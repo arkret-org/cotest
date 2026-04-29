@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    TestServerGroup, dev_login, encrypted_envelope, expect_json, register_account,
+    TestServerGroup, dev_login, encrypted_envelope, expect_json, expect_text, register_account,
 };
 
 pub async fn cross_server_collaboration_flow_works() -> Result<()> {
@@ -234,16 +234,18 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let downloaded = server_a
-        .http()
-        .get(server_a.url(&format!(
-            "/api/v1/blob/get?blob_ref={}",
-            blob["blob_ref"].as_str().unwrap()
-        )))
-        .send()
-        .await?;
-    assert_eq!(downloaded.status(), StatusCode::OK);
-    assert_eq!(downloaded.text().await?, "federated-media");
+    let downloaded = expect_text(
+        server_a
+            .http()
+            .get(server_a.url(&format!(
+                "/api/v1/blob/get?blob_ref={}&purpose=federation.media",
+                blob["blob_ref"].as_str().unwrap()
+            )))
+            .bearer_auth(&alice),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(downloaded, "federated-media");
 
     let push = expect_json(
         server_b

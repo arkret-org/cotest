@@ -8,7 +8,7 @@
 - 已有本地进程和 Docker SUT 运行模式。
 - 已有 `ContrixServer` / `TestServerGroup` harness、测试客户端和按领域组织的 scenarios。
 - 已覆盖 soland 的基础 HTTP surface、单机协作、repo/sync/index、blob、authz、device、federation smoke。
-- 当前主要缺口: 可注入冲突向量、starid/floria/coauth/chask 多项目栈、E2EE/device 深度测试、请求/响应 transcript 与 CI profile 落地。
+- 当前主要缺口: 可注入冲突向量、starid/floria/coauth/chask 多项目栈、E2EE/device 深度测试、CI profile 落地、日志脱敏扫描。
 
 ## P0: Official Fixture Runner
 
@@ -56,7 +56,7 @@
   - [x] push blind wakeup。
   - [x] pairwise/private DID resolve proof。
   - [x] encrypted payload forwarding without plaintext。
-  - [ ] query auth rejection。
+  - [x] query auth rejection。
 
 并行性: 每个 suite 可独立实现；fixture loader 和 report format 先冻结。
 
@@ -65,9 +65,9 @@
 目标: 不只测 soland 单体，覆盖项目实际边界。
 
 - [ ] `soland` Principal Server:
-  - [ ] memory mode。
+  - [x] memory mode。
   - [ ] PostgreSQL mode。
-  - [ ] two-service federation mode。
+  - [x] two-service federation mode。
 - [ ] `starid` Identity Registry:
   - [ ] memory mode。
   - [ ] PostgreSQL mode。
@@ -111,9 +111,9 @@
   - [ ] retry-after behavior。
 - [ ] Assertions:
   - [x] error envelope matcher。
-  - [ ] anti-enumeration matcher。
-  - [ ] audit event matcher。
-  - [ ] eventual consistency wait。
+  - [x] anti-enumeration matcher。
+  - [x] audit event matcher。
+  - [x] eventual consistency wait。
   - [ ] no-secret-in-log scan。
 
 ## P0: Principal Server Scenario Suites
@@ -128,11 +128,11 @@
   - [x] expected_head CAS。
   - [ ] proof invalid cases。
   - [ ] projection rollback on failure。
-- [ ] Sync:
+- [x] Sync:
   - [x] initial/incremental。
   - [x] state_after。
   - [x] limited/backfill。
-  - [ ] wait-for。
+  - [x] wait-for。
   - [x] to-device ack。
 - [ ] Authz/policy:
   - [x] grant before write accepted。
@@ -140,16 +140,16 @@
   - [x] revoke then write rejected。
   - [ ] policy deny/quarantine/review。
   - [ ] stale frontier rejected。
-- [ ] Directory/index:
-  - [ ] discoverability matrix。
-  - [ ] per-result auth filtering。
-  - [ ] private DID/actor search privacy。
+- [x] Directory/index:
+  - [x] discoverability matrix。
+  - [x] per-result auth filtering。
+  - [x] private DID/actor search privacy。
   - [x] relation traversal。
 - [ ] Blob/media:
   - [x] upload hash verification。
-  - [ ] authenticated download。
+  - [x] authenticated download。
   - [x] HEAD/Range。
-  - [ ] invisible vs nonexistent。
+  - [x] invisible vs nonexistent。
   - [ ] quota/retention when available。
 
 ## P0: Identity Registry Scenario Suites
@@ -191,7 +191,7 @@
   - [ ] expired signature rejected。
   - [ ] replay rejected。
 - [ ] Privacy:
-  - [ ] message body rejected。
+  - [x] message body rejected。
   - [ ] encrypted payload bytes rejected。
   - [ ] SDP/ICE/TURN rejected。
   - [ ] logs do not contain full push token。
@@ -218,7 +218,7 @@
 
 ## P1: Reporting, CI and Release Artifacts
 
-- [ ] Output formats:
+- [x] Output formats:
   - [x] JSON summary。
   - [x] JUnit XML。
   - [x] human HTML/Markdown。
@@ -226,7 +226,7 @@
   - [x] unresolved spec gap list。
 - [ ] Artifacts:
   - [x] service logs。
-  - [ ] request/response transcript with secrets redacted。
+  - [x] request/response transcript with secrets redacted。
   - [ ] screenshots for browser tests。
   - [x] fixture version。
   - [x] SUT commit/version。
@@ -240,7 +240,7 @@
 ## Definition of Done
 
 - [x] Test only uses public API or documented fixture injection endpoint。
-- [ ] Failure output includes enough request/response context with secrets redacted。
+- [x] Failure output includes enough request/response context with secrets redacted。
 - [x] Suite maps to a spec file and profile requirement。
 - [x] Multi-service tests clean up processes, containers, networks and artifacts deterministically。
 - [x] Coverage report can be used by release gates in SDK/server/client repos。

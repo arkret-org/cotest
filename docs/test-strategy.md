@@ -21,7 +21,8 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
   scenario group so federated tests exercise real cross-container addressing
   instead of host-local shortcuts.
 - Result presentation is part of the harness contract now: the scripted runner
-  writes a stable Markdown/JSON report surface under `artifacts/`.
+  writes a stable Markdown/JSON report surface plus a redacted HTTP transcript
+  under `artifacts/`.
 
 ## Current Suite Map
 
@@ -34,11 +35,13 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 - `collaboration_workflow`: account bootstrap, space lifecycle, member add,
   message send, sync, and index projection.
 - `delivery_media`: device key upload/query/claim, to-device delivery, blob
-  upload/download, range, and hash validation.
+  upload/download, range, hash validation, anti-enumeration, and query-string
+  auth rejection.
 - `events_entity_backfill`: event creation, entity projection, timeline reads,
   and missing-event recovery surfaces.
 - `identity_directory_index`: identity describe/resolve/document/log/receipt,
-  directory search/resolve, export, audit, notifications, and inbox behavior.
+  directory discoverability/privacy, export, audit, notifications, and inbox
+  behavior.
 - `authz_policy_presence`: grant lifecycle, policy check contract, presence,
   push device registration, and ICE config behavior.
 - `interaction_models`: message revision/redaction, reactions, read markers,
@@ -87,8 +90,9 @@ Recommended scripted entrypoints:
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage
 ```
 
-The runner stores raw logs plus Markdown/JSON summaries under `artifacts/`.
-`artifacts/latest/summary.md` is the primary result view for a completed run.
+The runner stores raw logs, a redacted request/response transcript, and
+Markdown/JSON summaries under `artifacts/`. `artifacts/latest/summary.md` is
+the primary result view for a completed run.
 `artifacts/latest/coverage-matrix.json` and
 `artifacts/latest/unresolved-gaps.json` are the machine-readable release-gate
 artifacts.

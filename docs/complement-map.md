@@ -21,7 +21,8 @@ applies the same pattern to Contrix.
   and [scripts/build-soland-image.ps1](/E:/Works/contrix-dev/cotest/scripts/build-soland-image.ps1:1).
 - Complement's result-formatting story maps to
   [scripts/run-cotest.ps1](/E:/Works/contrix-dev/cotest/scripts/run-cotest.ps1:1),
-  which emits raw logs and Markdown/JSON summaries under `artifacts/`.
+  which emits raw logs, redacted HTTP transcripts, and Markdown/JSON summaries
+  under `artifacts/`.
 
 ## Image and runtime model
 
@@ -64,6 +65,7 @@ optionally pretty-prints `go test -json` output with `gotestfmt`.
   [scripts/run-cotest.ps1](/E:/Works/contrix-dev/cotest/scripts/run-cotest.ps1:1)
 - persisted result artifacts:
   `artifacts/runs/<timestamp>/raw.log`,
+  `artifacts/runs/<timestamp>/transcript.ndjson`,
   `artifacts/runs/<timestamp>/summary.json`,
   `artifacts/runs/<timestamp>/summary.md`,
   `artifacts/runs/<timestamp>/summary.html`,
@@ -103,8 +105,8 @@ server scenarios side by side.
   identity resolution/log/receipts, grant and policy document lifecycle,
   presence/typing, push rules, and WebRTC signaling.
 - Delivery and media:
-  keys, to-device delivery, blob upload/download, range requests, and payload
-  preservation.
+  keys, to-device delivery, blob upload/download, range requests,
+  anti-enumeration/privacy guards, and payload preservation.
 - Federation:
   readiness checks, public contract validation, and end-to-end cross-server
   collaboration behavior.

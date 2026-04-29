@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, dev_login, encrypted_envelope, expect_json, expect_status,
+    ContrixServer, dev_login, encrypted_envelope, expect_json, expect_status, expect_text,
     repo_message_operation, signed_commit,
 };
 
@@ -200,17 +200,19 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
             .starts_with("cx:blob:sha256:")
     );
 
-    let range = server
-        .http()
-        .get(server.url(&format!(
-            "/api/v1/blob/get?blob_ref={}",
-            blob["blob_ref"].as_str().unwrap()
-        )))
-        .header("range", "bytes=0-8")
-        .send()
-        .await?;
-    assert_eq!(range.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(range.text().await?, "encrypted");
+    let range = expect_text(
+        server
+            .http()
+            .get(server.url(&format!(
+                "/api/v1/blob/get?blob_ref={}&purpose=message.attachment",
+                blob["blob_ref"].as_str().unwrap()
+            )))
+            .bearer_auth(&token)
+            .header("range", "bytes=0-8"),
+        StatusCode::PARTIAL_CONTENT,
+    )
+    .await?;
+    assert_eq!(range, "encrypted");
 
     let push = expect_json(
         server

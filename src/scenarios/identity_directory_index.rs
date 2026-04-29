@@ -1,8 +1,13 @@
-use anyhow::Result;
+use std::{collections::BTreeSet, time::Duration};
+
+use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_api_error, expect_json, expect_status};
+use crate::harness::{
+    ContrixServer, eventually, expect_api_error, expect_audit_action, expect_json,
+    expect_response, expect_status,
+};
 
 const DEMO_SPACE_ID: &str = "cx:space:01js0sp0000000000000000000";
 
@@ -436,24 +441,43 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         )
         .await?;
 
-    let notifications = expect_json(
-        server
-            .http()
-            .get(server.url(&format!("/api/v1/index/notifications?actor={}", bob.actor))),
-        StatusCode::OK,
+    let notifications = eventually(
+        "notification projection",
+        Duration::from_secs(2),
+        Duration::from_millis(50),
+        || {
+            let server = &server;
+            let bob_actor = bob.actor.clone();
+            let event_id = sent["event_id"].as_str().unwrap().to_owned();
+            async move {
+                let body = expect_json(
+                    server
+                        .http()
+                        .get(server.url(&format!("/api/v1/index/notifications?actor={bob_actor}"))),
+                    StatusCode::OK,
+                )
+                .await?;
+                if body["unread_count"]
+                    .as_u64()
+                    .is_some_and(|count| count >= 1)
+                    && body["notifications"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|notification| notification["event_ref"] == event_id)
+                {
+                    Ok(body)
+                } else {
+                    Err(anyhow!("notification for {event_id} not projected yet"))
+                }
+            }
+        },
     )
     .await?;
     assert!(
         notifications["unread_count"]
             .as_u64()
             .is_some_and(|count| count >= 1)
-    );
-    assert!(
-        notifications["notifications"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|notification| notification["event_ref"] == sent["event_id"])
     );
 
     let exported = expect_json(
@@ -470,7 +494,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             .any(|operation| operation["operation_id"] == sent["operation_id"])
     );
 
-    let waited_sync = expect_json(
+    let waited_sync = expect_response(
         alice
             .post("/api/v1/sync")
             .header("x-contrix-wait-for", sent["sync_token"].as_str().unwrap())
@@ -478,6 +502,14 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
+    assert_eq!(
+        waited_sync
+            .headers
+            .get("x-contrix-wait-for-satisfied")
+            .and_then(|value| value.to_str().ok()),
+        Some("true")
+    );
+    let waited_sync = waited_sync.json()?;
     assert_eq!(
         waited_sync["spaces"][&shared_space_id]["timeline"]["events"][0]["event_id"],
         sent["event_id"]
@@ -494,19 +526,309 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let audit_events =
         expect_json(alice.get("/api/v1/audit/events?limit=20"), StatusCode::OK).await?;
-    assert!(
-        audit_events["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|event| event["action"] == "space.create")
-    );
+    let _ = expect_audit_action(&audit_events, "space.create")?;
 
     expect_status(
         alice.get(&format!("/api/v1/audit/events?actor={}", bob.actor)),
         StatusCode::FORBIDDEN,
     )
     .await?;
+
+    Ok(())
+}
+
+pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
+    let server = ContrixServer::spawn("directory-privacy").await?;
+    let alice = server
+        .demo_client("did:web:alice.example", "dev_alice")
+        .await?;
+    let bob = server
+        .register_client("did:web:bob-privacy.example", "@bob-privacy", "dev_bob")
+        .await?;
+
+    let public_space = expect_json(
+        alice.post("/api/v1/spaces").json(&json!({
+            "title": "Visibility Matrix Public",
+            "discoverability": "public"
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let listed_space = expect_json(
+        alice.post("/api/v1/spaces").json(&json!({
+            "title": "Visibility Matrix Listed",
+            "discoverability": "listed"
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let restricted_space = expect_json(
+        alice.post("/api/v1/spaces").json(&json!({
+            "title": "Visibility Matrix Restricted",
+            "discoverability": "restricted"
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let unlisted_space = expect_json(
+        alice.post("/api/v1/spaces").json(&json!({
+            "title": "Visibility Matrix Unlisted",
+            "discoverability": "unlisted"
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let invite_only_space = expect_json(
+        alice.post("/api/v1/spaces").json(&json!({
+            "title": "Visibility Matrix Invite Only",
+            "discoverability": "invite_only",
+            "invitees": [bob.actor.clone()]
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let secret_space = expect_json(
+        alice.post("/api/v1/spaces").json(&json!({
+            "title": "Visibility Matrix Secret",
+            "discoverability": "secret"
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+
+    let public_space_id = public_space["space_id"].as_str().unwrap().to_owned();
+    let listed_space_id = listed_space["space_id"].as_str().unwrap().to_owned();
+    let restricted_space_id = restricted_space["space_id"].as_str().unwrap().to_owned();
+    let unlisted_space_id = unlisted_space["space_id"].as_str().unwrap().to_owned();
+    let invite_only_space_id = invite_only_space["space_id"].as_str().unwrap().to_owned();
+    let secret_space_id = secret_space["space_id"].as_str().unwrap().to_owned();
+
+    let anonymous_search = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/search-spaces"))
+            .json(&json!({"query": "Visibility Matrix", "limit": 20})),
+        StatusCode::OK,
+    )
+    .await?;
+    let anonymous_search_ids: BTreeSet<_> = anonymous_search["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|space| space["space_id"].as_str().map(ToOwned::to_owned))
+        .collect();
+    assert_eq!(
+        anonymous_search_ids,
+        BTreeSet::from([
+            public_space_id.clone(),
+            listed_space_id.clone(),
+            restricted_space_id.clone(),
+        ])
+    );
+
+    for resolvable_space_id in [
+        &public_space_id,
+        &listed_space_id,
+        &restricted_space_id,
+        &unlisted_space_id,
+    ] {
+        let resolved = expect_json(
+            server
+                .http()
+                .post(server.url("/api/v1/directory/resolve-space"))
+                .json(&json!({"space_id": resolvable_space_id.as_str()})),
+            StatusCode::OK,
+        )
+        .await?;
+        assert_eq!(
+            resolved["space_preview"]["space_id"],
+            resolvable_space_id.as_str()
+        );
+    }
+
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/resolve-space"))
+            .json(&json!({"space_id": invite_only_space_id.clone()})),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/resolve-space"))
+            .json(&json!({"space_id": secret_space_id.clone()})),
+        StatusCode::NOT_FOUND,
+        "not_found",
+    )
+    .await?;
+
+    let invites = expect_json(bob.get("/api/v1/authz/invites"), StatusCode::OK).await?;
+    let invite_token = invites["invites"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|invite| invite["space_id"].as_str() == Some(invite_only_space_id.as_str()))
+        .and_then(|invite| invite["invite_token"].as_str())
+        .ok_or_else(|| anyhow!("missing invite token for invite-only space"))?;
+    let invite_only_resolved = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/resolve-space"))
+            .json(&json!({
+                "space_id": invite_only_space_id.clone(),
+                "invite_token": invite_token
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        invite_only_resolved["space_preview"]["space_id"],
+        invite_only_space_id
+    );
+
+    let secret_resolved = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/resolve-space"))
+            .json(&json!({
+                "space_id": secret_space_id.clone(),
+                "signed_link": "cotest-signed-link"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(secret_resolved["space_preview"]["space_id"], secret_space_id);
+
+    let all_space_ids = vec![
+        public_space_id.clone(),
+        listed_space_id.clone(),
+        restricted_space_id.clone(),
+        unlisted_space_id.clone(),
+        invite_only_space_id.clone(),
+        secret_space_id.clone(),
+    ];
+    let anonymous_index = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/index/query"))
+            .json(&json!({"space_ids": all_space_ids})),
+        StatusCode::OK,
+    )
+    .await?;
+    let anonymous_index_ids: BTreeSet<_> = anonymous_index["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|entry| entry["space_id"].as_str().map(ToOwned::to_owned))
+        .collect();
+    assert_eq!(anonymous_index_ids, BTreeSet::from([public_space_id.clone()]));
+
+    let alice_index = expect_json(
+        alice.post("/api/v1/index/query").json(&json!({
+            "space_ids": [
+                public_space_id,
+                listed_space_id,
+                restricted_space_id,
+                unlisted_space_id,
+                invite_only_space_id,
+                secret_space_id
+            ]
+        })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(alice_index["results"].as_array().unwrap().len(), 6);
+
+    let anonymous_bob_actors = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/search-actors"))
+            .json(&json!({"query": "bob-privacy"})),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(anonymous_bob_actors["results"].as_array().unwrap().is_empty());
+
+    let anonymous_bob_users = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/directory/search-users?q=bob-privacy")),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(anonymous_bob_users["results"].as_array().unwrap().is_empty());
+
+    let anonymous_alice = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/search-actors"))
+            .json(&json!({"query": "alice"})),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(anonymous_alice["results"][0]["did"], "did:web:alice.example");
+
+    let alice_before_contact = expect_json(
+        alice
+            .post("/api/v1/directory/search-actors")
+            .json(&json!({"query": "bob-privacy"})),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(alice_before_contact["results"].as_array().unwrap().is_empty());
+
+    let bob_self = expect_json(
+        bob.post("/api/v1/directory/search-actors")
+            .json(&json!({"query": "bob-privacy"})),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(bob_self["results"][0]["did"], bob.actor);
+
+    expect_json(
+        alice
+            .post("/api/v1/contacts/request")
+            .json(&json!({"target": bob.actor})),
+        StatusCode::CREATED,
+    )
+    .await?;
+    expect_json(
+        bob.post("/api/v1/contacts/respond").json(&json!({
+            "requester": alice.actor,
+            "action": "accept"
+        })),
+        StatusCode::OK,
+    )
+    .await?;
+
+    let alice_after_contact = expect_json(
+        alice
+            .post("/api/v1/directory/search-actors")
+            .json(&json!({"query": "bob-privacy"})),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(alice_after_contact["results"][0]["did"], bob.actor);
+
+    let alice_user_after_contact = expect_json(
+        alice.get("/api/v1/directory/search-users?q=bob-privacy"),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(alice_user_after_contact["results"][0]["handle"], "@bob-privacy");
+
+    let anonymous_after_contact = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/directory/search-actors"))
+            .json(&json!({"query": "bob-privacy"})),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(anonymous_after_contact["results"].as_array().unwrap().is_empty());
 
     Ok(())
 }

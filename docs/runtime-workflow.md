@@ -162,6 +162,7 @@ If the image already exists:
 Artifacts are written to:
 
 - `artifacts/runs/<timestamp>/raw.log`
+- `artifacts/runs/<timestamp>/transcript.ndjson`
 - `artifacts/runs/<timestamp>/summary.json`
 - `artifacts/runs/<timestamp>/summary.md`
 - `artifacts/runs/<timestamp>/summary.html`
@@ -192,6 +193,8 @@ The runner now also emits:
 
 - JUnit XML for CI systems
 - HTML for a quick human-readable report outside the terminal
+- a redacted request/response transcript for HTTP debugging without leaking
+  bearer tokens or invite/push secrets
 - profile coverage matrix JSON/Markdown derived from
   `config/coverage-profiles.json`
 - unresolved remaining tasks derived from `_todos.md`
@@ -205,7 +208,8 @@ The runner now also emits:
   to how Complement validates homeserver images.
 - Use `artifacts/latest/summary.md` as the first place to inspect a run instead
   of relying on terminal scrollback.
-- As of this workflow, both
-  `.\scripts\run-cotest.ps1 -Runtime process` and
-  `.\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest`
-  have been validated end-to-end against the current `soland` checkout.
+- `process` mode is the authoritative path for validating the current local
+  `soland` checkout.
+- `docker` mode should be preceded by
+  `.\scripts\build-soland-image.ps1 -ImageTag cotest-soland:latest` so the SUT
+  image reflects the current `soland` tree rather than an older cached build.

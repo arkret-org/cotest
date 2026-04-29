@@ -71,6 +71,7 @@ function New-SummaryMarkdown {
     $lines.Add("- failed: $($Summary.failed)")
     $lines.Add("- ignored: $($Summary.ignored)")
     $lines.Add("- raw_log: $($Summary.raw_log)")
+    $lines.Add("- transcript: $($Summary.transcript_path)")
     $lines.Add("- junit_xml: $($Summary.junit_xml)")
     $lines.Add("- html_report: $($Summary.html_report)")
     $lines.Add("- metadata: $($Summary.metadata_path)")
@@ -150,6 +151,7 @@ function New-SummaryHtml {
   <div class="card">
     <h2>Artifacts</h2>
     <p>raw log: <code>$(ConvertTo-HtmlSafe $Summary.raw_log)</code></p>
+    <p>transcript: <code>$(ConvertTo-HtmlSafe $Summary.transcript_path)</code></p>
     <p>junit xml: <code>$(ConvertTo-HtmlSafe $Summary.junit_xml)</code></p>
     <p>coverage matrix: <code>$(ConvertTo-HtmlSafe $Summary.coverage_matrix_path)</code></p>
     <p>unresolved gaps: <code>$(ConvertTo-HtmlSafe $Summary.unresolved_gaps_path)</code></p>
@@ -400,6 +402,8 @@ $coverageJson = Join-Path $runDir "coverage-matrix.json"
 $coverageMd = Join-Path $runDir "coverage-matrix.md"
 $gapsJson = Join-Path $runDir "unresolved-gaps.json"
 $gapsMd = Join-Path $runDir "unresolved-gaps.md"
+$transcriptNdjson = Join-Path $runDir "transcript.ndjson"
+"" | Set-Content -Path $transcriptNdjson -Encoding UTF8
 
 if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -ImageTag $SutImage))) {
     & (Join-Path $PSScriptRoot "build-soland-image.ps1") -ImageTag $SutImage
@@ -409,7 +413,7 @@ if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -I
 }
 
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -428,6 +432,7 @@ try {
     $env:COTEST_SUT_MODE = $Runtime
     $env:COTEST_ARTIFACT_DIR = $runDir
     $env:COTEST_SERVICE_LOG_DIR = $serviceLogDir
+    $env:COTEST_TRANSCRIPT_PATH = $transcriptNdjson
     if ($Runtime -eq "docker") {
         Remove-Item Env:COTEST_SUT_MANIFEST -ErrorAction SilentlyContinue
         $env:COTEST_SUT_IMAGE = $SutImage
@@ -477,6 +482,7 @@ $summary = [pscustomobject]@{
     failed               = $failed
     ignored              = $ignored
     raw_log              = $rawLog
+    transcript_path      = $transcriptNdjson
     junit_xml            = $junitXml
     html_report          = $summaryHtml
     metadata_path        = $metadataJson
@@ -508,6 +514,7 @@ $gapsMarkdown | Set-Content -Path $gapsMd -Encoding UTF8
 
 $artifactFiles = @(
     $rawLog,
+    $transcriptNdjson,
     $summaryJson,
     $summaryMd,
     $summaryHtml,
@@ -539,6 +546,7 @@ Write-Host "  passed   : $($summary.passed)"
 Write-Host "  failed   : $($summary.failed)"
 Write-Host "  ignored  : $($summary.ignored)"
 Write-Host "  log      : $rawLog"
+Write-Host "  transcript : $transcriptNdjson"
 Write-Host "  report   : $summaryMd"
 Write-Host "  junit    : $junitXml"
 Write-Host "  html     : $summaryHtml"

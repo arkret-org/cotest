@@ -20,3 +20,10 @@ async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     cotest::scenarios::identity_directory_index::contacts_invites_listing_export_and_audit_work()
         .await
 }
+
+#[tokio::test]
+#[serial]
+async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
+    cotest::scenarios::identity_directory_index::directory_discoverability_and_actor_privacy_work()
+        .await
+}

@@ -3,7 +3,9 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, dev_login, encrypted_envelope, expect_api_error, expect_json, register_account,
+    ContrixServer, dev_login, encrypted_envelope, expect_api_error,
+    expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
+    register_account,
 };
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
@@ -202,7 +204,17 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let server = ContrixServer::spawn("blob-media").await?;
-    let token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let alice = server
+        .demo_client("did:web:alice.example", "dev_alice")
+        .await?;
+    let bob = server
+        .register_client("did:web:bob-blob.example", "@bob-blob", "dev_bob")
+        .await?;
+    let carol = server
+        .register_client("did:web:carol-blob.example", "@carol-blob", "dev_carol")
+        .await?;
+    let space_id = alice.create_space("Blob Access Space").await?;
+    alice.add_member(&space_id, &bob).await?;
 
     expect_api_error(
         server
@@ -217,7 +229,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/blob/upload"))
-            .bearer_auth(&token)
+            .bearer_auth(&alice.token)
             .header(
                 "x-contrix-sha256",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
@@ -232,7 +244,8 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/blob/upload"))
-            .bearer_auth(&token)
+            .bearer_auth(&alice.token)
+            .header("x-contrix-space-id", &space_id)
             .header("content-type", "text/plain")
             .body("encrypted-bytes"),
         StatusCode::OK,
@@ -240,27 +253,32 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     .await?;
     let blob_ref = blob["blob_ref"].as_str().unwrap();
 
-    let head = server
-        .http()
-        .head(server.url(&format!("/api/v1/blob/get?blob_ref={blob_ref}")))
-        .send()
-        .await?;
-    assert_eq!(head.status(), StatusCode::OK);
-    assert!(head.headers().get("digest").is_some());
-
-    let range = server
-        .http()
-        .get(server.url(&format!("/api/v1/blob/get?blob_ref={blob_ref}")))
-        .header("range", "bytes=0-8")
-        .send()
-        .await?;
-    assert_eq!(range.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(range.text().await?, "encrypted");
-
-    expect_api_error(
+    let head = expect_response(
         server
             .http()
-            .get(server.url(&format!("/api/v1/blob/get?blob_ref={blob_ref}")))
+            .head(server.url(&format!(
+                "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+            )))
+            .bearer_auth(&bob.token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(head.headers.get("digest").is_some());
+
+    let range = expect_text(
+        bob.get(&format!(
+            "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+        ))
+        .header("range", "bytes=0-8"),
+        StatusCode::PARTIAL_CONTENT,
+    )
+    .await?;
+    assert_eq!(range, "encrypted");
+
+    expect_api_error(
+        bob.get(&format!(
+            "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+        ))
             .header("range", "bytes=99-100"),
         StatusCode::BAD_REQUEST,
         "invalid_param",
@@ -269,7 +287,19 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/api/v1/blob/get?blob_ref=cx:blob:sha256:missing")),
+            .get(server.url(&format!(
+                "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
+                alice.token
+            ))),
+        StatusCode::UNAUTHORIZED,
+        "unauthenticated",
+    )
+    .await?;
+    let _ = expect_indistinguishable_api_errors(
+        carol.get(&format!(
+            "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
+        )),
+        carol.get("/api/v1/blob/get?blob_ref=cx:blob:sha256:missing&purpose=message.attachment"),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -297,6 +327,20 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .body("{"),
         StatusCode::BAD_REQUEST,
         "bad_json",
+    )
+    .await?;
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/api/v1/push/notify"))
+            .json(&json!({
+                "notification": {
+                    "devices": [{"device_id": "unknown-device"}],
+                    "body": "plaintext leak"
+                }
+            })),
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
     )
     .await?;
     let notify = expect_json(

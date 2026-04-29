@@ -24,9 +24,10 @@ Recommended entrypoints:
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
   `soland` plus the sibling `contrix-rust-sdk` checkout using the workspace
   root as Docker build context.
-- Each scripted run writes `raw.log`, `summary.json`, and `summary.md` to
-  `artifacts/runs/<timestamp>/` and copies the latest set to
-  `artifacts/latest/`.
+- Each scripted run writes `raw.log`, `transcript.ndjson`, `summary.json`,
+  `summary.md`, `summary.html`, `junit.xml`, coverage/gap reports, and
+  per-service logs to `artifacts/runs/<timestamp>/`, then copies the latest set
+  to `artifacts/latest/`.
 
 The primary human-readable report is
 `artifacts/latest/summary.md`.
@@ -84,6 +85,7 @@ for the full startup model, Docker image contract, and result artifacts.
 The runner script writes:
 
 - `artifacts/runs/<timestamp>/raw.log`
+- `artifacts/runs/<timestamp>/transcript.ndjson`
 - `artifacts/runs/<timestamp>/summary.json`
 - `artifacts/runs/<timestamp>/summary.md`
 - `artifacts/runs/<timestamp>/summary.html`

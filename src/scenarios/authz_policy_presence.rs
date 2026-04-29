@@ -2,7 +2,9 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_api_error, expect_json, expect_status};
+use crate::harness::{
+    ContrixServer, expect_api_error, expect_audit_action, expect_json, expect_status,
+};
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = ContrixServer::spawn("authz-grants").await?;
@@ -161,17 +163,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_after_revoke["reason_code"], "capability_denied");
 
     let audit = expect_json(alice.get("/api/v1/audit/events?limit=20"), StatusCode::OK).await?;
-    let actions = audit["events"].as_array().unwrap();
-    assert!(
-        actions
-            .iter()
-            .any(|event| event["action"] == "authz.grant.create")
-    );
-    assert!(
-        actions
-            .iter()
-            .any(|event| event["action"] == "authz.grant.revoke")
-    );
+    let _ = expect_audit_action(&audit, "authz.grant.create")?;
+    let _ = expect_audit_action(&audit, "authz.grant.revoke")?;
 
     Ok(())
 }
