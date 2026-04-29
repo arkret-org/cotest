@@ -55,10 +55,14 @@ for the full startup model, Docker image contract, and result artifacts.
 
 - `src/harness.rs`: process lifecycle, test actor helpers, and shared HTTP
   assertion utilities.
+- `src/conformance.rs`: fixture-driven offline conformance runner wired to
+  `contrix-spec/zh/conformance/fixtures`.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
 - `_todos.md`: Complement-derived plan and the current single-server /
   multi-server coverage matrix.
+- `config/coverage-profiles.json`: machine-readable profile-to-suite coverage
+  mapping used by the runner.
 - `docs/test-strategy.md`: harness model and suite grouping.
 - `docs/complement-map.md`: how Complement concepts map onto Contrix.
 - `docs/runtime-workflow.md`: runtime modes, Docker image flow, runner scripts,
@@ -69,6 +73,9 @@ for the full startup model, Docker image contract, and result artifacts.
 - Single-server surface: service description, auth, collaboration, repo, sync,
   index, identity/authz, schema/policy, realtime signaling, delivery/media,
   permissions, payload contracts, and extension surface gaps.
+- Offline conformance surface: encoding, redaction, capability, sync,
+  federation, privacy/security, and state-resolution fixtures loaded from
+  `contrix-spec`.
 - Multi-server surface: federation readiness, contract validation, and
   cross-server collaboration flows.
 
@@ -79,6 +86,14 @@ The runner script writes:
 - `artifacts/runs/<timestamp>/raw.log`
 - `artifacts/runs/<timestamp>/summary.json`
 - `artifacts/runs/<timestamp>/summary.md`
+- `artifacts/runs/<timestamp>/summary.html`
+- `artifacts/runs/<timestamp>/junit.xml`
+- `artifacts/runs/<timestamp>/metadata.json`
+- `artifacts/runs/<timestamp>/coverage-matrix.json`
+- `artifacts/runs/<timestamp>/coverage-matrix.md`
+- `artifacts/runs/<timestamp>/unresolved-gaps.json`
+- `artifacts/runs/<timestamp>/unresolved-gaps.md`
+- `artifacts/runs/<timestamp>/services/`
 - `artifacts/latest/` as a copy of the latest run
 
 This gives `cotest` an explicit result surface instead of relying only on

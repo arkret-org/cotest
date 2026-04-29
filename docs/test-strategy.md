@@ -53,6 +53,9 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
   reads, repo sync, and parameter edge coverage.
 - `space_permissions`: membership, owner-only mutation, deleted-space behavior,
   non-member denial, and private visibility policy checks.
+- `conformance_fixtures`: offline spec-owned fixture suites for encoding,
+  redaction, capability, state resolution, sync, federation, and
+  privacy/security semantics.
 
 ### Multi-Server
 
@@ -86,3 +89,6 @@ Recommended scripted entrypoints:
 
 The runner stores raw logs plus Markdown/JSON summaries under `artifacts/`.
 `artifacts/latest/summary.md` is the primary result view for a completed run.
+`artifacts/latest/coverage-matrix.json` and
+`artifacts/latest/unresolved-gaps.json` are the machine-readable release-gate
+artifacts.

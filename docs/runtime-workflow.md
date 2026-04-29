@@ -164,6 +164,14 @@ Artifacts are written to:
 - `artifacts/runs/<timestamp>/raw.log`
 - `artifacts/runs/<timestamp>/summary.json`
 - `artifacts/runs/<timestamp>/summary.md`
+- `artifacts/runs/<timestamp>/summary.html`
+- `artifacts/runs/<timestamp>/junit.xml`
+- `artifacts/runs/<timestamp>/metadata.json`
+- `artifacts/runs/<timestamp>/coverage-matrix.json`
+- `artifacts/runs/<timestamp>/coverage-matrix.md`
+- `artifacts/runs/<timestamp>/unresolved-gaps.json`
+- `artifacts/runs/<timestamp>/unresolved-gaps.md`
+- `artifacts/runs/<timestamp>/services/<service>.log`
 - `artifacts/latest/` as a copy of the most recent run
 
 The Markdown summary is the primary “show me the result” artifact. It includes:
@@ -179,6 +187,16 @@ The Markdown summary is the primary “show me the result” artifact. It includ
 This is the `cotest` equivalent of Complement's `go test -json | gotestfmt`
 story, except the formatting is emitted directly as saved Markdown and JSON
 artifacts rather than depending on an external pretty-printer.
+
+The runner now also emits:
+
+- JUnit XML for CI systems
+- HTML for a quick human-readable report outside the terminal
+- profile coverage matrix JSON/Markdown derived from
+  `config/coverage-profiles.json`
+- unresolved remaining tasks derived from `_todos.md`
+- per-run SUT/spec metadata including local git revision and fixture fingerprint
+- per-service logs captured by the harness
 
 ## Recommended usage
 

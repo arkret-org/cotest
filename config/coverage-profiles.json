@@ -1,0 +1,107 @@
+{
+  "profiles": [
+    {
+      "profile_id": "cx.profile.minimal_client.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "DID / handle resolve", "status": "implemented", "sources": ["identity_directory_index"] },
+        { "name": "service discovery", "status": "implemented", "sources": ["service_surface", "federation_readiness"] },
+        { "name": "repo commit / operation fetch", "status": "implemented", "sources": ["repo_sync_index"] },
+        { "name": "index query", "status": "implemented", "sources": ["interaction_models", "identity_directory_index"] },
+        { "name": "cursor pagination", "status": "implemented", "sources": ["events_entity_backfill", "repo_sync_index", "conformance_sync"] },
+        { "name": "standard error response", "status": "implemented", "sources": ["api_contracts_auth", "repo_sync_index", "federation_contract"] },
+        { "name": "E2EE decrypt", "status": "pending", "sources": [] }
+      ]
+    },
+    {
+      "profile_id": "cx.profile.principal_server_repo_api.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "submit commit / operation", "status": "implemented", "sources": ["repo_sync_index", "protocol_payloads"] },
+        { "name": "idempotent write", "status": "implemented", "sources": ["repo_sync_index", "delivery_media"] },
+        { "name": "commit fetch", "status": "implemented", "sources": ["repo_sync_index"] },
+        { "name": "operation fetch", "status": "implemented", "sources": ["repo_sync_index"] },
+        { "name": "cursor-based history", "status": "implemented", "sources": ["repo_sync_index", "events_entity_backfill"] },
+        { "name": "signature verification", "status": "partial", "sources": ["conformance_encoding", "protocol_payloads"] },
+        { "name": "schema validation", "status": "implemented", "sources": ["schema_policy_realtime", "protocol_payloads"] },
+        { "name": "capability precheck", "status": "partial", "sources": ["authz_policy_presence", "conformance_capability"] },
+        { "name": "conflict reporting", "status": "implemented", "sources": ["repo_sync_index"] },
+        { "name": "content-addressed blob reference validation", "status": "implemented", "sources": ["delivery_media", "protocol_payloads"] }
+      ]
+    },
+    {
+      "profile_id": "cx.profile.principal_server.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "subscribe / sync stream", "status": "implemented", "sources": ["interaction_models", "collaboration_workflow"] },
+        { "name": "backfill", "status": "implemented", "sources": ["events_entity_backfill", "collaboration_workflow"] },
+        { "name": "client sync", "status": "implemented", "sources": ["collaboration_workflow", "federation_contract"] },
+        { "name": "cursor stability", "status": "partial", "sources": ["conformance_sync", "repo_sync_index"] },
+        { "name": "duplicate suppression", "status": "implemented", "sources": ["delivery_media", "federation_contract", "repo_sync_index"] },
+        { "name": "encrypted payload forwarding", "status": "partial", "sources": ["protocol_payloads", "conformance_privacy_security"] },
+        { "name": "service describe", "status": "implemented", "sources": ["service_surface"] },
+        { "name": "federation destination verification", "status": "partial", "sources": ["federation_contract", "conformance_federation"] },
+        { "name": "plaintext-visible service enforcement", "status": "implemented", "sources": ["space_permissions", "federation_contract"] }
+      ]
+    },
+    {
+      "profile_id": "cx.profile.index_node.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "entity current-state query", "status": "implemented", "sources": ["interaction_models", "events_entity_backfill"] },
+        { "name": "relation query", "status": "implemented", "sources": ["interaction_models"] },
+        { "name": "structured query", "status": "implemented", "sources": ["schema_policy_realtime", "identity_directory_index"] },
+        { "name": "notification / inbox materialization", "status": "implemented", "sources": ["identity_directory_index"] },
+        { "name": "authorization filtering", "status": "partial", "sources": ["space_permissions", "identity_directory_index"] },
+        { "name": "stale frontier reporting", "status": "pending", "sources": [] },
+        { "name": "wait_for sync token", "status": "pending", "sources": [] },
+        { "name": "plaintext-visible enforcement", "status": "implemented", "sources": ["space_permissions"] }
+      ]
+    },
+    {
+      "profile_id": "cx.profile.identity_registry.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "DID resolve", "status": "implemented", "sources": ["identity_directory_index"] },
+        { "name": "DID log fetch", "status": "implemented", "sources": ["identity_directory_index"] },
+        { "name": "DID operation submit", "status": "pending", "sources": [] },
+        { "name": "inception_key verification", "status": "pending", "sources": [] },
+        { "name": "key_log validation", "status": "pending", "sources": [] },
+        { "name": "receipt publication", "status": "implemented", "sources": ["identity_directory_index"] }
+      ]
+    },
+    {
+      "profile_id": "cx.profile.blob_node.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "upload", "status": "implemented", "sources": ["delivery_media", "protocol_payloads"] },
+        { "name": "download", "status": "implemented", "sources": ["delivery_media", "protocol_payloads"] },
+        { "name": "HEAD metadata", "status": "implemented", "sources": ["delivery_media"] },
+        { "name": "SHA-256 digest verification", "status": "implemented", "sources": ["delivery_media", "conformance_encoding"] },
+        { "name": "size limit", "status": "pending", "sources": [] },
+        { "name": "MIME metadata", "status": "implemented", "sources": ["delivery_media"] },
+        { "name": "authorization-aware access", "status": "partial", "sources": ["delivery_media", "conformance_privacy_security"] }
+      ]
+    },
+    {
+      "profile_id": "cx.profile.push_gateway.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\zh\\conformance\\conformance-profiles.md",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "register_device", "status": "implemented", "sources": ["authz_policy_presence"] },
+        { "name": "unregister_device", "status": "implemented", "sources": ["delivery_media"] },
+        { "name": "notify", "status": "implemented", "sources": ["delivery_media"] },
+        { "name": "blind wakeup payload minimization", "status": "implemented", "sources": ["conformance_privacy_security"] },
+        { "name": "trusted service verification", "status": "pending", "sources": [] },
+        { "name": "invalid token cleanup", "status": "pending", "sources": [] },
+        { "name": "rejected[] result return", "status": "implemented", "sources": ["delivery_media"] }
+      ]
+    }
+  ]
+}

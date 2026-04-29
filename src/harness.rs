@@ -1,7 +1,8 @@
 use std::{
     fs,
+    fs::OpenOptions,
     net::TcpListener,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     time::Duration,
 };
@@ -20,6 +21,7 @@ pub struct ContrixServer {
     base_url: Url,
     service_did: String,
     blob_root: Option<PathBuf>,
+    log_path: Option<PathBuf>,
 }
 
 pub struct TestServerGroup {
@@ -68,8 +70,11 @@ impl ContrixServer {
         let service_did = format!("did:web:{name}.cotest.local");
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{port}-blobs"));
+        let log_path = service_log_path(name)?;
+        initialize_service_log(log_path.as_deref(), name, "process")?;
         let _ = fs::remove_dir_all(&blob_root);
         fs::create_dir_all(&blob_root)?;
+        let (stdout, stderr) = service_log_stdio(log_path.as_deref())?;
 
         let mut child = Command::new("cargo")
             .arg("run")
@@ -84,8 +89,8 @@ impl ContrixServer {
             .env("SERVERX_SERVICE_DID", &service_did)
             .env("SERVERX_DEVELOPMENT_MODE", "1")
             .env("SERVERX_BLOB_ROOT", &blob_root)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(stdout)
+            .stderr(stderr)
             .spawn()
             .with_context(|| format!("failed to start SUT from {}", manifest.display()))?;
 
@@ -100,6 +105,7 @@ impl ContrixServer {
             base_url,
             service_did,
             blob_root: Some(blob_root),
+            log_path,
         })
     }
 
@@ -116,6 +122,8 @@ impl ContrixServer {
         };
         let image = sut_image();
         let container_name = format!("cotest-{}-{}-{}", alias, std::process::id(), host_port);
+        let log_path = service_log_path(name)?;
+        initialize_service_log(log_path.as_deref(), name, "docker")?;
 
         let mut command = Command::new("docker");
         command
@@ -155,6 +163,7 @@ impl ContrixServer {
 
         if let Err(error) = wait_until_healthy(base_url.clone()).await {
             let logs = docker_logs(&container_name).unwrap_or_default();
+            let _ = append_service_log(log_path.as_deref(), &logs);
             let _ = docker_remove_container(&container_name);
             let log_suffix = if logs.trim().is_empty() {
                 String::new()
@@ -169,6 +178,7 @@ impl ContrixServer {
             base_url,
             service_did,
             blob_root: None,
+            log_path,
         })
     }
 
@@ -237,6 +247,9 @@ impl Drop for ContrixServer {
                 let _ = child.wait();
             }
             SutHandle::Docker { container_name } => {
+                if let Ok(logs) = docker_logs(container_name) {
+                    let _ = append_service_log(self.log_path.as_deref(), &logs);
+                }
                 let _ = docker_remove_container(container_name);
             }
         }
@@ -629,6 +642,54 @@ fn sut_container_port() -> u16 {
         .unwrap_or(8008)
 }
 
+fn service_log_root() -> Option<PathBuf> {
+    std::env::var_os("COTEST_SERVICE_LOG_DIR")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("COTEST_ARTIFACT_DIR")
+                .map(PathBuf::from)
+                .map(|path| path.join("services"))
+        })
+}
+
+fn service_log_path(name: &str) -> Result<Option<PathBuf>> {
+    let Some(root) = service_log_root() else {
+        return Ok(None);
+    };
+    fs::create_dir_all(&root)?;
+    Ok(Some(root.join(format!("{}.log", sanitize_runtime_name(name)))))
+}
+
+fn service_log_stdio(path: Option<&Path>) -> Result<(Stdio, Stdio)> {
+    let Some(path) = path else {
+        return Ok((Stdio::null(), Stdio::null()));
+    };
+    let file = OpenOptions::new().create(true).append(true).open(path)?;
+    let stderr = file.try_clone()?;
+    Ok((Stdio::from(file), Stdio::from(stderr)))
+}
+
+fn initialize_service_log(path: Option<&Path>, name: &str, runtime: &str) -> Result<()> {
+    let Some(path) = path else {
+        return Ok(());
+    };
+    let header = format!("[cotest] service={name} runtime={runtime}\n");
+    fs::write(path, header)?;
+    Ok(())
+}
+
+fn append_service_log(path: Option<&Path>, content: &str) -> Result<()> {
+    let Some(path) = path else {
+        return Ok(());
+    };
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    if !content.trim().is_empty() {
+        use std::io::Write as _;
+        writeln!(file, "{content}")?;
+    }
+    Ok(())
+}
+
 fn sanitize_runtime_name(value: &str) -> String {
     value
         .chars()
@@ -704,10 +765,27 @@ fn docker_remove_container(container_name: &str) -> Result<()> {
 fn docker_logs(container_name: &str) -> Result<String> {
     let mut command = Command::new("docker");
     command.arg("logs").arg(container_name);
-    run_command(
-        &mut command,
-        &format!("failed to read logs for {container_name}"),
-    )
+    let output = command.output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(anyhow!(
+            "failed to read logs for {container_name}: status {} stdout: {} stderr: {}",
+            output.status,
+            stdout.trim(),
+            stderr.trim()
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = if stderr.trim().is_empty() {
+        stdout.trim().to_owned()
+    } else if stdout.trim().is_empty() {
+        stderr.trim().to_owned()
+    } else {
+        format!("{}\n{}", stdout.trim(), stderr.trim())
+    };
+    Ok(combined)
 }
 
 fn free_port() -> Result<u16> {

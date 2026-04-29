@@ -66,11 +66,24 @@ optionally pretty-prints `go test -json` output with `gotestfmt`.
   `artifacts/runs/<timestamp>/raw.log`,
   `artifacts/runs/<timestamp>/summary.json`,
   `artifacts/runs/<timestamp>/summary.md`,
+  `artifacts/runs/<timestamp>/summary.html`,
+  `artifacts/runs/<timestamp>/junit.xml`,
+  `artifacts/runs/<timestamp>/coverage-matrix.json`,
+  `artifacts/runs/<timestamp>/unresolved-gaps.json`,
+  `artifacts/runs/<timestamp>/services/`,
   and `artifacts/latest/`
 
 The Markdown summary is the primary human-readable report. That gives `cotest`
 an explicit result surface comparable to Complement's formatter pipeline,
 without making users reconstruct the run from terminal scrollback.
+
+In addition to runtime results, `cotest` now has an offline fixture-driven
+conformance surface in [src/conformance.rs](/E:/Works/contrix-dev/cotest/src/conformance.rs:1),
+which consumes the spec-owned fixture files under
+`contrix-spec/zh/conformance/fixtures`. Complement does not need this exact
+layer because Matrix homeserver behavior is mostly expressed directly through
+networked black-box tests; Contrix benefits from keeping protocol vectors and
+server scenarios side by side.
 
 ## Coverage Translation
 
