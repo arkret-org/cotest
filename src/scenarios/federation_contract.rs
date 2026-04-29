@@ -84,7 +84,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let operation = Operation::create(
         OperationId::new("cx:operation:federation-replay")?,
         SpaceId::new("cx:space:federation")?,
-        "message",
+        "cx.message.create",
         json!({
             "event_id": "cx:event:federation-replay",
             "sender": "did:web:remote.example",
@@ -164,7 +164,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let invalid_operation = Operation::create(
         OperationId::new("cx:operation:federation-invalid-envelope")?,
         SpaceId::new("cx:space:federation")?,
-        "message",
+        "cx.message.create",
         json!({
             "event_id": "cx:event:federation-invalid-envelope",
             "sender": "did:web:remote.example",
@@ -192,7 +192,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let redaction = Operation::create(
         OperationId::new("cx:operation:federation-redaction")?,
         SpaceId::new("cx:space:federation")?,
-        "redaction",
+        "cx.message.redact",
         json!({
             "event_id": "cx:event:federation-redaction",
             "target_event_id": "cx:event:federation-replay"
@@ -236,7 +236,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     let operation = Operation::create(
         OperationId::new("cx:operation:federation-project-01")?,
         SpaceId::new(space_id.to_owned())?,
-        "message",
+        "cx.message.create",
         json!({
             "event_id": "cx:event:federation-project-01",
             "sender": "did:web:remote.example",

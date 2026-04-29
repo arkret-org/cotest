@@ -1,0 +1,193 @@
+# cotest Runtime Workflow
+
+## Why this exists
+
+`cotest` now has two execution paths:
+
+- `process` mode for local protocol debugging against a checked-out Rust server.
+- `docker` mode for reproducible, Complement-style black-box runs against a built
+  SUT image.
+
+This closes the gap between the earlier ad hoc `cargo run` harness and the
+deployment model used by `E:\Works\palpo-im\complement`.
+
+## What Complement does
+
+Complement is organized around a few explicit runtime pieces:
+
+- a base homeserver image selected with `COMPLEMENT_BASE_IMAGE`
+- Docker build/deploy helpers in `internal/docker/`
+- runtime-specific hooks in `runtime/`
+- host-side test execution with Go while homeservers run in containers
+- optional pretty result formatting via `go test -json` plus `gotestfmt`
+- per-deployment Docker networks and container lifecycle management in
+  `internal/docker/deployer.go`
+
+In practice, Complement treats the homeserver as an external appliance:
+
+1. build or provide a Docker image
+2. start one or more containers per test package or deployment
+3. drive them only through public APIs
+4. collect logs and summarize test output on the host
+
+## What cotest does
+
+`cotest` follows the same broad pattern, but keeps a fast local path for day to
+day Rust work.
+
+### Runtime modes
+
+- `process`:
+  `src/harness.rs` starts the SUT with `cargo run --manifest-path <manifest>`.
+  This is the default mode for local development.
+- `docker`:
+  `src/harness.rs` starts the SUT with `docker run` from `COTEST_SUT_IMAGE`.
+  Multi-server tests create an isolated Docker network so the spawned servers
+  share a runtime boundary instead of pretending everything is localhost. This
+  is the direct analogue of Complement standing up multiple homeserver
+  containers inside one deployment network.
+
+### Runtime switch
+
+The harness reads these environment variables:
+
+- `COTEST_SUT_MODE=process|docker`
+- `COTEST_SUT_MANIFEST=<path to Cargo.toml>` for process mode
+- `COTEST_SUT_IMAGE=<tag>` for docker mode
+- `COTEST_SUT_CONTAINER_PORT=<port>` if the image exposes a non-default
+  internal port. Default is `8008`.
+
+### Docker image contract
+
+The default image asset is [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1).
+It is built from the workspace root one level above `cotest`, because `soland`
+depends on the sibling checkout `contrix-rust-sdk`. The workspace root
+`.dockerignore` trims the build context so Docker only receives the `soland`,
+`contrix-rust-sdk`, and `cotest/docker` trees instead of the whole workspace.
+
+The image contract is intentionally simple:
+
+- start `soland` as the entrypoint
+- listen on `SERVERX_BIND`
+- honor `SERVERX_PUBLIC_BASE_URL`, `SERVERX_SERVICE_DID`,
+  `SERVERX_DEVELOPMENT_MODE`, and `SERVERX_BLOB_ROOT`
+- expose port `8008`
+
+The current implementation source-builds `soland` inside Docker:
+
+- build stage: `rust:1.92-bookworm`
+- runtime stage: `rust:1.92-bookworm`
+- copied source trees: `soland` and `contrix-rust-sdk`
+- build command: `cargo build --release`
+
+The image does not define an in-container `HEALTHCHECK`. Instead, the harness
+waits on `GET /health` from the host side, which keeps the SUT contract
+identical between `process` and `docker` modes.
+
+## Build and run
+
+### Build the default Docker SUT image
+
+```powershell
+.\scripts\build-soland-image.ps1
+```
+
+This script:
+
+- uses `E:\Works\contrix-dev` as the Docker build context by default
+- reads [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1)
+- expects sibling `soland` and `contrix-rust-sdk` checkouts to exist
+- produces `cotest-soland:latest` unless `-ImageTag` overrides it
+
+The first Docker build is slower than `process` mode because it compiles
+`soland` inside the image and resolves crates in the container build context.
+
+To build with a custom tag:
+
+```powershell
+.\scripts\build-soland-image.ps1 -ImageTag cotest-soland:dev
+```
+
+### Run in local process mode
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime process
+```
+
+To point at a different checkout:
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime process -SutManifest E:\path\to\server\Cargo.toml
+```
+
+### Run in Docker mode
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime docker -BuildImage
+```
+
+If the image already exists:
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
+```
+
+### Run a filtered subset
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime docker -CargoTestFilter federation
+```
+
+## Startup and shutdown model
+
+- `ContrixServer` is the single entrypoint for one SUT instance.
+- `TestServerGroup` is the single entrypoint for multi-server scenarios.
+- In `process` mode, each server is a child `cargo run` process with its own
+  temp blob root.
+- In `docker` mode, each server is a detached `docker run --rm` container with
+  its own mapped host port, temp blob root, and `SERVERX_*` runtime env.
+- Multi-server Docker scenarios create one unique bridge network per test group
+  and remove it on drop, mirroring Complement's deployment scoping.
+- Both runtimes use the same host-side health polling and the same actor/test
+  client code, so scenario behavior does not diverge by runtime.
+
+## How results are shown
+
+`run-cotest.ps1` does three things:
+
+1. streams the normal `cargo test` output to the terminal
+2. saves the full raw log
+3. writes machine-readable and human-readable summaries
+
+Artifacts are written to:
+
+- `artifacts/runs/<timestamp>/raw.log`
+- `artifacts/runs/<timestamp>/summary.json`
+- `artifacts/runs/<timestamp>/summary.md`
+- `artifacts/latest/` as a copy of the most recent run
+
+The Markdown summary is the primary “show me the result” artifact. It includes:
+
+- runtime mode
+- selected SUT
+- start and finish timestamps
+- duration
+- pass/fail/ignored counts
+- failing test list when present
+- per-test status table
+
+This is the `cotest` equivalent of Complement's `go test -json | gotestfmt`
+story, except the formatting is emitted directly as saved Markdown and JSON
+artifacts rather than depending on an external pretty-printer.
+
+## Recommended usage
+
+- Use `process` mode while iterating on server code and test logic.
+- Use `docker` mode when you need a shareable, reproducible black-box run closer
+  to how Complement validates homeserver images.
+- Use `artifacts/latest/summary.md` as the first place to inspect a run instead
+  of relying on terminal scrollback.
+- As of this workflow, both
+  `.\scripts\run-cotest.ps1 -Runtime process` and
+  `.\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest`
+  have been validated end-to-end against the current `soland` checkout.

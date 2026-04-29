@@ -3,13 +3,16 @@ use contrix_sdk::{Operation, OperationId, SpaceId};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, dev_login, encrypted_envelope, expect_json, register_account};
+use crate::harness::{
+    TestServerGroup, dev_login, encrypted_envelope, expect_json, register_account,
+};
 
 pub async fn cross_server_collaboration_flow_works() -> Result<()> {
-    let server_a = ContrixServer::spawn("federation-a").await?;
-    let server_b = ContrixServer::spawn("federation-b").await?;
-    let alice = dev_login(&server_a, "did:web:alice.example", "dev_alice").await?;
-    let bob = register_account(&server_b, "did:web:bob-b.example", "@bob-b", "dev_bob_b").await?;
+    let group = TestServerGroup::multi("federation-collaboration", 2).await?;
+    let server_a = group.server(0);
+    let server_b = group.server(1);
+    let alice = dev_login(server_a, "did:web:alice.example", "dev_alice").await?;
+    let bob = register_account(server_b, "did:web:bob-b.example", "@bob-b", "dev_bob_b").await?;
 
     let describe_a = expect_json(
         server_a.http().get(server_a.url("/api/v1/server/describe")),
@@ -68,7 +71,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let alice_message = Operation::create(
         OperationId::new("cx:operation:federation-alice-message-01")?,
         SpaceId::new(space_id.clone())?,
-        "message",
+        "cx.message.create",
         json!({
             "event_id": "cx:event:federation-alice-01",
             "sender": "did:web:alice.example",
@@ -128,7 +131,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let bob_reply = Operation::create(
         OperationId::new("cx:operation:federation-bob-message-01")?,
         SpaceId::new(space_id.clone())?,
-        "message",
+        "cx.message.create",
         json!({
             "event_id": "cx:event:federation-bob-01",
             "sender": "did:web:bob-b.example",

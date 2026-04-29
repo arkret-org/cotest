@@ -13,6 +13,15 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 - Shared lifecycle and actor helpers live in `src/harness.rs`.
 - Scenario logic lives in `src/scenarios/`; `tests/` stays as thin wrappers so
   the project remains the test harness, not a pile of ad hoc integration files.
+- The harness now supports both local process spawning and Docker-backed SUT
+  spawning from the same scenario code.
+- `ContrixServer` is the one-instance lifecycle unit; `TestServerGroup` is the
+  multi-instance lifecycle unit.
+- In Docker mode, `TestServerGroup::multi` creates one isolated network per
+  scenario group so federated tests exercise real cross-container addressing
+  instead of host-local shortcuts.
+- Result presentation is part of the harness contract now: the scripted runner
+  writes a stable Markdown/JSON report surface under `artifacts/`.
 
 ## Current Suite Map
 
@@ -67,3 +76,13 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 $env:COTEST_SUT_MANIFEST = "E:\Works\contrix-dev\soland\Cargo.toml"
 cargo test --tests -- --nocapture
 ```
+
+Recommended scripted entrypoints:
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime process
+.\scripts\run-cotest.ps1 -Runtime docker -BuildImage
+```
+
+The runner stores raw logs plus Markdown/JSON summaries under `artifacts/`.
+`artifacts/latest/summary.md` is the primary result view for a completed run.

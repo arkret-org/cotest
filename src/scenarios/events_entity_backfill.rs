@@ -58,7 +58,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let recovered_message_ids = collected
         .iter()
-        .filter(|event| event["event_type"] == "message")
+        .filter(|event| event["event_type"] == "cx.message.create")
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();
     assert_eq!(recovered_message_ids, expected_message_ids);
@@ -86,7 +86,7 @@ pub async fn repo_entity_state_operations_are_submitted_and_backfilled() -> Resu
         "cx:operation:entity-create-01",
         "cx:event:entity-create-01",
         space_id,
-        "entity.create",
+        "cx.entity.create",
         json!({
             "id": entity_id,
             "entity_id": entity_id,
@@ -100,7 +100,7 @@ pub async fn repo_entity_state_operations_are_submitted_and_backfilled() -> Resu
         "cx:operation:entity-update-01",
         "cx:event:entity-update-01",
         space_id,
-        "entity.update",
+        "cx.entity.update",
         json!({
             "id": entity_id,
             "entity_id": entity_id,
@@ -114,7 +114,7 @@ pub async fn repo_entity_state_operations_are_submitted_and_backfilled() -> Resu
         "cx:operation:entity-delete-01",
         "cx:event:entity-delete-01",
         space_id,
-        "entity.delete",
+        "cx.entity.delete",
         json!({
             "id": entity_id,
             "entity_id": entity_id,
@@ -169,7 +169,7 @@ pub async fn repo_entity_state_operations_are_submitted_and_backfilled() -> Resu
         .collect::<Vec<_>>();
     assert_eq!(
         event_types,
-        vec!["entity.create", "entity.update", "entity.delete"]
+        vec!["cx.entity.create", "cx.entity.update", "cx.entity.delete"]
     );
     assert_eq!(entity_events[0]["payload"]["state"], "active");
     assert_eq!(entity_events[1]["payload"]["state"], "archived");

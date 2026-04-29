@@ -16,14 +16,15 @@ use serde_json::{Value, json};
 use url::Url;
 
 pub struct ContrixServer {
-    child: Child,
+    handle: SutHandle,
     base_url: Url,
     service_did: String,
-    blob_root: PathBuf,
+    blob_root: Option<PathBuf>,
 }
 
 pub struct TestServerGroup {
     servers: Vec<ContrixServer>,
+    docker_network: Option<String>,
 }
 
 #[derive(Clone)]
@@ -37,8 +38,30 @@ pub struct TestActorClient {
     pub token: String,
 }
 
+enum SutHandle {
+    Local(Child),
+    Docker { container_name: String },
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum SutRuntimeMode {
+    Process,
+    Docker,
+}
+
 impl ContrixServer {
     pub async fn spawn(name: &str) -> Result<Self> {
+        Self::spawn_with_network(name, None).await
+    }
+
+    async fn spawn_with_network(name: &str, docker_network: Option<&str>) -> Result<Self> {
+        match sut_runtime_mode() {
+            SutRuntimeMode::Process => Self::spawn_process(name).await,
+            SutRuntimeMode::Docker => Self::spawn_docker(name, docker_network).await,
+        }
+    }
+
+    async fn spawn_process(name: &str) -> Result<Self> {
         let port = free_port()?;
         let bind = format!("127.0.0.1:{port}");
         let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
@@ -73,10 +96,79 @@ impl ContrixServer {
         }
 
         Ok(Self {
-            child,
+            handle: SutHandle::Local(child),
             base_url,
             service_did,
-            blob_root,
+            blob_root: Some(blob_root),
+        })
+    }
+
+    async fn spawn_docker(name: &str, docker_network: Option<&str>) -> Result<Self> {
+        let host_port = free_port()?;
+        let container_port = sut_container_port();
+        let alias = sanitize_runtime_name(name);
+        let base_url = Url::parse(&format!("http://127.0.0.1:{host_port}/"))?;
+        let service_did = format!("did:web:{name}.cotest.local");
+        let public_base_url = if docker_network.is_some() {
+            format!("http://{alias}:{container_port}/")
+        } else {
+            base_url.as_str().to_owned()
+        };
+        let image = sut_image();
+        let container_name = format!("cotest-{}-{}-{}", alias, std::process::id(), host_port);
+
+        let mut command = Command::new("docker");
+        command
+            .arg("run")
+            .arg("--detach")
+            .arg("--rm")
+            .arg("--name")
+            .arg(&container_name)
+            .arg("--publish")
+            .arg(format!("127.0.0.1:{host_port}:{container_port}"));
+        if let Some(network_name) = docker_network {
+            command
+                .arg("--network")
+                .arg(network_name)
+                .arg("--network-alias")
+                .arg(&alias)
+                .arg("--hostname")
+                .arg(&alias);
+        }
+        command
+            .arg("--env")
+            .arg(format!("SERVERX_BIND=0.0.0.0:{container_port}"))
+            .arg("--env")
+            .arg(format!("SERVERX_PUBLIC_BASE_URL={public_base_url}"))
+            .arg("--env")
+            .arg(format!("SERVERX_SERVICE_DID={service_did}"))
+            .arg("--env")
+            .arg("SERVERX_DEVELOPMENT_MODE=1")
+            .arg("--env")
+            .arg("SERVERX_BLOB_ROOT=/tmp/soland-blobs")
+            .arg(&image);
+
+        run_command(
+            &mut command,
+            &format!("failed to start docker SUT from image {image}"),
+        )?;
+
+        if let Err(error) = wait_until_healthy(base_url.clone()).await {
+            let logs = docker_logs(&container_name).unwrap_or_default();
+            let _ = docker_remove_container(&container_name);
+            let log_suffix = if logs.trim().is_empty() {
+                String::new()
+            } else {
+                format!("; container logs:\n{logs}")
+            };
+            return Err(anyhow!("{error}{log_suffix}"));
+        }
+
+        Ok(Self {
+            handle: SutHandle::Docker { container_name },
+            base_url,
+            service_did,
+            blob_root: None,
         })
     }
 
@@ -139,9 +231,18 @@ impl ContrixServer {
 
 impl Drop for ContrixServer {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        let _ = fs::remove_dir_all(&self.blob_root);
+        match &mut self.handle {
+            SutHandle::Local(child) => {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            SutHandle::Docker { container_name } => {
+                let _ = docker_remove_container(container_name);
+            }
+        }
+        if let Some(blob_root) = &self.blob_root {
+            let _ = fs::remove_dir_all(blob_root);
+        }
     }
 }
 
@@ -149,15 +250,45 @@ impl TestServerGroup {
     pub async fn single(name: &str) -> Result<Self> {
         Ok(Self {
             servers: vec![ContrixServer::spawn(name).await?],
+            docker_network: None,
         })
     }
 
     pub async fn multi(name: &str, count: usize) -> Result<Self> {
+        let docker_network = if sut_runtime_mode() == SutRuntimeMode::Docker {
+            let network_name = format!(
+                "cotest-{}-{}-{}",
+                sanitize_runtime_name(name),
+                std::process::id(),
+                Utc::now().timestamp_millis()
+            );
+            docker_create_network(&network_name)?;
+            Some(network_name)
+        } else {
+            None
+        };
         let mut servers = Vec::with_capacity(count);
         for index in 0..count {
-            servers.push(ContrixServer::spawn(&format!("{name}-{index}")).await?);
+            match ContrixServer::spawn_with_network(
+                &format!("{name}-{index}"),
+                docker_network.as_deref(),
+            )
+            .await
+            {
+                Ok(server) => servers.push(server),
+                Err(error) => {
+                    drop(servers);
+                    if let Some(network_name) = &docker_network {
+                        let _ = docker_remove_network(network_name);
+                    }
+                    return Err(error);
+                }
+            }
         }
-        Ok(Self { servers })
+        Ok(Self {
+            servers,
+            docker_network,
+        })
     }
 
     pub fn server(&self, index: usize) -> &ContrixServer {
@@ -166,6 +297,15 @@ impl TestServerGroup {
 
     pub fn len(&self) -> usize {
         self.servers.len()
+    }
+}
+
+impl Drop for TestServerGroup {
+    fn drop(&mut self) {
+        self.servers.clear();
+        if let Some(network_name) = self.docker_network.take() {
+            let _ = docker_remove_network(&network_name);
+        }
     }
 }
 
@@ -413,7 +553,7 @@ pub fn repo_message_operation(
     Ok(Operation::create(
         OperationId::new(operation_id.to_owned())?,
         SpaceId::new(space_id.to_owned())?,
-        "message",
+        "cx.message.create",
         json!({
             "event_id": event_id,
             "sender": sender,
@@ -471,6 +611,105 @@ fn sut_manifest() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(r"E:\Works\contrix-dev\soland\Cargo.toml"))
 }
 
+fn sut_runtime_mode() -> SutRuntimeMode {
+    match std::env::var("COTEST_SUT_MODE") {
+        Ok(value) if value.eq_ignore_ascii_case("docker") => SutRuntimeMode::Docker,
+        _ => SutRuntimeMode::Process,
+    }
+}
+
+fn sut_image() -> String {
+    std::env::var("COTEST_SUT_IMAGE").unwrap_or_else(|_| "cotest-soland:latest".to_owned())
+}
+
+fn sut_container_port() -> u16 {
+    std::env::var("COTEST_SUT_CONTAINER_PORT")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(8008)
+}
+
+fn sanitize_runtime_name(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn run_command(command: &mut Command, context: &str) -> Result<String> {
+    let output = command.output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(anyhow!(
+            "{context}: status {} stdout: {} stderr: {}",
+            output.status,
+            stdout.trim(),
+            stderr.trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+fn docker_create_network(network_name: &str) -> Result<()> {
+    let mut command = Command::new("docker");
+    command.arg("network").arg("create").arg(network_name);
+    run_command(
+        &mut command,
+        &format!("failed to create docker network {network_name}"),
+    )?;
+    Ok(())
+}
+
+fn docker_remove_network(network_name: &str) -> Result<()> {
+    let mut command = Command::new("docker");
+    command.arg("network").arg("rm").arg(network_name);
+    let output = command.output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("No such network") {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "failed to remove docker network {network_name}: {}",
+        stderr.trim()
+    ))
+}
+
+fn docker_remove_container(container_name: &str) -> Result<()> {
+    let mut command = Command::new("docker");
+    command.arg("rm").arg("--force").arg(container_name);
+    let output = command.output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("No such container") {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "failed to remove docker container {container_name}: {}",
+        stderr.trim()
+    ))
+}
+
+fn docker_logs(container_name: &str) -> Result<String> {
+    let mut command = Command::new("docker");
+    command.arg("logs").arg(container_name);
+    run_command(
+        &mut command,
+        &format!("failed to read logs for {container_name}"),
+    )
+}
+
 fn free_port() -> Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     Ok(listener.local_addr()?.port())
@@ -480,11 +719,25 @@ async fn wait_until_healthy(base_url: Url) -> Result<()> {
     let client = HttpClient::new();
     let health_url = base_url.join("health")?;
     let mut last_error = None;
+    let attempts = std::env::var("COTEST_SUT_HEALTH_ATTEMPTS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(480);
 
-    for _ in 0..120 {
+    for _ in 0..attempts {
         match client.get(health_url.clone()).send().await {
             Ok(response) if response.status().is_success() => return Ok(()),
-            Ok(response) => last_error = Some(anyhow!("health status {}", response.status())),
+            Ok(response) => {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                let body = body.trim();
+                last_error = Some(if body.is_empty() {
+                    anyhow!("health status {status}")
+                } else {
+                    anyhow!("health status {status}: {body}")
+                });
+            }
             Err(error) => last_error = Some(error.into()),
         }
         tokio::time::sleep(Duration::from_millis(250)).await;

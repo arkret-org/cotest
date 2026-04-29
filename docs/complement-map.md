@@ -7,6 +7,8 @@ applies the same pattern to Contrix.
 ## Concept Mapping
 
 - Complement deployment helpers map to `ContrixServer` and `TestServerGroup`.
+  `cotest` now supports both host-spawned local processes and Docker-backed SUT
+  instances under the same harness.
 - Complement client helpers map to `TestActorClient`, shared HTTP assertions,
   and selected `contrix-rust-sdk` helpers.
 - Complement's domain-oriented test packages map to `src/scenarios/*.rs`.
@@ -14,6 +16,61 @@ applies the same pattern to Contrix.
   `federation_contract`, and `federation_collaboration`.
 - Complement's out-of-repo discipline maps to keeping reusable logic in `src/`
   and leaving `tests/` as wrappers only.
+- Complement's base-image workflow maps to `COTEST_SUT_IMAGE` plus
+  [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1)
+  and [scripts/build-soland-image.ps1](/E:/Works/contrix-dev/cotest/scripts/build-soland-image.ps1:1).
+- Complement's result-formatting story maps to
+  [scripts/run-cotest.ps1](/E:/Works/contrix-dev/cotest/scripts/run-cotest.ps1:1),
+  which emits raw logs and Markdown/JSON summaries under `artifacts/`.
+
+## Image and runtime model
+
+Complement typically expects a prebuilt homeserver image selected through
+`COMPLEMENT_BASE_IMAGE`, then uses `internal/docker/builder.go` and
+`internal/docker/deployer.go` to create deployment-scoped Docker resources.
+
+`cotest` now mirrors that model like this:
+
+- Image build entrypoint:
+  [scripts/build-soland-image.ps1](/E:/Works/contrix-dev/cotest/scripts/build-soland-image.ps1:1)
+  builds `cotest-soland:latest`.
+- Image source:
+  [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1)
+  compiles `soland` together with the sibling `contrix-rust-sdk` checkout.
+- Build context control:
+  `E:\Works\contrix-dev\.dockerignore` limits Docker context to the trees needed
+  for the SUT image, instead of sending the entire workspace.
+- Runtime selector:
+  `COTEST_SUT_MODE=process|docker` chooses either local `cargo run` or
+  container-backed execution.
+- Multi-server deployment:
+  `TestServerGroup::multi` creates an isolated Docker bridge network in
+  `docker` mode so federated scenarios run in one controlled runtime boundary.
+
+This is intentionally simpler than Complement's blueprint-image machinery:
+`cotest` currently builds one source-based `soland` image and uses runtime
+configuration plus host-side actor setup to shape each test.
+
+## Startup, run, and result display
+
+Complement runs Go tests on the host while homeservers live in containers, and
+optionally pretty-prints `go test -json` output with `gotestfmt`.
+
+`cotest` now has the same separation of concerns:
+
+- host-side `cargo test`
+- SUT spawned as either child process or Docker container
+- one script entrypoint for execution:
+  [scripts/run-cotest.ps1](/E:/Works/contrix-dev/cotest/scripts/run-cotest.ps1:1)
+- persisted result artifacts:
+  `artifacts/runs/<timestamp>/raw.log`,
+  `artifacts/runs/<timestamp>/summary.json`,
+  `artifacts/runs/<timestamp>/summary.md`,
+  and `artifacts/latest/`
+
+The Markdown summary is the primary human-readable report. That gives `cotest`
+an explicit result surface comparable to Complement's formatter pipeline,
+without making users reconstruct the run from terminal scrollback.
 
 ## Coverage Translation
 

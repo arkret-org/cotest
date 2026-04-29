@@ -240,8 +240,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .as_array()
         .unwrap()
         .iter()
-        .filter(|event| event["event_type"] == "space.lifecycle")
-        .map(|event| event["payload"]["action"].as_str().unwrap().to_owned())
+        .filter_map(|event| event["payload"]["action"].as_str().map(ToOwned::to_owned))
         .collect();
     assert_eq!(
         actions,

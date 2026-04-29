@@ -30,6 +30,24 @@
 - [x] 删除已无价值的 ignored 占位测试，改为可执行的 extension surface gap
       检查。
 
+## 补充运行体系任务
+
+- [x] 对照 `E:\Works\palpo-im\complement` 的 `dockerfiles/`、`runtime/`、
+      `internal/docker/`，整理 `cotest` 应采用的镜像构建、启动与结果展示模型，
+      并落入 `docs/complement-map.md` 与 `docs/runtime-workflow.md`。
+- [x] 为 `cotest` 增加 Complement 风格的 Docker SUT 运行模式，同时保留当前本地
+      `cargo run` 模式，统一到同一套 `ContrixServer` / `TestServerGroup` harness
+      入口。
+- [x] 提供可执行的镜像构建资产与脚本，使 `soland` 能从
+      `E:\Works\contrix-dev\contrix-rust-sdk` 依赖一起构建为测试镜像；当前资产为
+      `docker/soland.Dockerfile`、`scripts/build-soland-image.ps1` 与工作区根
+      `.dockerignore`。
+- [x] 提供统一的测试运行脚本，支持选择本地进程模式或 Docker 模式；当前入口为
+      `scripts/run-cotest.ps1`。
+- [x] 提供测试结果产物输出，包括原始日志与汇总视图，而不是只看终端滚动输出；
+      当前固定输出到 `artifacts/runs/<timestamp>/` 与 `artifacts/latest/`。
+- [x] 将上述运行方式、镜像要求、结果展示方式和与 Complement 的差异补入文档。
+
 ## 单机测试矩阵
 
 - [x] `service_surface`
@@ -90,6 +108,12 @@
 - [x] 已接入 `E:\Works\contrix-dev\contrix-rust-sdk` 作为类型与客户端辅助依赖。
 - [x] 已完成 `_todos.md` 规划与状态落盘。
 - [x] 已完成 `_todos.md` 中本轮所有可执行测试任务并勾选。
+- [x] 已验证 `.\scripts\run-cotest.ps1 -Runtime process` 全量通过，并产出
+      `artifacts/runs/<timestamp>/` 与 `artifacts/latest/` 汇总。
+- [x] 已验证 `.\scripts\build-soland-image.ps1` 可构建 `cotest-soland:latest`
+      镜像。
+- [x] 已验证 `.\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest`
+      全量通过，并可在多服务场景下自动建立隔离 Docker 网络。
 
 ## 当前仍未闭合的协议缺口（细化记录，不计入本轮待办）
 
