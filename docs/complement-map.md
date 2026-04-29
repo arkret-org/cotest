@@ -1,24 +1,43 @@
 # Complement-Inspired Contrix Test Map
 
-Complement is broad because it treats a server as a black box and tests each
-protocol surface in several dimensions: success path, invalid input, auth,
-authorization, idempotency, state visibility, sync projection, media/device
-delivery, and federation inbound/outbound behavior.
+Complement treats a homeserver as a black box: deploy real instances, create
+high-level test clients, and validate protocol behavior by domain. `cotest`
+applies the same pattern to Contrix.
 
-`cotest` maps that style to Contrix as follows:
+## Concept Mapping
 
-- Account/Auth: register, login, logout, duplicate handling, invalid IDs, token
-  rejection, auth material in query strings.
-- Space/Collaboration: create, invite/member changes, owner-only actions,
-  private visibility, deleted-space behavior, non-member send denial.
-- Sync/Directory/Index: visibility, search limits, missing parameters, thread
-  and notification projections, subscribe/backfill/snapshot behavior.
-- Repo: commit submit, CAS mismatch, duplicate submit, missing commits,
-  operation validation, expanded commit reads.
-- Crypto/Delivery/Media: device key upload/query/claim, to-device idempotency,
-  opaque payload preservation, blob hash/range/HEAD behavior, push routing.
-- Federation: transaction/push/pull/space-members/verify-actor positive and
-  invalid-input behavior, remote operation projection into sync/index.
-- Torture/Framework: unknown endpoints, wrong methods, invalid JSON, bad query
-  parameters, standard error envelopes.
+- Complement deployment helpers map to `ContrixServer` and `TestServerGroup`.
+- Complement client helpers map to `TestActorClient`, shared HTTP assertions,
+  and selected `contrix-rust-sdk` helpers.
+- Complement's domain-oriented test packages map to `src/scenarios/*.rs`.
+- Complement federation coverage maps to `federation_readiness`,
+  `federation_contract`, and `federation_collaboration`.
+- Complement's out-of-repo discipline maps to keeping reusable logic in `src/`
+  and leaving `tests/` as wrappers only.
 
+## Coverage Translation
+
+- Service and framework surface:
+  health, server description, supported operations, unknown routes, bad JSON,
+  wrong methods, and standard error envelopes.
+- Account and social graph:
+  register, login, logout, session checks, duplicate handling, and contact
+  edge cases.
+- Collaboration and policy:
+  space lifecycle, membership, permissions, sync projection, and private
+  plaintext policy enforcement.
+- Repo and sync:
+  commit submission, idempotency, CAS conflicts, read paths, repo sync,
+  directory/index parameter handling, and expanded commit reads.
+- Identity, authz, and realtime:
+  identity resolution/log/receipts, grant and policy document lifecycle,
+  presence/typing, push rules, and WebRTC signaling.
+- Delivery and media:
+  keys, to-device delivery, blob upload/download, range requests, and payload
+  preservation.
+- Federation:
+  readiness checks, public contract validation, and end-to-end cross-server
+  collaboration behavior.
+- Extension gaps:
+  executable coverage for missing applet/agent route surfaces so gaps remain
+  visible without leaving ignored placeholder tests behind.

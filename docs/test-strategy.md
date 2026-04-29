@@ -1,170 +1,69 @@
 # cotest Test Strategy
 
-`cotest` is a black-box server conformance suite. A test group starts the server
-processes it needs, creates one or more test clients, and exercises public HTTP
-APIs only.
+`cotest` is a black-box Contrix server conformance suite. Each scenario starts
+the server processes it needs, creates test actors through public APIs, and
+asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 
 ## Harness Model
 
-- Single-server group: start one `serverx`; create local clients such as Alice,
-  Bob, and Carol.
-- Multi-server group: start two or more `serverx` instances; create local
-  clients on different servers; verify federation behavior through HTTP
-  federation endpoints.
-- Each integration test file is named by protocol/business domain, not by
-  milestone number.
-- `M0`, `M1`, etc. are planning folders only. They must not leak into Rust file
-  names, modules, structs, or test function names.
+- Single-server scenarios start one real server process and verify local
+  account, space, repo, sync, media, and policy behavior.
+- Multi-server scenarios start two or more real server processes and verify
+  federation-facing behavior through public endpoints.
+- Shared lifecycle and actor helpers live in `src/harness.rs`.
+- Scenario logic lives in `src/scenarios/`; `tests/` stays as thin wrappers so
+  the project remains the test harness, not a pile of ad hoc integration files.
 
-## Feature Groups
+## Current Suite Map
 
-### Service and API Contract
+### Single-Server
 
-- Health and service description.
-- Supported operations and advertised protocol version.
-- Unknown endpoints, wrong methods, invalid JSON, malformed identifiers.
-- Standard Contrix error envelope.
+- `service_surface`: health, service description, sync/directory/index describe
+  endpoints, and required operation advertisement.
+- `api_contracts_auth`: error envelopes, invalid JSON, account register/login,
+  logout, and contact edge cases.
+- `collaboration_workflow`: account bootstrap, space lifecycle, member add,
+  message send, sync, and index projection.
+- `delivery_media`: device key upload/query/claim, to-device delivery, blob
+  upload/download, range, and hash validation.
+- `events_entity_backfill`: event creation, entity projection, timeline reads,
+  and missing-event recovery surfaces.
+- `identity_directory_index`: identity describe/resolve/document/log/receipt,
+  directory search/resolve, export, audit, notifications, and inbox behavior.
+- `authz_policy_presence`: grant lifecycle, policy check contract, presence,
+  push device registration, and ICE config behavior.
+- `interaction_models`: message revision/redaction, reactions, read markers,
+  subscriptions, entity CRUD, relations, and view projections.
+- `schema_policy_realtime`: schema registry, policy documents, typing
+  ephemerals, push rules, and WebRTC signaling sessions.
+- `extension_surface_gaps`: executable checks for current applet/agent surface
+  gaps so missing routes are tracked by tests instead of ignored placeholders.
+- `protocol_payloads`: payload envelope, encrypted content, receipts, and
+  protocol object acceptance.
+- `repo_sync_index`: repo submit, idempotency, read paths, expanded commit
+  reads, repo sync, and parameter edge coverage.
+- `space_permissions`: membership, owner-only mutation, deleted-space behavior,
+  non-member denial, and private visibility policy checks.
 
-Servers: one. Clients: none or one authenticated client when auth is required.
+### Multi-Server
 
-### Account and Session
+- `federation_readiness`: remote service discovery and basic cross-instance
+  wiring checks.
+- `federation_contract`: transaction/push/pull/verify-actor style contract and
+  invalid-input behavior.
+- `federation_collaboration`: cross-server membership, remote message
+  propagation, sync visibility, and federated projection behavior.
 
-- Register user.
-- Login account.
-- `account/me`.
-- Logout account.
-- Duplicate account/handle rejection.
-- Invalid DID, invalid handle, invalid device ID.
-- Missing token, invalid token, and token in query string rejection.
+## SDK Usage Policy
 
-Servers: one. Clients: Alice/Bob/invalid anonymous client.
+- Use `contrix-rust-sdk` for typed protocol objects, commit construction, and
+  generic client smoke coverage.
+- Prefer raw HTTP assertions for authoritative server-contract checks when the
+  current SDK wire model lags the server's live JSON surface.
 
-### Social Graph / Contacts
+## Execution
 
-- Add friend/contact request.
-- Accept/reject contact request.
-- List contacts.
-- Duplicate contact request.
-- Self-target and unknown target rejection.
-- Contact visibility impact on user directory.
-
-Servers: one for local graph; two for future remote contact/federated discovery.
-Clients: Alice and Bob.
-
-### Space Lifecycle and Membership
-
-- Create space.
-- Join space or add member, depending on server API surface.
-- Delete space.
-- Add member.
-- Remove member.
-- Owner-only mutation checks.
-- Private/public visibility.
-- Sending events denied for non-members.
-- Deleted spaces disappear from sync/directory/index and reject new writes.
-
-Servers: one for local; two for federated invite/join/member propagation.
-Clients: owner, member, outsider.
-
-### Applets
-
-- Add applet to a space.
-- Delete applet.
-- Query applet metadata.
-- Applet portal/transaction behavior.
-- Permission checks for applet installation/removal.
-
-Current `serverx` state: schema and SDK names exist, but HTTP routes are not
-registered. These tests should be added as pending/ignored or implemented after
-the server exposes applet endpoints.
-
-Servers: one initially; two when applet state must federate.
-Clients: space owner, member, outsider.
-
-### AI Agents
-
-- Add AI agent to a space.
-- Delete AI agent.
-- Agent event emission.
-- Agent permission boundaries.
-- Agent memory/state visibility.
-
-Current `serverx` state: no concrete HTTP route has been identified. This needs
-server API design before positive tests.
-
-Servers: one initially; two when agent state must federate.
-Clients: owner/admin, member, agent principal.
-
-### Events and Entity State
-
-- Send event/message.
-- Change entity state.
-- Relation/entity create/update/delete operations.
-- Reaction/read-marker operations.
-- Event ordering and projection.
-- Event missing backfill: create a gap, then verify backfill recovers missing
-  operations/events.
-- Duplicate transaction or idempotency behavior.
-
-Servers: one for local repo/projection; two for missing event backfill over
-federation.
-Clients: author, reader, outsider.
-
-### Sync, Directory, and Index
-
-- Initial sync.
-- Incremental sync.
-- Subscribe stream.
-- Backfill.
-- Snapshot head.
-- Search spaces.
-- Resolve space.
-- Search users/actors/organizations.
-- Query/index thread/entity/inbox/notifications.
-- Visibility and pagination/cursor errors.
-
-Servers: one and two. Clients: member, outsider, anonymous.
-
-### Repo
-
-- Submit commit.
-- Read commit.
-- List commits.
-- Get operations.
-- Repo sync.
-- CAS conflict.
-- Idempotent duplicate submit.
-- Missing commit and unknown operation behavior.
-- Invalid operation family rejection.
-
-Servers: one for local; two for federation operation propagation.
-Clients: repo author and anonymous protocol client as permitted by API.
-
-### Keys, To-Device, Blob, Push, Moderation
-
-- Upload/query/claim keys.
-- One-time key consumption.
-- To-device delivery and queue drain.
-- Opaque encrypted payload preservation.
-- Blob upload/download/HEAD/range/hash mismatch.
-- Push register/unregister/notify rejection.
-- Moderation report permission checks.
-
-Servers: one for local; two when key/device/blob behavior must federate.
-Clients: sender, receiver, outsider.
-
-### Federation
-
-- Remote service metadata and DID verification.
-- Transaction receive.
-- Push operations.
-- Pull operations with cursor.
-- Space members.
-- Verify actor.
-- Cross-server invite/join/member projection.
-- Cross-server message/event propagation.
-- Missing event backfill over federation.
-- Invalid JSON/missing parameter/invalid ID rejection.
-
-Servers: two or more. Clients: local user on each server.
-
+```powershell
+$env:COTEST_SUT_MANIFEST = "E:\Works\contrix-dev\soland\Cargo.toml"
+cargo test --tests -- --nocapture
+```

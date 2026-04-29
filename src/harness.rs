@@ -1,6 +1,5 @@
-#![allow(dead_code)]
-
 use std::{
+    fs,
     net::TcpListener,
     path::PathBuf,
     process::{Child, Command, Stdio},
@@ -9,35 +8,45 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use chrono::Utc;
-use contrix_sdk::{Commit, CommitId, Did, Hash, Operation, OperationId, Proof, SpaceId};
+use contrix_sdk::{
+    Auth, Client as SdkClient, Commit, CommitId, Did, Hash, Operation, OperationId, Proof, SpaceId,
+};
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
 
-pub struct ServerxInstance {
+pub struct ContrixServer {
     child: Child,
     base_url: Url,
+    service_did: String,
+    blob_root: PathBuf,
 }
 
 pub struct TestServerGroup {
-    servers: Vec<ServerxInstance>,
+    servers: Vec<ContrixServer>,
 }
 
 #[derive(Clone)]
-pub struct TestClient {
+pub struct TestActorClient {
     http: HttpClient,
+    sdk: SdkClient,
     base_url: Url,
+    service_did: String,
     pub actor: String,
     pub device_id: String,
     pub token: String,
 }
 
-impl ServerxInstance {
+impl ContrixServer {
     pub async fn spawn(name: &str) -> Result<Self> {
         let port = free_port()?;
         let bind = format!("127.0.0.1:{port}");
         let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
-        let manifest = serverx_manifest();
+        let service_did = format!("did:web:{name}.cotest.local");
+        let manifest = sut_manifest();
+        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{port}-blobs"));
+        let _ = fs::remove_dir_all(&blob_root);
+        fs::create_dir_all(&blob_root)?;
 
         let mut child = Command::new("cargo")
             .arg("run")
@@ -49,12 +58,13 @@ impl ServerxInstance {
             .arg(&bind)
             .env_remove("DATABASE_URL")
             .env("SERVERX_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SERVERX_SERVICE_DID", format!("did:web:{name}.cotest.local"))
+            .env("SERVERX_SERVICE_DID", &service_did)
             .env("SERVERX_DEVELOPMENT_MODE", "1")
+            .env("SERVERX_BLOB_ROOT", &blob_root)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .with_context(|| format!("failed to start serverx from {}", manifest.display()))?;
+            .with_context(|| format!("failed to start SUT from {}", manifest.display()))?;
 
         if let Err(error) = wait_until_healthy(base_url.clone()).await {
             let _ = child.kill();
@@ -62,15 +72,30 @@ impl ServerxInstance {
             return Err(error);
         }
 
-        Ok(Self { child, base_url })
+        Ok(Self {
+            child,
+            base_url,
+            service_did,
+            blob_root,
+        })
     }
 
     pub fn base_url(&self) -> Url {
         self.base_url.clone()
     }
 
+    pub fn service_did(&self) -> &str {
+        &self.service_did
+    }
+
     pub fn http(&self) -> HttpClient {
         HttpClient::new()
+    }
+
+    pub fn sdk(&self) -> Result<SdkClient> {
+        Ok(SdkClient::builder(self.base_url())
+            .allow_insecure_localhost()
+            .build()?)
     }
 
     pub fn url(&self, path: &str) -> String {
@@ -80,15 +105,9 @@ impl ServerxInstance {
             .to_string()
     }
 
-    pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestClient> {
+    pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let token = dev_login(self, actor, device_id).await?;
-        Ok(TestClient {
-            http: self.http(),
-            base_url: self.base_url(),
-            actor: actor.to_owned(),
-            device_id: device_id.to_owned(),
-            token,
-        })
+        self.actor_client(actor, device_id, token)
     }
 
     pub async fn register_client(
@@ -96,41 +115,52 @@ impl ServerxInstance {
         did: &str,
         handle: &str,
         device_id: &str,
-    ) -> Result<TestClient> {
+    ) -> Result<TestActorClient> {
         let token = register_account(self, did, handle, device_id).await?;
-        Ok(TestClient {
+        self.actor_client(did, device_id, token)
+    }
+
+    fn actor_client(&self, actor: &str, device_id: &str, token: String) -> Result<TestActorClient> {
+        let sdk = SdkClient::builder(self.base_url())
+            .allow_insecure_localhost()
+            .auth(Auth::Bearer(token.clone()))
+            .build()?;
+        Ok(TestActorClient {
             http: self.http(),
+            sdk,
             base_url: self.base_url(),
-            actor: did.to_owned(),
+            service_did: self.service_did.clone(),
+            actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             token,
         })
     }
 }
 
-impl Drop for ServerxInstance {
+impl Drop for ContrixServer {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        let _ = fs::remove_dir_all(&self.blob_root);
     }
 }
 
 impl TestServerGroup {
     pub async fn single(name: &str) -> Result<Self> {
         Ok(Self {
-            servers: vec![ServerxInstance::spawn(name).await?],
+            servers: vec![ContrixServer::spawn(name).await?],
         })
     }
 
     pub async fn multi(name: &str, count: usize) -> Result<Self> {
         let mut servers = Vec::with_capacity(count);
         for index in 0..count {
-            servers.push(ServerxInstance::spawn(&format!("{name}-{index}")).await?);
+            servers.push(ContrixServer::spawn(&format!("{name}-{index}")).await?);
         }
         Ok(Self { servers })
     }
 
-    pub fn server(&self, index: usize) -> &ServerxInstance {
+    pub fn server(&self, index: usize) -> &ContrixServer {
         &self.servers[index]
     }
 
@@ -139,7 +169,15 @@ impl TestServerGroup {
     }
 }
 
-impl TestClient {
+impl TestActorClient {
+    pub fn sdk(&self) -> SdkClient {
+        self.sdk.clone()
+    }
+
+    pub fn service_did(&self) -> &str {
+        &self.service_did
+    }
+
     pub fn url(&self, path: &str) -> String {
         self.base_url
             .join(path.trim_start_matches('/'))
@@ -164,19 +202,25 @@ impl TestClient {
     }
 
     pub async fn create_space(&self, title: &str) -> Result<String> {
-        let created = expect_json(
-            self.post("/api/v1/spaces")
-                .json(&json!({"title": title, "summary": title, "public": false})),
-            StatusCode::CREATED,
-        )
-        .await?;
+        let created = self
+            .create_space_with(json!({
+                "title": title,
+                "summary": title,
+                "public": false,
+                "plaintext_visible_services": [self.service_did.clone()]
+            }))
+            .await?;
         created["space_id"]
             .as_str()
             .map(ToOwned::to_owned)
             .ok_or_else(|| anyhow!("create space response did not include space_id: {created}"))
     }
 
-    pub async fn add_member(&self, space_id: &str, member: &TestClient) -> Result<Value> {
+    pub async fn create_space_with(&self, body: Value) -> Result<Value> {
+        expect_json(self.post("/api/v1/spaces").json(&body), StatusCode::CREATED).await
+    }
+
+    pub async fn add_member(&self, space_id: &str, member: &TestActorClient) -> Result<Value> {
         expect_json(
             self.post(&format!("/api/v1/spaces/{space_id}/members"))
                 .json(&json!({"member": member.actor})),
@@ -204,7 +248,7 @@ impl TestClient {
 }
 
 pub async fn register_account(
-    server: &ServerxInstance,
+    server: &ContrixServer,
     did: &str,
     handle: &str,
     device_id: &str,
@@ -226,7 +270,7 @@ pub async fn register_account(
     dev_login(server, did, device_id).await
 }
 
-pub async fn dev_login(server: &ServerxInstance, actor: &str, device_id: &str) -> Result<String> {
+pub async fn dev_login(server: &ContrixServer, actor: &str, device_id: &str) -> Result<String> {
     let login = expect_json(
         server
             .http()
@@ -279,13 +323,18 @@ pub async fn expect_api_error(
     Ok(body)
 }
 
-pub async fn create_space(server: &ServerxInstance, token: &str, title: &str) -> Result<String> {
+pub async fn create_space(server: &ContrixServer, token: &str, title: &str) -> Result<String> {
     let created = expect_json(
         server
             .http()
             .post(server.url("/api/v1/spaces"))
             .bearer_auth(token)
-            .json(&json!({"title": title, "summary": title, "public": false})),
+            .json(&json!({
+                "title": title,
+                "summary": title,
+                "public": false,
+                "plaintext_visible_services": [server.service_did()]
+            })),
         StatusCode::CREATED,
     )
     .await?;
@@ -296,7 +345,7 @@ pub async fn create_space(server: &ServerxInstance, token: &str, title: &str) ->
 }
 
 pub async fn add_member(
-    server: &ServerxInstance,
+    server: &ContrixServer,
     token: &str,
     space_id: &str,
     member: &str,
@@ -314,7 +363,7 @@ pub async fn add_member(
 }
 
 pub async fn send_message(
-    server: &ServerxInstance,
+    server: &ContrixServer,
     token: &str,
     space_id: &str,
     thread_id: &str,
@@ -336,10 +385,29 @@ pub async fn send_message(
     .await
 }
 
-pub fn message_operation(
+pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
+    json!({
+        "scheme": "mls-rfc9420",
+        "version": 1,
+        "group_id": "cx:mls:test",
+        "epoch": 1,
+        "content_type": content_type,
+        "ciphertext": ciphertext,
+        "authentication_tag": "opaque-tag",
+        "aad": {"suite": "test"},
+        "key_ref": {"kid": "did:web:alice.example#device"},
+        "digests": {
+            "ciphertext": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        }
+    })
+}
+
+pub fn repo_message_operation(
     operation_id: &str,
+    event_id: &str,
     space_id: &str,
     sender: &str,
+    thread_id: &str,
     body: &str,
 ) -> Result<Operation> {
     Ok(Operation::create(
@@ -347,10 +415,9 @@ pub fn message_operation(
         SpaceId::new(space_id.to_owned())?,
         "message",
         json!({
-            "event_id": operation_id.replace("cx:operation:", "cx:event:"),
+            "event_id": event_id,
             "sender": sender,
-            "thread_id": format!("cx:thread:{}", operation_id.replace(':', "-")),
-            "members": [sender],
+            "thread_id": thread_id,
             "body": body
         }),
     ))
@@ -397,10 +464,11 @@ pub fn dummy_proof(actor: &str) -> Proof {
     }
 }
 
-fn serverx_manifest() -> PathBuf {
-    std::env::var_os("SERVERX_MANIFEST")
+fn sut_manifest() -> PathBuf {
+    std::env::var_os("COTEST_SUT_MANIFEST")
+        .or_else(|| std::env::var_os("SERVERX_MANIFEST"))
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"E:\Works\contrix-dev\serverx\Cargo.toml"))
+        .unwrap_or_else(|| PathBuf::from(r"E:\Works\contrix-dev\soland\Cargo.toml"))
 }
 
 fn free_port() -> Result<u16> {

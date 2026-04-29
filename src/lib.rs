@@ -1,6 +1,9 @@
-//! External conformance and interoperability harness for Contrix servers.
+//! Complement-style black-box conformance harness for Contrix servers.
 //!
-//! The executable behavior lives in integration tests so the harness can start
-//! real server processes and exercise them only through public HTTP contracts.
+//! `cotest` keeps the executable harness and scenario logic in the main crate.
+//! Integration test files are intentionally thin entrypoints.
+
+pub mod harness;
+pub mod scenarios;
 
 pub const HARNESS_NAME: &str = "cotest";
