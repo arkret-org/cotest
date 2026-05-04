@@ -347,6 +347,37 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_advance["state"], "policy_pending");
 
+    let restore_approval_status = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/approvals/status"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_approval_status["contract"],
+        "contrix.rest.key_backup_restore_approval_status.v1"
+    );
+
+    let restore_approval_submit = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/approvals/submit"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "approver": "did:web:guardian.example",
+                "decision": "approve",
+                "note": "cotest scaffold approval"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_approval_submit["contract"],
+        "contrix.rest.key_backup_restore_approval_submit.v1"
+    );
+
     let restore_executor_status = expect_json(
         server
             .http()
