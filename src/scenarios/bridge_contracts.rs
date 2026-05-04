@@ -302,6 +302,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                             "/api/v1/auth/recovery/start",
                             "/api/v1/auth/recovery/{id}",
                             "/api/v1/auth/recovery/{id}/resend",
+                            "/api/v1/recovery/contract-stack",
                             "/api/v1/device_messages/describe",
                             "/api/v1/keys/backups",
                             "/api/v1/keys/backups/describe",
@@ -329,6 +330,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                             "/api/v1/auth/recovery/start",
                             "/api/v1/auth/recovery/{id}",
                             "/api/v1/auth/recovery/{id}/resend",
+                            "/api/v1/recovery/contract-stack",
                             "/api/v1/device_messages/describe",
                             "/api/v1/keys/backups",
                             "/api/v1/keys/backups/describe",
@@ -353,6 +355,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                 version: "2026-05-04-scaffold".to_owned(),
                 required_paths: vec![
                     "/api/v1/auth/recovery/describe".to_owned(),
+                    "/api/v1/recovery/contract-stack".to_owned(),
                     "/api/v1/device_messages/describe".to_owned(),
                     "/api/v1/keys/backups".to_owned(),
                     "/api/v1/keys/backups/describe".to_owned(),

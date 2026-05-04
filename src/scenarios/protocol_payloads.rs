@@ -358,6 +358,23 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     assert_eq!(authz_describe["contract"], "contrix.rest.authz_describe.v1");
     assert_eq!(authz_describe["check_path"], "/api/v1/authz/check");
 
+    let recovery_contract_stack = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/recovery/contract-stack"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        recovery_contract_stack["contract"],
+        "contrix.rest.recovery_contract_stack.v1"
+    );
+    assert_eq!(
+        recovery_contract_stack["device_messages_describe_path"],
+        "/api/v1/device_messages/describe"
+    );
+
     let policies_describe = expect_json(
         server
             .http()
