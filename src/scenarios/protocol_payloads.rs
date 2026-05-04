@@ -346,6 +346,24 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_ticket_collection["total_count"], 1);
 
+    let restore_resume = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/resume"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "resume_mode": "resume_from_current_state",
+                "note": "cotest scaffold resume"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_resume["contract"],
+        "contrix.rest.key_backup_restore_ticket_resume.v1"
+    );
+    assert_eq!(restore_resume["state"], "resumed");
+
     let restore_ticket = expect_json(
         server
             .http()
@@ -543,6 +561,42 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         "contrix.rest.key_backup_restore_bundle.v1"
     );
     assert_eq!(restore_bundle["bundle_state"], "handoff_submitted");
+
+    let restore_retry = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/retry"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "retry_mode": "reuse_backup_material",
+                "note": "cotest scaffold retry"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_retry["contract"],
+        "contrix.rest.key_backup_restore_ticket_retry.v1"
+    );
+    assert_eq!(restore_retry["state"], "retry_queued");
+
+    let restore_cancel = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/cancel"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "reason": "operator_cancelled",
+                "note": "cotest scaffold cancel"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_cancel["contract"],
+        "contrix.rest.key_backup_restore_ticket_cancel.v1"
+    );
+    assert_eq!(restore_cancel["state"], "cancelled");
 
     let restore_state_export = expect_json(
         server
