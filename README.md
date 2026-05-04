@@ -14,6 +14,7 @@ Recommended entrypoints:
 
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime process
+.\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
 ```
@@ -26,8 +27,9 @@ Recommended entrypoints:
   root as Docker build context.
 - Each scripted run writes `raw.log`, `transcript.ndjson`, `summary.json`,
   `summary.md`, `summary.html`, `junit.xml`, coverage/gap reports, and
-  per-service logs to `artifacts/runs/<timestamp>/`, then copies the latest set
-  to `artifacts/latest/`.
+  CI profile, coverage gate, secret scan, and per-service logs to
+  `artifacts/runs/<timestamp>/`, then copies the latest set to
+  `artifacts/latest/`.
 
 The primary human-readable report is
 `artifacts/latest/summary.md`.
@@ -56,8 +58,9 @@ for the full startup model, Docker image contract, and result artifacts.
 
 - `src/harness.rs`: process lifecycle, test actor helpers, and shared HTTP
   assertion utilities.
-- `src/conformance.rs`: fixture-driven offline conformance runner wired to
-  `contrix-spec/zh/conformance/fixtures`.
+- `src/conformance.rs`: artifact-driven offline conformance runner wired to
+  `contrix-spec/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
+  bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
 - `_todos.md`: Complement-derived plan and the current single-server /
@@ -74,9 +77,9 @@ for the full startup model, Docker image contract, and result artifacts.
 - Single-server surface: service description, auth, collaboration, repo, sync,
   index, identity/authz, schema/policy, realtime signaling, delivery/media,
   permissions, payload contracts, and extension surface gaps.
-- Offline conformance surface: encoding, redaction, capability, sync,
-  federation, privacy/security, and state-resolution fixtures loaded from
-  `contrix-spec`.
+- Offline conformance surface: Event Envelope, encoding, redaction,
+  capability, sync, federation, privacy/security, and state-resolution fixtures
+  loaded from `contrix-spec/artifacts`.
 - Multi-server surface: federation readiness, contract validation, and
   cross-server collaboration flows.
 
@@ -93,13 +96,26 @@ The runner script writes:
 - `artifacts/runs/<timestamp>/metadata.json`
 - `artifacts/runs/<timestamp>/coverage-matrix.json`
 - `artifacts/runs/<timestamp>/coverage-matrix.md`
+- `artifacts/runs/<timestamp>/coverage-gate.json`
+- `artifacts/runs/<timestamp>/coverage-gate.md`
 - `artifacts/runs/<timestamp>/unresolved-gaps.json`
 - `artifacts/runs/<timestamp>/unresolved-gaps.md`
+- `artifacts/runs/<timestamp>/ci-profile.json`
+- `artifacts/runs/<timestamp>/ci-profile.md`
+- `artifacts/runs/<timestamp>/secret-scan.json`
+- `artifacts/runs/<timestamp>/secret-scan.md`
 - `artifacts/runs/<timestamp>/services/`
 - `artifacts/latest/` as a copy of the latest run
 
 This gives `cotest` an explicit result surface instead of relying only on
 scrolling terminal output.
+
+`-Profile fast-smoke` runs a small PR-oriented set from
+`config/ci-profiles.json`; `-Profile full-nightly` runs the complete suite.
+`-FailOnCoverageRegression` compares required coverage profiles against
+`-CoverageBaselinePath` or the previous `artifacts/latest/coverage-matrix.json`.
+Secret-shaped fields in raw logs, transcripts, and service logs fail the run
+unless `-AllowSecretLeaks` is supplied.
 
 For the runtime model comparison against Complement, including image creation,
 Docker networking, host-side execution, and result formatting, see

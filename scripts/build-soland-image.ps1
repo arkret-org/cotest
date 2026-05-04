@@ -2,7 +2,11 @@
 param(
     [string]$ImageTag = "cotest-soland:latest",
     [string]$WorkspaceRoot,
-    [string]$DockerfilePath
+    [string]$DockerfilePath,
+    [string[]]$CacheFrom = @(),
+    [string]$CacheTo,
+    [switch]$Pull,
+    [switch]$NoCache
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,8 +32,31 @@ foreach ($path in $requiredPaths) {
     }
 }
 
+$buildArgs = @("build", "--file", $DockerfilePath, "--tag", $ImageTag)
+foreach ($cache in $CacheFrom) {
+    if ($cache) {
+        $buildArgs += @("--cache-from", $cache)
+    }
+}
+if ($CacheTo) {
+    $buildArgs += @("--cache-to", $CacheTo)
+}
+if ($Pull) {
+    $buildArgs += "--pull"
+}
+if ($NoCache) {
+    $buildArgs += "--no-cache"
+}
+$buildArgs += $WorkspaceRoot
+
 Write-Host "Building $ImageTag from $DockerfilePath with context $WorkspaceRoot"
-& docker build --file $DockerfilePath --tag $ImageTag $WorkspaceRoot
+if ($CacheFrom.Count -gt 0) {
+    Write-Host "  cache-from: $($CacheFrom -join ', ')"
+}
+if ($CacheTo) {
+    Write-Host "  cache-to  : $CacheTo"
+}
+& docker @buildArgs
 if ($LASTEXITCODE -ne 0) {
     throw "docker build failed for image $ImageTag"
 }

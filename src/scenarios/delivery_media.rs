@@ -343,6 +343,36 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "invalid_param",
     )
     .await?;
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/api/v1/push/notify"))
+            .json(&json!({
+                "notification": {
+                    "type": "blind_wakeup",
+                    "devices": [{"device_id": "unknown-device"}],
+                    "room_id": "!legacy:example.com"
+                }
+            })),
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
+    )
+    .await?;
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/api/v1/push/notify"))
+            .json(&json!({
+                "notification": {
+                    "type": "blind_wakeup",
+                    "devices": [{"device_id": "unknown-device"}],
+                    "flow_id": "cx:card:legacy-card"
+                }
+            })),
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
+    )
+    .await?;
     let notify = expect_json(
         server
             .http()

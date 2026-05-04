@@ -6,7 +6,17 @@ param(
     [string]$SutImage = "cotest-soland:latest",
     [string]$OutputRoot,
     [string]$CargoTestFilter,
-    [switch]$BuildImage
+    [ValidateSet("all", "fast-smoke", "full-nightly")]
+    [string]$Profile = "all",
+    [string[]]$RequiredCoverageProfiles = @(),
+    [string]$CoverageBaselinePath,
+    [switch]$FailOnCoverageRegression,
+    [switch]$AllowSecretLeaks,
+    [switch]$BuildImage,
+    [string[]]$DockerCacheFrom = @(),
+    [string]$DockerCacheTo,
+    [switch]$DockerPull,
+    [switch]$DockerNoCache
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +27,129 @@ function Test-DockerImagePresent {
 
     & docker image inspect $ImageTag *> $null
     return $LASTEXITCODE -eq 0
+}
+
+function Get-CiProfileConfig {
+    param([Parameter(Mandatory = $true)][string]$RepoRoot)
+
+    $configPath = Join-Path $RepoRoot "config\ci-profiles.json"
+    if (-not (Test-Path $configPath)) {
+        throw "CI profile config not found: $configPath"
+    }
+    return Get-Content $configPath -Raw | ConvertFrom-Json
+}
+
+function Get-CiProfile {
+    param(
+        [Parameter(Mandatory = $true)]$Config,
+        [Parameter(Mandatory = $true)][string]$ProfileId
+    )
+
+    $profile = @($Config.profiles | Where-Object { $_.profile_id -eq $ProfileId }) | Select-Object -First 1
+    if (-not $profile) {
+        throw "Unknown CI profile '$ProfileId'"
+    }
+    return $profile
+}
+
+function Get-ActiveQuarantineEntries {
+    param(
+        [Parameter(Mandatory = $true)]$Config,
+        [string[]]$ExcludedLabels = @()
+    )
+
+    $entries = @()
+    foreach ($entry in @($Config.quarantined_tests)) {
+        $labels = @($entry.labels)
+        if ($labels.Count -eq 0 -and $entry.label) {
+            $labels = @($entry.label)
+        }
+        $matchesExcludedLabel = $false
+        foreach ($label in $labels) {
+            if ($ExcludedLabels -contains $label) {
+                $matchesExcludedLabel = $true
+                break
+            }
+        }
+        if ($matchesExcludedLabel) {
+            $entries += $entry
+        }
+    }
+    return $entries
+}
+
+function Get-CargoTestInvocations {
+    param(
+        [Parameter(Mandatory = $true)]$Profile,
+        [Parameter(Mandatory = $true)]$QuarantineEntries,
+        [AllowNull()][string]$CargoTestFilter
+    )
+
+    if ($CargoTestFilter) {
+        return @([pscustomobject]@{
+                label = "filter:$CargoTestFilter"
+                filter = $CargoTestFilter
+                skips = @()
+            })
+    }
+
+    $quarantinedFilters = @($QuarantineEntries | ForEach-Object { $_.test_filter } | Where-Object { $_ })
+    if ($Profile.include_all_tests) {
+        return @([pscustomobject]@{
+                label = $Profile.profile_id
+                filter = $null
+                skips = $quarantinedFilters
+            })
+    }
+
+    $invocations = New-Object System.Collections.Generic.List[object]
+    foreach ($filter in @($Profile.cargo_filters)) {
+        if ($quarantinedFilters -contains $filter) {
+            continue
+        }
+        $invocations.Add([pscustomobject]@{
+                label = $filter
+                filter = $filter
+                skips = @()
+            })
+    }
+    if ($invocations.Count -eq 0) {
+        throw "CI profile '$($Profile.profile_id)' did not produce any cargo test invocations"
+    }
+    return $invocations
+}
+
+function New-CargoTestArgs {
+    param(
+        [AllowNull()][string]$Filter,
+        [string[]]$Skips = @()
+    )
+
+    $args = @("test")
+    if ($Filter) {
+        $args += $Filter
+    }
+    $args += @("--tests", "--no-fail-fast", "--", "--nocapture")
+    foreach ($skip in $Skips) {
+        if ($skip) {
+            $args += @("--skip", $skip)
+        }
+    }
+    return $args
+}
+
+function Invoke-CargoTestInvocation {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$CargoArgs,
+        [Parameter(Mandatory = $true)][string]$RawLog,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $header = "=== cotest invocation: $Label ==="
+    $header | Tee-Object -FilePath $RawLog -Append | ForEach-Object { Write-Host $_ }
+    Write-Host ("Running cargo {0}" -f ($CargoArgs -join " "))
+    & cargo @CargoArgs 2>&1 | Tee-Object -FilePath $RawLog -Append | ForEach-Object { Write-Host $_ }
+    return $LASTEXITCODE
 }
 
 function Parse-CotestLog {
@@ -61,6 +194,7 @@ function New-SummaryMarkdown {
     $lines.Add("# cotest run summary")
     $lines.Add("")
     $lines.Add("- status: $($Summary.status)")
+    $lines.Add("- profile: $($Summary.profile)")
     $lines.Add("- runtime: $($Summary.runtime)")
     $lines.Add("- sut: $($Summary.sut)")
     $lines.Add("- started_at: $($Summary.started_at)")
@@ -76,7 +210,10 @@ function New-SummaryMarkdown {
     $lines.Add("- html_report: $($Summary.html_report)")
     $lines.Add("- metadata: $($Summary.metadata_path)")
     $lines.Add("- coverage_matrix: $($Summary.coverage_matrix_path)")
+    $lines.Add("- coverage_gate: $($Summary.coverage_gate_path) ($($Summary.coverage_gate_status))")
     $lines.Add("- unresolved_gaps: $($Summary.unresolved_gaps_path)")
+    $lines.Add("- ci_profile: $($Summary.ci_profile_path)")
+    $lines.Add("- secret_scan: $($Summary.secret_scan_path) ($($Summary.secret_scan_status))")
     $lines.Add("")
 
     $failed = @($Tests | Where-Object { $_.status -eq "failed" })
@@ -140,6 +277,7 @@ function New-SummaryHtml {
   <div class="card">
     <h1>cotest run summary</h1>
     <p>Status: <strong>$(ConvertTo-HtmlSafe $Summary.status)</strong></p>
+    <p>Profile: <code>$(ConvertTo-HtmlSafe $Summary.profile)</code></p>
     <p>Runtime: <code>$(ConvertTo-HtmlSafe $Summary.runtime)</code></p>
     <p>SUT: <code>$(ConvertTo-HtmlSafe $Summary.sut)</code></p>
     <div class="metrics">
@@ -154,7 +292,10 @@ function New-SummaryHtml {
     <p>transcript: <code>$(ConvertTo-HtmlSafe $Summary.transcript_path)</code></p>
     <p>junit xml: <code>$(ConvertTo-HtmlSafe $Summary.junit_xml)</code></p>
     <p>coverage matrix: <code>$(ConvertTo-HtmlSafe $Summary.coverage_matrix_path)</code></p>
+    <p>coverage gate: <code>$(ConvertTo-HtmlSafe $Summary.coverage_gate_path)</code> ($(ConvertTo-HtmlSafe $Summary.coverage_gate_status))</p>
     <p>unresolved gaps: <code>$(ConvertTo-HtmlSafe $Summary.unresolved_gaps_path)</code></p>
+    <p>ci profile: <code>$(ConvertTo-HtmlSafe $Summary.ci_profile_path)</code></p>
+    <p>secret scan: <code>$(ConvertTo-HtmlSafe $Summary.secret_scan_path)</code> ($(ConvertTo-HtmlSafe $Summary.secret_scan_status))</p>
   </div>
   <div class="card">
     <h2>Tests</h2>
@@ -275,12 +416,14 @@ function Get-SpecMetadata {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
     $specRoot = "E:\Works\contrix-dev\contrix-spec"
-    $fixtureRoot = Join-Path $specRoot "zh\conformance\fixtures"
+    $artifactRoot = Join-Path $specRoot "artifacts"
+    $fixtureRoot = Join-Path $artifactRoot "fixtures"
     return [pscustomobject]@{
-        spec_root           = $specRoot
-        git_revision        = Get-RepoGitRevision -RepoPath $specRoot
-        fixture_root        = $fixtureRoot
-        fixture_fingerprint = Get-DirectoryFingerprint -RootPath $fixtureRoot
+        spec_root            = $specRoot
+        git_revision         = Get-RepoGitRevision -RepoPath $specRoot
+        artifact_root        = $artifactRoot
+        fixture_root         = $fixtureRoot
+        artifact_fingerprint = Get-DirectoryFingerprint -RootPath $artifactRoot
     }
 }
 
@@ -293,6 +436,8 @@ function Get-CoverageMatrix {
         $implemented = @($profile.requirements | Where-Object { $_.status -eq "implemented" }).Count
         $partial = @($profile.requirements | Where-Object { $_.status -eq "partial" }).Count
         $pending = @($profile.requirements | Where-Object { $_.status -eq "pending" }).Count
+        $skipped = @($profile.requirements | Where-Object { $_.status -eq "skipped" }).Count
+        $failed = @($profile.requirements | Where-Object { $_.status -eq "failed" }).Count
         [pscustomobject]@{
             profile_id      = $profile.profile_id
             spec_ref        = $profile.spec_ref
@@ -300,6 +445,8 @@ function Get-CoverageMatrix {
             implemented     = $implemented
             partial         = $partial
             pending         = $pending
+            skipped         = $skipped
+            failed          = $failed
             requirements    = $profile.requirements
         }
     }
@@ -316,10 +463,10 @@ function New-CoverageMarkdown {
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("# coverage matrix")
     $lines.Add("")
-    $lines.Add("| Profile | Status | Implemented | Partial | Pending |")
-    $lines.Add("| --- | --- | --- | --- | --- |")
+    $lines.Add("| Profile | Status | Implemented | Partial | Pending | Skipped | Failed |")
+    $lines.Add("| --- | --- | --- | --- | --- | --- | --- |")
     foreach ($profile in $Coverage.profiles) {
-        $lines.Add("| $($profile.profile_id) | $($profile.summary_status) | $($profile.implemented) | $($profile.partial) | $($profile.pending) |")
+        $lines.Add("| $($profile.profile_id) | $($profile.summary_status) | $($profile.implemented) | $($profile.partial) | $($profile.pending) | $($profile.skipped) | $($profile.failed) |")
     }
     $lines.Add("")
     foreach ($profile in $Coverage.profiles) {
@@ -332,6 +479,241 @@ function New-CoverageMarkdown {
             $lines.Add("| $($requirement.name) | $($requirement.status) | $sources |")
         }
         $lines.Add("")
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Get-EffectiveRequiredCoverageProfiles {
+    param(
+        [Parameter(Mandatory = $true)]$Profile,
+        [string[]]$Overrides = @()
+    )
+
+    if ($Overrides.Count -gt 0) {
+        return $Overrides
+    }
+    return @($Profile.required_coverage_profiles)
+}
+
+function Get-CoverageStatusRank {
+    param([AllowNull()][string]$Status)
+
+    switch ($Status) {
+        "implemented" { return 3 }
+        "partial" { return 2 }
+        "skipped" { return 1 }
+        "pending" { return 1 }
+        "failed" { return 0 }
+        default { return 0 }
+    }
+}
+
+function Compare-CoverageToBaseline {
+    param(
+        [Parameter(Mandatory = $true)]$CurrentCoverage,
+        [AllowNull()][string]$BaselinePath,
+        [string[]]$RequiredProfiles = @()
+    )
+
+    $regressions = New-Object System.Collections.Generic.List[object]
+    $profileFilter = @($RequiredProfiles)
+    if ($profileFilter.Count -eq 0) {
+        $profileFilter = @($CurrentCoverage.profiles | ForEach-Object { $_.profile_id })
+    }
+    foreach ($currentProfile in @($CurrentCoverage.profiles)) {
+        if ($profileFilter -notcontains $currentProfile.profile_id) {
+            continue
+        }
+        foreach ($currentRequirement in @($currentProfile.requirements)) {
+            if ($currentRequirement.status -eq "failed") {
+                $regressions.Add([pscustomobject]@{
+                        profile_id      = $currentProfile.profile_id
+                        requirement     = $currentRequirement.name
+                        baseline_status = "declared"
+                        current_status  = "failed"
+                    })
+            }
+        }
+    }
+
+    if (-not $BaselinePath -or -not (Test-Path $BaselinePath)) {
+        return [pscustomobject]@{
+            status            = if ($regressions.Count -gt 0) { "failed" } else { "skipped" }
+            baseline_path     = $BaselinePath
+            required_profiles = $profileFilter
+            regressions       = $regressions
+            reason            = if ($regressions.Count -gt 0) { "current_requirement_failed" } else { "baseline_not_found" }
+        }
+    }
+
+    $baseline = Get-Content $BaselinePath -Raw | ConvertFrom-Json
+
+    foreach ($currentProfile in @($CurrentCoverage.profiles)) {
+        if ($profileFilter -notcontains $currentProfile.profile_id) {
+            continue
+        }
+        $baselineProfile = @($baseline.profiles | Where-Object { $_.profile_id -eq $currentProfile.profile_id }) | Select-Object -First 1
+        if (-not $baselineProfile) {
+            continue
+        }
+        foreach ($currentRequirement in @($currentProfile.requirements)) {
+            $baselineRequirement = @($baselineProfile.requirements | Where-Object { $_.name -eq $currentRequirement.name }) | Select-Object -First 1
+            if (-not $baselineRequirement) {
+                continue
+            }
+            $currentRank = Get-CoverageStatusRank -Status $currentRequirement.status
+            $baselineRank = Get-CoverageStatusRank -Status $baselineRequirement.status
+            if ($currentRank -lt $baselineRank) {
+                $regressions.Add([pscustomobject]@{
+                        profile_id      = $currentProfile.profile_id
+                        requirement     = $currentRequirement.name
+                        baseline_status = $baselineRequirement.status
+                        current_status  = $currentRequirement.status
+                    })
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        status            = if ($regressions.Count -gt 0) { "failed" } else { "passed" }
+        baseline_path     = $BaselinePath
+        required_profiles = $profileFilter
+        regressions       = $regressions
+        reason            = $null
+    }
+}
+
+function New-CoverageGateMarkdown {
+    param([Parameter(Mandatory = $true)]$Gate)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# coverage gate")
+    $lines.Add("")
+    $lines.Add("- status: $($Gate.status)")
+    if ($Gate.baseline_path) {
+        $lines.Add("- baseline: $($Gate.baseline_path)")
+    }
+    if ($Gate.required_profiles.Count -gt 0) {
+        $lines.Add("- required_profiles: $($Gate.required_profiles -join ', ')")
+    }
+    if ($Gate.reason) {
+        $lines.Add("- reason: $($Gate.reason)")
+    }
+    $lines.Add("")
+    if ($Gate.regressions.Count -eq 0) {
+        $lines.Add("No coverage regressions detected.")
+        return ($lines -join [Environment]::NewLine)
+    }
+
+    $lines.Add("| Profile | Requirement | Baseline | Current |")
+    $lines.Add("| --- | --- | --- | --- |")
+    foreach ($regression in $Gate.regressions) {
+        $lines.Add("| $($regression.profile_id) | $($regression.requirement) | $($regression.baseline_status) | $($regression.current_status) |")
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function ConvertTo-SecretPreview {
+    param([Parameter(Mandatory = $true)][string]$Line)
+
+    $preview = $Line
+    $preview = $preview -replace '(?i)(authorization["\s:=]+bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
+    $preview = $preview -replace '(?i)("(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)"\s*:\s*")(?!\[redacted\])([^"]+)(")', '$1[redacted]$5'
+    $preview = $preview -replace '(?i)((access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)=)(?!\[redacted\])([^&\s]+)', '$1[redacted]'
+    if ($preview.Length -gt 220) {
+        return $preview.Substring(0, 220) + "...[truncated]"
+    }
+    return $preview
+}
+
+function Find-SecretLeaks {
+    param([Parameter(Mandatory = $true)][string[]]$ScanRoots)
+
+    $patterns = @(
+        [pscustomobject]@{ name = "authorization_header"; pattern = '(?i)(authorization["\s:=]+bearer\s+)(?!\[redacted\])\S+' },
+        [pscustomobject]@{ name = "json_secret_field"; pattern = '(?i)"(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)"\s*:\s*"(?!\[redacted\])[^"]+"' },
+        [pscustomobject]@{ name = "query_secret_field"; pattern = '(?i)(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)=((?!\[redacted\])[^&\s]+)' }
+    )
+    $leaks = New-Object System.Collections.Generic.List[object]
+    foreach ($root in $ScanRoots) {
+        if (-not $root -or -not (Test-Path $root)) {
+            continue
+        }
+        $files = if ((Get-Item $root).PSIsContainer) {
+            Get-ChildItem -Path $root -Recurse -File
+        } else {
+            @(Get-Item $root)
+        }
+        foreach ($file in $files) {
+            $lineNo = 0
+            foreach ($line in Get-Content -Path $file.FullName -ErrorAction SilentlyContinue) {
+                $lineNo += 1
+                foreach ($pattern in $patterns) {
+                    if ($line -match $pattern.pattern) {
+                        $leaks.Add([pscustomobject]@{
+                                path    = $file.FullName
+                                line    = $lineNo
+                                pattern = $pattern.name
+                                preview = ConvertTo-SecretPreview -Line $line
+                            })
+                    }
+                }
+            }
+        }
+    }
+    return $leaks
+}
+
+function New-SecretScanMarkdown {
+    param([Parameter(Mandatory = $true)]$SecretScan)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# secret scan")
+    $lines.Add("")
+    $lines.Add("- status: $($SecretScan.status)")
+    $lines.Add("- scanned_files: $($SecretScan.scanned_files)")
+    $lines.Add("- leaks: $($SecretScan.leaks.Count)")
+    $lines.Add("")
+    if ($SecretScan.leaks.Count -eq 0) {
+        $lines.Add("No unredacted secret-shaped fields were found in logs or transcripts.")
+        return ($lines -join [Environment]::NewLine)
+    }
+    $lines.Add("| File | Line | Pattern | Preview |")
+    $lines.Add("| --- | --- | --- | --- |")
+    foreach ($leak in $SecretScan.leaks) {
+        $preview = ($leak.preview -replace '\|', '\|')
+        $lines.Add("| $($leak.path) | $($leak.line) | $($leak.pattern) | `$preview` |")
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function New-CiProfileMarkdown {
+    param([Parameter(Mandatory = $true)]$ProfileReport)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# CI profile")
+    $lines.Add("")
+    $lines.Add("- profile: $($ProfileReport.profile_id)")
+    $lines.Add("- cargo_test_filter: $($ProfileReport.cargo_test_filter)")
+    $lines.Add("- invocations: $($ProfileReport.invocations.Count)")
+    $lines.Add("")
+    $lines.Add("| Label | Filter | Skips |")
+    $lines.Add("| --- | --- | --- |")
+    foreach ($invocation in $ProfileReport.invocations) {
+        $skips = if ($invocation.skips.Count -gt 0) { $invocation.skips -join ", " } else { "-" }
+        $filter = if ($invocation.filter) { $invocation.filter } else { "-" }
+        $lines.Add("| $($invocation.label) | $filter | $skips |")
+    }
+    if ($ProfileReport.quarantined_tests.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("## Quarantined")
+        $lines.Add("")
+        $lines.Add("| Test filter | Labels | Reason |")
+        $lines.Add("| --- | --- | --- |")
+        foreach ($entry in $ProfileReport.quarantined_tests) {
+            $labels = @($entry.labels) -join ", "
+            $lines.Add("| $($entry.test_filter) | $labels | $($entry.reason) |")
+        }
     }
     return ($lines -join [Environment]::NewLine)
 }
@@ -400,13 +782,34 @@ $junitXml = Join-Path $runDir "junit.xml"
 $metadataJson = Join-Path $runDir "metadata.json"
 $coverageJson = Join-Path $runDir "coverage-matrix.json"
 $coverageMd = Join-Path $runDir "coverage-matrix.md"
+$coverageGateJson = Join-Path $runDir "coverage-gate.json"
+$coverageGateMd = Join-Path $runDir "coverage-gate.md"
 $gapsJson = Join-Path $runDir "unresolved-gaps.json"
 $gapsMd = Join-Path $runDir "unresolved-gaps.md"
+$ciProfileJson = Join-Path $runDir "ci-profile.json"
+$ciProfileMd = Join-Path $runDir "ci-profile.md"
+$secretScanJson = Join-Path $runDir "secret-scan.json"
+$secretScanMd = Join-Path $runDir "secret-scan.md"
 $transcriptNdjson = Join-Path $runDir "transcript.ndjson"
 "" | Set-Content -Path $transcriptNdjson -Encoding UTF8
+"" | Set-Content -Path $rawLog -Encoding UTF8
 
 if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -ImageTag $SutImage))) {
-    & (Join-Path $PSScriptRoot "build-soland-image.ps1") -ImageTag $SutImage
+    $buildArgs = @("-ImageTag", $SutImage)
+    if ($DockerCacheFrom.Count -gt 0) {
+        $buildArgs += "-CacheFrom"
+        $buildArgs += $DockerCacheFrom
+    }
+    if ($DockerCacheTo) {
+        $buildArgs += @("-CacheTo", $DockerCacheTo)
+    }
+    if ($DockerPull) {
+        $buildArgs += "-Pull"
+    }
+    if ($DockerNoCache) {
+        $buildArgs += "-NoCache"
+    }
+    & (Join-Path $PSScriptRoot "build-soland-image.ps1") @buildArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to build Docker image $SutImage"
     }
@@ -422,11 +825,19 @@ foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", 
 }
 
 $startedAt = Get-Date
-$command = @("test")
-if ($CargoTestFilter) {
-    $command += $CargoTestFilter
+$ciConfig = Get-CiProfileConfig -RepoRoot $repoRoot
+$ciProfile = Get-CiProfile -Config $ciConfig -ProfileId $Profile
+$quarantineEntries = @(Get-ActiveQuarantineEntries -Config $ciConfig -ExcludedLabels @($ciProfile.excluded_quarantine_labels))
+$invocations = @(Get-CargoTestInvocations -Profile $ciProfile -QuarantineEntries $quarantineEntries -CargoTestFilter $CargoTestFilter)
+$effectiveRequiredCoverageProfiles = @(Get-EffectiveRequiredCoverageProfiles -Profile $ciProfile -Overrides $RequiredCoverageProfiles)
+$profileReport = [pscustomobject]@{
+    profile_id                 = $Profile
+    cargo_test_filter          = if ($CargoTestFilter) { $CargoTestFilter } else { $null }
+    required_coverage_profiles = $effectiveRequiredCoverageProfiles
+    invocations                = $invocations
+    quarantined_tests          = $quarantineEntries
 }
-$command += @("--tests", "--no-fail-fast", "--", "--nocapture")
+$exitCode = 1
 
 try {
     $env:COTEST_SUT_MODE = $Runtime
@@ -441,9 +852,14 @@ try {
         Remove-Item Env:COTEST_SUT_IMAGE -ErrorAction SilentlyContinue
     }
 
-    Write-Host ("Running cargo {0}" -f ($command -join " "))
-    & cargo @command 2>&1 | Tee-Object -FilePath $rawLog
-    $exitCode = $LASTEXITCODE
+    $exitCode = 0
+    foreach ($invocation in $invocations) {
+        $cargoArgs = New-CargoTestArgs -Filter $invocation.filter -Skips @($invocation.skips)
+        $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs $cargoArgs -RawLog $rawLog -Label $invocation.label
+        if ($invocationExitCode -ne 0 -and $exitCode -eq 0) {
+            $exitCode = $invocationExitCode
+        }
+    }
 }
 finally {
     foreach ($entry in $originalEnv) {
@@ -461,6 +877,17 @@ $passed = @($tests | Where-Object { $_.status -eq "passed" }).Count
 $failed = @($tests | Where-Object { $_.status -eq "failed" }).Count
 $ignored = @($tests | Where-Object { $_.status -eq "ignored" }).Count
 $coverage = Get-CoverageMatrix -RepoRoot $repoRoot
+$resolvedCoverageBaseline = $CoverageBaselinePath
+if (-not $resolvedCoverageBaseline) {
+    $candidateBaseline = Join-Path $repoRoot "artifacts\latest\coverage-matrix.json"
+    if (Test-Path $candidateBaseline) {
+        $resolvedCoverageBaseline = $candidateBaseline
+    }
+}
+$coverageGate = Compare-CoverageToBaseline -CurrentCoverage $coverage -BaselinePath $resolvedCoverageBaseline -RequiredProfiles $effectiveRequiredCoverageProfiles
+if ($FailOnCoverageRegression -and $coverageGate.status -eq "failed") {
+    $exitCode = 1
+}
 $unresolved = Get-UnresolvedTodoItems -TodoPath (Join-Path $repoRoot "_todos.md")
 $sutMetadata = Get-SutMetadata -Runtime $Runtime -SutManifest $SutManifest -SutImage $SutImage
 $specMetadata = Get-SpecMetadata -RepoRoot $repoRoot
@@ -469,9 +896,33 @@ $metadata = [pscustomobject]@{
     sut          = $sutMetadata
     spec         = $specMetadata
 }
+$scanRoots = @($rawLog, $transcriptNdjson, $serviceLogDir)
+$scanFiles = 0
+foreach ($root in $scanRoots) {
+    if (-not $root -or -not (Test-Path $root)) {
+        continue
+    }
+    if ((Get-Item $root).PSIsContainer) {
+        $scanFiles += @(Get-ChildItem -Path $root -Recurse -File).Count
+    } else {
+        $scanFiles += 1
+    }
+}
+$secretLeaks = @(Find-SecretLeaks -ScanRoots $scanRoots)
+$secretScan = [pscustomobject]@{
+    generated_at  = $finishedAt.ToString("o")
+    status        = if ($secretLeaks.Count -eq 0) { "passed" } else { "failed" }
+    scanned_roots = $scanRoots
+    scanned_files = $scanFiles
+    leaks         = $secretLeaks
+}
+if (-not $AllowSecretLeaks -and $secretScan.status -eq "failed") {
+    $exitCode = 1
+}
 
 $summary = [pscustomobject]@{
     status               = if ($exitCode -eq 0) { "success" } else { "failure" }
+    profile              = $Profile
     runtime              = $Runtime
     sut                  = if ($Runtime -eq "docker") { "image:$SutImage" } else { "manifest:$SutManifest" }
     started_at           = $startedAt.ToString("o")
@@ -487,7 +938,12 @@ $summary = [pscustomobject]@{
     html_report          = $summaryHtml
     metadata_path        = $metadataJson
     coverage_matrix_path = $coverageJson
+    coverage_gate_path   = $coverageGateJson
+    coverage_gate_status = $coverageGate.status
     unresolved_gaps_path = $gapsJson
+    ci_profile_path      = $ciProfileJson
+    secret_scan_path     = $secretScanJson
+    secret_scan_status   = $secretScan.status
     service_log_dir      = $serviceLogDir
     tests                = $tests
 }
@@ -495,7 +951,10 @@ $summary = [pscustomobject]@{
 $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UTF8
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $metadataJson -Encoding UTF8
 $coverage | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageJson -Encoding UTF8
+$coverageGate | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageGateJson -Encoding UTF8
 $unresolved | ConvertTo-Json -Depth 6 | Set-Content -Path $gapsJson -Encoding UTF8
+$profileReport | ConvertTo-Json -Depth 8 | Set-Content -Path $ciProfileJson -Encoding UTF8
+$secretScan | ConvertTo-Json -Depth 8 | Set-Content -Path $secretScanJson -Encoding UTF8
 
 $markdown = New-SummaryMarkdown -Summary $summary -Tests $tests
 $markdown | Set-Content -Path $summaryMd -Encoding UTF8
@@ -509,8 +968,17 @@ $xml | Set-Content -Path $junitXml -Encoding UTF8
 $coverageMarkdown = New-CoverageMarkdown -Coverage $coverage
 $coverageMarkdown | Set-Content -Path $coverageMd -Encoding UTF8
 
+$coverageGateMarkdown = New-CoverageGateMarkdown -Gate $coverageGate
+$coverageGateMarkdown | Set-Content -Path $coverageGateMd -Encoding UTF8
+
 $gapsMarkdown = New-UnresolvedMarkdown -Items $unresolved
 $gapsMarkdown | Set-Content -Path $gapsMd -Encoding UTF8
+
+$ciProfileMarkdown = New-CiProfileMarkdown -ProfileReport $profileReport
+$ciProfileMarkdown | Set-Content -Path $ciProfileMd -Encoding UTF8
+
+$secretScanMarkdown = New-SecretScanMarkdown -SecretScan $secretScan
+$secretScanMarkdown | Set-Content -Path $secretScanMd -Encoding UTF8
 
 $artifactFiles = @(
     $rawLog,
@@ -522,8 +990,14 @@ $artifactFiles = @(
     $metadataJson,
     $coverageJson,
     $coverageMd,
+    $coverageGateJson,
+    $coverageGateMd,
     $gapsJson,
-    $gapsMd
+    $gapsMd,
+    $ciProfileJson,
+    $ciProfileMd,
+    $secretScanJson,
+    $secretScanMd
 )
 
 foreach ($file in $artifactFiles) {
@@ -540,6 +1014,7 @@ if (Test-Path $serviceLogDir) {
 Write-Host ""
 Write-Host "Summary"
 Write-Host "  status   : $($summary.status)"
+Write-Host "  profile  : $($summary.profile)"
 Write-Host "  runtime  : $($summary.runtime)"
 Write-Host "  sut      : $($summary.sut)"
 Write-Host "  passed   : $($summary.passed)"
@@ -551,7 +1026,10 @@ Write-Host "  report   : $summaryMd"
 Write-Host "  junit    : $junitXml"
 Write-Host "  html     : $summaryHtml"
 Write-Host "  coverage : $coverageMd"
+Write-Host "  gate     : $coverageGateMd"
 Write-Host "  gaps     : $gapsMd"
+Write-Host "  ci       : $ciProfileMd"
+Write-Host "  secrets  : $secretScanMd"
 Write-Host "  services : $serviceLogDir"
 
 exit $exitCode

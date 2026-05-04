@@ -56,8 +56,9 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
   reads, repo sync, and parameter edge coverage.
 - `space_permissions`: membership, owner-only mutation, deleted-space behavior,
   non-member denial, and private visibility policy checks.
-- `conformance_fixtures`: offline spec-owned fixture suites for encoding,
-  redaction, capability, state resolution, sync, federation, and
+- `conformance_fixtures`: offline spec-owned artifact suites for Event
+  Envelope, encoding, redaction, capability, state resolution, sync,
+  federation, registry drift, OpenAPI operation IDs, non-HTTP bindings, and
   privacy/security semantics.
 
 ### Multi-Server
@@ -87,6 +88,7 @@ Recommended scripted entrypoints:
 
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime process
+.\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage
 ```
 
@@ -96,3 +98,10 @@ the primary result view for a completed run.
 `artifacts/latest/coverage-matrix.json` and
 `artifacts/latest/unresolved-gaps.json` are the machine-readable release-gate
 artifacts.
+
+CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
+small PR feedback set, while `full-nightly` runs all tests. Coverage is grouped
+by conformance profiles such as `cx.profile.core_event_store.v1`,
+`cx.profile.chat_mvp.v1`, and `cx.profile.principal_server_events_api.v1`. The
+runner emits `ci-profile.*`, `coverage-gate.*`, and `secret-scan.*` artifacts
+and can fail on coverage regressions with `-FailOnCoverageRegression`.

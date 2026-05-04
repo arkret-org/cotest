@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use contrix_sdk::{Operation, OperationId, SpaceId};
+use contrix_core::{Operation, OperationId, SpaceId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 

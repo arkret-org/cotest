@@ -18,7 +18,8 @@ applies the same pattern to Contrix.
   and leaving `tests/` as wrappers only.
 - Complement's base-image workflow maps to `COTEST_SUT_IMAGE` plus
   [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1)
-  and [scripts/build-soland-image.ps1](/E:/Works/contrix-dev/cotest/scripts/build-soland-image.ps1:1).
+  and [scripts/build-soland-image.ps1](/E:/Works/contrix-dev/cotest/scripts/build-soland-image.ps1:1),
+  including Docker cache controls for CI builds.
 - Complement's result-formatting story maps to
   [scripts/run-cotest.ps1](/E:/Works/contrix-dev/cotest/scripts/run-cotest.ps1:1),
   which emits raw logs, redacted HTTP transcripts, and Markdown/JSON summaries
@@ -71,7 +72,10 @@ optionally pretty-prints `go test -json` output with `gotestfmt`.
   `artifacts/runs/<timestamp>/summary.html`,
   `artifacts/runs/<timestamp>/junit.xml`,
   `artifacts/runs/<timestamp>/coverage-matrix.json`,
+  `artifacts/runs/<timestamp>/coverage-gate.json`,
   `artifacts/runs/<timestamp>/unresolved-gaps.json`,
+  `artifacts/runs/<timestamp>/ci-profile.json`,
+  `artifacts/runs/<timestamp>/secret-scan.json`,
   `artifacts/runs/<timestamp>/services/`,
   and `artifacts/latest/`
 
@@ -81,11 +85,12 @@ without making users reconstruct the run from terminal scrollback.
 
 In addition to runtime results, `cotest` now has an offline fixture-driven
 conformance surface in [src/conformance.rs](/E:/Works/contrix-dev/cotest/src/conformance.rs:1),
-which consumes the spec-owned fixture files under
-`contrix-spec/zh/conformance/fixtures`. Complement does not need this exact
-layer because Matrix homeserver behavior is mostly expressed directly through
-networked black-box tests; Contrix benefits from keeping protocol vectors and
-server scenarios side by side.
+which consumes the spec-owned machine-readable artifacts under
+`contrix-spec/artifacts`: schemas, registries, profiles, OpenAPI, non-HTTP
+bindings, and fixtures. Complement does not need this exact layer because
+Matrix homeserver behavior is mostly expressed directly through networked
+black-box tests; Contrix benefits from keeping protocol vectors and server
+scenarios side by side.
 
 ## Coverage Translation
 

@@ -98,6 +98,8 @@ This script:
 - reads [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1)
 - expects sibling `soland` and `contrix-rust-sdk` checkouts to exist
 - produces `cotest-soland:latest` unless `-ImageTag` overrides it
+- accepts Docker cache controls through `-CacheFrom`, `-CacheTo`, `-Pull`, and
+  `-NoCache`
 
 The first Docker build is slower than `process` mode because it compiles
 `soland` inside the image and resolves crates in the container build context.
@@ -120,10 +122,24 @@ To point at a different checkout:
 .\scripts\run-cotest.ps1 -Runtime process -SutManifest E:\path\to\server\Cargo.toml
 ```
 
+To run the PR-sized smoke profile:
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
+```
+
 ### Run in Docker mode
 
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage
+```
+
+With BuildKit cache wiring:
+
+```powershell
+.\scripts\run-cotest.ps1 -Runtime docker -BuildImage `
+  -DockerCacheFrom type=registry,ref=registry.example/cotest-soland:buildcache `
+  -DockerCacheTo type=registry,ref=registry.example/cotest-soland:buildcache,mode=max
 ```
 
 If the image already exists:
@@ -137,6 +153,17 @@ If the image already exists:
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime docker -CargoTestFilter federation
 ```
+
+### Coverage gate
+
+```powershell
+.\scripts\run-cotest.ps1 -Profile full-nightly -FailOnCoverageRegression
+```
+
+When `-CoverageBaselinePath` is omitted, the runner compares against the
+previous `artifacts/latest/coverage-matrix.json` if it exists. The comparison is
+limited to the selected profile's `required_coverage_profiles`, unless
+`-RequiredCoverageProfiles` is supplied.
 
 ## Startup and shutdown model
 
@@ -170,8 +197,14 @@ Artifacts are written to:
 - `artifacts/runs/<timestamp>/metadata.json`
 - `artifacts/runs/<timestamp>/coverage-matrix.json`
 - `artifacts/runs/<timestamp>/coverage-matrix.md`
+- `artifacts/runs/<timestamp>/coverage-gate.json`
+- `artifacts/runs/<timestamp>/coverage-gate.md`
 - `artifacts/runs/<timestamp>/unresolved-gaps.json`
 - `artifacts/runs/<timestamp>/unresolved-gaps.md`
+- `artifacts/runs/<timestamp>/ci-profile.json`
+- `artifacts/runs/<timestamp>/ci-profile.md`
+- `artifacts/runs/<timestamp>/secret-scan.json`
+- `artifacts/runs/<timestamp>/secret-scan.md`
 - `artifacts/runs/<timestamp>/services/<service>.log`
 - `artifacts/latest/` as a copy of the most recent run
 
@@ -200,6 +233,9 @@ The runner now also emits:
 - unresolved remaining tasks derived from `_todos.md`
 - per-run SUT/spec metadata including local git revision and fixture fingerprint
 - per-service logs captured by the harness
+- selected CI profile and any quarantined test filters
+- coverage regression gate output
+- no-secret-in-log scan over raw logs, transcripts, and service logs
 
 ## Recommended usage
 

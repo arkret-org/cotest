@@ -1,6 +1,11 @@
 use anyhow::Result;
 
 #[test]
+fn artifact_registry_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_artifact_registry_suite()
+}
+
+#[test]
 fn encoding_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_encoding_fixture_suite()
 }
@@ -13,6 +18,31 @@ fn redaction_fixture_suite_matches_reference_semantics() -> Result<()> {
 #[test]
 fn capability_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_capability_fixture_suite()
+}
+
+#[test]
+fn event_envelope_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_event_envelope_fixture_suite()
+}
+
+#[test]
+fn deprecated_event_alias_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_deprecated_event_alias_suite()
+}
+
+#[test]
+fn capability_facet_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_capability_facet_fixture_suite()
+}
+
+#[test]
+fn facet_renderer_query_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_facet_renderer_query_fixture_suite()
+}
+
+#[test]
+fn projection_position_discriminator_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_projection_position_discriminator_fixture_suite()
 }
 
 #[test]

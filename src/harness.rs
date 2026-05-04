@@ -12,9 +12,8 @@ use std::{
 use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
-use contrix_sdk::{
-    Auth, Client as SdkClient, Commit, CommitId, Did, Hash, Operation, OperationId, Proof, SpaceId,
-};
+use contrix_client::{Auth, Client as SdkClient};
+use contrix_core::{Commit, CommitId, Did, Hash, Operation, OperationId, Proof, SpaceId};
 use reqwest::{
     Client as HttpClient, Request, RequestBuilder, StatusCode,
     header::{HeaderMap, HeaderValue},
@@ -756,7 +755,9 @@ fn service_log_path(name: &str) -> Result<Option<PathBuf>> {
         return Ok(None);
     };
     fs::create_dir_all(&root)?;
-    Ok(Some(root.join(format!("{}.log", sanitize_runtime_name(name)))))
+    Ok(Some(
+        root.join(format!("{}.log", sanitize_runtime_name(name))),
+    ))
 }
 
 fn service_log_stdio(path: Option<&Path>) -> Result<(Stdio, Stdio)> {
@@ -919,7 +920,10 @@ fn sanitize_url(url: &Url) -> String {
             (key.into_owned(), value)
         })
         .collect();
-    sanitized.query_pairs_mut().clear().extend_pairs(query_pairs);
+    sanitized
+        .query_pairs_mut()
+        .clear()
+        .extend_pairs(query_pairs);
     sanitized.to_string()
 }
 
@@ -976,9 +980,7 @@ fn sanitize_json_value(value: Value) -> Value {
                 })
                 .collect(),
         ),
-        Value::Array(values) => {
-            Value::Array(values.into_iter().map(sanitize_json_value).collect())
-        }
+        Value::Array(values) => Value::Array(values.into_iter().map(sanitize_json_value).collect()),
         Value::String(text) => Value::String(truncate_string(&text, 256)),
         other => other,
     }
@@ -1031,12 +1033,9 @@ fn normalize_transient_fields(value: Value) -> Value {
                 .map(|(key, value)| (key, normalize_transient_fields(value)))
                 .collect(),
         ),
-        Value::Array(values) => Value::Array(
-            values
-                .into_iter()
-                .map(normalize_transient_fields)
-                .collect(),
-        ),
+        Value::Array(values) => {
+            Value::Array(values.into_iter().map(normalize_transient_fields).collect())
+        }
         other => other,
     }
 }

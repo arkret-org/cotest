@@ -1,5 +1,5 @@
 use anyhow::Result;
-use contrix_sdk::{Commit, CommitId, Did, Operation, OperationId, SpaceId};
+use contrix_core::{Commit, CommitId, Did, Operation, OperationId, SpaceId};
 use reqwest::StatusCode;
 use serde_json::json;
 

@@ -1,0 +1,66 @@
+{
+  "profiles": [
+    {
+      "profile_id": "all",
+      "description": "Run every integration and conformance test.",
+      "include_all_tests": true,
+      "excluded_quarantine_labels": [],
+      "required_coverage_profiles": [
+        "cx.profile.core_event_store.v1",
+        "cx.profile.chat_mvp.v1",
+        "cx.profile.kanban_mvp.v1",
+        "cx.profile.principal_server_events_api.v1",
+        "cx.profile.principal_server.v1",
+        "cx.profile.index_node.v1",
+        "cx.profile.identity_registry.v1",
+        "cx.profile.blob_node.v1",
+        "cx.profile.push_gateway.v1",
+        "cx.profile.federation_minimal.v1",
+        "cx.profile.e2ee_client.v1"
+      ]
+    },
+    {
+      "profile_id": "fast-smoke",
+      "description": "Small public-surface smoke set for PR feedback.",
+      "include_all_tests": false,
+      "cargo_filters": [
+        "server_exposes_core_service_surface",
+        "framework_errors_and_invalid_json_use_contrix_envelopes",
+        "account_auth_and_session_edges_are_enforced",
+        "repo_submit_read_expand_idempotency_and_cas_edges",
+        "sync_directory_and_index_parameter_edges_are_enforced",
+        "event_envelope_fixture_suite_matches_reference_semantics",
+        "encoding_fixture_suite_matches_reference_semantics",
+        "privacy_security_fixture_suite_matches_reference_semantics"
+      ],
+      "excluded_quarantine_labels": [
+        "flaky"
+      ],
+      "required_coverage_profiles": [
+        "cx.profile.core_event_store.v1",
+        "cx.profile.chat_mvp.v1",
+        "cx.profile.principal_server_events_api.v1"
+      ]
+    },
+    {
+      "profile_id": "full-nightly",
+      "description": "Complete nightly run with federation and fixture coverage.",
+      "include_all_tests": true,
+      "excluded_quarantine_labels": [],
+      "required_coverage_profiles": [
+        "cx.profile.core_event_store.v1",
+        "cx.profile.chat_mvp.v1",
+        "cx.profile.kanban_mvp.v1",
+        "cx.profile.principal_server_events_api.v1",
+        "cx.profile.principal_server.v1",
+        "cx.profile.index_node.v1",
+        "cx.profile.identity_registry.v1",
+        "cx.profile.blob_node.v1",
+        "cx.profile.push_gateway.v1",
+        "cx.profile.federation_minimal.v1",
+        "cx.profile.e2ee_client.v1"
+      ]
+    }
+  ],
+  "quarantined_tests": []
+}
