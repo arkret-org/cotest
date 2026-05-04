@@ -259,6 +259,23 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         "contrix.rest.key_backups_describe.v1"
     );
     assert_eq!(key_backups_describe["schema"], "cx.schema.key_backup.v1");
+    assert_eq!(
+        key_backups_describe["restore_state_describe_path"],
+        "/api/v1/keys/backups/restore-state/describe"
+    );
+
+    let restore_state_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-state/describe"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_state_describe["contract"],
+        "contrix.rest.key_backup_restore_state_store_describe.v1"
+    );
 
     let backup_get = expect_json(
         server
@@ -410,6 +427,38 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_executor_enqueue["state"], "queued");
 
+    let restore_state_export = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-state/export"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_state_export["contract"],
+        "contrix.rest.key_backup_restore_state_store_export.v1"
+    );
+    assert_eq!(restore_state_export["ticket_count"], 1);
+
+    let restore_state_import = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-state/import"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "merge_mode": "replace_owned",
+                "records": restore_state_export["records"].clone()
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_state_import["contract"],
+        "contrix.rest.key_backup_restore_state_store_import.v1"
+    );
+    assert_eq!(restore_state_import["imported_ticket_count"], 1);
+
     let authz_describe = expect_json(
         server
             .http()
@@ -436,6 +485,10 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     assert_eq!(
         recovery_contract_stack["device_messages_describe_path"],
         "/api/v1/device_messages/describe"
+    );
+    assert_eq!(
+        recovery_contract_stack["restore_state_describe_path"],
+        "/api/v1/keys/backups/restore-state/describe"
     );
 
     let policies_describe = expect_json(
