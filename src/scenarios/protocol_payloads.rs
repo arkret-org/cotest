@@ -168,6 +168,23 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     assert_eq!(content["ciphertext"], "base64url-opaque-ciphertext");
     assert!(content.get("plaintext").is_none());
 
+    let device_messages_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/device_messages/describe"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        device_messages_describe["contract"],
+        "contrix.rest.device_messages_describe.v1"
+    );
+    assert_eq!(
+        device_messages_describe["schema"],
+        "cx.schema.device_message.v1"
+    );
+
     let verification_send = expect_json(
         server
             .http()
@@ -228,6 +245,20 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     )
     .await?;
     assert!(backup_list["items"].as_array().unwrap().len() >= 1);
+
+    let key_backups_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/describe"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        key_backups_describe["contract"],
+        "contrix.rest.key_backups_describe.v1"
+    );
+    assert_eq!(key_backups_describe["schema"], "cx.schema.key_backup.v1");
 
     let backup_get = expect_json(
         server
