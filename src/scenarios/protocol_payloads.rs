@@ -347,6 +347,38 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_advance["state"], "policy_pending");
 
+    let restore_executor_status = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/executor/status"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_executor_status["contract"],
+        "contrix.rest.key_backup_restore_executor_status.v1"
+    );
+
+    let restore_executor_enqueue = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/executor/enqueue"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "execution_mode": "scaffold_materialize",
+                "requested_by": "did:web:alice.example",
+                "note": "cotest scaffold enqueue"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_executor_enqueue["contract"],
+        "contrix.rest.key_backup_restore_executor_enqueue.v1"
+    );
+    assert_eq!(restore_executor_enqueue["state"], "queued");
+
     let authz_describe = expect_json(
         server
             .http()
