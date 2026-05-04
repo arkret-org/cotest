@@ -299,6 +299,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                         "contrix.auth.recovery_bridge.v1",
                         &[
                             "/api/v1/auth/recovery/describe",
+                            "/api/v1/auth/recovery/principal-snapshot",
                             "/api/v1/auth/recovery/start",
                             "/api/v1/auth/recovery/{id}",
                             "/api/v1/auth/recovery/{id}/resend",
@@ -331,6 +332,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                         ],
                         &[
                             "example_backup_payload",
+                            "recovery_principal_snapshot_path",
                             "recovery_restore_examples.restore_start_request",
                             "recovery_restore_examples.restore_ticket_advance_request",
                             "principal_restore_ticket_collection_path",
@@ -365,6 +367,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                         &body,
                         &[
                             "/api/v1/auth/recovery/describe",
+                            "/api/v1/auth/recovery/principal-snapshot",
                             "/api/v1/auth/recovery/start",
                             "/api/v1/auth/recovery/{id}",
                             "/api/v1/auth/recovery/{id}/resend",
@@ -397,6 +400,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                         ],
                         &[
                             "example_backup_payload",
+                            "recovery_principal_snapshot_path",
                             "recovery_restore_examples.restore_start_request",
                             "recovery_restore_examples.restore_ticket_advance_request",
                             "principal_restore_ticket_collection_path",
@@ -460,6 +464,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                 ],
                 example_keys: vec![
                     "coauth.example_backup_payload".to_owned(),
+                    "coauth.recovery_principal_snapshot_path".to_owned(),
                     "coauth.recovery_restore_examples.restore_start_request".to_owned(),
                     "coauth.recovery_restore_examples.restore_ticket_advance_request".to_owned(),
                     "coauth.principal_restore_ticket_collection_path".to_owned(),
