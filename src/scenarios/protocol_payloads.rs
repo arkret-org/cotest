@@ -516,6 +516,20 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_handoff["handoff_state"], "submitted");
 
+    let restore_bundle = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/bundle"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_bundle["contract"],
+        "contrix.rest.key_backup_restore_bundle.v1"
+    );
+    assert_eq!(restore_bundle["bundle_state"], "handoff_submitted");
+
     let restore_state_export = expect_json(
         server
             .http()
