@@ -465,6 +465,57 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_executor_complete["ticket_state"], "completed");
 
+    let restore_result = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/result"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_result["contract"],
+        "contrix.rest.key_backup_restore_result.v1"
+    );
+    assert_eq!(restore_result["result"], "success");
+
+    let restore_receipt = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/receipt"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_receipt["contract"],
+        "contrix.rest.key_backup_restore_receipt.v1"
+    );
+    assert_eq!(
+        restore_receipt["materialized_device_id"],
+        "dev_alice_restored"
+    );
+
+    let restore_handoff = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/materialized-device-handoff"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "target_device_id": "dev_alice_restored",
+                "delivery_channel": "device_messages",
+                "receipt_ack_mode": "scaffold_manual_ack",
+                "note": "cotest scaffold handoff"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_handoff["contract"],
+        "contrix.rest.key_backup_restore_materialized_device_handoff.v1"
+    );
+    assert_eq!(restore_handoff["handoff_state"], "submitted");
+
     let restore_state_export = expect_json(
         server
             .http()
@@ -527,6 +578,18 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     assert_eq!(
         recovery_contract_stack["restore_state_describe_path"],
         "/api/v1/keys/backups/restore-state/describe"
+    );
+    assert_eq!(
+        recovery_contract_stack["restore_result_path"],
+        "/api/v1/keys/backups/restore-tickets/{ticket_id}/result"
+    );
+    assert_eq!(
+        recovery_contract_stack["restore_receipt_path"],
+        "/api/v1/keys/backups/restore-tickets/{ticket_id}/receipt"
+    );
+    assert_eq!(
+        recovery_contract_stack["restore_materialized_device_handoff_path"],
+        "/api/v1/keys/backups/restore-tickets/{ticket_id}/materialized-device-handoff"
     );
 
     let policies_describe = expect_json(
