@@ -132,6 +132,11 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
         "/api/v1/auth/bridge/describe",
     )
     .await?;
+    let coauth_recovery_bridge = load_optional_live_contract(
+        coauth_base_url.as_deref(),
+        "/api/v1/auth/recovery/describe",
+    )
+    .await?;
     let coauth_admin_bridge = load_optional_live_contract(
         coauth_base_url.as_deref(),
         "/api/admin/v1/bridge/describe",
@@ -272,6 +277,47 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                     )
                 },
             ),
+            coauth_recovery_bridge.map_or_else(
+                || {
+                    snapshot_placeholder(
+                        "coauth",
+                        "recovery_bridge",
+                        "contrix.auth.recovery_bridge.v1",
+                        &[
+                            "/api/v1/auth/recovery/describe",
+                            "/api/v1/auth/recovery/start",
+                            "/api/v1/auth/recovery/{id}",
+                            "/api/v1/auth/recovery/{id}/resend",
+                            "/api/v1/keys/backups",
+                        ],
+                        &[
+                            "example_backup_payload",
+                            "verification_event_kinds",
+                            "recovery_modes",
+                        ],
+                        "TODO(cotest): point COAUTH_BASE_URL at a live coauth service to replace this placeholder recovery bridge row and assert key-backup/device-message recovery contract compatibility.",
+                    )
+                },
+                |body| {
+                    snapshot_from_live(
+                        "coauth",
+                        "recovery_bridge",
+                        &body,
+                        &[
+                            "/api/v1/auth/recovery/describe",
+                            "/api/v1/auth/recovery/start",
+                            "/api/v1/auth/recovery/{id}",
+                            "/api/v1/auth/recovery/{id}/resend",
+                            "/api/v1/keys/backups",
+                        ],
+                        &[
+                            "example_backup_payload",
+                            "verification_event_kinds",
+                            "recovery_modes",
+                        ],
+                    )
+                },
+            ),
             coauth_admin_bridge.map_or_else(
                 || {
                     snapshot_placeholder(
@@ -386,7 +432,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
         ],
     };
 
-    assert_eq!(matrix.rows.len(), 8);
+    assert_eq!(matrix.rows.len(), 9);
     assert!(matrix.rows.iter().any(|row| {
         row.service == "soland" && row.surface == "principal_auth_bridge"
     }));
@@ -395,6 +441,9 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
     }));
     assert!(matrix.rows.iter().any(|row| {
         row.service == "coauth" && row.surface == "auth_bridge"
+    }));
+    assert!(matrix.rows.iter().any(|row| {
+        row.service == "coauth" && row.surface == "recovery_bridge"
     }));
     assert!(matrix.rows.iter().any(|row| {
         row.service == "coauth" && row.surface == "service_integration_manifest"
