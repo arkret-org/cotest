@@ -239,6 +239,27 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     .await?;
     assert_eq!(backup_get["backup"]["schema"], "cx.schema.key_backup.v1");
 
+    let restore_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/backup-alice-01/restore/describe"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_describe["contract"],
+        "contrix.rest.key_backup_restore_describe.v1"
+    );
+    assert_eq!(
+        restore_describe["principal_authz_check_path"],
+        "/api/v1/authz/check"
+    );
+    assert_eq!(
+        restore_describe["principal_policy_collection_path"],
+        "/api/v1/policies"
+    );
+
     let backup_delete = expect_json(
         server
             .http()
