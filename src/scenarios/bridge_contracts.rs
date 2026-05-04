@@ -332,6 +332,27 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                     )
                 },
             ),
+            BridgeContractSnapshot {
+                service: "compose",
+                surface: "recovery_authz_policy_alignment",
+                contract: "contrix.contract_alignment.recovery_authz.v1".to_owned(),
+                version: "2026-05-04-scaffold".to_owned(),
+                required_paths: vec![
+                    "/api/v1/auth/recovery/describe".to_owned(),
+                    "/api/v1/keys/backups".to_owned(),
+                    "/api/v1/authz/check".to_owned(),
+                    "/api/v1/policies".to_owned(),
+                ],
+                example_keys: vec![
+                    "coauth.example_backup_payload".to_owned(),
+                    "coauth.recovery_authz_examples.authz_check_request".to_owned(),
+                    "coauth.recovery_authz_examples.policy_upsert_request".to_owned(),
+                    "soland.examples.authz_protocol.authz_check_request".to_owned(),
+                    "soland.examples.authz_protocol.policy_upsert_request".to_owned(),
+                    "soland.examples.key_backups.put_request".to_owned(),
+                ],
+                todo: "TODO(cotest): replace this synthetic alignment row with a live composed coauth + soland recovery restore flow once the stack harness can execute cross-service recovery/authz/policy handoff.",
+            },
             coauth_admin_bridge.map_or_else(
                 || {
                     snapshot_placeholder(
@@ -446,7 +467,7 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
         ],
     };
 
-    assert_eq!(matrix.rows.len(), 9);
+    assert_eq!(matrix.rows.len(), 10);
     assert!(matrix.rows.iter().any(|row| {
         row.service == "soland" && row.surface == "principal_auth_bridge"
     }));
@@ -458,6 +479,9 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
     }));
     assert!(matrix.rows.iter().any(|row| {
         row.service == "coauth" && row.surface == "recovery_bridge"
+    }));
+    assert!(matrix.rows.iter().any(|row| {
+        row.service == "compose" && row.surface == "recovery_authz_policy_alignment"
     }));
     assert!(matrix.rows.iter().any(|row| {
         row.service == "coauth" && row.surface == "service_integration_manifest"
