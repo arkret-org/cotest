@@ -168,6 +168,87 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     assert_eq!(content["ciphertext"], "base64url-opaque-ciphertext");
     assert!(content.get("plaintext").is_none());
 
+    let verification_send = expect_json(
+        server
+            .http()
+            .put(server.url("/api/v1/device_messages/protocol-verification-txn"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "messages": {
+                    "did:web:alice.example": {
+                        "dev_alice": {
+                            "type": "cx.key.verification.request",
+                            "content": {
+                                "transaction_id": "verify-sas-01",
+                                "method": "sas",
+                                "todo": "replace scaffold verification payload with signed device envelope"
+                            }
+                        }
+                    }
+                }
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(verification_send["ok"], true);
+
+    let backup_put = expect_json(
+        server
+            .http()
+            .put(server.url("/api/v1/keys/backups/backup-alice-01"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "schema": "cx.schema.key_backup.v1",
+                "backup_id": "backup-alice-01",
+                "class": "mls_export",
+                "encryption": {
+                    "alg": "xchacha20poly1305",
+                    "kdf": "argon2id"
+                },
+                "items": [
+                    {
+                        "kind": "mls_group_state",
+                        "ref": "group:default",
+                        "todo": "replace scaffold payload with encrypted export blob"
+                    }
+                ]
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(backup_put["ok"], true);
+    assert_eq!(backup_put["state"], "scaffold");
+
+    let backup_list = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(backup_list["items"].as_array().unwrap().len() >= 1);
+
+    let backup_get = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/backup-alice-01"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(backup_get["backup"]["schema"], "cx.schema.key_backup.v1");
+
+    let backup_delete = expect_json(
+        server
+            .http()
+            .delete(server.url("/api/v1/keys/backups/backup-alice-01"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(backup_delete["ok"], true);
+
     expect_status(
         server
             .http()
