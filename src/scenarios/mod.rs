@@ -1,5 +1,6 @@
 pub mod api_contracts_auth;
 pub mod authz_policy_presence;
+pub mod bridge_contracts;
 pub mod collaboration_workflow;
 pub mod delivery_media;
 pub mod events_entity_backfill;
