@@ -260,6 +260,26 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         "/api/v1/policies"
     );
 
+    let restore_start = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/backup-alice-01/restore/start"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "backup_id": "backup-alice-01",
+                "actor": "did:web:alice.example",
+                "device_id": "dev_alice",
+                "verification_event_kind": "cx.key.verification.done"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_start["contract"],
+        "contrix.rest.key_backup_restore_start.v1"
+    );
+    assert_eq!(restore_start["state"], "scaffold_started");
+
     let backup_delete = expect_json(
         server
             .http()
