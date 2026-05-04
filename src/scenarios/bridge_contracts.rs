@@ -491,6 +491,8 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                     "coauth.recovery_principal_snapshot_path".to_owned(),
                     "coauth.recovery_principal_cache_status_path".to_owned(),
                     "coauth.recovery_principal_cache_refresh_path".to_owned(),
+                    "coauth.principal_restore_timeline_path".to_owned(),
+                    "coauth.principal_restore_audit_feed_path".to_owned(),
                     "coauth.recovery_restore_examples.restore_start_request".to_owned(),
                     "coauth.recovery_restore_examples.restore_ticket_advance_request".to_owned(),
                     "coauth.principal_restore_ticket_collection_path".to_owned(),
