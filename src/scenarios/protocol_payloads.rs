@@ -279,6 +279,42 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         "contrix.rest.key_backup_restore_start.v1"
     );
     assert_eq!(restore_start["state"], "scaffold_started");
+    assert_eq!(
+        restore_start["restore_ticket_path"],
+        "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01"
+    );
+
+    let restore_ticket = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_ticket["contract"],
+        "contrix.rest.key_backup_restore_ticket.v1"
+    );
+    assert_eq!(restore_ticket["lifecycle_state"], "authz_pending");
+
+    let restore_advance = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/advance"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "transition": "authz_checked",
+                "note": "cotest scaffold advance"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_advance["contract"],
+        "contrix.rest.key_backup_restore_ticket_advance.v1"
+    );
+    assert_eq!(restore_advance["state"], "policy_pending");
 
     let backup_delete = expect_json(
         server
