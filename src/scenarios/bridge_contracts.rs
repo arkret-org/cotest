@@ -40,6 +40,18 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         integration["surfaces"][0]["path"],
         "/api/v1/auth/bridge/describe"
     );
+    assert_eq!(
+        integration["examples"]["authz_protocol"]["authz_check_request"]["path"],
+        "/api/v1/authz/check"
+    );
+    assert_eq!(
+        integration["examples"]["authz_protocol"]["policy_upsert_request"]["path"],
+        "/api/v1/policies"
+    );
+    assert_eq!(
+        integration["examples"]["authz_protocol"]["policy_get_path"],
+        "/api/v1/policies/{policy_id}"
+    );
 
     let auth_bridge = expect_json(
         server.http().get(server.url("/api/v1/auth/bridge/describe")),
@@ -168,6 +180,8 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                     "dependencies.0.discovery_path",
                     "surfaces.0.path",
                     "surfaces.1.path",
+                    "examples.authz_protocol.authz_check_request",
+                    "examples.authz_protocol.policy_upsert_request",
                 ],
             ),
             snapshot_from_live(
