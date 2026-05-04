@@ -23,6 +23,23 @@ struct BridgeContractMatrixScaffold {
 pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     let server = ContrixServer::spawn("bridge-contracts").await?;
 
+    let integration = expect_json(
+        server.http().get(server.url("/api/v1/integration/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(integration["contract"], "contrix.rest.integration_manifest.v1");
+    assert_eq!(integration["service"], "soland");
+    assert_eq!(integration["service_kind"], "principal_server");
+    assert_eq!(
+        integration["dependencies"][0]["required_contract"],
+        "contrix.rest.auth_bridge.v1"
+    );
+    assert_eq!(
+        integration["surfaces"][0]["path"],
+        "/api/v1/auth/bridge/describe"
+    );
+
     let auth_bridge = expect_json(
         server.http().get(server.url("/api/v1/auth/bridge/describe")),
         StatusCode::OK,
@@ -84,6 +101,11 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
 
 pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
     let server = ContrixServer::spawn("bridge-matrix").await?;
+    let service_integration = expect_json(
+        server.http().get(server.url("/api/v1/integration/describe")),
+        StatusCode::OK,
+    )
+    .await?;
     let principal_auth = expect_json(
         server.http().get(server.url("/api/v1/auth/bridge/describe")),
         StatusCode::OK,
@@ -99,6 +121,21 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
 
     let matrix = BridgeContractMatrixScaffold {
         rows: vec![
+            snapshot_from_live(
+                "soland",
+                "service_integration_manifest",
+                &service_integration,
+                &[
+                    "/api/v1/integration/describe",
+                    "/api/v1/auth/bridge/describe",
+                    "/api/v1/push/outbound/bridge/describe",
+                ],
+                &[
+                    "dependencies.0.discovery_path",
+                    "surfaces.0.path",
+                    "surfaces.1.path",
+                ],
+            ),
             snapshot_from_live(
                 "soland",
                 "principal_auth_bridge",
@@ -129,6 +166,22 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                     "examples.fetch_request",
                     "examples.notify_headers",
                 ],
+            ),
+            snapshot_placeholder(
+                "coauth",
+                "service_integration_manifest",
+                "contrix.rest.integration_manifest.v1",
+                &[
+                    "/api/v1/integration/describe",
+                    "/api/v1/auth/bridge/describe",
+                    "/api/admin/v1/bridge/describe",
+                ],
+                &[
+                    "dependencies.0.discovery_path",
+                    "surfaces.0.path",
+                    "surfaces.4.path",
+                ],
+                "TODO(cotest): replace placeholder with live coauth integration manifest assertions once the harness can spawn coauth alongside soland.",
             ),
             snapshot_placeholder(
                 "coauth",
@@ -166,6 +219,22 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
             ),
             snapshot_placeholder(
                 "floria",
+                "service_integration_manifest",
+                "contrix.rest.integration_manifest.v1",
+                &[
+                    "/api/v1/integration/describe",
+                    "/api/v1/push/bridge/describe",
+                    "/api/v1/push/notify",
+                ],
+                &[
+                    "dependencies.0.discovery_path",
+                    "surfaces.0.path",
+                    "surfaces.1.path",
+                ],
+                "TODO(cotest): replace placeholder with live floria integration manifest assertions once the harness can spawn the push gateway.",
+            ),
+            snapshot_placeholder(
+                "floria",
                 "push_bridge",
                 "cx.push.bridge.describe",
                 &[
@@ -182,15 +251,24 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
         ],
     };
 
-    assert_eq!(matrix.rows.len(), 5);
+    assert_eq!(matrix.rows.len(), 8);
     assert!(matrix.rows.iter().any(|row| {
         row.service == "soland" && row.surface == "principal_auth_bridge"
+    }));
+    assert!(matrix.rows.iter().any(|row| {
+        row.service == "soland" && row.surface == "service_integration_manifest"
     }));
     assert!(matrix.rows.iter().any(|row| {
         row.service == "coauth" && row.surface == "auth_bridge"
     }));
     assert!(matrix.rows.iter().any(|row| {
+        row.service == "coauth" && row.surface == "service_integration_manifest"
+    }));
+    assert!(matrix.rows.iter().any(|row| {
         row.service == "floria" && row.surface == "push_bridge"
+    }));
+    assert!(matrix.rows.iter().any(|row| {
+        row.service == "floria" && row.surface == "service_integration_manifest"
     }));
     assert!(matrix
         .rows
