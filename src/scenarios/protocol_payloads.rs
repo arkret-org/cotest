@@ -562,6 +562,40 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_bundle["bundle_state"], "handoff_submitted");
 
+    let restore_activity = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/activity"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_activity["contract"],
+        "contrix.rest.key_backup_restore_activity.v1"
+    );
+    assert_eq!(
+        restore_activity["recovery_live_snapshot_path"],
+        "/api/v1/recovery/live-snapshot"
+    );
+
+    let recovery_live_snapshot = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/recovery/live-snapshot"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        recovery_live_snapshot["contract"],
+        "contrix.rest.recovery_live_snapshot.v1"
+    );
+    assert_eq!(
+        recovery_live_snapshot["ticket_collection_path"],
+        "/api/v1/keys/backups/restore-tickets"
+    );
+
     let restore_retry = expect_json(
         server
             .http()
@@ -672,6 +706,14 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     assert_eq!(
         recovery_contract_stack["restore_materialized_device_handoff_path"],
         "/api/v1/keys/backups/restore-tickets/{ticket_id}/materialized-device-handoff"
+    );
+    assert_eq!(
+        recovery_contract_stack["restore_activity_path"],
+        "/api/v1/keys/backups/restore-tickets/{ticket_id}/activity"
+    );
+    assert_eq!(
+        recovery_contract_stack["recovery_live_snapshot_path"],
+        "/api/v1/recovery/live-snapshot"
     );
 
     let policies_describe = expect_json(
