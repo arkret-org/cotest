@@ -332,6 +332,20 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01"
     );
 
+    let restore_ticket_collection = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/keys/backups/restore-tickets"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_ticket_collection["contract"],
+        "contrix.rest.key_backup_restore_ticket_collection.v1"
+    );
+    assert_eq!(restore_ticket_collection["total_count"], 1);
+
     let restore_ticket = expect_json(
         server
             .http()
