@@ -595,6 +595,66 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         recovery_live_snapshot["ticket_collection_path"],
         "/api/v1/keys/backups/restore-tickets"
     );
+    assert_eq!(
+        recovery_live_snapshot["discovery_path"],
+        "/api/v1/recovery/discovery"
+    );
+    assert_eq!(
+        recovery_live_snapshot["readiness_path"],
+        "/api/v1/recovery/readiness"
+    );
+
+    let recovery_discovery = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/recovery/discovery"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        recovery_discovery["contract"],
+        "contrix.rest.recovery_discovery.v1"
+    );
+    assert_eq!(
+        recovery_discovery["recovery_readiness_path"],
+        "/api/v1/recovery/readiness"
+    );
+
+    let recovery_readiness = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/recovery/readiness"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        recovery_readiness["contract"],
+        "contrix.rest.recovery_readiness.v1"
+    );
+    assert_eq!(recovery_readiness["readiness_state"], "scaffold_ready");
+
+    let recovery_stack_bundle = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/recovery/stack-bundle"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        recovery_stack_bundle["contract"],
+        "contrix.rest.recovery_stack_bundle.v1"
+    );
+    assert_eq!(
+        recovery_stack_bundle["discovery_path"],
+        "/api/v1/recovery/discovery"
+    );
+    assert_eq!(
+        recovery_stack_bundle["readiness_path"],
+        "/api/v1/recovery/readiness"
+    );
 
     let restore_timeline = expect_json(
         server
