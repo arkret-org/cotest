@@ -316,6 +316,31 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_advance["state"], "policy_pending");
 
+    let authz_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/authz/describe"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(authz_describe["contract"], "contrix.rest.authz_describe.v1");
+    assert_eq!(authz_describe["check_path"], "/api/v1/authz/check");
+
+    let policies_describe = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/policies/describe"))
+            .bearer_auth(&token),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        policies_describe["contract"],
+        "contrix.rest.policies_describe.v1"
+    );
+    assert_eq!(policies_describe["collection_path"], "/api/v1/policies");
+
     let backup_delete = expect_json(
         server
             .http()

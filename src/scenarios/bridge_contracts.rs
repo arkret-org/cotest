@@ -304,6 +304,8 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                             "/api/v1/auth/recovery/{id}/resend",
                             "/api/v1/keys/backups",
                             "/api/v1/keys/backups/{backup_id}/restore/start",
+                            "/api/v1/authz/describe",
+                            "/api/v1/policies/describe",
                         ],
                         &[
                             "example_backup_payload",
@@ -327,6 +329,8 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                             "/api/v1/auth/recovery/{id}/resend",
                             "/api/v1/keys/backups",
                             "/api/v1/keys/backups/{backup_id}/restore/start",
+                            "/api/v1/authz/describe",
+                            "/api/v1/policies/describe",
                         ],
                         &[
                             "example_backup_payload",
@@ -347,7 +351,9 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
                     "/api/v1/auth/recovery/describe".to_owned(),
                     "/api/v1/keys/backups".to_owned(),
                     "/api/v1/keys/backups/{backup_id}/restore/start".to_owned(),
+                    "/api/v1/authz/describe".to_owned(),
                     "/api/v1/authz/check".to_owned(),
+                    "/api/v1/policies/describe".to_owned(),
                     "/api/v1/policies".to_owned(),
                 ],
                 example_keys: vec![
