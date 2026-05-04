@@ -633,7 +633,8 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         recovery_readiness["contract"],
         "contrix.rest.recovery_readiness.v1"
     );
-    assert_eq!(recovery_readiness["readiness_state"], "scaffold_ready");
+    assert_eq!(recovery_readiness["readiness_state"], "ready");
+    assert_eq!(recovery_readiness["blocking_gaps"], json!([]));
 
     let recovery_stack_bundle = expect_json(
         server
