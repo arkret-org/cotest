@@ -427,6 +427,44 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_executor_enqueue["state"], "queued");
 
+    let restore_executor_start = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/executor/start"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "worker_id": "restore-worker-01",
+                "lease_kind": "scaffold_single_actor",
+                "note": "cotest scaffold start"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_executor_start["contract"],
+        "contrix.rest.key_backup_restore_executor_start.v1"
+    );
+    assert_eq!(restore_executor_start["state"], "running");
+
+    let restore_executor_complete = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/executor/complete"))
+            .bearer_auth(&token)
+            .json(&json!({
+                "result": "success",
+                "materialized_device_id": "dev_alice_restored",
+                "note": "cotest scaffold complete"
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        restore_executor_complete["contract"],
+        "contrix.rest.key_backup_restore_executor_complete.v1"
+    );
+    assert_eq!(restore_executor_complete["ticket_state"], "completed");
+
     let restore_state_export = expect_json(
         server
             .http()
