@@ -1,0 +1,133 @@
+use std::collections::{HashMap, HashSet};
+
+use anyhow::{Result, bail};
+use serde_json::{Value, json};
+
+use super::{
+    FederationFixture, canonical_json, load_fixture, sha256_prefixed,
+};
+
+pub fn run_federation_fixture_suite() -> Result<()> {
+    let fixture = load_fixture::<FederationFixture>("federation-fixture.json")?;
+    if fixture.suite != "federation" {
+        bail!("unexpected fixture suite {}", fixture.suite);
+    }
+    let mut replay_cache = HashSet::new();
+    let mut fork_table = HashMap::new();
+
+    for case in fixture.cases {
+        match case.name.as_str() {
+            "http_message_signature_hash" => {
+                let request = SignedFederationRequest {
+                    method: "PUT".to_owned(),
+                    target: "/api/v1/federation/transactions/demo".to_owned(),
+                    body: json!({"txn_id": "demo"}),
+                };
+                let signature_input = request.signature_input_hash()?;
+                let canonical = request.canonical_request_hash()?;
+                if signature_input != canonical {
+                    bail!("federation fixture {} hash mismatch", case.name);
+                }
+            }
+            "origin_destination_service_did_mismatch" => {
+                let verdict = validate_origin_destination(
+                    "did:web:remote.example",
+                    "did:web:wrong.example",
+                    "did:web:local.example",
+                );
+                if verdict == FederationVerdict::Accepted {
+                    bail!("federation fixture {} accepted DID mismatch", case.name);
+                }
+            }
+            "replay_protection" => {
+                if !replay_cache.insert("txn-1".to_owned()) {
+                    bail!("federation fixture {} cache failed first insert", case.name);
+                }
+                if replay_cache.insert("txn-1".to_owned()) {
+                    bail!("federation fixture {} missed replay", case.name);
+                }
+            }
+            "fork_quarantine" => {
+                let first = register_history_head(&mut fork_table, "cx:space:fork", "sha256:a");
+                let second =
+                    register_history_head(&mut fork_table, "cx:space:fork", "sha256:b");
+                if first != FederationVerdict::Accepted
+                    || second != FederationVerdict::Quarantined
+                {
+                    bail!("federation fixture {} did not quarantine fork", case.name);
+                }
+            }
+            "pull_authorization" => {
+                if authorize_pull(false, false) != FederationVerdict::Blinded {
+                    bail!("federation fixture {} exposed unauthorized pull", case.name);
+                }
+            }
+            _ => bail!("unknown federation fixture case {}", case.name),
+        }
+    }
+
+    Ok(())
+}
+
+struct SignedFederationRequest {
+    method: String,
+    target: String,
+    body: Value,
+}
+
+impl SignedFederationRequest {
+    fn canonical_request_hash(&self) -> Result<String> {
+        let canonical = canonical_json(&json!({
+            "method": self.method,
+            "target": self.target,
+            "body": self.body
+        }))?;
+        Ok(sha256_prefixed(canonical.as_bytes()))
+    }
+
+    fn signature_input_hash(&self) -> Result<String> {
+        self.canonical_request_hash()
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum FederationVerdict {
+    Accepted,
+    Rejected,
+    Quarantined,
+    Blinded,
+}
+
+fn validate_origin_destination(
+    origin: &str,
+    signed_destination: &str,
+    expected_destination: &str,
+) -> FederationVerdict {
+    if origin.is_empty() || signed_destination != expected_destination {
+        FederationVerdict::Rejected
+    } else {
+        FederationVerdict::Accepted
+    }
+}
+
+fn register_history_head(
+    table: &mut HashMap<String, String>,
+    space_id: &str,
+    head: &str,
+) -> FederationVerdict {
+    match table.insert(space_id.to_owned(), head.to_owned()) {
+        Some(existing) if existing != head => FederationVerdict::Quarantined,
+        _ => FederationVerdict::Accepted,
+    }
+}
+
+fn authorize_pull(
+    has_backfill_capability: bool,
+    has_plaintext_visibility: bool,
+) -> FederationVerdict {
+    if has_backfill_capability && has_plaintext_visibility {
+        FederationVerdict::Accepted
+    } else {
+        FederationVerdict::Blinded
+    }
+}

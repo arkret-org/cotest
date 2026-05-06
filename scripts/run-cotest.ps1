@@ -618,8 +618,9 @@ function ConvertTo-SecretPreview {
 
     $preview = $Line
     $preview = $preview -replace '(?i)(authorization["\s:=]+bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
-    $preview = $preview -replace '(?i)("(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)"\s*:\s*")(?!\[redacted\])([^"]+)(")', '$1[redacted]$5'
-    $preview = $preview -replace '(?i)((access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)=)(?!\[redacted\])([^&\s]+)', '$1[redacted]'
+    $preview = $preview -replace '(?i)("(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)"\s*:\s*")(?!\[redacted\])([^"]+)(")', '$1[redacted]$5'
+    $preview = $preview -replace '(?i)((access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=)(?!\[redacted\])([^&\s]+)', '$1[redacted]'
+    $preview = $preview -replace '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----[^\-]*-----END (RSA |EC |OPENSSH )?PRIVATE KEY-----', '[redacted-private-key]'
     if ($preview.Length -gt 220) {
         return $preview.Substring(0, 220) + "...[truncated]"
     }
@@ -631,8 +632,10 @@ function Find-SecretLeaks {
 
     $patterns = @(
         [pscustomobject]@{ name = "authorization_header"; pattern = '(?i)(authorization["\s:=]+bearer\s+)(?!\[redacted\])\S+' },
-        [pscustomobject]@{ name = "json_secret_field"; pattern = '(?i)"(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)"\s*:\s*"(?!\[redacted\])[^"]+"' },
-        [pscustomobject]@{ name = "query_secret_field"; pattern = '(?i)(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret)=((?!\[redacted\])[^&\s]+)' }
+        [pscustomobject]@{ name = "json_secret_field"; pattern = '(?i)"(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)"\s*:\s*"(?!\[redacted\])[^"]+"' },
+        [pscustomobject]@{ name = "query_secret_field"; pattern = '(?i)(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=((?!\[redacted\])[^&\s]+)' },
+        [pscustomobject]@{ name = "did_in_token_field"; pattern = '(?i)"(token|push_key|credential)"\s*:\s*"(did:[^"]+)"' },
+        [pscustomobject]@{ name = "private_key_block"; pattern = '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' }
     )
     $leaks = New-Object System.Collections.Generic.List[object]
     foreach ($root in $ScanRoots) {
@@ -758,6 +761,317 @@ function New-UnresolvedMarkdown {
         }
         $lines.Add("")
     }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Get-RegistryCoverageGaps {
+    param(
+        [Parameter(Mandatory = $true)][string]$SpecArtifactsRoot,
+        [Parameter(Mandatory = $true)][string]$CoverageProfilesPath
+    )
+
+    $gaps = New-Object System.Collections.Generic.List[object]
+
+    # Load coverage profiles to know what tests exist
+    $coverageProfiles = @{}
+    if (Test-Path $CoverageProfilesPath) {
+        $cpJson = Get-Content $CoverageProfilesPath -Raw | ConvertFrom-Json
+        foreach ($profile in $cpJson.profiles) {
+            foreach ($req in $profile.requirements) {
+                foreach ($src in $req.sources) {
+                    $coverageProfiles[$src] = $true
+                }
+            }
+        }
+    }
+
+    # Event kind registry gaps
+    $eventKindPath = Join-Path $SpecArtifactsRoot "registry/event-kind-registry.json"
+    if (Test-Path $eventKindPath) {
+        $registry = Get-Content $eventKindPath -Raw | ConvertFrom-Json
+        $activeKinds = @()
+        foreach ($ek in $registry.event_kinds) {
+            if ($ek.status -eq "active" -and $ek.wire_scope -ne "deprecated_alias") {
+                $activeKinds += $ek.event_kind
+            }
+        }
+        # Check which event kinds are referenced in conformance tests
+        $coveredKinds = @{}
+        $conformanceDir = Join-Path $repoRoot "src/conformance"
+        if (Test-Path $conformanceDir) {
+            $sourceFiles = Get-ChildItem -Path $conformanceDir -Filter "*.rs" -Recurse
+            foreach ($file in $sourceFiles) {
+                $content = Get-Content $file.FullName -Raw
+                foreach ($kind in $activeKinds) {
+                    if ($content -match [regex]::Escape($kind)) {
+                        $coveredKinds[$kind] = $true
+                    }
+                }
+            }
+        }
+        $scenarioDir = Join-Path $repoRoot "src/scenarios"
+        if (Test-Path $scenarioDir) {
+            $sourceFiles = Get-ChildItem -Path $scenarioDir -Filter "*.rs" -Recurse
+            foreach ($file in $sourceFiles) {
+                $content = Get-Content $file.FullName -Raw
+                foreach ($kind in $activeKinds) {
+                    if ($content -match [regex]::Escape($kind)) {
+                        $coveredKinds[$kind] = $true
+                    }
+                }
+            }
+        }
+        foreach ($kind in $activeKinds) {
+            if (-not $coveredKinds.ContainsKey($kind)) {
+                $gaps.Add([pscustomobject]@{
+                    category = "event_kind"
+                    id       = $kind
+                    status   = "uncovered"
+                })
+            }
+        }
+    }
+
+    # Schema registry gaps
+    $schemaPath = Join-Path $SpecArtifactsRoot "registry/schema-registry.json"
+    if (Test-Path $schemaPath) {
+        $registry = Get-Content $schemaPath -Raw | ConvertFrom-Json
+        $coveredSchemas = @{}
+        $conformanceDir = Join-Path $repoRoot "src/conformance"
+        if (Test-Path $conformanceDir) {
+            $sourceFiles = Get-ChildItem -Path $conformanceDir -Filter "*.rs" -Recurse
+            foreach ($file in $sourceFiles) {
+                $content = Get-Content $file.FullName -Raw
+                foreach ($schema in $registry.schemas) {
+                    if ($content -match [regex]::Escape($schema.schema_id)) {
+                        $coveredSchemas[$schema.schema_id] = $true
+                    }
+                }
+            }
+        }
+        foreach ($schema in $registry.schemas) {
+            if (-not $coveredSchemas.ContainsKey($schema.schema_id)) {
+                $gaps.Add([pscustomobject]@{
+                    category = "schema"
+                    id       = $schema.schema_id
+                    status   = "uncovered"
+                })
+            }
+        }
+    }
+
+    # Operation registry gaps
+    $operationPath = Join-Path $SpecArtifactsRoot "registry/operation-registry.json"
+    if (Test-Path $operationPath) {
+        $registry = Get-Content $operationPath -Raw | ConvertFrom-Json
+        $coveredOps = @{}
+        $sourceDirs = @(
+            (Join-Path $repoRoot "src/conformance"),
+            (Join-Path $repoRoot "src/scenarios"),
+            (Join-Path $repoRoot "src/harness.rs")
+        )
+        foreach ($dir in $sourceDirs) {
+            if (Test-Path $dir -PathType Leaf) {
+                $content = Get-Content $dir -Raw
+                foreach ($op in $registry.operations) {
+                    if ($content -match [regex]::Escape($op.operation_id)) {
+                        $coveredOps[$op.operation_id] = $true
+                    }
+                }
+            } elseif (Test-Path $dir) {
+                $sourceFiles = Get-ChildItem -Path $dir -Filter "*.rs" -Recurse
+                foreach ($file in $sourceFiles) {
+                    $content = Get-Content $file.FullName -Raw
+                    foreach ($op in $registry.operations) {
+                        if ($content -match [regex]::Escape($op.operation_id)) {
+                            $coveredOps[$op.operation_id] = $true
+                        }
+                    }
+                }
+            }
+        }
+        foreach ($op in $registry.operations) {
+            if (-not $coveredOps.ContainsKey($op.operation_id)) {
+                $gaps.Add([pscustomobject]@{
+                    category = "operation"
+                    id       = $op.operation_id
+                    status   = "uncovered"
+                })
+            }
+        }
+    }
+
+    return $gaps
+}
+
+function New-RegistryGapMarkdown {
+    param([Parameter(Mandatory = $true)]$Gaps)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("## Registry Coverage Gaps")
+    $lines.Add("")
+    if ($Gaps.Count -eq 0) {
+        $lines.Add("All registered items are referenced in at least one test or scenario.")
+        $lines.Add("")
+        return ($lines -join [Environment]::NewLine)
+    }
+
+    $grouped = $Gaps | Group-Object category
+    foreach ($group in $grouped) {
+        $lines.Add("### Uncovered $($group.Name)s ($($group.Count))")
+        $lines.Add("")
+        foreach ($item in $group.Group) {
+            $lines.Add("- ``$($item.id)``")
+        }
+        $lines.Add("")
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Test-SpecArtifactSync {
+    param(
+        [Parameter(Mandatory = $true)][string]$SpecRoot,
+        [string]$PythonExe = "python"
+    )
+
+    $pipelineScript = Join-Path $SpecRoot "tools" "artifact_pipeline.py"
+    if (-not (Test-Path $pipelineScript)) {
+        return [pscustomobject]@{
+            status = "skipped"
+            reason = "artifact_pipeline.py not found"
+            errors = @()
+        }
+    }
+
+    $output = & $PythonExe $pipelineScript check 2>&1
+    $exitCode = $LASTEXITCODE
+    $errors = @($output | Where-Object { $_ -match "^(ERROR|FAIL|DRIFT)" })
+
+    [pscustomobject]@{
+        status   = if ($exitCode -eq 0) { "passed" } else { "failed" }
+        exit_code = $exitCode
+        errors   = $errors
+        output   = @($output)
+    }
+}
+
+function Get-SutDescribeAlignment {
+    param(
+        [Parameter(Mandatory = $true)][string]$SpecArtifactsRoot,
+        [string]$SutBaseUrl
+    )
+
+    if (-not $SutBaseUrl) {
+        return [pscustomobject]@{
+            status = "skipped"
+            reason = "no SUT base URL"
+            drifts = @()
+        }
+    }
+
+    $drifts = New-Object System.Collections.Generic.List[object]
+
+    # Check server describe endpoint
+    $serverDescribe = $null
+    try {
+        $response = Invoke-RestMethod -Uri "$SutBaseUrl/server/describe" -Method Get -TimeoutSec 10 -ErrorAction Stop
+        $serverDescribe = $response
+    } catch {
+        $drifts.Add([pscustomobject]@{
+            endpoint = "/server/describe"
+            issue    = "unreachable"
+            detail   = $_.Exception.Message
+        })
+    }
+
+    # Check integration describe endpoint
+    $integrationDescribe = $null
+    try {
+        $response = Invoke-RestMethod -Uri "$SutBaseUrl/integration/describe" -Method Get -TimeoutSec 10 -ErrorAction Stop
+        $integrationDescribe = $response
+    } catch {
+        $drifts.Add([pscustomobject]@{
+            endpoint = "/integration/describe"
+            issue    = "unreachable"
+            detail   = $_.Exception.Message
+        })
+    }
+
+    # Validate against spec registries if endpoints responded
+    if ($serverDescribe) {
+        $eventKindsPath = Join-Path $SpecArtifactsRoot "registry" "event-kind-registry.json"
+        if (Test-Path $eventKindsPath) {
+            $specRegistry = Get-Content $eventKindsPath -Raw | ConvertFrom-Json
+            $specKinds = @($specRegistry.event_kinds | ForEach-Object { $_.kind })
+            $sutKinds = @()
+            if ($serverDescribe.supported_event_kinds) {
+                $sutKinds = @($serverDescribe.supported_event_kinds)
+            }
+            $missing = @($specKinds | Where-Object { $_ -notin $sutKinds })
+            if ($missing.Count -gt 0) {
+                $drifts.Add([pscustomobject]@{
+                    endpoint = "/server/describe"
+                    issue    = "missing_event_kinds"
+                    detail   = "$($missing.Count) spec event kinds not in SUT: $($missing[0..4] -join ', ')..."
+                })
+            }
+        }
+    }
+
+    [pscustomobject]@{
+        status             = if ($drifts.Count -eq 0) { "aligned" } else { "drift_detected" }
+        server_describe    = $serverDescribe -ne $null
+        integration_describe = $integrationDescribe -ne $null
+        drifts             = @($drifts)
+    }
+}
+
+function New-SpecSyncGateMarkdown {
+    param(
+        [Parameter(Mandatory = $true)]$ArtifactSync,
+        [Parameter(Mandatory = $true)]$DescribeAlignment
+    )
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("## Spec Artifact Sync Gate")
+    $lines.Add("")
+
+    # Artifact pipeline check
+    $lines.Add("### Artifact Pipeline")
+    $lines.Add("")
+    $lines.Add("- status: $($ArtifactSync.status)")
+    if ($ArtifactSync.reason) {
+        $lines.Add("- reason: $($ArtifactSync.reason)")
+    }
+    if ($ArtifactSync.errors.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("**Errors:**")
+        foreach ($err in $ArtifactSync.errors) {
+            $lines.Add("- $err")
+        }
+    }
+    $lines.Add("")
+
+    # SUT describe alignment
+    $lines.Add("### SUT Describe Alignment")
+    $lines.Add("")
+    $lines.Add("- status: $($DescribeAlignment.status)")
+    $lines.Add("- server_describe: $($DescribeAlignment.server_describe)")
+    $lines.Add("- integration_describe: $($DescribeAlignment.integration_describe)")
+    if ($DescribeAlignment.drifts.Count -gt 0) {
+        $lines.Add("")
+        $lines.Add("| Endpoint | Issue | Detail |")
+        $lines.Add("| --- | --- | --- |")
+        foreach ($drift in $DescribeAlignment.drifts) {
+            $detail = ($drift.detail -replace '\|', '\|')
+            if ($detail.Length -gt 120) {
+                $detail = $detail.Substring(0, 120) + "..."
+            }
+            $lines.Add("| $($drift.endpoint) | $($drift.issue) | $detail |")
+        }
+    }
+    $lines.Add("")
+
     return ($lines -join [Environment]::NewLine)
 }
 
@@ -889,12 +1203,44 @@ if ($FailOnCoverageRegression -and $coverageGate.status -eq "failed") {
     $exitCode = 1
 }
 $unresolved = Get-UnresolvedTodoItems -TodoPath (Join-Path $repoRoot "_todos.md")
+$specArtifactsRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "contrix-spec" | Join-Path -ChildPath "artifacts"
+if (-not (Test-Path $specArtifactsRoot)) {
+    $specArtifactsRoot = $null
+}
+$registryGaps = @()
+if ($specArtifactsRoot -and (Test-Path (Join-Path $repoRoot "config/coverage-profiles.json"))) {
+    $registryGaps = @(Get-RegistryCoverageGaps -SpecArtifactsRoot $specArtifactsRoot -CoverageProfilesPath (Join-Path $repoRoot "config/coverage-profiles.json"))
+}
+
+# Spec artifact sync gate
+$specRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "contrix-spec"
+$specSyncResult = Test-SpecArtifactSync -SpecRoot $specRoot
+$sutDescribeAlignment = [pscustomobject]@{
+    status = "skipped"
+    reason = "no SUT base URL configured"
+    drifts = @()
+}
+# SUT describe alignment only when running against a live SUT with base URL
+if ($env:COTEST_SUT_BASE_URL) {
+    $sutDescribeAlignment = Get-SutDescribeAlignment -SpecArtifactsRoot $specArtifactsRoot -SutBaseUrl $env:COTEST_SUT_BASE_URL
+}
+$specSyncGate = [pscustomobject]@{
+    generated_at       = $finishedAt.ToString("o")
+    artifact_pipeline  = $specSyncResult
+    sut_describe       = $sutDescribeAlignment
+    status             = if ($specSyncResult.status -eq "failed" -or $sutDescribeAlignment.status -eq "drift_detected") { "failed" } else { "passed" }
+}
+if ($specSyncGate.status -eq "failed") {
+    $exitCode = 1
+}
+
 $sutMetadata = Get-SutMetadata -Runtime $Runtime -SutManifest $SutManifest -SutImage $SutImage
 $specMetadata = Get-SpecMetadata -RepoRoot $repoRoot
 $metadata = [pscustomobject]@{
     generated_at = $finishedAt.ToString("o")
     sut          = $sutMetadata
     spec         = $specMetadata
+    sync_gate    = $specSyncGate
 }
 $scanRoots = @($rawLog, $transcriptNdjson, $serviceLogDir)
 $scanFiles = 0
@@ -953,8 +1299,15 @@ $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $metadataJson -Encoding 
 $coverage | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageJson -Encoding UTF8
 $coverageGate | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageGateJson -Encoding UTF8
 $unresolved | ConvertTo-Json -Depth 6 | Set-Content -Path $gapsJson -Encoding UTF8
+$registryGaps | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $runDir "registry-gaps.json") -Encoding UTF8
 $profileReport | ConvertTo-Json -Depth 8 | Set-Content -Path $ciProfileJson -Encoding UTF8
 $secretScan | ConvertTo-Json -Depth 8 | Set-Content -Path $secretScanJson -Encoding UTF8
+
+$specSyncGateJson = Join-Path $runDir "spec-sync-gate.json"
+$specSyncGateMd = Join-Path $runDir "spec-sync-gate.md"
+$specSyncGate | ConvertTo-Json -Depth 8 | Set-Content -Path $specSyncGateJson -Encoding UTF8
+$specSyncGateMarkdown = New-SpecSyncGateMarkdown -ArtifactSync $specSyncResult -DescribeAlignment $sutDescribeAlignment
+$specSyncGateMarkdown | Set-Content -Path $specSyncGateMd -Encoding UTF8
 
 $markdown = New-SummaryMarkdown -Summary $summary -Tests $tests
 $markdown | Set-Content -Path $summaryMd -Encoding UTF8
@@ -972,6 +1325,10 @@ $coverageGateMarkdown = New-CoverageGateMarkdown -Gate $coverageGate
 $coverageGateMarkdown | Set-Content -Path $coverageGateMd -Encoding UTF8
 
 $gapsMarkdown = New-UnresolvedMarkdown -Items $unresolved
+if ($registryGaps.Count -gt 0) {
+    $registryGapMarkdown = New-RegistryGapMarkdown -Gaps $registryGaps
+    $gapsMarkdown = $gapsMarkdown + [Environment]::NewLine + $registryGapMarkdown
+}
 $gapsMarkdown | Set-Content -Path $gapsMd -Encoding UTF8
 
 $ciProfileMarkdown = New-CiProfileMarkdown -ProfileReport $profileReport
@@ -994,10 +1351,13 @@ $artifactFiles = @(
     $coverageGateMd,
     $gapsJson,
     $gapsMd,
+    (Join-Path $runDir "registry-gaps.json"),
     $ciProfileJson,
     $ciProfileMd,
     $secretScanJson,
-    $secretScanMd
+    $secretScanMd,
+    $specSyncGateJson,
+    $specSyncGateMd
 )
 
 foreach ($file in $artifactFiles) {
@@ -1030,6 +1390,7 @@ Write-Host "  gate     : $coverageGateMd"
 Write-Host "  gaps     : $gapsMd"
 Write-Host "  ci       : $ciProfileMd"
 Write-Host "  secrets  : $secretScanMd"
+Write-Host "  sync     : $specSyncGateMd"
 Write-Host "  services : $serviceLogDir"
 
 exit $exitCode

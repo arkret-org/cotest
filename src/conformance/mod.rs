@@ -1,0 +1,593 @@
+mod capability;
+mod encoding;
+mod envelope;
+mod federation;
+mod privacy;
+mod redaction;
+mod registry;
+mod state_resolution;
+mod sync;
+
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::PathBuf,
+};
+
+use anyhow::{Result, anyhow, bail};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
+
+const ARTIFACT_REGISTRY_DIR: &str = "registry";
+const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
+
+// ── Public suite re-exports ─────────────────────────────────────────────────
+
+pub use capability::run_capability_fixture_suite;
+pub use capability::run_capability_facet_fixture_suite;
+pub use encoding::run_encoding_fixture_suite;
+pub use encoding::run_facet_renderer_query_fixture_suite;
+pub use encoding::run_projection_position_discriminator_fixture_suite;
+pub use envelope::run_deprecated_event_alias_suite;
+pub use envelope::run_event_envelope_fixture_suite;
+pub use federation::run_federation_fixture_suite;
+pub use privacy::run_privacy_security_fixture_suite;
+pub use redaction::run_redaction_fixture_suite;
+pub use registry::run_artifact_registry_suite;
+pub use state_resolution::run_state_resolution_fixture_suite;
+pub use sync::run_sync_fixture_suite;
+
+// ── Shared fixture types ────────────────────────────────────────────────────
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct RegistryManifestEntry {
+    pub(crate) kind: String,
+    pub(crate) source_role: String,
+    pub(crate) source_of_truth: bool,
+    pub(crate) generated_from: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct EncodingFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: EncodingCases,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct EncodingCases {
+    pub(crate) canonical_json: Vec<CanonicalJsonCase>,
+    pub(crate) hash_digest: Vec<HashDigestCase>,
+    pub(crate) proof_payload: Vec<ProofPayloadCase>,
+    pub(crate) hlc: Vec<HlcCase>,
+    pub(crate) cursor: Vec<CursorCase>,
+    pub(crate) fractional_rank: Vec<FractionalRankCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CanonicalJsonCase {
+    pub(crate) name: String,
+    pub(crate) input: Value,
+    pub(crate) canonical: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct HashDigestCase {
+    pub(crate) name: String,
+    pub(crate) input_ref: String,
+    pub(crate) expected_pattern: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProofPayloadCase {
+    pub(crate) name: String,
+    pub(crate) covered_fields: Vec<String>,
+    pub(crate) excluded_fields: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct HlcCase {
+    pub(crate) name: String,
+    pub(crate) values: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct CursorShape {
+    pub(crate) v: String,
+    pub(crate) x: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CursorCase {
+    pub(crate) name: String,
+    pub(crate) shape: CursorShape,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct FractionalRankCase {
+    pub(crate) name: String,
+    pub(crate) left: Option<String>,
+    pub(crate) right: Option<String>,
+    pub(crate) expected: Option<String>,
+    pub(crate) input: Option<String>,
+    pub(crate) max_length: Option<usize>,
+    pub(crate) active_edge_count: Option<usize>,
+    pub(crate) assignment_count: Option<usize>,
+    pub(crate) ordered_edges: Option<Vec<RankEdge>>,
+    pub(crate) expected_assignments: Option<Vec<RankAssignment>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RedactionFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: Vec<RedactionCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RedactionCase {
+    pub(crate) name: String,
+    pub(crate) preserve: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CapabilityFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: Vec<CapabilityCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CapabilityCase {
+    pub(crate) name: String,
+    pub(crate) selector: Option<ResourceSelector>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct StateResolutionFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: Vec<StateResolutionCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SyncFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: Vec<SyncCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct FederationFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: Vec<NamedCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PrivacySecurityFixture {
+    pub(crate) suite: String,
+    pub(crate) cases: Vec<NamedCase>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct NamedCase {
+    pub(crate) name: String,
+    pub(crate) operation_id: Option<String>,
+    pub(crate) input: Option<Value>,
+    pub(crate) expected: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct StateResolutionCase {
+    pub(crate) name: String,
+    pub(crate) input: Option<Value>,
+    pub(crate) expected: Option<Value>,
+    pub(crate) expected_assignments: Option<Vec<RankAssignment>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct SyncCase {
+    pub(crate) name: String,
+    #[serde(flatten)]
+    pub(crate) fields: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct ResourceSelector {
+    pub(crate) kind: String,
+    pub(crate) space_id: String,
+    pub(crate) entity_type: Option<String>,
+}
+
+impl ResourceSelector {
+    pub(crate) fn matches(&self, resource: &ResourceRef) -> bool {
+        self.kind == resource.kind
+            && self.space_id == resource.space_id
+            && match (&self.entity_type, &resource.entity_type) {
+                (Some(expected), Some(actual)) => expected == actual,
+                (Some(_), None) => false,
+                (None, _) => true,
+            }
+    }
+
+    pub(crate) fn contains(&self, child: &Self) -> bool {
+        self.kind == child.kind
+            && self.space_id == child.space_id
+            && match (&self.entity_type, &child.entity_type) {
+                (Some(parent), Some(current)) => parent == current,
+                (Some(_), None) => false,
+                (None, _) => true,
+            }
+    }
+}
+
+pub(crate) struct ResourceRef {
+    pub(crate) kind: String,
+    pub(crate) space_id: String,
+    pub(crate) entity_type: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct RankEdge {
+    pub(crate) relation_id: String,
+    pub(crate) entity_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub(crate) struct RankAssignment {
+    pub(crate) relation_id: String,
+    pub(crate) entity_id: String,
+    pub(crate) rank: String,
+}
+
+// ── Shared utility functions ────────────────────────────────────────────────
+
+pub(crate) fn spec_artifacts_root() -> PathBuf {
+    if let Some(root) = std::env::var_os("COTEST_SPEC_ARTIFACTS_ROOT") {
+        return PathBuf::from(root);
+    }
+
+    if let Some(root) = std::env::var_os("COTEST_SPEC_ROOT") {
+        let root = PathBuf::from(root);
+        if root.join(ARTIFACT_REGISTRY_DIR).is_dir() {
+            return root;
+        }
+        if root.join("artifacts").join(ARTIFACT_REGISTRY_DIR).is_dir() {
+            return root.join("artifacts");
+        }
+    }
+
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("contrix-spec")
+        .join("artifacts")
+}
+
+pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
+    if let Some(root) = std::env::var_os("COTEST_SPEC_ROOT") {
+        let root = PathBuf::from(root);
+        let candidate = if root.join(ARTIFACT_FIXTURES_DIR).is_dir() {
+            root.join(ARTIFACT_FIXTURES_DIR).join(file_name)
+        } else {
+            root.join("artifacts")
+                .join(ARTIFACT_FIXTURES_DIR)
+                .join(file_name)
+        };
+        if candidate.is_file() {
+            return candidate;
+        }
+        let legacy = root.join("fixtures").join(file_name);
+        if legacy.is_file() {
+            return legacy;
+        }
+    }
+
+    spec_artifacts_root()
+        .join(ARTIFACT_FIXTURES_DIR)
+        .join(file_name)
+}
+
+pub(crate) fn load_fixture<T>(file_name: &str) -> Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    parse_fixture_value(file_name, load_fixture_value(file_name)?)
+}
+
+pub(crate) fn load_fixture_value(file_name: &str) -> Result<Value> {
+    let path = fixture_path(file_name);
+    let raw = fs::read_to_string(&path)?;
+    serde_json::from_str(&raw)
+        .map_err(|error| anyhow!("failed to parse fixture {}: {error}", path.display()))
+}
+
+pub(crate) fn parse_fixture_value<T>(file_name: &str, value: Value) -> Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    serde_json::from_value(value)
+        .map_err(|error| anyhow!("failed to parse fixture {file_name}: {error}"))
+}
+
+pub(crate) fn load_artifact_json(relative_path: &str) -> Result<Value> {
+    let path = spec_artifacts_root().join(relative_path);
+    let raw = fs::read_to_string(&path)?;
+    serde_json::from_str(&raw)
+        .map_err(|error| anyhow!("failed to parse artifact {}: {error}", path.display()))
+}
+
+pub(crate) fn load_artifact_yaml(relative_path: &str) -> Result<serde_yaml::Value> {
+    let path = spec_artifacts_root().join(relative_path);
+    let raw = fs::read_to_string(&path)?;
+    serde_yaml::from_str(&raw)
+        .map_err(|error| anyhow!("failed to parse artifact {}: {error}", path.display()))
+}
+
+pub(crate) fn validate_profile(value: &Value, expected: &str) -> Result<()> {
+    let profile = value
+        .get("profile")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("fixture artifact missing profile"))?;
+    if profile != expected {
+        bail!("fixture profile drifted: expected {expected}, got {profile}");
+    }
+    Ok(())
+}
+
+pub(crate) fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Vec<&'a str>> {
+    Ok(value
+        .get(field)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|item| {
+            item.as_str()
+                .ok_or_else(|| anyhow!("{field} entry must be a string"))
+        })
+        .collect::<Result<Vec<_>>>()?)
+}
+
+pub(crate) fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("missing string field {field}"))
+}
+
+pub(crate) fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
+    value
+        .as_object()
+        .and_then(|object| object.get(field))
+        .ok_or_else(|| anyhow!("missing object field {field}"))
+}
+
+pub(crate) fn value_object<'a>(value: &'a Value, context: &str) -> Result<&'a Map<String, Value>> {
+    value
+        .as_object()
+        .ok_or_else(|| anyhow!("{context} must be an object"))
+}
+
+pub(crate) fn value_array<'a>(value: &'a Value, context: &str) -> Result<&'a Vec<Value>> {
+    value
+        .as_array()
+        .ok_or_else(|| anyhow!("{context} must be an array"))
+}
+
+pub(crate) fn value_field_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    required_field(value, field)?
+        .as_str()
+        .ok_or_else(|| anyhow!("object field {field} must be a string"))
+}
+
+pub(crate) fn value_field_bool(value: &Value, field: &str) -> Result<bool> {
+    required_field(value, field)?
+        .as_bool()
+        .ok_or_else(|| anyhow!("object field {field} must be a bool"))
+}
+
+pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
+    required_field(value, field)?
+        .as_u64()
+        .ok_or_else(|| anyhow!("object field {field} must be an unsigned integer"))
+}
+
+pub(crate) fn assert_json_eq(
+    actual: &Value,
+    expected: &Value,
+    case_name: &str,
+    field: &str,
+) -> Result<()> {
+    if actual != expected {
+        bail!("fixture {case_name} {field} mismatch: expected {expected}, got {actual}");
+    }
+    Ok(())
+}
+
+pub(crate) fn canonical_json(value: &Value) -> Result<String> {
+    match value {
+        Value::Object(map) => {
+            let mut ordered = BTreeMap::new();
+            for (key, value) in map {
+                ordered.insert(key, canonical_json(value)?);
+            }
+            let mut out = String::from("{");
+            for (index, (key, value)) in ordered.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                out.push_str(&serde_json::to_string(key)?);
+                out.push(':');
+                out.push_str(value);
+            }
+            out.push('}');
+            Ok(out)
+        }
+        Value::Array(items) => {
+            let canonical_items = items
+                .iter()
+                .map(canonical_json)
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("[{}]", canonical_items.join(",")))
+        }
+        _ => Ok(serde_json::to_string(value)?),
+    }
+}
+
+pub(crate) fn sha256_prefixed(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity("sha256:".len() + digest.len() * 2);
+    out.push_str("sha256:");
+    for byte in digest {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
+
+pub(crate) fn looks_like_sha256_digest(value: &str) -> bool {
+    value.starts_with("sha256:")
+        && value.len() == "sha256:".len() + 64
+        && value["sha256:".len()..]
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase())
+}
+
+pub(crate) fn canonical_proof_payload(event: &Value) -> Result<Map<String, Value>> {
+    let object = event
+        .as_object()
+        .ok_or_else(|| anyhow!("proof payload source must be an object"))?;
+    let mut payload = Map::new();
+    for (key, value) in object {
+        if key != "unsigned" {
+            payload.insert(key.clone(), value.clone());
+        }
+    }
+    Ok(payload)
+}
+
+pub(crate) fn encode_cursor_shape(shape: &CursorShape) -> Result<String> {
+    let canonical = canonical_json(&serde_json::to_value(shape)?)?;
+    Ok(format!(
+        "cx:cursor:{}",
+        base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, canonical.as_bytes())
+    ))
+}
+
+pub(crate) fn decode_cursor_shape(encoded: &str) -> Result<CursorShape> {
+    use base64::Engine as _;
+    let payload = encoded
+        .strip_prefix("cx:cursor:")
+        .ok_or_else(|| anyhow!("cursor must start with cx:cursor:"))?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload)?;
+    serde_json::from_slice(&bytes).map_err(Into::into)
+}
+
+pub(crate) const RANK_ALPHABET: &str =
+    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+pub(crate) const RANK_MAX_LENGTH: usize = 128;
+
+pub(crate) fn rank_between(left: Option<&str>, right: Option<&str>) -> Result<String> {
+    if let Some(rank) = left {
+        validate_rank(rank, RANK_MAX_LENGTH)?;
+    }
+    if let Some(rank) = right {
+        validate_rank(rank, RANK_MAX_LENGTH)?;
+    }
+
+    match (left, right) {
+        (Some(left), Some(right)) if left >= right => {
+            bail!("left rank must be lower than right rank");
+        }
+        (Some(left), Some(right)) if right.starts_with(left) => {
+            let candidate = format!("{left}0");
+            if candidate.as_str() < right {
+                return Ok(candidate);
+            }
+            bail!("no dense rank between {left} and {right}");
+        }
+        (Some(left), Some(right)) if left.len() == right.len() && left.len() >= 2 => {
+            let left_prefix = &left[..left.len() - 1];
+            let right_prefix = &right[..right.len() - 1];
+            if left_prefix != right_prefix {
+                bail!("rank prefixes differ for {left} / {right}");
+            }
+            let left_digit = rank_char_index(left.chars().last().unwrap())?;
+            let right_digit = rank_char_index(right.chars().last().unwrap())?;
+            if right_digit <= left_digit + 1 {
+                bail!("no space between {left} and {right}");
+            }
+            let middle = (left_digit + right_digit) / 2;
+            Ok(format!("{left_prefix}{}", rank_char_at(middle)?))
+        }
+        (left, right) => {
+            let lower = match left {
+                Some(rank) if rank.len() == 1 => rank_char_index(rank.chars().next().unwrap())?,
+                Some(rank) => bail!("unsupported lower boundary rank {rank}"),
+                None => -1,
+            };
+            let upper = match right {
+                Some(rank) if rank.len() == 1 => rank_char_index(rank.chars().next().unwrap())?,
+                Some(rank) => bail!("unsupported upper boundary rank {rank}"),
+                None => RANK_ALPHABET.len() as i32,
+            };
+            if upper <= lower + 1 {
+                bail!("no rank available between boundaries");
+            }
+            let middle = (lower + upper) / 2;
+            Ok(rank_char_at(middle)?.to_string())
+        }
+    }
+}
+
+pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
+    if rank.is_empty() || rank.len() > max_length {
+        bail!("invalid_rank");
+    }
+    if !rank.chars().all(|ch| RANK_ALPHABET.contains(ch)) {
+        bail!("invalid_rank");
+    }
+    Ok(())
+}
+
+pub(crate) fn rank_char_index(ch: char) -> Result<i32> {
+    RANK_ALPHABET
+        .chars()
+        .position(|candidate| candidate == ch)
+        .map(|index| index as i32)
+        .ok_or_else(|| anyhow!("invalid_rank"))
+}
+
+pub(crate) fn rank_char_at(index: i32) -> Result<char> {
+    if index < 0 {
+        bail!("invalid_rank");
+    }
+    RANK_ALPHABET
+        .chars()
+        .nth(index as usize)
+        .ok_or_else(|| anyhow!("invalid_rank"))
+}
+
+pub(crate) fn rebalance_assignments(edges: &[RankEdge]) -> Result<Vec<RankAssignment>> {
+    let count = edges.len();
+    validate_rebalance_assignment_count(count, count)?;
+    let alphabet_span = (RANK_ALPHABET.len() + 1) as f64;
+    let denominator = (count + 1) as f64;
+    edges
+        .iter()
+        .enumerate()
+        .map(|(index, edge)| {
+            let rank_index =
+                (-1.0 + (((index + 1) as f64 * alphabet_span) / denominator)).round() as i32;
+            Ok(RankAssignment {
+                relation_id: edge.relation_id.clone(),
+                entity_id: edge.entity_id.clone(),
+                rank: rank_char_at(rank_index)?.to_string(),
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn validate_rebalance_assignment_count(
+    active_edge_count: usize,
+    assignment_count: usize,
+) -> Result<()> {
+    if active_edge_count != assignment_count {
+        bail!("invalid_rebalance_assignment");
+    }
+    Ok(())
+}
