@@ -1,7 +1,7 @@
 {
   "profile": "cx.profile.consent_vectors.v1",
   "version": "2026-05-07",
-  "comment": "Phase 5 holder-private consent vectors. Consent grants and revocations are durable state events keyed by payload.consent_id; they share a single state slot (revoke supersedes grant). When a profile asserts `require_consent`, an invite without a matching active grant must be rejected. Pseudonym DIDs are treated identically to public DIDs.",
+  "comment": "Holder-private consent vectors. Consent grants and revocations are durable Moves on the cell cx:cell:cx.component.consent.grant.v1:<consent_id> (lattice or-set): grant adds a tag, revoke removes it. When a profile asserts `require_consent`, an invite without a matching active grant tag must be rejected. Pseudonym DIDs are treated identically to public DIDs.",
   "vectors": [
     {
       "name": "grant_then_invite_accepts",

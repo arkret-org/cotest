@@ -26,8 +26,7 @@
       { "contrix_component_type": "cx.component.space.media_service.v1",        "contrix_kind": "cx.space.media_service",        "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
       { "contrix_component_type": "cx.component.space.schema.v1",               "contrix_kind": "cx.space.schema",               "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
       { "contrix_component_type": "cx.component.space.inheritance_policy.v1",   "contrix_kind": "cx.space.inheritance_policy",   "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
-      { "contrix_component_type": "cx.component.space.host.v1",                 "contrix_kind": "cx.space.host",                 "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json", "comment": "Hub Writer Model is Contrix-specific; MIMI hub provider concept is adjacent but not equivalent." },
-      { "contrix_component_type": "cx.component.space.host.transfer.v1",        "contrix_kind": "cx.space.host.transfer",        "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json", "comment": "Hub transfer ceremony is Contrix-specific; record as audit metadata only." }
+      { "contrix_component_type": "cx.component.consent.grant.v1",              "contrix_kind": "cx.consent.grant",              "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json", "comment": "Holder-private consent cell (or-set lattice). MIMI consent operations map to grant/revoke Moves on this cell; cross-protocol semantics is the cell join, not a discrete component." }
     ]
   }
 }

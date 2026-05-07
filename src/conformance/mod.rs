@@ -38,12 +38,12 @@ pub use privacy::run_privacy_security_fixture_suite;
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
 pub use schema_validation::run_schema_validation_suite;
-pub use state_resolution::run_state_resolution_fixture_suite;
+pub use state_resolution::{
+    run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
+};
 pub use sync::run_sync_fixture_suite;
 pub use wire_model::run_composite_state_subject_fixture_suite;
 pub use wire_model::run_consent_fixture_suite;
-pub use wire_model::run_host_endorsement_fixture_suite;
-pub use wire_model::run_host_transfer_fixture_suite;
 pub use wire_model::run_mimi_components_fixture_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
@@ -150,12 +150,6 @@ pub(crate) struct CapabilityCase {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct StateResolutionFixture {
-    pub(crate) suite: String,
-    pub(crate) cases: Vec<StateResolutionCase>,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct SyncFixture {
     pub(crate) suite: String,
     pub(crate) cases: Vec<SyncCase>,
@@ -179,14 +173,6 @@ pub(crate) struct NamedCase {
     pub(crate) operation_id: Option<String>,
     pub(crate) input: Option<Value>,
     pub(crate) expected: Option<Value>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct StateResolutionCase {
-    pub(crate) name: String,
-    pub(crate) input: Option<Value>,
-    pub(crate) expected: Option<Value>,
-    pub(crate) expected_assignments: Option<Vec<RankAssignment>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -370,12 +356,6 @@ pub(crate) fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Va
         .ok_or_else(|| anyhow!("missing object field {field}"))
 }
 
-pub(crate) fn value_object<'a>(value: &'a Value, context: &str) -> Result<&'a Map<String, Value>> {
-    value
-        .as_object()
-        .ok_or_else(|| anyhow!("{context} must be an object"))
-}
-
 pub(crate) fn value_array<'a>(value: &'a Value, context: &str) -> Result<&'a Vec<Value>> {
     value
         .as_array()
@@ -398,18 +378,6 @@ pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
     required_field(value, field)?
         .as_u64()
         .ok_or_else(|| anyhow!("object field {field} must be an unsigned integer"))
-}
-
-pub(crate) fn assert_json_eq(
-    actual: &Value,
-    expected: &Value,
-    case_name: &str,
-    field: &str,
-) -> Result<()> {
-    if actual != expected {
-        bail!("fixture {case_name} {field} mismatch: expected {expected}, got {actual}");
-    }
-    Ok(())
 }
 
 pub(crate) fn canonical_json(value: &Value) -> Result<String> {

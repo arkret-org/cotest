@@ -56,6 +56,11 @@ fn state_resolution_fixture_suite_matches_reference_semantics() -> Result<()> {
 }
 
 #[test]
+fn move_anchor_lattice_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_move_anchor_lattice_fixture_suite()
+}
+
+#[test]
 fn sync_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_sync_fixture_suite()
 }
@@ -68,16 +73,6 @@ fn federation_fixture_suite_matches_reference_semantics() -> Result<()> {
 #[test]
 fn privacy_security_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_privacy_security_fixture_suite()
-}
-
-#[test]
-fn host_endorsement_fixture_suite_matches_reference_semantics() -> Result<()> {
-    cotest::conformance::run_host_endorsement_fixture_suite()
-}
-
-#[test]
-fn host_transfer_fixture_suite_matches_reference_semantics() -> Result<()> {
-    cotest::conformance::run_host_transfer_fixture_suite()
 }
 
 #[test]

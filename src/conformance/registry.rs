@@ -289,38 +289,53 @@ fn validate_event_kind_registry(
         if let Some(component_type) = entry.get("component_type").and_then(Value::as_str) {
             component_types.insert(component_type.to_owned());
         }
-        // W12 partial: every active state-bearing kind must declare the
-        // (state_cardinality, component_type, criticality) triple. per_subject
-        // kinds additionally need a state_subject_field. Anything missing
-        // would silently reduce reducer behaviour to "kind not state-bearing"
-        // and let stale-spec implementations slip through.
-        if status == "active" {
-            if let Some(cardinality) = entry.get("state_cardinality").and_then(Value::as_str) {
-                if cardinality != "not_state" {
-                    let _ = entry
-                        .get("component_type")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            anyhow!(
-                                "active state kind {event_kind} missing component_type"
-                            )
-                        })?;
-                    let _ = entry
-                        .get("criticality")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            anyhow!(
-                                "active state kind {event_kind} missing criticality"
-                            )
-                        })?;
-                    if cardinality == "per_subject"
-                        && entry
-                            .get("state_subject_field")
-                            .and_then(Value::as_str)
-                            .is_none()
-                    {
+        // Move/Anchor/Lattice gate (spec 2026-05-08): when an active
+        // reducer-input durable kind declares cell_family (i.e. it actually
+        // participates in Lattice cell state), the (cell_family, lattice,
+        // bottom, cell_subject?) tuple MUST be coherent. cell_family alone
+        // is optional per spec ("Reducer-input durable kinds MAY declare
+        // cell_family..."), but if any of these is present they all MUST be.
+        if status == "active"
+            && entry.get("reducer_input").and_then(Value::as_bool) == Some(true)
+            && entry.get("cell_family").is_some()
+        {
+            let cell_family = required_str(entry, "cell_family")?;
+            if !cell_family.starts_with("cx.component.") {
+                bail!(
+                    "reducer-input kind {event_kind} cell_family {cell_family} must start with cx.component."
+                );
+            }
+            let lattice = required_str(entry, "lattice")?;
+            const ALLOWED_LATTICES: &[&str] = &[
+                "or-set", "mv-register", "cas-register", "fsm", "counter", "ordered-log",
+            ];
+            if !ALLOWED_LATTICES.contains(&lattice) {
+                bail!(
+                    "reducer-input kind {event_kind} lattice {lattice} not in core set"
+                );
+            }
+            let bottom = required_str(entry, "bottom")?;
+            if bottom != "reject" && bottom != "expose" {
+                bail!(
+                    "reducer-input kind {event_kind} bottom must be reject or expose, got {bottom}"
+                );
+            }
+            // cell_subject MAY be null (singleton), or an object with
+            // either {type, field} (single payload field) or
+            // {type:"composite", components:[...]} (composite subject).
+            if let Some(subject) = entry.get("cell_subject") {
+                if !subject.is_null() {
+                    let obj = subject.as_object().ok_or_else(|| {
+                        anyhow!(
+                            "reducer-input kind {event_kind} cell_subject must be null or an object"
+                        )
+                    })?;
+                    let has_field = obj.get("field").and_then(Value::as_str).is_some();
+                    let is_composite = obj.get("type").and_then(Value::as_str) == Some("composite")
+                        && obj.get("components").and_then(Value::as_array).is_some();
+                    if !has_field && !is_composite {
                         bail!(
-                            "active per_subject state kind {event_kind} missing state_subject_field"
+                            "reducer-input kind {event_kind} cell_subject must declare `field` or be a `composite` with `components[]`"
                         );
                     }
                 }
@@ -332,40 +347,42 @@ fn validate_event_kind_registry(
             bail!("deprecated alias set drift for {alias}");
         }
     }
-    // Wire model rework gate: post-Phase 1-5 spec must expose >=129 active kinds
-    // (110 baseline + 17 per-facet/lifecycle splits + 2 host kinds + 2 consent kinds
-    // - 2 retired aggregates).
-    const MIN_ACTIVE_EVENT_KINDS: usize = 129;
+    // Wire-model gate: post-Move/Anchor/Lattice spec (2026-05-08) exposes
+    // ~127 active kinds (110 baseline + 17 per-facet/lifecycle splits + 2
+    // consent kinds - 2 retired aggregates; cx.space.host* removed in
+    // favour of anchorer cell governance). Threshold is conservative.
+    const MIN_ACTIVE_EVENT_KINDS: usize = 125;
     if active_count < MIN_ACTIVE_EVENT_KINDS {
         bail!(
             "event-kind registry has {active_count} active kinds, expected >= {MIN_ACTIVE_EVENT_KINDS} (wire model rework gate)"
         );
     }
-    // Phase 4 host writer model + Phase 5 consent state machine must be wired
-    // with the cardinality / criticality the spec mandates.
+    // Holder-private consent (cell or-set) MUST be wired per Move/Anchor/Lattice
+    // spec (2026-05-08): both grant and revoke share cell_family
+    // cx.component.consent.grant.v1, lattice or-set, cell_subject keyed by
+    // payload.consent_id. cx.space.host{,.transfer} are intentionally
+    // removed (anchorer cell governs Anchor signing).
     let required_kinds: &[(&str, &str, &str)] = &[
-        ("cx.space.host", "singleton", "required"),
-        ("cx.space.host.transfer", "per_subject", "required"),
-        ("cx.consent.grant", "per_subject", "required"),
-        ("cx.consent.revoke", "per_subject", "required"),
+        ("cx.consent.grant", "or-set", "cx.component.consent.grant.v1"),
+        ("cx.consent.revoke", "or-set", "cx.component.consent.grant.v1"),
     ];
-    for (kind, expected_cardinality, expected_criticality) in required_kinds {
+    for (kind, expected_lattice, expected_cell_family) in required_kinds {
         let entry = event_kinds
             .iter()
             .find(|e| e.get("event_kind").and_then(Value::as_str) == Some(kind))
             .ok_or_else(|| {
                 anyhow!("event-kind registry missing required wire-model kind {kind}")
             })?;
-        let cardinality = required_str(entry, "state_cardinality")?;
-        if cardinality != *expected_cardinality {
+        let lattice = required_str(entry, "lattice")?;
+        if lattice != *expected_lattice {
             bail!(
-                "wire-model kind {kind} must have state_cardinality={expected_cardinality}, got {cardinality}"
+                "wire-model kind {kind} must have lattice={expected_lattice}, got {lattice}"
             );
         }
-        let criticality = required_str(entry, "criticality")?;
-        if criticality != *expected_criticality {
+        let cell_family = required_str(entry, "cell_family")?;
+        if cell_family != *expected_cell_family {
             bail!(
-                "wire-model kind {kind} must have criticality={expected_criticality}, got {criticality}"
+                "wire-model kind {kind} must have cell_family={expected_cell_family}, got {cell_family}"
             );
         }
     }
@@ -465,9 +482,6 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         "deployment_profiles",
         "hardening_profiles",
         "vector_profiles",
-        // Phase 4: Space-level writer model profiles (hub_writer / peer_mesh).
-        // Each Space create-locks one of these; profile_requirements lists them.
-        "writer_model_profiles",
     ] {
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {
@@ -525,19 +539,16 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         "cx.profile.chat_mvp.v1",
         "cx.profile.kanban_mvp.v1",
         "cx.profile.push_gateway.v1",
-        // Phase 4 Hybrid Writer Model: each Space create-locks one of these.
-        "cx.profile.space.hub_writer.v1",
-        "cx.profile.space.peer_mesh.v1",
-        // Phase 3 E2EE state binding: promoted from optional extension to
-        // mandatory inherits of e2ee_client.
+        // E2EE state binding: mandatory inherits of e2ee_client.
         "cx.profile.mls_state_binding.full.v1",
     ] {
         if !all_profiles.contains(required) {
             bail!("conformance profiles missing required {required}");
         }
     }
-    // Wire model rework gate: post-Phase 1-5 the spec catalogues >= 50 profile ids.
-    const MIN_PROFILE_COUNT: usize = 50;
+    // Wire-model gate: post-Move/Anchor/Lattice spec catalogues >= 47
+    // profile ids (writer_model_profiles group was removed in 2026-05-08).
+    const MIN_PROFILE_COUNT: usize = 47;
     if all_profiles.len() < MIN_PROFILE_COUNT {
         bail!(
             "conformance profiles registry has {} ids, expected >= {MIN_PROFILE_COUNT} (wire model rework gate)",
@@ -554,7 +565,7 @@ fn validate_profile_requirements(
     event_kinds: &BTreeSet<String>,
     operation_ids: &BTreeSet<String>,
     schema_ids: &BTreeSet<String>,
-    component_types: &BTreeSet<String>,
+    _component_types: &BTreeSet<String>,
 ) -> Result<()> {
     let requirements = registry
         .get("profile_requirements")
@@ -583,29 +594,44 @@ fn validate_profile_requirements(
         );
     }
 
-    // Phase 3 binding requires three component-type lists naming registered
-    // component_type values. Each list is non-empty (an empty list would
-    // silently disable the corresponding frontier check).
+    // Move/Anchor/Lattice binding (spec 2026-05-08): mls_state_binding.full.v1
+    // no longer carries Phase 3 component-type lists; instead it declares
+    // required_event_kinds (cx.mls.commit + key share/withheld) and
+    // feature_discovery.required (move_based_mls_commit, covered_frontier_cell,
+    // mls_epoch_cell). Validate the new shape so a stale profile slips through.
     let mls_binding = requirements
         .get("cx.profile.mls_state_binding.full.v1")
         .ok_or_else(|| {
             anyhow!("mls_state_binding.full.v1 missing profile_requirements entry")
         })?;
-    for field in [
-        "policy_root_required_components",
-        "membership_frontier_required_components",
-        "capability_root_required_components",
+    let required_event_kinds = string_array_field(mls_binding, "required_event_kinds")?;
+    if !required_event_kinds.iter().any(|k| *k == "cx.mls.commit") {
+        bail!(
+            "mls_state_binding.full.v1 required_event_kinds must include cx.mls.commit"
+        );
+    }
+    let feature_discovery = mls_binding
+        .get("feature_discovery")
+        .ok_or_else(|| anyhow!("mls_state_binding.full.v1 missing feature_discovery"))?;
+    let required_features = feature_discovery
+        .get("required")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow!("mls_state_binding.full.v1 feature_discovery.required missing")
+        })?;
+    let feature_set: BTreeSet<String> = required_features
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+    for required in [
+        "move_based_mls_commit",
+        "covered_frontier_cell",
+        "mls_epoch_cell",
     ] {
-        let entries = string_array_field(mls_binding, field)?;
-        if entries.is_empty() {
-            bail!("mls_state_binding.full.v1 has empty {field} (cannot be enforceable)");
-        }
-        for component in &entries {
-            if !component_types.contains(*component) {
-                bail!(
-                    "mls_state_binding.full.v1 {field} references unknown component_type {component}"
-                );
-            }
+        if !feature_set.contains(required) {
+            bail!(
+                "mls_state_binding.full.v1 feature_discovery.required must include {required}"
+            );
         }
     }
 

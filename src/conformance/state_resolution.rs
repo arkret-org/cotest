@@ -1,517 +1,186 @@
+//! Move / Anchor / Lattice fixture suite (spec 2026-05-08).
+//!
+//! Validates the `move-anchor-lattice-fixture.json` profile's normative
+//! vectors. The legacy state-slot winner-reconstruction validator that this
+//! file used to host (against `state-resolution-fixture.json`) was removed
+//! when the spec replaced state-slot winner reconstruction with the Move /
+//! Anchor / Lattice three-primitive model. Conformance for state convergence
+//! now lives entirely on this suite plus the per-Lattice reference-impl
+//! sections in `event-auth-state-resolution.md` §5.3.
+
 use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
 
-use super::{
-    RankEdge, StateResolutionCase, StateResolutionFixture, assert_json_eq, load_fixture_value,
-    parse_fixture_value, rebalance_assignments, required_field, required_str, validate_profile,
-    value_array, value_field_str, value_field_u64, value_object,
-};
+use super::{load_fixture_value, required_str, validate_profile};
 
+/// Public entry point retained so the release-gate cargo_filter list can
+/// reference both `state_resolution_fixture_suite_matches_reference_semantics`
+/// and `move_anchor_lattice_fixture_suite_matches_reference_semantics` —
+/// both delegate here.
 pub fn run_state_resolution_fixture_suite() -> Result<()> {
-    let value = load_fixture_value("state-resolution-fixture.json")?;
-    if value.get("suite").is_none() {
-        return run_state_resolution_artifact_suite(&value);
-    }
-    let fixture: StateResolutionFixture =
-        parse_fixture_value("state-resolution-fixture.json", value)?;
-    if fixture.suite != "state_resolution" {
-        bail!("unexpected fixture suite {}", fixture.suite);
-    }
-
-    for case in fixture.cases {
-        match case.name.as_str() {
-            "membership_concurrency" => {
-                let join = StateEvent {
-                    kind: "join".to_owned(),
-                    auth_weight: 10,
-                    hlc: "01970e589d21-0004-a13f9c2e".to_owned(),
-                    actor_seq: 1,
-                    event_id: "cx:event:join".to_owned(),
-                };
-                let ban = StateEvent {
-                    kind: "ban".to_owned(),
-                    auth_weight: 20,
-                    hlc: "01970e589d21-0005-a13f9c2e".to_owned(),
-                    actor_seq: 1,
-                    event_id: "cx:event:ban".to_owned(),
-                };
-                let resolved = resolve_state_events(&[join, ban])?;
-                if resolved.kind != "ban" {
-                    bail!("state resolution fixture {} did not pick ban", case.name);
-                }
-            }
-            "capability_delegate_revoke_race" => {
-                let delegate = StateEvent {
-                    kind: "delegate".to_owned(),
-                    auth_weight: 15,
-                    hlc: "01970e589d21-0005-a13f9c2e".to_owned(),
-                    actor_seq: 1,
-                    event_id: "cx:event:delegate".to_owned(),
-                };
-                let revoke = StateEvent {
-                    kind: "revoke".to_owned(),
-                    auth_weight: 15,
-                    hlc: "01970e589d21-0005-a13f9c2e".to_owned(),
-                    actor_seq: 1,
-                    event_id: "cx:event:revoke".to_owned(),
-                };
-                let resolved = resolve_state_events(&[delegate, revoke])?;
-                if resolved.kind != "revoke" {
-                    bail!(
-                        "state resolution fixture {} did not fail closed on revoke",
-                        case.name
-                    );
-                }
-            }
-            "schema_policy_update_race" => {
-                let policy_state = PolicyState {
-                    decision: "deny".to_owned(),
-                };
-                let write = PendingWrite {
-                    event_id: "cx:event:write".to_owned(),
-                    required_decision: "allow".to_owned(),
-                };
-                if write_is_valid_against_policy(&write, &policy_state) {
-                    bail!(
-                        "state resolution fixture {} accepted stale policy",
-                        case.name
-                    );
-                }
-            }
-            "deterministic_tie_breaker" => {
-                let first = StateEvent {
-                    kind: "join".to_owned(),
-                    auth_weight: 10,
-                    hlc: "01970e589d21-0005-a13f9c2e".to_owned(),
-                    actor_seq: 1,
-                    event_id: "cx:event:a".to_owned(),
-                };
-                let second = StateEvent {
-                    kind: "join".to_owned(),
-                    auth_weight: 10,
-                    hlc: "01970e589d21-0005-a13f9c2e".to_owned(),
-                    actor_seq: 2,
-                    event_id: "cx:event:b".to_owned(),
-                };
-                let resolved = resolve_state_events(&[second, first.clone()])?;
-                if resolved.event_id != first.event_id {
-                    bail!(
-                        "state resolution fixture {} was not deterministic",
-                        case.name
-                    );
-                }
-            }
-            "kanban_concurrent_card_move" | "board_concurrent_item_move" => {
-                validate_container_move_resolution(&case)?
-            }
-            "kanban_atomic_task_move" | "board_atomic_field_position_move" => {
-                validate_field_position_resolution(&case)?
-            }
-            "relation_rebalance_assignment" | "container_rebalance_assignment" => {
-                validate_state_rebalance_assignment(&case)?
-            }
-            "relation_rebalance_cas_conflict" | "container_rebalance_cas_conflict" => {
-                validate_state_rebalance_cas_conflict(&case)?
-            }
-            _ => bail!("unknown state resolution fixture case {}", case.name),
-        }
-    }
-
-    Ok(())
+    run_move_anchor_lattice_fixture_suite()
 }
 
-fn run_state_resolution_artifact_suite(value: &Value) -> Result<()> {
-    validate_profile(value, "cx.profile.state_resolution_vectors.v1")?;
+/// Structural validator for `move-anchor-lattice-fixture.json`.
+///
+/// The fixture is a profile with normative vectors for Move precondition
+/// validation, Anchor batch semantics, cas-register conflict bottom, MLS
+/// commit covered_frontier, anchorer cell ⊥ recovery, signed compaction
+/// equivalence, and Anchor DAG genesis / multi-leaf cases. This suite
+/// runs a static well-formedness check; deeper deterministic re-execution
+/// lives in the SDK's lattice / state-res crates (root C10.A) and in
+/// scenario-level integration tests once a Move/Anchor SUT is wired
+/// through cotest's harness.
+pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
+    let value = load_fixture_value("move-anchor-lattice-fixture.json")?;
+    validate_profile(&value, "cx.profile.move_anchor_lattice_vectors.v1")?;
+
     let vectors = value
         .get("vectors")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("state resolution artifact missing vectors"))?;
+        .ok_or_else(|| anyhow!("move-anchor-lattice fixture missing vectors[]"))?;
+    if vectors.is_empty() {
+        bail!("move-anchor-lattice fixture has no vectors");
+    }
+
+    let mut seen_atomic = false;
+    let mut seen_cas_bottom = false;
+    let mut seen_anchor_batch_pre_state = false;
+    let mut seen_mls_covered_frontier = false;
+    let mut seen_anchorer_recovery = false;
+    let mut seen_signed_compaction = false;
+    let mut seen_genesis_multi_leaf = false;
+
     for vector in vectors {
         let name = required_str(vector, "name")?;
-        if let Some(candidates) = vector.get("candidates").and_then(Value::as_array) {
-            // Phase 1 wire model: state-event resolution vectors declare a
-            // `state_slot` descriptor (envelope-level `state_key` was removed).
-            // When present, every candidate's kind must match the slot's kind
-            // so the reducer is operating on a single slot. Content-event
-            // resolution vectors (e.g. `cx.flow.move`) do not need a slot
-            // descriptor.
-            if let Some(slot) = vector.get("state_slot").and_then(Value::as_object) {
-                let slot_kind = slot
-                    .get("kind")
+        match name {
+            "multi_cell_ban_revokes_grants_atomically" => {
+                let m = vector
+                    .get("move")
+                    .and_then(Value::as_object)
+                    .ok_or_else(|| anyhow!("vector {name} missing move"))?;
+                require_field(m, "id", name)?;
+                require_field(m, "issuer", name)?;
+                require_field(m, "anchor_ref", name)?;
+                let preconditions = m
+                    .get("preconditions")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} move missing preconditions"))?;
+                let effects = m
+                    .get("effects")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} move missing effects"))?;
+                if preconditions.len() < 2 {
+                    bail!("vector {name} requires multi-cell precondition set (>=2)");
+                }
+                if effects.len() < 2 {
+                    bail!("vector {name} requires multi-cell atomic effects (>=2)");
+                }
+                let atomicity = vector
+                    .pointer("/expected/atomicity")
+                    .and_then(Value::as_str);
+                if atomicity != Some("all_effects_or_none") {
+                    bail!("vector {name} expected.atomicity must be 'all_effects_or_none'");
+                }
+                seen_atomic = true;
+            }
+            "cas_register_conflict_returns_bottom" => {
+                let lat = vector
+                    .pointer("/lattice/type")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("state vector {name} state_slot missing kind"))?;
-                for candidate in candidates {
-                    let candidate_kind = required_str(candidate, "kind")?;
-                    if candidate_kind != slot_kind {
-                        bail!(
-                            "state vector {name} candidate kind {candidate_kind} does not match slot kind {slot_kind}"
-                        );
-                    }
+                    .ok_or_else(|| anyhow!("vector {name} missing lattice.type"))?;
+                if lat != "cas-register" {
+                    bail!("vector {name} lattice.type must be cas-register");
                 }
-            } else {
-                // Without a state_slot, every candidate must still agree on
-                // kind (resolution is meaningless across different kinds).
-                let mut kind_iter = candidates
-                    .iter()
-                    .filter_map(|c| c.get("kind").and_then(Value::as_str));
-                if let Some(first_kind) = kind_iter.next() {
-                    for next in kind_iter {
-                        if next != first_kind {
-                            bail!(
-                                "state vector {name} mixes kinds {first_kind} and {next} without a state_slot descriptor"
-                            );
-                        }
-                    }
+                let bot_status = vector
+                    .pointer("/expected/query/status")
+                    .and_then(Value::as_str);
+                if bot_status != Some("bottom") {
+                    bail!("vector {name} expected.query.status must be 'bottom'");
                 }
+                let dep = vector
+                    .pointer("/expected/dependent_move_result")
+                    .and_then(Value::as_str);
+                if dep != Some("fail_bottom") {
+                    bail!("vector {name} dependent_move_result must be 'fail_bottom'");
+                }
+                seen_cas_bottom = true;
             }
-
-            let expected = vector
-                .pointer("/expected/winner_event_id")
-                .and_then(Value::as_str)
-                .ok_or_else(|| anyhow!("state vector {name} missing winner_event_id"))?;
-            let actual = select_state_resolution_candidate(candidates)
-                .ok_or_else(|| anyhow!("state vector {name} has no selectable candidate"))?;
-            if actual != expected {
-                bail!("state vector {name} winner drifted: expected {expected}, got {actual}");
+            "anchor_batch_pre_state_prevents_self_satisfaction" => {
+                let anchor_result = vector
+                    .pointer("/expected/anchor_result")
+                    .and_then(Value::as_str);
+                if anchor_result != Some("reject") {
+                    bail!("vector {name} expected.anchor_result must be 'reject'");
+                }
+                seen_anchor_batch_pre_state = true;
             }
-        }
-        if name == "offline_write_concurrent_with_revoke_soft_fails_when_order_unknown"
-            && vector.pointer("/expected/decision").and_then(Value::as_str) != Some("soft_fail")
-        {
-            bail!("state vector {name} no longer soft-fails unknown revoke ordering");
+            "mls_commit_move_requires_covered_frontier" => {
+                let verify = vector
+                    .pointer("/expected/verify_move")
+                    .and_then(Value::as_str);
+                if verify != Some("fail_precondition") {
+                    bail!("vector {name} expected.verify_move must be 'fail_precondition'");
+                }
+                seen_mls_covered_frontier = true;
+            }
+            "anchorer_cell_bottom_pauses_space_until_recovery" => {
+                let space_state = vector
+                    .pointer("/expected/space_state")
+                    .and_then(Value::as_str);
+                if space_state != Some("anchorer_paused") {
+                    bail!("vector {name} expected.space_state must be 'anchorer_paused'");
+                }
+                seen_anchorer_recovery = true;
+            }
+            "signed_compaction_anchor_equals_effective_view" => {
+                let preserves = vector
+                    .pointer("/expected/preserves_bottom_diagnostics")
+                    .and_then(Value::as_bool);
+                if preserves != Some(true) {
+                    bail!(
+                        "vector {name} expected.preserves_bottom_diagnostics must be true"
+                    );
+                }
+                seen_signed_compaction = true;
+            }
+            "anchor_dag_genesis_and_multi_leaf_join" => {
+                let cases = vector
+                    .get("cases")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing cases[]"))?;
+                if cases.len() < 4 {
+                    bail!("vector {name} requires at least 4 cases (genesis / non-genesis-empty / multi-leaf-view / signed-compaction)");
+                }
+                seen_genesis_multi_leaf = true;
+            }
+            _ => bail!("unknown move-anchor-lattice vector: {name}"),
         }
     }
+
+    if !(seen_atomic
+        && seen_cas_bottom
+        && seen_anchor_batch_pre_state
+        && seen_mls_covered_frontier
+        && seen_anchorer_recovery
+        && seen_signed_compaction
+        && seen_genesis_multi_leaf)
+    {
+        bail!(
+            "move-anchor-lattice fixture must cover all 7 normative vectors \
+             (atomic / cas_bottom / anchor_batch_pre_state / mls_covered_frontier / \
+              anchorer_recovery / signed_compaction / genesis_multi_leaf)"
+        );
+    }
+
     Ok(())
 }
 
-fn select_state_resolution_candidate(candidates: &[Value]) -> Option<&str> {
-    candidates
-        .iter()
-        .filter(|candidate| {
-            candidate.get("policy_result").and_then(Value::as_str) != Some("hard_deny")
-        })
-        .max_by(|left, right| compare_state_candidates(left, right))
-        .and_then(|candidate| candidate.get("event_id").and_then(Value::as_str))
-}
-
-fn compare_state_candidates(left: &Value, right: &Value) -> std::cmp::Ordering {
-    let left_weight = left
-        .get("auth_weight")
-        .and_then(Value::as_i64)
-        .unwrap_or_default();
-    let right_weight = right
-        .get("auth_weight")
-        .and_then(Value::as_i64)
-        .unwrap_or_default();
-    left_weight
-        .cmp(&right_weight)
-        .then_with(|| {
-            left.get("hlc")
-                .and_then(Value::as_str)
-                .cmp(&right.get("hlc").and_then(Value::as_str))
-        })
-        .then_with(|| {
-            left.get("event_id")
-                .and_then(Value::as_str)
-                .cmp(&right.get("event_id").and_then(Value::as_str))
-        })
-}
-
-// ── Internal types ──────────────────────────────────────────────────────────
-
-#[derive(Clone)]
-struct StateEvent {
-    kind: String,
-    auth_weight: u64,
-    hlc: String,
-    actor_seq: u64,
-    event_id: String,
-}
-
-fn resolve_state_events(events: &[StateEvent]) -> Result<StateEvent> {
-    let mut sorted = events.to_vec();
-    sorted.sort_by(|left, right| {
-        right
-            .auth_weight
-            .cmp(&left.auth_weight)
-            .then_with(|| precedence_of(&right.kind).cmp(&precedence_of(&left.kind)))
-            .then_with(|| left.hlc.cmp(&right.hlc))
-            .then_with(|| left.actor_seq.cmp(&right.actor_seq))
-            .then_with(|| left.event_id.cmp(&right.event_id))
-    });
-    sorted
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("cannot resolve empty state set"))
-}
-
-fn precedence_of(kind: &str) -> u8 {
-    match kind {
-        "ban" => 3,
-        "revoke" => 2,
-        "delegate" => 1,
-        _ => 0,
-    }
-}
-
-struct PolicyState {
-    decision: String,
-}
-
-struct PendingWrite {
-    event_id: String,
-    required_decision: String,
-}
-
-fn write_is_valid_against_policy(write: &PendingWrite, policy: &PolicyState) -> bool {
-    let _ = &write.event_id;
-    write.required_decision == policy.decision
-}
-
-fn validate_container_move_resolution(case: &StateResolutionCase) -> Result<()> {
-    let input = required_case_input(case)?;
-    let base_state = value_object(required_field(input, "base_state")?, "input.base_state")?;
-    let candidates = value_array(required_field(input, "candidates")?, "input.candidates")?;
-    let expected = required_case_expected(case)?;
-    let winner = choose_operation_winner(candidates)?;
-    let winner_id = value_field_str(winner, "operation_id")?;
-    let content = required_field(winner, "content")?;
-    if value_field_str(winner, "kind")? != "cx.container.move_item" {
-        bail!(
-            "state fixture {} winner was not canonical container move",
-            case.name
-        );
-    }
-
-    let resolved_position = Value::Object({
-        let mut map = serde_json::Map::new();
-        map.insert(
-            "scope_container_id".to_owned(),
-            required_field(content, "scope_container_id")?.clone(),
-        );
-        map.insert(
-            "relation_kind".to_owned(),
-            required_field(content, "relation_kind")?.clone(),
-        );
-        map.insert(
-            "entity_id".to_owned(),
-            required_field(content, "entity_id")?.clone(),
-        );
-        map.insert(
-            "container_id".to_owned(),
-            required_field(content, "to_container_id")?.clone(),
-        );
-        map.insert("rank".to_owned(), required_field(content, "rank")?.clone());
-        map.insert(
-            "source_operation_id".to_owned(),
-            Value::String(winner_id.to_owned()),
-        );
-        map
-    });
-    assert_json_eq(
-        &resolved_position,
-        required_field(expected, "resolved_position")?,
-        &case.name,
-        "resolved_position",
-    )?;
-
-    let state_key = format!(
-        "{}|{}|{}",
-        value_field_str(content, "scope_container_id")?,
-        value_field_str(content, "relation_kind")?,
-        value_field_str(content, "entity_id")?
-    );
-    let active_registers = serde_json::json!([{
-        "state_key": state_key,
-        "container_id": required_field(content, "to_container_id")?.clone(),
-        "rank": required_field(content, "rank")?.clone(),
-        "source_operation_id": winner_id
-    }]);
-    assert_json_eq(
-        &active_registers,
-        required_field(expected, "active_position_registers")?,
-        &case.name,
-        "active_position_registers",
-    )?;
-
-    let loser_ids = operation_ids_except(candidates, winner_id)?;
-    let mut inactive_ids = Vec::with_capacity(loser_ids.len() + 1);
-    inactive_ids.push(
-        base_state
-            .get("source_operation_id")
-            .cloned()
-            .ok_or_else(|| anyhow!("state fixture {} missing base source operation", case.name))?,
-    );
-    inactive_ids.extend(
-        loser_ids
-            .iter()
-            .map(|operation_id| serde_json::json!(operation_id)),
-    );
-    assert_json_eq(
-        &serde_json::json!(inactive_ids),
-        required_field(expected, "inactive_source_operation_ids")?,
-        &case.name,
-        "inactive_source_operation_ids",
-    )?;
-
-    let expected_conflicts = required_field(expected, "conflict_records")?;
-    let conflict = serde_json::json!([{
-        "conflict_type": "exclusive_position",
-        "state_key": active_registers[0]["state_key"].clone(),
-        "winner": winner_id,
-        "losers": loser_ids,
-        "reason": expected_conflicts[0]["reason"].clone()
-    }]);
-    assert_json_eq(
-        &conflict,
-        expected_conflicts,
-        &case.name,
-        "conflict_records",
-    )
-}
-
-fn validate_field_position_resolution(case: &StateResolutionCase) -> Result<()> {
-    let input = required_case_input(case)?;
-    let candidates = value_array(required_field(input, "candidates")?, "input.candidates")?;
-    let expected = required_case_expected(case)?;
-    let winner = choose_operation_winner(candidates)?;
-    let winner_id = value_field_str(winner, "operation_id")?;
-    let content = required_field(winner, "content")?;
-    if value_field_str(winner, "kind")? != "cx.field_position.move" {
-        bail!(
-            "state fixture {} winner was not canonical field-position move",
-            case.name
-        );
-    }
-
-    let resolved_position = serde_json::json!({
-        "view_id": required_field(content, "view_id")?.clone(),
-        "entity_id": required_field(content, "entity_id")?.clone(),
-        "group_by": required_field(content, "group_by")?.clone(),
-        "value": required_field(content, "to_value")?.clone(),
-        "rank": required_field(content, "rank")?.clone(),
-        "source_operation_id": winner_id
-    });
-    assert_json_eq(
-        &resolved_position,
-        required_field(expected, "resolved_position")?,
-        &case.name,
-        "resolved_position",
-    )?;
-
-    let loser_ids = operation_ids_except(candidates, winner_id)?;
-    let expected_conflicts = required_field(expected, "conflict_records")?;
-    let conflict = serde_json::json!([{
-        "conflict_type": "atomic_position_register",
-        "state_key": format!(
-            "{}|{}|{}",
-            value_field_str(content, "view_id")?,
-            value_field_str(content, "entity_id")?,
-            value_field_str(content, "group_by")?
-        ),
-        "winner": winner_id,
-        "losers": loser_ids,
-        "reason": expected_conflicts[0]["reason"].clone()
-    }]);
-    assert_json_eq(
-        &conflict,
-        expected_conflicts,
-        &case.name,
-        "conflict_records",
-    )
-}
-
-fn validate_state_rebalance_assignment(case: &StateResolutionCase) -> Result<()> {
-    let input = required_case_input(case)?;
-    let active_edges =
-        serde_json::from_value::<Vec<RankEdge>>(required_field(input, "active_edges")?.clone())?;
-    let state_hash = value_field_str(input, "state_hash")?;
-    let expected_state_hash = value_field_str(input, "expected_state_hash")?;
-    if state_hash != expected_state_hash {
-        bail!(
-            "state fixture {} attempted rebalance from stale state hash",
-            case.name
-        );
-    }
-    let actual = rebalance_assignments(&active_edges)?;
-    let expected = case
-        .expected_assignments
-        .as_deref()
-        .ok_or_else(|| anyhow!("state fixture {} missing expected_assignments", case.name))?;
-    if actual != expected {
-        bail!("state fixture {} rebalance assignments differed", case.name);
-    }
-    Ok(())
-}
-
-fn validate_state_rebalance_cas_conflict(case: &StateResolutionCase) -> Result<()> {
-    let input = required_case_input(case)?;
-    let state_hash = value_field_str(input, "state_hash")?;
-    let expected_state_hash = value_field_str(input, "expected_state_hash")?;
-    let expected = case
-        .expected
-        .as_ref()
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("state fixture {} missing string expected", case.name))?;
-    if expected != "reject_without_partial_assignment" {
-        bail!(
-            "state fixture {} expected CAS rejection semantics drifted",
-            case.name
-        );
-    }
-    if state_hash == expected_state_hash {
-        bail!(
-            "state fixture {} did not model a stale state hash",
-            case.name
-        );
-    }
-    Ok(())
-}
-
-fn choose_operation_winner(candidates: &[Value]) -> Result<&Value> {
-    let mut winner = candidates
-        .first()
-        .ok_or_else(|| anyhow!("cannot resolve empty operation candidate set"))?;
-    for candidate in &candidates[1..] {
-        if operation_order(candidate, winner)? == std::cmp::Ordering::Greater {
-            winner = candidate;
-        }
-    }
-    Ok(winner)
-}
-
-fn operation_order(left: &Value, right: &Value) -> Result<std::cmp::Ordering> {
-    let left_weight = value_field_u64(left, "auth_weight")?;
-    let right_weight = value_field_u64(right, "auth_weight")?;
-    let left_hlc = value_field_str(left, "hlc")?;
-    let right_hlc = value_field_str(right, "hlc")?;
-    let left_operation_id = value_field_str(left, "operation_id")?;
-    let right_operation_id = value_field_str(right, "operation_id")?;
-    Ok(left_weight
-        .cmp(&right_weight)
-        .then_with(|| left_hlc.cmp(right_hlc))
-        .then_with(|| left_operation_id.cmp(right_operation_id)))
-}
-
-fn operation_ids_except(candidates: &[Value], winner_id: &str) -> Result<Vec<String>> {
-    let mut operation_ids = Vec::new();
-    for candidate in candidates {
-        let operation_id = value_field_str(candidate, "operation_id")?;
-        if operation_id != winner_id {
-            operation_ids.push(operation_id.to_owned());
-        }
-    }
-    Ok(operation_ids)
-}
-
-fn required_case_input(case: &StateResolutionCase) -> Result<&Value> {
-    case.input
-        .as_ref()
-        .ok_or_else(|| anyhow!("state fixture {} missing input", case.name))
-}
-
-fn required_case_expected(case: &StateResolutionCase) -> Result<&Value> {
-    case.expected
-        .as_ref()
-        .ok_or_else(|| anyhow!("state fixture {} missing expected object", case.name))
+fn require_field<'a>(
+    obj: &'a serde_json::Map<String, Value>,
+    field: &str,
+    vector_name: &str,
+) -> Result<&'a Value> {
+    obj.get(field)
+        .ok_or_else(|| anyhow!("vector {vector_name} move missing field {field}"))
 }
