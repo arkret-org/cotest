@@ -12,13 +12,13 @@
 
 ## 当前状态摘要
 
-- **代码量**：`src/conformance/*.rs`（10 子模块）+ `src/harness.rs`（1147）+ 18 个场景文件，总 ~6K 行 Rust。
+- **代码量**：`src/conformance/*.rs`（11 子模块，新增 `schema_validation`）+ `src/harness.rs`（1176）+ 18 个场景文件，总 ~6K 行 Rust。
 - **运行模式**：`process` 直接 `cargo run` SUT；`compose` 通过 `run-compose.ps1` 统一 bridge contract matrix 和可选 side-service；`docker` 与 Complement 同形态。
 - **SUT 默认**：`soland`；harness 通过 `COTEST_SUT_MANIFEST` 切换。
 - **多服务支持**：已支持 `COAUTH_BASE_URL` / `FLORIA_BASE_URL` 切到 live external，bridge contract matrix 已是可执行 scaffold（live `soland` rows + placeholder `coauth/floria` rows）。
 - **artifacts**：每次跑写 `summary.{md,html,json}` + `transcript.ndjson` + `junit.xml` + coverage/gap reports + secret scan + spec sync gate；`artifacts/latest/` 维护最新一组。
 - **release gate**：`--Profile release-gate` 已落地，输出 `release-gate.{json,md}`；当前稳定 gate 为 12 个测试，新增覆盖 recovery restore surface 与 optional StarID resolver discovery，live directory anti-enumeration 场景仍归后续 hang/flake 治理。
-- **conformance fixtures**：13 个 fixture 测试全部通过（registry, encoding, redaction, capability, envelope, sync, federation, privacy, state_resolution）。
+- **conformance fixtures**：14 个 fixture 测试全部通过（registry, schema_validation, encoding, redaction, capability, envelope, sync, federation, privacy, state_resolution）；新加 `schema_validation` 覆盖全部 34 个 schema 的 $id / const / required / enum / typed-id 校验向量。
 - **缺失**：bridge matrix 仍允许 coauth/floria placeholder rows；docker compose 和真实 side-service 默认命令仍是后续项。
 - **协议计数注意**：`contrix-spec` 当前 artifact lint 报告 110 event kinds；所有覆盖率任务以 `spec/v1/artifacts/registry/*` 实际输出为准，不再手写固定数量。
 
@@ -43,11 +43,11 @@
 | # | 任务 | 文件 |
 |---|---|---|
 | A1 🅿 | 把 `event-kind-registry.json` 当前 active event kind（2026-05-07 lint: 110）的 negative + positive vector 全覆盖。 | `scenarios/protocol_payloads.rs` |
-| A2 🅿 | `schema-registry.json` 现有 34 个 schema 的 canonical-JSON / required-field / enum / typed-id 校验向量。 | 同上 |
+| A2 ✅ | **完成（2026-05-07）**：`src/conformance/schema_validation.rs` 拉取 34 个 schema，每个 schema 跑 $id 一致性 + const ↔ schema_id 一致性 + JSON Schema 2020-12 编译 + 非对象 payload 拒绝（124 vec）+ 空对象拒绝（31 vec）+ 枚举非法值拒绝（46 vec）+ typed-id pattern 非法值拒绝（192 vec）；canonical-JSON 由现有 `run_encoding_fixture_suite` 覆盖。 | `src/conformance/schema_validation.rs`、`tests/conformance_fixtures.rs` |
 | A3 🅿 | `operation-registry.json` 现有 83 个 operation 的 happy-path + 2 个 negative path（auth / payload）。 | 同上 |
 | A4 🅿 | `error-code-registry.json` 现有 42 个 error code 的产生路径回归（每个至少 1 个能稳定触发的 vector）。 | 同上 |
 | A5 🅿 | `cx.key.verification.*` + `cx.schema.device_message.v1` + `cx.schema.key_backup.v1` 与 2026-05-04 spec delta 对齐的 negative vectors（已部分落地，需扩展到所有 sub-kind）。 | 同上 |
-| A6 🅿 | `cx.flow.*` / `cx.flow.branch.*` / `cx.message.*` 主链路向量；剔除剩余的 `cx.subject.*` / `cx.room.*` / `cx.card.*` 变体（rule-based grep + manual review）。 | 同上 |
+| A6 ✅ | **剔除清理完成（2026-05-07）**：grep `cx\.(subject|room|card)\.` 在所有 `*.rs` 中零命中；`cx:card:legacy-card` 仅作为 federation/push 黑盒负向输入存在（验证 SUT 拒绝未注册 typed-id 命名空间）。`cx.flow.*` / `cx.flow.branch.*` / `cx.message.*` 主链路向量扩面仍待补（与 A1 同源 SUT 进度）。 | 同上 |
 
 ### Stream B · State Resolution / Reducer / Auth State
 

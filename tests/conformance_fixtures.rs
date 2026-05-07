@@ -6,6 +6,11 @@ fn artifact_registry_suite_matches_reference_semantics() -> Result<()> {
 }
 
 #[test]
+fn schema_validation_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_schema_validation_suite()
+}
+
+#[test]
 fn encoding_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_encoding_fixture_suite()
 }

@@ -10,6 +10,7 @@ base64 = "0.22.1"
 chrono = "0.4.42"
 contrix-client = { path = "../contrix-rust-sdk/crates/client" }
 contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
+jsonschema = { version = "0.46.4", default-features = false, features = ["resolve-file"] }
 reqwest = { version = "0.12.24", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

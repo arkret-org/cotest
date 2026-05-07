@@ -5,6 +5,7 @@ mod federation;
 mod privacy;
 mod redaction;
 mod registry;
+mod schema_validation;
 mod state_resolution;
 mod sync;
 
@@ -35,6 +36,7 @@ pub use federation::run_federation_fixture_suite;
 pub use privacy::run_privacy_security_fixture_suite;
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
+pub use schema_validation::run_schema_validation_suite;
 pub use state_resolution::run_state_resolution_fixture_suite;
 pub use sync::run_sync_fixture_suite;
 
