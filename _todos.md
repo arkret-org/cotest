@@ -20,6 +20,29 @@
 
 ---
 
+## P0 · v1 wire model rework conformance ⚠ 🔒
+
+> 起源：`contrix-spec` 2026-05-07 完成 Phase 1-5。详见根 [`../_todos.md` C10.C](../_todos.md) 与 [`../contrix-spec/_state_todos.md`](../contrix-spec/_state_todos.md)。
+>
+> Gate：本仓 SUT 升级（contrix-rust-sdk W1-W13 + soland T2.5）后才能跑通；现有 fixture 直接 sync 会因 schema 变化（state_key 字段移除、新 event kinds、新 proof 类型）失败。
+
+| # | 任务 | 文件 |
+|---|---|---|
+| **W1** ⚠ | 同步 `contrix-spec/spec/v1/artifacts/`：active event kind 110 → **129**（+19 新 kinds）、profiles 48 → **50**（+`hub_writer` / `peer_mesh`）。`schema_validation` 全量重跑；预期会发现 fixture 引用 stale schema/kind。 | `src/conformance/state_resolution.rs`、所有 fixture |
+| **W2** ⚠ | Fixture 全部移除 envelope-level `state_key` 字段；`cx.member.state` payload 加 `actor_id`；composite state subject 用 `state_subject` 派生而非 `state_key`。本仓 `src/conformance/state_resolution.rs` 4 处 state_key 引用同步。 | `src/conformance/state_resolution.rs`、`tests/fixtures/*.json` |
+| **W3** ⚠ | 新 fixture `host_endorsement_fixture.json`：hub Space happy path / 缺 endorsement → `proof_missing` reject / wrong host_did → `host_mismatch` reject / peer_mesh Space 出现 endorsement → `schema_violation` reject / activation_frontier 边界。 | 新 `tests/fixtures/host_endorsement_fixture.json`、`scenarios/space_permissions.rs` |
+| **W4** ⚠ | 新 fixture `host_transfer_fixture.json`：smooth dual-sign happy / 单签 reject / emergency without quorum reject / activation_frontier 后旧 host endorsement reject / standby_hosts 之外的 new_host warning。 | 新 `tests/fixtures/host_transfer_fixture.json`、`scenarios/space_permissions.rs` |
+| **W5** ⚠ | 新 fixture `consent_fixture.json`：consent grant → invite 接受 / consent revoke → invite reject / scope=any 全覆盖 / pseudonym DID 场景 / `require_consent` profile 强制路径。 | 新 `tests/fixtures/consent_fixture.json`、`scenarios/api_contracts_auth.rs` |
+| **W6** ⚠ | `state-resolution-fixture.json`：本仓识别新 `state_slot` 描述符字段（spec 已重写）；hub fork diagnostic vector（§9.5）：双 host endorsement 同 slot → 整 slot quarantine。 | `src/conformance/state_resolution.rs` |
+| **W7** | `mls_state_binding.full.v1` 必需 component 验证：E2EE Space commit 缺 `policy_root_required_components` 中任一 → reject；`pending_mls_binding` 状态可见性。 | `scenarios/delivery_media.rs`、`scenarios/protocol_payloads.rs` |
+| **W8** | MIMI consent / room policy components 互译矩阵：按 `mimi-interop.md` §9.1 / §9.2 互译表跑双向 round-trip。 | `scenarios/api_contracts_auth.rs` |
+| **W9** | `profile_tiers` schema_validation：含 `writer_model_profiles` 新顶层 section + `hardening_profiles.cx.profile.mls_state_binding.full.v1` 已从 e2ee_client optional_extensions 升为 inherits。 | `src/conformance/profile_validation.rs` |
+| **W10** 🔒 | release gate 12/12 → 增量保持全绿；新 fixture 加入 `release-gate` profile。 | `scripts/run-release-gate.ps1`、`profile_tiers` 配置 |
+| **W11** | Stream B4（composite state-key encoding round-trip）改名为 composite **state subject** encoding round-trip；测试向量按 spec encoding.md §9.5 重写。 | `scenarios/protocol_payloads.rs`（B4） |
+| **W12** | Stream A1 active event kind 数 110 → 129 全覆盖。新 kinds 至少各 1 positive + 1 negative：`cx.space.policy / join_rule / history_visibility / discovery / policy_server / policy_components / history_sharing_policy / asset_privacy_policy / moderation_policy / plaintext_visible_services / media_service / schema / inheritance_policy / archive / freeze / tombstone / destroy / host / host.transfer / consent.grant / consent.revoke`。 | `scenarios/protocol_payloads.rs` (A1) |
+
+---
+
 ## P1 · 并行扩面（六路）
 
 ### Stream A · Protocol Payload / Event-kind / Schema 覆盖
@@ -126,6 +149,7 @@
 | C5 | recovery restore surface 已进入 release gate；真实 coauth→soland refresh 待补。 |
 | C6 | optional StarID resolver discovery 已进入 release gate；live vectors 待补。 |
 | C8 | release gate 12/12 通过。 |
+| C10.C | **本仓是 C10 联调最后一关**——SDK + soland 消化 wire 改动后，cotest fixture 全量 refresh + 双轨（hub / peer_mesh）conformance 套件就位。P0 W1-W12 是本仓全部 C10 任务。 |
 
 ## 不在本轮范围
 
