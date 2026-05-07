@@ -11,7 +11,7 @@ mod sync;
 use std::{
     collections::BTreeMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Result, anyhow, bail};
@@ -24,8 +24,8 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
-pub use capability::run_capability_fixture_suite;
 pub use capability::run_capability_facet_fixture_suite;
+pub use capability::run_capability_fixture_suite;
 pub use encoding::run_encoding_fixture_suite;
 pub use encoding::run_facet_renderer_query_fixture_suite;
 pub use encoding::run_projection_position_discriminator_fixture_suite;
@@ -245,32 +245,29 @@ pub(crate) fn spec_artifacts_root() -> PathBuf {
 
     if let Some(root) = std::env::var_os("COTEST_SPEC_ROOT") {
         let root = PathBuf::from(root);
-        if root.join(ARTIFACT_REGISTRY_DIR).is_dir() {
-            return root;
-        }
-        if root.join("artifacts").join(ARTIFACT_REGISTRY_DIR).is_dir() {
-            return root.join("artifacts");
+        for candidate in spec_artifact_candidates(&root) {
+            if candidate.join(ARTIFACT_REGISTRY_DIR).is_dir() {
+                return candidate;
+            }
         }
     }
 
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("contrix-spec")
+        .join("spec")
+        .join("v1")
         .join("artifacts")
 }
 
 pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
     if let Some(root) = std::env::var_os("COTEST_SPEC_ROOT") {
         let root = PathBuf::from(root);
-        let candidate = if root.join(ARTIFACT_FIXTURES_DIR).is_dir() {
-            root.join(ARTIFACT_FIXTURES_DIR).join(file_name)
-        } else {
-            root.join("artifacts")
-                .join(ARTIFACT_FIXTURES_DIR)
-                .join(file_name)
-        };
-        if candidate.is_file() {
-            return candidate;
+        for artifact_root in spec_artifact_candidates(&root) {
+            let candidate = artifact_root.join(ARTIFACT_FIXTURES_DIR).join(file_name);
+            if candidate.is_file() {
+                return candidate;
+            }
         }
         let legacy = root.join("fixtures").join(file_name);
         if legacy.is_file() {
@@ -281,6 +278,14 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
     spec_artifacts_root()
         .join(ARTIFACT_FIXTURES_DIR)
         .join(file_name)
+}
+
+fn spec_artifact_candidates(root: &Path) -> Vec<PathBuf> {
+    vec![
+        root.to_owned(),
+        root.join("spec").join("v1").join("artifacts"),
+        root.join("artifacts"),
+    ]
 }
 
 pub(crate) fn load_fixture<T>(file_name: &str) -> Result<T>
@@ -464,7 +469,10 @@ pub(crate) fn encode_cursor_shape(shape: &CursorShape) -> Result<String> {
     let canonical = canonical_json(&serde_json::to_value(shape)?)?;
     Ok(format!(
         "cx:cursor:{}",
-        base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, canonical.as_bytes())
+        base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            canonical.as_bytes()
+        )
     ))
 }
 

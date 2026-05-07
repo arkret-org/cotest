@@ -95,21 +95,29 @@ fn validate_registry_manifest(
         match source_role {
             "canonical" => {
                 if !source_of_truth {
-                    bail!("registry-manifest canonical entry {file} must declare source_of_truth=true");
+                    bail!(
+                        "registry-manifest canonical entry {file} must declare source_of_truth=true"
+                    );
                 }
                 if generated_from.is_some() {
-                    bail!("registry-manifest canonical entry {file} must not declare generated_from");
+                    bail!(
+                        "registry-manifest canonical entry {file} must not declare generated_from"
+                    );
                 }
             }
             "generated" => {
                 if source_of_truth {
-                    bail!("registry-manifest generated entry {file} must declare source_of_truth=false");
+                    bail!(
+                        "registry-manifest generated entry {file} must declare source_of_truth=false"
+                    );
                 }
                 let generated_from = generated_from.as_deref().ok_or_else(|| {
                     anyhow!("registry-manifest generated entry {file} missing generated_from")
                 })?;
                 if !root.join(generated_from).is_file() {
-                    bail!("registry-manifest generated entry {file} references missing source {generated_from}");
+                    bail!(
+                        "registry-manifest generated entry {file} references missing source {generated_from}"
+                    );
                 }
             }
             other => bail!("registry-manifest entry {file} has invalid source_role {other}"),
@@ -189,7 +197,12 @@ fn validate_schema_registry(
     registry: &Value,
     manifest_entry: &RegistryManifestEntry,
 ) -> Result<BTreeSet<String>> {
-    validate_registry_metadata("schema registry", registry, "schema_registry", manifest_entry)?;
+    validate_registry_metadata(
+        "schema registry",
+        registry,
+        "schema_registry",
+        manifest_entry,
+    )?;
     let schemas = registry
         .get("schemas")
         .and_then(Value::as_array)
@@ -372,9 +385,9 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     ] {
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {
-                let profile = profile
-                    .as_str()
-                    .ok_or_else(|| anyhow!("conformance profile entry in {field} is not a string"))?;
+                let profile = profile.as_str().ok_or_else(|| {
+                    anyhow!("conformance profile entry in {field} is not a string")
+                })?;
                 if !profile.starts_with("cx.profile.") {
                     bail!("invalid profile id {profile}");
                 }
@@ -389,9 +402,9 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     ] {
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {
-                let profile = profile
-                    .as_str()
-                    .ok_or_else(|| anyhow!("conformance profile entry in {field} is not a string"))?;
+                let profile = profile.as_str().ok_or_else(|| {
+                    anyhow!("conformance profile entry in {field} is not a string")
+                })?;
                 if !profile.starts_with("cx.profile.") {
                     bail!("invalid profile id {profile}");
                 }

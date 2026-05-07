@@ -5,8 +5,8 @@ use serde_json::{Map, Value, json};
 
 use super::{
     canonical_json, load_artifact_json, load_fixture_value, looks_like_sha256_digest,
-    required_field, required_str, sha256_prefixed, validate_profile,
-    value_field_str, value_field_u64, value_array,
+    required_field, required_str, sha256_prefixed, validate_profile, value_array, value_field_str,
+    value_field_u64,
 };
 
 pub fn run_event_envelope_fixture_suite() -> Result<()> {
@@ -49,10 +49,14 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
             bail!("deprecated read marker alias metadata drifted");
         }
 
-        if canonical_event_kind_for_consumer("cx.marker.read", &event_kinds) != Some("cx.read.marker") {
+        if canonical_event_kind_for_consumer("cx.marker.read", &event_kinds)
+            != Some("cx.read.marker")
+        {
             bail!("consumer compatibility failed to map cx.marker.read to cx.read.marker");
         }
-        if canonical_event_kind_for_consumer("cx.read.marker", &event_kinds) != Some("cx.read.marker") {
+        if canonical_event_kind_for_consumer("cx.read.marker", &event_kinds)
+            != Some("cx.read.marker")
+        {
             bail!("canonical read marker kind was not stable");
         }
 
@@ -359,9 +363,7 @@ fn validate_event_envelope(
         }
     }
     // Content field: accept both "content" and "payload" (spec uses "payload" in some fixtures)
-    let content = event
-        .get("content")
-        .or_else(|| event.get("payload"));
+    let content = event.get("content").or_else(|| event.get("payload"));
     if content.is_none() {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
@@ -435,7 +437,10 @@ fn validate_event_envelope(
             "prev_refs and auth_refs must contain event refs",
         ));
     }
-    if prev_refs.iter().any(|value| value.as_str() == Some(event_id)) {
+    if prev_refs
+        .iter()
+        .any(|value| value.as_str() == Some(event_id))
+    {
         return Ok(EventEnvelopeDecision::reject(
             "causal_conflict",
             "prev_refs MUST NOT contain the event's own event_id",
@@ -635,11 +640,15 @@ pub(crate) fn canonical_event_payload(event: &Value) -> Result<String> {
 }
 
 pub(crate) fn canonical_event_payload_hash(event: &Value) -> Result<String> {
-    Ok(super::sha256_prefixed(canonical_event_payload(event)?.as_bytes()))
+    Ok(super::sha256_prefixed(
+        canonical_event_payload(event)?.as_bytes(),
+    ))
 }
 
 pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
-    Ok(super::sha256_prefixed(super::canonical_json(event)?.as_bytes()))
+    Ok(super::sha256_prefixed(
+        super::canonical_json(event)?.as_bytes(),
+    ))
 }
 
 pub(crate) fn event_feature_ids(event: &Value) -> Result<BTreeSet<String>> {

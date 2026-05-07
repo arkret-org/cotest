@@ -76,10 +76,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                     );
                 }
                 if redacted["redacts"] != target["event_id"] {
-                    bail!(
-                        "redaction fixture {} lost redaction reference",
-                        case.name
-                    );
+                    bail!("redaction fixture {} lost redaction reference", case.name);
                 }
             }
             _ => bail!("unknown redaction fixture case {}", case.name),

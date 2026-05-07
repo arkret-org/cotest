@@ -80,7 +80,7 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 ## Execution
 
 ```powershell
-$env:COTEST_SUT_MANIFEST = "E:\Works\contrix-dev\soland\Cargo.toml"
+$env:COTEST_SUT_MANIFEST = "..\soland\Cargo.toml"
 cargo test --tests -- --nocapture
 ```
 

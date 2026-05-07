@@ -5,13 +5,12 @@ use serde_json::{Value, json};
 
 use super::{
     SyncCase, SyncFixture, canonical_json, load_fixture_value, looks_like_sha256_digest,
-    parse_fixture_value, required_field, sha256_prefixed, validate_profile,
-    value_array, value_field_bool, value_field_str, value_field_u64,
+    parse_fixture_value, required_field, sha256_prefixed, validate_profile, value_array,
+    value_field_bool, value_field_str, value_field_u64,
 };
 
 use super::encoding::{
-    validate_entity,
-    validate_projection_position, validate_query_renderer,
+    validate_entity, validate_projection_position, validate_query_renderer,
     validate_response_entities_against_request_facets,
 };
 
@@ -568,8 +567,7 @@ fn validate_projection_shape(response: &Value, projection: &str, case_name: &str
             }
         }
         "document" => {
-            for section in
-                value_array(required_field(response, "sections")?, "response.sections")?
+            for section in value_array(required_field(response, "sections")?, "response.sections")?
             {
                 if value_field_str(section, "sort_key")?.is_empty() {
                     bail!("sync fixture {case_name} document section missing sort key");

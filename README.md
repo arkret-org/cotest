@@ -5,8 +5,8 @@ after Complement. It starts real server processes or real server containers,
 drives public HTTP endpoints, and uses `contrix-rust-sdk` where typed protocol
 helpers and client smoke coverage are useful.
 
-The current default server under test is
-`E:\Works\contrix-dev\soland\Cargo.toml`.
+The current default server under test is the sibling
+`../soland/Cargo.toml` checkout.
 
 ## Quick Start
 
@@ -15,11 +15,15 @@ Recommended entrypoints:
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime process
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
 ```
 
 - `process` mode is the fast local path and spawns the SUT with `cargo run`.
+- `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
+  attach live `coauth`, `floria`, `sodmin`, or `yougen` services through base
+  URLs or managed service commands.
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
@@ -37,7 +41,7 @@ The primary human-readable report is
 ## Direct Cargo Run
 
 ```powershell
-$env:COTEST_SUT_MANIFEST = "E:\Works\contrix-dev\soland\Cargo.toml"
+$env:COTEST_SUT_MANIFEST = "..\soland\Cargo.toml"
 cargo test --tests -- --nocapture
 ```
 
@@ -48,6 +52,10 @@ override to avoid breaking older local workflows.
 ## Runtime Modes
 
 - `process`: spawn the SUT with local `cargo run` against a checkout manifest.
+- `compose`: run process-mode bridge-contract tests through
+  `scripts/run-compose.ps1`; spawned `soland` remains under cotest lifecycle,
+  while external service URLs are passed through `COAUTH_BASE_URL`,
+  `FLORIA_BASE_URL`, `SODMIN_BASE_URL`, and `YOUGEN_BASE_URL`.
 - `docker`: spawn the SUT from `COTEST_SUT_IMAGE` with Docker while the Rust
   tests remain host-side, similar to Complement.
 
@@ -59,7 +67,7 @@ for the full startup model, Docker image contract, and result artifacts.
 - `src/harness.rs`: process lifecycle, test actor helpers, and shared HTTP
   assertion utilities.
 - `src/conformance.rs`: artifact-driven offline conformance runner wired to
-  `contrix-spec/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
+  `contrix-spec/spec/v1/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
   bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
@@ -79,7 +87,7 @@ for the full startup model, Docker image contract, and result artifacts.
   permissions, payload contracts, and extension surface gaps.
 - Offline conformance surface: Event Envelope, encoding, redaction,
   capability, sync, federation, privacy/security, and state-resolution fixtures
-  loaded from `contrix-spec/artifacts`.
+  loaded from `contrix-spec/spec/v1/artifacts`.
 - Multi-server surface: federation readiness, contract validation, and
   cross-server collaboration flows.
 

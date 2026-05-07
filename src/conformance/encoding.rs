@@ -2,12 +2,10 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::{
-    EncodingFixture, RANK_MAX_LENGTH, canonical_json,
-    decode_cursor_shape, encode_cursor_shape, load_fixture_value, parse_fixture_value,
-    rank_between, rebalance_assignments,
-    sha256_prefixed, looks_like_sha256_digest,
-    validate_profile, validate_rank, validate_rebalance_assignment_count,
-    value_field_str,
+    EncodingFixture, RANK_MAX_LENGTH, canonical_json, decode_cursor_shape, encode_cursor_shape,
+    load_fixture_value, looks_like_sha256_digest, parse_fixture_value, rank_between,
+    rebalance_assignments, sha256_prefixed, validate_profile, validate_rank,
+    validate_rebalance_assignment_count, value_field_str,
 };
 
 pub fn run_encoding_fixture_suite() -> Result<()> {
@@ -537,16 +535,13 @@ pub(crate) fn validate_entity(
 }
 
 fn entity_facets(entity: &Value) -> Result<std::collections::BTreeSet<String>> {
-    super::value_array(
-        super::required_field(entity, "facets")?,
-        "entity.facets",
-    )?
-    .iter()
-    .map(|value| {
-        value
-            .as_str()
-            .map(str::to_owned)
-            .ok_or_else(|| anyhow!("entity facet was not string"))
-    })
-    .collect()
+    super::value_array(super::required_field(entity, "facets")?, "entity.facets")?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow!("entity facet was not string"))
+        })
+        .collect()
 }

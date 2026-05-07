@@ -2,11 +2,9 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
 
 use super::{
-    RankEdge, StateResolutionFixture, StateResolutionCase,
-    assert_json_eq, load_fixture_value, parse_fixture_value,
-    rebalance_assignments, required_field,
-    required_str, validate_profile,
-    value_field_str, value_field_u64, value_array, value_object,
+    RankEdge, StateResolutionCase, StateResolutionFixture, assert_json_eq, load_fixture_value,
+    parse_fixture_value, rebalance_assignments, required_field, required_str, validate_profile,
+    value_array, value_field_str, value_field_u64, value_object,
 };
 
 pub fn run_state_resolution_fixture_suite() -> Result<()> {
@@ -267,11 +265,11 @@ fn validate_container_move_resolution(case: &StateResolutionCase) -> Result<()> 
             "container_id".to_owned(),
             required_field(content, "to_container_id")?.clone(),
         );
+        map.insert("rank".to_owned(), required_field(content, "rank")?.clone());
         map.insert(
-            "rank".to_owned(),
-            required_field(content, "rank")?.clone(),
+            "source_operation_id".to_owned(),
+            Value::String(winner_id.to_owned()),
         );
-        map.insert("source_operation_id".to_owned(), Value::String(winner_id.to_owned()));
         map
     });
     assert_json_eq(
@@ -308,7 +306,11 @@ fn validate_container_move_resolution(case: &StateResolutionCase) -> Result<()> 
             .cloned()
             .ok_or_else(|| anyhow!("state fixture {} missing base source operation", case.name))?,
     );
-    inactive_ids.extend(loser_ids.iter().map(|operation_id| serde_json::json!(operation_id)));
+    inactive_ids.extend(
+        loser_ids
+            .iter()
+            .map(|operation_id| serde_json::json!(operation_id)),
+    );
     assert_json_eq(
         &serde_json::json!(inactive_ids),
         required_field(expected, "inactive_source_operation_ids")?,

@@ -128,6 +128,32 @@ To run the PR-sized smoke profile:
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
 ```
 
+### Run the compose profile
+
+```powershell
+.\scripts\run-compose.ps1
+```
+
+The compose entrypoint runs the process-mode `compose` profile. `soland`
+instances are still spawned by cotest for each scenario. Live side services can
+be attached with base URLs:
+
+```powershell
+.\scripts\run-compose.ps1 `
+  -CoauthBaseUrl http://127.0.0.1:8080 `
+  -FloriaBaseUrl http://127.0.0.1:5000
+```
+
+For locally managed side services, pass a command and a base URL. The script
+waits on `<base>/health` unless a service-specific `*HealthUrl` is supplied,
+then stops those processes after the run:
+
+```powershell
+.\scripts\run-compose.ps1 `
+  -FloriaBaseUrl http://127.0.0.1:5000 `
+  -FloriaCommand '$env:SOFLARE_CONF="D:\Works\contrix-dev\floria\soflare.sample.kdl"; cargo run --manifest-path D:\Works\contrix-dev\floria\Cargo.toml'
+```
+
 ### Run in Docker mode
 
 ```powershell
@@ -171,6 +197,9 @@ limited to the selected profile's `required_coverage_profiles`, unless
 - `TestServerGroup` is the single entrypoint for multi-server scenarios.
 - In `process` mode, each server is a child `cargo run` process with its own
   temp blob root.
+- In `compose` profile runs, `run-compose.ps1` owns optional side-service
+  processes and exports their URLs to the scenario layer; cotest still owns
+  SUT process lifecycle.
 - In `docker` mode, each server is a detached `docker run --rm` container with
   its own mapped host port, temp blob root, and `SERVERX_*` runtime env.
 - Multi-server Docker scenarios create one unique bridge network per test group

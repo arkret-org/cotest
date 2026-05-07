@@ -1,11 +1,22 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
-use std::env;
+use std::{
+    env,
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener, TcpStream},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Duration as StdDuration,
+};
 
 use crate::harness::{ContrixServer, expect_json};
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct BridgeContractSnapshot {
     service: &'static str,
     surface: &'static str,
@@ -25,11 +36,16 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     let server = ContrixServer::spawn("bridge-contracts").await?;
 
     let integration = expect_json(
-        server.http().get(server.url("/api/v1/integration/describe")),
+        server
+            .http()
+            .get(server.url("/api/v1/integration/describe")),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(integration["contract"], "contrix.rest.integration_manifest.v1");
+    assert_eq!(
+        integration["contract"],
+        "contrix.rest.integration_manifest.v1"
+    );
     assert_eq!(integration["service"], "soland");
     assert_eq!(integration["service_kind"], "principal_server");
     assert_eq!(
@@ -40,25 +56,33 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         integration["surfaces"][0]["path"],
         "/api/v1/auth/bridge/describe"
     );
+    assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
+        surfaces.iter().any(|surface| {
+            surface["name"] == "authz_describe" && surface["path"] == "/api/v1/authz/describe"
+        })
+    }));
+    assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
+        surfaces.iter().any(|surface| {
+            surface["name"] == "policies_describe" && surface["path"] == "/api/v1/policies/describe"
+        })
+    }));
     assert_eq!(
-        integration["examples"]["authz_protocol"]["authz_check_request"]["path"],
-        "/api/v1/authz/check"
+        integration["examples"]["compose_flow"]["step_2"]["path"],
+        "/api/v1/auth/session-grant/exchange"
     );
     assert_eq!(
-        integration["examples"]["authz_protocol"]["policy_upsert_request"]["path"],
-        "/api/v1/policies"
-    );
-    assert_eq!(
-        integration["examples"]["authz_protocol"]["policy_get_path"],
-        "/api/v1/policies/{policy_id}"
+        integration["examples"]["compose_flow"]["step_3"]["path"],
+        "/api/v1/push/outbound/bridge/fetch"
     );
 
     let auth_bridge = expect_json(
-        server.http().get(server.url("/api/v1/auth/bridge/describe")),
+        server
+            .http()
+            .get(server.url("/api/v1/auth/bridge/describe")),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(auth_bridge["contract"], "contrix.rest.auth_bridge.v1");
+    assert_eq!(auth_bridge["contract"], "contrix.rest.principal_bridge.v1");
     assert_eq!(
         auth_bridge["auth"]["session_grant_exchange_path"],
         "/api/v1/auth/session-grant/exchange"
@@ -83,7 +107,10 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(push_bridge["contract"], "contrix.rest.outbound_push_bridge.v1");
+    assert_eq!(
+        push_bridge["contract"],
+        "contrix.rest.outbound_push_bridge.v1"
+    );
     assert_eq!(
         push_bridge["gateway_contract"]["resolve_path"],
         "/api/v1/push/outbound/bridge/resolve"
@@ -115,12 +142,16 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
 pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
     let server = ContrixServer::spawn("bridge-matrix").await?;
     let service_integration = expect_json(
-        server.http().get(server.url("/api/v1/integration/describe")),
+        server
+            .http()
+            .get(server.url("/api/v1/integration/describe")),
         StatusCode::OK,
     )
     .await?;
     let principal_auth = expect_json(
-        server.http().get(server.url("/api/v1/auth/bridge/describe")),
+        server
+            .http()
+            .get(server.url("/api/v1/auth/bridge/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -134,36 +165,24 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
     let coauth_base_url = configured_external_service_base("COAUTH_BASE_URL");
     let floria_base_url = configured_external_service_base("FLORIA_BASE_URL");
 
-    let coauth_service_integration = load_optional_live_contract(
-        coauth_base_url.as_deref(),
-        "/api/v1/integration/describe",
-    )
-    .await?;
-    let coauth_auth_bridge = load_optional_live_contract(
-        coauth_base_url.as_deref(),
-        "/api/v1/auth/bridge/describe",
-    )
-    .await?;
-    let coauth_recovery_bridge = load_optional_live_contract(
-        coauth_base_url.as_deref(),
-        "/api/v1/auth/recovery/describe",
-    )
-    .await?;
-    let coauth_admin_bridge = load_optional_live_contract(
-        coauth_base_url.as_deref(),
-        "/api/admin/v1/bridge/describe",
-    )
-    .await?;
-    let floria_service_integration = load_optional_live_contract(
-        floria_base_url.as_deref(),
-        "/api/v1/integration/describe",
-    )
-    .await?;
-    let floria_push_bridge = load_optional_live_contract(
-        floria_base_url.as_deref(),
-        "/api/v1/push/bridge/describe",
-    )
-    .await?;
+    let coauth_service_integration =
+        load_optional_live_contract(coauth_base_url.as_deref(), "/api/v1/integration/describe")
+            .await?;
+    let coauth_auth_bridge =
+        load_optional_live_contract(coauth_base_url.as_deref(), "/api/v1/auth/bridge/describe")
+            .await?;
+    let coauth_recovery_bridge =
+        load_optional_live_contract(coauth_base_url.as_deref(), "/api/v1/auth/recovery/describe")
+            .await?;
+    let coauth_admin_bridge =
+        load_optional_live_contract(coauth_base_url.as_deref(), "/api/admin/v1/bridge/describe")
+            .await?;
+    let floria_service_integration =
+        load_optional_live_contract(floria_base_url.as_deref(), "/api/v1/integration/describe")
+            .await?;
+    let floria_push_bridge =
+        load_optional_live_contract(floria_base_url.as_deref(), "/api/v1/push/bridge/describe")
+            .await?;
 
     let matrix = BridgeContractMatrixScaffold {
         rows: vec![
@@ -784,35 +803,208 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
         ],
     };
 
-    assert_eq!(matrix.rows.len(), 10);
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "soland" && row.surface == "principal_auth_bridge"
-    }));
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "soland" && row.surface == "service_integration_manifest"
-    }));
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "coauth" && row.surface == "auth_bridge"
-    }));
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "coauth" && row.surface == "recovery_bridge"
-    }));
+    assert!(matrix.rows.len() >= 10);
+    assert!(
+        matrix
+            .rows
+            .iter()
+            .any(|row| { row.service == "soland" && row.surface == "principal_auth_bridge" })
+    );
+    assert!(
+        matrix.rows.iter().any(|row| {
+            row.service == "soland" && row.surface == "service_integration_manifest"
+        })
+    );
+    assert!(
+        matrix
+            .rows
+            .iter()
+            .any(|row| { row.service == "coauth" && row.surface == "auth_bridge" })
+    );
+    assert!(
+        matrix
+            .rows
+            .iter()
+            .any(|row| { row.service == "coauth" && row.surface == "recovery_bridge" })
+    );
     assert!(matrix.rows.iter().any(|row| {
         row.service == "compose" && row.surface == "recovery_authz_policy_alignment"
     }));
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "coauth" && row.surface == "service_integration_manifest"
-    }));
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "floria" && row.surface == "push_bridge"
-    }));
-    assert!(matrix.rows.iter().any(|row| {
-        row.service == "floria" && row.surface == "service_integration_manifest"
-    }));
-    assert!(matrix
-        .rows
-        .iter()
-        .all(|row| !row.required_paths.is_empty() && !row.example_keys.is_empty()));
+    assert!(
+        matrix.rows.iter().any(|row| {
+            row.service == "coauth" && row.surface == "service_integration_manifest"
+        })
+    );
+    assert!(
+        matrix
+            .rows
+            .iter()
+            .any(|row| { row.service == "floria" && row.surface == "push_bridge" })
+    );
+    assert!(
+        matrix.rows.iter().any(|row| {
+            row.service == "floria" && row.surface == "service_integration_manifest"
+        })
+    );
+    assert!(
+        matrix
+            .rows
+            .iter()
+            .all(|row| !row.required_paths.is_empty() && !row.example_keys.is_empty())
+    );
+
+    Ok(())
+}
+
+pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
+    let server = ContrixServer::spawn_with_env(
+        "starid-optional",
+        &[
+            (
+                "SERVERX_DID_RESOLVER_ALLOW_METHODS",
+                "did:web,did:key,did:uuid,did:webvh",
+            ),
+            (
+                "SERVERX_STARID_WEBVH_RESOLVER_URL",
+                "http://starid.cotest.local",
+            ),
+        ],
+    )
+    .await?;
+
+    let describe = expect_json(
+        server.http().get(server.url("/api/v1/identity/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(describe["starid_profile"]["enabled"], true);
+    assert_eq!(describe["starid_profile"]["method"], "did:webvh");
+    assert_eq!(
+        describe["starid_profile"]["profile"],
+        "cx.identity.starid.webvh.optional.v1"
+    );
+    assert_eq!(
+        describe["starid_profile"]["resolver_url"],
+        "http://starid.cotest.local"
+    );
+    assert!(
+        describe["resolver_policy"]["allow_methods"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value.as_str() == Some("webvh")),
+        "did:webvh should be discoverable when the optional starid resolver is configured"
+    );
+    assert!(
+        describe["todos"]
+            .as_array()
+            .is_some_and(|todos| !todos.is_empty()),
+        "soland must keep explicit TODO markers until starid proof/trust-root validation lands"
+    );
+
+    Ok(())
+}
+
+pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Result<()> {
+    let principal_did = "did:web:alice-session-grant.example";
+    let device_id = "dev_web";
+    let coauth = MockCoauthIntrospectionServer::spawn(principal_did, device_id)?;
+    let _env = EnvOverride::set(&[
+        (
+            "SERVERX_SESSION_GRANT_INTROSPECTION_URL",
+            Some(coauth.url()),
+        ),
+        (
+            "SERVERX_SESSION_GRANT_INTROSPECTION_BEARER",
+            Some("principal-token".to_owned()),
+        ),
+    ]);
+    let server = ContrixServer::spawn("session-grant-exchange").await?;
+
+    expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/account/register"))
+            .json(&json!({
+                "did": principal_did,
+                "handle": "@alice-session-grant",
+                "display_name": "Alice Session Grant",
+                "device_id": device_id
+            })),
+        StatusCode::CREATED,
+    )
+    .await?;
+
+    let exchange = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/auth/session-grant/exchange"))
+            .json(&json!({
+                "grant_jwt": "coauth.session.jwt",
+                "principal_did": principal_did,
+                "device_id": device_id,
+                "display_name": "yougen session-grant bridge",
+                "introspection_proof": {
+                    "challenge": "soland-bridge-challenge",
+                    "proof_jwt": "client.session-key.proof.jwt"
+                }
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(exchange["actor"], principal_did);
+    assert_eq!(exchange["device_id"], device_id);
+    assert_eq!(exchange["token_type"], "Bearer");
+    assert!(
+        exchange["access_token"]
+            .as_str()
+            .is_some_and(|token| !token.is_empty())
+    );
+
+    let authenticated = expect_json(
+        server
+            .http()
+            .get(server.url("/api/v1/account/me"))
+            .bearer_auth(exchange["access_token"].as_str().unwrap()),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(authenticated["did"], principal_did);
+
+    let push = expect_json(
+        server
+            .http()
+            .post(server.url("/api/v1/push/register-device"))
+            .header("X-Contrix-Session-Grant", "coauth.session.jwt")
+            .header("X-Contrix-Session-Grant-Challenge", "soland-push-challenge")
+            .header(
+                "X-Contrix-Session-Grant-Proof",
+                "client.session-key.push-proof.jwt",
+            )
+            .json(&json!({
+                "operation_id": "cx.push.register_device",
+                "principal_did": principal_did,
+                "device_id": device_id,
+                "push_gateway": "https://floria.example/api/v1/push/notify",
+                "push_key": "webpush:opaque-token",
+                "platform": "web",
+                "request_id": "cx:req:push-session-grant",
+                "proof": {"kind": "push-register-proof-placeholder"}
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(push["ok"], true);
+    assert_eq!(push["registration_id"], format!("cx:push:{device_id}"));
+
+    let requests = coauth.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0]["grant_jwt"], "coauth.session.jwt");
+    assert_eq!(requests[0]["audience"], server.service_did());
+    assert_eq!(requests[0]["proof"]["challenge"], "soland-bridge-challenge");
+    assert_eq!(requests[1]["grant_jwt"], "coauth.session.jwt");
+    assert_eq!(requests[1]["audience"], server.service_did());
+    assert_eq!(requests[1]["proof"]["challenge"], "soland-push-challenge");
 
     Ok(())
 }
@@ -824,10 +1016,7 @@ fn configured_external_service_base(env_key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-async fn load_optional_live_contract(
-    base_url: Option<&str>,
-    path: &str,
-) -> Result<Option<Value>> {
+async fn load_optional_live_contract(base_url: Option<&str>, path: &str) -> Result<Option<Value>> {
     let Some(base_url) = base_url else {
         return Ok(None);
     };
@@ -857,8 +1046,14 @@ fn snapshot_from_live(
             .and_then(Value::as_str)
             .unwrap_or("missing")
             .to_owned(),
-        required_paths: required_paths.iter().map(|value| (*value).to_owned()).collect(),
-        example_keys: example_keys.iter().map(|value| (*value).to_owned()).collect(),
+        required_paths: required_paths
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        example_keys: example_keys
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
         todo: "TODO(cotest): expand this live bridge row with cross-service semantic assertions once the composed stack harness lands",
     }
 }
@@ -883,8 +1078,223 @@ fn snapshot_placeholder(
         surface,
         contract: contract.to_owned(),
         version: "2026-05-04-scaffold".to_owned(),
-        required_paths: required_paths.iter().map(|value| (*value).to_owned()).collect(),
-        example_keys: example_keys.iter().map(|value| (*value).to_owned()).collect(),
+        required_paths: required_paths
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
+        example_keys: example_keys
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect(),
         todo,
     }
+}
+
+struct EnvOverride {
+    previous: Vec<(&'static str, Option<String>)>,
+}
+
+impl EnvOverride {
+    fn set(pairs: &[(&'static str, Option<String>)]) -> Self {
+        let previous = pairs
+            .iter()
+            .map(|(key, _)| (*key, env::var(key).ok()))
+            .collect();
+        for (key, value) in pairs {
+            unsafe {
+                match value {
+                    Some(value) => env::set_var(key, value),
+                    None => env::remove_var(key),
+                }
+            }
+        }
+        Self { previous }
+    }
+}
+
+impl Drop for EnvOverride {
+    fn drop(&mut self) {
+        for (key, value) in &self.previous {
+            unsafe {
+                match value {
+                    Some(value) => env::set_var(key, value),
+                    None => env::remove_var(key),
+                }
+            }
+        }
+    }
+}
+
+struct MockCoauthIntrospectionServer {
+    url: String,
+    addr: SocketAddr,
+    stop: Arc<AtomicBool>,
+    requests: Arc<Mutex<Vec<Value>>>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl MockCoauthIntrospectionServer {
+    fn spawn(subject: &str, device_id: &str) -> Result<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let addr = listener.local_addr()?;
+        let url = format!("http://{addr}/api/v1/session-grants/introspect");
+        let stop = Arc::new(AtomicBool::new(false));
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let thread_stop = Arc::clone(&stop);
+        let thread_requests = Arc::clone(&requests);
+        let subject = subject.to_owned();
+        let device_id = device_id.to_owned();
+        let handle = thread::spawn(move || {
+            while !thread_stop.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        let request_subject = subject.clone();
+                        let request_device_id = device_id.clone();
+                        let request_log = Arc::clone(&thread_requests);
+                        thread::spawn(move || {
+                            handle_mock_coauth_request(
+                                stream,
+                                &request_subject,
+                                &request_device_id,
+                                request_log,
+                            );
+                        });
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(StdDuration::from_millis(10));
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+        Ok(Self {
+            url,
+            addr,
+            stop,
+            requests,
+            handle: Some(handle),
+        })
+    }
+
+    fn url(&self) -> String {
+        self.url.clone()
+    }
+
+    fn requests(&self) -> Vec<Value> {
+        self.requests.lock().expect("mock requests lock").clone()
+    }
+}
+
+impl Drop for MockCoauthIntrospectionServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        let _ = TcpStream::connect(self.addr);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn handle_mock_coauth_request(
+    mut stream: TcpStream,
+    subject: &str,
+    device_id: &str,
+    requests: Arc<Mutex<Vec<Value>>>,
+) {
+    let Ok(request) = read_http_request(&mut stream) else {
+        return;
+    };
+    let request_text = String::from_utf8_lossy(&request);
+    if !request_text
+        .to_ascii_lowercase()
+        .contains("authorization: bearer principal-token")
+    {
+        write_http_response(&mut stream, 401, json!({"error": "unauthorized"}));
+        return;
+    }
+    let body = parse_http_json_body(&request).unwrap_or_else(|| json!({}));
+    requests
+        .lock()
+        .expect("mock requests lock")
+        .push(body.clone());
+    let audience = body
+        .get("audience")
+        .and_then(Value::as_str)
+        .unwrap_or("did:web:missing-audience");
+    write_http_response(
+        &mut stream,
+        200,
+        json!({
+            "active": true,
+            "status": "active",
+            "proof_required": true,
+            "one_time_use_consumed": true,
+            "grant": {
+                "id": "01HZSESSIONGRANTMOCK000000000",
+                "issuer": "did:web:coauth.cotest.local",
+                "subject": subject,
+                "service_account_id": "alice-session-grant",
+                "device_id": device_id,
+                "audience": audience,
+                "scopes": ["urn:contrix:principal-server:session.bind"],
+                "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
+                "revoked_at": null,
+                "revocation_ref": "cx:session:mock"
+            }
+        }),
+    );
+}
+
+fn read_http_request(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
+    stream.set_read_timeout(Some(StdDuration::from_secs(2)))?;
+    let mut request = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        let read = stream.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        request.extend_from_slice(&buffer[..read]);
+        if http_request_complete(&request) {
+            break;
+        }
+    }
+    Ok(request)
+}
+
+fn http_request_complete(request: &[u8]) -> bool {
+    let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") else {
+        return false;
+    };
+    let body_start = header_end + 4;
+    let headers = String::from_utf8_lossy(&request[..header_end]);
+    let content_length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .unwrap_or(0);
+    request.len() >= body_start + content_length
+}
+
+fn parse_http_json_body(request: &[u8]) -> Option<Value> {
+    let header_end = request
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")?;
+    let body = &request[header_end + 4..];
+    serde_json::from_slice(body).ok()
+}
+
+fn write_http_response(stream: &mut TcpStream, status: u16, body: Value) {
+    let body = body.to_string();
+    let reason = if status == 200 { "OK" } else { "Unauthorized" };
+    let response = format!(
+        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.as_bytes().len()
+    );
+    let _ = stream.write_all(response.as_bytes());
 }

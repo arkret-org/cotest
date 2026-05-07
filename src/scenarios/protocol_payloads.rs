@@ -195,11 +195,10 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
                     "did:web:alice.example": {
                         "dev_alice": {
                             "type": "cx.key.verification.request",
-                            "content": {
-                                "transaction_id": "verify-sas-01",
-                                "method": "sas",
-                                "todo": "replace scaffold verification payload with signed device envelope"
-                            }
+                            "content": encrypted_envelope(
+                                "cx.key.verification.request",
+                                "base64url-opaque-verification-ciphertext"
+                            )
                         }
                     }
                 }
@@ -234,7 +233,7 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     )
     .await?;
     assert_eq!(backup_put["ok"], true);
-    assert_eq!(backup_put["state"], "scaffold");
+    assert_eq!(backup_put["state"], "stored_in_memory_scaffold");
 
     let backup_list = expect_json(
         server
@@ -244,7 +243,7 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         StatusCode::OK,
     )
     .await?;
-    assert!(backup_list["items"].as_array().unwrap().len() >= 1);
+    assert!(backup_list["backups"].as_array().unwrap().len() >= 1);
 
     let key_backups_describe = expect_json(
         server
@@ -346,18 +345,21 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_ticket_collection["total_count"], 1);
 
-    let restore_resume = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/resume"))
-            .bearer_auth(&token)
-            .json(&json!({
-                "resume_mode": "resume_from_current_state",
-                "note": "cotest scaffold resume"
-            })),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_resume =
+        expect_json(
+            server
+                .http()
+                .post(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/resume",
+                ))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "resume_mode": "resume_from_current_state",
+                    "note": "cotest scaffold resume"
+                })),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_resume["contract"],
         "contrix.rest.key_backup_restore_ticket_resume.v1"
@@ -376,20 +378,23 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         restore_ticket["contract"],
         "contrix.rest.key_backup_restore_ticket.v1"
     );
-    assert_eq!(restore_ticket["lifecycle_state"], "authz_pending");
+    assert_eq!(restore_ticket["lifecycle_state"], "resumed");
 
-    let restore_advance = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/advance"))
-            .bearer_auth(&token)
-            .json(&json!({
-                "transition": "authz_checked",
-                "note": "cotest scaffold advance"
-            })),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_advance =
+        expect_json(
+            server
+                .http()
+                .post(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/advance",
+                ))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "transition": "authz_checked",
+                    "note": "cotest scaffold advance"
+                })),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_advance["contract"],
         "contrix.rest.key_backup_restore_ticket_advance.v1"
@@ -497,28 +502,34 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_executor_complete["ticket_state"], "completed");
 
-    let restore_result = expect_json(
-        server
-            .http()
-            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/result"))
-            .bearer_auth(&token),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_result =
+        expect_json(
+            server
+                .http()
+                .get(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/result",
+                ))
+                .bearer_auth(&token),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_result["contract"],
         "contrix.rest.key_backup_restore_result.v1"
     );
     assert_eq!(restore_result["result"], "success");
 
-    let restore_receipt = expect_json(
-        server
-            .http()
-            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/receipt"))
-            .bearer_auth(&token),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_receipt =
+        expect_json(
+            server
+                .http()
+                .get(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/receipt",
+                ))
+                .bearer_auth(&token),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_receipt["contract"],
         "contrix.rest.key_backup_restore_receipt.v1"
@@ -548,14 +559,17 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     );
     assert_eq!(restore_handoff["handoff_state"], "submitted");
 
-    let restore_bundle = expect_json(
-        server
-            .http()
-            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/bundle"))
-            .bearer_auth(&token),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_bundle =
+        expect_json(
+            server
+                .http()
+                .get(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/bundle",
+                ))
+                .bearer_auth(&token),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_bundle["contract"],
         "contrix.rest.key_backup_restore_bundle.v1"
@@ -565,7 +579,9 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     let restore_activity = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/activity"))
+            .get(server.url(
+                "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/activity",
+            ))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -660,7 +676,9 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     let restore_timeline = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/timeline"))
+            .get(server.url(
+                "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/timeline",
+            ))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -673,7 +691,9 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     let restore_audit_feed = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/audit-feed"))
+            .get(server.url(
+                "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/audit-feed",
+            ))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -726,36 +746,42 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
         "contrix.rest.key_backup_restore_state_checkpoint_create.v1"
     );
 
-    let restore_retry = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/retry"))
-            .bearer_auth(&token)
-            .json(&json!({
-                "retry_mode": "reuse_backup_material",
-                "note": "cotest scaffold retry"
-            })),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_retry =
+        expect_json(
+            server
+                .http()
+                .post(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/retry",
+                ))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "retry_mode": "reuse_backup_material",
+                    "note": "cotest scaffold retry"
+                })),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_retry["contract"],
         "contrix.rest.key_backup_restore_ticket_retry.v1"
     );
     assert_eq!(restore_retry["state"], "retry_queued");
 
-    let restore_cancel = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/cancel"))
-            .bearer_auth(&token)
-            .json(&json!({
-                "reason": "operator_cancelled",
-                "note": "cotest scaffold cancel"
-            })),
-        StatusCode::OK,
-    )
-    .await?;
+    let restore_cancel =
+        expect_json(
+            server
+                .http()
+                .post(server.url(
+                    "/api/v1/keys/backups/restore-tickets/restore-ticket-backup-alice-01/cancel",
+                ))
+                .bearer_auth(&token)
+                .json(&json!({
+                    "reason": "operator_cancelled",
+                    "note": "cotest scaffold cancel"
+                })),
+            StatusCode::OK,
+        )
+        .await?;
     assert_eq!(
         restore_cancel["contract"],
         "contrix.rest.key_backup_restore_ticket_cancel.v1"

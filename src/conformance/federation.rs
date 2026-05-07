@@ -3,9 +3,7 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, bail};
 use serde_json::{Value, json};
 
-use super::{
-    FederationFixture, canonical_json, load_fixture, sha256_prefixed,
-};
+use super::{FederationFixture, canonical_json, load_fixture, sha256_prefixed};
 
 pub fn run_federation_fixture_suite() -> Result<()> {
     let fixture = load_fixture::<FederationFixture>("federation-fixture.json")?;
@@ -49,10 +47,8 @@ pub fn run_federation_fixture_suite() -> Result<()> {
             }
             "fork_quarantine" => {
                 let first = register_history_head(&mut fork_table, "cx:space:fork", "sha256:a");
-                let second =
-                    register_history_head(&mut fork_table, "cx:space:fork", "sha256:b");
-                if first != FederationVerdict::Accepted
-                    || second != FederationVerdict::Quarantined
+                let second = register_history_head(&mut fork_table, "cx:space:fork", "sha256:b");
+                if first != FederationVerdict::Accepted || second != FederationVerdict::Quarantined
                 {
                     bail!("federation fixture {} did not quarantine fork", case.name);
                 }

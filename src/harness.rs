@@ -65,17 +65,29 @@ enum SutRuntimeMode {
 
 impl ContrixServer {
     pub async fn spawn(name: &str) -> Result<Self> {
-        Self::spawn_with_network(name, None).await
+        Self::spawn_with_env(name, &[]).await
+    }
+
+    pub async fn spawn_with_env(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
+        Self::spawn_with_network_and_env(name, None, extra_env).await
     }
 
     async fn spawn_with_network(name: &str, docker_network: Option<&str>) -> Result<Self> {
+        Self::spawn_with_network_and_env(name, docker_network, &[]).await
+    }
+
+    async fn spawn_with_network_and_env(
+        name: &str,
+        docker_network: Option<&str>,
+        extra_env: &[(&str, &str)],
+    ) -> Result<Self> {
         match sut_runtime_mode() {
-            SutRuntimeMode::Process => Self::spawn_process(name).await,
-            SutRuntimeMode::Docker => Self::spawn_docker(name, docker_network).await,
+            SutRuntimeMode::Process => Self::spawn_process(name, extra_env).await,
+            SutRuntimeMode::Docker => Self::spawn_docker(name, docker_network, extra_env).await,
         }
     }
 
-    async fn spawn_process(name: &str) -> Result<Self> {
+    async fn spawn_process(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
         let port = free_port()?;
         let bind = format!("127.0.0.1:{port}");
         let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
@@ -88,7 +100,8 @@ impl ContrixServer {
         fs::create_dir_all(&blob_root)?;
         let (stdout, stderr) = service_log_stdio(log_path.as_deref())?;
 
-        let mut child = Command::new("cargo")
+        let mut command = Command::new("cargo");
+        command
             .arg("run")
             .arg("--quiet")
             .arg("--manifest-path")
@@ -102,7 +115,11 @@ impl ContrixServer {
             .env("SERVERX_DEVELOPMENT_MODE", "1")
             .env("SERVERX_BLOB_ROOT", &blob_root)
             .stdout(stdout)
-            .stderr(stderr)
+            .stderr(stderr);
+        for &(key, value) in extra_env {
+            command.env(key, value);
+        }
+        let mut child = command
             .spawn()
             .with_context(|| format!("failed to start SUT from {}", manifest.display()))?;
 
@@ -121,7 +138,11 @@ impl ContrixServer {
         })
     }
 
-    async fn spawn_docker(name: &str, docker_network: Option<&str>) -> Result<Self> {
+    async fn spawn_docker(
+        name: &str,
+        docker_network: Option<&str>,
+        extra_env: &[(&str, &str)],
+    ) -> Result<Self> {
         let host_port = free_port()?;
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
@@ -165,8 +186,11 @@ impl ContrixServer {
             .arg("--env")
             .arg("SERVERX_DEVELOPMENT_MODE=1")
             .arg("--env")
-            .arg("SERVERX_BLOB_ROOT=/tmp/soland-blobs")
-            .arg(&image);
+            .arg("SERVERX_BLOB_ROOT=/tmp/soland-blobs");
+        for &(key, value) in extra_env {
+            command.arg("--env").arg(format!("{key}={value}"));
+        }
+        command.arg(&image);
 
         run_command(
             &mut command,
@@ -709,7 +733,12 @@ fn sut_manifest() -> PathBuf {
     std::env::var_os("COTEST_SUT_MANIFEST")
         .or_else(|| std::env::var_os("SERVERX_MANIFEST"))
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"E:\Works\contrix-dev\soland\Cargo.toml"))
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("soland")
+                .join("Cargo.toml")
+        })
 }
 
 fn sut_runtime_mode() -> SutRuntimeMode {

@@ -2,11 +2,11 @@
 param(
     [ValidateSet("process", "docker")]
     [string]$Runtime = "process",
-    [string]$SutManifest = "E:\Works\contrix-dev\soland\Cargo.toml",
+    [string]$SutManifest,
     [string]$SutImage = "cotest-soland:latest",
     [string]$OutputRoot,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "full-nightly")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly")]
     [string]$Profile = "all",
     [string[]]$RequiredCoverageProfiles = @(),
     [string]$CoverageBaselinePath,
@@ -146,10 +146,37 @@ function Invoke-CargoTestInvocation {
     )
 
     $header = "=== cotest invocation: $Label ==="
-    $header | Tee-Object -FilePath $RawLog -Append | ForEach-Object { Write-Host $_ }
+    $header | Add-Content -Path $RawLog -Encoding UTF8
+    Write-Host $header
     Write-Host ("Running cargo {0}" -f ($CargoArgs -join " "))
-    & cargo @CargoArgs 2>&1 | Tee-Object -FilePath $RawLog -Append | ForEach-Object { Write-Host $_ }
-    return $LASTEXITCODE
+
+    $safeLabel = ($Label -replace '[^A-Za-z0-9_.-]', '_')
+    $stdoutPath = Join-Path ([System.IO.Path]::GetDirectoryName($RawLog)) "cargo-$safeLabel.stdout.log"
+    $stderrPath = Join-Path ([System.IO.Path]::GetDirectoryName($RawLog)) "cargo-$safeLabel.stderr.log"
+    try {
+        $process = Start-Process `
+            -FilePath "cargo" `
+            -ArgumentList $CargoArgs `
+            -NoNewWindow `
+            -Wait `
+            -PassThru `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath
+
+        foreach ($path in @($stderrPath, $stdoutPath)) {
+            if (-not (Test-Path $path)) {
+                continue
+            }
+            foreach ($line in Get-Content $path) {
+                $line | Add-Content -Path $RawLog -Encoding UTF8
+                Write-Host $line
+            }
+        }
+        return $process.ExitCode
+    }
+    finally {
+        Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+    }
 }
 
 function Parse-CotestLog {
@@ -211,6 +238,7 @@ function New-SummaryMarkdown {
     $lines.Add("- metadata: $($Summary.metadata_path)")
     $lines.Add("- coverage_matrix: $($Summary.coverage_matrix_path)")
     $lines.Add("- coverage_gate: $($Summary.coverage_gate_path) ($($Summary.coverage_gate_status))")
+    $lines.Add("- release_gate: $($Summary.release_gate_path) ($($Summary.release_gate_status))")
     $lines.Add("- unresolved_gaps: $($Summary.unresolved_gaps_path)")
     $lines.Add("- ci_profile: $($Summary.ci_profile_path)")
     $lines.Add("- secret_scan: $($Summary.secret_scan_path) ($($Summary.secret_scan_status))")
@@ -293,6 +321,7 @@ function New-SummaryHtml {
     <p>junit xml: <code>$(ConvertTo-HtmlSafe $Summary.junit_xml)</code></p>
     <p>coverage matrix: <code>$(ConvertTo-HtmlSafe $Summary.coverage_matrix_path)</code></p>
     <p>coverage gate: <code>$(ConvertTo-HtmlSafe $Summary.coverage_gate_path)</code> ($(ConvertTo-HtmlSafe $Summary.coverage_gate_status))</p>
+    <p>release gate: <code>$(ConvertTo-HtmlSafe $Summary.release_gate_path)</code> ($(ConvertTo-HtmlSafe $Summary.release_gate_status))</p>
     <p>unresolved gaps: <code>$(ConvertTo-HtmlSafe $Summary.unresolved_gaps_path)</code></p>
     <p>ci profile: <code>$(ConvertTo-HtmlSafe $Summary.ci_profile_path)</code></p>
     <p>secret scan: <code>$(ConvertTo-HtmlSafe $Summary.secret_scan_path)</code> ($(ConvertTo-HtmlSafe $Summary.secret_scan_status))</p>
@@ -402,7 +431,8 @@ function Get-SutMetadata {
     if ($LASTEXITCODE -eq 0) {
         $imageId = (& docker image inspect $SutImage --format "{{.Id}}" 2>$null).Trim()
     }
-    $localSolandRoot = "E:\Works\contrix-dev\soland"
+    $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+    $localSolandRoot = Join-Path $workspaceRoot "soland"
     return [pscustomobject]@{
         runtime           = "docker"
         image             = $SutImage
@@ -415,8 +445,9 @@ function Get-SutMetadata {
 function Get-SpecMetadata {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
-    $specRoot = "E:\Works\contrix-dev\contrix-spec"
-    $artifactRoot = Join-Path $specRoot "artifacts"
+    $workspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+    $specRoot = Join-Path $workspaceRoot "contrix-spec"
+    $artifactRoot = Join-Path $specRoot "spec\v1\artifacts"
     $fixtureRoot = Join-Path $artifactRoot "fixtures"
     return [pscustomobject]@{
         spec_root            = $specRoot
@@ -613,6 +644,174 @@ function New-CoverageGateMarkdown {
     return ($lines -join [Environment]::NewLine)
 }
 
+function Get-RequiredTestStatuses {
+    param(
+        [Parameter(Mandatory = $true)]$Tests,
+        [string[]]$RequiredTests = @()
+    )
+
+    $statuses = New-Object System.Collections.Generic.List[object]
+    foreach ($name in $RequiredTests) {
+        $matches = @($Tests | Where-Object { $_.name -eq $name })
+        $status = "missing"
+        if (@($matches | Where-Object { $_.status -eq "passed" }).Count -gt 0) {
+            $status = "passed"
+        } elseif (@($matches | Where-Object { $_.status -eq "failed" }).Count -gt 0) {
+            $status = "failed"
+        } elseif (@($matches | Where-Object { $_.status -eq "ignored" }).Count -gt 0) {
+            $status = "ignored"
+        }
+        $statuses.Add([pscustomobject]@{
+                name   = $name
+                status = $status
+            })
+    }
+    return @($statuses.ToArray())
+}
+
+function New-ReleaseGateCheck {
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][string]$Description,
+        [Parameter(Mandatory = $true)]$Tests,
+        [string[]]$RequiredTests = @(),
+        [bool]$AdditionalGatePassed = $true,
+        [AllowNull()][string]$AdditionalGateReason
+    )
+
+    $testStatuses = @(Get-RequiredTestStatuses -Tests $Tests -RequiredTests $RequiredTests)
+    $missingOrFailed = @($testStatuses | Where-Object { $_.status -ne "passed" })
+    $status = if ($missingOrFailed.Count -eq 0 -and $AdditionalGatePassed) { "passed" } else { "failed" }
+    $reason = if ($status -eq "passed") {
+        $null
+    } elseif ($missingOrFailed.Count -gt 0) {
+        "required_tests_not_passed"
+    } else {
+        $AdditionalGateReason
+    }
+
+    [pscustomobject]@{
+        id             = $Id
+        description    = $Description
+        status         = $status
+        reason         = $reason
+        required_tests = $testStatuses
+    }
+}
+
+function New-ReleaseGate {
+    param(
+        [Parameter(Mandatory = $true)][string]$Profile,
+        [Parameter(Mandatory = $true)]$Tests,
+        [Parameter(Mandatory = $true)]$CoverageGate,
+        [Parameter(Mandatory = $true)]$SecretScan,
+        [Parameter(Mandatory = $true)]$SpecSyncGate
+    )
+
+    if ($Profile -ne "release-gate") {
+        return [pscustomobject]@{
+            generated_at = (Get-Date).ToString("o")
+            profile      = $Profile
+            status       = "not_evaluated"
+            checks       = @()
+        }
+    }
+
+    $checks = New-Object System.Collections.Generic.List[object]
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "profile_conformance" `
+                -Description "Core fixture conformance, spec sync, and coverage-regression gate." `
+                -Tests $Tests `
+                -RequiredTests @(
+                    "artifact_registry_suite_matches_reference_semantics",
+                    "event_envelope_fixture_suite_matches_reference_semantics",
+                    "capability_fixture_suite_matches_reference_semantics",
+                    "state_resolution_fixture_suite_matches_reference_semantics",
+                    "sync_fixture_suite_matches_reference_semantics"
+                ) `
+                -AdditionalGatePassed ($CoverageGate.status -ne "failed" -and $SpecSyncGate.status -eq "passed") `
+                -AdditionalGateReason "coverage_or_spec_sync_failed"))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "privacy_boundary" `
+                -Description "Privacy fixture boundary checks, including ciphertext-only forwarding and plaintext denial." `
+                -Tests $Tests `
+                -RequiredTests @("privacy_security_fixture_suite_matches_reference_semantics")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "anti_enumeration" `
+                -Description "Indistinguishable missing/private lookup behavior from the privacy fixture suite." `
+                -Tests $Tests `
+                -RequiredTests @("privacy_security_fixture_suite_matches_reference_semantics")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "push_wakeup" `
+                -Description "Blind wakeup minimization and live push rejection/privacy edges." `
+                -Tests $Tests `
+                -RequiredTests @(
+                    "privacy_security_fixture_suite_matches_reference_semantics",
+                    "push_and_moderation_edges_are_enforced"
+                )))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "recovery_restore_surface" `
+                -Description "Key backup, restore-ticket lifecycle, recovery discovery, and stack-bundle surfaces stay coherent." `
+                -Tests $Tests `
+                -RequiredTests @("repo_keys_device_blob_push_and_moderation_surfaces_work")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "device_session_revoke" `
+                -Description "Logout revokes the bound session/device path and rejects further bearer use." `
+                -Tests $Tests `
+                -RequiredTests @("account_auth_and_session_edges_are_enforced")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "federation_replay" `
+                -Description "Federation replay, invalid semantic, and redaction contract checks." `
+                -Tests $Tests `
+                -RequiredTests @("federation_replay_snapshot_and_redaction_contracts_work")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "session_grant_bridge" `
+                -Description "coauth-style introspection backs soland session grant exchange and push registration." `
+                -Tests $Tests `
+                -RequiredTests @("session_grant_exchange_uses_configured_coauth_introspection")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "did_resolver_starid_optional" `
+                -Description "soland advertises the optional starid did:webvh resolver profile through identity discovery." `
+                -Tests $Tests `
+                -RequiredTests @("starid_optional_resolver_profile_is_discoverable")))
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "secret_redaction" `
+                -Description "Run logs, transcripts, and service logs do not contain unredacted secret-shaped fields." `
+                -Tests $Tests `
+                -RequiredTests @() `
+                -AdditionalGatePassed ($SecretScan.status -eq "passed") `
+                -AdditionalGateReason "secret_scan_failed"))
+
+    $failedChecks = @($checks | Where-Object { $_.status -ne "passed" })
+    [pscustomobject]@{
+        generated_at = (Get-Date).ToString("o")
+        profile      = $Profile
+        status       = if ($failedChecks.Count -eq 0) { "passed" } else { "failed" }
+        checks       = @($checks.ToArray())
+    }
+}
+
+function New-ReleaseGateMarkdown {
+    param([Parameter(Mandatory = $true)]$Gate)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# release gate")
+    $lines.Add("")
+    $lines.Add("- status: $($Gate.status)")
+    $lines.Add("- profile: $($Gate.profile)")
+    $lines.Add("- generated_at: $($Gate.generated_at)")
+    $lines.Add("")
+    $lines.Add("| Check | Status | Reason | Required tests |")
+    $lines.Add("| --- | --- | --- | --- |")
+    foreach ($check in $Gate.checks) {
+        $required = @($check.required_tests | ForEach-Object { "$($_.name):$($_.status)" })
+        $requiredText = if ($required.Count -gt 0) { $required -join "<br>" } else { "-" }
+        $reason = if ($check.reason) { $check.reason } else { "-" }
+        $lines.Add("| $($check.id) | $($check.status) | $reason | $requiredText |")
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
 function ConvertTo-SecretPreview {
     param([Parameter(Mandatory = $true)][string]$Line)
 
@@ -738,15 +937,18 @@ function Get-UnresolvedTodoItems {
                 })
         }
     }
-    return $items
+    return @($items.ToArray())
 }
 
 function New-UnresolvedMarkdown {
-    param([Parameter(Mandatory = $true)]$Items)
+    param([AllowNull()]$Items)
 
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("# unresolved spec gaps and pending work")
     $lines.Add("")
+    if ($null -eq $Items) {
+        $Items = @()
+    }
     if ($Items.Count -eq 0) {
         $lines.Add("All tracked tasks are complete.")
         return ($lines -join [Environment]::NewLine)
@@ -934,7 +1136,7 @@ function Test-SpecArtifactSync {
         [string]$PythonExe = "python"
     )
 
-    $pipelineScript = Join-Path $SpecRoot "tools" "artifact_pipeline.py"
+    $pipelineScript = Join-Path (Join-Path $SpecRoot "tools") "artifact_pipeline.py"
     if (-not (Test-Path $pipelineScript)) {
         return [pscustomobject]@{
             status = "skipped"
@@ -1040,7 +1242,7 @@ function New-SpecSyncGateMarkdown {
     $lines.Add("### Artifact Pipeline")
     $lines.Add("")
     $lines.Add("- status: $($ArtifactSync.status)")
-    if ($ArtifactSync.reason) {
+    if (($ArtifactSync.PSObject.Properties.Name -contains "reason") -and $ArtifactSync.reason) {
         $lines.Add("- reason: $($ArtifactSync.reason)")
     }
     if ($ArtifactSync.errors.Count -gt 0) {
@@ -1076,6 +1278,9 @@ function New-SpecSyncGateMarkdown {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+if (-not $SutManifest) {
+    $SutManifest = Join-Path ((Resolve-Path (Join-Path $repoRoot "..")).Path) "soland\Cargo.toml"
+}
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
@@ -1098,6 +1303,8 @@ $coverageJson = Join-Path $runDir "coverage-matrix.json"
 $coverageMd = Join-Path $runDir "coverage-matrix.md"
 $coverageGateJson = Join-Path $runDir "coverage-gate.json"
 $coverageGateMd = Join-Path $runDir "coverage-gate.md"
+$releaseGateJson = Join-Path $runDir "release-gate.json"
+$releaseGateMd = Join-Path $runDir "release-gate.md"
 $gapsJson = Join-Path $runDir "unresolved-gaps.json"
 $gapsMd = Join-Path $runDir "unresolved-gaps.md"
 $ciProfileJson = Join-Path $runDir "ci-profile.json"
@@ -1203,7 +1410,7 @@ if ($FailOnCoverageRegression -and $coverageGate.status -eq "failed") {
     $exitCode = 1
 }
 $unresolved = Get-UnresolvedTodoItems -TodoPath (Join-Path $repoRoot "_todos.md")
-$specArtifactsRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "contrix-spec" | Join-Path -ChildPath "artifacts"
+$specArtifactsRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "contrix-spec" | Join-Path -ChildPath "spec\v1\artifacts"
 if (-not (Test-Path $specArtifactsRoot)) {
     $specArtifactsRoot = $null
 }
@@ -1216,9 +1423,11 @@ if ($specArtifactsRoot -and (Test-Path (Join-Path $repoRoot "config/coverage-pro
 $specRoot = Join-Path $repoRoot ".." | Join-Path -ChildPath "contrix-spec"
 $specSyncResult = Test-SpecArtifactSync -SpecRoot $specRoot
 $sutDescribeAlignment = [pscustomobject]@{
-    status = "skipped"
-    reason = "no SUT base URL configured"
-    drifts = @()
+    status               = "skipped"
+    reason               = "no SUT base URL configured"
+    server_describe      = $false
+    integration_describe = $false
+    drifts               = @()
 }
 # SUT describe alignment only when running against a live SUT with base URL
 if ($env:COTEST_SUT_BASE_URL) {
@@ -1265,6 +1474,15 @@ $secretScan = [pscustomobject]@{
 if (-not $AllowSecretLeaks -and $secretScan.status -eq "failed") {
     $exitCode = 1
 }
+$releaseGate = New-ReleaseGate `
+    -Profile $Profile `
+    -Tests $tests `
+    -CoverageGate $coverageGate `
+    -SecretScan $secretScan `
+    -SpecSyncGate $specSyncGate
+if ($Profile -eq "release-gate" -and $releaseGate.status -eq "failed") {
+    $exitCode = 1
+}
 
 $summary = [pscustomobject]@{
     status               = if ($exitCode -eq 0) { "success" } else { "failure" }
@@ -1286,6 +1504,8 @@ $summary = [pscustomobject]@{
     coverage_matrix_path = $coverageJson
     coverage_gate_path   = $coverageGateJson
     coverage_gate_status = $coverageGate.status
+    release_gate_path    = $releaseGateJson
+    release_gate_status  = $releaseGate.status
     unresolved_gaps_path = $gapsJson
     ci_profile_path      = $ciProfileJson
     secret_scan_path     = $secretScanJson
@@ -1298,8 +1518,9 @@ $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UT
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $metadataJson -Encoding UTF8
 $coverage | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageJson -Encoding UTF8
 $coverageGate | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageGateJson -Encoding UTF8
-$unresolved | ConvertTo-Json -Depth 6 | Set-Content -Path $gapsJson -Encoding UTF8
-$registryGaps | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $runDir "registry-gaps.json") -Encoding UTF8
+$releaseGate | ConvertTo-Json -Depth 8 | Set-Content -Path $releaseGateJson -Encoding UTF8
+ConvertTo-Json -InputObject @($unresolved) -Depth 6 | Set-Content -Path $gapsJson -Encoding UTF8
+ConvertTo-Json -InputObject @($registryGaps) -Depth 6 | Set-Content -Path (Join-Path $runDir "registry-gaps.json") -Encoding UTF8
 $profileReport | ConvertTo-Json -Depth 8 | Set-Content -Path $ciProfileJson -Encoding UTF8
 $secretScan | ConvertTo-Json -Depth 8 | Set-Content -Path $secretScanJson -Encoding UTF8
 
@@ -1323,6 +1544,9 @@ $coverageMarkdown | Set-Content -Path $coverageMd -Encoding UTF8
 
 $coverageGateMarkdown = New-CoverageGateMarkdown -Gate $coverageGate
 $coverageGateMarkdown | Set-Content -Path $coverageGateMd -Encoding UTF8
+
+$releaseGateMarkdown = New-ReleaseGateMarkdown -Gate $releaseGate
+$releaseGateMarkdown | Set-Content -Path $releaseGateMd -Encoding UTF8
 
 $gapsMarkdown = New-UnresolvedMarkdown -Items $unresolved
 if ($registryGaps.Count -gt 0) {
@@ -1349,6 +1573,8 @@ $artifactFiles = @(
     $coverageMd,
     $coverageGateJson,
     $coverageGateMd,
+    $releaseGateJson,
+    $releaseGateMd,
     $gapsJson,
     $gapsMd,
     (Join-Path $runDir "registry-gaps.json"),
@@ -1387,6 +1613,7 @@ Write-Host "  junit    : $junitXml"
 Write-Host "  html     : $summaryHtml"
 Write-Host "  coverage : $coverageMd"
 Write-Host "  gate     : $coverageGateMd"
+Write-Host "  release  : $releaseGateMd"
 Write-Host "  gaps     : $gapsMd"
 Write-Host "  ci       : $ciProfileMd"
 Write-Host "  secrets  : $secretScanMd"

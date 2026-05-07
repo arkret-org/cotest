@@ -86,7 +86,7 @@ without making users reconstruct the run from terminal scrollback.
 In addition to runtime results, `cotest` now has an offline fixture-driven
 conformance surface in [src/conformance.rs](/E:/Works/contrix-dev/cotest/src/conformance.rs:1),
 which consumes the spec-owned machine-readable artifacts under
-`contrix-spec/artifacts`: schemas, registries, profiles, OpenAPI, non-HTTP
+`contrix-spec/spec/v1/artifacts`: schemas, registries, profiles, OpenAPI, non-HTTP
 bindings, and fixtures. Complement does not need this exact layer because
 Matrix homeserver behavior is mostly expressed directly through networked
 black-box tests; Contrix benefits from keeping protocol vectors and server
