@@ -60,7 +60,7 @@
     },
     {
       "profile_id": "release-gate",
-      "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, and session-grant bridge checks.",
+      "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, session-grant bridge checks, plus Phase 4/5 wire-model fixtures (host endorsement, host transfer, holder consent).",
       "include_all_tests": false,
       "cargo_filters": [
         "artifact_registry_suite_matches_reference_semantics",
@@ -69,6 +69,11 @@
         "state_resolution_fixture_suite_matches_reference_semantics",
         "sync_fixture_suite_matches_reference_semantics",
         "privacy_security_fixture_suite_matches_reference_semantics",
+        "host_endorsement_fixture_suite_matches_reference_semantics",
+        "host_transfer_fixture_suite_matches_reference_semantics",
+        "consent_fixture_suite_matches_reference_semantics",
+        "composite_state_subject_fixture_suite_matches_reference_semantics",
+        "mimi_components_fixture_suite_matches_reference_semantics",
         "repo_keys_device_blob_push_and_moderation_surfaces_work",
         "push_and_moderation_edges_are_enforced",
         "account_auth_and_session_edges_are_enforced",

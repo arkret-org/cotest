@@ -69,3 +69,28 @@ fn federation_fixture_suite_matches_reference_semantics() -> Result<()> {
 fn privacy_security_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_privacy_security_fixture_suite()
 }
+
+#[test]
+fn host_endorsement_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_host_endorsement_fixture_suite()
+}
+
+#[test]
+fn host_transfer_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_host_transfer_fixture_suite()
+}
+
+#[test]
+fn consent_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_consent_fixture_suite()
+}
+
+#[test]
+fn composite_state_subject_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_composite_state_subject_fixture_suite()
+}
+
+#[test]
+fn mimi_components_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_mimi_components_fixture_suite()
+}

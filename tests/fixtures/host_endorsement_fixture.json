@@ -1,0 +1,141 @@
+{
+  "profile": "cx.profile.host_endorsement_vectors.v1",
+  "version": "2026-05-07",
+  "comment": "Phase 4 Hub Writer Model conformance vectors. Each vector models a single submitted state event in either a hub or peer_mesh Space. Cotest does not run a reducer; it asserts structural consistency between the input and the declared outcome (e.g. a `proof_missing` reject must correspond to an input lacking a `host_endorsement` proof, while an accepted hub-Space state event must carry exactly one such proof whose host_did matches the Space's currently accepted space_host).",
+  "vectors": [
+    {
+      "name": "hub_space_durable_state_with_endorsement_accepts",
+      "comment": "Happy path: hub Space, durable state event, valid host_endorsement proof from the accepted space_host.",
+      "space": {
+        "space_id": "cx:space:01js0sp0000000000000000000",
+        "space_writer_model": "hub",
+        "space_host": "did:web:host.example",
+        "activation_frontier": null,
+        "standby_hosts": []
+      },
+      "event": {
+        "kind": "cx.space.policy",
+        "actor_id": "did:web:admin.example",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "verification_method": "did:web:host.example#sign", "host_did": "did:web:host.example", "endorsed_at": "2026-05-07T12:00:00Z" }
+        ]
+      },
+      "expected": { "outcome": "accept" }
+    },
+    {
+      "name": "hub_space_durable_state_missing_endorsement_rejects",
+      "comment": "Hub Space rejects durable state without host endorsement.",
+      "space": {
+        "space_id": "cx:space:01js0sp0000000000000000000",
+        "space_writer_model": "hub",
+        "space_host": "did:web:host.example"
+      },
+      "event": {
+        "kind": "cx.space.policy",
+        "actor_id": "did:web:admin.example",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "proof_missing" }
+    },
+    {
+      "name": "hub_space_endorsement_wrong_host_rejects",
+      "comment": "Endorsement signed by a DID that is not the accepted space_host.",
+      "space": {
+        "space_id": "cx:space:01js0sp0000000000000000000",
+        "space_writer_model": "hub",
+        "space_host": "did:web:host.example"
+      },
+      "event": {
+        "kind": "cx.space.policy",
+        "actor_id": "did:web:admin.example",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "verification_method": "did:web:rogue.example#sign", "host_did": "did:web:rogue.example", "endorsed_at": "2026-05-07T12:00:00Z" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "host_mismatch" }
+    },
+    {
+      "name": "peer_mesh_space_endorsement_present_rejects",
+      "comment": "peer_mesh Space MUST NOT carry host endorsements (writer_model_constraint).",
+      "space": {
+        "space_id": "cx:space:01js0pm0000000000000000000",
+        "space_writer_model": "peer_mesh",
+        "space_host": null
+      },
+      "event": {
+        "kind": "cx.space.policy",
+        "actor_id": "did:web:admin.example",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "verification_method": "did:web:any.example#sign", "host_did": "did:web:any.example", "endorsed_at": "2026-05-07T12:00:00Z" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "hub_space_post_activation_old_host_endorsement_rejects",
+      "comment": "After a host transfer's activation_frontier, endorsements signed by the old host MUST be rejected; only the new host's endorsement is valid.",
+      "space": {
+        "space_id": "cx:space:01js0sp0000000000000000000",
+        "space_writer_model": "hub",
+        "space_host": "did:web:new-host.example",
+        "previous_host": "did:web:old-host.example",
+        "activation_frontier": "cx:event:01js0xf0000000000000000000"
+      },
+      "event": {
+        "kind": "cx.space.policy",
+        "actor_id": "did:web:admin.example",
+        "depends_on_frontier": "cx:event:01js0xf0000000000000000000",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "verification_method": "did:web:old-host.example#sign", "host_did": "did:web:old-host.example", "endorsed_at": "2026-05-07T12:00:00Z" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "host_mismatch" }
+    },
+    {
+      "name": "hub_space_double_host_endorsement_same_slot_quarantines",
+      "comment": "Diagnostic for §9.5: in a hub Space the host is the single ordering authority, so two distinct accepted endorsements on the same state slot at the same HLC indicate a host fault. The reducer quarantines the entire slot until host status is clarified.",
+      "space": {
+        "space_id": "cx:space:01js0sp0000000000000000000",
+        "space_writer_model": "hub",
+        "space_host": "did:web:host.example"
+      },
+      "state_slot": { "kind": "cx.space.policy", "space_id": "cx:space:01js0sp0000000000000000000" },
+      "candidates": [
+        {
+          "event_id": "cx:event:01js0p10000000000000000000",
+          "kind": "cx.space.policy",
+          "actor_id": "did:web:admin-a.example",
+          "hlc": "01970e589d21-0001-a13f9c2e",
+          "proofs": [
+            { "kind": "detached_jws", "verification_method": "did:web:admin-a.example#sign" },
+            { "kind": "host_endorsement", "verification_method": "did:web:host.example#sign", "host_did": "did:web:host.example", "endorsed_at": "2026-05-07T12:00:00Z" }
+          ]
+        },
+        {
+          "event_id": "cx:event:01js0p20000000000000000000",
+          "kind": "cx.space.policy",
+          "actor_id": "did:web:admin-b.example",
+          "hlc": "01970e589d21-0001-a13f9c2e",
+          "proofs": [
+            { "kind": "detached_jws", "verification_method": "did:web:admin-b.example#sign" },
+            { "kind": "host_endorsement", "verification_method": "did:web:host.example#sign", "host_did": "did:web:host.example", "endorsed_at": "2026-05-07T12:00:01Z" }
+          ]
+        }
+      ],
+      "expected": {
+        "outcome": "quarantine_slot",
+        "reason_code": "host_fork_diagnostic",
+        "quarantined": [
+          "cx:event:01js0p10000000000000000000",
+          "cx:event:01js0p20000000000000000000"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "profile": "cx.profile.mimi_components_vectors.v1",
+  "version": "2026-05-07",
+  "comment": "MIMI <-> Contrix policy-component round-trip vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 (component_type translation) + §9.2 (criticality translation). Each vector either declares a bidirectional mapping or marks a Contrix-only component that the facade must emit as application/vnd.contrix.component+json with appropriate MIMI unknown-handling. Round-trip means: (a) a Contrix component_type emitted to MIMI must round-trip back to the same component_type when ingested; (b) criticality preserved on both legs.",
+  "criticality_mapping": {
+    "comment": "Spec §9.2: Contrix criticality enum and the corresponding MIMI policy-component unknown-handling field.",
+    "vectors": [
+      { "contrix": "required", "mimi_unknown_handling": "must_understand", "round_trip": true },
+      { "contrix": "optional", "mimi_unknown_handling": "should_understand", "round_trip": true },
+      { "contrix": "ignore",   "mimi_unknown_handling": "silently_drop",    "round_trip": true }
+    ]
+  },
+  "component_mapping": {
+    "comment": "Selected entries from §9.1. `direction` values: bidirectional (round-trip-safe), contrix_only (facade emits private extension, no inverse), mimi_only (Contrix has no native form, MIMI ingestion only).",
+    "vectors": [
+      { "contrix_component_type": "cx.component.space.join_rule.v1",            "contrix_kind": "cx.space.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
+      { "contrix_component_type": "cx.component.space.history_visibility.v1",   "contrix_kind": "cx.space.history_visibility",   "mimi_path": "history_sharing.visibility",                "direction": "bidirectional" },
+      { "contrix_component_type": "cx.component.space.discovery.v1",            "contrix_kind": "cx.space.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
+      { "contrix_component_type": "cx.component.space.history_sharing_policy.v1","contrix_kind": "cx.space.history_sharing_policy","mimi_path": "history_sharing",                          "direction": "bidirectional" },
+      { "contrix_component_type": "cx.component.space.asset_privacy_policy.v1", "contrix_kind": "cx.space.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
+      { "contrix_component_type": "cx.component.space.moderation_policy.v1",    "contrix_kind": "cx.space.moderation_policy",    "mimi_path": "logging.abuse_report",                      "direction": "bidirectional", "mimi_extension": "moderation" },
+      { "contrix_component_type": "cx.component.space.policy_components.v1",    "contrix_kind": "cx.space.policy_components",    "mimi_path": "policy_components",                          "direction": "bidirectional" },
+      { "contrix_component_type": "cx.component.space.policy.v1",               "contrix_kind": "cx.space.policy",               "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
+      { "contrix_component_type": "cx.component.space.policy_server.v1",        "contrix_kind": "cx.space.policy_server",        "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
+      { "contrix_component_type": "cx.component.space.plaintext_visible_services.v1", "contrix_kind": "cx.space.plaintext_visible_services", "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
+      { "contrix_component_type": "cx.component.space.media_service.v1",        "contrix_kind": "cx.space.media_service",        "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
+      { "contrix_component_type": "cx.component.space.schema.v1",               "contrix_kind": "cx.space.schema",               "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
+      { "contrix_component_type": "cx.component.space.inheritance_policy.v1",   "contrix_kind": "cx.space.inheritance_policy",   "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json" },
+      { "contrix_component_type": "cx.component.space.host.v1",                 "contrix_kind": "cx.space.host",                 "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json", "comment": "Hub Writer Model is Contrix-specific; MIMI hub provider concept is adjacent but not equivalent." },
+      { "contrix_component_type": "cx.component.space.host.transfer.v1",        "contrix_kind": "cx.space.host.transfer",        "direction": "contrix_only", "facade_media_type": "application/vnd.contrix.component+json", "comment": "Hub transfer ceremony is Contrix-specific; record as audit metadata only." }
+    ]
+  }
+}

@@ -8,6 +8,7 @@ mod registry;
 mod schema_validation;
 mod state_resolution;
 mod sync;
+mod wire_model;
 
 use std::{
     collections::BTreeMap,
@@ -39,6 +40,11 @@ pub use registry::run_artifact_registry_suite;
 pub use schema_validation::run_schema_validation_suite;
 pub use state_resolution::run_state_resolution_fixture_suite;
 pub use sync::run_sync_fixture_suite;
+pub use wire_model::run_composite_state_subject_fixture_suite;
+pub use wire_model::run_consent_fixture_suite;
+pub use wire_model::run_host_endorsement_fixture_suite;
+pub use wire_model::run_host_transfer_fixture_suite;
+pub use wire_model::run_mimi_components_fixture_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
 

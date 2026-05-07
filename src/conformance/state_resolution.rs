@@ -129,6 +129,42 @@ fn run_state_resolution_artifact_suite(value: &Value) -> Result<()> {
     for vector in vectors {
         let name = required_str(vector, "name")?;
         if let Some(candidates) = vector.get("candidates").and_then(Value::as_array) {
+            // Phase 1 wire model: state-event resolution vectors declare a
+            // `state_slot` descriptor (envelope-level `state_key` was removed).
+            // When present, every candidate's kind must match the slot's kind
+            // so the reducer is operating on a single slot. Content-event
+            // resolution vectors (e.g. `cx.flow.move`) do not need a slot
+            // descriptor.
+            if let Some(slot) = vector.get("state_slot").and_then(Value::as_object) {
+                let slot_kind = slot
+                    .get("kind")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("state vector {name} state_slot missing kind"))?;
+                for candidate in candidates {
+                    let candidate_kind = required_str(candidate, "kind")?;
+                    if candidate_kind != slot_kind {
+                        bail!(
+                            "state vector {name} candidate kind {candidate_kind} does not match slot kind {slot_kind}"
+                        );
+                    }
+                }
+            } else {
+                // Without a state_slot, every candidate must still agree on
+                // kind (resolution is meaningless across different kinds).
+                let mut kind_iter = candidates
+                    .iter()
+                    .filter_map(|c| c.get("kind").and_then(Value::as_str));
+                if let Some(first_kind) = kind_iter.next() {
+                    for next in kind_iter {
+                        if next != first_kind {
+                            bail!(
+                                "state vector {name} mixes kinds {first_kind} and {next} without a state_slot descriptor"
+                            );
+                        }
+                    }
+                }
+            }
+
             let expected = vector
                 .pointer("/expected/winner_event_id")
                 .and_then(Value::as_str)

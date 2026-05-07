@@ -28,7 +28,7 @@ pub fn run_artifact_registry_suite() -> Result<()> {
         &schema_registry,
         registry_manifest_entry(&registry_entries, "registry/schema-registry.json")?,
     )?;
-    let event_kinds = validate_event_kind_registry(
+    let (event_kinds, component_types) = validate_event_kind_registry(
         &root,
         &event_kind_registry,
         registry_manifest_entry(&registry_entries, "registry/event-kind-registry.json")?,
@@ -49,6 +49,7 @@ pub fn run_artifact_registry_suite() -> Result<()> {
         &event_kinds,
         &operation_ids,
         &schema_ids,
+        &component_types,
     )?;
     validate_openapi_operation_refs(&openapi, &operation_ids)?;
     validate_non_http_binding_refs(&non_http_bindings, &operation_ids)?;
@@ -240,7 +241,7 @@ fn validate_event_kind_registry(
     root: &std::path::Path,
     registry: &Value,
     manifest_entry: &RegistryManifestEntry,
-) -> Result<BTreeSet<String>> {
+) -> Result<(BTreeSet<String>, BTreeSet<String>)> {
     validate_registry_metadata(
         "event-kind registry",
         registry,
@@ -261,6 +262,8 @@ fn validate_event_kind_registry(
         .ok_or_else(|| anyhow!("event-kind registry missing event_kinds"))?;
     let mut ids = BTreeSet::new();
     let mut deprecated = BTreeSet::new();
+    let mut active_count = 0usize;
+    let mut component_types = BTreeSet::new();
     for entry in event_kinds {
         let event_kind = required_str(entry, "event_kind")?;
         if !event_kind.starts_with("cx.") {
@@ -274,10 +277,53 @@ fn validate_event_kind_registry(
         if status == "active" && wire_scope == "deprecated_alias" {
             bail!("active event kind {event_kind} cannot be deprecated_alias");
         }
+        if status == "active" {
+            active_count += 1;
+        }
         if status == "deprecated" || wire_scope == "deprecated_alias" {
             deprecated.insert(event_kind.to_owned());
             if entry.get("replaced_by").and_then(Value::as_str).is_none() {
                 bail!("deprecated event kind {event_kind} missing replaced_by");
+            }
+        }
+        if let Some(component_type) = entry.get("component_type").and_then(Value::as_str) {
+            component_types.insert(component_type.to_owned());
+        }
+        // W12 partial: every active state-bearing kind must declare the
+        // (state_cardinality, component_type, criticality) triple. per_subject
+        // kinds additionally need a state_subject_field. Anything missing
+        // would silently reduce reducer behaviour to "kind not state-bearing"
+        // and let stale-spec implementations slip through.
+        if status == "active" {
+            if let Some(cardinality) = entry.get("state_cardinality").and_then(Value::as_str) {
+                if cardinality != "not_state" {
+                    let _ = entry
+                        .get("component_type")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "active state kind {event_kind} missing component_type"
+                            )
+                        })?;
+                    let _ = entry
+                        .get("criticality")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "active state kind {event_kind} missing criticality"
+                            )
+                        })?;
+                    if cardinality == "per_subject"
+                        && entry
+                            .get("state_subject_field")
+                            .and_then(Value::as_str)
+                            .is_none()
+                    {
+                        bail!(
+                            "active per_subject state kind {event_kind} missing state_subject_field"
+                        );
+                    }
+                }
             }
         }
     }
@@ -286,7 +332,44 @@ fn validate_event_kind_registry(
             bail!("deprecated alias set drift for {alias}");
         }
     }
-    Ok(ids)
+    // Wire model rework gate: post-Phase 1-5 spec must expose >=129 active kinds
+    // (110 baseline + 17 per-facet/lifecycle splits + 2 host kinds + 2 consent kinds
+    // - 2 retired aggregates).
+    const MIN_ACTIVE_EVENT_KINDS: usize = 129;
+    if active_count < MIN_ACTIVE_EVENT_KINDS {
+        bail!(
+            "event-kind registry has {active_count} active kinds, expected >= {MIN_ACTIVE_EVENT_KINDS} (wire model rework gate)"
+        );
+    }
+    // Phase 4 host writer model + Phase 5 consent state machine must be wired
+    // with the cardinality / criticality the spec mandates.
+    let required_kinds: &[(&str, &str, &str)] = &[
+        ("cx.space.host", "singleton", "required"),
+        ("cx.space.host.transfer", "per_subject", "required"),
+        ("cx.consent.grant", "per_subject", "required"),
+        ("cx.consent.revoke", "per_subject", "required"),
+    ];
+    for (kind, expected_cardinality, expected_criticality) in required_kinds {
+        let entry = event_kinds
+            .iter()
+            .find(|e| e.get("event_kind").and_then(Value::as_str) == Some(kind))
+            .ok_or_else(|| {
+                anyhow!("event-kind registry missing required wire-model kind {kind}")
+            })?;
+        let cardinality = required_str(entry, "state_cardinality")?;
+        if cardinality != *expected_cardinality {
+            bail!(
+                "wire-model kind {kind} must have state_cardinality={expected_cardinality}, got {cardinality}"
+            );
+        }
+        let criticality = required_str(entry, "criticality")?;
+        if criticality != *expected_criticality {
+            bail!(
+                "wire-model kind {kind} must have criticality={expected_criticality}, got {criticality}"
+            );
+        }
+    }
+    Ok((ids, component_types))
 }
 
 fn validate_operation_registry(
@@ -382,6 +465,9 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         "deployment_profiles",
         "hardening_profiles",
         "vector_profiles",
+        // Phase 4: Space-level writer model profiles (hub_writer / peer_mesh).
+        // Each Space create-locks one of these; profile_requirements lists them.
+        "writer_model_profiles",
     ] {
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {
@@ -399,6 +485,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     for field in [
         "identity_extension_profiles",
         "constraint_extension_profiles",
+        "encoding_extension_profiles",
     ] {
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {
@@ -412,6 +499,25 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
             }
         }
     }
+    // Hardening lists may mix profile ids with feature-flag tokens (e.g.
+    // "service_did_authentication"). Pick out any cx.profile.* entries so the
+    // total profile count matches the spec's published catalogue.
+    for field in [
+        "e2ee_hardening",
+        "federation_hardening",
+        "privacy_hardening",
+        "mimi_interop",
+    ] {
+        if let Some(array) = registry.get(field).and_then(Value::as_array) {
+            for profile in array {
+                if let Some(profile) = profile.as_str() {
+                    if profile.starts_with("cx.profile.") {
+                        extension_profiles.insert(profile.to_owned());
+                    }
+                }
+            }
+        }
+    }
     let mut all_profiles = core_profiles.clone();
     all_profiles.extend(extension_profiles.clone());
     for required in [
@@ -419,10 +525,24 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         "cx.profile.chat_mvp.v1",
         "cx.profile.kanban_mvp.v1",
         "cx.profile.push_gateway.v1",
+        // Phase 4 Hybrid Writer Model: each Space create-locks one of these.
+        "cx.profile.space.hub_writer.v1",
+        "cx.profile.space.peer_mesh.v1",
+        // Phase 3 E2EE state binding: promoted from optional extension to
+        // mandatory inherits of e2ee_client.
+        "cx.profile.mls_state_binding.full.v1",
     ] {
         if !all_profiles.contains(required) {
             bail!("conformance profiles missing required {required}");
         }
+    }
+    // Wire model rework gate: post-Phase 1-5 the spec catalogues >= 50 profile ids.
+    const MIN_PROFILE_COUNT: usize = 50;
+    if all_profiles.len() < MIN_PROFILE_COUNT {
+        bail!(
+            "conformance profiles registry has {} ids, expected >= {MIN_PROFILE_COUNT} (wire model rework gate)",
+            all_profiles.len()
+        );
     }
     Ok((all_profiles, core_profiles))
 }
@@ -434,6 +554,7 @@ fn validate_profile_requirements(
     event_kinds: &BTreeSet<String>,
     operation_ids: &BTreeSet<String>,
     schema_ids: &BTreeSet<String>,
+    component_types: &BTreeSet<String>,
 ) -> Result<()> {
     let requirements = registry
         .get("profile_requirements")
@@ -444,6 +565,47 @@ fn validate_profile_requirements(
     for profile in core_profiles {
         if !requirements.contains_key(profile) {
             bail!("conformance profile {profile} missing profile_requirements entry");
+        }
+    }
+
+    // Phase 3 binding: e2ee_client MUST inherit mls_state_binding.full.v1 directly,
+    // not as an optional extension.
+    let e2ee_client = requirements
+        .get("cx.profile.e2ee_client.v1")
+        .ok_or_else(|| anyhow!("e2ee_client.v1 missing profile_requirements entry"))?;
+    let inherits = string_array_field(e2ee_client, "inherits")?;
+    if !inherits
+        .iter()
+        .any(|p| *p == "cx.profile.mls_state_binding.full.v1")
+    {
+        bail!(
+            "e2ee_client.v1 must inherit cx.profile.mls_state_binding.full.v1 (Phase 3 binding)"
+        );
+    }
+
+    // Phase 3 binding requires three component-type lists naming registered
+    // component_type values. Each list is non-empty (an empty list would
+    // silently disable the corresponding frontier check).
+    let mls_binding = requirements
+        .get("cx.profile.mls_state_binding.full.v1")
+        .ok_or_else(|| {
+            anyhow!("mls_state_binding.full.v1 missing profile_requirements entry")
+        })?;
+    for field in [
+        "policy_root_required_components",
+        "membership_frontier_required_components",
+        "capability_root_required_components",
+    ] {
+        let entries = string_array_field(mls_binding, field)?;
+        if entries.is_empty() {
+            bail!("mls_state_binding.full.v1 has empty {field} (cannot be enforceable)");
+        }
+        for component in &entries {
+            if !component_types.contains(*component) {
+                bail!(
+                    "mls_state_binding.full.v1 {field} references unknown component_type {component}"
+                );
+            }
         }
     }
 

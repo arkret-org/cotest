@@ -1,0 +1,127 @@
+{
+  "profile": "cx.profile.consent_vectors.v1",
+  "version": "2026-05-07",
+  "comment": "Phase 5 holder-private consent vectors. Consent grants and revocations are durable state events keyed by payload.consent_id; they share a single state slot (revoke supersedes grant). When a profile asserts `require_consent`, an invite without a matching active grant must be rejected. Pseudonym DIDs are treated identically to public DIDs.",
+  "vectors": [
+    {
+      "name": "grant_then_invite_accepts",
+      "comment": "Holder grants consent for `invite` scope to peer; subsequent invite is accepted.",
+      "events": [
+        {
+          "kind": "cx.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "payload": {
+            "consent_id": "cx:consent:01js0c10000000000000000000",
+            "peer": "did:web:bob.example",
+            "scope": ["invite"],
+            "not_before": "2026-05-07T00:00:00Z",
+            "valid_until": null
+          },
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "kind": "cx.invite.send",
+          "actor_id": "did:web:bob.example",
+          "payload": { "target": "did:web:alice.example" },
+          "profile_constraints": ["require_consent"],
+          "consent_lookup": "did:web:alice.example/did:web:bob.example/invite",
+          "expected": { "outcome": "accept" }
+        }
+      ]
+    },
+    {
+      "name": "revoke_after_grant_blocks_invite",
+      "comment": "Revoke supersedes grant in the same slot. Subsequent invite must reject.",
+      "events": [
+        {
+          "kind": "cx.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "payload": {
+            "consent_id": "cx:consent:01js0c20000000000000000000",
+            "peer": "did:web:bob.example",
+            "scope": ["invite"]
+          },
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "kind": "cx.consent.revoke",
+          "actor_id": "did:web:alice.example",
+          "payload": {
+            "consent_id": "cx:consent:01js0c20000000000000000000"
+          },
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "kind": "cx.invite.send",
+          "actor_id": "did:web:bob.example",
+          "payload": { "target": "did:web:alice.example" },
+          "profile_constraints": ["require_consent"],
+          "consent_lookup": "did:web:alice.example/did:web:bob.example/invite",
+          "expected": { "outcome": "reject", "reason_code": "consent_required" }
+        }
+      ]
+    },
+    {
+      "name": "scope_any_covers_all_scopes",
+      "comment": "scope=any acts as a wildcard for all consent scopes (invite, direct_message, voice_call, video_call, presence).",
+      "events": [
+        {
+          "kind": "cx.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "payload": {
+            "consent_id": "cx:consent:01js0c30000000000000000000",
+            "peer": "did:web:bob.example",
+            "scope": ["any"]
+          },
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "kind": "cx.call.invite",
+          "actor_id": "did:web:bob.example",
+          "payload": { "target": "did:web:alice.example", "media": "voice" },
+          "profile_constraints": ["require_consent"],
+          "consent_lookup": "did:web:alice.example/did:web:bob.example/voice_call",
+          "expected": { "outcome": "accept" }
+        }
+      ]
+    },
+    {
+      "name": "pseudonym_did_consent_accepts",
+      "comment": "Pseudonym DIDs are valid consent peers; the reducer must not depend on identity provenance.",
+      "events": [
+        {
+          "kind": "cx.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "payload": {
+            "consent_id": "cx:consent:01js0c40000000000000000000",
+            "peer": "did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9",
+            "scope": ["direct_message"]
+          },
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "kind": "cx.message.send",
+          "actor_id": "did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9",
+          "payload": { "target": "did:web:alice.example" },
+          "profile_constraints": ["require_consent"],
+          "consent_lookup": "did:web:alice.example/did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9/direct_message",
+          "expected": { "outcome": "accept" }
+        }
+      ]
+    },
+    {
+      "name": "require_consent_profile_blocks_unconsented_invite",
+      "comment": "When the receiving Space pins the require_consent component, the invite reducer rejects an invite to a holder who has issued no matching grant.",
+      "events": [
+        {
+          "kind": "cx.invite.send",
+          "actor_id": "did:web:bob.example",
+          "payload": { "target": "did:web:alice.example" },
+          "profile_constraints": ["require_consent"],
+          "consent_lookup": "did:web:alice.example/did:web:bob.example/invite",
+          "expected": { "outcome": "reject", "reason_code": "consent_required" }
+        }
+      ]
+    }
+  ]
+}

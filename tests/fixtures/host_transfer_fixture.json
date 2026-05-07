@@ -1,0 +1,118 @@
+{
+  "profile": "cx.profile.host_transfer_vectors.v1",
+  "version": "2026-05-07",
+  "comment": "Phase 4 host transfer ceremony vectors. Smooth transfer requires both current and incoming host signatures. Emergency transfer requires governance quorum (>=1/2 of owning_organizations) plus an incident_ref. Standby_hosts is advisory: a transfer to a DID outside that list should produce a non-fatal warning, not a reject.",
+  "vectors": [
+    {
+      "name": "smooth_dual_sign_accepts",
+      "comment": "Both current host and new host endorse the cx.space.host.transfer event.",
+      "space": {
+        "space_writer_model": "hub",
+        "space_host": "did:web:old-host.example",
+        "standby_hosts": ["did:web:new-host.example"],
+        "owning_organizations": ["did:web:org-a.example", "did:web:org-b.example"]
+      },
+      "transfer": {
+        "kind": "cx.space.host.transfer",
+        "transfer_id": "cx:transfer:01js0t10000000000000000000",
+        "mode": "smooth",
+        "new_host": "did:web:new-host.example",
+        "replacement_at": "cx:event:01js0xf0000000000000000000",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "host_did": "did:web:old-host.example", "endorsed_at": "2026-05-07T12:00:00Z" },
+          { "kind": "host_endorsement", "host_did": "did:web:new-host.example", "endorsed_at": "2026-05-07T12:00:01Z" }
+        ]
+      },
+      "expected": { "outcome": "accept" }
+    },
+    {
+      "name": "smooth_single_sign_rejects",
+      "comment": "Only the current host signed; missing incoming host endorsement.",
+      "space": {
+        "space_writer_model": "hub",
+        "space_host": "did:web:old-host.example",
+        "standby_hosts": ["did:web:new-host.example"]
+      },
+      "transfer": {
+        "kind": "cx.space.host.transfer",
+        "transfer_id": "cx:transfer:01js0t20000000000000000000",
+        "mode": "smooth",
+        "new_host": "did:web:new-host.example",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "host_did": "did:web:old-host.example", "endorsed_at": "2026-05-07T12:00:00Z" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "proof_missing" }
+    },
+    {
+      "name": "emergency_without_quorum_rejects",
+      "comment": "Emergency transfer demands >= ceil(N/2) governance signatures from owning_organizations.",
+      "space": {
+        "space_writer_model": "hub",
+        "space_host": "did:web:dead-host.example",
+        "owning_organizations": ["did:web:org-a.example", "did:web:org-b.example", "did:web:org-c.example"],
+        "activation_timeout_ms": 86400000
+      },
+      "transfer": {
+        "kind": "cx.space.host.transfer",
+        "transfer_id": "cx:transfer:01js0t30000000000000000000",
+        "mode": "emergency",
+        "new_host": "did:web:rescue-host.example",
+        "incident_ref": "cx:incident:01js0in0000000000000000000",
+        "governance_signatures": [
+          { "actor_id": "did:web:org-a.example" }
+        ],
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:org-a.example#sign" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "insufficient_quorum" }
+    },
+    {
+      "name": "post_activation_old_host_endorsement_rejects",
+      "comment": "After activation_frontier, endorsements signed by the old host on subsequent state events MUST be rejected.",
+      "space": {
+        "space_writer_model": "hub",
+        "space_host": "did:web:new-host.example",
+        "previous_host": "did:web:old-host.example",
+        "activation_frontier": "cx:event:01js0xf0000000000000000000"
+      },
+      "follow_up_event": {
+        "kind": "cx.space.policy",
+        "depends_on_frontier": "cx:event:01js0xf0000000000000000000",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "host_did": "did:web:old-host.example", "endorsed_at": "2026-05-07T12:00:02Z" }
+        ]
+      },
+      "expected": { "outcome": "reject", "reason_code": "host_mismatch" }
+    },
+    {
+      "name": "smooth_new_host_outside_standby_warns",
+      "comment": "Standby_hosts is advisory; transferring to a host that is not on the standby list is not fatal — the reducer accepts the transfer and emits a non-fatal warning.",
+      "space": {
+        "space_writer_model": "hub",
+        "space_host": "did:web:old-host.example",
+        "standby_hosts": ["did:web:planned-standby.example"]
+      },
+      "transfer": {
+        "kind": "cx.space.host.transfer",
+        "transfer_id": "cx:transfer:01js0t40000000000000000000",
+        "mode": "smooth",
+        "new_host": "did:web:new-host-not-on-standby.example",
+        "replacement_at": "cx:event:01js0xf0000000000000000000",
+        "proofs": [
+          { "kind": "detached_jws", "verification_method": "did:web:admin.example#sign" },
+          { "kind": "host_endorsement", "host_did": "did:web:old-host.example", "endorsed_at": "2026-05-07T12:00:00Z" },
+          { "kind": "host_endorsement", "host_did": "did:web:new-host-not-on-standby.example", "endorsed_at": "2026-05-07T12:00:01Z" }
+        ]
+      },
+      "expected": {
+        "outcome": "accept",
+        "warnings": ["new_host_outside_standby_hosts"]
+      }
+    }
+  ]
+}

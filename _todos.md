@@ -12,11 +12,11 @@
 
 ## 当前状态摘要
 
-- **代码量**：`src/conformance/*.rs`（11 子模块）+ `src/harness.rs` + 18 个场景文件，总 ~6K 行 Rust。
+- **代码量**：`src/conformance/*.rs`（12 子模块）+ `src/harness.rs` + 18 个场景文件，总 ~6K 行 Rust。
 - **运行模式**：`process` 直接 `cargo run` SUT；`compose` 通过 `run-compose.ps1` 统一 bridge contract matrix；`docker` 与 Complement 同形态。
-- **release gate**：`--Profile release-gate` 已落地，12 个测试通过。
-- **conformance fixtures**：14 个 fixture 测试全部通过；`schema_validation` 覆盖全部 34 个 schema。
-- **已完成**：F1 compose harness、F2 conformance.rs 拆分、F3 spec artifact 同步 gate、F4 artifacts 输出整理、F5 secret scan、A2 schema validation、A6 剔除清理、S2 release gate、Q5 profile 支持。
+- **release gate**：`--Profile release-gate` 已落地，**17** 个测试通过（+host_endorsement / host_transfer / consent / composite_state_subject / mimi_components）。
+- **conformance fixtures**：**19** 个 fixture 测试全部通过；`schema_validation` 覆盖全部 34 个 schema；event-kind registry 强制 ≥129 active kinds + ≥50 profiles + 每个 active state kind 必须声明 cardinality/component_type/criticality（per_subject 还需 state_subject_field）。
+- **已完成**：F1 compose harness、F2 conformance.rs 拆分、F3 spec artifact 同步 gate、F4 artifacts 输出整理、F5 secret scan、A2 schema validation、A6 剔除清理、S2 release gate、Q5 profile 支持；P0 W1 / W3 / W4 / W5 / W6（cotest 侧）/ W7 / W8 / W9 / W10 / W11 / W12（partial）。
 
 ---
 
@@ -28,18 +28,18 @@
 
 | # | 任务 | 文件 |
 |---|---|---|
-| **W1** ⚠ | 同步 `contrix-spec/spec/v1/artifacts/`：active event kind 110 → **129**（+19 新 kinds）、profiles 48 → **50**（+`hub_writer` / `peer_mesh`）。`schema_validation` 全量重跑；预期会发现 fixture 引用 stale schema/kind。 | `src/conformance/state_resolution.rs`、所有 fixture |
-| **W2** ⚠ | Fixture 全部移除 envelope-level `state_key` 字段；`cx.member.state` payload 加 `actor_id`；composite state subject 用 `state_subject` 派生而非 `state_key`。本仓 `src/conformance/state_resolution.rs` 4 处 state_key 引用同步。 | `src/conformance/state_resolution.rs`、`tests/fixtures/*.json` |
-| **W3** ⚠ | 新 fixture `host_endorsement_fixture.json`：hub Space happy path / 缺 endorsement → `proof_missing` reject / wrong host_did → `host_mismatch` reject / peer_mesh Space 出现 endorsement → `schema_violation` reject / activation_frontier 边界。 | 新 `tests/fixtures/host_endorsement_fixture.json`、`scenarios/space_permissions.rs` |
-| **W4** ⚠ | 新 fixture `host_transfer_fixture.json`：smooth dual-sign happy / 单签 reject / emergency without quorum reject / activation_frontier 后旧 host endorsement reject / standby_hosts 之外的 new_host warning。 | 新 `tests/fixtures/host_transfer_fixture.json`、`scenarios/space_permissions.rs` |
-| **W5** ⚠ | 新 fixture `consent_fixture.json`：consent grant → invite 接受 / consent revoke → invite reject / scope=any 全覆盖 / pseudonym DID 场景 / `require_consent` profile 强制路径。 | 新 `tests/fixtures/consent_fixture.json`、`scenarios/api_contracts_auth.rs` |
-| **W6** ⚠ | `state-resolution-fixture.json`：本仓识别新 `state_slot` 描述符字段（spec 已重写）；hub fork diagnostic vector（§9.5）：双 host endorsement 同 slot → 整 slot quarantine。 | `src/conformance/state_resolution.rs` |
-| **W7** | `mls_state_binding.full.v1` 必需 component 验证：E2EE Space commit 缺 `policy_root_required_components` 中任一 → reject；`pending_mls_binding` 状态可见性。 | `scenarios/delivery_media.rs`、`scenarios/protocol_payloads.rs` |
-| **W8** | MIMI consent / room policy components 互译矩阵：按 `mimi-interop.md` §9.1 / §9.2 互译表跑双向 round-trip。 | `scenarios/api_contracts_auth.rs` |
-| **W9** | `profile_tiers` schema_validation：含 `writer_model_profiles` 新顶层 section + `hardening_profiles.cx.profile.mls_state_binding.full.v1` 已从 e2ee_client optional_extensions 升为 inherits。 | `src/conformance/profile_validation.rs` |
-| **W10** 🔒 | release gate 12/12 → 增量保持全绿；新 fixture 加入 `release-gate` profile。 | `scripts/run-release-gate.ps1`、`profile_tiers` 配置 |
-| **W11** | Stream B4（composite state-key encoding round-trip）改名为 composite **state subject** encoding round-trip；测试向量按 spec encoding.md §9.5 重写。 | `scenarios/protocol_payloads.rs`（B4） |
-| **W12** | Stream A1 active event kind 数 110 → 129 全覆盖。新 kinds 至少各 1 positive + 1 negative：`cx.space.policy / join_rule / history_visibility / discovery / policy_server / policy_components / history_sharing_policy / asset_privacy_policy / moderation_policy / plaintext_visible_services / media_service / schema / inheritance_policy / archive / freeze / tombstone / destroy / host / host.transfer / consent.grant / consent.revoke`。 | `scenarios/protocol_payloads.rs` (A1) |
+| **W1** ⚠ | `[x]` `schema_validation` 全量重跑；event-kind registry 强制 ≥129 active kinds + 强制存在 `cx.space.host` / `cx.space.host.transfer` / `cx.consent.{grant,revoke}`；profile registry 强制 ≥50 profile id 并识别 `writer_model_profiles` / `encoding_extension_profiles` / 各 hardening section 中的 `cx.profile.*` 入口。 | `src/conformance/registry.rs` |
+| **W2** ⚠ | `[~]` Fixture 已在 spec 侧重写（spec Phase 1 完成）；本仓 `state_resolution.rs` 中 4 处 `state_key` 引用是 container/field-position register key（合法的本地概念，非 envelope state_key），保留。剩余动作只在 SUT 升级后跑通端到端 vector 时会被触及。 | `src/conformance/state_resolution.rs`、`tests/fixtures/*.json` |
+| **W3** ⚠ | `[x]` `tests/fixtures/host_endorsement_fixture.json` + `run_host_endorsement_fixture_suite`：hub happy / proof_missing / host_mismatch / peer_mesh 出 endorsement → schema_violation / activation_frontier 后旧 host reject / 双 endorsement 同 slot → host_fork_diagnostic quarantine。 | `tests/fixtures/host_endorsement_fixture.json`、`src/conformance/wire_model.rs` |
+| **W4** ⚠ | `[x]` `tests/fixtures/host_transfer_fixture.json` + `run_host_transfer_fixture_suite`：smooth dual-sign accept / 单签 proof_missing / emergency 无 quorum insufficient_quorum / activation_frontier 后旧 host follow_up host_mismatch / standby 外 new_host warning。 | `tests/fixtures/host_transfer_fixture.json`、`src/conformance/wire_model.rs` |
+| **W5** ⚠ | `[x]` `tests/fixtures/consent_fixture.json` + `run_consent_fixture_suite`：grant → invite accept / revoke → invite reject(consent_required) / scope=any 覆盖语音呼叫 / pseudonym DID grant / require_consent profile 阻挡 unconsented invite。 | `tests/fixtures/consent_fixture.json`、`src/conformance/wire_model.rs` |
+| **W6** ⚠ | `[x]` 本仓在 `run_state_resolution_artifact_suite` 中识别 `state_slot` 描述符并断言 candidate kind 与 slot kind 一致；hub fork diagnostic vector 通过 `host_endorsement_fixture` 的 `hub_space_double_host_endorsement_same_slot_quarantines` 覆盖。 | `src/conformance/state_resolution.rs`、`src/conformance/wire_model.rs` |
+| **W7** | `[~]` Registry 侧已强制 `mls_state_binding.full.v1` 三组 `*_required_components` 非空且每个 component_type 在 event-kind registry 注册（Phase 3 校验）。E2EE Space commit 缺 component → reject 与 `pending_mls_binding` 可见性需 SUT 实装后由 `delivery_media` 真实场景覆盖。 | `src/conformance/registry.rs`、`scenarios/delivery_media.rs` |
+| **W8** | `[x]` `tests/fixtures/mimi_components_fixture.json` + `run_mimi_components_fixture_suite`：§9.2 criticality 三档 round-trip（required↔must_understand / optional↔should_understand / ignore↔silently_drop）；§9.1 component_type 矩阵 ≥5 bidirectional + ≥5 contrix_only；contrix_only 必须用 `application/vnd.contrix.component+json` facade media-type；hub-writer host / host.transfer 强制 contrix_only。component_type 全部 cross-check 进 event-kind registry。 | `tests/fixtures/mimi_components_fixture.json`、`src/conformance/wire_model.rs` |
+| **W9** | `[x]` `validate_profile_registry` 新增 `writer_model_profiles` 收录、`encoding_extension_profiles` 识别、各 `*_hardening` / `mimi_interop` 中 `cx.profile.*` 收录；`validate_profile_requirements` 强制 `cx.profile.e2ee_client.v1.inherits` 包含 `cx.profile.mls_state_binding.full.v1`。 | `src/conformance/registry.rs` |
+| **W10** 🔒 | `[x]` release gate 12/12 → **17/17**：新增 host_endorsement / host_transfer / consent / composite_state_subject / mimi_components fixture 进 `release-gate` cargo_filters。 | `config/ci-profiles.json` |
+| **W11** | `[x]` `tests/fixtures/composite_state_subject_fixture.json` + `run_composite_state_subject_fixture_suite`：§9.5 5 种标准 composite kind（flow.branch.member / flow.branch.history_visibility / flow.branch.policy_components / device.authorized / device.revoked）的 components_array → canonical_json → sha256 → base64url_nopad 全链路；同 components_array 不同 kind 共享 hash 验证；revoke / authorized 共享 slot；reorder negative + pipe-form negative MUST 与 canonical 不同。 | `tests/fixtures/composite_state_subject_fixture.json`、`src/conformance/wire_model.rs` |
+| **W12** | `[~]` registry 侧覆盖闸门已落地：每个 active state-bearing kind 必须声明 `state_cardinality` + `component_type` + `criticality`，per_subject 还需 `state_subject_field`；4 个新 wire-model kind 强制 (cardinality, criticality) 精确值。SUT 实装后再补每 kind ≥1 positive + 1 negative 真实场景向量。 | `src/conformance/registry.rs`、`scenarios/protocol_payloads.rs` (A1) |
 
 ---
 
@@ -168,3 +168,14 @@
 - `[x]` A6 剔除清理（`cx.(subject|room|card).` 零命中）。
 - `[x]` S2 release gate 12/12 通过。
 - `[x]` Q5 `--Profile` 支持（fast-smoke / compose / release-gate / full-nightly）。
+- `[x]` 2026-05-07 P0 wire-model rework conformance（两波合并）：
+  - W1：event-kind registry 强制 ≥129 active kinds + 4 个新关键 kinds 必存；profile registry 强制 ≥50 profile id（包含 `writer_model_profiles`）。
+  - W3 / W4 / W5：新增 `tests/fixtures/host_endorsement_fixture.json` / `host_transfer_fixture.json` / `consent_fixture.json` 共 16 条 vector，由 `src/conformance/wire_model.rs` 的 3 个 suite 函数静态校验。
+  - W6（本仓侧）：`run_state_resolution_artifact_suite` 识别 `state_slot` 描述符并断言 slot/kind 一致；hub fork diagnostic 在 host_endorsement fixture 中覆盖。
+  - W7（registry 侧）：`mls_state_binding.full.v1` 三组 `*_required_components` 全部 cross-check 进 event-kind registry 的 component_type。
+  - W8：新增 `tests/fixtures/mimi_components_fixture.json` + `run_mimi_components_fixture_suite`，覆盖 §9.1（component_type 互译，5+ bidirectional + 5+ contrix_only）和 §9.2（criticality 三档）。
+  - W9：`validate_profile_registry` 新增 `writer_model_profiles` / `encoding_extension_profiles` / `*_hardening` / `mimi_interop` 的 `cx.profile.*` 收录；`e2ee_client.v1` 强制 inherit `mls_state_binding.full.v1`。
+  - W10：release-gate 由 12/12 升至 **17/17**。
+  - W11：新增 `tests/fixtures/composite_state_subject_fixture.json` + `run_composite_state_subject_fixture_suite`（§9.5 全 5 种 composite kind 的 hash 形态 + reorder/pipe negative）。
+  - W12（partial）：每个 active state-bearing kind 必须声明 cardinality + component_type + criticality；4 个新 wire-model kind 锁定精确 cardinality / criticality。
+  - 19 / 19 conformance fixture 测试 + 17 / 17 release-gate 全绿。
