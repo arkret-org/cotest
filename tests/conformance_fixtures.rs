@@ -89,3 +89,8 @@ fn composite_state_subject_fixture_suite_matches_reference_semantics() -> Result
 fn mimi_components_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_mimi_components_fixture_suite()
 }
+
+#[test]
+fn read_receipt_policy_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_read_receipt_policy_fixture_suite()
+}

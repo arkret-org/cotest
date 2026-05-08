@@ -1,0 +1,172 @@
+{
+  "profile": "cx.profile.read_receipt_policy_vectors.v1",
+  "version": "2026-05-08",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by component cells cx.component.space.read_receipt_policy.v1 and cx.component.flow.branch.read_receipt_policy.v1 (cas-register, bottom=reject). User preferences live under the actor-private account-data key cx.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (flow → space → default).",
+  "vectors": [
+    {
+      "name": "disclosure_required_locks_client_send",
+      "comment": "When a Space declares disclosure=required, even a user preference of send=false MUST be overridden — compliant clients send the receipt and lock the UI toggle.",
+      "policy": {
+        "scope": "space",
+        "disclosure": "required",
+        "visibility": "members",
+        "scope_overrides_allowed": true
+      },
+      "preferences": {
+        "default": { "send": false }
+      },
+      "expected": {
+        "decision": "forced_send",
+        "is_send": true,
+        "is_locked": true
+      }
+    },
+    {
+      "name": "disclosure_disabled_drops_receipt_at_sync_service",
+      "comment": "When a Space declares disclosure=disabled, even a user preference of send=true MUST be overridden — compliant clients MUST NOT generate the receipt and Sync Service MUST drop any inbound cx.receipt.read for this scope.",
+      "policy": {
+        "scope": "space",
+        "disclosure": "disabled",
+        "visibility": "members",
+        "scope_overrides_allowed": true
+      },
+      "preferences": {
+        "default": { "send": true }
+      },
+      "expected": {
+        "decision": "forced_skip",
+        "is_send": false,
+        "is_locked": true,
+        "sync_service_action": "drop_with_policy_violation"
+      }
+    },
+    {
+      "name": "visibility_private_fanout_only_to_sender",
+      "comment": "When visibility=private, Sync Service MUST only fanout the receipt to the original sender of the referenced event_id. Other Space/branch members MUST NOT observe it.",
+      "policy": {
+        "scope": "space",
+        "disclosure": "optional",
+        "visibility": "private",
+        "scope_overrides_allowed": true
+      },
+      "preferences": {
+        "default": { "send": true }
+      },
+      "expected": {
+        "decision": "send",
+        "is_send": true,
+        "is_locked": false,
+        "sync_service_fanout": "sender_only"
+      }
+    },
+    {
+      "name": "branch_overrides_tighten_only",
+      "comment": "Flow branch policy MAY tighten the parent Space policy without scope_overrides_allowed=true. Optional → Required at the branch is a tightening (forces send), Members → Private is also a tightening (smaller audience).",
+      "policy": {
+        "scope": "flow_branch",
+        "parent": {
+          "disclosure": "optional",
+          "visibility": "members",
+          "scope_overrides_allowed": false
+        },
+        "branch": {
+          "disclosure": "required",
+          "visibility": "private",
+          "scope_overrides_allowed": false
+        }
+      },
+      "preferences": {
+        "default": { "send": false }
+      },
+      "expected": {
+        "composed_disclosure": "required",
+        "composed_visibility": "private",
+        "decision": "forced_send",
+        "is_send": true,
+        "is_locked": true,
+        "sync_service_fanout": "sender_only"
+      }
+    },
+    {
+      "name": "branch_overrides_loosen_rejected_when_not_allowed",
+      "comment": "When the parent Space declares scope_overrides_allowed=false, a Flow branch MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject.",
+      "policy": {
+        "scope": "flow_branch",
+        "parent": {
+          "disclosure": "required",
+          "visibility": "private",
+          "scope_overrides_allowed": false
+        },
+        "branch": {
+          "disclosure": "optional",
+          "visibility": "public",
+          "scope_overrides_allowed": false
+        }
+      },
+      "preferences": {
+        "default": { "send": true }
+      },
+      "expected": {
+        "composed_disclosure": "required",
+        "composed_visibility": "private",
+        "decision": "forced_send",
+        "is_send": true,
+        "is_locked": true,
+        "sync_service_fanout": "sender_only",
+        "reducer_action": "reject_loosening_branch_move"
+      }
+    },
+    {
+      "name": "prefs_resolution_flow_overrides_space",
+      "comment": "When policy is optional and the user has both space-level and flow-level overrides, the flow override wins (resolution order is flow → space → default).",
+      "policy": {
+        "scope": "space",
+        "disclosure": "optional",
+        "visibility": "members",
+        "scope_overrides_allowed": true
+      },
+      "preferences": {
+        "default": { "send": true },
+        "spaces": {
+          "cx:space:01JS0SP00000000000000RR000": { "send": false }
+        },
+        "flows": {
+          "cx:flow:01JS1FL00000000000000RR000": { "send": true }
+        }
+      },
+      "scope_lookup": {
+        "space_id": "cx:space:01JS0SP00000000000000RR000",
+        "flow_id": "cx:flow:01JS1FL00000000000000RR000"
+      },
+      "expected": {
+        "decision": "send",
+        "is_send": true,
+        "is_locked": false
+      }
+    },
+    {
+      "name": "prefs_resolution_space_overrides_default",
+      "comment": "Without a flow-level override, the space-level override wins over the default.",
+      "policy": {
+        "scope": "space",
+        "disclosure": "optional",
+        "visibility": "members",
+        "scope_overrides_allowed": true
+      },
+      "preferences": {
+        "default": { "send": true },
+        "spaces": {
+          "cx:space:01JS0SP00000000000000RR000": { "send": false }
+        }
+      },
+      "scope_lookup": {
+        "space_id": "cx:space:01JS0SP00000000000000RR000"
+      },
+      "expected": {
+        "decision": "skip",
+        "is_send": false,
+        "is_locked": false
+      }
+    }
+  ]
+}
