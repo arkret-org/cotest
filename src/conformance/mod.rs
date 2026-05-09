@@ -44,6 +44,7 @@ pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };
 pub use sync::run_sync_fixture_suite;
+pub use wire_model::run_anchor_view_compaction_fixture_suite;
 pub use wire_model::run_composite_state_subject_fixture_suite;
 pub use wire_model::run_consent_fixture_suite;
 pub use wire_model::run_mimi_components_fixture_suite;

@@ -496,12 +496,55 @@ fn validate_id_kind_registry(
         if !wire_form.starts_with(&format!("cx:{id_kind}:")) {
             bail!("id kind {id_kind} wire_form drifted: {wire_form}");
         }
+        // C19.A wire-break (spec f724863, 2026-05-09): per-id_kind wire_form
+        // MUST end in `<uuid>` placeholder — the canonical typed-id payload is
+        // a UUIDv7 (RFC 9562) string. Legacy ULID payloads (`<ulid>` token)
+        // are forbidden in the unreleased v1 wire; this is a hard reject.
+        if wire_form.contains("<ulid>") {
+            bail!(
+                "id kind {id_kind} wire_form retains legacy <ulid> token; spec post-2026-05-09 mandates <uuid> (UUIDv7)"
+            );
+        }
+        if !wire_form.ends_with("<uuid>") {
+            bail!(
+                "id kind {id_kind} wire_form must terminate in <uuid>: {wire_form}"
+            );
+        }
     }
     let mut kinds = regular_kinds;
     kinds.extend(special_kinds);
     if !kinds.contains("event") {
         bail!("id-kind registry missing event");
     }
+
+    // C19.A wire-break (spec f724863, 2026-05-09): top-level `uuid_pattern` /
+    // `typed_uuid_pattern` MUST be the canonical UUIDv7 regex pair (replaces
+    // the older `ulid_pattern` / `typed_ulid_pattern` which are now forbidden
+    // wire-tokens). Validator rejects fixtures that retain the old field
+    // names so a stale spec snapshot fails loudly.
+    if registry.get("ulid_pattern").is_some()
+        || registry.get("typed_ulid_pattern").is_some()
+    {
+        bail!(
+            "id-kind registry retains legacy ulid_pattern / typed_ulid_pattern fields; spec post-2026-05-09 mandates uuid_pattern / typed_uuid_pattern"
+        );
+    }
+    let uuid_pattern = required_str(registry, "uuid_pattern")?;
+    let typed_uuid_pattern = required_str(registry, "typed_uuid_pattern")?;
+    // Coarse shape sanity: the canonical pattern is a 36-char UUIDv7 form.
+    // Avoid pulling a regex engine — string fragment match is enough to flag
+    // an outdated v1/v4-only or ULID-shape pattern.
+    if !uuid_pattern.contains("[0-9a-f]{8}") || !uuid_pattern.contains("7[0-9a-f]{3}") {
+        bail!(
+            "id-kind registry uuid_pattern does not look like a UUIDv7 regex (must contain 8-hex prefix and 7xxx version block): {uuid_pattern}"
+        );
+    }
+    if !typed_uuid_pattern.starts_with("^cx:") || !typed_uuid_pattern.contains("[89ab]") {
+        bail!(
+            "id-kind registry typed_uuid_pattern must be `^cx:<kind>:<UUIDv7>` shape (RFC 9562 variant must include [89ab]): {typed_uuid_pattern}"
+        );
+    }
+
     Ok(kinds)
 }
 
@@ -856,6 +899,30 @@ fn validate_value_refs(
 ) -> Result<()> {
     match value {
         Value::Object(map) => {
+            // C20 wire-break (spec 2026-05-09): `actor_type` was renamed to
+            // `actor_kind` in actor-profile.schema.json and friends. v1 is
+            // unreleased — no dual-pattern compat. Any fixture that retains
+            // `actor_type` as a key MUST fail loudly.
+            if map.contains_key("actor_type") {
+                bail!(
+                    "{context} retains legacy `actor_type` key; spec post-2026-05-09 mandates `actor_kind`"
+                );
+            }
+            // C21 wire-break (spec 2026-05-09): `content_block.type` was
+            // renamed `content_block.kind` (and the $defs entry
+            // `content_type` → `content_kind`). A `content_block`-shaped
+            // object (has a `body` field and a `type` field) is the legacy
+            // form — reject. Pure `type` fields outside content_block (e.g.
+            // cell_subject `{"type": "composite", ...}`) remain legal.
+            if map.contains_key("body") && map.contains_key("type") && !map.contains_key("kind") {
+                if let Some(t) = map.get("type").and_then(Value::as_str) {
+                    if t.starts_with("cx.content.") || t == "text" || t == "image" || t == "file" {
+                        bail!(
+                            "{context} content_block uses legacy `type` field; spec post-2026-05-09 mandates `kind` ({t})"
+                        );
+                    }
+                }
+            }
             for (key, child) in map {
                 match (key.as_str(), child.as_str()) {
                     ("operation_id", Some(operation_id)) => {

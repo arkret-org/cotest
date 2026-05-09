@@ -105,3 +105,10 @@ fn mimi_components_fixture_suite_matches_reference_semantics() -> Result<()> {
 fn read_receipt_policy_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_read_receipt_policy_fixture_suite()
 }
+
+/// C10.C M6 — multi-leaf Anchor effective_anchor_view + signed compaction
+/// equivalence + bottom diagnostic preservation.
+#[test]
+fn anchor_view_compaction_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_anchor_view_compaction_fixture_suite()
+}

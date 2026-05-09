@@ -48,6 +48,24 @@ fn expected_reason<'a>(vector: &'a Value) -> Option<&'a str> {
     vector.pointer("/expected/reason_code").and_then(Value::as_str)
 }
 
+/// W3 — holder-private consent cell or-set Move semantics.
+///
+/// Spec: `identity/consent-model.md` + `authz/event-auth-state-resolution.md`
+/// (Move/Anchor/Lattice). Each grant Move adds a `(peer, scope)` tag to the
+/// holder-keyed or-set cell `cx:cell:cx.component.consent.grant.v1:<holder>`.
+/// Each revoke Move issues a causal `or_set_remove` against the prior grant
+/// Move's id. The cell join (active set) is the lookup surface for
+/// `consent_active` preconditions on downstream invite / message Moves.
+///
+/// This validator replays the fixture's Move sequence per vector, tracking
+/// the or-set's active tags by their op_ids (Move ids). It enforces:
+///   * grant ops add `(peer, scope)` tagged by Move id
+///   * revoke ops remove the referenced op_ids causally
+///   * `consent_active` preconditions on downstream Moves resolve against
+///     the cell's join, with `scope=any` acting as a peer-scoped wildcard
+///   * `accept` preconditioned Moves always have an active matching tag
+///   * `reject` Moves carry `reason_code=consent_required` and always have
+///     no matching active tag
 pub fn run_consent_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("consent_fixture.json")?;
     validate_profile(&fixture, "cx.profile.consent_vectors.v1")?;
@@ -61,138 +79,221 @@ pub fn run_consent_fixture_suite() -> Result<()> {
     let mut covered_scope_any = false;
     let mut covered_pseudonym = false;
     let mut covered_require_consent = false;
+    let mut covered_idempotent_regrant = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
-        let events = vector
-            .get("events")
+        let moves = vector
+            .get("moves")
             .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("vector {name} missing events"))?;
+            .ok_or_else(|| {
+                anyhow!("vector {name} missing moves[] (post-2026-05-09 or-set Move shape)")
+            })?;
 
-        // Track active grants: peer/scope -> active state.
-        let mut grant_active: std::collections::HashMap<String, bool> = Default::default();
-        let mut holder_scope_any: std::collections::HashMap<String, bool> = Default::default();
+        // Per-cell or-set state: map<cell_id, map<move_id, (peer, scope)>>.
+        let mut or_set: std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, (String, String)>,
+        > = Default::default();
+        let mut saw_grant_then_invite_accept = false;
+        let mut saw_revoke_then_invite_reject = false;
 
-        for event in events {
-            let kind = required_str(event, "kind")?;
-            let outcome = expected_outcome(event, name)?;
+        for mv in moves {
+            let kind = required_str(mv, "kind")?;
+            let move_id = required_str(mv, "move_id")?;
+            if !move_id.starts_with("cx:event:") {
+                bail!(
+                    "vector {name} move_id {move_id} must use typed cx:event:<uuidv7> form (C19 wire-break)"
+                );
+            }
+            let outcome = expected_outcome(mv, name)?;
             match kind {
                 "cx.consent.grant" => {
                     if outcome != "accept" {
                         bail!("vector {name} cx.consent.grant must accept");
                     }
-                    let payload = event
-                        .get("payload")
-                        .ok_or_else(|| anyhow!("vector {name} grant missing payload"))?;
-                    let actor = required_str(event, "actor_id")?;
-                    let peer = payload
-                        .get("peer")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| anyhow!("vector {name} grant missing peer"))?;
-                    let scopes = payload
-                        .get("scope")
+                    let effects = mv
+                        .get("effects")
                         .and_then(Value::as_array)
-                        .ok_or_else(|| anyhow!("vector {name} grant missing scope"))?;
-                    for scope in scopes {
-                        let s = scope
-                            .as_str()
-                            .ok_or_else(|| anyhow!("vector {name} scope entry not string"))?;
-                        if s == "any" {
-                            holder_scope_any.insert(format!("{actor}/{peer}"), true);
+                        .ok_or_else(|| anyhow!("vector {name} grant move missing effects[]"))?;
+                    if effects.is_empty() {
+                        bail!("vector {name} grant move has empty effects[]");
+                    }
+                    for effect in effects {
+                        let cell = required_str(effect, "cell")?;
+                        if !cell.starts_with("cx:cell:cx.component.consent.grant.v1:") {
+                            bail!(
+                                "vector {name} grant effect cell must be the consent.grant.v1 cell, got {cell}"
+                            );
                         }
-                        grant_active.insert(format!("{actor}/{peer}/{s}"), true);
-                    }
-                    if peer.starts_with("did:cx:psd-") {
-                        covered_pseudonym = true;
-                    }
-                    if scopes.iter().any(|s| s.as_str() == Some("any")) {
-                        covered_scope_any = true;
+                        if required_str(effect, "op")? != "or_set_add" {
+                            bail!(
+                                "vector {name} grant effect must use op=or_set_add (or-set semantics)"
+                            );
+                        }
+                        let tag = effect
+                            .get("tag")
+                            .ok_or_else(|| anyhow!("vector {name} grant effect missing tag"))?;
+                        let peer = required_str(tag, "peer")?;
+                        let scope = required_str(tag, "scope")?;
+                        or_set
+                            .entry(cell.to_owned())
+                            .or_default()
+                            .insert(move_id.to_owned(), (peer.to_owned(), scope.to_owned()));
+                        if peer.starts_with("did:cx:psd-") {
+                            covered_pseudonym = true;
+                        }
+                        if scope == "any" {
+                            covered_scope_any = true;
+                        }
                     }
                 }
                 "cx.consent.revoke" => {
                     if outcome != "accept" {
                         bail!("vector {name} cx.consent.revoke must accept");
                     }
-                    grant_active.values_mut().for_each(|v| *v = false);
-                    holder_scope_any.values_mut().for_each(|v| *v = false);
-                    covered_revoke_block = true;
-                }
-                _ => {
-                    let constraints = event
-                        .get("profile_constraints")
+                    let effects = mv
+                        .get("effects")
                         .and_then(Value::as_array)
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(Value::as_str)
-                                .collect::<Vec<&str>>()
-                        })
-                        .unwrap_or_default();
-                    let lookup = event
-                        .get("consent_lookup")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            anyhow!("vector {name} non-consent event missing consent_lookup")
-                        })?;
-                    let segments: Vec<&str> = lookup.split('/').collect();
-                    if segments.len() != 3 {
-                        bail!("vector {name} consent_lookup must be holder/peer/scope");
-                    }
-                    let holder = segments[0];
-                    let peer = segments[1];
-                    let scope = segments[2];
-                    let direct = grant_active
-                        .get(&format!("{holder}/{peer}/{scope}"))
-                        .copied()
-                        .unwrap_or(false);
-                    let any = holder_scope_any
-                        .get(&format!("{holder}/{peer}"))
-                        .copied()
-                        .unwrap_or(false);
-                    let active = direct || any;
-                    let require_consent = constraints.contains(&"require_consent");
-                    match outcome {
-                        "accept" => {
-                            if require_consent && !active {
+                        .ok_or_else(|| anyhow!("vector {name} revoke move missing effects[]"))?;
+                    let mut removed_anything = false;
+                    for effect in effects {
+                        let cell = required_str(effect, "cell")?;
+                        if !cell.starts_with("cx:cell:cx.component.consent.grant.v1:") {
+                            bail!(
+                                "vector {name} revoke effect cell must be the consent.grant.v1 cell, got {cell}"
+                            );
+                        }
+                        if required_str(effect, "op")? != "or_set_remove" {
+                            bail!(
+                                "vector {name} revoke effect must use op=or_set_remove (causal removal)"
+                            );
+                        }
+                        let removes = effect
+                            .get("removes")
+                            .and_then(Value::as_array)
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "vector {name} revoke effect missing removes[] (must reference prior grant move_ids)"
+                                )
+                            })?;
+                        if removes.is_empty() {
+                            bail!(
+                                "vector {name} revoke effect has empty removes[]; or-set causal remove must target at least one prior op"
+                            );
+                        }
+                        let cell_set = or_set.entry(cell.to_owned()).or_default();
+                        for r in removes {
+                            let r = r.as_str().ok_or_else(|| {
+                                anyhow!("vector {name} revoke removes[] entry must be a string")
+                            })?;
+                            if cell_set.remove(r).is_some() {
+                                removed_anything = true;
+                            } else {
                                 bail!(
-                                    "vector {name} event {kind} accepts but no active consent grant for {lookup}"
+                                    "vector {name} revoke references unknown grant op_id {r} (causal predecessor missing)"
                                 );
                             }
-                            if active && require_consent {
-                                covered_grant_accept = true;
+                        }
+                    }
+                    if !removed_anything {
+                        bail!("vector {name} revoke removed nothing from the or-set");
+                    }
+                }
+                _ => {
+                    // Downstream Move (cx.invite.send / cx.message.send /
+                    // cx.call.invite ...) carrying a `consent_active`
+                    // precondition. Resolve precondition against the
+                    // consent.grant.v1 cell join.
+                    let preconditions = mv
+                        .get("preconditions")
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "vector {name} non-consent move {kind} missing preconditions[] (consent_active required for v1 wire)"
+                            )
+                        })?;
+                    let mut consent_resolved: Option<bool> = None;
+                    for pre in preconditions {
+                        if required_str(pre, "kind")? != "consent_active" {
+                            continue;
+                        }
+                        let holder = required_str(pre, "holder")?;
+                        let peer = required_str(pre, "peer")?;
+                        let scope = required_str(pre, "scope")?;
+                        let cell = format!(
+                            "cx:cell:cx.component.consent.grant.v1:{holder}"
+                        );
+                        let active_tags = or_set.get(&cell);
+                        let resolved = active_tags
+                            .map(|tags| {
+                                tags.values().any(|(p, s)| {
+                                    p == peer && (s == scope || s == "any")
+                                })
+                            })
+                            .unwrap_or(false);
+                        consent_resolved = Some(resolved);
+                    }
+                    let resolved = consent_resolved.ok_or_else(|| {
+                        anyhow!(
+                            "vector {name} non-consent move {kind} missing consent_active precondition"
+                        )
+                    })?;
+                    match outcome {
+                        "accept" => {
+                            if !resolved {
+                                bail!(
+                                    "vector {name} move {kind} accepts but consent_active precondition resolves false"
+                                );
+                            }
+                            covered_grant_accept = true;
+                            if name == "idempotent_re_grant_after_revoke" {
+                                covered_idempotent_regrant = true;
+                            }
+                            if name == "revoke_after_grant_blocks_invite" {
+                                saw_grant_then_invite_accept = true;
                             }
                         }
                         "reject" => {
-                            if !require_consent {
+                            if resolved {
                                 bail!(
-                                    "vector {name} event {kind} rejects without require_consent constraint"
+                                    "vector {name} move {kind} rejects but consent_active precondition resolves true"
                                 );
                             }
-                            if active {
+                            if expected_reason(mv) != Some("consent_required") {
                                 bail!(
-                                    "vector {name} event {kind} rejects despite active grant for {lookup}"
-                                );
-                            }
-                            if expected_reason(event) != Some("consent_required") {
-                                bail!(
-                                    "vector {name} event {kind} reject must use consent_required"
+                                    "vector {name} move {kind} reject must use reason_code=consent_required"
                                 );
                             }
                             covered_require_consent = true;
+                            if name == "revoke_after_grant_blocks_invite" {
+                                saw_revoke_then_invite_reject = true;
+                            }
                         }
-                        other => bail!("vector {name} event {kind} unexpected outcome {other}"),
+                        other => bail!("vector {name} move {kind} unexpected outcome {other}"),
                     }
                 }
             }
         }
+        // For the revoke-after-grant scenario we want both halves of the
+        // sequence to have been observed (we replay grant -> revoke -> invite
+        // and verify the invite is rejected).
+        if name == "revoke_after_grant_blocks_invite" && saw_revoke_then_invite_reject {
+            covered_revoke_block = true;
+        }
+        // saw_grant_then_invite_accept is unused but kept to document that
+        // the precondition flips correctly across revoke. Suppress unused.
+        let _ = saw_grant_then_invite_accept;
     }
     if !(covered_grant_accept
         && covered_revoke_block
         && covered_scope_any
         && covered_pseudonym
-        && covered_require_consent)
+        && covered_require_consent
+        && covered_idempotent_regrant)
     {
         bail!(
-            "consent fixture must cover grant_accept + revoke_block + scope_any + pseudonym + require_consent"
+            "consent fixture must cover grant_accept + revoke_block + scope_any + pseudonym + require_consent + idempotent_regrant (or-set Move semantics)"
         );
     }
     Ok(())
@@ -648,6 +749,264 @@ fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Re
     } else {
         parent.to_owned()
     })
+}
+
+/// M6 — anchor view compaction round-trip vectors.
+///
+/// Spec: `authz/event-auth-state-resolution.md` §6 (Anchor DAG,
+/// effective_anchor_view, signed compaction). The validator pins these
+/// invariants per vector:
+///
+/// * **multi-leaf effective_anchor_view is a pure function of the input
+///   leaves** — `expected_effective_anchor_view.leaves` MUST equal the
+///   set of input Anchor ids; `frontier` MUST equal the leaves whenever
+///   the leaves are concurrent (no Anchor in the input list is an
+///   ancestor of another in the same input list).
+/// * **signed compaction is join-equivalent** — when a `signed_compaction`
+///   is present, its `frontier` and `state_root` MUST exactly match the
+///   `expected_effective_anchor_view`.
+/// * **bottom diagnostics are preserved across compaction** —
+///   `signed_compaction.bottom_diagnostics` MUST be a superset of
+///   `expected_effective_anchor_view.bottom_diagnostics` (compaction is
+///   information-preserving for ⊥ cells; dropping one is a structural
+///   error).
+/// * **compaction Anchor id is content-addressed** — id starts with
+///   `cx:anchor:sha256:` and the digest is 64 lowercase hex chars.
+///
+/// Negative vectors carry a `drift_compaction` with `expected_rejection_reason`
+/// — the validator computes the actual drift (state_root or
+/// dropped-diagnostic) and asserts the recorded reason matches.
+pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("anchor_view_compaction_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.anchor_view_compaction_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("anchor_view_compaction fixture missing vectors[]"))?;
+    if vectors.is_empty() {
+        bail!("anchor_view_compaction fixture has no vectors");
+    }
+
+    let mut covered_single_leaf = false;
+    let mut covered_multi_leaf_clean = false;
+    let mut covered_bottom_preserved = false;
+
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        let anchors = vector
+            .get("anchors")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("vector {name} missing anchors[]"))?;
+        if anchors.is_empty() {
+            bail!("vector {name} has no anchor leaves");
+        }
+        let view = vector
+            .get("expected_effective_anchor_view")
+            .ok_or_else(|| anyhow!("vector {name} missing expected_effective_anchor_view"))?;
+
+        // (1) leaves equal input anchor id set
+        let input_ids: std::collections::BTreeSet<String> = anchors
+            .iter()
+            .map(|a| required_str(a, "id").map(str::to_owned))
+            .collect::<Result<_>>()?;
+        for id in &input_ids {
+            validate_anchor_id_shape(id, name)?;
+        }
+        let view_leaves: std::collections::BTreeSet<String> = view
+            .get("leaves")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("vector {name} view missing leaves[]"))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(ToOwned::to_owned)
+                    .ok_or_else(|| anyhow!("vector {name} leaf entry not a string"))
+            })
+            .collect::<Result<_>>()?;
+        if view_leaves != input_ids {
+            bail!(
+                "vector {name} effective_anchor_view.leaves drift from input anchor ids"
+            );
+        }
+
+        // (2) when there are >= 2 concurrent leaves, frontier == leaves.
+        // We treat all input anchors as concurrent (the fixture vectors are
+        // crafted that way: each leaf points to the same prior frontier).
+        let view_frontier: std::collections::BTreeSet<String> = view
+            .get("frontier")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("vector {name} view missing frontier[]"))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(ToOwned::to_owned)
+                    .ok_or_else(|| anyhow!("vector {name} frontier entry not a string"))
+            })
+            .collect::<Result<_>>()?;
+        if anchors.len() >= 2 && view_frontier != view_leaves {
+            bail!(
+                "vector {name} concurrent multi-leaf frontier MUST equal leaves set"
+            );
+        }
+        if anchors.len() == 1 && !view_frontier.is_empty() && view_frontier != view_leaves {
+            bail!(
+                "vector {name} single-leaf view frontier must be empty or equal to leaves"
+            );
+        }
+
+        // (3) signed compaction equivalence
+        if let Some(compaction) = vector.get("signed_compaction") {
+            if !compaction.is_null() {
+                let comp_id = required_str(compaction, "id")?;
+                validate_anchor_id_shape(comp_id, name)?;
+                let comp_frontier: std::collections::BTreeSet<String> = compaction
+                    .get("frontier")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} signed_compaction missing frontier[]")
+                    })?
+                    .iter()
+                    .map(|v| {
+                        v.as_str()
+                            .map(ToOwned::to_owned)
+                            .ok_or_else(|| {
+                                anyhow!(
+                                    "vector {name} signed_compaction frontier entry not a string"
+                                )
+                            })
+                    })
+                    .collect::<Result<_>>()?;
+                if comp_frontier != view_frontier {
+                    bail!(
+                        "vector {name} signed_compaction frontier MUST equal effective_view frontier"
+                    );
+                }
+                let comp_state_root = required_str(compaction, "state_root")?;
+                let view_state_root = required_str(view, "state_root")?;
+                if comp_state_root != view_state_root {
+                    bail!(
+                        "vector {name} signed_compaction state_root drift: expected {view_state_root}, got {comp_state_root}"
+                    );
+                }
+                // (4) bottom_diagnostics preserved
+                let view_diags = view
+                    .get("bottom_diagnostics")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} view missing bottom_diagnostics"))?;
+                let comp_diags = compaction
+                    .get("bottom_diagnostics")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} signed_compaction missing bottom_diagnostics")
+                    })?;
+                for diag in view_diags {
+                    if !comp_diags.iter().any(|d| d == diag) {
+                        bail!(
+                            "vector {name} signed_compaction dropped a bottom diagnostic from the effective view (compaction must be information-preserving for ⊥ cells)"
+                        );
+                    }
+                }
+                let signature = compaction
+                    .get("signature")
+                    .ok_or_else(|| anyhow!("vector {name} signed_compaction missing signature"))?;
+                let alg = required_str(signature, "alg")?;
+                if alg != "EdDSA" {
+                    bail!("vector {name} signed_compaction signature.alg must be EdDSA, got {alg}");
+                }
+            }
+        }
+
+        match name {
+            "single_leaf_view_passthrough" => covered_single_leaf = true,
+            "two_leaf_concurrent_no_bottom_compacts_to_one" => covered_multi_leaf_clean = true,
+            "compaction_preserves_bottom_diagnostics" => covered_bottom_preserved = true,
+            _ => {}
+        }
+    }
+
+    if !(covered_single_leaf && covered_multi_leaf_clean && covered_bottom_preserved) {
+        bail!(
+            "anchor_view_compaction fixture must cover single-leaf passthrough + concurrent-multi-leaf + bottom-diagnostic-preservation"
+        );
+    }
+
+    // Negative vectors: each carries a `drift_compaction` with an expected
+    // rejection reason. We compute the drift kind and assert it matches.
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("anchor_view_compaction fixture missing negative_vectors[]"))?;
+    let mut saw_diag_drop = false;
+    let mut saw_state_root_drift = false;
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let anchors = vector
+            .get("anchors")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("negative vector {name} missing anchors[]"))?;
+        let drift = vector
+            .get("drift_compaction")
+            .ok_or_else(|| anyhow!("negative vector {name} missing drift_compaction"))?;
+        let reason = required_str(drift, "expected_rejection_reason")?;
+        match reason {
+            "compaction_dropped_bottom_diagnostics" => {
+                let leaf_diags: Vec<&Value> = anchors
+                    .iter()
+                    .filter_map(|a| a.get("bottom_diagnostics").and_then(Value::as_array))
+                    .flatten()
+                    .collect();
+                let drift_diags: &Vec<Value> = drift
+                    .get("bottom_diagnostics")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("negative vector {name} drift_compaction missing bottom_diagnostics")
+                    })?;
+                if drift_diags.iter().count() >= leaf_diags.len() {
+                    bail!(
+                        "negative vector {name} expected dropped diagnostics but drift_compaction kept them all"
+                    );
+                }
+                saw_diag_drop = true;
+            }
+            "state_root_drifted_from_effective_view" => {
+                let leaf_state_root = anchors
+                    .first()
+                    .and_then(|a| a.get("state_root"))
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("negative vector {name} leaf missing state_root"))?;
+                let drift_state_root = required_str(drift, "state_root")?;
+                if drift_state_root == leaf_state_root {
+                    bail!(
+                        "negative vector {name} expected drifted state_root but drift_compaction matches"
+                    );
+                }
+                saw_state_root_drift = true;
+            }
+            other => bail!("negative vector {name} unknown rejection reason {other}"),
+        }
+    }
+    if !(saw_diag_drop && saw_state_root_drift) {
+        bail!(
+            "anchor_view_compaction fixture must include both bottom-diagnostic-drop and state-root-drift negative vectors"
+        );
+    }
+
+    Ok(())
+}
+
+fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
+    let Some(rest) = id.strip_prefix("cx:anchor:sha256:") else {
+        bail!(
+            "{ctx} anchor id {id} must use cx:anchor:sha256:<hex> special form"
+        );
+    };
+    if rest.len() != 64 || !rest.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()) {
+        bail!(
+            "{ctx} anchor id {id} sha256 segment must be exactly 64 lowercase hex chars"
+        );
+    }
+    Ok(())
 }
 
 fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {

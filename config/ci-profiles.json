@@ -60,7 +60,7 @@
     },
     {
       "profile_id": "release-gate",
-      "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, session-grant bridge checks, plus Move/Anchor/Lattice wire-model fixtures (move/anchor/lattice + holder consent + composite state subject + mimi components). Pending deeper Move/Anchor/Lattice fixtures (anchorer_cell / lattice_round_trip / conflict_repair) — tracked in root C10.C.",
+      "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, session-grant bridge checks, plus Move/Anchor/Lattice wire-model fixtures (move/anchor/lattice + holder consent or-set + composite state subject + mimi components + lattice round-trip + anchor view compaction). Pending deeper Move/Anchor/Lattice fixtures (conflict_repair) — tracked in root C10.C.",
       "include_all_tests": false,
       "cargo_filters": [
         "artifact_registry_suite_matches_reference_semantics",
@@ -68,6 +68,8 @@
         "capability_fixture_suite_matches_reference_semantics",
         "state_resolution_fixture_suite_matches_reference_semantics",
         "move_anchor_lattice_fixture_suite_matches_reference_semantics",
+        "lattice_round_trip_suite_matches_reference_semantics",
+        "anchor_view_compaction_fixture_suite_matches_reference_semantics",
         "sync_fixture_suite_matches_reference_semantics",
         "privacy_security_fixture_suite_matches_reference_semantics",
         "consent_fixture_suite_matches_reference_semantics",

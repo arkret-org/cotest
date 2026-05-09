@@ -185,7 +185,7 @@ checksum = "cc14f565cf027a105f7a44ccf9e5b424348421a1d8952a8fc9d499d313107789"
 
 [[package]]
 name = "contrix-client"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "contrix-core",
  "reqwest",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "chrono",
@@ -212,17 +212,18 @@ dependencies = [
 
 [[package]]
 name = "contrix-identifiers"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "getrandom 0.3.4",
  "serde",
  "sha2",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]
 name = "contrix-lattice"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "contrix-core",
  "serde",
@@ -1950,6 +1951,18 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
+
+[[package]]
+name = "uuid"
+version = "1.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
+dependencies = [
+ "getrandom 0.4.2",
+ "js-sys",
+ "serde_core",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "uuid-simd"
