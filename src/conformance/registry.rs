@@ -1071,11 +1071,68 @@ fn validate_typed_id_ref(value: &str, context: &str, id_kinds: &BTreeSet<String>
     let Some(rest) = value.strip_prefix("cx:") else {
         return Ok(());
     };
-    let Some((kind, _tail)) = rest.split_once(':') else {
+    let Some((kind, tail)) = rest.split_once(':') else {
         return Ok(());
     };
     if !id_kinds.contains(kind) {
         bail!("{context} references unknown typed id kind {kind}: {value}");
     }
+    // Round-21 validator hardening (matches SDK round-20 typed-id validator
+    // tightening): kinds whose canonical wire_form is `cx:<kind>:<uuid>` MUST
+    // carry a 36-character lowercase UUIDv7 payload (RFC 9562: version=7,
+    // variant ∈ {8,9,a,b}). The id-kind registry's six `special_forms` —
+    // cursor (base64url), blob (sha256:<digest>), mls (<profile>:<id>),
+    // pseudonym (<scope>:<random>), anchor (sha256:<digest>), cell
+    // (<component>:<subject>) — are exempt: their tails are never UUIDv7.
+    //
+    // This catches the stale ULID-shape literals (e.g. cx:event:01js0gv01...
+    // — Crockford base32, not UUID) that round-20 of the SDK started
+    // rejecting at envelope-validation time. cotest fixtures and src
+    // literals must mirror the same constraint.
+    const SPECIAL_FORM_KINDS: &[&str] = &["cursor", "blob", "mls", "pseudonym", "anchor", "cell"];
+    if SPECIAL_FORM_KINDS.contains(&kind) {
+        return Ok(());
+    }
+    if !is_uuidv7_shaped(tail) {
+        bail!(
+            "{context} typed id {value} (kind={kind}) payload is not a UUIDv7 (RFC 9562 v7 lowercase 36-char form `xxxxxxxx-xxxx-7xxx-Nxxx-xxxxxxxxxxxx`, N∈{{8,9,a,b}}); spec post-2026-05-09 forbids legacy non-UUID payloads"
+        );
+    }
     Ok(())
+}
+
+/// True when `s` matches the canonical UUIDv7 wire form
+/// `xxxxxxxx-xxxx-7xxx-Nxxx-xxxxxxxxxxxx` (lowercase hex, version=7,
+/// variant ∈ {8,9,a,b}). String-level shape check; no regex engine needed.
+pub(crate) fn is_uuidv7_shaped(s: &str) -> bool {
+    if s.len() != 36 {
+        return false;
+    }
+    let bytes = s.as_bytes();
+    // Hyphen positions: 8, 13, 18, 23.
+    for &i in &[8usize, 13, 18, 23] {
+        if bytes[i] != b'-' {
+            return false;
+        }
+    }
+    for (i, &b) in bytes.iter().enumerate() {
+        if matches!(i, 8 | 13 | 18 | 23) {
+            continue;
+        }
+        // Lowercase hex.
+        let is_digit = b.is_ascii_digit();
+        let is_lower_hex = matches!(b, b'a'..=b'f');
+        if !(is_digit || is_lower_hex) {
+            return false;
+        }
+    }
+    // Version nibble at index 14 must be '7'.
+    if bytes[14] != b'7' {
+        return false;
+    }
+    // Variant nibble at index 19 must be one of 8, 9, a, b.
+    if !matches!(bytes[19], b'8' | b'9' | b'a' | b'b') {
+        return false;
+    }
+    true
 }

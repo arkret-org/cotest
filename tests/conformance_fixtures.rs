@@ -140,3 +140,11 @@ fn conflict_repair_fixture_suite_matches_reference_semantics() -> Result<()> {
 fn mls_move_covered_frontier_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_mls_move_covered_frontier_fixture_suite()
 }
+
+/// Round-21 — Discovery profile (cx.profile.discovery.v1) advertise vs
+/// core/extension tier filtering, interop_bridge handling, and post-C16
+/// surface naming (blob_storage / realtime_media / moderation_reports).
+#[test]
+fn discovery_profile_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_discovery_profile_fixture_suite()
+}

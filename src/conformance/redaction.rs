@@ -15,7 +15,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
     for case in fixture.cases {
         match case.name.as_str() {
             "preserved_fields" => {
-                let redacted = redact_event(&target, "cx:event:redaction")?;
+                let redacted = redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
                 for field in case.preserve.unwrap_or_default() {
                     if redacted.get(&field).is_none() {
                         bail!("redaction fixture {} did not preserve {}", case.name, field);
@@ -27,28 +27,28 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
             }
             "dangling_redaction" => {
                 let mut tracker = RedactionTracker::default();
-                let state = tracker.push_redaction("cx:event:missing", "cx:event:redaction");
+                let state = tracker.push_redaction("cx:event:01970e58-0004-7000-8000-000000000002", "cx:event:01970e58-0004-7000-8000-000000000001");
                 if state != RedactionState::Pending {
                     bail!("redaction fixture {} expected pending state", case.name);
                 }
             }
             "late_target_event" => {
                 let mut tracker = RedactionTracker::default();
-                tracker.push_redaction("cx:event:late", "cx:event:redaction");
+                tracker.push_redaction("cx:event:01970e58-0004-7000-8000-000000000003", "cx:event:01970e58-0004-7000-8000-000000000001");
                 let materialized =
-                    tracker.materialize_target(&sample_event_with_id("cx:event:late"))?;
+                    tracker.materialize_target(&sample_event_with_id("cx:event:01970e58-0004-7000-8000-000000000003"))?;
                 if materialized.get("content").is_some() {
                     bail!(
                         "redaction fixture {} failed to materialize as redacted",
                         case.name
                     );
                 }
-                if materialized["redacted_because"] != "cx:event:redaction" {
+                if materialized["redacted_because"] != "cx:event:01970e58-0004-7000-8000-000000000001" {
                     bail!("redaction fixture {} lost redaction reference", case.name);
                 }
             }
             "audit_visibility" => {
-                let redacted = redact_event(&target, "cx:event:redaction")?;
+                let redacted = redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
                 let audit = audit_tombstone(&redacted)?;
                 if audit.get("content").is_some() {
                     bail!(
@@ -61,7 +61,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                 }
             }
             "snapshot_pruning_stub" => {
-                let redacted = redact_event(&target, "cx:event:redaction")?;
+                let redacted = redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
                 // After redaction, snapshot should retain verification stub
                 if redacted.get("content").is_some() {
                     bail!(
@@ -87,7 +87,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
 }
 
 fn sample_event() -> Value {
-    sample_event_with_id("cx:event:target")
+    sample_event_with_id("cx:event:01970e58-0004-7000-8000-000000000004")
 }
 
 fn sample_event_with_id(event_id: &str) -> Value {

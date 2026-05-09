@@ -196,7 +196,7 @@ pub fn run_capability_facet_fixture_suite() -> Result<()> {
 fn selector_scope(entity_type: &str) -> Result<ResourceSelector> {
     Ok(ResourceSelector {
         kind: "entity".to_owned(),
-        space_id: "cx:space:01JS0SP000000000000000000".to_owned(),
+        space_id: "cx:space:01970e58-0003-7000-8000-000000000001".to_owned(),
         entity_type: Some(entity_type.to_owned()),
     })
 }

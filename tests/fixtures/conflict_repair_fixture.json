@@ -15,8 +15,8 @@
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
-          "cx:event:01js0mv0a100000000000000001",
-          "cx:event:01js0mv0a200000000000000001"
+          "cx:event:01970e58-0001-7a10-8010-000000000010",
+          "cx:event:01970e58-0001-7a11-8011-000000000011"
         ],
         "heads": [
           {"role": "admin"},
@@ -24,18 +24,18 @@
         ]
       },
       "repair_move": {
-        "move_id": "cx:event:01js0mv0b100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a12-8012-000000000012",
         "op_type": "set",
         "head_in": [
-          "cx:event:01js0mv0a100000000000000001",
-          "cx:event:01js0mv0a200000000000000001"
+          "cx:event:01970e58-0001-7a10-8010-000000000010",
+          "cx:event:01970e58-0001-7a11-8011-000000000011"
         ],
         "recovery_capability": "cap:01js0rc0a100000000000000",
         "value": {
           "role": "admin",
           "repair_of": [
-            "cx:event:01js0mv0a100000000000000001",
-            "cx:event:01js0mv0a200000000000000001"
+            "cx:event:01970e58-0001-7a10-8010-000000000010",
+            "cx:event:01970e58-0001-7a11-8011-000000000011"
           ]
         }
       },
@@ -50,7 +50,7 @@
       "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp02000000000000000000",
       "concurrent_anchored_ops": [
         {
-          "move_id": "cx:event:01js0mv0c100000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a13-8013-000000000013",
           "op_type": "set",
           "value": {
             "role": "admin",
@@ -59,7 +59,7 @@
           }
         },
         {
-          "move_id": "cx:event:01js0mv0c200000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a14-8014-000000000014",
           "op_type": "set",
           "value": {"role": "moderator"}
         }
@@ -77,8 +77,8 @@
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
-          "cx:event:01js0mv0d100000000000000001",
-          "cx:event:01js0mv0d200000000000000001"
+          "cx:event:01970e58-0001-7a15-8015-000000000015",
+          "cx:event:01970e58-0001-7a16-8016-000000000016"
         ],
         "heads": [
           {"join_rule": "invite"},
@@ -86,11 +86,11 @@
         ]
       },
       "repair_move": {
-        "move_id": "cx:event:01js0mv0e100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a17-8017-000000000017",
         "op_type": "set",
         "head_in": [
-          "cx:event:01js0mv0d100000000000000001",
-          "cx:event:01js0mv0d200000000000000001"
+          "cx:event:01970e58-0001-7a15-8015-000000000015",
+          "cx:event:01970e58-0001-7a16-8016-000000000016"
         ],
         "recovery_capability": "cap:01js0rc0d100000000000000",
         "issuer_did": "did:web:operator.example",
@@ -101,8 +101,8 @@
         "value": {
           "join_rule": "invite",
           "repair_of": [
-            "cx:event:01js0mv0d100000000000000001",
-            "cx:event:01js0mv0d200000000000000001"
+            "cx:event:01970e58-0001-7a15-8015-000000000015",
+            "cx:event:01970e58-0001-7a16-8016-000000000016"
           ]
         }
       },
@@ -118,11 +118,11 @@
       "comment": "A Move with `head_in` but NO `recovery_capability` MUST be rejected at verify_move. The lattice would happily resolve a single op to Value; the AUTH layer is the gate.",
       "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp04000000000000000000",
       "repair_move": {
-        "move_id": "cx:event:01js0mv0f100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a1a-801a-00000000001a",
         "op_type": "set",
         "head_in": [
-          "cx:event:01js0mv0f000000000000000001",
-          "cx:event:01js0mv0f000000000000000002"
+          "cx:event:01970e58-0001-7a18-8018-000000000018",
+          "cx:event:01970e58-0001-7a19-8019-000000000019"
         ],
         "value": {"role": "admin"}
       },
@@ -139,16 +139,16 @@
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
-          "cx:event:01js0mv10100000000000000001",
-          "cx:event:01js0mv10200000000000000001"
+          "cx:event:01970e58-0001-7a1b-801b-00000000001b",
+          "cx:event:01970e58-0001-7a1c-801c-00000000001c"
         ]
       },
       "repair_move": {
-        "move_id": "cx:event:01js0mv10300000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a1d-801d-00000000001d",
         "op_type": "set",
         "head_in": [
-          "cx:event:01js0mv99900000000000000001",
-          "cx:event:01js0mv99900000000000000002"
+          "cx:event:01970e58-0001-7a27-8027-000000000027",
+          "cx:event:01970e58-0001-7a28-8028-000000000028"
         ],
         "recovery_capability": "cap:01js0rc01000000000000000",
         "value": {"role": "admin"}

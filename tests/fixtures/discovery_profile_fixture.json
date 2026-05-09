@@ -1,0 +1,267 @@
+{
+  "profile": "cx.profile.discovery_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "Discovery profile (cx.profile.discovery.v1) black-box vectors covering: (a) advertise vs core/extension tier filtering — `core` surfaces are implied by claiming v1 protocol support, `extension` surfaces require explicit advertisement; (b) `interop_bridge` tier handling when an external protocol (MIMI / Applet) is supported vs NOT supported — bridge operations are NEVER implied and are not part of any core/extension profile; (c) post-C16 (spec 2026-05-08) surface naming: `blob_storage` (split out from a previous combined media surface), `realtime_media` (renamed from media), `moderation_reports` (renamed from moderation). The validator walks each vector, checks the advertised `surfaces[]` against the core/extension/interop_bridge tier rules, and asserts the SUT capability response matches the spec-mandated discovery semantics.",
+  "tier_rules": {
+    "core": "MUST be advertised whenever the SUT claims `cx.profile.contrix_v1.core`. Absent advertisement is a discovery contract violation; the discovery client MUST treat the SUT as non-conformant.",
+    "extension": "MUST be advertised explicitly. A core-only SUT MUST NOT auto-imply any extension surface. Discovery clients MUST gate extension calls on the surface appearing in the advertised set.",
+    "interop_bridge": "Bridge surfaces MUST be advertised only when the external protocol (MIMI Internet-Drafts / third-party Applet host) is actually supported. Bridge advertisement implies neither core nor extension support. Discovery clients MUST NOT assume an interop_bridge surface implies the corresponding `bridges_to` in-spec surface is supported (and vice-versa).",
+    "deployment_local": "Deployment-specific surfaces (account_auth, etc) — out of scope for discovery profile vectors."
+  },
+  "surface_catalog": {
+    "comment": "Spec authority: registry/operation-registry.json `surface_groups[]`. Each entry pairs a canonical surface name with its tier; the validator uses this to detect drift between the fixture and the live operation registry.",
+    "core": [
+      "service_discovery",
+      "identity_registry",
+      "events_sync"
+    ],
+    "extension": [
+      "directory_discovery",
+      "blob_storage",
+      "realtime_media",
+      "authz_policy",
+      "moderation_reports",
+      "device_and_keys",
+      "push"
+    ],
+    "interop_bridge": [
+      "applet",
+      "mimi_interop"
+    ]
+  },
+  "vectors": [
+    {
+      "name": "core_only_sut_advertises_core_implies_no_extension_or_bridge",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync"
+      ],
+      "expected": {
+        "core_present": true,
+        "extension_present": false,
+        "interop_bridge_present": false,
+        "client_can_call": [
+          "cx.events.submit",
+          "cx.events.frontier",
+          "cx.sync.account"
+        ],
+        "client_must_not_call": [
+          "cx.blob.upload",
+          "cx.media.ice_config",
+          "cx.moderation.report",
+          "cx.applet.ping",
+          "cx.mimi.submit_message"
+        ]
+      }
+    },
+    {
+      "name": "extension_advertised_blob_storage_post_c16_split",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "blob_storage"
+      ],
+      "expected": {
+        "core_present": true,
+        "extension_present": true,
+        "extension_surfaces": ["blob_storage"],
+        "interop_bridge_present": false,
+        "client_can_call": [
+          "cx.blob.upload",
+          "cx.blob.head",
+          "cx.blob.get"
+        ],
+        "client_must_not_call": [
+          "cx.media.ice_config",
+          "cx.moderation.report"
+        ],
+        "comment_c16": "Post-C16 (spec 2026-05-08) blob_storage was split out as its own surface from a previous combined media-like surface. A SUT advertising blob_storage gets blob ops only — NOT realtime_media, NOT moderation_reports."
+      }
+    },
+    {
+      "name": "extension_advertised_realtime_media_alone_does_not_imply_blob",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "realtime_media"
+      ],
+      "expected": {
+        "core_present": true,
+        "extension_present": true,
+        "extension_surfaces": ["realtime_media"],
+        "interop_bridge_present": false,
+        "client_can_call": [
+          "cx.media.ice_config"
+        ],
+        "client_must_not_call": [
+          "cx.blob.upload",
+          "cx.blob.get",
+          "cx.moderation.report"
+        ],
+        "comment_c16": "realtime_media (the WebRTC ICE config surface) does NOT imply blob_storage; the spec split is enforced at discovery."
+      }
+    },
+    {
+      "name": "extension_advertised_moderation_reports_post_c16_split",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "moderation_reports"
+      ],
+      "expected": {
+        "core_present": true,
+        "extension_present": true,
+        "extension_surfaces": ["moderation_reports"],
+        "interop_bridge_present": false,
+        "client_can_call": [
+          "cx.moderation.report"
+        ],
+        "client_must_not_call": [
+          "cx.blob.upload",
+          "cx.media.ice_config",
+          "cx.applet.ping",
+          "cx.mimi.report_abuse"
+        ],
+        "comment_c16": "moderation_reports is the post-C16 canonical surface name. Pre-C16 fixtures used `moderation`; this is now drift and would fail validator surface-name lookup."
+      }
+    },
+    {
+      "name": "interop_bridge_mimi_advertised_when_supported",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "mimi_interop"
+      ],
+      "external_protocol_supported": "mimi",
+      "expected": {
+        "core_present": true,
+        "extension_present": false,
+        "interop_bridge_present": true,
+        "interop_bridge_surfaces": ["mimi_interop"],
+        "client_can_call": [
+          "cx.mimi.submit_message",
+          "cx.mimi.room_update",
+          "cx.mimi.request_consent"
+        ],
+        "client_must_not_call": [
+          "cx.applet.ping"
+        ],
+        "comment": "interop_bridge tier surfaces MUST be explicitly advertised, and only when the external protocol is actually supported. Advertising mimi_interop does NOT imply applet or any extension surface."
+      }
+    },
+    {
+      "name": "interop_bridge_applet_advertised_when_third_party_host_supported",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "applet"
+      ],
+      "external_protocol_supported": "third_party_applet",
+      "expected": {
+        "core_present": true,
+        "extension_present": false,
+        "interop_bridge_present": true,
+        "interop_bridge_surfaces": ["applet"],
+        "client_can_call": [
+          "cx.applet.ping",
+          "cx.applet.describe",
+          "cx.applet.transaction"
+        ],
+        "client_must_not_call": [
+          "cx.mimi.submit_message"
+        ]
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "interop_bridge_mimi_not_advertised_when_external_protocol_unsupported",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync"
+      ],
+      "external_protocol_supported": null,
+      "expected": {
+        "outcome": "reject_call",
+        "rejection_reason": "interop_bridge_surface_not_advertised",
+        "client_attempted_call": "cx.mimi.submit_message",
+        "comment": "Discovery client tries to invoke a MIMI bridge op against an SUT that did NOT advertise mimi_interop and does NOT support MIMI. The SUT MUST reject (or 404) and the discovery client MUST gate the call on the advertised set, not on naive heuristics."
+      }
+    },
+    {
+      "name": "extension_call_blocked_when_surface_not_advertised",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync"
+      ],
+      "expected": {
+        "outcome": "reject_call",
+        "rejection_reason": "extension_surface_not_advertised",
+        "client_attempted_call": "cx.blob.upload",
+        "comment": "Calling an extension op (blob.upload) on a core-only SUT MUST be rejected. Extension surfaces are NEVER implied by core."
+      }
+    },
+    {
+      "name": "legacy_pre_c16_surface_name_moderation_rejected",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "moderation"
+      ],
+      "expected": {
+        "outcome": "reject_advertisement",
+        "rejection_reason": "unknown_surface_name",
+        "comment_c16": "Post-C16 the surface name is `moderation_reports`. The legacy `moderation` token MUST be rejected as drift; v1 is unreleased so there is no compat shim."
+      }
+    },
+    {
+      "name": "legacy_pre_c16_combined_media_surface_rejected",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "media"
+      ],
+      "expected": {
+        "outcome": "reject_advertisement",
+        "rejection_reason": "unknown_surface_name",
+        "comment_c16": "Pre-C16 a combined `media` surface lumped blob ops with realtime ICE ops. The C16 split (spec 2026-05-08) replaced this with two distinct surfaces: blob_storage and realtime_media. The combined `media` token MUST be rejected."
+      }
+    },
+    {
+      "name": "interop_bridge_advertised_does_not_imply_in_spec_bridges_to",
+      "advertised_profile": "cx.profile.contrix_v1.core",
+      "advertised_surfaces": [
+        "service_discovery",
+        "identity_registry",
+        "events_sync",
+        "mimi_interop"
+      ],
+      "expected": {
+        "outcome": "reject_call",
+        "rejection_reason": "extension_surface_not_advertised",
+        "client_attempted_call": "cx.events.submit",
+        "comment": "Even though mimi_interop's bridge ops have a `bridges_to` link to in-spec ops (e.g. cx.mimi.submit_message bridges_to cx.events.submit), advertising mimi_interop is NOT advertising events_sync. The events_sync surface IS advertised here so the call would actually succeed — the negative is the reverse direction: a discovery client must NOT advertise mimi_interop and assume that gives it events_sync access. The SUT here did advertise events_sync, so this vector is structural: the client must call ops via the actual advertised surface, not via a bridge implication."
+      }
+    }
+  ]
+}

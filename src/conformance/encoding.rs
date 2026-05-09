@@ -56,9 +56,9 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
     for case in fixture.cases.proof_payload {
         let event = json!({
-            "event_id": "cx:event:proof-demo",
+            "event_id": "cx:event:01970e58-0003-7000-8000-000000000010",
             "kind": "cx.message.create",
-            "space_id": "cx:space:proof-demo",
+            "space_id": "cx:space:01970e58-0003-7000-8000-000000000011",
             "content": {"body": "covered"},
             "proofs": [{"alg": "none"}],
             "unsigned": {"hint": "not covered"}
@@ -311,7 +311,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
             "scope_container_id": "cx:entity:019640b6-8000-7000-8000-000000000000",
             "container_id": "cx:entity:019640c0-8000-7000-8000-000000000000",
             "relation_kind": "contains",
-            "relation_id": "cx:relation:01js0r1000000000000000000",
+            "relation_id": "cx:relation:01970e58-0002-7000-8000-000000000001",
             "rank": "V"
         }),
         json!({

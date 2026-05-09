@@ -14,26 +14,26 @@
       "cell_id": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp01000000000000000000",
       "anchored_ops": [
         {
-          "move_id": "cx:event:01js0mv11100000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a1e-801e-00000000001e",
           "op": "or_set_add",
-          "tag": "cx:event:01js0gv01100000000000000001"
+          "tag": "cx:event:01970e58-0001-7a00-8000-000000000000"
         },
         {
-          "move_id": "cx:event:01js0mv11200000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a1f-801f-00000000001f",
           "op": "or_set_add",
-          "tag": "cx:event:01js0gv01200000000000000001"
+          "tag": "cx:event:01970e58-0001-7a01-8001-000000000001"
         },
         {
-          "move_id": "cx:event:01js0mv11300000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a20-8020-000000000020",
           "op": "or_set_add",
-          "tag": "cx:event:01js0gv01100000000000000001"
+          "tag": "cx:event:01970e58-0001-7a00-8000-000000000000"
         }
       ],
       "expected": {
         "outcome": "value",
         "active_tags": [
-          "cx:event:01js0gv01100000000000000001",
-          "cx:event:01js0gv01200000000000000001"
+          "cx:event:01970e58-0001-7a00-8000-000000000000",
+          "cx:event:01970e58-0001-7a01-8001-000000000001"
         ],
         "rationale": "or-set: idempotent re-add (third op tags the same ref) MUST resolve to a 2-element set, not 3."
       }
@@ -44,28 +44,28 @@
       "cell_id": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp02000000000000000000",
       "anchored_ops": [
         {
-          "move_id": "cx:event:01js0mv12100000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a21-8021-000000000021",
           "op": "or_set_add",
-          "tag": "cx:event:01js0gv02100000000000000001"
+          "tag": "cx:event:01970e58-0001-7a02-8002-000000000002"
         },
         {
-          "move_id": "cx:event:01js0mv12200000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a22-8022-000000000022",
           "op": "or_set_add",
-          "tag": "cx:event:01js0gv02200000000000000001"
+          "tag": "cx:event:01970e58-0001-7a03-8003-000000000003"
         },
         {
-          "move_id": "cx:event:01js0mv12300000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a23-8023-000000000023",
           "op": "or_set_remove",
-          "tag": "cx:event:01js0gv02100000000000000001"
+          "tag": "cx:event:01970e58-0001-7a02-8002-000000000002"
         }
       ],
       "expected": {
         "outcome": "value",
         "active_tags": [
-          "cx:event:01js0gv02200000000000000001"
+          "cx:event:01970e58-0001-7a03-8003-000000000003"
         ],
         "removed_tags": [
-          "cx:event:01js0gv02100000000000000001"
+          "cx:event:01970e58-0001-7a02-8002-000000000002"
         ],
         "rationale": "Causal or-set remove drops the rotated ref; the unrelated add survives."
       }
@@ -75,7 +75,7 @@
       "comment": "A governance Move (cx.space.policy / cx.policy.set / etc.) does NOT carry a `covered_frontier` precondition — it grows the frontier rather than attesting to it. The Move is admitted unconditionally; subsequent MLS commits will pick the new ref up.",
       "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp03000000000000000000",
       "governance_move": {
-        "move_id": "cx:event:01js0gv03100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a04-8004-000000000004",
         "kind": "cx.space.policy",
         "op_type": "set",
         "preconditions": [],
@@ -90,15 +90,15 @@
       "name": "mls_commit_attests_three_cells_in_one_move",
       "comment": "An MLS commit Move writes to THREE cells in one anchored op: (a) covered_frontier (or_set_add of the governance ref), (b) mls_epoch (cas-register set of the new epoch_id), (c) mls_state (whatever the SDK pinned). All three writes share the same move_id; the lattice resolves each cell independently.",
       "mls_commit_move": {
-        "move_id": "cx:event:01js0mv13100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a24-8024-000000000024",
         "kind": "cx.mls.commit",
         "op_type": "set",
-        "covered_frontier_attests_to": "cx:event:01js0gv03100000000000000001",
+        "covered_frontier_attests_to": "cx:event:01970e58-0001-7a04-8004-000000000004",
         "effects": [
           {
             "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp04000000000000000000",
             "op": "or_set_add",
-            "tag": "cx:event:01js0gv03100000000000000001"
+            "tag": "cx:event:01970e58-0001-7a04-8004-000000000004"
           },
           {
             "cell": "cx:cell:cx.component.mls.epoch.v1:cx.space.01js0sp04000000000000000000",
@@ -123,7 +123,7 @@
       "name": "e2ee_message_missing_covered_frontier_precondition_rejected",
       "comment": "An E2EE message Move (cx.message.send carrying ciphertext) MUST declare a `covered_frontier` precondition naming the governance ref the sender's MLS epoch attests to. A Move missing this precondition (or naming a stale ref) is rejected with `fail_precondition`.",
       "e2ee_move": {
-        "move_id": "cx:event:01js0mv14100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a25-8025-000000000025",
         "kind": "cx.message.send",
         "ciphertext_b64": "ZGVhZGJlZWY",
         "preconditions": []
@@ -140,16 +140,16 @@
       "comment": "E2EE message declares covered_frontier attesting to gov_ref X, but the cell's active_tags don't contain X (X was rotated out). Reject with `fail_precondition` + `covered_frontier_stale`.",
       "cell_id": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp05000000000000000000",
       "active_tags_at_send_time": [
-        "cx:event:01js0gv05100000000000000001"
+        "cx:event:01970e58-0001-7a05-8005-000000000005"
       ],
       "e2ee_move": {
-        "move_id": "cx:event:01js0mv15100000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a26-8026-000000000026",
         "kind": "cx.message.send",
         "ciphertext_b64": "ZGVhZGJlZWY",
         "preconditions": [
           {
             "kind": "covered_frontier",
-            "attests_to": "cx:event:01js0gv99900000000000000001"
+            "attests_to": "cx:event:01970e58-0001-7a06-8006-000000000006"
           }
         ]
       },

@@ -606,9 +606,9 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     // Two MLS commits attest to overlapping governance frontier refs; the
     // or-set surfaces the union without bottom.
     let ops = vec![
-        AnchoredOp::new(move_id("c1"), op_add("cx:event:gov:01")),
-        AnchoredOp::new(move_id("c2"), op_add("cx:event:gov:02")),
-        AnchoredOp::new(move_id("c3"), op_add("cx:event:gov:01")), // duplicate add
+        AnchoredOp::new(move_id("c1"), op_add("cx:event:01970e58-0007-7000-8000-000000000001")),
+        AnchoredOp::new(move_id("c2"), op_add("cx:event:01970e58-0007-7000-8000-000000000002")),
+        AnchoredOp::new(move_id("c3"), op_add("cx:event:01970e58-0007-7000-8000-000000000001")), // duplicate add
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -620,7 +620,7 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("cx:event:gov:01") || !serialized.contains("cx:event:gov:02") {
+    if !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000001") || !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000002") {
         bail!("covered_frontier did not surface both governance refs: {serialized}");
     }
     Ok(())
@@ -635,9 +635,9 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     // remove erases ONLY the matching prior add. The remaining governance
     // ref MUST stay visible.
     let ops = vec![
-        AnchoredOp::new(move_id("c4"), op_add("cx:event:gov:rotated")),
-        AnchoredOp::new(move_id("c5"), op_add("cx:event:gov:still_valid")),
-        AnchoredOp::new(move_id("c6"), op_remove("cx:event:gov:rotated")),
+        AnchoredOp::new(move_id("c4"), op_add("cx:event:01970e58-0007-7000-8000-000000000003")),
+        AnchoredOp::new(move_id("c5"), op_add("cx:event:01970e58-0007-7000-8000-000000000004")),
+        AnchoredOp::new(move_id("c6"), op_remove("cx:event:01970e58-0007-7000-8000-000000000003")),
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -647,12 +647,12 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("cx:event:gov:still_valid") {
+    if !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000004") {
         bail!(
             "covered_frontier should keep `still_valid` ref visible after rotation: {serialized}"
         );
     }
-    if serialized.contains("cx:event:gov:rotated") {
+    if serialized.contains("cx:event:01970e58-0007-7000-8000-000000000003") {
         bail!(
             "covered_frontier should drop the rotated ref after causal remove: {serialized}"
         );

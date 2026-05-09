@@ -17,7 +17,7 @@
         "did": "did:web:hub.example"
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv01000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a07-8007-000000000007",
         "op_type": "set"
       },
       "expected": {
@@ -40,7 +40,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv02000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a08-8008-000000000008",
         "op_type": "set"
       },
       "expected": {
@@ -60,7 +60,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv03000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a09-8009-000000000009",
         "op_type": "set"
       },
       "expected": {
@@ -81,7 +81,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv04000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a0a-800a-00000000000a",
         "op_type": "set"
       },
       "expected": {
@@ -95,7 +95,7 @@
       "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp05000000000000000000",
       "concurrent_anchored_ops": [
         {
-          "move_id": "cx:event:01js0mv05000000000000000001",
+          "move_id": "cx:event:01970e58-0001-7a0b-800b-00000000000b",
           "op_type": "set",
           "value": {
             "shape": "single_did",
@@ -103,7 +103,7 @@
           }
         },
         {
-          "move_id": "cx:event:01js0mv05000000000000000002",
+          "move_id": "cx:event:01970e58-0001-7a0c-800c-00000000000c",
           "op_type": "set",
           "value": {
             "shape": "single_did",
@@ -128,7 +128,7 @@
         "did": "did:web:hub.example"
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv06000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a0d-800d-00000000000d",
         "op_type": "set"
       },
       "drift": {
@@ -161,7 +161,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv07000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a0e-800e-00000000000e",
         "op_type": "set"
       },
       "drift": {
@@ -190,7 +190,7 @@
         ]
       },
       "anchored_op": {
-        "move_id": "cx:event:01js0mv08000000000000000001",
+        "move_id": "cx:event:01970e58-0001-7a0f-800f-00000000000f",
         "op_type": "set"
       },
       "drift": {

@@ -300,8 +300,8 @@ impl ReferenceSnapshot {
             sha256_prefixed(canonical_json(&chunk_2)?.as_bytes()),
         ];
         let manifest = json!({
-            "snapshot_ref": "cx:snapshot:01JS0SN000000000000000000",
-            "space_id": "cx:space:fixture",
+            "snapshot_ref": "cx:snapshot:01970e58-0005-7000-8000-000000000001",
+            "space_id": "cx:space:01970e58-0005-7000-8000-000000000002",
             "state_hash": sha256_prefixed("evt_1evt_2evt_3evt_4".as_bytes()),
             "frontier": ["evt_4"],
             "chunks": [

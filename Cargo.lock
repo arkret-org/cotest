@@ -185,7 +185,7 @@ checksum = "cc14f565cf027a105f7a44ccf9e5b424348421a1d8952a8fc9d499d313107789"
 
 [[package]]
 name = "contrix-client"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "contrix-core",
  "reqwest",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64",
  "chrono",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-identifiers"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "getrandom 0.3.4",
  "serde",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "contrix-lattice"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "contrix-core",
  "serde",
