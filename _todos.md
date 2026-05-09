@@ -12,11 +12,11 @@
 
 ## 当前状态摘要
 
-- **代码量**：`src/conformance/*.rs`（12 子模块）+ `src/harness.rs` + 18 个场景文件，总 ~6K 行 Rust。
+- **代码量**：`src/conformance/*.rs`（13 子模块，含 lattice_round_trip）+ `src/harness.rs` + 18 个场景文件，总 ~6K 行 Rust。
 - **运行模式**：`process` 直接 `cargo run` SUT；`compose` 通过 `run-compose.ps1` 统一 bridge contract matrix；`docker` 与 Complement 同形态。
 - **release gate**：`--Profile release-gate` 已落地。Move/Anchor/Lattice rebase 后 host_endorsement / host_transfer fixture 已删除（C11），release-gate 当前 **15** 个测试通过；目标 ≥18（含 anchorer_cell / lattice_round_trip / conflict_repair）— 见下方 P0 Move/Anchor/Lattice fixture refresh M3-M13。
-- **conformance fixtures**：**19** 个 fixture 测试全部通过；`schema_validation` 覆盖全部 34 个 schema；event-kind registry 强制 ≥129 active kinds + ≥50 profiles + 每个 active state kind 必须声明 cardinality/component_type/criticality（per_subject 还需 state_subject_field）。
-- **已完成**：F1 compose harness、F2 conformance.rs 拆分、F3 spec artifact 同步 gate、F4 artifacts 输出整理、F5 secret scan、A2 schema validation、A6 剔除清理、S2 release gate、Q5 profile 支持；C11 旧 host_endorsement / host_transfer / mimi-host fixture 清理（2026-05-08）；C13.C state_resolution.rs 重写为 move_anchor_lattice 委派 + composite/consent/mimi fixture 措辞对齐。
+- **conformance fixtures**：**20** 个 fixture 测试全部通过（含新增 lattice_round_trip 直接 exercise SDK contrix-lattice crate 真实 join 语义）；`schema_validation` 覆盖全部 34 个 schema；event-kind registry 强制 ≥129 active kinds + ≥50 profiles + 每个 active state kind 必须声明 cardinality/component_type/criticality（per_subject 还需 state_subject_field）。
+- **已完成**：F1 compose harness、F2 conformance.rs 拆分、F3 spec artifact 同步 gate、F4 artifacts 输出整理、F5 secret scan、A2 schema validation、A6 剔除清理、S2 release gate、Q5 profile 支持；C11 旧 host_endorsement / host_transfer / mimi-host fixture 清理（2026-05-08）；C13.C state_resolution.rs 重写为 move_anchor_lattice 委派 + composite/consent/mimi fixture 措辞对齐；**C10.C lattice_round_trip suite (2026-05-09)** 新增 `src/conformance/lattice_round_trip.rs` 9 case 直接调用 SDK lattice crate 验 OrSet/CasRegister/Counter/Fsm/MvRegister/OrderedLog 真实 join 语义。
 
 ---
 
@@ -31,7 +31,7 @@
 | **M1** ⚠ | `[x]` | 删除 `tests/fixtures/host_endorsement_fixture.json` / `host_transfer_fixture.json` + 对应 suite 函数；release-gate 17/17 → 15/15（C11 完成 2026-05-08）。 | `tests/fixtures/`、`src/conformance/wire_model.rs`、`config/ci-profiles.json` |
 | **M2** ⚠ | `[x]` | `move-anchor-lattice-fixture.json` 全识别 + 静态校验：`state_resolution.rs` 重写为 `run_move_anchor_lattice_fixture_suite`，`state_resolution_fixture_suite_matches_reference_semantics` + `move_anchor_lattice_fixture_suite_matches_reference_semantics` 两条 cargo test 名都进了 release-gate。 | `src/conformance/wire_model.rs`、`src/conformance/state_resolution.rs` |
 | **M3** | `[ ]` | 新增 `tests/fixtures/anchorer_cell_fixture.json`：4 种 anchorer profile（single_did / threshold k-of-n / open_set / mixed）的 happy path + signature mismatch + threshold below quorum + anchorer cell ⊥ → space-wide pause + recovery anchorer 上位。 | `tests/fixtures/`、`src/conformance/wire_model.rs` |
-| **M4** | `[ ]` | 新增 `tests/fixtures/lattice_round_trip_fixture.json`：6 个核心 Lattice type 的 deterministic join + bottom 诊断（or-set tag 唯一性 / mv-register 多值 / cas-register 并发 ⊥ / fsm 非法迁移 ⊥ / counter PN 求和 / ordered-log issuer chain）。 | `tests/fixtures/`、`src/conformance/wire_model.rs` |
+| **M4** | `[x]` | (2026-05-09) **不走 fixture JSON，走真实 SDK round-trip**：`src/conformance/lattice_round_trip.rs` 9 个 case 直接 exercise SDK `contrix-lattice` crate 的 `join` 语义。覆盖 OrSet 因果 add/remove + 幂等 re-add、CasRegister 并发→`Bottom::Conflict` + 单写→Value、Counter PN sum (5+3-2=6)、Fsm legal/illegal、MvRegister 并发多值（accept Value-array 或 Bottom-with-heads）、OrderedLog per-issuer monotonic append。`run_lattice_round_trip_suite` exposed via `cotest::conformance` + `tests/conformance_fixtures.rs::lattice_round_trip_suite_matches_reference_semantics` 进 release-gate。 | `src/conformance/lattice_round_trip.rs`、`src/conformance/mod.rs`、`tests/conformance_fixtures.rs` |
 | **M5** | `[ ]` | 新增 `tests/fixtures/conflict_repair_fixture.json`：head_in 修复 Move + recovery_capability ref happy / 用冲突候选自身声明的新 policy 自我授权 reject / `bottom_escalation_after_ms` 超时不自动选 winner。 | `tests/fixtures/` |
 | **M6** | `[ ]` | 新增 `tests/fixtures/anchor_view_compaction_fixture.json`：多 leaf Anchor effective_anchor_view 纯函数 / signed compaction Anchor 等价 / compaction 不丢失 bottom diagnostics。 | `tests/fixtures/` |
 | **M7** | `[ ]` | 新增 `tests/fixtures/mls_move_covered_frontier_fixture.json`：E2EE message Move 缺 covered_frontier → fail_precondition / governance Move 不受阻塞 / MLS commit Move 写 mls_epoch + key_schedule + covered_frontier 三 cell。 | `tests/fixtures/` |

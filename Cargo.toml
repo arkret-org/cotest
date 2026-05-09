@@ -10,6 +10,10 @@ base64 = "0.22.1"
 chrono = "0.4.42"
 contrix-client = { path = "../contrix-rust-sdk/crates/client" }
 contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
+# C10.C lattice round-trip vectors: cotest exercises the SDK's contrix-lattice
+# crate directly to confirm CasRegister / OrSet / Counter / Fsm / MvRegister /
+# OrderedLog implementations match the spec's normative join semantics.
+contrix-lattice = { path = "../contrix-rust-sdk/crates/lattice" }
 jsonschema = { version = "0.46.4", default-features = false, features = ["resolve-file"] }
 reqwest = { version = "0.12.24", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
