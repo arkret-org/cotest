@@ -3504,3 +3504,807 @@ fn class_strictness_rank(class: &str) -> u8 {
         _ => 0,
     }
 }
+
+/// A5 Round 24 — device-message / key-verification / key-backup negative
+/// envelope vectors. Spec extensions/device-messages.md + B-22 strict_key_ref
+/// rule + crypto-media/encryption-and-audit.md.
+pub fn run_device_message_negative_fixture_suite() -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let fixture = load_local_fixture("device_message_negative_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.device_message_negative_vectors.v1")?;
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("device_message_negative fixture missing negative_vectors[]"))?;
+    if negatives.len() < 5 {
+        bail!(
+            "device_message_negative fixture has {} negative_vectors, expected >= 5",
+            negatives.len()
+        );
+    }
+
+    let valid_reasons: BTreeSet<&str> = [
+        "key_ref_not_authorized",
+        "key_ref_did_namespace_mismatch",
+        "key_ref_stale",
+        "device_scope_unauthorized",
+        "session_grant_expired",
+        "replay_window_violation",
+    ]
+    .into_iter()
+    .collect();
+
+    let mut covered_reasons: BTreeSet<String> = BTreeSet::new();
+
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let envelope = v
+            .get("envelope")
+            .ok_or_else(|| anyhow!("vector {name} missing envelope"))?;
+        let envelope_id = required_str(envelope, "envelope_id")?;
+        if !envelope_id.starts_with("cx:envelope:") {
+            bail!(
+                "vector {name} envelope_id {envelope_id} must use cx:envelope:<uuidv7> form"
+            );
+        }
+        let sender = required_str(envelope, "sender_device_id")?;
+        let key_ref = required_str(envelope, "key_ref")?;
+        let _ = required_str(envelope, "recipient_device_id")?;
+        let _ = required_str(envelope, "hlc")?;
+        let _ = required_str(envelope, "ciphertext_b64")?;
+
+        let expected = v
+            .get("expected")
+            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("vector {name} outcome must be reject");
+        }
+        let reason = required_str(expected, "reason_code")?;
+        if !valid_reasons.contains(reason) {
+            bail!("vector {name} reason_code {reason} not in expected set");
+        }
+        if required_str(expected, "stage")? != "envelope_validation" {
+            bail!("vector {name} stage must be envelope_validation (pre-decryption)");
+        }
+
+        // Per-reason structural cross-checks
+        match reason {
+            "key_ref_not_authorized" => {
+                let trust_set: BTreeSet<&str> = v
+                    .get("trust_set_at_recv_time")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if trust_set.contains(key_ref) {
+                    bail!(
+                        "vector {name} declares key_ref_not_authorized but key_ref IS in trust_set"
+                    );
+                }
+            }
+            "key_ref_did_namespace_mismatch" => {
+                // Sender DID prefix MUST NOT match key_ref DID prefix
+                let key_did_prefix = key_ref.split('#').next().unwrap_or("");
+                if key_did_prefix == sender {
+                    bail!(
+                        "vector {name} declares did_namespace_mismatch but key_ref DID prefix MATCHES sender"
+                    );
+                }
+            }
+            "key_ref_stale" => {
+                let rotated: BTreeSet<&str> = v
+                    .get("rotated_out_keys")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if !rotated.contains(key_ref) {
+                    bail!("vector {name} stale variant must list key_ref in rotated_out_keys");
+                }
+            }
+            "device_scope_unauthorized" => {
+                let scopes: BTreeSet<&str> = v
+                    .get("device_authorized_scopes")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let missing = required_str(expected, "missing_scope")?;
+                if scopes.contains(missing) {
+                    bail!(
+                        "vector {name} declares scope_unauthorized but device.authorized.scopes CONTAINS {missing}"
+                    );
+                }
+            }
+            "session_grant_expired" => {
+                let proof = envelope.get("session_grant_proof").ok_or_else(|| {
+                    anyhow!("vector {name} expired must include session_grant_proof")
+                })?;
+                let expires_at = required_str(proof, "expires_at")?;
+                let recv = required_str(v, "recv_time")?;
+                if expires_at >= recv {
+                    bail!(
+                        "vector {name} declares expired but expires_at ({expires_at}) is NOT before recv_time ({recv})"
+                    );
+                }
+            }
+            "replay_window_violation" => {
+                let dedup: BTreeSet<&str> = v
+                    .get("dedup_cache_seen")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if !dedup.contains(envelope_id) {
+                    bail!(
+                        "vector {name} replay variant must list envelope_id in dedup_cache_seen"
+                    );
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        covered_reasons.insert(reason.to_owned());
+    }
+
+    let required_reasons = [
+        "key_ref_not_authorized",
+        "key_ref_did_namespace_mismatch",
+        "device_scope_unauthorized",
+        "session_grant_expired",
+        "replay_window_violation",
+    ];
+    for required in required_reasons {
+        if !covered_reasons.contains(required) {
+            bail!(
+                "device_message_negative fixture must cover reason_code {required}"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// B2 Round 24 — redaction reducer × history_visibility composition vectors.
+pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let fixture = load_local_fixture("redaction_history_visibility_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.redaction_history_visibility_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("redaction_history_visibility fixture missing vectors[]"))?;
+    if vectors.len() < 4 {
+        bail!(
+            "redaction_history_visibility fixture has {} vectors, expected >= 4",
+            vectors.len()
+        );
+    }
+
+    let valid_visibility: BTreeSet<&str> =
+        ["world_readable", "shared", "joined", "invited"].into_iter().collect();
+
+    let mut saw_author = false;
+    let mut saw_member_hidden = false;
+    let mut saw_world_readable_remove = false;
+    let mut saw_unredact = false;
+
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let visibility = required_str(v, "history_visibility")?;
+        if !valid_visibility.contains(visibility) {
+            bail!("vector {name} history_visibility {visibility} invalid");
+        }
+        let viewer_role = required_str(v, "viewer_role")?;
+        let original = v
+            .get("original_event")
+            .ok_or_else(|| anyhow!("vector {name} missing original_event"))?;
+        let _ = required_str(original, "event_id")?;
+        if required_str(original, "kind")? != "cx.message.create" {
+            bail!("vector {name} original_event kind must be cx.message.create");
+        }
+
+        let redaction = v
+            .get("redaction_event")
+            .ok_or_else(|| anyhow!("vector {name} missing redaction_event"))?;
+        if required_str(redaction, "kind")? != "cx.message.redact" {
+            bail!("vector {name} redaction_event kind must be cx.message.redact");
+        }
+        let redacts = required_str(redaction, "redacts")?;
+        let original_id = required_str(original, "event_id")?;
+        if redacts != original_id {
+            bail!(
+                "vector {name} redaction.redacts {redacts} != original.event_id {original_id}"
+            );
+        }
+
+        let expected = v
+            .get("expected")
+            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+        let tombstone_visible = expected
+            .get("tombstone_visible")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.tombstone_visible"))?;
+        let original_visible = expected
+            .get("original_content_visible")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.original_content_visible"))?;
+
+        match (viewer_role, visibility) {
+            ("author", _) => {
+                if !tombstone_visible || !original_visible {
+                    bail!(
+                        "vector {name} author MUST see both tombstone and original content"
+                    );
+                }
+                saw_author = true;
+            }
+            ("world_reader", "world_readable") => {
+                let fully = expected
+                    .get("fully_removed")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                if tombstone_visible || original_visible || !fully {
+                    bail!(
+                        "vector {name} world_readable redaction must be fully_removed for world reader"
+                    );
+                }
+                saw_world_readable_remove = true;
+            }
+            ("member", _) => {
+                if v.get("unredaction_move").is_some() {
+                    if !original_visible || tombstone_visible {
+                        bail!(
+                            "vector {name} reverse-redaction must re-expose original and hide tombstone"
+                        );
+                    }
+                    let mv = v.get("unredaction_move").unwrap();
+                    if required_str(mv, "kind")? != "cx.message.unredact" {
+                        bail!(
+                            "vector {name} unredaction_move kind must be cx.message.unredact"
+                        );
+                    }
+                    let removes = mv
+                        .get("removes")
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| anyhow!("vector {name} unredact missing removes[]"))?;
+                    let red_id = required_str(redaction, "event_id")?;
+                    let listed: Vec<&str> =
+                        removes.iter().filter_map(Value::as_str).collect();
+                    if !listed.contains(&red_id) {
+                        bail!(
+                            "vector {name} unredact removes[] must reference redaction event_id"
+                        );
+                    }
+                    saw_unredact = true;
+                } else {
+                    if !tombstone_visible || original_visible {
+                        bail!(
+                            "vector {name} member must see tombstone but NOT original content"
+                        );
+                    }
+                    saw_member_hidden = true;
+                }
+            }
+            (role, vis) => bail!("vector {name} unexpected (viewer_role={role}, visibility={vis})"),
+        }
+    }
+
+    if !(saw_author && saw_member_hidden && saw_world_readable_remove && saw_unredact) {
+        bail!(
+            "redaction_history_visibility fixture must cover author + member_hidden + world_readable_remove + reverse_redaction"
+        );
+    }
+
+    Ok(())
+}
+
+/// B3 Round 24 — composite (cell, subject) state-key encoding determinism +
+/// reserved-name collision rejection.
+pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("composite_state_key_encoding_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.composite_state_key_encoding_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("composite_state_key_encoding fixture missing vectors[]"))?;
+    if vectors.len() < 5 {
+        bail!(
+            "composite_state_key_encoding fixture has {} vectors, expected >= 5",
+            vectors.len()
+        );
+    }
+
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let components = v
+            .get("components_array")
+            .ok_or_else(|| anyhow!("vector {name} missing components_array"))?;
+        let expected_cj = required_str(v, "expected_canonical_json")?;
+        let actual_cj = canonical_json(components)?;
+        if actual_cj != expected_cj {
+            bail!(
+                "vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}"
+            );
+        }
+        let expected_subject = required_str(v, "expected_state_subject")?;
+        let actual_subject = compute_state_subject(components)?;
+        if actual_subject != expected_subject {
+            bail!(
+                "vector {name} state_subject drift: expected {expected_subject}, got {actual_subject}"
+            );
+        }
+    }
+
+    // Ordering-negative: the wrong-order array MUST hash to a different subject.
+    let ordering = fixture
+        .get("ordering_negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("composite_state_key_encoding fixture missing ordering_negative_vectors[]"))?;
+    let mut saw_ordering = false;
+    for v in ordering {
+        let name = required_str(v, "name")?;
+        let components = v
+            .get("components_array")
+            .ok_or_else(|| anyhow!("ordering negative {name} missing components_array"))?;
+        let must_differ = required_str(v, "must_differ_from")?;
+        let computed = compute_state_subject(components)?;
+        if computed == must_differ {
+            bail!(
+                "ordering negative {name} produced canonical state_subject (would mask reorder bug)"
+            );
+        }
+        saw_ordering = true;
+    }
+    if !saw_ordering {
+        bail!("composite_state_key_encoding fixture must include at least one ordering negative");
+    }
+
+    // Reserved-name negatives: any components_array containing __bottom__ or
+    // __compaction__ MUST be rejected by the encoder. The fixture asserts the
+    // outcome metadata; we cross-check that the reserved_token is actually
+    // present in the components_array.
+    let reserved = fixture
+        .get("reserved_name_negatives")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("composite_state_key_encoding fixture missing reserved_name_negatives[]"))?;
+    if reserved.len() < 2 {
+        bail!(
+            "composite_state_key_encoding fixture must include >= 2 reserved-name negatives (one per reserved token)"
+        );
+    }
+    let mut saw_bottom = false;
+    let mut saw_compaction = false;
+    for v in reserved {
+        let name = required_str(v, "name")?;
+        let components = v
+            .get("components_array")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("reserved negative {name} missing components_array[]"))?;
+        let expected = v
+            .get("expected")
+            .ok_or_else(|| anyhow!("reserved negative {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("reserved negative {name} outcome must be reject");
+        }
+        if required_str(expected, "reason_code")? != "reserved_state_subject_component" {
+            bail!(
+                "reserved negative {name} reason_code must be reserved_state_subject_component"
+            );
+        }
+        let token = required_str(expected, "reserved_token")?;
+        let token_present = components.iter().any(|c| c.as_str() == Some(token));
+        if !token_present {
+            bail!(
+                "reserved negative {name} declared reserved_token {token} but components_array does not contain it"
+            );
+        }
+        match token {
+            "__bottom__" => saw_bottom = true,
+            "__compaction__" => saw_compaction = true,
+            other => bail!("reserved negative {name} unknown reserved_token {other}"),
+        }
+    }
+    if !(saw_bottom && saw_compaction) {
+        bail!(
+            "composite_state_key_encoding fixture must include both __bottom__ and __compaction__ reserved-name negatives"
+        );
+    }
+
+    Ok(())
+}
+
+/// D1 Round 24 — MLS / E2EE basic protocol vectors: genesis, epoch advance,
+/// member join, member leave, covered_frontier accumulation, AAD pinning.
+pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let fixture = load_local_fixture("mls_e2ee_basic_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.mls_e2ee_basic_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("mls_e2ee_basic fixture missing vectors[]"))?;
+    if vectors.len() < 5 {
+        bail!(
+            "mls_e2ee_basic fixture has {} vectors, expected >= 5",
+            vectors.len()
+        );
+    }
+
+    let mut saw_genesis = false;
+    let mut saw_epoch_advance = false;
+    let mut saw_member_join = false;
+    let mut saw_member_leave = false;
+    let mut saw_frontier_accum = false;
+    let mut saw_aad_pin = false;
+
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        match name {
+            "genesis_move_creates_epoch_zero" => {
+                if required_str(v, "kind")? != "cx.mls.genesis" {
+                    bail!("vector {name} kind must be cx.mls.genesis");
+                }
+                let epoch_after = v
+                    .pointer("/expected/epoch_after")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected.epoch_after"))?;
+                if epoch_after != 0 {
+                    bail!("vector {name} genesis must yield epoch_after=0");
+                }
+                let frontier = v
+                    .pointer("/expected/covered_frontier_after")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected.covered_frontier_after"))?;
+                if !frontier.is_empty() {
+                    bail!("vector {name} genesis must yield empty covered_frontier");
+                }
+                saw_genesis = true;
+            }
+            "epoch_advance_via_commit_zero_to_one" => {
+                if required_str(v, "kind")? != "cx.mls.commit" {
+                    bail!("vector {name} kind must be cx.mls.commit");
+                }
+                let prior = v
+                    .get("prior_epoch")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("vector {name} missing prior_epoch"))?;
+                let after = v
+                    .pointer("/expected/epoch_after")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected.epoch_after"))?;
+                if after != prior + 1 {
+                    bail!(
+                        "vector {name} epoch advance must be exactly +1: prior={prior} after={after}"
+                    );
+                }
+                saw_epoch_advance = true;
+            }
+            "member_join_via_commit" => {
+                let prior_members: BTreeSet<&str> = v
+                    .get("prior_members")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let after_members: BTreeSet<&str> = v
+                    .pointer("/expected/members_after")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let added: BTreeSet<&str> = v
+                    .pointer("/expected/members_added")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if added.is_empty() {
+                    bail!("vector {name} join must declare members_added");
+                }
+                let computed_after: BTreeSet<&str> =
+                    prior_members.union(&added).copied().collect();
+                if computed_after != after_members {
+                    bail!(
+                        "vector {name} members_after {after_members:?} != prior_members ∪ members_added {computed_after:?}"
+                    );
+                }
+                saw_member_join = true;
+            }
+            "member_leave_via_commit" => {
+                let prior_members: BTreeSet<&str> = v
+                    .get("prior_members")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let after_members: BTreeSet<&str> = v
+                    .pointer("/expected/members_after")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let removed: BTreeSet<&str> = v
+                    .pointer("/expected/members_removed")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if removed.is_empty() {
+                    bail!("vector {name} leave must declare members_removed");
+                }
+                let computed_after: BTreeSet<&str> =
+                    prior_members.difference(&removed).copied().collect();
+                if computed_after != after_members {
+                    bail!(
+                        "vector {name} members_after {after_members:?} != prior_members − members_removed {computed_after:?}"
+                    );
+                }
+                saw_member_leave = true;
+            }
+            "covered_frontier_accumulates_across_three_epochs" => {
+                let commits = v
+                    .get("commits")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing commits[]"))?;
+                if commits.len() != 3 {
+                    bail!("vector {name} must have exactly 3 commits");
+                }
+                let mut prior_epoch: u64 = 0;
+                for (i, c) in commits.iter().enumerate() {
+                    let ep = c
+                        .get("epoch")
+                        .and_then(Value::as_u64)
+                        .ok_or_else(|| anyhow!("vector {name} commit {i} missing epoch"))?;
+                    if ep != prior_epoch + 1 {
+                        bail!(
+                            "vector {name} commit {i} epoch {ep} not monotonically prior+1 (prior={prior_epoch})"
+                        );
+                    }
+                    prior_epoch = ep;
+                }
+                let frontier_after: Vec<&str> = v
+                    .pointer("/expected/covered_frontier_after")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if frontier_after.len() != 3 {
+                    bail!(
+                        "vector {name} covered_frontier_after must have all 3 attested refs"
+                    );
+                }
+                saw_frontier_accum = true;
+            }
+            "encryption_aad_digest_pinning" => {
+                let inputs = v
+                    .get("expected_aad_digest_inputs")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected_aad_digest_inputs"))?;
+                if inputs.len() != 4 {
+                    bail!(
+                        "vector {name} AAD digest must have exactly 4 inputs (move_id, epoch_id, tree_hash, covered_frontier_root)"
+                    );
+                }
+                let move_id = required_str(v, "move_id")?;
+                if inputs[0].as_str() != Some(move_id) {
+                    bail!("vector {name} AAD inputs[0] must be move_id");
+                }
+                if required_str(
+                    v.pointer("/expected").unwrap(),
+                    "aad_pinning",
+                )? != "sha256"
+                {
+                    bail!("vector {name} aad_pinning must be sha256");
+                }
+                saw_aad_pin = true;
+            }
+            other => bail!("vector unexpected name {other}"),
+        }
+    }
+
+    if !(saw_genesis && saw_epoch_advance && saw_member_join && saw_member_leave && saw_frontier_accum && saw_aad_pin) {
+        bail!(
+            "mls_e2ee_basic fixture must cover genesis + epoch_advance + member_join + member_leave + frontier_accum + aad_pin"
+        );
+    }
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("mls_e2ee_basic fixture missing negative_vectors[]"))?;
+    let mut saw_skip = false;
+    let mut saw_aad_mismatch = false;
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let reason = v
+            .pointer("/expected/reason_code")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing expected.reason_code"))?;
+        match reason {
+            "mls_epoch_non_monotonic" => {
+                let prior = v
+                    .get("prior_epoch")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("negative {name} missing prior_epoch"))?;
+                let claimed = v
+                    .get("claimed_epoch")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("negative {name} missing claimed_epoch"))?;
+                if claimed == prior + 1 {
+                    bail!("negative {name} claimed_epoch is +1 (would actually be valid)");
+                }
+                saw_skip = true;
+            }
+            "aad_digest_mismatch" => {
+                let observed = required_str(v, "observed_tree_hash_b64")?;
+                let claimed = required_str(v, "claimed_aad_inputs_tree_hash_b64")?;
+                if observed == claimed {
+                    bail!("negative {name} observed and claimed tree_hash match (no mismatch)");
+                }
+                saw_aad_mismatch = true;
+            }
+            other => bail!("negative {name} unknown reason_code {other}"),
+        }
+    }
+    if !(saw_skip && saw_aad_mismatch) {
+        bail!(
+            "mls_e2ee_basic fixture must cover epoch_skip + aad_mismatch negatives"
+        );
+    }
+
+    Ok(())
+}
+
+/// D2 Round 24 — device verification flow vectors: cross-signing chain, SAS,
+/// emoji code.
+pub fn run_device_verification_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("device_verification_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.device_verification_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("device_verification fixture missing vectors[]"))?;
+    if vectors.len() < 4 {
+        bail!(
+            "device_verification fixture has {} vectors, expected >= 4",
+            vectors.len()
+        );
+    }
+
+    let mut saw_cross_sign = false;
+    let mut saw_user_sign = false;
+    let mut saw_sas = false;
+    let mut saw_emoji = false;
+    let mut saw_revoked_master = false;
+
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        match name {
+            "cross_signing_chain_master_signs_self_signing_signs_device_leaf" => {
+                let master = v
+                    .get("master_key")
+                    .ok_or_else(|| anyhow!("vector {name} missing master_key"))?;
+                let master_id = required_str(master, "key_id")?;
+                if !master_id.ends_with("#master") {
+                    bail!("vector {name} master_key.key_id must end with #master");
+                }
+                let self_sign = v
+                    .get("self_signing_key")
+                    .ok_or_else(|| anyhow!("vector {name} missing self_signing_key"))?;
+                if required_str(self_sign, "signed_by")? != master_id {
+                    bail!(
+                        "vector {name} self_signing_key.signed_by must point to master_key"
+                    );
+                }
+                let leaves = v
+                    .get("device_leaf_keys")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing device_leaf_keys[]"))?;
+                if leaves.is_empty() {
+                    bail!("vector {name} must include at least one device_leaf_key");
+                }
+                let self_sign_id = required_str(self_sign, "key_id")?;
+                for leaf in leaves {
+                    if required_str(leaf, "signed_by")? != self_sign_id {
+                        bail!(
+                            "vector {name} device_leaf_key.signed_by must point to self_signing_key"
+                        );
+                    }
+                }
+                let chain_valid = v
+                    .pointer("/expected/chain_valid")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected.chain_valid"))?;
+                if !chain_valid {
+                    bail!("vector {name} expected.chain_valid must be true");
+                }
+                saw_cross_sign = true;
+            }
+            "user_signing_cross_user_trust_link" => {
+                let us = v
+                    .get("user_signing_key")
+                    .ok_or_else(|| anyhow!("vector {name} missing user_signing_key"))?;
+                if !required_str(us, "key_id")?.ends_with("#user-signing") {
+                    bail!("vector {name} user_signing_key.key_id must end with #user-signing");
+                }
+                let trusted = v
+                    .get("trusted_user_master")
+                    .ok_or_else(|| anyhow!("vector {name} missing trusted_user_master"))?;
+                if required_str(trusted, "signed_by")? != required_str(us, "key_id")? {
+                    bail!(
+                        "vector {name} trusted_user_master.signed_by must equal user_signing.key_id"
+                    );
+                }
+                saw_user_sign = true;
+            }
+            "sas_verification_short_auth_string_match" => {
+                let alice = required_str(v, "alice_sas_truncated_hex")?;
+                let bob = required_str(v, "bob_sas_truncated_hex")?;
+                if alice != bob {
+                    bail!("vector {name} SAS strings must match for accept");
+                }
+                let outcome = v
+                    .pointer("/expected/sas_match")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected.sas_match"))?;
+                if !outcome {
+                    bail!("vector {name} expected.sas_match must be true");
+                }
+                saw_sas = true;
+            }
+            "out_of_band_emoji_code_deterministic_mapping" => {
+                let alice: Vec<&str> = v
+                    .get("alice_emojis")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let bob: Vec<&str> = v
+                    .get("bob_emojis")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                if alice != bob {
+                    bail!("vector {name} alice_emojis and bob_emojis must match");
+                }
+                if alice.len() != 7 {
+                    bail!(
+                        "vector {name} emoji sequence must be 7 elements (42 bits ≈ 6 SAS bytes)"
+                    );
+                }
+                saw_emoji = true;
+            }
+            "self_signing_key_with_revoked_master_rejects" => {
+                let master = v
+                    .get("master_key")
+                    .ok_or_else(|| anyhow!("vector {name} missing master_key"))?;
+                let revoked = master
+                    .get("revoked")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
+                if !revoked {
+                    bail!("vector {name} master_key.revoked must be true");
+                }
+                let outcome = required_str(
+                    v.pointer("/expected").unwrap(),
+                    "outcome",
+                )?;
+                if outcome != "reject" {
+                    bail!("vector {name} outcome must be reject");
+                }
+                if required_str(v.pointer("/expected").unwrap(), "reason_code")?
+                    != "master_key_revoked"
+                {
+                    bail!("vector {name} reason_code must be master_key_revoked");
+                }
+                saw_revoked_master = true;
+            }
+            other => bail!("vector unexpected name {other}"),
+        }
+    }
+
+    if !(saw_cross_sign && saw_user_sign && saw_sas && saw_emoji && saw_revoked_master) {
+        bail!(
+            "device_verification fixture must cover cross_sign + user_sign + sas + emoji + revoked_master"
+        );
+    }
+
+    Ok(())
+}

@@ -1,0 +1,103 @@
+{
+  "profile": "cx.profile.composite_state_key_encoding_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
+  "encoder": {
+    "canonical_json": "RFC 8785 / encoding.md §1: arrays preserve order, object keys sorted, no whitespace",
+    "digest": "SHA-256",
+    "encoding": "base64url no padding",
+    "ordering_property": "components_array ordering is deterministic per kind; reordering produces a different hash"
+  },
+  "vectors": [
+    {
+      "name": "flow_track_member_alice",
+      "kind": "cx.flow.track.member",
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_order_source": "[flow_id, track, actor_id]",
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_state_subject": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
+    },
+    {
+      "name": "flow_track_history_visibility_main",
+      "kind": "cx.flow.track.history_visibility",
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_order_source": "[flow_id, track]",
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34"
+    },
+    {
+      "name": "device_authorized_alice",
+      "kind": "cx.device.authorized",
+      "components_array": ["did:web:alice.example", "dev_alice_01"],
+      "components_order_source": "[principal_id, device_id]",
+      "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
+      "expected_state_subject": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
+    },
+    {
+      "name": "space_policy_default",
+      "kind": "cx.space.policy",
+      "components_array": ["cx:space:01js0sp01000000000000000000", "default"],
+      "components_order_source": "[space_id, policy_name]",
+      "expected_canonical_json": "[\"cx:space:01js0sp01000000000000000000\",\"default\"]",
+      "expected_state_subject": "18_lKDow3LwluDlYlEpTahbJeV_jQD6teOncN2j24PM"
+    },
+    {
+      "name": "space_member_carol",
+      "kind": "cx.space.member",
+      "components_array": ["cx:space:01js0sp01000000000000000000", "did:web:carol.example"],
+      "components_order_source": "[space_id, actor_id]",
+      "expected_canonical_json": "[\"cx:space:01js0sp01000000000000000000\",\"did:web:carol.example\"]",
+      "expected_state_subject": "AGszk3i4wz20hhaR62oM2_6XOCjFWmnZLISUxHD8KGY"
+    },
+    {
+      "name": "flow_track_member_alice_distinct_track",
+      "kind": "cx.flow.track.member",
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
+      "components_order_source": "[flow_id, track, actor_id]",
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
+      "expected_state_subject": "OP0EsF38fyKuP7qED_VpUC1vAdmNU2oZ12AKpiKenOU",
+      "comment": "Same flow_id + actor_id as flow_track_member_alice but different track segment — must produce a distinct state_subject."
+    }
+  ],
+  "ordering_negative_vectors": [
+    {
+      "name": "wrong_component_order_must_differ",
+      "kind": "cx.flow.track.member",
+      "components_array": ["main", "cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
+      "comment": "Component reordering (track before flow_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
+      "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
+    }
+  ],
+  "reserved_name_negatives": [
+    {
+      "name": "bottom_reserved_rejected",
+      "components_array": ["__bottom__"],
+      "comment": "`__bottom__` is the spec-reserved lattice-bottom diagnostic surface name. Encoders MUST refuse to admit user-supplied components_array containing this literal anywhere. The hash, were it computed, would still be deterministic — but the encoder must reject before computing.",
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "reserved_state_subject_component",
+        "reserved_token": "__bottom__"
+      }
+    },
+    {
+      "name": "compaction_reserved_rejected",
+      "components_array": ["cx:space:01js0sp01000000000000000000", "__compaction__"],
+      "comment": "`__compaction__` is the spec-reserved compaction-marker surface name. Even when not the sole component, ANY position MUST trigger rejection.",
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "reserved_state_subject_component",
+        "reserved_token": "__compaction__"
+      }
+    },
+    {
+      "name": "bottom_token_in_inner_position_rejected",
+      "components_array": ["did:web:alice.example", "__bottom__", "dev_alice_01"],
+      "comment": "Reserved-token check is positional-agnostic — even when nested as a middle component, encoders MUST reject.",
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "reserved_state_subject_component",
+        "reserved_token": "__bottom__"
+      }
+    }
+  ]
+}

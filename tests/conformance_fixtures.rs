@@ -214,3 +214,36 @@ fn membership_fsm_fixture_suite_matches_reference_semantics() -> Result<()> {
 fn constraint_family_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_constraint_family_fixture_suite()
 }
+
+/// Round-24 A5 — device-message / key-verification / key-backup negatives.
+#[test]
+fn device_message_negative_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_device_message_negative_fixture_suite()
+}
+
+/// Round-24 B2 — redaction reducer × history_visibility composition.
+#[test]
+fn redaction_history_visibility_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_redaction_history_visibility_fixture_suite()
+}
+
+/// Round-24 B3 — composite (cell, subject) state-key encoding determinism +
+/// reserved-name collision rejection.
+#[test]
+fn composite_state_key_encoding_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_composite_state_key_encoding_fixture_suite()
+}
+
+/// Round-24 D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
+/// join/leave, covered_frontier accumulation, AAD digest pinning).
+#[test]
+fn mls_e2ee_basic_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_mls_e2ee_basic_fixture_suite()
+}
+
+/// Round-24 D2 — device verification flow (cross-signing chain, SAS, OOB
+/// emoji code).
+#[test]
+fn device_verification_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_device_verification_fixture_suite()
+}

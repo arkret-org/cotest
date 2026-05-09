@@ -8,6 +8,7 @@ pub mod extension_surface_gaps;
 pub mod federation_collaboration;
 pub mod federation_contract;
 pub mod federation_readiness;
+pub mod federation_two_node_e1;
 pub mod identity_directory_index;
 pub mod interaction_models;
 pub mod protocol_payloads;

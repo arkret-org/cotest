@@ -46,20 +46,25 @@ pub use state_resolution::{
 pub use sync::run_sync_fixture_suite;
 pub use wire_model::run_anchor_view_compaction_fixture_suite;
 pub use wire_model::run_anchorer_cell_fixture_suite;
+pub use wire_model::run_composite_state_key_encoding_fixture_suite;
 pub use wire_model::run_composite_state_subject_fixture_suite;
 pub use wire_model::run_conflict_repair_fixture_suite;
 pub use wire_model::run_consent_fixture_suite;
 pub use wire_model::run_constraint_family_fixture_suite;
+pub use wire_model::run_device_message_negative_fixture_suite;
+pub use wire_model::run_device_verification_fixture_suite;
 pub use wire_model::run_discovery_profile_fixture_suite;
 pub use wire_model::run_error_code_registry_coverage_fixture_suite;
 pub use wire_model::run_event_kind_lattice_dispatch_fixture_suite;
 pub use wire_model::run_event_kind_payload_coverage_fixture_suite;
 pub use wire_model::run_membership_fsm_fixture_suite;
 pub use wire_model::run_mimi_components_fixture_suite;
+pub use wire_model::run_mls_e2ee_basic_fixture_suite;
 pub use wire_model::run_mls_move_covered_frontier_fixture_suite;
 pub use wire_model::run_operation_registry_coverage_fixture_suite;
 pub use wire_model::run_production_signing_fixture_suite;
 pub use wire_model::run_read_receipt_policy_fixture_suite;
+pub use wire_model::run_redaction_history_visibility_fixture_suite;
 pub use wire_model::run_state_resolution_quarantine_fixture_suite;
 pub use wire_model::run_threshold_multisig_fixture_suite;
 

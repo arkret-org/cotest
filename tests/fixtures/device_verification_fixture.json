@@ -1,0 +1,122 @@
+{
+  "profile": "cx.profile.device_verification_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "D2 Round 24 — device verification flow vectors. Spec authority: crypto-media/device-verification.md. Three verification primitives: (a) cross-signing chain rooted at master key — each user has ONE master signing key (long-lived) that signs sub-keys for self-signing (per-device leaf sign) and user-signing (cross-user trust). (b) SAS (Short Authentication String) — Diffie-Hellman key exchange produces a short shared secret two parties compare to verify identity out-of-band. (c) Out-of-band emoji code — the SAS shared bytes map to an ordered list of emojis the two parties read/compare in person or over a trusted channel. The chain MUST validate at every link; SAS MUST agree on both sides; emoji codes MUST be deterministic from the shared secret bytes.",
+  "encoder": {
+    "master_key_form": "did:cx:user:<actor>#master",
+    "self_signing_key_form": "did:cx:user:<actor>#self-signing",
+    "user_signing_key_form": "did:cx:user:<actor>#user-signing",
+    "device_leaf_form": "did:cx:dev:<device_id>#leaf",
+    "sas_alg": "ECDH-X25519 + HKDF-SHA256 (8 bytes per emoji slot)",
+    "emoji_alphabet_size": 64
+  },
+  "vectors": [
+    {
+      "name": "cross_signing_chain_master_signs_self_signing_signs_device_leaf",
+      "comment": "Canonical chain: master_key → self_signing_key → device_leaf. The master key signs the self-signing key; the self-signing key signs the device leaf key. Both signatures verify.",
+      "actor_did": "did:web:alice.example",
+      "master_key": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "TUFTVEVSX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "self_signing_key": {
+        "key_id": "did:cx:user:alice#self-signing",
+        "alg": "ed25519",
+        "public_b64": "U0VMRl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX01BU1RFUl9TRUxGX1NJR04wMDAwMDAwMDAwMDA"
+      },
+      "device_leaf_keys": [
+        {
+          "key_id": "did:cx:dev:dev_alice_01#leaf",
+          "alg": "ed25519",
+          "public_b64": "TEVBRl9BTElDRV9ERVZfMDFfMDAwMDAwMDAwMDAwMDA",
+          "signed_by": "did:cx:user:alice#self-signing",
+          "signature_b64": "U0lHX1NFTEZfTEVBRl9BTElDRV9ERVZfMDEwMDAwMDA"
+        }
+      ],
+      "expected": {
+        "outcome": "accept",
+        "chain_valid": true,
+        "rationale": "Chain valid: master signs self-signing; self-signing signs device leaf. Both signatures verify."
+      }
+    },
+    {
+      "name": "user_signing_cross_user_trust_link",
+      "comment": "Cross-user trust: alice's user-signing key signs bob's master key, attesting that alice trusts bob's identity. The receiving relying party verifies (alice.user-signing → bob.master) link in addition to bob's own master→self chain.",
+      "actor_did": "did:web:alice.example",
+      "trusted_did": "did:web:bob.example",
+      "user_signing_key": {
+        "key_id": "did:cx:user:alice#user-signing",
+        "alg": "ed25519",
+        "public_b64": "VVNFUl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX01BU1RFUl9VU0VSX1NJR04wMDAwMDAwMDAwMDA"
+      },
+      "trusted_user_master": {
+        "key_id": "did:cx:user:bob#master",
+        "alg": "ed25519",
+        "public_b64": "TUFTVEVSX0JPQl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA",
+        "signed_by": "did:cx:user:alice#user-signing",
+        "signature_b64": "U0lHX1VTRVJfU0lHTl9NQVNURVJfQk9CMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "accept",
+        "cross_user_trust_link_valid": true,
+        "rationale": "Cross-user trust: alice.user-signing signs bob.master, establishing alice→bob trust. Both signatures verify."
+      }
+    },
+    {
+      "name": "sas_verification_short_auth_string_match",
+      "comment": "SAS verification: alice and bob each generate ECDH X25519 keypairs; exchange public keys; derive shared secret via HKDF-SHA256; truncate to a 6-byte short auth string both display. If the two parties compare the SAS out-of-band and match → verified.",
+      "alice_ecdh_public_b64": "QUxJQ0VfRUNESF9QVUJfMDAwMDAwMDAwMDAwMDAwMDA",
+      "bob_ecdh_public_b64": "Qk9CX0VDREhfUFVCXzAwMDAwMDAwMDAwMDAwMDAwMDA",
+      "shared_secret_hkdf_b64": "U0hBUkVEX1NFQ1JFVF8wMDAwMDAwMDAwMDAwMDAwMDA",
+      "alice_sas_truncated_hex": "AB12CD",
+      "bob_sas_truncated_hex": "AB12CD",
+      "expected": {
+        "outcome": "accept",
+        "sas_match": true,
+        "rationale": "Both parties derive the same shared secret; the truncated SAS strings match → identity verified out-of-band."
+      }
+    },
+    {
+      "name": "out_of_band_emoji_code_deterministic_mapping",
+      "comment": "The 6-byte SAS is also rendered as an ordered list of 7 emojis from the 64-symbol alphabet (each emoji = 6 bits, 7 emojis = 42 bits ≈ 6 bytes shown). The mapping is deterministic — the same shared bytes always map to the same emoji sequence on both sides.",
+      "shared_secret_hkdf_b64": "U0hBUkVEX1NFQ1JFVF8wMDAwMDAwMDAwMDAwMDAwMDA",
+      "alice_emojis": ["dog", "cat", "rocket", "house", "tree", "star", "umbrella"],
+      "bob_emojis": ["dog", "cat", "rocket", "house", "tree", "star", "umbrella"],
+      "expected": {
+        "outcome": "accept",
+        "emoji_match": true,
+        "deterministic": true,
+        "rationale": "Emoji mapping is deterministic from shared bytes; both parties render identical sequence; OOB visual compare → verified."
+      }
+    },
+    {
+      "name": "self_signing_key_with_revoked_master_rejects",
+      "comment": "Negative-shape variant: the master key has been revoked (e.g. user lost it and rotated to a new master). Any chain rooted at the OLD master MUST reject; clients must follow the new master's chain.",
+      "actor_did": "did:web:alice.example",
+      "master_key": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "T0xEX01BU1RFUl9BTElDRV8wMDAwMDAwMDAwMDAwMDA",
+        "revoked": true,
+        "revoked_at": "2026-04-01T00:00:00Z"
+      },
+      "self_signing_key": {
+        "key_id": "did:cx:user:alice#self-signing",
+        "alg": "ed25519",
+        "public_b64": "U0VMRl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX01BU1RFUl9TRUxGX1NJR04wMDAwMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "master_key_revoked",
+        "rationale": "Master key was revoked; any signature chain rooted at it MUST reject. Client must follow new master."
+      }
+    }
+  ]
+}
