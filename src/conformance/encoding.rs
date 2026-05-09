@@ -237,7 +237,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
         "projection": "collection",
         "preset": "kanban",
         "renderer": "board",
-        "view_id": "cx:view:01js0vw0000000000000000000",
+        "view_id": "cx:view:019641be-0000-7000-8000-000000000000",
         "facets": ["stateful", "rankable"],
         "limit": 50
     });
@@ -245,13 +245,13 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
     let required_facets = request_facets(&request)?;
     let entities = vec![
         json!({
-            "id": "cx:entity:01js0ta0000000000000000000",
+            "id": "cx:entity:019641a5-0000-7000-8000-000000000000",
             "entity_type": "task",
             "facets": ["stateful", "rankable", "renderable"],
             "title": "Rankable task"
         }),
         json!({
-            "id": "cx:entity:01js0na0000000000000000000",
+            "id": "cx:entity:01964155-0000-7000-8000-000000000000",
             "entity_type": "note",
             "facets": ["stateful", "renderable"],
             "title": "State-only note"
@@ -259,7 +259,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
     ];
     let visible = filter_entities_by_facets(&entities, &required_facets)?;
     if visible.len() != 1
-        || value_field_str(&visible[0], "id")? != "cx:entity:01js0ta0000000000000000000"
+        || value_field_str(&visible[0], "id")? != "cx:entity:019641a5-0000-7000-8000-000000000000"
     {
         bail!("facet renderer query suite did not filter by requested facets");
     }
@@ -267,7 +267,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
     let response = json!({
         "projection": "collection",
         "preset": "kanban",
-        "view_id": "cx:view:01js0vw0000000000000000000",
+        "view_id": "cx:view:019641be-0000-7000-8000-000000000000",
         "frontier": {"state_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
         "groups": [{
             "key": "todo",
@@ -287,7 +287,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
         "projection": "collection",
         "preset": "kanban",
         "renderer": "table",
-        "view_id": "cx:view:01js0vw0000000000000000000",
+        "view_id": "cx:view:019641be-0000-7000-8000-000000000000",
         "facets": ["stateful", "rankable"]
     });
     if validate_query_renderer(&invalid_renderer).is_ok() {
@@ -308,8 +308,8 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
         }),
         json!({
             "model": "relation_container",
-            "scope_container_id": "cx:entity:01js0bd0000000000000000000",
-            "container_id": "cx:entity:01js0c10000000000000000000",
+            "scope_container_id": "cx:entity:019640b6-8000-7000-8000-000000000000",
+            "container_id": "cx:entity:019640c0-8000-7000-8000-000000000000",
             "relation_kind": "contains",
             "relation_id": "cx:relation:01js0r1000000000000000000",
             "rank": "V"
@@ -337,7 +337,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
 
     let invalid = json!({
         "model": "relation_container",
-        "container_id": "cx:entity:01js0c10000000000000000000",
+        "container_id": "cx:entity:019640c0-8000-7000-8000-000000000000",
         "relation_kind": "contains",
         "rank": "F"
     });

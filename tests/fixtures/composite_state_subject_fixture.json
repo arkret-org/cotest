@@ -11,35 +11,35 @@
     {
       "name": "flow_track_member_alice",
       "kind": "cx.flow.track.member",
-      "components_array": ["cx:flow:01js0fl0000000000000000000", "main", "did:web:alice.example"],
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "R1cq-2fMHw5k5dodPHF0NRh9dt02x1k5PAo37Cr3yvA"
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_state_subject": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
     },
     {
       "name": "flow_track_member_bob_distinct_subject",
       "kind": "cx.flow.track.member",
-      "components_array": ["cx:flow:01js0fl0000000000000000000", "main", "did:web:bob.example"],
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:bob.example"],
       "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\",\"did:web:bob.example\"]",
-      "expected_state_subject": "4Rjt_nyy37BHC1gpSCYrcj0pGulrnrRllHSpGTvCBFE",
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:bob.example\"]",
+      "expected_state_subject": "xxwg91aWIRqUiWy-cIf0m1atHZXgdpahXUybVI2VBaA",
       "comment": "Same flow + track but a different actor — must hash to a distinct state_subject (collision negative)."
     },
     {
       "name": "flow_track_history_visibility",
       "kind": "cx.flow.track.history_visibility",
-      "components_array": ["cx:flow:01js0fl0000000000000000000", "main"],
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[flow_id, track]",
-      "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\"]",
-      "expected_state_subject": "b-ow6bOOhMLPosOKuFnIAGcSb8jVJTm0UT7d-wVooTg"
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34"
     },
     {
       "name": "flow_track_policy_components_same_subject_as_history_visibility",
       "kind": "cx.flow.track.policy_components",
-      "components_array": ["cx:flow:01js0fl0000000000000000000", "main"],
+      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[flow_id, track]",
-      "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\"]",
-      "expected_state_subject": "b-ow6bOOhMLPosOKuFnIAGcSb8jVJTm0UT7d-wVooTg",
+      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34",
       "comment": "Two different kinds share the same components_array shape; the state_subject is identical, but reducer keys still differ because slot key includes (space_id, kind) — confirms the subject hash is independent of kind."
     },
     {
@@ -64,16 +64,16 @@
     {
       "name": "wrong_component_order_collides_into_different_subject",
       "kind": "cx.flow.track.member",
-      "components_array": ["main", "cx:flow:01js0fl0000000000000000000", "did:web:alice.example"],
+      "components_array": ["main", "cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "If a buggy implementation reorders components_array (e.g. track before flow_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical flow_track_member_alice subject.",
-      "must_differ_from": "R1cq-2fMHw5k5dodPHF0NRh9dt02x1k5PAo37Cr3yvA"
+      "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
       "kind": "cx.flow.track.member",
-      "pipe_form": "cx:flow:01js0fl0000000000000000000|main|did:web:alice.example",
+      "pipe_form": "cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9|main|did:web:alice.example",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
-      "must_differ_from": "R1cq-2fMHw5k5dodPHF0NRh9dt02x1k5PAo37Cr3yvA"
+      "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
     }
   ]
 }

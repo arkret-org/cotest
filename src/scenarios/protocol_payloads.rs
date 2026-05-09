@@ -988,7 +988,7 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
             .post(server.url("/api/v1/moderation/report"))
             .bearer_auth(&token)
             .json(&json!({
-                "space_id": "cx:space:01js0sp0000000000000000000",
+                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "cx:event:demo",
                 "reason": "spam",
                 "reporter": "did:web:alice.example"

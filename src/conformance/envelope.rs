@@ -65,7 +65,7 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
             1,
             "01970e589d21-0001-a13f9c2e",
             "2026-05-02T00:00:00Z",
-            json!({"event_id": "cx:event:01k9na00000000000000000000"}),
+            json!({"event_id": "cx:event:019a6aa0-0000-7000-8000-000000000000"}),
         );
         let decision = validate_event_envelope(
             &event,
@@ -224,7 +224,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00Z",
         json!({
-            "flow_id": "cx:flow:01k9rm00000000000000000000",
+            "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
             "body": "hello",
             "noncritical_future_field": {"preserve": true}
         }),
@@ -247,14 +247,14 @@ fn validate_synthetic_event_envelope_negatives(
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
-        json!({"flow_id": "cx:flow:01k9rm00000000000000000000", "body": "a"}),
+        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "a"}),
     );
     let duplicate_b = sample_envelope_event(
         "cx.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
-        json!({"flow_id": "cx:flow:01k9rm00000000000000000000", "body": "b"}),
+        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "b"}),
     );
     if value_field_str(&duplicate_a, "event_id")? != value_field_str(&duplicate_b, "event_id")? {
         bail!("synthetic duplicate fixture did not use the same event_id");
@@ -270,7 +270,7 @@ fn validate_synthetic_event_envelope_negatives(
         3,
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00Z",
-        json!({"flow_id": "cx:flow:01k9rm00000000000000000000", "body": "future"}),
+        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "future"}),
     );
     let future_decision = validate_event_envelope(&future, event_kinds, &future_context)?;
     assert_event_decision(
@@ -290,7 +290,7 @@ fn validate_synthetic_event_envelope_negatives(
         4,
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02Z",
-        json!({"flow_id": "cx:flow:01k9rm00000000000000000000", "body": "backdated"}),
+        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "backdated"}),
     );
     let backdated_decision = validate_event_envelope(&backdated, event_kinds, &revoked_context)?;
     assert_event_decision(
@@ -840,15 +840,15 @@ fn sample_envelope_event(
     // the validator's permissive back-compat does not mask drift.
     json!({
         "schema": "cx.schema.event.v1",
-        "event_id": "cx:event:01k9nh00000000000000000000",
+        "event_id": "cx:event:019a6b10-0000-7000-8000-000000000000",
         "kind": kind,
-        "space_id": "cx:space:01k9sp00000000000000000000",
+        "space_id": "cx:space:019a7360-0000-7000-8000-000000000000",
         "actor_id": "did:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,
         "prev_refs": [],
-        "refs": ["cx:event:01k9au00000000000000000000"],
+        "refs": ["cx:event:5139099c-b114-7e4c-8149-a8048971a269"],
         "payload": content,
         // Synthetic placeholder proof — uses the binding-object shape
         // (`domain` set), well-formed but non-sentinel `payload_hash`. The

@@ -9,7 +9,7 @@ use crate::harness::{
     expect_response, expect_status,
 };
 
-const DEMO_SPACE_ID: &str = "cx:space:01js0sp0000000000000000000";
+const DEMO_SPACE_ID: &str = "cx:space:0196419b-0000-7000-8000-000000000000";
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let server = ContrixServer::spawn("identity-surface").await?;

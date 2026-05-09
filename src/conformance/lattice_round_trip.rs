@@ -43,6 +43,17 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     fsm_illegal_transition_returns_bottom()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
     ordered_log_per_issuer_monotonic_append()?;
+    // C10.C extensions (2026-05-09 aggressive batch): Anchorer cell
+    // configurations, conflict repair head_in semantics, MLS covered_frontier.
+    anchorer_cell_single_did_profile_resolves_to_value()?;
+    anchorer_cell_threshold_profile_resolves_to_value()?;
+    anchorer_cell_open_set_profile_resolves_to_value()?;
+    anchorer_cell_mixed_profile_resolves_to_value()?;
+    anchorer_cell_concurrent_reconfig_returns_bottom()?;
+    conflict_repair_head_in_move_resolves_existing_bottom()?;
+    conflict_repair_resists_self_authorising_winner()?;
+    mls_covered_frontier_or_set_accumulates_governance_refs()?;
+    mls_covered_frontier_after_rotation_keeps_old_refs_visible()?;
     Ok(())
 }
 
@@ -369,6 +380,282 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("OrderedLog with monotonic per-issuer seq must not Bottom; got {resolved:?}");
+    }
+    Ok(())
+}
+
+// ──────────────────── Anchorer cell ────────────────────
+//
+// `cx:cell:cx.component.anchorer.v1:<space_id>` is a cas-register holding the
+// `AnchorerValue` (single_did | threshold(k/n) | open_set | mixed). Each
+// happy-path test below confirms a single anchored Move that sets the cell
+// to one of the four spec-normative shapes resolves to a Value (no Bottom).
+// The conflict test confirms two concurrent reconfigurations Bottom — admins
+// MUST coordinate (this is a safety-critical cell).
+
+fn anchorer_cell(space_suffix: &str) -> CellRef {
+    cell(
+        "cx.component.anchorer.v1",
+        &format!("cx.space.01js{space_suffix}000000000000000000"),
+    )
+}
+
+fn anchorer_cell_single_did_profile_resolves_to_value() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = anchorer_cell("01");
+    let value = json!({
+        "shape": "single_did",
+        "did": "did:web:hub.example",
+    });
+    let ops = vec![AnchoredOp::new(move_id("a1"), op_set(value))];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!("Anchorer single_did profile must resolve to Value, got {resolved:?}");
+    }
+    Ok(())
+}
+
+fn anchorer_cell_threshold_profile_resolves_to_value() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = anchorer_cell("02");
+    let value = json!({
+        "shape": "threshold",
+        "k": 2,
+        "n": 3,
+        "members": [
+            "did:web:anchor1.example",
+            "did:web:anchor2.example",
+            "did:web:anchor3.example"
+        ],
+    });
+    let ops = vec![AnchoredOp::new(move_id("a2"), op_set(value))];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!("Anchorer threshold profile must resolve to Value, got {resolved:?}");
+    }
+    Ok(())
+}
+
+fn anchorer_cell_open_set_profile_resolves_to_value() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = anchorer_cell("03");
+    let value = json!({
+        "shape": "open_set",
+        "members": [
+            "did:web:peer1.example",
+            "did:web:peer2.example"
+        ],
+    });
+    let ops = vec![AnchoredOp::new(move_id("a3"), op_set(value))];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!("Anchorer open_set profile must resolve to Value, got {resolved:?}");
+    }
+    Ok(())
+}
+
+fn anchorer_cell_mixed_profile_resolves_to_value() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = anchorer_cell("04");
+    let value = json!({
+        "shape": "mixed",
+        "primary": "did:web:hub.example",
+        "recovery_members": [
+            "did:web:recovery1.example",
+            "did:web:recovery2.example"
+        ],
+    });
+    let ops = vec![AnchoredOp::new(move_id("a4"), op_set(value))];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!("Anchorer mixed profile must resolve to Value, got {resolved:?}");
+    }
+    Ok(())
+}
+
+fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = anchorer_cell("05");
+    // Two admins concurrently reconfigure the anchorer cell. Spec requires
+    // this to surface Bottom — a "split anchorer" is a Space-wide pause
+    // condition, not a thing you LWW past.
+    let ops = vec![
+        AnchoredOp::new(
+            move_id("a5"),
+            op_set(json!({
+                "shape": "single_did",
+                "did": "did:web:hub-a.example",
+            })),
+        ),
+        AnchoredOp::new(
+            move_id("a6"),
+            op_set(json!({
+                "shape": "single_did",
+                "did": "did:web:hub-b.example",
+            })),
+        ),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    let bottom = match resolved {
+        CellState::Bottom(b) => b,
+        CellState::Value(_) => bail!(
+            "Anchorer concurrent reconfig MUST Bottom (split anchorer is a Space-wide pause)"
+        ),
+    };
+    if !matches!(bottom.kind, contrix_core::BottomKind::Conflict) {
+        bail!(
+            "Anchorer split Bottom kind expected Conflict, got {:?}",
+            bottom.kind
+        );
+    }
+    Ok(())
+}
+
+// ──────────────────── Conflict repair (head_in) ────────────────────
+//
+// Per spec, conflict-repair Moves carry a `head_in [head_a, head_b]`
+// precondition + `recovery_capability` ref. The repair Move itself just
+// writes a NEW, single value to the conflicting cell — provided the writer
+// is authorised by recovery_capability, the cas-register sees a single
+// post-anchor op and returns Value, clearing the prior Bottom.
+//
+// At the lattice level (this layer), the test reduces to: a third anchored
+// Move with a fresh value, joined alongside an even later Bottom-clearing
+// recovery, MUST resolve to Value. Authorisation is handled at the verify_move
+// layer above the lattice; here we confirm the post-recovery view is clean.
+
+fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = cell(
+        "cx.component.space.policy.v1",
+        "cx.space.01js0sp0000000000000000000",
+    );
+    // Anchor view AFTER recovery: only the repair Move's anchored op is in
+    // scope (the earlier conflict pair was rolled back / superseded by the
+    // recovery anchor). Result MUST be Value.
+    let ops = vec![AnchoredOp::new(
+        move_id("b1"),
+        op_set(json!({
+            "role": "admin",
+            "repair_of": ["a1", "a2"],
+            "recovery_capability": "cap:01js0rc0000000000000000000",
+        })),
+    )];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!(
+            "Conflict repair Move (single anchored op post-recovery) must resolve to Value; got {resolved:?}"
+        );
+    }
+    Ok(())
+}
+
+fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
+    let lattice = CasRegister;
+    let cref = cell(
+        "cx.component.space.policy.v1",
+        "cx.space.01js0sp0000000000000000001",
+    );
+    // Two concurrent set-Moves where one self-references its own "winner"
+    // capability remain a Bottom at the lattice layer — the cas-register
+    // doesn't peek at payload semantics, it just sees concurrent writes.
+    // Self-authorisation prevention is enforced at verify_move (auth layer)
+    // ABOVE the lattice; here we confirm the lattice itself doesn't pick a
+    // winner just because one payload claims authority.
+    let ops = vec![
+        AnchoredOp::new(
+            move_id("b2"),
+            op_set(json!({
+                "role": "admin",
+                "self_authorising": true,
+                "claims": "winner",
+            })),
+        ),
+        AnchoredOp::new(
+            move_id("b3"),
+            op_set(json!({"role": "moderator"})),
+        ),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    if !resolved.is_bottom() {
+        bail!(
+            "CasRegister must not pick winner from self-authorising payload at lattice layer; got {resolved:?}"
+        );
+    }
+    Ok(())
+}
+
+// ──────────────────── MLS covered_frontier ────────────────────
+//
+// `cx:cell:cx.component.mls.covered_frontier.v1:<space_id>` is an or-set of
+// governance-frontier event refs each MLS commit attests to. Add-only
+// growth is the typical pattern; rotation that purges old refs is rare and
+// gated by capability. These tests confirm the lattice surfaces the union
+// without bottom under normal commit flow.
+
+fn covered_frontier_cell(space_suffix: &str) -> CellRef {
+    cell(
+        "cx.component.mls.covered_frontier.v1",
+        &format!("cx.space.01js{space_suffix}000000000000000000"),
+    )
+}
+
+fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
+    let lattice = OrSet;
+    let cref = covered_frontier_cell("c1");
+    // Two MLS commits attest to overlapping governance frontier refs; the
+    // or-set surfaces the union without bottom.
+    let ops = vec![
+        AnchoredOp::new(move_id("c1"), op_add("cx:event:gov:01")),
+        AnchoredOp::new(move_id("c2"), op_add("cx:event:gov:02")),
+        AnchoredOp::new(move_id("c3"), op_add("cx:event:gov:01")), // duplicate add
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!(
+            "covered_frontier or-set must accumulate refs without Bottom; got {resolved:?}"
+        );
+    }
+    let serialized = match &resolved {
+        CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
+        CellState::Bottom(_) => unreachable!(),
+    };
+    if !serialized.contains("cx:event:gov:01") || !serialized.contains("cx:event:gov:02") {
+        bail!("covered_frontier did not surface both governance refs: {serialized}");
+    }
+    Ok(())
+}
+
+fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
+    let lattice = OrSet;
+    let cref = covered_frontier_cell("c2");
+    // After an MLS epoch rotation, a new commit adds a fresh ref; a remove
+    // for an old ref is causally LATER (the rotation Move's anchored move_id
+    // is later in deterministic order). Because the OR-Set is causal, the
+    // remove erases ONLY the matching prior add. The remaining governance
+    // ref MUST stay visible.
+    let ops = vec![
+        AnchoredOp::new(move_id("c4"), op_add("cx:event:gov:rotated")),
+        AnchoredOp::new(move_id("c5"), op_add("cx:event:gov:still_valid")),
+        AnchoredOp::new(move_id("c6"), op_remove("cx:event:gov:rotated")),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved.is_bottom() {
+        bail!("covered_frontier rotation must not Bottom; got {resolved:?}");
+    }
+    let serialized = match &resolved {
+        CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
+        CellState::Bottom(_) => unreachable!(),
+    };
+    if !serialized.contains("cx:event:gov:still_valid") {
+        bail!(
+            "covered_frontier should keep `still_valid` ref visible after rotation: {serialized}"
+        );
+    }
+    if serialized.contains("cx:event:gov:rotated") {
+        bail!(
+            "covered_frontier should drop the rotated ref after causal remove: {serialized}"
+        );
     }
     Ok(())
 }

@@ -236,7 +236,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "req-allow",
-                "space_id": "cx:space:01js0sp0000000000000000000",
+                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "message.send",
                 "actor": "did:web:alice.example",
@@ -254,7 +254,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "req-review",
-                "space_id": "cx:space:01js0sp0000000000000000000",
+                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "space.delete",
                 "actor": "did:web:alice.example",
@@ -272,7 +272,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "req-invalid",
-                "space_id": "cx:space:01js0sp0000000000000000000",
+                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "message.send",
                 "actor": "alice",
