@@ -1,0 +1,93 @@
+{
+  "profile": "cx.profile.operation_registry_coverage_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "A3 Round 23 — operation registry coverage. Cross-references operation-registry.json (operations[] + surface_groups[]) with event-kind-registry.json and capability-action-registry.json. Validator asserts: (a) every operation referenced in any surface_group exists in operations[]; (b) every operation belongs to exactly one surface_group → tier classification (core/extension/interop_bridge/deployment_local); (c) for every operation that is a 'mutation' (declared in operation_to_event_kinds[] mapping below), the target event_kind exists in event-kind-registry AND there is at least one capability_action in capability-action-registry whose target_event_kinds[] contains it. Negative vectors cover orphaned operation (no surface group), tier mismatch (op declared with tier different from its surface group), and event-kind not in registry.",
+  "encoder": {
+    "operation_registry": "registry/operation-registry.json",
+    "event_kind_registry": "registry/event-kind-registry.json",
+    "capability_action_registry": "registry/capability-action-registry.json",
+    "valid_tiers": ["core", "extension", "interop_bridge", "deployment_local"]
+  },
+  "operation_to_event_kinds": [
+    {
+      "operation_id": "cx.events.submit",
+      "tier": "core",
+      "target_event_kinds_hint": "any",
+      "capability_action_hint": "varies_per_event_kind"
+    },
+    {
+      "operation_id": "cx.moderation.report",
+      "tier": "extension",
+      "target_event_kinds": ["cx.moderation.report"],
+      "capability_actions": ["cx.moderation.report"]
+    }
+  ],
+  "vectors": [
+    {
+      "name": "every_operation_belongs_to_a_surface_group",
+      "scope": "live_registry",
+      "expected": { "outcome": "all_ops_have_tier", "rationale": "Every operations[].operation_id MUST appear in exactly one surface_groups[].operations[] so tier classification is unambiguous." }
+    },
+    {
+      "name": "every_surface_group_op_exists_in_operations_array",
+      "scope": "live_registry",
+      "expected": { "outcome": "no_dangling_surface_op", "rationale": "Every surface_groups[].operations[] entry MUST be defined in operations[] (with http/grpc/mq bindings)." }
+    },
+    {
+      "name": "valid_tier_vocabulary",
+      "scope": "live_registry",
+      "expected": { "outcome": "tiers_are_in_known_set", "rationale": "Every surface_group.tier MUST be one of {core, extension, interop_bridge, deployment_local} (operation-registry.json#capability_tiers)." }
+    },
+    {
+      "name": "events_submit_is_core",
+      "scope": "live_registry",
+      "operation_id": "cx.events.submit",
+      "expected": { "outcome": "tier_match", "tier": "core" }
+    },
+    {
+      "name": "moderation_report_is_extension",
+      "scope": "live_registry",
+      "operation_id": "cx.moderation.report",
+      "expected": { "outcome": "tier_match", "tier": "extension" }
+    },
+    {
+      "name": "applet_ping_is_interop_bridge",
+      "scope": "live_registry",
+      "operation_id": "cx.applet.ping",
+      "expected": { "outcome": "tier_match", "tier": "interop_bridge" }
+    },
+    {
+      "name": "admin_get_server_status_is_deployment_local",
+      "scope": "live_registry",
+      "operation_id": "cx.admin.get_server_status",
+      "expected": { "outcome": "tier_match", "tier": "deployment_local" }
+    },
+    {
+      "name": "every_capability_action_target_event_kind_resolves_in_event_kind_registry",
+      "scope": "live_registry",
+      "expected": { "outcome": "all_target_event_kinds_resolve", "rationale": "Every capability-action-registry.actions[*].target_event_kinds[] entry MUST be declared in event-kind-registry.event_kinds[*].event_kind." }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "orphaned_operation_no_surface_group",
+      "synthetic_operation_id": "cx.totally.fake_op",
+      "drift": { "kind": "operation_not_in_any_surface_group" },
+      "expected": { "outcome": "reject", "reason_code": "operation_orphaned" }
+    },
+    {
+      "name": "tier_mismatch_for_known_op",
+      "operation_id": "cx.events.submit",
+      "claimed_tier": "deployment_local",
+      "drift": { "kind": "tier_mismatch" },
+      "expected": { "outcome": "reject", "reason_code": "tier_drift" }
+    },
+    {
+      "name": "capability_action_target_event_kind_does_not_exist",
+      "synthetic_action": "cx.fake.action",
+      "synthetic_target_event_kind": "cx.totally.fake.kind.v1",
+      "drift": { "kind": "target_event_kind_dangling" },
+      "expected": { "outcome": "reject", "reason_code": "target_event_kind_unknown" }
+    }
+  ]
+}

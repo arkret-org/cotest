@@ -178,3 +178,39 @@ fn production_signing_fixture_suite_matches_reference_semantics() -> Result<()> 
 fn event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_event_kind_lattice_dispatch_fixture_suite()
 }
+
+/// Round-23 A1 — event-kind payload coverage.
+#[test]
+fn event_kind_payload_coverage_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_event_kind_payload_coverage_fixture_suite()
+}
+
+/// Round-23 A3 — operation registry coverage.
+#[test]
+fn operation_registry_coverage_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_operation_registry_coverage_fixture_suite()
+}
+
+/// Round-23 A4 — error code registry coverage.
+#[test]
+fn error_code_registry_coverage_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_error_code_registry_coverage_fixture_suite()
+}
+
+/// Round-23 B1 — quarantine-on-fork algorithm.
+#[test]
+fn state_resolution_quarantine_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_state_resolution_quarantine_fixture_suite()
+}
+
+/// Round-23 B5 — membership transition FSM.
+#[test]
+fn membership_fsm_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_membership_fsm_fixture_suite()
+}
+
+/// Round-23 C1 — constraint family coverage.
+#[test]
+fn constraint_family_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_constraint_family_fixture_suite()
+}

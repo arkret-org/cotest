@@ -1,0 +1,146 @@
+{
+  "profile": "cx.profile.state_resolution_quarantine_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "B1 Round 23 — quarantine-on-fork algorithm vectors. Spec authz/event-auth-state-resolution.md §6 + §7: when concurrent forks land on the same (kind, state_key) cell, the reducer MUST NOT pick a winner automatically (no LWW timestamp tiebreak). Instead all non-winners (or all heads, depending on lattice bottom mode) are quarantined and require admin escalation. cas-register cells with bottom=reject yield Bottom Conflict; or-set cells expose the union (no conflict); ordered-log appends both branches. The vectors below cover concurrent forks across the cas-register lattice (admin escalation REQUIRED) and confirm that the reducer never auto-resolves.",
+  "encoder": {
+    "spec": "authz/event-auth-state-resolution.md §6 + §7",
+    "algorithm": "On concurrent fork at the same (kind, state_key): if lattice has bottom=reject → all participating ops quarantined, cell remains Bottom; if lattice=or-set → both ops merged into the union; if lattice=ordered-log → both ops admitted, ordered by HLC."
+  },
+  "vectors": [
+    {
+      "name": "cas_register_concurrent_fork_join_rule_quarantine_all_heads",
+      "cell_family": "cx.component.space.join_rule.v1",
+      "lattice": "cas-register",
+      "bottom": "reject",
+      "ops": [
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "actor": "did:web:alice.example", "value": "invite", "head_in": ["cx:anchor:sha256:abc123"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114201", "actor": "did:web:bob.example", "value": "public", "head_in": ["cx:anchor:sha256:abc123"] }
+      ],
+      "expected": {
+        "outcome": "all_heads_quarantined",
+        "reducer_picks_winner": false,
+        "admin_escalation_required": true,
+        "cell_state": "Bottom",
+        "quarantined_op_ids": ["cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114201"]
+      }
+    },
+    {
+      "name": "cas_register_concurrent_fork_history_visibility_quarantine_all_heads",
+      "cell_family": "cx.component.space.history_visibility.v1",
+      "lattice": "cas-register",
+      "bottom": "reject",
+      "ops": [
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114210", "actor": "did:web:alice.example", "value": "shared", "head_in": ["cx:anchor:sha256:def456"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114211", "actor": "did:web:bob.example", "value": "joined", "head_in": ["cx:anchor:sha256:def456"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114212", "actor": "did:web:carol.example", "value": "world_readable", "head_in": ["cx:anchor:sha256:def456"] }
+      ],
+      "expected": {
+        "outcome": "all_heads_quarantined",
+        "reducer_picks_winner": false,
+        "admin_escalation_required": true,
+        "cell_state": "Bottom",
+        "quarantined_op_ids": [
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114210",
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114211",
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114212"
+        ]
+      }
+    },
+    {
+      "name": "cas_register_admin_escalation_anchorer_endorse_one_head_unquarantines",
+      "cell_family": "cx.component.space.policy.v1",
+      "lattice": "cas-register",
+      "bottom": "reject",
+      "ops": [
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220", "actor": "did:web:alice.example", "value": "policy_a", "head_in": ["cx:anchor:sha256:ghi789"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114221", "actor": "did:web:bob.example", "value": "policy_b", "head_in": ["cx:anchor:sha256:ghi789"] }
+      ],
+      "admin_escalation": {
+        "kind": "anchorer_endorse_repair_move",
+        "repair_op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114222",
+        "endorsed_winner_op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220",
+        "head_in": [
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220",
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114221"
+        ]
+      },
+      "expected": {
+        "outcome": "repair_admits_winner",
+        "reducer_picks_winner": false,
+        "admin_escalation_required": true,
+        "cell_state_after_repair": "Value(policy_a)",
+        "quarantined_op_ids": ["cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114221"]
+      }
+    },
+    {
+      "name": "cas_register_three_way_fork_quarantine_then_partial_repair",
+      "cell_family": "cx.component.space.upgrade.v1",
+      "lattice": "cas-register",
+      "bottom": "reject",
+      "ops": [
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "cx.profile.chat_mvp.v1", "head_in": ["cx:anchor:sha256:jkl000"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "cx.profile.kanban_mvp.v1", "head_in": ["cx:anchor:sha256:jkl000"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "cx.profile.applet.v1", "head_in": ["cx:anchor:sha256:jkl000"] }
+      ],
+      "expected": {
+        "outcome": "all_heads_quarantined",
+        "reducer_picks_winner": false,
+        "admin_escalation_required": true,
+        "cell_state": "Bottom",
+        "quarantined_op_ids": [
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114230",
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114231",
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114232"
+        ]
+      }
+    },
+    {
+      "name": "fsm_member_state_concurrent_join_invite_quarantine",
+      "cell_family": "cx.component.member.state.v1",
+      "lattice": "fsm",
+      "bottom": "reject",
+      "ops": [
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114240", "actor": "did:web:alice.example", "value": "join", "prev_state": "leave", "head_in": ["cx:anchor:sha256:mno000"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114241", "actor": "did:web:admin.example", "value": "ban", "prev_state": "leave", "head_in": ["cx:anchor:sha256:mno000"] }
+      ],
+      "expected": {
+        "outcome": "all_heads_quarantined",
+        "reducer_picks_winner": false,
+        "admin_escalation_required": true,
+        "cell_state": "Bottom",
+        "quarantined_op_ids": [
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114240",
+          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114241"
+        ]
+      }
+    },
+    {
+      "name": "or_set_concurrent_grant_does_not_quarantine_merges_union",
+      "cell_family": "cx.component.consent.grant.v1",
+      "lattice": "or-set",
+      "bottom": "expose",
+      "ops": [
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114250", "actor": "did:web:alice.example", "value": { "peer": "did:web:bob.example", "scope": "messaging" }, "head_in": ["cx:anchor:sha256:pqr000"] },
+        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114251", "actor": "did:web:alice.example", "value": { "peer": "did:web:carol.example", "scope": "messaging" }, "head_in": ["cx:anchor:sha256:pqr000"] }
+      ],
+      "expected": {
+        "outcome": "or_set_union",
+        "reducer_picks_winner": false,
+        "admin_escalation_required": false,
+        "cell_state": "OrSet({(bob, messaging), (carol, messaging)})"
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "reducer_must_not_use_hlc_to_pick_winner",
+      "drift": { "kind": "hlc_tiebreak_attempt" },
+      "expected": { "outcome": "reject", "reason_code": "auto_resolution_forbidden" }
+    },
+    {
+      "name": "reducer_must_not_use_actor_signature_to_pick_winner",
+      "drift": { "kind": "actor_priority_tiebreak_attempt" },
+      "expected": { "outcome": "reject", "reason_code": "auto_resolution_forbidden" }
+    }
+  ]
+}

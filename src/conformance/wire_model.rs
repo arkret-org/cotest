@@ -2808,3 +2808,699 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
 
     Ok(())
 }
+
+/// A1 Round 23 — event-kind payload coverage.
+pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let fixture = load_local_fixture("event_kind_payload_coverage_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.event_kind_payload_coverage_vectors.v1")?;
+
+    let registry = super::load_artifact_json("registry/event-kind-registry.json")?;
+    let event_kinds = registry
+        .get("event_kinds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
+    let mut live_kind_meta: BTreeMap<String, (Option<String>, Option<String>, Option<String>, String)> =
+        BTreeMap::new();
+    for entry in event_kinds {
+        let kind = required_str(entry, "event_kind")?;
+        let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
+        let cell_family = entry.get("cell_family").and_then(Value::as_str).map(|s| s.to_owned());
+        let lattice = entry.get("lattice").and_then(Value::as_str).map(|s| s.to_owned());
+        let bottom = entry.get("bottom").and_then(Value::as_str).map(|s| s.to_owned());
+        live_kind_meta.insert(kind.to_owned(), (cell_family, lattice, bottom, status.to_owned()));
+    }
+
+    let positives = fixture
+        .get("positive_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event_kind_payload_coverage fixture missing positive_vectors[]"))?;
+    if positives.len() < 20 {
+        bail!(
+            "event_kind_payload_coverage fixture has {} positive vectors, expected >= 20",
+            positives.len()
+        );
+    }
+
+    let mut covered_tuples: BTreeSet<(String, String)> = BTreeSet::new();
+    for v in positives {
+        let name = required_str(v, "name")?;
+        let kind = required_str(v, "event_kind")?;
+        let claimed_family = required_str(v, "cell_family")?;
+        let claimed_lattice = required_str(v, "lattice")?;
+        let claimed_bottom = required_str(v, "bottom")?;
+
+        let (live_family, live_lattice, live_bottom, status) =
+            live_kind_meta.get(kind).ok_or_else(|| {
+                anyhow!("vector {name} references event_kind {kind} not in live registry")
+            })?;
+        if status != "active" {
+            bail!("vector {name} event_kind {kind} status={status} (expected active)");
+        }
+        let live_family = live_family.as_deref().ok_or_else(|| {
+            anyhow!("vector {name} event_kind {kind} has no cell_family in registry")
+        })?;
+        let live_lattice = live_lattice.as_deref().ok_or_else(|| {
+            anyhow!("vector {name} event_kind {kind} has no lattice in registry")
+        })?;
+        let live_bottom = live_bottom.as_deref().ok_or_else(|| {
+            anyhow!("vector {name} event_kind {kind} has no bottom in registry")
+        })?;
+        if live_family != claimed_family {
+            bail!("vector {name} cell_family drift: claimed {claimed_family}, registry {live_family}");
+        }
+        if live_lattice != claimed_lattice {
+            bail!("vector {name} lattice drift: claimed {claimed_lattice}, registry {live_lattice}");
+        }
+        if live_bottom != claimed_bottom {
+            bail!("vector {name} bottom drift: claimed {claimed_bottom}, registry {live_bottom}");
+        }
+        covered_tuples.insert((claimed_family.to_owned(), claimed_lattice.to_owned()));
+    }
+    if covered_tuples.len() < 6 {
+        bail!(
+            "event_kind_payload_coverage fixture covers only {} distinct (cell_family, lattice) tuples, expected >= 6",
+            covered_tuples.len()
+        );
+    }
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event_kind_payload_coverage fixture missing negative_vectors[]"))?;
+    let mut neg_unknown = false;
+    let mut neg_family = false;
+    let mut neg_lattice = false;
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing expected.outcome"))?;
+        if outcome != "reject" {
+            bail!("negative {name} expected outcome=reject");
+        }
+        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        match drift {
+            "unknown_kind" => {
+                let synth = required_str(v, "event_kind")?;
+                if live_kind_meta.contains_key(synth) {
+                    bail!("negative {name} synthetic event_kind {synth} actually exists");
+                }
+                neg_unknown = true;
+            }
+            "cell_family_mismatch" => {
+                let claimed = required_str(v, "claimed_cell_family")?;
+                let kind = required_str(v, "event_kind")?;
+                let (live_family, _, _, _) = live_kind_meta.get(kind).ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
+                if live_family.as_deref() == Some(claimed) {
+                    bail!("negative {name} claimed_cell_family equals registry — not a real drift");
+                }
+                neg_family = true;
+            }
+            "lattice_mismatch" => {
+                let claimed = required_str(v, "claimed_lattice")?;
+                let kind = required_str(v, "event_kind")?;
+                let (_, live_lattice, _, _) = live_kind_meta.get(kind).ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
+                if live_lattice.as_deref() == Some(claimed) {
+                    bail!("negative {name} claimed_lattice equals registry — not a real drift");
+                }
+                neg_lattice = true;
+            }
+            other => bail!("negative {name} unknown drift.kind {other}"),
+        }
+    }
+    if !(neg_unknown && neg_family && neg_lattice) {
+        bail!("event_kind_payload_coverage fixture must cover unknown_kind, cell_family_mismatch, lattice_mismatch negatives");
+    }
+
+    Ok(())
+}
+
+/// A3 Round 23 — operation registry coverage.
+pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let fixture = load_local_fixture("operation_registry_coverage_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.operation_registry_coverage_vectors.v1")?;
+
+    let op_registry = super::load_artifact_json("registry/operation-registry.json")?;
+    let event_kind_registry = super::load_artifact_json("registry/event-kind-registry.json")?;
+    let cap_action_registry = super::load_artifact_json("registry/capability-action-registry.json")?;
+
+    let valid_tiers: BTreeSet<&str> = ["core", "extension", "interop_bridge", "deployment_local"]
+        .into_iter()
+        .collect();
+
+    let operations = op_registry.get("operations").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("operation-registry missing operations[]"))?;
+    let mut op_ids: BTreeSet<String> = BTreeSet::new();
+    for entry in operations {
+        let id = required_str(entry, "operation_id")?;
+        op_ids.insert(id.to_owned());
+    }
+
+    let surface_groups = op_registry.get("surface_groups").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("operation-registry missing surface_groups[]"))?;
+    let mut op_tier: BTreeMap<String, String> = BTreeMap::new();
+    for group in surface_groups {
+        let tier = required_str(group, "tier")?;
+        if !valid_tiers.contains(tier) {
+            bail!("surface_group declares invalid tier {tier}");
+        }
+        let ops = group.get("operations").and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("surface_group missing operations[]"))?;
+        for op in ops {
+            let id = op.as_str().ok_or_else(|| anyhow!("surface_group operation must be string"))?;
+            if !op_ids.contains(id) {
+                bail!("surface_group references operation_id {id} not in operations[]");
+            }
+            if let Some(prev) = op_tier.insert(id.to_owned(), tier.to_owned()) {
+                if prev != tier {
+                    bail!("operation_id {id} declared in two surface_groups with different tiers {prev} / {tier}");
+                }
+            }
+        }
+    }
+    for id in &op_ids {
+        if !op_tier.contains_key(id) {
+            bail!("operation_id {id} is orphaned (not in any surface_group)");
+        }
+    }
+
+    let actions = cap_action_registry.get("actions").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("capability-action-registry missing actions[]"))?;
+    let event_kinds = event_kind_registry.get("event_kinds").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
+    let mut live_event_kinds: BTreeSet<String> = BTreeSet::new();
+    for entry in event_kinds {
+        let k = required_str(entry, "event_kind")?;
+        live_event_kinds.insert(k.to_owned());
+    }
+    for entry in actions {
+        let action_id = required_str(entry, "action")?;
+        let _risk = required_str(entry, "risk_tier")?;
+        if let Some(targets) = entry.get("target_event_kinds").and_then(Value::as_array) {
+            for t in targets {
+                let kind = t.as_str().ok_or_else(|| anyhow!("action {action_id} target_event_kind must be string"))?;
+                if !live_event_kinds.contains(kind) {
+                    bail!("capability action {action_id} target_event_kind {kind} not in event-kind-registry");
+                }
+            }
+        }
+    }
+
+    let vectors = fixture.get("vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("operation_registry_coverage fixture missing vectors[]"))?;
+    let mut covered: BTreeSet<&str> = BTreeSet::new();
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        if outcome == "tier_match" {
+            let op = required_str(v, "operation_id")?;
+            let expected_tier = v.pointer("/expected/tier").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.tier"))?;
+            let live = op_tier.get(op).ok_or_else(|| anyhow!("vector {name} op {op} not in any surface_group"))?;
+            if live != expected_tier {
+                bail!("vector {name} tier drift: op {op} live={live}, expected={expected_tier}");
+            }
+        }
+        covered.insert(name);
+    }
+    for required in [
+        "every_operation_belongs_to_a_surface_group",
+        "every_surface_group_op_exists_in_operations_array",
+        "valid_tier_vocabulary",
+        "events_submit_is_core",
+        "moderation_report_is_extension",
+        "applet_ping_is_interop_bridge",
+        "admin_get_server_status_is_deployment_local",
+        "every_capability_action_target_event_kind_resolves_in_event_kind_registry",
+    ] {
+        if !covered.contains(required) {
+            bail!("operation_registry_coverage fixture missing vector {required}");
+        }
+    }
+
+    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("operation_registry_coverage fixture missing negative_vectors[]"))?;
+    let mut neg_orphan = false;
+    let mut neg_tier = false;
+    let mut neg_target = false;
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        match drift {
+            "operation_not_in_any_surface_group" => {
+                let synth = required_str(v, "synthetic_operation_id")?;
+                if op_ids.contains(synth) {
+                    bail!("negative {name} synthetic op {synth} is real — not a drift");
+                }
+                neg_orphan = true;
+            }
+            "tier_mismatch" => {
+                let op = required_str(v, "operation_id")?;
+                let claimed_tier = required_str(v, "claimed_tier")?;
+                let live = op_tier.get(op).ok_or_else(|| anyhow!("negative {name} op {op} not in surface_group"))?;
+                if live == claimed_tier {
+                    bail!("negative {name} claimed_tier equals live — not a drift");
+                }
+                neg_tier = true;
+            }
+            "target_event_kind_dangling" => {
+                let synth = required_str(v, "synthetic_target_event_kind")?;
+                if live_event_kinds.contains(synth) {
+                    bail!("negative {name} synthetic target {synth} is real — not a drift");
+                }
+                neg_target = true;
+            }
+            other => bail!("negative {name} unknown drift.kind {other}"),
+        }
+    }
+    if !(neg_orphan && neg_tier && neg_target) {
+        bail!("operation_registry_coverage fixture must cover orphaned op, tier mismatch, target dangling negatives");
+    }
+
+    Ok(())
+}
+
+/// A4 Round 23 — error code registry coverage. Spec uses {both, endpoint};
+/// validator accepts the published superset {client, server, both, endpoint}.
+pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let fixture = load_local_fixture("error_code_registry_coverage_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.error_code_registry_coverage_vectors.v1")?;
+
+    let registry = super::load_artifact_json("registry/error-code-registry.json")?;
+    let codes_arr = registry.get("codes").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("error-code-registry missing codes[]"))?;
+    let valid_scopes: BTreeSet<&str> = ["client", "server", "both", "endpoint"].into_iter().collect();
+
+    let mut live_codes: BTreeMap<String, (i64, String)> = BTreeMap::new();
+    for c in codes_arr {
+        let code = required_str(c, "code")?;
+        let http = c.get("http_status").and_then(Value::as_i64)
+            .ok_or_else(|| anyhow!("code {code} missing http_status (integer)"))?;
+        if !(400..=599).contains(&http) {
+            bail!("code {code} has http_status {http} outside 400-599 range");
+        }
+        let scope = required_str(c, "scope")?;
+        if !valid_scopes.contains(scope) {
+            bail!("code {code} has scope {scope} not in {{client, server, both, endpoint}}");
+        }
+        let description = required_str(c, "description")?;
+        if description.is_empty() {
+            bail!("code {code} has empty description");
+        }
+        live_codes.insert(code.to_owned(), (http, scope.to_owned()));
+    }
+
+    let expected_refs = fixture.get("expected_referenced_codes").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("error_code_registry_coverage fixture missing expected_referenced_codes[]"))?;
+    for r in expected_refs {
+        let code = required_str(r, "code")?;
+        let exp_http = r.get("expected_http_status").and_then(Value::as_i64)
+            .ok_or_else(|| anyhow!("ref {code} missing expected_http_status"))?;
+        let exp_scope = required_str(r, "expected_scope")?;
+        let live = live_codes.get(code).ok_or_else(|| anyhow!("expected referenced code {code} missing from registry"))?;
+        if live.0 != exp_http {
+            bail!("code {code} http_status drift: live={}, expected={exp_http}", live.0);
+        }
+        if live.1 != exp_scope {
+            bail!("code {code} scope drift: live={}, expected={exp_scope}", live.1);
+        }
+    }
+
+    let vectors = fixture.get("vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("error_code_registry_coverage fixture missing vectors[]"))?;
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        if outcome == "code_match" {
+            let code = required_str(v, "code")?;
+            let live = live_codes.get(code).ok_or_else(|| anyhow!("vector {name} code {code} not in registry"))?;
+            let exp_http = v.pointer("/expected/http_status").and_then(Value::as_i64).ok_or_else(|| anyhow!("vector {name} missing expected.http_status"))?;
+            let exp_scope = v.pointer("/expected/scope").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.scope"))?;
+            if live.0 != exp_http {
+                bail!("vector {name} code {code} http_status drift: live={}, exp={exp_http}", live.0);
+            }
+            if live.1 != exp_scope {
+                bail!("vector {name} code {code} scope drift: live={}, exp={exp_scope}", live.1);
+            }
+        }
+    }
+
+    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("error_code_registry_coverage fixture missing negative_vectors[]"))?;
+    let mut neg_unknown = false;
+    let mut neg_scope = false;
+    let mut neg_status = false;
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        match drift {
+            "code_not_in_registry" => {
+                let synth = required_str(v, "synthetic_code")?;
+                if live_codes.contains_key(synth) {
+                    bail!("negative {name} synthetic code {synth} is real");
+                }
+                neg_unknown = true;
+            }
+            "scope_invalid" => {
+                let synth = required_str(v, "synthetic_scope")?;
+                if valid_scopes.contains(synth) {
+                    bail!("negative {name} synthetic scope {synth} is valid");
+                }
+                neg_scope = true;
+            }
+            "http_status_out_of_range" => {
+                let synth = v.get("synthetic_http_status").and_then(Value::as_i64).ok_or_else(|| anyhow!("negative {name} missing synthetic_http_status"))?;
+                if (400..=599).contains(&synth) {
+                    bail!("negative {name} synthetic http_status {synth} is in valid range");
+                }
+                neg_status = true;
+            }
+            other => bail!("negative {name} unknown drift.kind {other}"),
+        }
+    }
+    if !(neg_unknown && neg_scope && neg_status) {
+        bail!("error_code_registry_coverage fixture must cover unknown code, invalid scope, out-of-range http_status negatives");
+    }
+
+    Ok(())
+}
+
+/// B1 Round 23 — quarantine-on-fork algorithm vectors.
+pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let fixture = load_local_fixture("state_resolution_quarantine_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.state_resolution_quarantine_vectors.v1")?;
+
+    let vectors = fixture.get("vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("state_resolution_quarantine fixture missing vectors[]"))?;
+    if vectors.len() < 5 {
+        bail!("state_resolution_quarantine fixture has {} vectors, expected >= 5", vectors.len());
+    }
+
+    let mut covered_quarantine = 0usize;
+    let mut covered_admin_escalation = false;
+    let mut covered_or_set_no_quarantine = false;
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let lattice = required_str(v, "lattice")?;
+        let bottom = required_str(v, "bottom")?;
+        let ops = v.get("ops").and_then(Value::as_array).ok_or_else(|| anyhow!("vector {name} missing ops[]"))?;
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+
+        match (lattice, bottom, outcome) {
+            ("cas-register", "reject", "all_heads_quarantined")
+            | ("fsm", "reject", "all_heads_quarantined") => {
+                let picks = v.pointer("/expected/reducer_picks_winner").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.reducer_picks_winner"))?;
+                if picks {
+                    bail!("vector {name} reducer_picks_winner must be false");
+                }
+                let admin = v.pointer("/expected/admin_escalation_required").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.admin_escalation_required"))?;
+                if !admin {
+                    bail!("vector {name} admin_escalation_required must be true");
+                }
+                let quarantined = v.pointer("/expected/quarantined_op_ids").and_then(Value::as_array).ok_or_else(|| anyhow!("vector {name} missing expected.quarantined_op_ids"))?;
+                let q_set: BTreeSet<&str> = quarantined.iter().filter_map(Value::as_str).collect();
+                let op_set: BTreeSet<&str> = ops.iter().filter_map(|o| o.get("op_id").and_then(Value::as_str)).collect();
+                if q_set != op_set {
+                    bail!("vector {name} quarantined_op_ids must equal full ops[] set; q={q_set:?} ops={op_set:?}");
+                }
+                covered_quarantine += 1;
+            }
+            ("cas-register", "reject", "repair_admits_winner") => {
+                let escalation = v.get("admin_escalation").ok_or_else(|| anyhow!("vector {name} missing admin_escalation"))?;
+                let _ = required_str(escalation, "kind")?;
+                let _ = required_str(escalation, "endorsed_winner_op_id")?;
+                covered_admin_escalation = true;
+                covered_quarantine += 1;
+            }
+            ("or-set", "expose", "or_set_union") => {
+                let admin = v.pointer("/expected/admin_escalation_required").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.admin_escalation_required"))?;
+                if admin {
+                    bail!("vector {name} or-set must NOT require admin escalation");
+                }
+                covered_or_set_no_quarantine = true;
+            }
+            (l, b, o) => bail!("vector {name} unexpected (lattice={l}, bottom={b}, outcome={o})"),
+        }
+    }
+
+    if covered_quarantine < 4 {
+        bail!("state_resolution_quarantine fixture must include >= 4 quarantine vectors");
+    }
+    if !covered_admin_escalation {
+        bail!("state_resolution_quarantine fixture must cover admin escalation repair");
+    }
+    if !covered_or_set_no_quarantine {
+        bail!("state_resolution_quarantine fixture must cover or-set non-quarantine union");
+    }
+
+    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("state_resolution_quarantine fixture missing negative_vectors[]"))?;
+    let mut saw_hlc = false;
+    let mut saw_actor = false;
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        match drift {
+            "hlc_tiebreak_attempt" => saw_hlc = true,
+            "actor_priority_tiebreak_attempt" => saw_actor = true,
+            other => bail!("negative {name} unknown drift.kind {other}"),
+        }
+    }
+    if !(saw_hlc && saw_actor) {
+        bail!("state_resolution_quarantine fixture must cover HLC tiebreak + actor priority forbidden vectors");
+    }
+
+    Ok(())
+}
+
+/// B5 Round 23 — membership transition FSM vectors.
+pub fn run_membership_fsm_fixture_suite() -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let fixture = load_local_fixture("membership_fsm_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.membership_fsm_vectors.v1")?;
+
+    let valid_states: BTreeSet<&str> = ["invited", "join", "leave", "ban", "kick", "knock"].into_iter().collect();
+    let legal_table: &[(&str, &str, bool)] = &[
+        ("invited", "join", false), ("invited", "leave", false), ("invited", "ban", true),
+        ("join", "leave", false), ("join", "ban", true), ("join", "kick", true),
+        ("leave", "invited", false), ("leave", "ban", true),
+        ("ban", "leave", true),
+        ("kick", "invited", false), ("kick", "knock", false),
+        ("knock", "invited", false), ("knock", "leave", false),
+    ];
+    let legal_set: BTreeSet<(&str, &str)> = legal_table.iter().map(|(f, t, _)| (*f, *t)).collect();
+
+    let legal = fixture.get("legal_transitions").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("membership_fsm fixture missing legal_transitions[]"))?;
+    if legal.len() < 8 {
+        bail!("membership_fsm fixture has {} legal_transitions, expected >= 8", legal.len());
+    }
+    for v in legal {
+        let name = required_str(v, "name")?;
+        let from = required_str(v, "from")?;
+        let to = required_str(v, "to")?;
+        if !valid_states.contains(from) {
+            bail!("legal {name}: from state {from} not in known set");
+        }
+        if !valid_states.contains(to) {
+            bail!("legal {name}: to state {to} not in known set");
+        }
+        if !legal_set.contains(&(from, to)) {
+            bail!("legal {name}: transition {from}→{to} is NOT in canonical FSM table");
+        }
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("legal {name} missing expected.outcome"))?;
+        if outcome != "accept" {
+            bail!("legal {name}: outcome must be accept, got {outcome}");
+        }
+        let next = v.pointer("/expected/next_state").and_then(Value::as_str).ok_or_else(|| anyhow!("legal {name} missing expected.next_state"))?;
+        if next != to {
+            bail!("legal {name}: next_state {next} != to {to}");
+        }
+    }
+
+    let illegal = fixture.get("illegal_transitions").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("membership_fsm fixture missing illegal_transitions[]"))?;
+    if illegal.len() < 7 {
+        bail!("membership_fsm fixture has {} illegal_transitions, expected >= 7", illegal.len());
+    }
+    for v in illegal {
+        let name = required_str(v, "name")?;
+        let from = required_str(v, "from")?;
+        let to = required_str(v, "to")?;
+        let actor = required_str(v, "actor")?;
+        if !valid_states.contains(from) {
+            bail!("illegal {name}: from state {from} not in known set");
+        }
+        if !valid_states.contains(to) {
+            bail!("illegal {name}: to state {to} not in known set");
+        }
+        let in_table = legal_set.contains(&(from, to));
+        let admin_required = legal_table.iter().find(|(f, t, _)| *f == from && *t == to).map(|(_, _, a)| *a).unwrap_or(false);
+        let is_actually_illegal = !in_table || (admin_required && actor == "self");
+        if !is_actually_illegal {
+            bail!("illegal {name}: transition {from}→{to} (actor={actor}) is actually legal in canonical table");
+        }
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("illegal {name} missing expected.outcome"))?;
+        if outcome != "reject" {
+            bail!("illegal {name}: outcome must be reject");
+        }
+        let reason = v.pointer("/expected/reason_code").and_then(Value::as_str).ok_or_else(|| anyhow!("illegal {name} missing expected.reason_code"))?;
+        if reason != "fsm_transition_forbidden" {
+            bail!("illegal {name}: reason_code must be fsm_transition_forbidden, got {reason}");
+        }
+    }
+
+    Ok(())
+}
+
+/// C1 Round 23 — constraint family × subtype coverage.
+pub fn run_constraint_family_fixture_suite() -> Result<()> {
+    use std::collections::BTreeSet;
+
+    let fixture = load_local_fixture("constraint_family_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.constraint_family_vectors.v1")?;
+
+    let valid_types: BTreeSet<&str> = [
+        "temporal", "field_access", "type_restriction", "scope_limitation",
+        "delegation_control", "quota", "claim_based", "confidentiality",
+    ].into_iter().collect();
+    let valid_classes: BTreeSet<&str> = ["stateless", "grant_local", "space_state", "external"].into_iter().collect();
+    let valid_effects: BTreeSet<&str> = ["allow", "deny", "quarantine", "require_review"].into_iter().collect();
+
+    let vectors = fixture.get("vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("constraint_family fixture missing vectors[]"))?;
+
+    let mut covered_types: BTreeSet<String> = BTreeSet::new();
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let ct = required_str(v, "constraint_type")?;
+        if !valid_types.contains(ct) {
+            bail!("vector {name} constraint_type {ct} not in schema enum");
+        }
+        let constraint = v.get("constraint").ok_or_else(|| anyhow!("vector {name} missing constraint object"))?;
+        let body_ct = required_str(constraint, "constraint_type")?;
+        if body_ct != ct {
+            bail!("vector {name} constraint.constraint_type {body_ct} != outer {ct}");
+        }
+        let effect = required_str(constraint, "effect")?;
+        if !valid_effects.contains(effect) {
+            bail!("vector {name} effect {effect} not valid");
+        }
+        let class = required_str(constraint, "evaluation_class")?;
+        if !valid_classes.contains(class) {
+            bail!("vector {name} evaluation_class {class} not valid");
+        }
+        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        if outcome != "shape_ok" {
+            bail!("vector {name} expected.outcome must be shape_ok");
+        }
+        let exp_class = v.pointer("/expected/evaluation_class").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.evaluation_class"))?;
+        if exp_class != class {
+            bail!("vector {name} expected.evaluation_class {exp_class} != constraint.evaluation_class {class}");
+        }
+        let fast = v.pointer("/expected/fast_path_eligible").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.fast_path_eligible"))?;
+        let expect_fast = matches!(class, "stateless" | "grant_local");
+        if fast != expect_fast {
+            bail!("vector {name} fast_path_eligible={fast} but evaluation_class={class} (expected fast={expect_fast})");
+        }
+        covered_types.insert(ct.to_owned());
+    }
+
+    for required in &valid_types {
+        if !covered_types.contains(*required) {
+            bail!("constraint_family fixture missing positive vector for family {required}");
+        }
+    }
+
+    let fast_tests = fixture.get("fast_path_tests").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("constraint_family fixture missing fast_path_tests[]"))?;
+    if fast_tests.len() < 4 {
+        bail!("constraint_family fixture has {} fast_path_tests, expected >= 4", fast_tests.len());
+    }
+    let mut covered_classes: BTreeSet<String> = BTreeSet::new();
+    for v in fast_tests {
+        let name = required_str(v, "name")?;
+        let class = required_str(v, "evaluation_class")?;
+        if !valid_classes.contains(class) {
+            bail!("fast_path_test {name} evaluation_class {class} invalid");
+        }
+        let cacheable = v.get("expected_cacheable").and_then(Value::as_bool).ok_or_else(|| anyhow!("fast_path_test {name} missing expected_cacheable"))?;
+        let expect = matches!(class, "stateless" | "grant_local");
+        if cacheable != expect {
+            bail!("fast_path_test {name} expected_cacheable={cacheable}, evaluation_class={class}, expected {expect}");
+        }
+        covered_classes.insert(class.to_owned());
+    }
+    if covered_classes.len() < 4 {
+        bail!("constraint_family fixture fast_path_tests must cover all 4 evaluation_classes; got {} ({:?})", covered_classes.len(), covered_classes);
+    }
+
+    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("constraint_family fixture missing negative_vectors[]"))?;
+    let mut saw_unknown = false;
+    let mut saw_loosen = false;
+    let mut saw_unknown_subtype = false;
+    for v in negatives {
+        let name = required_str(v, "name")?;
+        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        match drift {
+            "unknown_constraint_type" => {
+                let body_ct = v.pointer("/constraint/constraint_type").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing constraint.constraint_type"))?;
+                if valid_types.contains(body_ct) {
+                    bail!("negative {name} constraint_type {body_ct} is actually valid");
+                }
+                saw_unknown = true;
+            }
+            "evaluation_class_loosened" => {
+                let claimed = required_str(v, "claimed_evaluation_class")?;
+                let ct = required_str(v, "constraint_type")?;
+                let canonical = canonical_evaluation_class(ct);
+                let canon_rank = class_strictness_rank(canonical);
+                let claimed_rank = class_strictness_rank(claimed);
+                if claimed_rank >= canon_rank {
+                    bail!("negative {name} claimed class {claimed} is not strictly looser than canonical {canonical}");
+                }
+                saw_loosen = true;
+            }
+            "unknown_subtype" => {
+                saw_unknown_subtype = true;
+            }
+            other => bail!("negative {name} unknown drift.kind {other}"),
+        }
+    }
+    if !(saw_unknown && saw_loosen && saw_unknown_subtype) {
+        bail!("constraint_family fixture must cover unknown_constraint_type, evaluation_class loosen, unknown_subtype negatives");
+    }
+
+    Ok(())
+}
+
+fn canonical_evaluation_class(constraint_type: &str) -> &'static str {
+    match constraint_type {
+        "temporal" => "stateless",
+        "field_access" => "grant_local",
+        "type_restriction" => "grant_local",
+        "scope_limitation" => "space_state",
+        "delegation_control" => "grant_local",
+        "quota" => "external",
+        "claim_based" => "external",
+        "confidentiality" => "grant_local",
+        _ => "external",
+    }
+}
+
+fn class_strictness_rank(class: &str) -> u8 {
+    match class {
+        "stateless" => 0,
+        "grant_local" => 1,
+        "space_state" => 2,
+        "external" => 3,
+        _ => 0,
+    }
+}
