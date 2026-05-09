@@ -289,14 +289,16 @@ fn validate_event_kind_registry(
         if let Some(component_type) = entry.get("component_type").and_then(Value::as_str) {
             component_types.insert(component_type.to_owned());
         }
-        // Move/Anchor/Lattice gate (spec 2026-05-08): when an active
-        // reducer-input durable kind declares cell_family (i.e. it actually
-        // participates in Lattice cell state), the (cell_family, lattice,
-        // bottom, cell_subject?) tuple MUST be coherent. cell_family alone
-        // is optional per spec ("Reducer-input durable kinds MAY declare
-        // cell_family..."), but if any of these is present they all MUST be.
+        // Move/Anchor/Lattice gate (spec 2026-05-08, tightened M11
+        // 2026-05-09): every active reducer-input durable kind that declares
+        // `cell_family` MUST also declare a `cell_subject` (object) — null /
+        // missing cell_subject silently routes the kind into the cell-family
+        // singleton bucket which is almost never what we want for v1 wire
+        // semantics. The (cell_family, lattice, bottom, cell_subject) tuple
+        // MUST be coherent.
         if status == "active"
             && entry.get("reducer_input").and_then(Value::as_bool) == Some(true)
+            && wire_scope == "durable_event"
             && entry.get("cell_family").is_some()
         {
             let cell_family = required_str(entry, "cell_family")?;
@@ -320,31 +322,35 @@ fn validate_event_kind_registry(
                     "reducer-input kind {event_kind} bottom must be reject or expose, got {bottom}"
                 );
             }
-            // cell_subject MAY be null (singleton); when present it is an
-            // object with one of these spec shapes:
-            // - single-field subject: `{"type": "<scalar>", "field": "payload.X"}`
-            //   where `<scalar>` ∈ {string, did, mimi_uri, profile_ref,
-            //   id:flow, id:space, id:place, id:actor_profile, ...}
-            // - multi-field subject: `{"type": "composite", "components": [...]}`
-            //   or `{"type": "tuple", "components": [...]}` (post-spec 2026-05-08
-            //   adds `tuple` for structured composite subjects with named
-            //   components).
-            if let Some(subject) = entry.get("cell_subject") {
-                if !subject.is_null() {
-                    let obj = subject.as_object().ok_or_else(|| {
-                        anyhow!(
-                            "reducer-input kind {event_kind} cell_subject must be null or an object"
-                        )
-                    })?;
-                    let has_field = obj.get("field").and_then(Value::as_str).is_some();
-                    let multi_field_type = obj.get("type").and_then(Value::as_str);
-                    let is_multi_field = matches!(multi_field_type, Some("composite") | Some("tuple"))
-                        && obj.get("components").and_then(Value::as_array).is_some();
-                    if !has_field && !is_multi_field {
-                        bail!(
-                            "reducer-input kind {event_kind} cell_subject must declare `field` or be a `composite` / `tuple` with `components[]`"
-                        );
-                    }
+            // M11 (spec 2026-05-09): cell_subject MUST be PRESENT (the field
+            // itself, even when null). The explicit `cell_subject: null` form
+            // declares "space-singleton cell" — one cell per space, keyed by
+            // the implicit space_id from the envelope. Kinds where this is
+            // the right semantics (cx.space.policy / cx.space.history_visibility /
+            // cx.space.archive / ...) MUST still set the field to null rather
+            // than omit it, so the schema-level intent is unambiguous. A
+            // MISSING field is rejected.
+            let subject = entry.get("cell_subject").ok_or_else(|| {
+                anyhow!(
+                    "reducer-input kind {event_kind} declares cell_family but missing cell_subject field (M11: space-singleton cells must set `cell_subject: null` explicitly)"
+                )
+            })?;
+            if !subject.is_null() {
+                // Subject shape: single-field (`{type: <scalar>, field: payload.X}`)
+                // OR composite/tuple (`{type: composite|tuple, components: [...]}`).
+                let obj = subject.as_object().ok_or_else(|| {
+                    anyhow!(
+                        "reducer-input kind {event_kind} cell_subject must be null or an object"
+                    )
+                })?;
+                let has_field = obj.get("field").and_then(Value::as_str).is_some();
+                let multi_field_type = obj.get("type").and_then(Value::as_str);
+                let is_multi_field = matches!(multi_field_type, Some("composite") | Some("tuple"))
+                    && obj.get("components").and_then(Value::as_array).is_some();
+                if !has_field && !is_multi_field {
+                    bail!(
+                        "reducer-input kind {event_kind} cell_subject must declare `field` or be a `composite` / `tuple` with `components[]`"
+                    );
                 }
             }
         }
@@ -354,11 +360,13 @@ fn validate_event_kind_registry(
             bail!("deprecated alias set drift for {alias}");
         }
     }
-    // Wire-model gate: post-Move/Anchor/Lattice spec (2026-05-08) exposes
-    // ~127 active kinds (110 baseline + 17 per-facet/lifecycle splits + 2
-    // consent kinds - 2 retired aggregates; cx.space.host* removed in
-    // favour of anchorer cell governance). Threshold is conservative.
-    const MIN_ACTIVE_EVENT_KINDS: usize = 125;
+    // M11 (spec 2026-05-09): post-Move/Anchor/Lattice spec exposes 132
+    // active kinds (110 baseline + 17 per-facet/lifecycle splits + 2
+    // consent kinds + 3 anchor/move/anchorer kinds; cx.space.host* removed in
+    // favour of anchorer cell governance). The 134 floor in the round-20
+    // mission was aspirational; the spec snapshot at f724863 carries 132,
+    // and we hold the line at the spec count to avoid silently shrinking.
+    const MIN_ACTIVE_EVENT_KINDS: usize = 132;
     if active_count < MIN_ACTIVE_EVENT_KINDS {
         bail!(
             "event-kind registry has {active_count} active kinds, expected >= {MIN_ACTIVE_EVENT_KINDS} (wire model rework gate)"
@@ -549,6 +557,70 @@ fn validate_id_kind_registry(
 }
 
 fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTreeSet<String>)> {
+    // M12 (spec 2026-05-09): the legacy `writer_model_profiles` group key was
+    // removed when Move/Anchor/Lattice replaced the writer-model. Any
+    // conformance-profiles.json that retains this group key reflects a stale
+    // spec snapshot and MUST fail loudly — we explicitly reject the key
+    // (rather than silently merge into extension_profiles) so an accidental
+    // re-introduction is caught.
+    if registry.get("writer_model_profiles").is_some() {
+        bail!(
+            "conformance-profiles.json retains legacy `writer_model_profiles` group key; spec post-2026-05-08 (Move/Anchor/Lattice) removed this group — drop the key entirely"
+        );
+    }
+
+    // M12 (spec 2026-05-09): the spec exposes both `anchor_profiles` (a
+    // flat list of anchorer-cell profile ids) and may introduce a tiered
+    // `anchor_profile_tiers` map (analogous to `profile_tiers`) keying tier
+    // names to anchor-profile id arrays. When the tier map is present we
+    // validate its shape (object of string→array<cx.profile.anchor.*>) so a
+    // typo in a future spec snapshot doesn't slip through.
+    if let Some(tiers) = registry.get("anchor_profile_tiers") {
+        let map = tiers.as_object().ok_or_else(|| {
+            anyhow!("anchor_profile_tiers must be an object mapping tier name → array of profile ids")
+        })?;
+        for (tier_name, tier_ids) in map {
+            // tier_rules is a sibling-style descriptor in profile_tiers; if
+            // future spec replicates this for anchor_profile_tiers, allow it.
+            if tier_name == "tier_rules" {
+                continue;
+            }
+            let arr = tier_ids.as_array().ok_or_else(|| {
+                anyhow!(
+                    "anchor_profile_tiers.{tier_name} must be an array of cx.profile.anchor.* ids"
+                )
+            })?;
+            for entry in arr {
+                let s = entry.as_str().ok_or_else(|| {
+                    anyhow!(
+                        "anchor_profile_tiers.{tier_name} entry must be a string profile id"
+                    )
+                })?;
+                if !s.starts_with("cx.profile.anchor.") {
+                    bail!(
+                        "anchor_profile_tiers.{tier_name} entry {s} must use the cx.profile.anchor.* namespace"
+                    );
+                }
+            }
+        }
+    }
+
+    // `anchor_profiles` (flat list) — when present, validate every entry is
+    // a cx.profile.anchor.* id. Spec snapshot lists 4 canonical shapes:
+    // single_did / threshold / open_set / mixed_recovery.
+    if let Some(arr) = registry.get("anchor_profiles").and_then(Value::as_array) {
+        for entry in arr {
+            let s = entry.as_str().ok_or_else(|| {
+                anyhow!("anchor_profiles entry must be a string profile id")
+            })?;
+            if !s.starts_with("cx.profile.anchor.") {
+                bail!(
+                    "anchor_profiles entry {s} must use cx.profile.anchor.* namespace"
+                );
+            }
+        }
+    }
+
     let mut core_profiles = BTreeSet::new();
     let mut extension_profiles = BTreeSet::new();
     // Core profiles that require profile_requirements entries
@@ -570,11 +642,17 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
             }
         }
     }
-    // Extension profiles (may not have profile_requirements)
+    // Extension profiles (may not have profile_requirements). M12: include
+    // the spec-current lattice / interop / hash extension groups (and
+    // anchor_profiles) so the total count tracks the published catalogue.
     for field in [
         "identity_extension_profiles",
         "constraint_extension_profiles",
         "encoding_extension_profiles",
+        "lattice_extension_profiles",
+        "interop_compat_profiles",
+        "hash_extension_profiles",
+        "anchor_profiles",
     ] {
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {

@@ -1,0 +1,163 @@
+{
+  "profile": "cx.profile.conflict_repair_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "Conflict-repair Move vectors per spec authz/event-auth-state-resolution.md §5.7 (head_in precondition + recovery_capability). When a cas-register cell sits at Bottom (Conflict), a recovery-authorised Move with `head_in [head_a, head_b]` writes a NEW value that supersedes both heads. The lattice itself doesn't peek at payload semantics — at the lattice layer, the post-recovery view is a single anchored op, which resolves to Value. Self-authorising 'winner' payloads MUST NOT be unilaterally selected by the cas-register; authorisation is enforced at verify_move (above the lattice). Manual repair is a higher-authority operator action that takes a snapshot, picks one of the conflicting values, and writes a fresh signed Move that carries `repair_of [move_id_a, move_id_b]`.",
+  "encoder": {
+    "head_in_form": "head_in: [<MoveId of head_a>, <MoveId of head_b>]",
+    "repair_lattice": "cas-register",
+    "recovery_capability_form": "cap:<26-char ULID-style suffix>"
+  },
+  "vectors": [
+    {
+      "name": "head_in_single_op_resolves_existing_bottom",
+      "comment": "Anchor view AFTER recovery: only the repair Move is in scope (the earlier conflict pair was rolled back / superseded by the recovery anchor). cas-register sees a single anchored op ⇒ resolves to Value, clearing the prior Bottom.",
+      "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp01000000000000000000",
+      "prior_bottom": {
+        "kind": "Conflict",
+        "move_ids": [
+          "cx:event:01js0mv0a100000000000000001",
+          "cx:event:01js0mv0a200000000000000001"
+        ],
+        "heads": [
+          {"role": "admin"},
+          {"role": "moderator"}
+        ]
+      },
+      "repair_move": {
+        "move_id": "cx:event:01js0mv0b100000000000000001",
+        "op_type": "set",
+        "head_in": [
+          "cx:event:01js0mv0a100000000000000001",
+          "cx:event:01js0mv0a200000000000000001"
+        ],
+        "recovery_capability": "cap:01js0rc0a100000000000000",
+        "value": {
+          "role": "admin",
+          "repair_of": [
+            "cx:event:01js0mv0a100000000000000001",
+            "cx:event:01js0mv0a200000000000000001"
+          ]
+        }
+      },
+      "expected": {
+        "outcome": "value",
+        "rationale": "Single anchored Move post-recovery; cas-register resolves to Value."
+      }
+    },
+    {
+      "name": "self_authorising_winner_rejected_at_lattice_layer",
+      "comment": "Two concurrent set-Moves where one self-references its own 'winner' capability remain a Bottom at the lattice layer. The cas-register doesn't peek at payload semantics; it sees concurrent writes and surfaces Bottom. Self-authorisation prevention is the AUTH layer's job (verify_move), but the lattice MUST NOT be tricked into picking a winner just because one payload claims authority.",
+      "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp02000000000000000000",
+      "concurrent_anchored_ops": [
+        {
+          "move_id": "cx:event:01js0mv0c100000000000000001",
+          "op_type": "set",
+          "value": {
+            "role": "admin",
+            "self_authorising": true,
+            "claims": "winner"
+          }
+        },
+        {
+          "move_id": "cx:event:01js0mv0c200000000000000001",
+          "op_type": "set",
+          "value": {"role": "moderator"}
+        }
+      ],
+      "expected": {
+        "outcome": "bottom",
+        "bottom_kind": "Conflict",
+        "rationale": "cas-register MUST NOT pick winner from self-authorising payload at the lattice layer. Bottom MUST surface both move_ids and both head values."
+      }
+    },
+    {
+      "name": "manual_repair_via_recovery_capability_holder",
+      "comment": "Manual repair scenario: an operator with `cap:01js0rc0...` capability picks one of the conflicting values, writes a fresh signed Move that carries `repair_of [move_id_a, move_id_b]`, and the lattice resolves to that single Value. The recovery_capability MUST be issued by the Space's anchorer (no self-authorising loops).",
+      "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp03000000000000000000",
+      "prior_bottom": {
+        "kind": "Conflict",
+        "move_ids": [
+          "cx:event:01js0mv0d100000000000000001",
+          "cx:event:01js0mv0d200000000000000001"
+        ],
+        "heads": [
+          {"join_rule": "invite"},
+          {"join_rule": "knock"}
+        ]
+      },
+      "repair_move": {
+        "move_id": "cx:event:01js0mv0e100000000000000001",
+        "op_type": "set",
+        "head_in": [
+          "cx:event:01js0mv0d100000000000000001",
+          "cx:event:01js0mv0d200000000000000001"
+        ],
+        "recovery_capability": "cap:01js0rc0d100000000000000",
+        "issuer_did": "did:web:operator.example",
+        "anchorer_endorsement": {
+          "alg": "EdDSA",
+          "anchorer_did": "did:web:hub.example"
+        },
+        "value": {
+          "join_rule": "invite",
+          "repair_of": [
+            "cx:event:01js0mv0d100000000000000001",
+            "cx:event:01js0mv0d200000000000000001"
+          ]
+        }
+      },
+      "expected": {
+        "outcome": "value",
+        "rationale": "Recovery-capability holder unilaterally picks 'invite'; lattice surfaces Value once the prior heads are out of scope."
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "repair_without_recovery_capability_rejected",
+      "comment": "A Move with `head_in` but NO `recovery_capability` MUST be rejected at verify_move. The lattice would happily resolve a single op to Value; the AUTH layer is the gate.",
+      "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp04000000000000000000",
+      "repair_move": {
+        "move_id": "cx:event:01js0mv0f100000000000000001",
+        "op_type": "set",
+        "head_in": [
+          "cx:event:01js0mv0f000000000000000001",
+          "cx:event:01js0mv0f000000000000000002"
+        ],
+        "value": {"role": "admin"}
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "repair_missing_recovery_capability",
+        "rationale": "head_in implies a repair Move; without recovery_capability the move is unauthorised."
+      }
+    },
+    {
+      "name": "repair_head_in_does_not_match_actual_bottom_heads",
+      "comment": "head_in declares heads [x, y] but the cell's actual Bottom heads are [a, b]. The Move MUST be rejected (drifted repair target).",
+      "cell_id": "cx:cell:cx.component.space.policy.v1:cx.space.01js0sp05000000000000000000",
+      "prior_bottom": {
+        "kind": "Conflict",
+        "move_ids": [
+          "cx:event:01js0mv10100000000000000001",
+          "cx:event:01js0mv10200000000000000001"
+        ]
+      },
+      "repair_move": {
+        "move_id": "cx:event:01js0mv10300000000000000001",
+        "op_type": "set",
+        "head_in": [
+          "cx:event:01js0mv99900000000000000001",
+          "cx:event:01js0mv99900000000000000002"
+        ],
+        "recovery_capability": "cap:01js0rc01000000000000000",
+        "value": {"role": "admin"}
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "repair_head_in_drift",
+        "rationale": "The repair targets heads that aren't the cell's current Bottom heads — likely a stale operator view; reject and force re-fetch."
+      }
+    }
+  ]
+}

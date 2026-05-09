@@ -112,3 +112,31 @@ fn read_receipt_policy_fixture_suite_matches_reference_semantics() -> Result<()>
 fn anchor_view_compaction_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_anchor_view_compaction_fixture_suite()
 }
+
+/// Round-20 M3 — anchorer cell governance vectors (4 happy-path profiles +
+/// concurrent reconfig→Bottom Conflict + signature mismatch + threshold
+/// below/over quorum + registry drift). Stand-alone JSON fixture for SUT
+/// black-box validation; lattice round-trip stays in lattice_round_trip.rs.
+#[test]
+fn anchorer_cell_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_anchorer_cell_fixture_suite()
+}
+
+/// Round-20 M5 — conflict-repair Move vectors (head_in single-op→Value,
+/// self-authorising winner reject at lattice layer, manual repair via
+/// recovery_capability + anchorer endorsement). Stand-alone JSON fixture
+/// for SUT black-box validation; lattice round-trip stays in
+/// lattice_round_trip.rs.
+#[test]
+fn conflict_repair_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_conflict_repair_fixture_suite()
+}
+
+/// Round-20 M7 — MLS covered_frontier or-set vectors (idempotent re-add,
+/// rotation→causal remove, governance Move not blocked, MLS commit writes
+/// 3 cells in 1 Move, missing/stale covered_frontier precondition→
+/// fail_precondition).
+#[test]
+fn mls_move_covered_frontier_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_mls_move_covered_frontier_fixture_suite()
+}

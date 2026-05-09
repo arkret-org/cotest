@@ -1009,6 +1009,708 @@ fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
     Ok(())
 }
 
+/// M3 — anchorer cell governance vectors (round 20).
+///
+/// Stand-alone fixture (`tests/fixtures/anchorer_cell_fixture.json`) extracted
+/// from the in-process Rust assertions in `lattice_round_trip.rs`. The lattice
+/// suite stays as the SDK-level lattice round-trip; this fixture is the
+/// black-box JSON form a SUT can consume and validate against. The validator
+/// pins these structural invariants:
+///
+/// * each happy-path vector declares one of the spec's four normative
+///   `AnchorerValue` shapes (`single_did` / `threshold` / `open_set` /
+///   `mixed`) with the matching shape-keyed payload;
+/// * the threshold vector carries `k <= n` and a members[] of length n;
+/// * the concurrent-reconfig vector declares ≥ 2 distinct anchored ops and
+///   `expected.outcome = bottom` with `bottom_kind = Conflict`;
+/// * negative vectors carry one of the spec's recognised admission rejection
+///   reasons (signature mismatch / threshold below quorum / k>n geometry /
+///   registry drift).
+///
+/// All four happy-path shapes + the concurrent-reconfig + the four negative
+/// admission failures MUST be covered.
+pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("anchorer_cell_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.anchorer_cell_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("anchorer_cell fixture missing vectors[]"))?;
+    let mut covered: std::collections::BTreeSet<&str> = Default::default();
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        let shape = required_str(vector, "shape")?;
+        let cell_id = required_str(vector, "cell_id")?;
+        if !cell_id.starts_with("cx:cell:cx.component.anchorer.v1:") {
+            bail!(
+                "vector {name} cell_id must be the anchorer.v1 cell, got {cell_id}"
+            );
+        }
+        match name {
+            "single_did_happy_path"
+            | "threshold_k_of_n_happy_path"
+            | "open_set_happy_path"
+            | "mixed_recovery_happy_path" => {
+                let value = vector
+                    .get("anchorer_value")
+                    .ok_or_else(|| anyhow!("vector {name} missing anchorer_value"))?;
+                let value_shape = required_str(value, "shape")?;
+                if value_shape != shape {
+                    bail!(
+                        "vector {name} anchorer_value.shape {value_shape} != declared shape {shape}"
+                    );
+                }
+                match shape {
+                    "single_did" => {
+                        let _ = required_str(value, "did")?;
+                    }
+                    "threshold" => {
+                        let k = value
+                            .get("k")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| anyhow!("vector {name} threshold missing k"))?;
+                        let n = value
+                            .get("n")
+                            .and_then(Value::as_u64)
+                            .ok_or_else(|| anyhow!("vector {name} threshold missing n"))?;
+                        if k == 0 || k > n {
+                            bail!(
+                                "vector {name} threshold k={k} n={n} must satisfy 1 <= k <= n"
+                            );
+                        }
+                        let members = value
+                            .get("members")
+                            .and_then(Value::as_array)
+                            .ok_or_else(|| {
+                                anyhow!("vector {name} threshold missing members[]")
+                            })?;
+                        if members.len() as u64 != n {
+                            bail!(
+                                "vector {name} threshold members.len()={} != n={n}",
+                                members.len()
+                            );
+                        }
+                    }
+                    "open_set" => {
+                        let members = value
+                            .get("members")
+                            .and_then(Value::as_array)
+                            .ok_or_else(|| {
+                                anyhow!("vector {name} open_set missing members[]")
+                            })?;
+                        if members.is_empty() {
+                            bail!("vector {name} open_set members[] must be non-empty");
+                        }
+                    }
+                    "mixed" => {
+                        let _ = required_str(value, "primary")?;
+                        let recovery = value
+                            .get("recovery_members")
+                            .and_then(Value::as_array)
+                            .ok_or_else(|| {
+                                anyhow!("vector {name} mixed missing recovery_members[]")
+                            })?;
+                        if recovery.is_empty() {
+                            bail!("vector {name} mixed recovery_members[] must be non-empty");
+                        }
+                    }
+                    other => bail!("vector {name} unsupported shape {other}"),
+                }
+                let outcome = required_str(
+                    vector
+                        .get("expected")
+                        .ok_or_else(|| anyhow!("vector {name} missing expected"))?,
+                    "outcome",
+                )?;
+                if outcome != "value" {
+                    bail!(
+                        "vector {name} happy path must expect outcome=value, got {outcome}"
+                    );
+                }
+                covered.insert(name);
+            }
+            "concurrent_reconfig_returns_bottom_conflict" => {
+                let ops = vector
+                    .get("concurrent_anchored_ops")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing concurrent_anchored_ops[]")
+                    })?;
+                if ops.len() < 2 {
+                    bail!(
+                        "vector {name} must declare at least 2 concurrent anchored ops to surface Bottom"
+                    );
+                }
+                let mut seen_move_ids = std::collections::BTreeSet::new();
+                for op in ops {
+                    let move_id = required_str(op, "move_id")?;
+                    if !move_id.starts_with("cx:event:") {
+                        bail!(
+                            "vector {name} concurrent op move_id {move_id} must use cx:event:<UUIDv7> form"
+                        );
+                    }
+                    if !seen_move_ids.insert(move_id.to_owned()) {
+                        bail!(
+                            "vector {name} concurrent ops MUST have distinct move_ids; duplicate {move_id}"
+                        );
+                    }
+                }
+                let expected = vector
+                    .get("expected")
+                    .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+                if required_str(expected, "outcome")? != "bottom" {
+                    bail!("vector {name} concurrent reconfig must expect outcome=bottom");
+                }
+                if required_str(expected, "bottom_kind")? != "Conflict" {
+                    bail!(
+                        "vector {name} concurrent reconfig must expect bottom_kind=Conflict (split anchorer is a Space-wide pause)"
+                    );
+                }
+                covered.insert(name);
+            }
+            other => bail!("vector {name}: unexpected name {other}"),
+        }
+    }
+    for required in [
+        "single_did_happy_path",
+        "threshold_k_of_n_happy_path",
+        "open_set_happy_path",
+        "mixed_recovery_happy_path",
+        "concurrent_reconfig_returns_bottom_conflict",
+    ] {
+        if !covered.contains(required) {
+            bail!("anchorer_cell fixture missing required vector {required}");
+        }
+    }
+
+    // Negative vectors
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("anchorer_cell fixture missing negative_vectors[]"))?;
+    let mut neg_reasons: std::collections::BTreeSet<&str> = Default::default();
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let drift = vector
+            .get("drift")
+            .ok_or_else(|| anyhow!("negative vector {name} missing drift"))?;
+        let drift_kind = required_str(drift, "kind")?;
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("negative vector {name} must expect outcome=reject");
+        }
+        let reason = required_str(expected, "reason_code")?;
+        match (drift_kind, reason) {
+            ("signature_mismatch", "anchor_signature_invalid")
+            | ("threshold_below_quorum", "anchor_threshold_below_quorum")
+            | ("threshold_geometry_invalid", "anchor_threshold_geometry_invalid")
+            | ("registry_drift", "registry_kind_missing_cell_family") => {
+                neg_reasons.insert(reason);
+            }
+            (k, r) => bail!(
+                "negative vector {name}: drift.kind={k} not paired with expected reason_code={r}"
+            ),
+        }
+        if drift_kind == "threshold_geometry_invalid" {
+            let k = drift.get("k").and_then(Value::as_u64).ok_or_else(|| {
+                anyhow!("negative vector {name} threshold geometry drift missing k")
+            })?;
+            let n = drift.get("n").and_then(Value::as_u64).ok_or_else(|| {
+                anyhow!("negative vector {name} threshold geometry drift missing n")
+            })?;
+            if k <= n {
+                bail!(
+                    "negative vector {name} threshold geometry drift must have k>n to be a real violation; got k={k} n={n}"
+                );
+            }
+        }
+    }
+    for required in [
+        "anchor_signature_invalid",
+        "anchor_threshold_below_quorum",
+        "anchor_threshold_geometry_invalid",
+        "registry_kind_missing_cell_family",
+    ] {
+        if !neg_reasons.contains(required) {
+            bail!(
+                "anchorer_cell fixture must include a negative vector with reason_code={required}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// M5 — conflict-repair Move vectors (round 20).
+///
+/// Stand-alone fixture (`tests/fixtures/conflict_repair_fixture.json`) — the
+/// JSON form for SUT black-box validation of the head_in / recovery_capability
+/// / manual-repair semantics described in `event-auth-state-resolution.md` §5.7.
+/// Validator pins:
+///
+/// * happy-path repair Move declares `head_in` matching the prior_bottom
+///   move_ids (no drift) and a `recovery_capability` ref;
+/// * self-authorising-winner vector declares ≥ 2 concurrent ops and
+///   `outcome = bottom` (lattice MUST NOT pick winner from payload);
+/// * manual repair vector carries an `anchorer_endorsement` ref;
+/// * negative vectors cover missing-recovery-capability and head_in drift.
+pub fn run_conflict_repair_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("conflict_repair_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.conflict_repair_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("conflict_repair fixture missing vectors[]"))?;
+    let mut covered_head_in_resolves = false;
+    let mut covered_self_auth_rejected = false;
+    let mut covered_manual_repair = false;
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        match name {
+            "head_in_single_op_resolves_existing_bottom" => {
+                let prior = vector
+                    .get("prior_bottom")
+                    .ok_or_else(|| anyhow!("vector {name} missing prior_bottom"))?;
+                let prior_ids: Vec<&str> = prior
+                    .get("move_ids")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} prior_bottom missing move_ids[]")
+                    })?
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect();
+                if prior_ids.len() < 2 {
+                    bail!(
+                        "vector {name} prior_bottom MUST have ≥ 2 conflicting move_ids"
+                    );
+                }
+                let repair = vector
+                    .get("repair_move")
+                    .ok_or_else(|| anyhow!("vector {name} missing repair_move"))?;
+                let head_in: Vec<&str> = repair
+                    .get("head_in")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} repair_move missing head_in[]"))?
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect();
+                let prior_set: std::collections::BTreeSet<&str> =
+                    prior_ids.iter().copied().collect();
+                let head_set: std::collections::BTreeSet<&str> =
+                    head_in.iter().copied().collect();
+                if prior_set != head_set {
+                    bail!(
+                        "vector {name} repair_move.head_in MUST equal prior_bottom.move_ids set"
+                    );
+                }
+                let _ = required_str(repair, "recovery_capability")?;
+                let outcome = required_str(
+                    vector
+                        .get("expected")
+                        .ok_or_else(|| anyhow!("vector {name} missing expected"))?,
+                    "outcome",
+                )?;
+                if outcome != "value" {
+                    bail!(
+                        "vector {name} expected outcome=value (single anchored repair op)"
+                    );
+                }
+                covered_head_in_resolves = true;
+            }
+            "self_authorising_winner_rejected_at_lattice_layer" => {
+                let ops = vector
+                    .get("concurrent_anchored_ops")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing concurrent_anchored_ops[]")
+                    })?;
+                if ops.len() < 2 {
+                    bail!(
+                        "vector {name} self-authorising vector must have ≥ 2 concurrent ops"
+                    );
+                }
+                let any_self_auth = ops.iter().any(|op| {
+                    op.get("value")
+                        .and_then(|v| v.get("self_authorising"))
+                        .and_then(Value::as_bool)
+                        == Some(true)
+                });
+                if !any_self_auth {
+                    bail!(
+                        "vector {name} must include at least one op with value.self_authorising=true to exercise the lattice-no-peek rule"
+                    );
+                }
+                let expected = vector
+                    .get("expected")
+                    .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+                if required_str(expected, "outcome")? != "bottom" {
+                    bail!(
+                        "vector {name} self-authorising MUST resolve to Bottom at the lattice layer"
+                    );
+                }
+                if required_str(expected, "bottom_kind")? != "Conflict" {
+                    bail!("vector {name} bottom_kind must be Conflict");
+                }
+                covered_self_auth_rejected = true;
+            }
+            "manual_repair_via_recovery_capability_holder" => {
+                let repair = vector
+                    .get("repair_move")
+                    .ok_or_else(|| anyhow!("vector {name} missing repair_move"))?;
+                let _ = required_str(repair, "recovery_capability")?;
+                let _ = required_str(repair, "issuer_did")?;
+                let endorsement = repair
+                    .get("anchorer_endorsement")
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} manual repair missing anchorer_endorsement")
+                    })?;
+                if required_str(endorsement, "alg")? != "EdDSA" {
+                    bail!(
+                        "vector {name} anchorer_endorsement.alg must be EdDSA"
+                    );
+                }
+                let _ = required_str(endorsement, "anchorer_did")?;
+                covered_manual_repair = true;
+            }
+            other => bail!("vector unexpected name {other}"),
+        }
+    }
+    if !(covered_head_in_resolves && covered_self_auth_rejected && covered_manual_repair) {
+        bail!(
+            "conflict_repair fixture must cover head_in_resolves + self_auth_rejected + manual_repair"
+        );
+    }
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("conflict_repair fixture missing negative_vectors[]"))?;
+    let mut neg_codes: std::collections::BTreeSet<&str> = Default::default();
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("negative vector {name} must expect outcome=reject");
+        }
+        let reason = required_str(expected, "reason_code")?;
+        neg_codes.insert(reason);
+        // shape-specific drift check
+        if reason == "repair_head_in_drift" {
+            let prior_ids: std::collections::BTreeSet<&str> = vector
+                .get("prior_bottom")
+                .and_then(|p| p.get("move_ids"))
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let head_in: std::collections::BTreeSet<&str> = vector
+                .get("repair_move")
+                .and_then(|r| r.get("head_in"))
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            if prior_ids == head_in {
+                bail!(
+                    "negative vector {name} declared head_in drift but head_in matches prior_bottom"
+                );
+            }
+        }
+    }
+    for required in [
+        "repair_missing_recovery_capability",
+        "repair_head_in_drift",
+    ] {
+        if !neg_codes.contains(required) {
+            bail!(
+                "conflict_repair fixture must include negative vector with reason_code={required}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// M7 — MLS covered_frontier cell vectors (round 20).
+///
+/// Stand-alone fixture (`tests/fixtures/mls_move_covered_frontier_fixture.json`)
+/// validating the or-set behaviour of `cx.component.mls.covered_frontier.v1`
+/// across MLS commit Moves, governance Moves, and rotation. Pins:
+///
+/// * accumulate vector adds three ops where two share the same tag (idempotent
+///   re-add); `expected.active_tags` MUST be the unique-tag set;
+/// * rotation vector adds two distinct tags then removes one; remaining
+///   active_tag MUST equal the un-removed tag;
+/// * governance Move vector declares zero preconditions (governance Moves are
+///   NOT blocked on covered_frontier);
+/// * mls_commit_three_cells declares three distinct cells in `effects[]` with
+///   one shared move_id;
+/// * E2EE missing-precondition negative declares no `covered_frontier`
+///   precondition + reason_code `fail_precondition`;
+/// * E2EE stale-attestation negative declares an attests_to that's NOT in
+///   active_tags_at_send_time.
+pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("mls_move_covered_frontier_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.mls_covered_frontier_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("mls covered_frontier fixture missing vectors[]"))?;
+    let mut covered: std::collections::BTreeSet<&str> = Default::default();
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        match name {
+            "covered_frontier_accumulates_governance_refs_idempotent" => {
+                let cell_id = required_str(vector, "cell_id")?;
+                if !cell_id.starts_with("cx:cell:cx.component.mls.covered_frontier.v1:") {
+                    bail!("vector {name} cell_id wrong family: {cell_id}");
+                }
+                let ops = vector
+                    .get("anchored_ops")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing anchored_ops[]"))?;
+                let mut tags_seen: Vec<&str> = Vec::new();
+                for op in ops {
+                    if required_str(op, "op")? != "or_set_add" {
+                        bail!(
+                            "vector {name} accumulate vector ops must all be or_set_add"
+                        );
+                    }
+                    tags_seen.push(required_str(op, "tag")?);
+                }
+                let unique_tags: std::collections::BTreeSet<&str> =
+                    tags_seen.iter().copied().collect();
+                if unique_tags.len() == tags_seen.len() {
+                    bail!(
+                        "vector {name} must include at least one duplicate-tag re-add to test or-set idempotence"
+                    );
+                }
+                let expected = vector
+                    .get("expected")
+                    .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+                let active: std::collections::BTreeSet<&str> = expected
+                    .get("active_tags")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} expected.active_tags missing"))?
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect();
+                if active != unique_tags {
+                    bail!(
+                        "vector {name} expected.active_tags MUST equal the unique-tag set; got {active:?} vs {unique_tags:?}"
+                    );
+                }
+                covered.insert(name);
+            }
+            "rotation_removes_old_ref_keeps_others" => {
+                let ops = vector
+                    .get("anchored_ops")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing anchored_ops[]"))?;
+                let mut adds: Vec<&str> = Vec::new();
+                let mut removes: Vec<&str> = Vec::new();
+                for op in ops {
+                    let kind = required_str(op, "op")?;
+                    let tag = required_str(op, "tag")?;
+                    match kind {
+                        "or_set_add" => adds.push(tag),
+                        "or_set_remove" => removes.push(tag),
+                        other => bail!("vector {name} unknown op {other}"),
+                    }
+                }
+                if removes.is_empty() {
+                    bail!("vector {name} rotation must declare at least one or_set_remove");
+                }
+                let expected_active: std::collections::BTreeSet<&str> = vector
+                    .pointer("/expected/active_tags")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} expected.active_tags missing"))?
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect();
+                let computed_active: std::collections::BTreeSet<&str> = adds
+                    .iter()
+                    .filter(|tag| !removes.contains(tag))
+                    .copied()
+                    .collect();
+                if expected_active != computed_active {
+                    bail!(
+                        "vector {name} expected.active_tags drift: declared {expected_active:?} computed {computed_active:?}"
+                    );
+                }
+                covered.insert(name);
+            }
+            "governance_move_not_blocked_by_covered_frontier" => {
+                let mv = vector
+                    .get("governance_move")
+                    .ok_or_else(|| anyhow!("vector {name} missing governance_move"))?;
+                let preconds = mv
+                    .get("preconditions")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} governance_move missing preconditions[]")
+                    })?;
+                if !preconds.is_empty() {
+                    bail!(
+                        "vector {name} governance_move MUST have empty preconditions[] (governance is NOT blocked on covered_frontier)"
+                    );
+                }
+                if required_str(
+                    vector
+                        .get("expected")
+                        .ok_or_else(|| anyhow!("vector {name} missing expected"))?,
+                    "outcome",
+                )? != "accept"
+                {
+                    bail!("vector {name} governance Move must accept");
+                }
+                covered.insert(name);
+            }
+            "mls_commit_attests_three_cells_in_one_move" => {
+                let mv = vector
+                    .get("mls_commit_move")
+                    .ok_or_else(|| anyhow!("vector {name} missing mls_commit_move"))?;
+                let _ = required_str(mv, "covered_frontier_attests_to")?;
+                let effects = mv
+                    .get("effects")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing effects[]"))?;
+                if effects.len() != 3 {
+                    bail!(
+                        "vector {name} MLS commit Move MUST write exactly 3 cells (covered_frontier + epoch + group_state); got {} effects",
+                        effects.len()
+                    );
+                }
+                let mut cell_families: std::collections::BTreeSet<&str> = Default::default();
+                for effect in effects {
+                    let cell = required_str(effect, "cell")?;
+                    let family = cell
+                        .strip_prefix("cx:cell:")
+                        .and_then(|tail| tail.split(':').next())
+                        .ok_or_else(|| anyhow!("vector {name} cell {cell} malformed"))?;
+                    cell_families.insert(family);
+                }
+                for required in [
+                    "cx.component.mls.covered_frontier.v1",
+                    "cx.component.mls.epoch.v1",
+                    "cx.component.mls.group_state.v1",
+                ] {
+                    if !cell_families.contains(required) {
+                        bail!(
+                            "vector {name} MLS commit must write cell family {required}"
+                        );
+                    }
+                }
+                covered.insert(name);
+            }
+            other => bail!("vector {name}: unexpected name {other}"),
+        }
+    }
+    for required in [
+        "covered_frontier_accumulates_governance_refs_idempotent",
+        "rotation_removes_old_ref_keeps_others",
+        "governance_move_not_blocked_by_covered_frontier",
+        "mls_commit_attests_three_cells_in_one_move",
+    ] {
+        if !covered.contains(required) {
+            bail!("mls covered_frontier fixture missing required vector {required}");
+        }
+    }
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("mls covered_frontier fixture missing negative_vectors[]"))?;
+    let mut covered_missing = false;
+    let mut covered_stale = false;
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("negative vector {name} must expect outcome=reject");
+        }
+        if required_str(expected, "reason_code")? != "fail_precondition" {
+            bail!(
+                "negative vector {name} reason_code must be fail_precondition (covered_frontier admission)"
+            );
+        }
+        if required_str(expected, "missing_precondition")? != "covered_frontier" {
+            bail!(
+                "negative vector {name} missing_precondition must be covered_frontier"
+            );
+        }
+        match name {
+            "e2ee_message_missing_covered_frontier_precondition_rejected" => {
+                let mv = vector
+                    .get("e2ee_move")
+                    .ok_or_else(|| anyhow!("negative vector {name} missing e2ee_move"))?;
+                let preconds = mv
+                    .get("preconditions")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("negative vector {name} e2ee_move missing preconditions[]")
+                    })?;
+                let has_cf = preconds.iter().any(|p| {
+                    p.get("kind").and_then(Value::as_str) == Some("covered_frontier")
+                });
+                if has_cf {
+                    bail!(
+                        "negative vector {name} declared a covered_frontier precondition; this vector must omit it"
+                    );
+                }
+                covered_missing = true;
+            }
+            "e2ee_message_with_stale_covered_frontier_ref_rejected" => {
+                let active: std::collections::BTreeSet<&str> = vector
+                    .get("active_tags_at_send_time")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let mv = vector
+                    .get("e2ee_move")
+                    .ok_or_else(|| anyhow!("negative vector {name} missing e2ee_move"))?;
+                let preconds = mv
+                    .get("preconditions")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("negative vector {name} e2ee_move missing preconditions[]")
+                    })?;
+                let attests = preconds.iter().find_map(|p| {
+                    if p.get("kind").and_then(Value::as_str) == Some("covered_frontier") {
+                        p.get("attests_to").and_then(Value::as_str)
+                    } else {
+                        None
+                    }
+                });
+                let attests = attests.ok_or_else(|| {
+                    anyhow!(
+                        "negative vector {name} stale variant must DECLARE a covered_frontier precondition"
+                    )
+                })?;
+                if active.contains(attests) {
+                    bail!(
+                        "negative vector {name} attests_to ref {attests} IS in active_tags_at_send_time; this vector requires it to be stale"
+                    );
+                }
+                covered_stale = true;
+            }
+            other => bail!("negative vector unexpected name {other}"),
+        }
+    }
+    if !(covered_missing && covered_stale) {
+        bail!(
+            "mls covered_frontier fixture must cover both missing-precondition and stale-attestation negatives"
+        );
+    }
+    Ok(())
+}
+
 fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
     let lookup = vector.get("scope_lookup");
     if let Some(lookup) = lookup

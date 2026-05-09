@@ -45,9 +45,12 @@ pub use state_resolution::{
 };
 pub use sync::run_sync_fixture_suite;
 pub use wire_model::run_anchor_view_compaction_fixture_suite;
+pub use wire_model::run_anchorer_cell_fixture_suite;
 pub use wire_model::run_composite_state_subject_fixture_suite;
+pub use wire_model::run_conflict_repair_fixture_suite;
 pub use wire_model::run_consent_fixture_suite;
 pub use wire_model::run_mimi_components_fixture_suite;
+pub use wire_model::run_mls_move_covered_frontier_fixture_suite;
 pub use wire_model::run_read_receipt_policy_fixture_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
