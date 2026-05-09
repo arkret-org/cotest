@@ -1,0 +1,115 @@
+{
+  "profile": "cx.profile.recovery_bridge_full_chain_vectors.v1",
+  "version": "2026-05-10",
+  "inherits": ["_shared/_canonical_dids.json"],
+  "comment": "F-1 Round 25 — recovery bridge end-to-end vectors. Spec authority: services/coauth-recovery.md + services/soland-recovery-ticket.md + services/restore-executor.md. Recovery flow: (1) coauth principal-cache lookup proves account → principal_did + verified DIDs; (2) coauth issues recovery_action_proof with risk_action_kind=recover_session_grants; (3) soland mints a recovery_ticket bound to the action_proof + the target space + an idempotency_key; (4) restore_executor consumes the ticket, replays the chosen artifact (key_backup blob restore + session-grant re-issue), emits final state Move; (5) the artifact's state is observable on the destination space via standard reducer. End-to-end vectors stitch each step together.",
+  "encoder": {
+    "principal_cache_endpoint": "GET /api/v1/account/{did}/principal-space",
+    "recovery_action_endpoint": "POST /api/v1/admin/v1/risk-action-proposals (coauth)",
+    "recovery_ticket_endpoint": "POST /api/v1/recovery/tickets (soland)",
+    "restore_endpoint": "POST /api/v1/recovery/tickets/{ticket_id}/execute (soland)",
+    "idempotency_key_format": "cx:idempotency:<account_did>:<action_kind>:<nonce>",
+    "ticket_ttl_seconds_default": 1800,
+    "supported_action_kinds": ["recover_session_grants", "restore_key_backup", "rotate_recovery_key"]
+  },
+  "vectors": [
+    {
+      "name": "principal_cache_resolves_account_did_to_principal_space",
+      "comment": "Step 1: coauth resolves did:web:alice.example to her principal_space_id and verified DID set. This is the authoritative claim chain origin.",
+      "step": "principal_cache_lookup",
+      "account_did": "did:web:alice.example",
+      "expected": {
+        "outcome": "accept",
+        "principal_space_id": "cx:space:01js0sp10000000000000000001",
+        "verified_dids": ["did:web:alice.example"],
+        "rationale": "Principal-space lookup is byte-deterministic per coauth DidResolverService; cotest cross-checks against soland's parity-tested derivation."
+      }
+    },
+    {
+      "name": "recovery_action_proof_minted_for_high_risk",
+      "comment": "Step 2: coauth mints a recovery_action_proof for risk_action_kind=recover_session_grants. With high_risk_threshold=2, the proposal needs 2 admin approvals; once accumulated, coauth signs and emits a JWS proof binding (action_kind, account_did, idempotency_key, nbf, exp, approvers[]).",
+      "step": "recovery_action_proof",
+      "action_kind": "recover_session_grants",
+      "account_did": "did:web:alice.example",
+      "approvals_required": 2,
+      "approvals_received": 2,
+      "idempotency_key": "cx:idempotency:did:web:alice.example:recover_session_grants:01970f03-0001",
+      "expected": {
+        "outcome": "accept",
+        "proof_alg": "EdDSA",
+        "proof_claims": ["action_kind", "account_did", "idempotency_key", "nbf", "exp", "approvers"],
+        "rationale": "Quorum-met high-risk action mints a JWS proof; soland will verify this proof before minting a ticket."
+      }
+    },
+    {
+      "name": "soland_mints_recovery_ticket_against_proof",
+      "comment": "Step 3: soland verifies the coauth recovery_action_proof JWS, scopes it to the destination space, mints a recovery_ticket with a fresh ticket_id + ttl=1800. The ticket is consumed-once (idempotency_key dedup).",
+      "step": "recovery_ticket_mint",
+      "input_proof_id": "01970f03-0001-7a01-8a01-000000000001",
+      "destination_space_id": "cx:space:01js0sp10000000000000000001",
+      "ticket_id": "cx:recovery_ticket:01970f03-0001-7a01-8a01-000000000010",
+      "ticket_state": "issued",
+      "expected": {
+        "outcome": "accept",
+        "ticket_state": "issued",
+        "ttl_seconds": 1800,
+        "consume_once": true,
+        "rationale": "Soland mints a single-use ticket; idempotency_key dedup prevents double-mint on retry."
+      }
+    },
+    {
+      "name": "restore_executor_consumes_ticket_and_replays_artifact",
+      "comment": "Step 4: restore_executor pulls the ticket, fetches the target key_backup blob (using the user's recovery passphrase delivered out-of-band), decrypts session keys, re-issues session grants in the destination space, emits final state Move (cx.recovery.session_grants_restored.v1). Ticket transitions issued→executing→executed.",
+      "step": "restore_execute",
+      "ticket_id": "cx:recovery_ticket:01970f03-0001-7a01-8a01-000000000010",
+      "artifact_kind": "session_grants_bundle",
+      "session_keys_restored_count": 8,
+      "session_grants_reissued_count": 3,
+      "ticket_state_transitions": ["issued", "executing", "executed"],
+      "final_state_move_kind": "cx.recovery.session_grants_restored.v1",
+      "expected": {
+        "outcome": "accept",
+        "ticket_state_after": "executed",
+        "final_state_move_emitted": true,
+        "rationale": "Atomic restore: blob decrypt + grants re-issue + final-state Move all succeed or all fail; ticket lifecycle reflects exactly one execution."
+      }
+    },
+    {
+      "name": "final_state_observable_via_reducer",
+      "comment": "Step 5: After execute, the standard reducer projects the recovery effects: session-grants cell shows the re-issued grants, key-backup cell shows the latest restored version_id. Cotest fetches /api/v1/spaces/<id>/cells/cx.component.session_grant.v1 and confirms the cell content.",
+      "step": "final_state_observe",
+      "space_id": "cx:space:01js0sp10000000000000000001",
+      "session_grant_cell": "cx:cell:cx.component.session_grant.v1:cx.space.01js0sp10000000000000000001",
+      "expected": {
+        "outcome": "accept",
+        "session_grant_count": 3,
+        "audit_log_emitted": true,
+        "rationale": "Reducer is the authoritative projection; final state is observable to all permitted readers via standard cell-fetch."
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "expired_proof_rejected_by_soland",
+      "comment": "Coauth proof's exp claim is in the past; soland MUST reject ticket-mint with reason recovery_proof_expired.",
+      "step": "recovery_ticket_mint",
+      "proof_exp_in_past": true,
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "recovery_proof_expired",
+        "rationale": "Time-bound proof: soland verifies nbf <= now <= exp before minting a ticket."
+      }
+    },
+    {
+      "name": "double_consume_ticket_rejected",
+      "comment": "Restore executor tries to consume an already-executed ticket. Idempotency: the second call MUST return the prior result without re-executing (consume_once + idempotent_response).",
+      "step": "restore_execute",
+      "ticket_state_before": "executed",
+      "expected": {
+        "outcome": "idempotent_replay",
+        "reason_code": "ticket_already_consumed",
+        "rationale": "Already-consumed ticket returns the prior response (consume_once invariant); never double-applies side effects."
+      }
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+{
+  "profile": "cx.profile.megolm_ratcheting_vectors.v1",
+  "version": "2026-05-10",
+  "inherits": ["_shared/_canonical_dids.json"],
+  "comment": "D3 Round 25 — Megolm-equivalent ratcheting vectors. Spec authority: crypto-media/encryption-and-audit.md (group-key ratcheting + per-message advance). The Megolm-equivalent in Contrix is a forward-secret group session keyed off the active MLS epoch: each sender owns a chain (chain_id, current_index, current_key) and at each message MUST advance the index by 1 (HKDF(current_key, salt='cx.megolm.ratchet.v1') => next_key). Recipients hold the (chain_id, [start_index, end_index]) key-window and may decrypt any message within. Pre-shared session keys distribute the (start_index, key_at_start) seed; old messages remain decryptable by holders of older indices, but rotating to a new chain MUST drop access to keys before the rotation point (forward secrecy bound: the post-rotation chain MUST NOT be derivable from any pre-rotation key).",
+  "encoder": {
+    "ratchet_kdf": "HKDF-SHA256 with info='cx.megolm.ratchet.v1'",
+    "key_size_bytes": 32,
+    "max_chain_index": 1048576,
+    "session_key_share_envelope": "cx.device_message.megolm_session_share.v1",
+    "rotation_trigger": "MLS commit on cx.component.mls.epoch.v1 OR explicit cx.megolm.rotate"
+  },
+  "vectors": [
+    {
+      "name": "preshared_session_key_seeds_chain_at_index_zero",
+      "comment": "Sender alice creates a fresh chain seeded at index=0 with a pre-shared session key (32 bytes). She shares (chain_id, 0, key_at_zero) to recipients via cx.device_message.megolm_session_share.v1. Recipient decrypt-window: [0, ∞).",
+      "chain_id": "cx:megolm:01970f02-0001-7a01-8a01-000000000001",
+      "sender_did": "did:web:alice.example",
+      "epoch_at_seed": 4,
+      "shared_index": 0,
+      "shared_key_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "recipients": ["did:web:bob.example", "did:web:carol.example"],
+      "expected": {
+        "outcome": "accept",
+        "chain_started_at": 0,
+        "recipient_decrypt_window_start": 0,
+        "recipient_decrypt_window_end_inclusive": null,
+        "rationale": "Pre-shared session key at index 0 lets recipients decrypt every message from the start of the chain forward."
+      }
+    },
+    {
+      "name": "per_message_ratchet_advance_one_step",
+      "comment": "Sender sends message at index=5; before sending, she derives key_5 = HKDF(key_4, 'cx.megolm.ratchet.v1'). Recipient at decrypt-window [0, ∞) computes the same chain step and decrypts. Invariant: each send MUST advance the index by exactly 1; gaps require the sender to share the missed indices' keys via session-share.",
+      "chain_id": "cx:megolm:01970f02-0002-7a02-8a02-000000000002",
+      "sender_did": "did:web:alice.example",
+      "prior_index": 4,
+      "advance_index": 5,
+      "kdf": "HKDF-SHA256",
+      "kdf_info_b64": "Y3gubWVnb2xtLnJhdGNoZXQudjE",
+      "expected": {
+        "outcome": "accept",
+        "advanced_by": 1,
+        "next_index": 5,
+        "rationale": "Each message advances the chain index by exactly 1; key_n+1 = HKDF(key_n, info='cx.megolm.ratchet.v1')."
+      }
+    },
+    {
+      "name": "decrypt_old_message_with_archived_key",
+      "comment": "Recipient bob received the session-share at index=10 with key_at_10. He now sees an OLD message at index=7 (sent before he joined). To decrypt, the sender MUST have included an out-of-band key-share at index=7. If sender included (7, key_at_7), bob can derive forward to verify, but cannot derive backward from key_at_10 (forward-secret).",
+      "chain_id": "cx:megolm:01970f02-0003-7a03-8a03-000000000003",
+      "recipient_did": "did:web:bob.example",
+      "recipient_window_start": 10,
+      "old_message_index": 7,
+      "shared_oob_at": 7,
+      "shared_oob_key_b64": "BwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAhIiMkJSY",
+      "expected": {
+        "outcome": "accept",
+        "decryption_path": "out_of_band_key_share_at_index_7",
+        "forward_only_derivable": true,
+        "rationale": "Forward-only KDF chain means a recipient given key_at_index=N can decrypt messages at indices >=N from THAT key alone; older messages require explicit out-of-band sharing."
+      }
+    },
+    {
+      "name": "rotation_drops_pre_rotation_access",
+      "comment": "MLS epoch advances from 7 → 8 (membership change), triggering megolm rotation. Sender starts a NEW chain (chain_id_new) seeded at index=0 with a fresh random key. The new chain MUST NOT be derivable from the old chain (independent random seed + epoch_id binding). New members have access to chain_id_new from index=0; old members who left at the rotation point have access only to chain_id_old up to its terminal index.",
+      "old_chain_id": "cx:megolm:01970f02-0004-7a04-8a04-000000000004",
+      "new_chain_id": "cx:megolm:01970f02-0004-7a04-8a04-000000000005",
+      "epoch_at_rotation": 8,
+      "old_chain_terminal_index": 23,
+      "leaver_did": "did:web:carol.example",
+      "leaver_last_index_in_old": 23,
+      "new_chain_seed_kind": "independent_random_with_epoch_binding",
+      "expected": {
+        "outcome": "accept",
+        "old_chain_post_terminal_locked": true,
+        "new_chain_independent": true,
+        "leaver_can_decrypt_old_up_to_index": 23,
+        "leaver_can_decrypt_new": false,
+        "rationale": "Rotation seeds a fresh chain bound to epoch_id_new; old chain ends at the rotation point so leavers cannot follow."
+      }
+    },
+    {
+      "name": "forward_secrecy_bound_pre_seed_undecryptable",
+      "comment": "Recipient dave first received key share at index=20 (post-join). Even with full knowledge of the chain seed share at index=20, dave MUST NOT be able to compute key_at_index=15 (a message from before his share). Forward-secret KDF is one-way.",
+      "chain_id": "cx:megolm:01970f02-0005-7a05-8a05-000000000006",
+      "recipient_did": "did:web:dave.example",
+      "recipient_window_start": 20,
+      "earlier_index": 15,
+      "kdf_one_way": true,
+      "expected": {
+        "outcome": "reject_decrypt",
+        "reason_code": "forward_secrecy_bound_violation",
+        "rationale": "Holder of key_at_index=N cannot derive any key_at_index<N (HKDF chain is one-way); message at earlier index is unrecoverable without out-of-band share."
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "non_monotonic_index_rejected",
+      "comment": "Sender claims to be at index=8 but her recorded prior_index=10. Receiver MUST reject (replay or fork attempt).",
+      "chain_id": "cx:megolm:01970f02-0006-7a06-8a06-000000000007",
+      "prior_index": 10,
+      "claimed_index": 8,
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "ratchet_index_non_monotonic",
+        "rationale": "Within a chain the index MUST strictly increase per send; lower or equal index is a replay/fork."
+      }
+    },
+    {
+      "name": "rotation_without_new_chain_id_rejected",
+      "comment": "Sender claims an MLS epoch rotation but reuses the old chain_id (effectively making the new chain derivable from the old). Forward-secrecy violation; receiver MUST reject.",
+      "old_chain_id": "cx:megolm:01970f02-0007-7a07-8a07-000000000008",
+      "claimed_new_chain_id_same_as_old": true,
+      "epoch_advanced": true,
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "megolm_rotation_chain_reuse",
+        "rationale": "Rotation MUST mint a new chain_id with an independent random seed; reusing the old chain_id breaks the forward-secrecy bound."
+      }
+    }
+  ]
+}

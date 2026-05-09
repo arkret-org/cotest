@@ -1,0 +1,80 @@
+{
+  "profile": "cx.profile.redacted_cross_server_vectors.v1",
+  "version": "2026-05-10",
+  "inherits": ["_shared/_canonical_dids.json"],
+  "comment": "E6 Round 27 — redacted-Move cross-server projection. Spec authority: round-25 MAL-14 (redact reducer) + crypto-media/redaction.md. A redaction Move on peer A propagates to peer B's projection. Per MAL-14, the cell-level model preserves the original message and writes a parallel redaction_cells entry; the projected view depends on viewer-is-author (full audit view) vs member (tombstone-only). Cross-server: peer B must produce the same per-viewer projection peer A produces.",
+  "encoder": {
+    "redaction_cell_model": "redaction_cells: BTreeMap<message_id, Option<RedactionCellValue>>; original MessageState preserved",
+    "viewer_views": {
+      "author": "full message body + redaction metadata (audit view)",
+      "member": "tombstone {redacted_by, redacted_at, reason} only",
+      "world_readable_admin_override": "tombstone only — admin override does NOT bypass redaction privacy"
+    }
+  },
+  "vectors": [
+    {
+      "name": "redaction_propagates_to_peer_b_member_sees_tombstone",
+      "comment": "Author@peer_a sends message m1; admin@peer_a issues redaction Move on m1. Peer B pulls and projects. A non-author member viewer on peer B sees only the tombstone — body is hidden, redacted_by/redacted_at metadata visible.",
+      "message_id": "msg:m1",
+      "author_did": "did:web:alice.example",
+      "viewer_did": "did:web:carol.example",
+      "viewer_is_author": false,
+      "redaction": {
+        "redacted_by": "did:web:admin.example",
+        "redacted_at": "2026-05-10T00:00:00Z",
+        "reason": "spam"
+      },
+      "expected": {
+        "outcome": "accept",
+        "projection_on_peer_b": "tombstone_only",
+        "body_visible": false,
+        "metadata_visible": ["redacted_by", "redacted_at", "reason"],
+        "rationale": "Non-author members see only the redaction tombstone post-redaction; body is hidden cross-server."
+      }
+    },
+    {
+      "name": "redaction_propagates_author_audit_view_full_body",
+      "comment": "Same redaction Move; on peer B, the author@peer_a's own session views m1. Per MAL-14 author-audit-view rule, the author sees the full body + redaction metadata (audit trail).",
+      "message_id": "msg:m1",
+      "author_did": "did:web:alice.example",
+      "viewer_did": "did:web:alice.example",
+      "viewer_is_author": true,
+      "redaction": {
+        "redacted_by": "did:web:admin.example",
+        "redacted_at": "2026-05-10T00:00:00Z",
+        "reason": "spam"
+      },
+      "expected": {
+        "outcome": "accept",
+        "projection_on_peer_b": "audit_view",
+        "body_visible": true,
+        "metadata_visible": ["redacted_by", "redacted_at", "reason"],
+        "rationale": "Author audit view: original body + redaction metadata both visible. Cross-server consistent with peer A."
+      }
+    },
+    {
+      "name": "un_redaction_move_propagates_cross_server_restores_body",
+      "comment": "Admin issues an un-redact Move on m1 (writes RedactionCell::None). Peer B pulls and projects. Member viewer now sees the full body again — un-redaction is causal-only and propagates cross-server.",
+      "message_id": "msg:m1",
+      "author_did": "did:web:alice.example",
+      "viewer_did": "did:web:carol.example",
+      "viewer_is_author": false,
+      "redaction_then_un_redaction": true,
+      "redaction": {
+        "redacted_by": "did:web:admin.example",
+        "redacted_at": "2026-05-10T00:00:00Z",
+        "reason": "spam"
+      },
+      "un_redaction": {
+        "un_redacted_by": "did:web:admin.example",
+        "un_redacted_at": "2026-05-10T01:00:00Z"
+      },
+      "expected": {
+        "outcome": "accept",
+        "projection_on_peer_b": "body_visible",
+        "body_visible": true,
+        "rationale": "Un-redaction restores the body for non-author members; propagates cross-server idempotently."
+      }
+    }
+  ]
+}

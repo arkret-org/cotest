@@ -1,6 +1,7 @@
 {
   "profile": "cx.profile.threshold_multisig_vectors.v1",
   "version": "2026-05-09",
+  "inherits": ["_shared/_canonical_dids.json"],
   "comment": "Round 22 — threshold k-of-n Anchor signing vectors per spec authz/event-auth-state-resolution.md §6 (anchorer cell threshold profile) and contrix-rust-sdk crates/core/src/signer.rs::ThresholdAggregator. Validates the partial-signature collection state machine: (a) collecting >=k verified partials produces an aggregated MultiSignature whose signatures[].len() == k; (b) collecting k-1 partials and calling aggregate() rejects with `threshold_below_quorum`; (c) PartialSignature whose signer_did is not in the anchorer cell's `members[]` rejected at admission; (d) duplicate signer_did partials deduped (second add_partial returns `duplicate_signer`); (e) aggregated signature verifies iff each partial individually verifies (one-call-per-partial). Each vector pins a normative input shape + outcome; no real signing is exercised — that lives in SDK signature crate unit tests. The validator is structural.",
   "encoder": {
     "anchorer_cell_kind": "threshold",

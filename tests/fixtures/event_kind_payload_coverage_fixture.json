@@ -1,6 +1,7 @@
 {
   "profile": "cx.profile.event_kind_payload_coverage_vectors.v1",
   "version": "2026-05-09",
+  "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
   "comment": "A1 Round 23 — every active event kind in the spec event-kind-registry.json has at least one positive payload vector here. The validator counts active kinds in the live registry, asserts the fixture's positive_vectors[] cover at least 20 distinct (cell_family, lattice) tuples, and cross-checks the sampled event_kind set against the spec's event-kind-registry.json + schema-registry.json. Each positive vector declares a synthetic minimal payload shape labelled by the registry-published cell_family + lattice + bottom; the validator does NOT execute the payload schema (cotest is black-box) but enforces the (event_kind, cell_family, lattice) consistency vs the live registry — drift fails loudly. Negative vectors cover (a) unknown event_kind, (b) cell_family/lattice mismatch vs registry.",
   "encoder": {
     "registry_ref": "registry/event-kind-registry.json",

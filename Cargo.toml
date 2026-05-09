@@ -7,6 +7,7 @@ rust-version = "1.92"
 [dependencies]
 anyhow = "1.0.100"
 base64 = "0.22.1"
+chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["alloc"] }
 chrono = "0.4.42"
 contrix-client = { path = "../contrix-rust-sdk/crates/client" }
 contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
@@ -14,7 +15,9 @@ contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"]
 # crate directly to confirm CasRegister / OrSet / Counter / Fsm / MvRegister /
 # OrderedLog implementations match the spec's normative join semantics.
 contrix-lattice = { path = "../contrix-rust-sdk/crates/lattice" }
+hkdf = "0.12.4"
 jsonschema = { version = "0.46.4", default-features = false, features = ["resolve-file"] }
+pbkdf2 = { version = "0.12.2", default-features = false, features = ["hmac"] }
 reqwest = { version = "0.12.24", features = ["json"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

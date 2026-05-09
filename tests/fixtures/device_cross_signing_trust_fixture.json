@@ -1,0 +1,207 @@
+{
+  "profile": "cx.profile.device_cross_signing_trust_vectors.v1",
+  "version": "2026-05-10",
+  "inherits": ["_shared/_canonical_dids.json"],
+  "comment": "D5 Round 27 — device cross-signing TRUST BOUNDARY vectors. Spec authority: crypto-media/device-lifecycle.md (cross-user trust + key rotation). Builds on D2 (which covered intra-user master→self-sign→leaf). D5 covers cross-USER trust: alice's user-signing key signs bob's master (not just self-sign). Vectors: (a) alice.master signs alice.user-signing signs bob.master signs bob.self-sign signs bob.devices — full transitive chain valid; (b) once chain anchored, alice's clients trust ANY device leaf bob signs into bob.self-sign; (c) revoking alice.master invalidates alice.user-signing → cuts trust into bob (transitive invalidation); (d) bob rotating bob.user-signing requires alice to re-sign the new bob.user-signing — old anchor stale.",
+  "encoder": {
+    "master_form": "did:cx:user:<actor>#master",
+    "user_signing_form": "did:cx:user:<actor>#user-signing",
+    "self_signing_form": "did:cx:user:<actor>#self-signing",
+    "device_leaf_form": "did:cx:dev:<device_id>#leaf",
+    "trust_anchor_relation": "alice.user-signing -[signs]-> bob.master"
+  },
+  "vectors": [
+    {
+      "name": "cross_user_trust_full_chain_valid",
+      "comment": "Full cross-user transitive chain. Alice's master signs alice's user-signing (intra-user). Alice's user-signing signs bob's master (cross-user trust anchor). Bob's master signs bob's self-signing (intra-user). Bob's self-signing signs bob's device leaf (intra-user). Every link verifies → alice's clients trust the bob device end-to-end.",
+      "trust_anchor_actor_did": "did:web:alice.example",
+      "trusted_actor_did": "did:web:bob.example",
+      "alice_master": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "alice_user_signing": {
+        "key_id": "did:cx:user:alice#user-signing",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_master": {
+        "key_id": "did:cx:user:bob#master",
+        "signed_by": "did:cx:user:alice#user-signing",
+        "signature_b64": "U0lHX0FMSUNFX1VTRVJfU0lHTl9PVl9CT0JfTUFTVA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX01BU1RFUl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_self_signing": {
+        "key_id": "did:cx:user:bob#self-signing",
+        "signed_by": "did:cx:user:bob#master",
+        "signature_b64": "U0lHX0JPQl9NQVNURVJfT1ZfU0VMRl9TSUdOMDAwMDA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX1NFTEZfU0lHTl8wMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_device_leaf": {
+        "key_id": "did:cx:dev:dev_bob_01#leaf",
+        "signed_by": "did:cx:user:bob#self-signing",
+        "signature_b64": "U0lHX0JPQl9TRUxGX1NJR05fT1ZfTEVBRl8wMDAwMDA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX0RFVl8wMV9MRUFGXzAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "accept",
+        "chain_valid": true,
+        "trust_path": [
+          "did:cx:user:alice#master",
+          "did:cx:user:alice#user-signing",
+          "did:cx:user:bob#master",
+          "did:cx:user:bob#self-signing",
+          "did:cx:dev:dev_bob_01#leaf"
+        ],
+        "rationale": "Every link verifies. Alice's user-signing key, anchored under her master, signs bob's master, transitively trusting bob's chain end-to-end."
+      }
+    },
+    {
+      "name": "cross_user_trust_transitively_trusts_new_bob_device",
+      "comment": "After (alice.user-signing → bob.master) anchor exists, bob mints a new device leaf signed by bob.self-signing. Alice's clients accept it without alice re-signing — the trust extends transitively through bob's master.",
+      "trust_anchor_actor_did": "did:web:alice.example",
+      "trusted_actor_did": "did:web:bob.example",
+      "alice_master": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "alice_user_signing": {
+        "key_id": "did:cx:user:alice#user-signing",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_master": {
+        "key_id": "did:cx:user:bob#master",
+        "signed_by": "did:cx:user:alice#user-signing",
+        "signature_b64": "U0lHX0FMSUNFX1VTRVJfU0lHTl9PVl9CT0JfTUFTVA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX01BU1RFUl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_self_signing": {
+        "key_id": "did:cx:user:bob#self-signing",
+        "signed_by": "did:cx:user:bob#master",
+        "signature_b64": "U0lHX0JPQl9NQVNURVJfT1ZfU0VMRl9TSUdOMDAwMDA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX1NFTEZfU0lHTl8wMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_device_leaf": {
+        "key_id": "did:cx:dev:dev_bob_NEW#leaf",
+        "signed_by": "did:cx:user:bob#self-signing",
+        "signature_b64": "U0lHX0JPQl9TRUxGX09WX05FV19MRUFGXzAwMDAwMDA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX0RFVl9ORVdfTEVBRl8wMDAwMDAwMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "accept",
+        "chain_valid": true,
+        "transitively_trusted": true,
+        "rationale": "New bob device added under bob.self-signing inherits trust from the existing alice.user-signing → bob.master anchor without alice re-signing."
+      }
+    },
+    {
+      "name": "alice_master_revocation_invalidates_cross_user_trust",
+      "comment": "Alice's master is revoked. Even though alice.user-signing→bob.master signature was valid before, the chain now has a revoked root — clients MUST drop trust into bob's chain via this anchor.",
+      "trust_anchor_actor_did": "did:web:alice.example",
+      "trusted_actor_did": "did:web:bob.example",
+      "alice_master": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA",
+        "revoked": true,
+        "revoked_at": "2026-05-09T00:00:00Z"
+      },
+      "alice_user_signing": {
+        "key_id": "did:cx:user:alice#user-signing",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_master": {
+        "key_id": "did:cx:user:bob#master",
+        "signed_by": "did:cx:user:alice#user-signing",
+        "signature_b64": "U0lHX0FMSUNFX1VTRVJfU0lHTl9PVl9CT0JfTUFTVA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX01BU1RFUl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "trust_anchor_master_revoked",
+        "rationale": "alice.master is revoked; alice.user-signing is no longer a valid chain root, so the cross-user trust into bob is invalidated."
+      }
+    },
+    {
+      "name": "bob_user_signing_rotation_requires_re_anchor_with_alice",
+      "comment": "Bob rotates his user-signing key (e.g. precaution after device compromise). Alice's previous anchor signed bob's OLD user-signing — that no longer covers bob's NEW user-signing. Until alice re-signs the new user-signing, alice's clients must drop trust through this anchor.",
+      "trust_anchor_actor_did": "did:web:alice.example",
+      "trusted_actor_did": "did:web:bob.example",
+      "alice_master": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "alice_user_signing": {
+        "key_id": "did:cx:user:alice#user-signing",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "bob_user_signing_old": {
+        "key_id": "did:cx:user:bob#user-signing",
+        "signed_by": "did:cx:user:alice#user-signing",
+        "signature_b64": "U0lHX0FMSUNFX1VTSUdfT1ZfQk9CX1VTSUdfT0xEMA",
+        "alg": "ed25519",
+        "public_b64": "Qk9CX1VTSUdfT0xEXzAwMDAwMDAwMDAwMDAwMDAwMDA",
+        "rotated": true,
+        "rotated_at": "2026-05-09T00:00:00Z"
+      },
+      "bob_user_signing_new": {
+        "key_id": "did:cx:user:bob#user-signing",
+        "signed_by": null,
+        "signature_b64": null,
+        "alg": "ed25519",
+        "public_b64": "Qk9CX1VTSUdfTkVXXzAwMDAwMDAwMDAwMDAwMDAwMDA",
+        "needs_re_anchor": true
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "trust_anchor_stale_after_rotation",
+        "needs_re_anchor": true,
+        "rationale": "Bob rotated user-signing; alice's prior anchor pointed at the old key only. Trust into bob via alice's anchor must drop until alice re-signs the new bob.user-signing."
+      }
+    },
+    {
+      "name": "cross_user_signature_alg_mismatch_rejects",
+      "comment": "Alice's master is ed25519 but the chain claims an unsupported algorithm for the cross-user signature — clients reject. Sanity check that algorithm policy is enforced cross-user.",
+      "trust_anchor_actor_did": "did:web:alice.example",
+      "trusted_actor_did": "did:web:bob.example",
+      "alice_master": {
+        "key_id": "did:cx:user:alice#master",
+        "alg": "ed25519",
+        "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "alice_user_signing": {
+        "key_id": "did:cx:user:alice#user-signing",
+        "signed_by": "did:cx:user:alice#master",
+        "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
+        "alg": "rsa-1024-sha1",
+        "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "trust_anchor_alg_disallowed",
+        "rationale": "Cross-user trust anchors must use ed25519. rsa-1024-sha1 is not in the allowed-algorithm policy."
+      }
+    }
+  ]
+}

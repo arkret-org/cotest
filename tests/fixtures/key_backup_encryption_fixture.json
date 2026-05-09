@@ -1,0 +1,106 @@
+{
+  "profile": "cx.profile.key_backup_encryption_vectors.v1",
+  "version": "2026-05-10",
+  "inherits": ["_shared/_canonical_dids.json"],
+  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: crypto-media/encryption-and-audit.md (recovery-key envelope) + extensions/key-backup.md. Client encrypts megolm session keys + cross-signing keys + private device keys with a passphrase-derived recovery key (PBKDF2-HMAC-SHA512 with at-least 600k iterations + 16-byte random salt → 32-byte master key) before uploading. Server stores opaque blob keyed by (account_did, backup_version). Server NEVER sees plaintext. Restore: client downloads blob, re-derives key from passphrase + salt, decrypts. Rotation: client mints new (passphrase, salt, version) and re-encrypts all session keys; new uploads target version_new; server retains version_old until client confirms migration completion.",
+  "encoder": {
+    "kdf": "PBKDF2-HMAC-SHA512",
+    "kdf_iterations_min": 600000,
+    "kdf_salt_bytes": 16,
+    "master_key_bytes": 32,
+    "envelope_aead": "ChaCha20-Poly1305",
+    "envelope_nonce_bytes": 12,
+    "session_key_blob_field": "encrypted_session_keys_b64",
+    "backup_version_id_format": "cx:keybackup:<account_did>:v<n>",
+    "server_endpoint_upload": "POST /api/v1/key_backup/blobs",
+    "server_endpoint_restore": "GET /api/v1/key_backup/blobs/{version_id}"
+  },
+  "vectors": [
+    {
+      "name": "client_side_passphrase_derives_master_key",
+      "comment": "Client derives the recovery master key locally from a passphrase + random salt via PBKDF2-HMAC-SHA512 at >=600000 iterations. The plaintext passphrase NEVER leaves the client. Server sees only the derived encrypted blob.",
+      "passphrase_present": true,
+      "salt_b64": "AAECAwQFBgcICQoLDA0ODw",
+      "kdf_iterations": 600000,
+      "master_key_length_bytes": 32,
+      "client_only_passphrase": true,
+      "expected": {
+        "outcome": "accept",
+        "master_key_derived_locally": true,
+        "passphrase_uploaded": false,
+        "salt_uploaded_with_blob": true,
+        "rationale": "Client-side KDF: passphrase stays local; salt is uploaded with the blob so future restore can re-derive the same key."
+      }
+    },
+    {
+      "name": "server_side_blob_storage_opaque",
+      "comment": "After client encrypts, the upload contains: {version_id, salt_b64, kdf_iterations, encrypted_session_keys_b64, ciphertext_nonce_b64, auth_tag_b64}. Server treats the encrypted_session_keys_b64 as opaque bytes and persists by (account_did, version_id). Server CANNOT decrypt without the passphrase.",
+      "version_id": "cx:keybackup:did:web:alice.example:v1",
+      "blob_size_bytes": 4096,
+      "server_treats_as_opaque": true,
+      "server_decrypt_capable": false,
+      "stored_at": "GET /api/v1/key_backup/blobs/cx:keybackup:did:web:alice.example:v1",
+      "expected": {
+        "outcome": "accept",
+        "server_seen_plaintext": false,
+        "blob_persisted_keyed_by": ["account_did", "version_id"],
+        "rationale": "Zero-knowledge backup: server stores ciphertext blob + KDF parameters; cannot derive plaintext without the user's passphrase."
+      }
+    },
+    {
+      "name": "restore_path_redrives_key_and_decrypts",
+      "comment": "Client restores: GET /api/v1/key_backup/blobs/{version_id} → re-derive master key from cached passphrase + downloaded salt + iterations → decrypt with ChaCha20-Poly1305 using nonce + auth_tag from blob → recover session_keys map. Successful decryption proves passphrase correctness AND blob integrity.",
+      "version_id": "cx:keybackup:did:web:alice.example:v1",
+      "passphrase_correct": true,
+      "salt_b64": "AAECAwQFBgcICQoLDA0ODw",
+      "kdf_iterations": 600000,
+      "expected_session_keys_count": 12,
+      "expected": {
+        "outcome": "accept",
+        "decryption_succeeded": true,
+        "auth_tag_verified": true,
+        "session_keys_count": 12,
+        "rationale": "Restore re-derives the same master key (deterministic given passphrase+salt+iterations); AEAD verifies integrity AND correct passphrase atomically."
+      }
+    },
+    {
+      "name": "rotation_mints_new_version_and_reencrypts",
+      "comment": "User rotates passphrase. Client: derives new master key with NEW (passphrase_new, salt_new), re-encrypts ALL session keys, uploads to version_id_new. Server retains version_old until client sends migration_complete=true (or version_old TTL expires, default 30 days). Old version_id MAY be deleted after grace period; the rotation MUST NOT silently drop session keys (atomic re-encrypt + upload).",
+      "old_version_id": "cx:keybackup:did:web:alice.example:v1",
+      "new_version_id": "cx:keybackup:did:web:alice.example:v2",
+      "new_salt_b64": "EBESExQVFhcYGRobHB0eHw",
+      "session_keys_re_encrypted_count": 12,
+      "new_kdf_iterations": 600000,
+      "old_retained_until_migration_complete": true,
+      "expected": {
+        "outcome": "accept",
+        "new_version_uploaded": true,
+        "old_version_retained": true,
+        "all_session_keys_present_in_new": true,
+        "rationale": "Rotation is atomic re-encrypt + upload of every session key under the new master key; both versions coexist until migration confirmed."
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "low_iteration_count_rejected",
+      "comment": "Client tries to upload with kdf_iterations=10000 (below the 600000 minimum). Server MUST refuse since this is a client misconfiguration that weakens the backup against offline brute-force.",
+      "kdf_iterations": 10000,
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "kdf_iteration_count_too_low",
+        "rationale": "Backup blob KDF iterations MUST be >= 600000 (per spec); below this the passphrase is too easily brute-forced."
+      }
+    },
+    {
+      "name": "wrong_passphrase_aead_rejects",
+      "comment": "Restore client supplies wrong passphrase. Derived master key differs; AEAD auth_tag verification fails; client MUST refuse to use any partially-decrypted data.",
+      "passphrase_correct": false,
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "key_backup_decrypt_auth_failed",
+        "rationale": "ChaCha20-Poly1305 auth tag fails for any wrong key; client MUST treat partial decryption as failure (no plaintext leak)."
+      }
+    }
+  ]
+}

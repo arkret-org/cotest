@@ -247,3 +247,119 @@ fn mls_e2ee_basic_fixture_suite_matches_reference_semantics() -> Result<()> {
 fn device_verification_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_device_verification_fixture_suite()
 }
+
+/// Round-25 B4 — history visibility scope vectors (joined / invited /
+/// world_readable / shared) — smoke validation.
+#[test]
+fn history_visibility_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_history_visibility_fixture_suite()
+}
+
+/// Round-25 D3 — Megolm-equivalent ratcheting vectors — smoke validation.
+#[test]
+fn megolm_ratcheting_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_megolm_ratcheting_fixture_suite()
+}
+
+/// Round-25 D4 — key backup encryption vectors — smoke validation.
+#[test]
+fn key_backup_encryption_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_key_backup_encryption_fixture_suite()
+}
+
+/// Round-25 C2 — constraint evaluation_class fast-path coverage — smoke
+/// validation.
+#[test]
+fn constraint_evaluation_class_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_constraint_evaluation_class_fixture_suite()
+}
+
+/// Round-25 F-1 — recovery bridge full chain (coauth principal-cache →
+/// soland recovery ticket → restore executor → final state). Round-26
+/// upgraded to full per-step state-machine + transition legality validation.
+#[test]
+fn recovery_bridge_full_chain_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_recovery_bridge_full_chain_fixture_suite()
+}
+
+/// Round-26 D4 — fixture-decoupled key-backup AEAD round-trip primitive
+/// check (PBKDF2-HMAC-SHA512 → ChaCha20-Poly1305). Asserts the exact crypto
+/// primitive set the spec mandates is callable + correct.
+#[test]
+fn key_backup_aead_round_trip_round_26() -> Result<()> {
+    cotest::conformance::run_key_backup_aead_round_trip_check()
+}
+
+/// Round-26 D3 — fixture-decoupled megolm-equivalent HKDF chain check.
+/// Asserts the KDF is deterministic + non-identity over a 16-step run.
+#[test]
+fn megolm_ratchet_kdf_chain_round_26() -> Result<()> {
+    cotest::conformance::run_megolm_ratchet_kdf_chain_check()
+}
+
+/// Round-26 F-1 — recovery-ticket state-machine legality matrix (legal
+/// success / terminal paths accept; illegal transitions reject). Independent
+/// of the recovery_bridge_full_chain fixture so the FSM stays self-validating.
+#[test]
+fn recovery_ticket_state_machine_round_26() -> Result<()> {
+    cotest::conformance::run_recovery_ticket_state_machine_check()
+}
+
+/// Round-26 B4 — fixture-decoupled history_visibility projection matrix
+/// (every (visibility, membership, ts) tuple's expected visible/hidden bit
+/// computed from the spec's projection function).
+#[test]
+fn history_visibility_projection_matrix_round_26() -> Result<()> {
+    cotest::conformance::run_history_visibility_projection_matrix_check()
+}
+
+/// Round-27 D5 — device cross-signing trust boundary (cross-user master →
+/// user-signing → trusted-user master chain; revoke + rotation invariants).
+#[test]
+fn device_cross_signing_trust_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_device_cross_signing_trust_fixture_suite()
+}
+
+/// Round-27 E3 — multi-space federation per-space anchor isolation +
+/// cross-space rejection.
+#[test]
+fn multi_space_federation_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_multi_space_federation_fixture_suite()
+}
+
+/// Round-27 E4 — frontier conflict resolution via lattice join.
+#[test]
+fn frontier_conflict_resolution_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_frontier_conflict_resolution_fixture_suite()
+}
+
+/// Round-27 E5 — late-arriving anchor idempotency (no double-effect).
+#[test]
+fn late_arriving_anchor_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_late_arriving_anchor_fixture_suite()
+}
+
+/// Round-27 E6 — redacted Move cross-server projection (round-25 MAL-14
+/// viewer-is-author audit-view rules).
+#[test]
+fn redacted_cross_server_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_redacted_cross_server_fixture_suite()
+}
+
+/// Round-27 F-2 — restore approval/executor/artifact full workflows.
+#[test]
+fn restore_full_workflows_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_restore_full_workflows_fixture_suite()
+}
+
+/// Round-27 E5 — fixture-decoupled late-arriving-anchor idempotency primitive.
+#[test]
+fn late_arriving_anchor_idempotency_round_27() -> Result<()> {
+    cotest::conformance::run_late_arriving_anchor_idempotency_check()
+}
+
+/// Round-27 F-2 — fixture-decoupled multi-admin distinct-approver gate.
+#[test]
+fn multi_admin_distinct_approver_gate_round_27() -> Result<()> {
+    cotest::conformance::run_multi_admin_distinct_approver_gate_check()
+}

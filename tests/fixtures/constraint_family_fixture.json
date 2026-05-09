@@ -175,6 +175,115 @@
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
     }
   ],
+  "cross_family_compositions": [
+    {
+      "name": "temporal_plus_quota_compose_to_slow",
+      "comment": "C3 Round 26 — composing temporal (stateless) with quota (space_state). The combined evaluation MUST be classified at the slowest evaluation_class of the set (space_state). fast-path-eligible only when ALL families are stateless or grant_local.",
+      "families": ["temporal", "quota"],
+      "constraint": {
+        "constraint_type": "quota",
+        "subtype": "resource",
+        "effect": "deny",
+        "evaluation_class": "space_state",
+        "not_before": "2026-05-09T00:00:00Z",
+        "expires_at": "2026-12-31T23:59:59Z",
+        "max_resources": 50
+      },
+      "expected": {
+        "outcome": "shape_ok",
+        "combined_evaluation_class": "space_state",
+        "fast_path_eligible": false,
+        "rationale": "Slowest member dominates: temporal+stateless cannot rescue quota+space_state into fast path."
+      }
+    },
+    {
+      "name": "quota_plus_claim_based_external_two_external_calls",
+      "comment": "C4 Round 26 — composing quota (external rate limit) with claim_based (external claim verification) requires two external calls per evaluation. Combined classification stays external. NOT cacheable.",
+      "families": ["quota", "claim_based"],
+      "constraint": {
+        "constraint_type": "claim_based",
+        "subtype": "claim",
+        "effect": "allow",
+        "evaluation_class": "external",
+        "max_operations": 100,
+        "period": "1h",
+        "requires_claims": [
+          { "claim_type": "verified_email", "subject_matches_actor": true }
+        ]
+      },
+      "expected": {
+        "outcome": "shape_ok",
+        "combined_evaluation_class": "external",
+        "fast_path_eligible": false,
+        "external_call_count": 2,
+        "cacheable": false,
+        "rationale": "Both quota and claim_based are external; combined is external × 2 with no cacheability."
+      }
+    },
+    {
+      "name": "field_access_plus_type_restriction_remain_fast",
+      "comment": "C5 Round 26 — pure stateless composition: field_access (no condition, stateless) + type_restriction (stateless) stays fully fast-path-eligible. Verifies the fast-path short-circuit semantics when ALL families are stateless.",
+      "families": ["field_access", "type_restriction"],
+      "constraint": {
+        "constraint_type": "field_access",
+        "effect": "allow",
+        "evaluation_class": "stateless",
+        "fields_write_allow": ["title", "body"],
+        "object_type_allow": ["card", "note"]
+      },
+      "expected": {
+        "outcome": "shape_ok",
+        "combined_evaluation_class": "stateless",
+        "fast_path_eligible": true,
+        "cacheable": true,
+        "rationale": "All stateless members compose to stateless: max(stateless, stateless) = stateless; cache key = (constraint_hash, op_target_type, op_kind)."
+      }
+    },
+    {
+      "name": "delegation_control_plus_confidentiality_mixed_class",
+      "comment": "C6 Round 26 — composing delegation_control (grant_local) with confidentiality (space_state) lifts combined to space_state. Verifies the mixed-class promotion: grant_local cannot stay fast when paired with a space_state family.",
+      "families": ["delegation_control", "confidentiality"],
+      "constraint": {
+        "constraint_type": "confidentiality",
+        "subtype": "encryption",
+        "effect": "deny",
+        "evaluation_class": "space_state",
+        "max_delegation_depth": 3,
+        "delegation_scope": "narrowing_only",
+        "encryption_required": true
+      },
+      "expected": {
+        "outcome": "shape_ok",
+        "combined_evaluation_class": "space_state",
+        "fast_path_eligible": false,
+        "rationale": "Combined evaluation_class is the strictness-max of all families; grant_local + space_state = space_state."
+      }
+    },
+    {
+      "name": "all_four_classes_compose_to_external",
+      "comment": "C6 Round 26 — exhaustive composition: stateless + grant_local + space_state + external collapses to external. Verifies the upper bound of the lattice meet.",
+      "families": ["temporal", "delegation_control", "confidentiality", "claim_based"],
+      "constraint": {
+        "constraint_type": "claim_based",
+        "subtype": "claim",
+        "effect": "allow",
+        "evaluation_class": "external",
+        "expires_at": "2027-01-01T00:00:00Z",
+        "max_delegation_depth": 5,
+        "encryption_required": true,
+        "requires_claims": [
+          { "claim_type": "kyc_verified", "subject_matches_actor": true }
+        ]
+      },
+      "expected": {
+        "outcome": "shape_ok",
+        "combined_evaluation_class": "external",
+        "fast_path_eligible": false,
+        "cacheable": false,
+        "rationale": "external dominates all other classes; the most expensive member sets the bound."
+      }
+    }
+  ],
   "fast_path_tests": [
     {
       "name": "stateless_temporal_window_cacheable",

@@ -1,0 +1,38 @@
+{
+  "profile": "cx.profile.canonical_dids.v1",
+  "version": "2026-05-10",
+  "comment": "Round 28 Q2 — shared canonical DID baseline. Most fixtures reference the same `did:web:<role>.example` DIDs; consolidating the source-of-truth here keeps fixture diffs focused on protocol semantics. Fixtures that use these DIDs SHOULD declare `inherits: [\"_shared/_canonical_dids.json\"]` for audit-trail discoverability.",
+  "actors": {
+    "alice": {
+      "did": "did:web:alice.example",
+      "role": "regular_member",
+      "default_handle": "@alice",
+      "default_device_id": "dev_alice"
+    },
+    "bob": {
+      "did": "did:web:bob.example",
+      "role": "regular_member",
+      "default_handle": "@bob",
+      "default_device_id": "dev_bob"
+    },
+    "carol": {
+      "did": "did:web:carol.example",
+      "role": "regular_member",
+      "default_handle": "@carol",
+      "default_device_id": "dev_carol"
+    },
+    "admin": {
+      "did": "did:web:admin.example",
+      "role": "space_admin",
+      "default_handle": "@admin",
+      "default_device_id": "dev_admin"
+    },
+    "attacker": {
+      "did": "did:web:attacker.example",
+      "role": "external_unauthorized",
+      "default_handle": "@attacker",
+      "default_device_id": "dev_attacker",
+      "comment": "Used in negative vectors (signature forgery, redaction-bypass, etc.)."
+    }
+  }
+}

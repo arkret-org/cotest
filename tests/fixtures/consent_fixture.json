@@ -1,6 +1,7 @@
 {
   "profile": "cx.profile.consent_vectors.v1",
   "version": "2026-05-09",
+  "inherits": ["_shared/_canonical_dids.json"],
   "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `cx:cell:cx.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `require_consent` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `cx:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
   "vectors": [
     {

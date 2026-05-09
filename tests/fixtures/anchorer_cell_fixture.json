@@ -1,6 +1,7 @@
 {
   "profile": "cx.profile.anchorer_cell_vectors.v1",
   "version": "2026-05-09",
+  "inherits": ["_shared/_canonical_dids.json"],
   "comment": "Anchorer cell governance vectors per spec authz/event-auth-state-resolution.md §6.4 (anchorer profiles, split-anchorer Bottom, signature mismatch, threshold-below-quorum). The anchorer cell is `cx:cell:cx.component.anchorer.v1:<space_id>`, a cas-register holding the anchorer profile descriptor (single_did | threshold k-of-n | open_set | mixed). Each happy-path vector pins a single anchored Move that sets the cell to a normative AnchorerValue shape; concurrent reconfigurations (split anchorer) MUST surface Bottom — Space-wide pause condition, not LWW. Negative vectors cover signature mismatch and threshold-below-quorum admission errors. The validator is structural: it doesn't verify the lattice round-trip itself (that's `lattice_round_trip.rs::anchorer_cell_*`); it asserts each declared input has the spec-mandated shape and each negative vector carries the correct rejection reason.",
   "encoder": {
     "anchorer_cell_id": "cx:cell:cx.component.anchorer.v1:<space_id>",
