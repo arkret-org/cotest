@@ -2069,3 +2069,742 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
 
     Ok(())
 }
+
+// ────────────────────────── Round 22 ──────────────────────────
+
+/// Round 22 — Threshold k-of-n Anchor signing vectors.
+///
+/// Validates `tests/fixtures/threshold_multisig_fixture.json` against the
+/// spec authz/event-auth-state-resolution.md §6 anchorer-cell threshold
+/// profile + the SDK `ThresholdAggregator` semantics (collected partials,
+/// per-partial verification, duplicate signer dedup, threshold-met gate).
+///
+/// Validator pins:
+/// * positive vectors declare `partials.len() >= k` and outcome=aggregate_ok
+///   with `aggregated_signatures_len == partials.len()`;
+/// * negative vectors cover (a) `threshold_below_quorum` (k-1 partials),
+///   (b) zero partials below k=1, (c) `partial_signer_not_in_anchorer_set`,
+///   (d) `duplicate_signer`;
+/// * every partial declares non-empty `signer_did` + `kid` + `signature_b64`;
+/// * threshold geometry valid (1 <= k <= n) and members.len() == n.
+pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("threshold_multisig_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.threshold_multisig_vectors.v1")?;
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("threshold_multisig fixture missing vectors[]"))?;
+    if vectors.len() < 4 {
+        bail!(
+            "threshold_multisig fixture requires >=4 positive vectors, got {}",
+            vectors.len()
+        );
+    }
+    let mut covered_aggregate_at_k = false;
+    let mut covered_aggregate_above_k = false;
+    let mut covered_per_partial_verifier = false;
+    let mut covered_sparse_subset = false;
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        let k = vector
+            .get("k")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("vector {name} missing k"))?;
+        let n = vector
+            .get("n")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("vector {name} missing n"))?;
+        if k == 0 || k > n {
+            bail!("vector {name} threshold geometry invalid: k={k} n={n}");
+        }
+        let members = vector
+            .get("members")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("vector {name} missing members[]"))?;
+        if members.len() as u64 != n {
+            bail!(
+                "vector {name} members.len()={} != n={n}",
+                members.len()
+            );
+        }
+        let member_set: std::collections::BTreeSet<&str> = members
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        let partials = vector
+            .get("partials")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("vector {name} missing partials[]"))?;
+        if (partials.len() as u64) < k {
+            bail!(
+                "positive vector {name} must declare partials.len() >= k; got {} < {k}",
+                partials.len()
+            );
+        }
+        let mut seen_signers: std::collections::BTreeSet<&str> = Default::default();
+        for partial in partials {
+            let signer_did = required_str(partial, "signer_did")?;
+            if !member_set.contains(signer_did) {
+                bail!(
+                    "vector {name} positive partial signer_did {signer_did} not in members[]"
+                );
+            }
+            if !seen_signers.insert(signer_did) {
+                bail!(
+                    "vector {name} positive partial duplicate signer_did {signer_did}"
+                );
+            }
+            let kid = required_str(partial, "kid")?;
+            if kid.is_empty() {
+                bail!("vector {name} partial kid must be non-empty");
+            }
+            let sig = required_str(partial, "signature_b64")?;
+            if sig.is_empty() {
+                bail!("vector {name} partial signature_b64 must be non-empty");
+            }
+        }
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "aggregate_ok" {
+            bail!("positive vector {name} outcome must be aggregate_ok");
+        }
+        let agg_len = expected
+            .get("aggregated_signatures_len")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("vector {name} expected.aggregated_signatures_len missing"))?;
+        if agg_len != partials.len() as u64 {
+            bail!(
+                "vector {name} aggregated_signatures_len {agg_len} != partials.len() {}",
+                partials.len()
+            );
+        }
+        match name {
+            "exact_k_of_n_partials_aggregate_to_multi" => covered_aggregate_at_k = true,
+            "k_plus_one_partials_aggregate_with_all_partials" => {
+                covered_aggregate_above_k = true
+            }
+            "individual_partial_verification_is_per_partial" => {
+                covered_per_partial_verifier = true
+            }
+            "k_of_n_with_open_set_overlay_still_keys_off_threshold_k" => {
+                covered_sparse_subset = true
+            }
+            other => bail!("threshold_multisig fixture unexpected positive vector {other}"),
+        }
+    }
+    if !(covered_aggregate_at_k
+        && covered_aggregate_above_k
+        && covered_per_partial_verifier
+        && covered_sparse_subset)
+    {
+        bail!(
+            "threshold_multisig fixture must cover (a) k-of-n at threshold, (b) k+1 partials, (c) per-partial verifier semantics, (d) sparse member subset"
+        );
+    }
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("threshold_multisig fixture missing negative_vectors[]"))?;
+    if negatives.len() < 4 {
+        bail!(
+            "threshold_multisig fixture requires >=4 negative vectors, got {}",
+            negatives.len()
+        );
+    }
+    let mut neg_below_quorum = false;
+    let mut neg_zero_partials = false;
+    let mut neg_signer_not_in_set = false;
+    let mut neg_duplicate_signer = false;
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let k = vector
+            .get("k")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("negative vector {name} missing k"))?;
+        let n = vector
+            .get("n")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("negative vector {name} missing n"))?;
+        if k == 0 || k > n {
+            bail!("negative vector {name} threshold geometry invalid: k={k} n={n}");
+        }
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("negative vector {name} must expect outcome=reject");
+        }
+        let reason = required_str(expected, "reason_code")?;
+        match (name, reason) {
+            ("k_minus_one_partials_rejected_threshold_below_quorum", "threshold_below_quorum") => {
+                let collected = expected
+                    .get("collected")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("negative vector {name} missing expected.collected"))?;
+                let required = expected
+                    .get("required")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("negative vector {name} missing expected.required"))?;
+                if required != k {
+                    bail!(
+                        "negative vector {name} expected.required {required} != k {k}"
+                    );
+                }
+                if collected >= required {
+                    bail!(
+                        "negative vector {name} collected {collected} must be < required {required}"
+                    );
+                }
+                neg_below_quorum = true;
+            }
+            ("zero_partials_rejected_threshold_below_quorum", "threshold_below_quorum") => {
+                let collected = expected
+                    .get("collected")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("negative vector {name} missing collected"))?;
+                if collected != 0 {
+                    bail!("negative vector {name} must declare collected=0");
+                }
+                neg_zero_partials = true;
+            }
+            (
+                "partial_signer_not_in_member_set_rejected",
+                "partial_signer_not_in_anchorer_set",
+            ) => {
+                let members: std::collections::BTreeSet<&str> = vector
+                    .get("members")
+                    .and_then(Value::as_array)
+                    .map(|arr| arr.iter().filter_map(Value::as_str).collect())
+                    .unwrap_or_default();
+                let mut found_attacker = false;
+                for partial in vector
+                    .get("partials")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let signer = required_str(partial, "signer_did")?;
+                    if !members.contains(signer) {
+                        found_attacker = true;
+                    }
+                }
+                if !found_attacker {
+                    bail!(
+                        "negative vector {name} must include at least one partial whose signer_did is NOT in members[]"
+                    );
+                }
+                neg_signer_not_in_set = true;
+            }
+            ("duplicate_signer_partial_rejected", "duplicate_signer") => {
+                let mut seen: std::collections::BTreeSet<&str> = Default::default();
+                let mut had_dup = false;
+                for partial in vector
+                    .get("partials")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let signer = required_str(partial, "signer_did")?;
+                    if !seen.insert(signer) {
+                        had_dup = true;
+                    }
+                }
+                if !had_dup {
+                    bail!(
+                        "negative vector {name} must include at least two partials with the same signer_did"
+                    );
+                }
+                neg_duplicate_signer = true;
+            }
+            (other_name, other_reason) => bail!(
+                "negative vector {other_name}: unexpected (name, reason_code)=({other_name}, {other_reason})"
+            ),
+        }
+    }
+    if !(neg_below_quorum && neg_zero_partials && neg_signer_not_in_set && neg_duplicate_signer) {
+        bail!(
+            "threshold_multisig fixture must cover (a) k-1 below quorum, (b) zero partials, (c) signer-not-in-set, (d) duplicate-signer dedup"
+        );
+    }
+
+    Ok(())
+}
+
+/// Round 22 — AnchorerWorker production-signing-path (Ed25519MoveSigner)
+/// vectors.
+///
+/// Validates `tests/fixtures/production_signing_fixture.json` against the
+/// SDK `Ed25519MoveSigner` semantics (deterministic seed ⇒ deterministic
+/// JWS, ephemeral seed ⇒ non-deterministic, key-binding, payload_hash
+/// invariant) + the soland `service_admin_signer` derivation.
+///
+/// Validator pins:
+/// * positive vectors declare `seed_source` ∈ {configured, ephemeral,
+///   service_did_derived};
+/// * canonical_body_sha256 is `sha256:<64-hex>` shape;
+/// * deterministic vectors declare outcome=deterministic_signature OR
+///   verify_ok / payload_hash_matches / different_signatures;
+/// * ephemeral vector declares outcome=non_deterministic_signature;
+/// * negative vectors cover wrong-verifying-key + tampered-canonical-body.
+pub fn run_production_signing_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("production_signing_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.production_signing_vectors.v1")?;
+
+    const VALID_SEED_SOURCES: &[&str] = &["configured", "ephemeral", "service_did_derived"];
+    const VALID_POSITIVE_OUTCOMES: &[&str] = &[
+        "deterministic_signature",
+        "non_deterministic_signature",
+        "different_signatures",
+        "verify_ok",
+        "payload_hash_matches",
+    ];
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("production_signing fixture missing vectors[]"))?;
+    if vectors.len() < 4 || vectors.len() > 6 {
+        bail!(
+            "production_signing fixture should have 4-6 positive vectors, got {}",
+            vectors.len()
+        );
+    }
+    let mut covered_deterministic = false;
+    let mut covered_ephemeral = false;
+    let mut covered_different_seeds = false;
+    let mut covered_round_trip_verify = false;
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        let seed_source = required_str(vector, "seed_source")?;
+        if !VALID_SEED_SOURCES.contains(&seed_source) {
+            bail!(
+                "vector {name} seed_source {seed_source} not in {VALID_SEED_SOURCES:?}"
+            );
+        }
+        let _ = required_str(vector, "did")?;
+        let _ = required_str(vector, "kid")?;
+        let body_hash = required_str(vector, "canonical_body_sha256")?;
+        if !super::looks_like_sha256_digest(body_hash) {
+            bail!(
+                "vector {name} canonical_body_sha256 {body_hash} not a sha256:<64-hex> digest"
+            );
+        }
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+        let outcome = required_str(expected, "outcome")?;
+        if !VALID_POSITIVE_OUTCOMES.contains(&outcome) {
+            bail!(
+                "vector {name} outcome {outcome} not in {VALID_POSITIVE_OUTCOMES:?}"
+            );
+        }
+        // Cross-shape: ephemeral seed ⇒ outcome MUST be
+        // non_deterministic_signature (and vice-versa).
+        match (seed_source, outcome) {
+            ("ephemeral", "non_deterministic_signature") => covered_ephemeral = true,
+            ("ephemeral", _) => bail!(
+                "vector {name} ephemeral seed_source must produce outcome=non_deterministic_signature"
+            ),
+            (_, "non_deterministic_signature") => bail!(
+                "vector {name} non_deterministic_signature outcome only valid for seed_source=ephemeral"
+            ),
+            _ => {}
+        }
+        match name {
+            "configured_seed_produces_deterministic_signature"
+            | "service_did_derived_seed_is_deterministic_per_did" => {
+                if outcome != "deterministic_signature" {
+                    bail!(
+                        "vector {name} must declare outcome=deterministic_signature; got {outcome}"
+                    );
+                }
+                covered_deterministic = true;
+            }
+            "different_seeds_produce_different_signatures_for_same_body" => {
+                if outcome != "different_signatures" {
+                    bail!(
+                        "vector {name} must declare outcome=different_signatures; got {outcome}"
+                    );
+                }
+                let seeds = vector
+                    .get("seeds")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing seeds[]"))?;
+                if seeds.len() < 2 {
+                    bail!(
+                        "vector {name} seeds[] must have >=2 entries to demonstrate different signatures"
+                    );
+                }
+                covered_different_seeds = true;
+            }
+            "signature_verifies_with_signer_derived_verifying_key" => {
+                if outcome != "verify_ok" {
+                    bail!("vector {name} must declare outcome=verify_ok");
+                }
+                if expected.get("verify_via").and_then(Value::as_str)
+                    != Some("verify_ed25519_move_signature")
+                {
+                    bail!(
+                        "vector {name} must declare verify_via=verify_ed25519_move_signature"
+                    );
+                }
+                covered_round_trip_verify = true;
+            }
+            "signature_payload_hash_matches_sha256_of_canonical_body" => {
+                if outcome != "payload_hash_matches" {
+                    bail!("vector {name} must declare outcome=payload_hash_matches");
+                }
+            }
+            "ephemeral_seed_is_non_deterministic_across_runs" => {
+                // Already cross-validated above.
+            }
+            other => bail!("production_signing fixture unexpected positive vector {other}"),
+        }
+    }
+    if !(covered_deterministic
+        && covered_ephemeral
+        && covered_different_seeds
+        && covered_round_trip_verify)
+    {
+        bail!(
+            "production_signing fixture must cover (a) deterministic-from-configured-seed, (b) ephemeral-non-deterministic, (c) different-seeds-different-sigs, (d) round-trip verify_ok"
+        );
+    }
+
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("production_signing fixture missing negative_vectors[]"))?;
+    if negatives.is_empty() {
+        bail!("production_signing fixture must declare at least one negative vector");
+    }
+    let mut neg_wrong_key = false;
+    let mut neg_tampered = false;
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let drift = vector
+            .get("drift")
+            .ok_or_else(|| anyhow!("negative vector {name} missing drift"))?;
+        let drift_kind = required_str(drift, "kind")?;
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("negative vector {name} must expect outcome=reject");
+        }
+        let reason = required_str(expected, "reason_code")?;
+        match (drift_kind, reason) {
+            ("wrong_verifying_key", "signature_verification_failed") => neg_wrong_key = true,
+            ("tampered_canonical_body", "payload_hash_mismatch") => neg_tampered = true,
+            (k, r) => bail!(
+                "negative vector {name}: drift.kind={k} not paired with reason_code={r}"
+            ),
+        }
+    }
+    if !(neg_wrong_key && neg_tampered) {
+        bail!(
+            "production_signing fixture must cover (a) wrong verifying key, (b) tampered canonical body"
+        );
+    }
+
+    Ok(())
+}
+
+/// Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors.
+///
+/// Cross-checks `tests/fixtures/event_kind_lattice_dispatch_fixture.json`
+/// against the LIVE event-kind-registry (registry/event-kind-registry.json).
+/// The fixture declares EXPECTED canonical lattices per cell-family AND the
+/// validator confirms the live registry matches. Drift from either side
+/// fails loudly. Pattern mirrors `discovery_profile_fixture` cross-checking
+/// operation-registry.surface_groups.
+///
+/// Validator pins:
+/// * every active+reducer_input+durable_event kind that declares
+///   `cell_family` declares a `lattice` in the core set
+///   {or-set, mv-register, cas-register, fsm, counter, ordered-log};
+/// * cell_family namespace prefix is `cx.component.`;
+/// * a single cell_family is bound to exactly one lattice across all kinds
+///   that declare it;
+/// * bottom mode ∈ {reject, expose};
+/// * every family in `expected_cell_family_lattice_bindings.<lattice>` MUST
+///   resolve to that lattice in the live registry; conversely, every live
+///   cell_family that appears in the registry MUST be listed under the
+///   correct lattice in the expected bindings.
+pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let fixture = load_local_fixture("event_kind_lattice_dispatch_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.event_kind_lattice_dispatch_vectors.v1")?;
+
+    const CORE_LATTICES: &[&str] = &[
+        "or-set", "mv-register", "cas-register", "fsm", "counter", "ordered-log",
+    ];
+    const VALID_BOTTOM_MODES: &[&str] = &["reject", "expose"];
+
+    // Walk the live registry and build cell_family → set<lattice>.
+    let registry = super::load_artifact_json("registry/event-kind-registry.json")?;
+    let event_kinds = registry
+        .get("event_kinds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
+    let mut family_to_lattice: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut family_to_bottom: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut all_live_families: BTreeSet<String> = BTreeSet::new();
+    for entry in event_kinds {
+        let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
+        let wire_scope = entry
+            .get("wire_scope")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if status != "active"
+            || entry.get("reducer_input").and_then(Value::as_bool) != Some(true)
+            || wire_scope != "durable_event"
+        {
+            continue;
+        }
+        let Some(family) = entry.get("cell_family").and_then(Value::as_str) else {
+            continue;
+        };
+        if !family.starts_with("cx.component.") {
+            bail!(
+                "live event-kind-registry: cell_family {family} does not start with `cx.component.`"
+            );
+        }
+        let lattice = required_str(entry, "lattice")?;
+        if !CORE_LATTICES.contains(&lattice) {
+            bail!(
+                "live event-kind-registry: cell_family {family} declares non-core lattice {lattice}"
+            );
+        }
+        let bottom = required_str(entry, "bottom")?;
+        if !VALID_BOTTOM_MODES.contains(&bottom) {
+            bail!(
+                "live event-kind-registry: cell_family {family} declares invalid bottom={bottom}"
+            );
+        }
+        family_to_lattice
+            .entry(family.to_owned())
+            .or_default()
+            .insert(lattice.to_owned());
+        family_to_bottom
+            .entry(family.to_owned())
+            .or_default()
+            .insert(bottom.to_owned());
+        all_live_families.insert(family.to_owned());
+    }
+    // Single-lattice-per-family invariant.
+    for (family, lattices) in &family_to_lattice {
+        if lattices.len() > 1 {
+            bail!(
+                "live event-kind-registry: cell_family {family} bound to multiple lattices {lattices:?} — only one allowed"
+            );
+        }
+    }
+
+    // Walk the expected bindings and confirm every declared family resolves
+    // to the expected lattice in the live registry.
+    let expected_bindings = fixture
+        .get("expected_cell_family_lattice_bindings")
+        .ok_or_else(|| anyhow!("fixture missing expected_cell_family_lattice_bindings"))?;
+    let expected_pairs: &[(&str, &str)] = &[
+        ("or_set_families", "or-set"),
+        ("cas_register_families", "cas-register"),
+        ("fsm_families", "fsm"),
+        ("ordered_log_families", "ordered-log"),
+        ("mv_register_families", "mv-register"),
+    ];
+    let mut all_expected_families: BTreeSet<String> = BTreeSet::new();
+    for (group, expected_lattice) in expected_pairs {
+        let arr = expected_bindings
+            .get(*group)
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("expected_cell_family_lattice_bindings.{group} missing"))?;
+        for v in arr {
+            let family = v.as_str().ok_or_else(|| {
+                anyhow!("expected_cell_family_lattice_bindings.{group} entry must be a string")
+            })?;
+            if !all_expected_families.insert(family.to_owned()) {
+                bail!(
+                    "expected_cell_family_lattice_bindings: cell_family {family} listed under multiple lattices"
+                );
+            }
+            let live_lattices = family_to_lattice.get(family).ok_or_else(|| {
+                anyhow!(
+                    "expected family {family} (group={group}) not present in live event-kind-registry"
+                )
+            })?;
+            // Single lattice already enforced above.
+            let live = live_lattices.iter().next().expect("non-empty by construction");
+            if live != *expected_lattice {
+                bail!(
+                    "cell_family {family}: live lattice={live} != expected lattice={expected_lattice} (group={group})"
+                );
+            }
+        }
+    }
+    // Conversely: every live family covered by some expected group.
+    for family in &all_live_families {
+        if !all_expected_families.contains(family) {
+            bail!(
+                "live cell_family {family} not declared under any expected_cell_family_lattice_bindings group"
+            );
+        }
+    }
+
+    // Vectors — structural sanity (each scope is recognised, each outcome
+    // matches the validator semantics already enforced above). Vectors are
+    // descriptive; the live cross-check IS the validation.
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event_kind_lattice_dispatch fixture missing vectors[]"))?;
+    let mut covered_invariants: BTreeSet<&str> = Default::default();
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        let scope = required_str(vector, "scope")?;
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
+        let outcome = required_str(expected, "outcome")?;
+        match (name, scope, outcome) {
+            (
+                "every_active_reducer_input_durable_kind_with_cell_family_declares_one_lattice",
+                "live_registry",
+                "all_kinds_consistent",
+            )
+            | (
+                "no_cell_family_appears_in_two_distinct_lattices",
+                "live_registry",
+                "single_lattice_per_cell_family",
+            )
+            | (
+                "cell_family_namespace_is_cx_component",
+                "live_registry",
+                "namespace_ok",
+            )
+            | (
+                "bottom_mode_is_reject_or_expose",
+                "live_registry",
+                "bottom_mode_ok",
+            ) => {
+                covered_invariants.insert(name);
+            }
+            (
+                "expected_or_set_families_resolve_to_or_set_in_live_registry",
+                "expected_cell_family_lattice_bindings.or_set_families",
+                "lattice_match",
+            )
+            | (
+                "expected_cas_register_families_resolve_to_cas_register_in_live_registry",
+                "expected_cell_family_lattice_bindings.cas_register_families",
+                "lattice_match",
+            )
+            | (
+                "expected_fsm_families_resolve_to_fsm_in_live_registry",
+                "expected_cell_family_lattice_bindings.fsm_families",
+                "lattice_match",
+            )
+            | (
+                "expected_ordered_log_families_resolve_to_ordered_log_in_live_registry",
+                "expected_cell_family_lattice_bindings.ordered_log_families",
+                "lattice_match",
+            )
+            | (
+                "expected_mv_register_families_resolve_to_mv_register_in_live_registry",
+                "expected_cell_family_lattice_bindings.mv_register_families",
+                "lattice_match",
+            ) => {
+                let lat = required_str(expected, "lattice")?;
+                if !CORE_LATTICES.contains(&lat) {
+                    bail!("vector {name} expected.lattice {lat} not in core set");
+                }
+                covered_invariants.insert(name);
+            }
+            (other_name, other_scope, other_outcome) => bail!(
+                "event_kind_lattice_dispatch fixture unexpected vector ({other_name}, scope={other_scope}, outcome={other_outcome})"
+            ),
+        }
+    }
+    for required in [
+        "every_active_reducer_input_durable_kind_with_cell_family_declares_one_lattice",
+        "no_cell_family_appears_in_two_distinct_lattices",
+        "cell_family_namespace_is_cx_component",
+        "bottom_mode_is_reject_or_expose",
+        "expected_or_set_families_resolve_to_or_set_in_live_registry",
+        "expected_cas_register_families_resolve_to_cas_register_in_live_registry",
+        "expected_fsm_families_resolve_to_fsm_in_live_registry",
+        "expected_ordered_log_families_resolve_to_ordered_log_in_live_registry",
+        "expected_mv_register_families_resolve_to_mv_register_in_live_registry",
+    ] {
+        if !covered_invariants.contains(required) {
+            bail!("event_kind_lattice_dispatch fixture missing required vector {required}");
+        }
+    }
+
+    // Negative vectors — pure structural / synthetic. Validator confirms each
+    // declared drift name + reason_code maps to a known synthesised case.
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("event_kind_lattice_dispatch fixture missing negative_vectors[]"))?;
+    let mut neg_non_core = false;
+    let mut neg_wrong_ns = false;
+    let mut neg_invalid_bottom = false;
+    for vector in negatives {
+        let name = required_str(vector, "name")?;
+        let drift = vector
+            .get("drift")
+            .ok_or_else(|| anyhow!("negative vector {name} missing drift"))?;
+        let drift_kind = required_str(drift, "kind")?;
+        let expected = vector
+            .get("expected")
+            .ok_or_else(|| anyhow!("negative vector {name} missing expected"))?;
+        if required_str(expected, "outcome")? != "reject" {
+            bail!("negative vector {name} must expect outcome=reject");
+        }
+        let reason = required_str(expected, "reason_code")?;
+        match (drift_kind, reason) {
+            ("non_core_lattice", "lattice_not_in_core_set") => {
+                let lat = required_str(drift, "lattice")?;
+                if CORE_LATTICES.contains(&lat) {
+                    bail!(
+                        "negative vector {name} drift.lattice {lat} IS in core set — not a real drift"
+                    );
+                }
+                neg_non_core = true;
+            }
+            ("wrong_namespace", "cell_family_invalid_namespace") => {
+                let cf = required_str(drift, "cell_family")?;
+                if cf.starts_with("cx.component.") {
+                    bail!(
+                        "negative vector {name} drift.cell_family {cf} IS in cx.component.* namespace — not a real drift"
+                    );
+                }
+                neg_wrong_ns = true;
+            }
+            ("invalid_bottom", "bottom_invalid_value") => {
+                let b = required_str(drift, "bottom")?;
+                if VALID_BOTTOM_MODES.contains(&b) {
+                    bail!(
+                        "negative vector {name} drift.bottom {b} IS valid — not a real drift"
+                    );
+                }
+                neg_invalid_bottom = true;
+            }
+            (k, r) => bail!(
+                "negative vector {name} drift.kind={k} not paired with reason_code={r}"
+            ),
+        }
+    }
+    if !(neg_non_core && neg_wrong_ns && neg_invalid_bottom) {
+        bail!(
+            "event_kind_lattice_dispatch fixture must cover (a) non-core lattice, (b) wrong cell_family namespace, (c) invalid bottom mode"
+        );
+    }
+
+    Ok(())
+}

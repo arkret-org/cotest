@@ -148,3 +148,33 @@ fn mls_move_covered_frontier_fixture_suite_matches_reference_semantics() -> Resu
 fn discovery_profile_fixture_suite_matches_reference_semantics() -> Result<()> {
     cotest::conformance::run_discovery_profile_fixture_suite()
 }
+
+/// Round-22 — Threshold k-of-n Anchor signing vectors (ThresholdAggregator):
+/// k partials accept, k-1 partials reject (`threshold_below_quorum`),
+/// signer-not-in-anchorer-set rejected, duplicate signer deduped, aggregated
+/// signature has one MoveSignature per partial (each individually checking).
+#[test]
+fn threshold_multisig_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_threshold_multisig_fixture_suite()
+}
+
+/// Round-22 — AnchorerWorker production signing path (Ed25519MoveSigner):
+/// configured/service-DID-derived seed produces deterministic JWS, ephemeral
+/// seed produces non-deterministic, different seeds produce different
+/// signatures, signature verifies via verify_ed25519_move_signature with the
+/// signer-derived verifying key.
+#[test]
+fn production_signing_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_production_signing_fixture_suite()
+}
+
+/// Round-22 — Event-kind ↔ LatticeKind dispatch consistency. Cross-checks
+/// the live event-kind-registry: every active reducer-input durable kind
+/// with cell_family declares one core lattice, no cell_family appears in
+/// two lattices, namespace is cx.component.*, bottom ∈ {reject, expose},
+/// and the fixture's expected_cell_family_lattice_bindings exactly matches
+/// the registry.
+#[test]
+fn event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics() -> Result<()> {
+    cotest::conformance::run_event_kind_lattice_dispatch_fixture_suite()
+}

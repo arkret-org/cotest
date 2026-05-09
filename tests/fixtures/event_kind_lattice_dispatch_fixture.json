@@ -1,0 +1,184 @@
+{
+  "profile": "cx.profile.event_kind_lattice_dispatch_vectors.v1",
+  "version": "2026-05-09",
+  "comment": "Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors per spec event-kind-registry.json + soland/src/reducer/lattice_kinds.rs::default_lattice_registry. Validates that the spec event-kind registry's (event_kind, cell_family, lattice, bottom) tuples are coherent: (a) every active reducer-input durable kind that declares cell_family also declares a single lattice in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log}; (b) any single cell_family is bound to exactly ONE lattice across ALL kinds that declare it (no cell_family in two lattices); (c) cell_family namespace prefix is `cx.component.`; (d) bottom ∈ {reject, expose}; (e) the aggregate cell-family set covers the spec-mandated families used by Move/Anchor pipeline. Cross-checks the LIVE event-kind-registry (not a frozen snapshot). The validator is structural — does not run dispatch — and complements `validate_event_kind_registry` by surfacing the same-cell-family/different-lattice drift loudly. Pattern mirrors `discovery_profile_fixture` and the Round-21 anchor_view_compaction approach: the fixture declares EXPECTED canonical lattices per cell-family AND the validator confirms the live registry matches. Drift from either side fails loudly.",
+  "encoder": {
+    "core_lattices": ["or-set", "mv-register", "cas-register", "fsm", "counter", "ordered-log"],
+    "valid_bottom_modes": ["reject", "expose"],
+    "cell_family_namespace": "cx.component.",
+    "registry": "registry/event-kind-registry.json"
+  },
+  "expected_cell_family_lattice_bindings": {
+    "comment": "Canonical lattice per cell-family. Mirrors the LIVE event-kind-registry.json exactly (40 spec families, 2026-05-09). soland/src/reducer/lattice_kinds.rs::default_lattice_registry adds 3 SDK-side families (cx.component.mls.covered_frontier.v1, cx.component.mls.epoch.v1, cx.component.anchorer.v1) ahead of the spec; once those land in the spec registry they MUST be added here. Round 22 expectation set; future spec drift surfaces here as a hard failure.",
+    "or_set_families": [
+      "cx.component.consent.grant.v1",
+      "cx.component.capability.grant.v1",
+      "cx.component.capability.delegate.v1",
+      "cx.component.capability.derived.v1",
+      "cx.component.session.grant.v1",
+      "cx.component.device.authorized.v1",
+      "cx.component.device.list_update.v1"
+    ],
+    "cas_register_families": [
+      "cx.component.space.policy.v1",
+      "cx.component.space.read_receipt_policy.v1",
+      "cx.component.space.history_visibility.v1",
+      "cx.component.space.join_rule.v1",
+      "cx.component.space.discovery.v1",
+      "cx.component.space.organization.v1",
+      "cx.component.space.upgrade.v1",
+      "cx.component.space.archive.v1",
+      "cx.component.space.freeze.v1",
+      "cx.component.space.tombstone.v1",
+      "cx.component.space.destroy.v1",
+      "cx.component.space.moderation_policy.v1",
+      "cx.component.space.history_sharing_policy.v1",
+      "cx.component.space.asset_privacy_policy.v1",
+      "cx.component.space.policy_components.v1",
+      "cx.component.space.policy_server.v1",
+      "cx.component.space.plaintext_visible_services.v1",
+      "cx.component.space.media_service.v1",
+      "cx.component.space.schema.v1",
+      "cx.component.space.inheritance_policy.v1",
+      "cx.component.flow.position.v1",
+      "cx.component.place.parent.v1"
+    ],
+    "fsm_families": [
+      "cx.component.member.state.v1"
+    ],
+    "ordered_log_families": [
+      "cx.component.space.create.v1",
+      "cx.component.space.child.v1",
+      "cx.component.space.parent.v1",
+      "cx.component.account.status.v1",
+      "cx.component.policy.rule.v1"
+    ],
+    "mv_register_families": [
+      "cx.component.profile.create.v1",
+      "cx.component.view.create.v1",
+      "cx.component.view.update.v1",
+      "cx.component.view.reconcile.v1",
+      "cx.component.mimi.room_binding.v1"
+    ]
+  },
+  "vectors": [
+    {
+      "name": "every_active_reducer_input_durable_kind_with_cell_family_declares_one_lattice",
+      "scope": "live_registry",
+      "expected": {
+        "outcome": "all_kinds_consistent",
+        "rationale": "Every active+reducer_input+durable_event kind that declares cell_family MUST also declare a `lattice` field, and that lattice MUST be in the core set. Mirrors `validate_event_kind_registry` M11 invariant; this vector is the dual."
+      }
+    },
+    {
+      "name": "no_cell_family_appears_in_two_distinct_lattices",
+      "scope": "live_registry",
+      "expected": {
+        "outcome": "single_lattice_per_cell_family",
+        "rationale": "If two distinct event_kinds declare the same `cell_family` they MUST also declare the SAME `lattice`. A cell-family bound to two lattices is a wire-model drift bug — the receiver cannot dispatch to a single LatticeKind impl."
+      }
+    },
+    {
+      "name": "cell_family_namespace_is_cx_component",
+      "scope": "live_registry",
+      "expected": {
+        "outcome": "namespace_ok",
+        "rationale": "Every cell_family MUST start with `cx.component.`. Non-conforming families would not match any LatticeKind impl in `default_lattice_registry`."
+      }
+    },
+    {
+      "name": "bottom_mode_is_reject_or_expose",
+      "scope": "live_registry",
+      "expected": {
+        "outcome": "bottom_mode_ok",
+        "rationale": "Every reducer-input durable kind that declares cell_family MUST set bottom ∈ {reject, expose}. `reject` quarantines the cell on Bottom; `expose` surfaces multi-value to UX."
+      }
+    },
+    {
+      "name": "expected_or_set_families_resolve_to_or_set_in_live_registry",
+      "scope": "expected_cell_family_lattice_bindings.or_set_families",
+      "expected": {
+        "outcome": "lattice_match",
+        "lattice": "or-set",
+        "rationale": "Every family in `expected_cell_family_lattice_bindings.or_set_families` MUST resolve to lattice=or-set in the live event-kind-registry. Drift from either side ⇒ fixture failure."
+      }
+    },
+    {
+      "name": "expected_cas_register_families_resolve_to_cas_register_in_live_registry",
+      "scope": "expected_cell_family_lattice_bindings.cas_register_families",
+      "expected": {
+        "outcome": "lattice_match",
+        "lattice": "cas-register",
+        "rationale": "Every family in `expected_cell_family_lattice_bindings.cas_register_families` MUST resolve to lattice=cas-register in the live event-kind-registry. Includes anchorer + mls.epoch — both governance-critical."
+      }
+    },
+    {
+      "name": "expected_fsm_families_resolve_to_fsm_in_live_registry",
+      "scope": "expected_cell_family_lattice_bindings.fsm_families",
+      "expected": {
+        "outcome": "lattice_match",
+        "lattice": "fsm",
+        "rationale": "Member-state FSM is the only fsm-lattice family in the spec snapshot."
+      }
+    },
+    {
+      "name": "expected_ordered_log_families_resolve_to_ordered_log_in_live_registry",
+      "scope": "expected_cell_family_lattice_bindings.ordered_log_families",
+      "expected": {
+        "outcome": "lattice_match",
+        "lattice": "ordered-log",
+        "rationale": "Per-issuer monotonic append families. Bottom ⇒ replay-protection rejection (duplicate issuer_seq)."
+      }
+    },
+    {
+      "name": "expected_mv_register_families_resolve_to_mv_register_in_live_registry",
+      "scope": "expected_cell_family_lattice_bindings.mv_register_families",
+      "expected": {
+        "outcome": "lattice_match",
+        "lattice": "mv-register",
+        "rationale": "Concurrent multi-value families. Bottom=expose so UX renders both candidates."
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "lattice_outside_core_set_rejected",
+      "scope": "synthetic",
+      "drift": {
+        "kind": "non_core_lattice",
+        "lattice": "lww-register"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "lattice_not_in_core_set",
+        "rationale": "lww-register / rga are extension-only lattices restricted to ui_affordance/content/draft/cosmetic cells via cx.profile.collaborative_text.v1. A reducer-input durable kind in the registry MUST NOT declare these as its lattice."
+      }
+    },
+    {
+      "name": "cell_family_outside_cx_component_namespace_rejected",
+      "scope": "synthetic",
+      "drift": {
+        "kind": "wrong_namespace",
+        "cell_family": "cx.cell.legacy.v1"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cell_family_invalid_namespace",
+        "rationale": "Spec mandates cell_family starts with `cx.component.`. Any other prefix is a registry drift bug."
+      }
+    },
+    {
+      "name": "bottom_value_outside_reject_or_expose_rejected",
+      "scope": "synthetic",
+      "drift": {
+        "kind": "invalid_bottom",
+        "bottom": "ignore"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "bottom_invalid_value",
+        "rationale": "Bottom mode must be `reject` (quarantine cell on Bottom) or `expose` (surface multi-value). `ignore` would silently drop conflicts — not allowed."
+      }
+    }
+  ]
+}
