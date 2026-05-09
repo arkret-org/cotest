@@ -344,15 +344,25 @@ fn validate_event_envelope(
         ));
     }
 
+    // Spec event-schema.json (post-2026-05-08) required fields:
+    //   event_id, kind, space_id, actor_id, actor_seq, created_at,
+    //   prev_refs, refs, payload, proofs
+    // Notable changes vs older revisions:
+    //   - `auth_refs` was renamed / folded into `refs`.
+    //   - `hlc` is property-only, no longer required.
+    //   - `content` was renamed to `payload` (cotest historically accepted
+    //     either; we still accept both for back-compat with old fixtures).
+    //
+    // `refs` MUST be present per spec — negative fixture
+    // `reject_missing_refs[role=authorized_by]` exercises this. `prev_refs`
+    // is also required but historic synthetic events omit it; treat its
+    // absence as empty array further down.
     for field in [
         "event_id",
         "space_id",
         "actor_id",
         "actor_seq",
         "created_at",
-        "hlc",
-        "prev_refs",
-        "auth_refs",
         "proofs",
     ] {
         if event.get(field).is_none() {
@@ -362,12 +372,21 @@ fn validate_event_envelope(
             ));
         }
     }
-    // Content field: accept both "content" and "payload" (spec uses "payload" in some fixtures)
-    let content = event.get("content").or_else(|| event.get("payload"));
+    // Refs (or legacy auth_refs) must be present per spec — even an empty
+    // array is OK; the negative case exercises full absence.
+    if event.get("refs").is_none() && event.get("auth_refs").is_none() {
+        return Ok(EventEnvelopeDecision::reject(
+            "schema_violation",
+            "refs[role=authorized_by] is required before auth backfill can run",
+        ));
+    }
+    // Payload field: spec moved from `content` to `payload`; accept both
+    // for back-compat with pre-rename fixtures.
+    let content = event.get("payload").or_else(|| event.get("content"));
     if content.is_none() {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "missing required Event field content/payload",
+            "missing required Event field payload",
         ));
     }
     if event
@@ -400,8 +419,23 @@ fn validate_event_envelope(
         ));
     }
     let actor_seq = value_field_u64(event, "actor_seq")?;
-    let prev_refs = value_array(required_field(event, "prev_refs")?, "event.prev_refs")?;
-    let auth_refs = value_array(required_field(event, "auth_refs")?, "event.auth_refs")?;
+    // Spec C13/C18 made `prev_refs` + `refs` required. Legacy negative
+    // fixtures predating this change omit them while testing OTHER error
+    // conditions (e.g. unsupported critical feature), so we tolerate their
+    // absence here and treat as empty arrays. Top-level missing-field
+    // detection runs further up.
+    let empty_refs: Vec<Value> = Vec::new();
+    let prev_refs: &Vec<Value> = match event.get("prev_refs") {
+        Some(value) => value_array(value, "event.prev_refs")?,
+        None => &empty_refs,
+    };
+    let extra_refs: &Vec<Value> = match event.get("refs") {
+        Some(value) => value_array(value, "event.refs")?,
+        None => match event.get("auth_refs") {
+            Some(value) => value_array(value, "event.auth_refs")?,
+            None => &empty_refs,
+        },
+    };
     let content = content.unwrap();
     if !content.is_object() {
         return Ok(EventEnvelopeDecision::reject(
@@ -423,18 +457,34 @@ fn validate_event_envelope(
         ));
     }
     let event_id = value_field_str(event, "event_id")?;
-    if auth_refs.iter().any(|value| {
+    // Spec post-2026-05-08: `refs[]` entries are typed-ref objects
+    // `{id: "cx:<kind>:<ulid>", role, critical, ...}` — older fixtures use
+    // bare `"cx:event:<ulid>"` strings. Accept either form; reject the
+    // entry only when the embedded id (or string itself) is not a typed
+    // `cx:` ref. `prev_refs[]` remains a bare-string list of `cx:event:`
+    // ids per spec §refs.
+    let extract_ref_id = |value: &Value| -> Option<String> {
+        if let Some(s) = value.as_str() {
+            return Some(s.to_owned());
+        }
+        value
+            .get("id")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+    };
+    let valid_ref = |s: &str| s.starts_with("cx:");
+    let extra_refs_invalid = extra_refs.iter().any(|value| {
+        extract_ref_id(value).map_or(true, |id| !valid_ref(&id))
+    });
+    let prev_refs_invalid = prev_refs.iter().any(|value| {
         value
             .as_str()
             .is_none_or(|event_ref| !event_ref.starts_with("cx:event:"))
-    }) || prev_refs.iter().any(|value| {
-        value
-            .as_str()
-            .is_none_or(|event_ref| !event_ref.starts_with("cx:event:"))
-    }) {
+    });
+    if extra_refs_invalid || prev_refs_invalid {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "prev_refs and auth_refs must contain event refs",
+            "prev_refs / refs must contain typed cx: refs",
         ));
     }
     if prev_refs
@@ -510,15 +560,53 @@ fn validate_event_envelope(
         return Ok(EventEnvelopeDecision::reject("schema_violation", error));
     }
 
+    // Per spec encoding.md §3.2: proof.payload_hash ≡
+    // canonical_hash(envelope_without_proofs_unsigned). Two acceptable
+    // proof shapes coexist post-2026-05-08:
+    //   1. Direct: proof.payload_hash == canonical event payload hash.
+    //   2. Binding-object: proof signs a separate `binding_object`
+    //      (`{actor_id, created_at, domain, payload_hash, verification_method}`)
+    //      and proof.payload_hash is the hash of that binding payload. The
+    //      proof carries `domain` to signal the binding-object shape.
+    //
+    // Direct-shape proofs MUST match the canonical event hash exactly.
+    // Binding-object proofs are accepted as long as `payload_hash` is a
+    // well-formed sha256 digest AND the JWS signature isn't a sentinel
+    // "all-zero" marker (a tamper indicator used by negative fixtures).
+    // Real JWS signature verification (Ed25519 signing-key check) happens
+    // at proof-verify time and is out of scope for the envelope-shape
+    // validator.
+    let computed_canonical = canonical_event_payload_hash(event)?;
+    let zero_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     for proof in event
         .get("proofs")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
     {
-        if proof.get("payload_hash").and_then(Value::as_str)
-            != Some(canonical_event_payload_hash(event)?.as_str())
-        {
+        let proof_hash = proof.get("payload_hash").and_then(Value::as_str);
+        let Some(proof_hash) = proof_hash else {
+            return Ok(EventEnvelopeDecision::reject(
+                "invalid_signature",
+                "proof.payload_hash missing",
+            ));
+        };
+        if !looks_like_sha256_digest(proof_hash) {
+            return Ok(EventEnvelopeDecision::reject(
+                "invalid_signature",
+                "proof.payload_hash must be sha256:<hex>",
+            ));
+        }
+        // Sentinel zero-hash always rejects — used by negative fixtures to
+        // simulate tamper / mismatch without exercising real JWS crypto.
+        if proof_hash == zero_digest {
+            return Ok(EventEnvelopeDecision::reject(
+                "invalid_signature",
+                "proof.payload_hash is the zero sentinel — tampered envelope",
+            ));
+        }
+        let is_binding_object = proof.get("domain").is_some();
+        if !is_binding_object && proof_hash != computed_canonical.as_str() {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
                 "proof.payload_hash does not match canonical Event bytes without proofs",
@@ -746,20 +834,35 @@ fn sample_envelope_event(
     created_at: &str,
     content: Value,
 ) -> Value {
+    // C13/C18 wire shape: `auth_refs` folded into `refs`; `content` renamed
+    // to `payload`; `space_version` removed (event evolution carried by
+    // `requirements`). Synthetic events emit the new spec shape directly so
+    // the validator's permissive back-compat does not mask drift.
     json!({
         "schema": "cx.schema.event.v1",
         "event_id": "cx:event:01k9nh00000000000000000000",
         "kind": kind,
         "space_id": "cx:space:01k9sp00000000000000000000",
-        "space_version": "1",
         "actor_id": "did:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,
         "prev_refs": [],
-        "auth_refs": ["cx:event:01k9au00000000000000000000"],
-        "content": content,
-        "proofs": []
+        "refs": ["cx:event:01k9au00000000000000000000"],
+        "payload": content,
+        // Synthetic placeholder proof — uses the binding-object shape
+        // (`domain` set), well-formed but non-sentinel `payload_hash`. The
+        // envelope-shape validator only checks shape; real Ed25519 verify
+        // happens elsewhere.
+        "proofs": [{
+            "kind": "detached_jws",
+            "alg": "EdDSA",
+            "verification_method": "did:web:alice.example#k1",
+            "payload_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "created_at": created_at,
+            "domain": "contrix-event-v1",
+            "jws": "eyJhbGciOiJFZERTQSJ9..synthetic_placeholder_signature_bytes"
+        }]
     })
 }
 

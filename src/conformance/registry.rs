@@ -320,9 +320,15 @@ fn validate_event_kind_registry(
                     "reducer-input kind {event_kind} bottom must be reject or expose, got {bottom}"
                 );
             }
-            // cell_subject MAY be null (singleton), or an object with
-            // either {type, field} (single payload field) or
-            // {type:"composite", components:[...]} (composite subject).
+            // cell_subject MAY be null (singleton); when present it is an
+            // object with one of these spec shapes:
+            // - single-field subject: `{"type": "<scalar>", "field": "payload.X"}`
+            //   where `<scalar>` ∈ {string, did, mimi_uri, profile_ref,
+            //   id:flow, id:space, id:place, id:actor_profile, ...}
+            // - multi-field subject: `{"type": "composite", "components": [...]}`
+            //   or `{"type": "tuple", "components": [...]}` (post-spec 2026-05-08
+            //   adds `tuple` for structured composite subjects with named
+            //   components).
             if let Some(subject) = entry.get("cell_subject") {
                 if !subject.is_null() {
                     let obj = subject.as_object().ok_or_else(|| {
@@ -331,11 +337,12 @@ fn validate_event_kind_registry(
                         )
                     })?;
                     let has_field = obj.get("field").and_then(Value::as_str).is_some();
-                    let is_composite = obj.get("type").and_then(Value::as_str) == Some("composite")
+                    let multi_field_type = obj.get("type").and_then(Value::as_str);
+                    let is_multi_field = matches!(multi_field_type, Some("composite") | Some("tuple"))
                         && obj.get("components").and_then(Value::as_array).is_some();
-                    if !has_field && !is_composite {
+                    if !has_field && !is_multi_field {
                         bail!(
-                            "reducer-input kind {event_kind} cell_subject must declare `field` or be a `composite` with `components[]`"
+                            "reducer-input kind {event_kind} cell_subject must declare `field` or be a `composite` / `tuple` with `components[]`"
                         );
                     }
                 }
@@ -424,6 +431,30 @@ fn validate_operation_registry(
     ] {
         if !ids.contains(required) {
             bail!("operation registry missing required {required}");
+        }
+    }
+
+    // C16 (spec 2026-05-08): operation_registry.capability_tiers expanded
+    // from 3 values (core / extension / deployment_local) to 4 with
+    // `interop_bridge` (adapter surfaces for external protocols like MIMI /
+    // Applet). Validate that the spec-declared tier vocabulary contains all
+    // four values so future cotest tier filtering doesn't silently drop
+    // adapter ops as `unknown_tier`.
+    if let Some(tiers) = registry
+        .get("capability_tiers")
+        .and_then(|t| t.as_array())
+    {
+        let tier_set: std::collections::BTreeSet<&str> = tiers
+            .iter()
+            .filter_map(|t| t.get("name").and_then(Value::as_str))
+            .collect();
+        for required_tier in ["core", "extension", "deployment_local", "interop_bridge"] {
+            if !tier_set.contains(required_tier) {
+                bail!(
+                    "operation_registry.capability_tiers missing required tier '{required_tier}' \
+                     (spec C16, 2026-05-08)"
+                );
+            }
         }
     }
     Ok(ids)
@@ -541,7 +572,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         "cx.profile.kanban_mvp.v1",
         "cx.profile.push_gateway.v1",
         // E2EE state binding: mandatory inherits of e2ee_client.
-        "cx.profile.mls_state_binding.full.v1",
+        "cx.profile.mls_governance_binding.full.v1",
     ] {
         if !all_profiles.contains(required) {
             bail!("conformance profiles missing required {required}");
@@ -580,7 +611,7 @@ fn validate_profile_requirements(
         }
     }
 
-    // Phase 3 binding: e2ee_client MUST inherit mls_state_binding.full.v1 directly,
+    // Phase 3 binding: e2ee_client MUST inherit mls_governance_binding.full.v1 directly,
     // not as an optional extension.
     let e2ee_client = requirements
         .get("cx.profile.e2ee_client.v1")
@@ -588,37 +619,37 @@ fn validate_profile_requirements(
     let inherits = string_array_field(e2ee_client, "inherits")?;
     if !inherits
         .iter()
-        .any(|p| *p == "cx.profile.mls_state_binding.full.v1")
+        .any(|p| *p == "cx.profile.mls_governance_binding.full.v1")
     {
         bail!(
-            "e2ee_client.v1 must inherit cx.profile.mls_state_binding.full.v1 (Phase 3 binding)"
+            "e2ee_client.v1 must inherit cx.profile.mls_governance_binding.full.v1 (Phase 3 binding)"
         );
     }
 
-    // Move/Anchor/Lattice binding (spec 2026-05-08): mls_state_binding.full.v1
+    // Move/Anchor/Lattice binding (spec 2026-05-08): mls_governance_binding.full.v1
     // no longer carries Phase 3 component-type lists; instead it declares
     // required_event_kinds (cx.mls.commit + key share/withheld) and
     // feature_discovery.required (move_based_mls_commit, covered_frontier_cell,
     // mls_epoch_cell). Validate the new shape so a stale profile slips through.
     let mls_binding = requirements
-        .get("cx.profile.mls_state_binding.full.v1")
+        .get("cx.profile.mls_governance_binding.full.v1")
         .ok_or_else(|| {
-            anyhow!("mls_state_binding.full.v1 missing profile_requirements entry")
+            anyhow!("mls_governance_binding.full.v1 missing profile_requirements entry")
         })?;
     let required_event_kinds = string_array_field(mls_binding, "required_event_kinds")?;
     if !required_event_kinds.iter().any(|k| *k == "cx.mls.commit") {
         bail!(
-            "mls_state_binding.full.v1 required_event_kinds must include cx.mls.commit"
+            "mls_governance_binding.full.v1 required_event_kinds must include cx.mls.commit"
         );
     }
     let feature_discovery = mls_binding
         .get("feature_discovery")
-        .ok_or_else(|| anyhow!("mls_state_binding.full.v1 missing feature_discovery"))?;
+        .ok_or_else(|| anyhow!("mls_governance_binding.full.v1 missing feature_discovery"))?;
     let required_features = feature_discovery
         .get("required")
         .and_then(Value::as_array)
         .ok_or_else(|| {
-            anyhow!("mls_state_binding.full.v1 feature_discovery.required missing")
+            anyhow!("mls_governance_binding.full.v1 feature_discovery.required missing")
         })?;
     let feature_set: BTreeSet<String> = required_features
         .iter()
@@ -631,7 +662,7 @@ fn validate_profile_requirements(
     ] {
         if !feature_set.contains(required) {
             bail!(
-                "mls_state_binding.full.v1 feature_discovery.required must include {required}"
+                "mls_governance_binding.full.v1 feature_discovery.required must include {required}"
             );
         }
     }
@@ -838,7 +869,21 @@ fn validate_value_refs(
                         }
                     }
                     ("kind", Some(kind)) if kind.starts_with("cx.") => {
-                        if !event_kinds.contains(kind) {
+                        // The recursive walk hits `kind:` fields nested in
+                        // payload content blocks (e.g. `payload.content.kind`
+                        // = `cx.content.text`), profile refs, feature ids,
+                        // etc. — none of which live in the event-kind
+                        // registry. Skip namespace prefixes that are
+                        // intentionally NOT event kinds; only validate
+                        // top-level event-style names.
+                        let is_non_event_namespace = kind.starts_with("cx.content.")
+                            || kind.starts_with("cx.profile.")
+                            || kind.starts_with("cx.feature.")
+                            || kind.starts_with("cx.schema.")
+                            || kind.starts_with("cx.component.")
+                            || kind.starts_with("cx.vector.")
+                            || kind.starts_with("cx.reducer.");
+                        if !is_non_event_namespace && !event_kinds.contains(kind) {
                             bail!("{context} references unknown event kind {kind}");
                         }
                     }
