@@ -419,7 +419,8 @@ fn validate_operation_registry(
     for required in [
         "cx.events.describe",
         "cx.events.submit",
-        "cx.sync.client_sync",
+        // C17 wire-break (spec 2026-05-08): cx.sync.client_sync → cx.sync.account.
+        "cx.sync.account",
     ] {
         if !ids.contains(required) {
             bail!("operation registry missing required {required}");

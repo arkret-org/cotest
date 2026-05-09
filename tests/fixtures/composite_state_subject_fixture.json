@@ -1,7 +1,7 @@
 {
   "profile": "cx.profile.composite_state_subject_vectors.v1",
-  "version": "2026-05-07",
-  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2).",
+  "version": "2026-05-09",
+  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). C18 (spec 2026-05-08): cx.flow.branch.* renamed to cx.flow.track.*; spec also dropped member/history_visibility/policy_components (Flow tracks no longer carry independent membership/visibility/policy — see Flow.discussion_space_ref). Vectors retained as historical-shape examples to verify the encoding rule, which is kind-independent.",
   "encoder": {
     "canonical_json": "RFC 8785 / spec encoding.md §1: sorted object keys, no whitespace, exact JSON string representation",
     "digest": "SHA-256",
@@ -9,35 +9,35 @@
   },
   "vectors": [
     {
-      "name": "flow_branch_member_alice",
-      "kind": "cx.flow.branch.member",
+      "name": "flow_track_member_alice",
+      "kind": "cx.flow.track.member",
       "components_array": ["cx:flow:01js0fl0000000000000000000", "main", "did:web:alice.example"],
-      "components_order_source": "[flow_id, branch, actor_id]",
+      "components_order_source": "[flow_id, track, actor_id]",
       "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\",\"did:web:alice.example\"]",
       "expected_state_subject": "R1cq-2fMHw5k5dodPHF0NRh9dt02x1k5PAo37Cr3yvA"
     },
     {
-      "name": "flow_branch_member_bob_distinct_subject",
-      "kind": "cx.flow.branch.member",
+      "name": "flow_track_member_bob_distinct_subject",
+      "kind": "cx.flow.track.member",
       "components_array": ["cx:flow:01js0fl0000000000000000000", "main", "did:web:bob.example"],
-      "components_order_source": "[flow_id, branch, actor_id]",
+      "components_order_source": "[flow_id, track, actor_id]",
       "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\",\"did:web:bob.example\"]",
       "expected_state_subject": "4Rjt_nyy37BHC1gpSCYrcj0pGulrnrRllHSpGTvCBFE",
-      "comment": "Same flow + branch but a different actor — must hash to a distinct state_subject (collision negative)."
+      "comment": "Same flow + track but a different actor — must hash to a distinct state_subject (collision negative)."
     },
     {
-      "name": "flow_branch_history_visibility",
-      "kind": "cx.flow.branch.history_visibility",
+      "name": "flow_track_history_visibility",
+      "kind": "cx.flow.track.history_visibility",
       "components_array": ["cx:flow:01js0fl0000000000000000000", "main"],
-      "components_order_source": "[flow_id, branch]",
+      "components_order_source": "[flow_id, track]",
       "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\"]",
       "expected_state_subject": "b-ow6bOOhMLPosOKuFnIAGcSb8jVJTm0UT7d-wVooTg"
     },
     {
-      "name": "flow_branch_policy_components_same_subject_as_history_visibility",
-      "kind": "cx.flow.branch.policy_components",
+      "name": "flow_track_policy_components_same_subject_as_history_visibility",
+      "kind": "cx.flow.track.policy_components",
       "components_array": ["cx:flow:01js0fl0000000000000000000", "main"],
-      "components_order_source": "[flow_id, branch]",
+      "components_order_source": "[flow_id, track]",
       "expected_canonical_json": "[\"cx:flow:01js0fl0000000000000000000\",\"main\"]",
       "expected_state_subject": "b-ow6bOOhMLPosOKuFnIAGcSb8jVJTm0UT7d-wVooTg",
       "comment": "Two different kinds share the same components_array shape; the state_subject is identical, but reducer keys still differ because slot key includes (space_id, kind) — confirms the subject hash is independent of kind."
@@ -63,14 +63,14 @@
   "negative_vectors": [
     {
       "name": "wrong_component_order_collides_into_different_subject",
-      "kind": "cx.flow.branch.member",
+      "kind": "cx.flow.track.member",
       "components_array": ["main", "cx:flow:01js0fl0000000000000000000", "did:web:alice.example"],
-      "comment": "If a buggy implementation reorders components_array (e.g. branch before flow_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical flow_branch_member_alice subject.",
+      "comment": "If a buggy implementation reorders components_array (e.g. track before flow_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical flow_track_member_alice subject.",
       "must_differ_from": "R1cq-2fMHw5k5dodPHF0NRh9dt02x1k5PAo37Cr3yvA"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
-      "kind": "cx.flow.branch.member",
+      "kind": "cx.flow.track.member",
       "pipe_form": "cx:flow:01js0fl0000000000000000000|main|did:web:alice.example",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
       "must_differ_from": "R1cq-2fMHw5k5dodPHF0NRh9dt02x1k5PAo37Cr3yvA"

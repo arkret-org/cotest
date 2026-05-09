@@ -231,7 +231,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let lifecycle = expect_json(
         server
             .http()
-            .get(server.url(&format!("/api/v1/sync/backfill?space_id={space_id}")))
+            .get(server.url(&format!("/api/v1/events?spaces={space_id}")))
             .bearer_auth(&alice),
         StatusCode::OK,
     )

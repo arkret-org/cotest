@@ -261,8 +261,11 @@ pub async fn repo_rejects_unsigned_unknown_family_and_repo_mismatch() -> Result<
 pub async fn sync_directory_and_index_parameter_edges_are_enforced() -> Result<()> {
     let server = ContrixServer::spawn("sync-index-edges").await?;
 
+    // C17 (spec 2026-05-08): cx.sync.subscribe → cx.events.subscribe at
+    // /api/v1/events/subscribe; cx.sync.backfill folded into cx.events.query
+    // at /api/v1/events.
     expect_api_error(
-        server.http().get(server.url("/api/v1/sync/subscribe")),
+        server.http().get(server.url("/api/v1/events/subscribe")),
         StatusCode::BAD_REQUEST,
         "missing_param",
     )
@@ -270,13 +273,13 @@ pub async fn sync_directory_and_index_parameter_edges_are_enforced() -> Result<(
     expect_api_error(
         server
             .http()
-            .get(server.url("/api/v1/sync/subscribe?space_id=bad")),
+            .get(server.url("/api/v1/events/subscribe?spaces=bad")),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
     .await?;
     expect_api_error(
-        server.http().get(server.url("/api/v1/sync/backfill")),
+        server.http().get(server.url("/api/v1/events")),
         StatusCode::BAD_REQUEST,
         "missing_param",
     )

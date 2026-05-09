@@ -221,10 +221,16 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("composite_state_subject fixture missing vectors"))?;
 
+    // C18 wire-break (spec 2026-05-08): cx.flow.branch.* event kinds renamed
+    // to cx.flow.track.*; spec also removed member/history_visibility/
+    // policy_components since tracks no longer carry independent membership/
+    // visibility/policy. Composite-subject encoding rule is unchanged — kept
+    // here as historical-shape vectors (the hash test validates encoding,
+    // independent of whether the kind is currently spec-active).
     let kinds = [
-        "cx.flow.branch.member",
-        "cx.flow.branch.history_visibility",
-        "cx.flow.branch.policy_components",
+        "cx.flow.track.member",
+        "cx.flow.track.history_visibility",
+        "cx.flow.track.policy_components",
         "cx.device.authorized",
         "cx.device.revoked",
     ];

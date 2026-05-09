@@ -42,7 +42,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     expect_status(
         server.http().get(server.url(&format!(
-            "/api/v1/sync/subscribe?space_id={space_id}&limit=1"
+            "/api/v1/events/subscribe?spaces={space_id}&limit=1"
         ))),
         StatusCode::NOT_FOUND,
     )
@@ -50,7 +50,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let subscribe = expect_json(
         alice.get(&format!(
-            "/api/v1/sync/subscribe?space_id={space_id}&limit=10"
+            "/api/v1/events/subscribe?spaces={space_id}&limit=10"
         )),
         StatusCode::OK,
     )

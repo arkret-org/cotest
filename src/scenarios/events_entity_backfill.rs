@@ -44,9 +44,9 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     for _ in 0..12 {
         let path = match cursor.as_deref() {
             Some(cursor) => {
-                format!("/api/v1/sync/backfill?space_id={space_id}&limit=1&cursor={cursor}")
+                format!("/api/v1/events?spaces={space_id}&limit=1&cursor={cursor}")
             }
-            None => format!("/api/v1/sync/backfill?space_id={space_id}&limit=1"),
+            None => format!("/api/v1/events?spaces={space_id}&limit=1"),
         };
         let page = expect_json(alice.get(&path), StatusCode::OK).await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());
@@ -150,7 +150,7 @@ pub async fn repo_entity_state_operations_are_submitted_and_backfilled() -> Resu
         server
             .http()
             .get(server.url(&format!(
-                "/api/v1/sync/backfill?space_id={space_id}&limit=10"
+                "/api/v1/events?spaces={space_id}&limit=10"
             )))
             .bearer_auth(&alice),
         StatusCode::OK,
