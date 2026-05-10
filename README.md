@@ -71,7 +71,7 @@ for the full startup model, Docker image contract, and result artifacts.
   bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
-- `_todos.md`: Complement-derived plan and the current single-server /
+- `../_todos.md`: Complement-derived plan and the current single-server /
   multi-server coverage matrix.
 - `config/coverage-profiles.json`: machine-readable profile-to-suite coverage
   mapping used by the runner.

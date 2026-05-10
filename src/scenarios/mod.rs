@@ -17,3 +17,4 @@ pub mod repo_sync_index;
 pub mod schema_policy_realtime;
 pub mod service_surface;
 pub mod space_permissions;
+pub mod webvh_blackbox;

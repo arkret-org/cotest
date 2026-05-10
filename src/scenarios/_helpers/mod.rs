@@ -4,3 +4,4 @@
 //! single-responsibility while retaining the original semantics.
 
 pub mod bridge;
+pub mod external_binary;
