@@ -6,6 +6,8 @@ use crate::scenarios::_helpers::bridge::{
     BridgeContractMatrixScaffold, BridgeContractSnapshot, configured_external_service_base,
     load_optional_live_contract, snapshot_from_live, snapshot_placeholder,
 };
+use crate::scenarios::_helpers::coauth_bootstrap::spawn_coauth_with_db;
+use crate::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
 pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
     let server = ContrixServer::spawn("bridge-matrix").await?;
     let service_integration = expect_json(
@@ -29,8 +31,49 @@ pub async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let coauth_base_url = configured_external_service_base("COAUTH_BASE_URL");
-    let floria_base_url = configured_external_service_base("FLORIA_BASE_URL");
+
+    // C34.3 — when `COAUTH_BASE_URL` / `FLORIA_BASE_URL` are not exported by
+    // the operator, try to bring up the sibling-checkout binary on demand:
+    //
+    //   * coauth_bootstrap — boots an ephemeral docker postgres, runs
+    //     `coauth config generate` + `coauth database migrate`, then spawns
+    //     the server bound to a free port.
+    //   * floria_bootstrap — renders a minimal YAML config with one custom
+    //     pushkin and spawns floria pointed at it.
+    //
+    // Both bootstraps return `Ok(None)` when any prerequisite is missing
+    // (docker daemon down, sibling binary not built, ...). In that case the
+    // matrix degrades to the synthetic placeholder rows so CI runners
+    // without a docker daemon still pass.
+    //
+    // Both `_proc` handles MUST stay alive for the duration of the matrix
+    // discovery calls below — `Drop` kills the spawned process AND, for
+    // coauth, removes the postgres container.
+    let mut coauth_base_url = configured_external_service_base("COAUTH_BASE_URL");
+    let _coauth_proc = if coauth_base_url.is_none() {
+        match spawn_coauth_with_db().await? {
+            Some(handle) => {
+                coauth_base_url = Some(handle.base_url().trim_end_matches('/').to_owned());
+                Some(handle)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
+    let mut floria_base_url = configured_external_service_base("FLORIA_BASE_URL");
+    let _floria_proc = if floria_base_url.is_none() {
+        match spawn_floria_with_config().await? {
+            Some(handle) => {
+                floria_base_url = Some(handle.base_url().trim_end_matches('/').to_owned());
+                Some(handle)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
 
     let coauth_service_integration =
         load_optional_live_contract(coauth_base_url.as_deref(), "/api/v1/integration/describe")

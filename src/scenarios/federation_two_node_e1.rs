@@ -1,4 +1,4 @@
-//! E2 Round 26 — federation two-node real Move replay.
+//! E2 Round 26 / C33.4 — federation two-node real Move replay.
 //!
 //! Spawns two real `soland` binaries on independent ports/blob roots,
 //! confirms they negotiate basic federation handshake (`/api/v1/server/describe`
@@ -7,25 +7,46 @@
 //! space, push the canonical Move to server_b via `/api/v1/federation/anchors`,
 //! and confirm both nodes converge on the same anchored frontier.
 //!
-//! Marked `#[ignore = "needs soland binary on PATH"]` at the test wrapper —
-//! cargo CI runners may not have a built soland binary in scope. To run:
-//! `cargo test --test federation_two_node_e1 -- --ignored`.
+//! C33.4 wired the spawn through the reusable `external_binary` helper:
+//! `TestServerGroup::try_multi_external` resolves `SOLAND_BIN` (or sibling-
+//! checkout `contrix-dev/soland/target/debug/soland[.exe]`) and spawns the
+//! pre-built binary directly — no `cargo run` slow path. When neither is
+//! available the scenario silently returns `Ok(())` so CI runners that have
+//! not built soland do not flake.
+//!
+//! C35.2 fixed the `device_id` fixture to use a wire-canonical
+//! `cx:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
+//! `contrix_identifiers::DeviceId` validator rejects), confirmed the actor
+//! registration + space-create + message-send round-trip succeeds against
+//! a real soland, and removed the wrapper's `#[ignore]` so default
+//! `cargo test` runs the full federation scenario whenever a soland binary
+//! is locatable (and silently skips otherwise).
 
 use anyhow::{Context, Result};
+use contrix_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{TestServerGroup, expect_json, expect_response};
 
-/// Spawns two `soland` instances and runs the round-26 federation real
-/// Move-replay scenario:
+/// Spawns two `soland` instances (pre-built binary, located via SOLAND_BIN
+/// env or sibling checkout) and runs the round-26 federation real Move-
+/// replay scenario:
 ///   1. distinct service DIDs (basic handshake invariant)
 ///   2. server_a registers an account + creates a space + sends a message Move
 ///   3. server_a's anchor leaves are fetched
 ///   4. server_b accepts the same anchor leaves via the federation push endpoint
 ///   5. server_b's `/api/v1/federation/anchors` reports the pushed leaves
+///
+/// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling
+/// `contrix-dev/soland/target/debug/soland[.exe]` exists (silent skip path).
 pub async fn two_node_federation_harness_starts() -> Result<()> {
-    let group = TestServerGroup::multi("e2-federation-two-node", 2).await?;
+    let Some(group) = TestServerGroup::try_multi_external("e2-federation-two-node", 2).await?
+    else {
+        // Silent skip — caller is `--ignored`-gated and we already failed the
+        // binary lookup (`SOLAND_BIN` unset + no sibling-checkout binary).
+        return Ok(());
+    };
     assert_eq!(group.len(), 2, "two-node group must have exactly 2 servers");
 
     let server_a = group.server(0);
@@ -51,11 +72,16 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     );
 
     // ── Step 2: actor + space + message Move on server_a ────────────────
+    // C35.2 — `device_id` MUST be a canonical Contrix wire DeviceId per
+    // `contrix_identifiers::DeviceId` (`dev_*` legacy form OR
+    // `cx:device:<uuidv7>`). Mint a fresh UUIDv7-backed device id at runtime
+    // so the fixture is wire-canonical and unique per run.
+    let device_alice = new_prefixed_uuid7("cx:device:");
     let actor_a = server_a
         .register_client(
             "did:web:alice.e2.federation.cotest.local",
             "@alice-e2",
-            "device-alice-e2",
+            &device_alice,
         )
         .await
         .context("register actor on server_a")?;

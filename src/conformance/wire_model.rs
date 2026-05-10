@@ -17,10 +17,38 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow, bail};
 use base64::Engine as _;
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use super::{canonical_json, required_str, validate_profile};
+use crate::transcripts::{is_active, record_vector_event};
+
+/// Emit a structured transcript event for a wire-model vector at the end of
+/// a per-vector loop iteration. `kind_suffix` becomes the trailing portion of
+/// the JSONL `kind` field (e.g. `"composite_state_subject.encoded"` →
+/// `wire_model.composite_state_subject.encoded`). The full vector value is
+/// used for `payload`; `expected` extracts `vector.expected` when present
+/// (defaulting to the vector's `name`); `actual` is the caller-supplied
+/// summary of what the validator computed.
+///
+/// No-op when the calling thread has no active transcript writer (i.e. when
+/// running under plain `cargo test` without the auto-init fixture wrapper),
+/// so it stays free in the hot path.
+fn emit_vector(kind_suffix: &str, vector: &Value, actual: Value) {
+    if !is_active() {
+        return;
+    }
+    let expected = vector
+        .get("expected")
+        .cloned()
+        .unwrap_or_else(|| json!({"name": vector.get("name").cloned().unwrap_or(Value::Null)}));
+    record_vector_event(
+        &format!("wire_model.{kind_suffix}"),
+        vector,
+        &expected,
+        &actual,
+    );
+}
 
 fn local_fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -45,7 +73,9 @@ fn expected_outcome<'a>(vector: &'a Value, name: &str) -> Result<&'a str> {
 }
 
 fn expected_reason<'a>(vector: &'a Value) -> Option<&'a str> {
-    vector.pointer("/expected/reason_code").and_then(Value::as_str)
+    vector
+        .pointer("/expected/reason_code")
+        .and_then(Value::as_str)
 }
 
 /// W3 — holder-private consent cell or-set Move semantics.
@@ -221,15 +251,12 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                         let holder = required_str(pre, "holder")?;
                         let peer = required_str(pre, "peer")?;
                         let scope = required_str(pre, "scope")?;
-                        let cell = format!(
-                            "cx:cell:cx.component.consent.grant.v1:{holder}"
-                        );
+                        let cell = format!("cx:cell:cx.component.consent.grant.v1:{holder}");
                         let active_tags = or_set.get(&cell);
                         let resolved = active_tags
                             .map(|tags| {
-                                tags.values().any(|(p, s)| {
-                                    p == peer && (s == scope || s == "any")
-                                })
+                                tags.values()
+                                    .any(|(p, s)| p == peer && (s == scope || s == "any"))
                             })
                             .unwrap_or(false);
                         consent_resolved = Some(resolved);
@@ -284,6 +311,11 @@ pub fn run_consent_fixture_suite() -> Result<()> {
         // saw_grant_then_invite_accept is unused but kept to document that
         // the precondition flips correctly across revoke. Suppress unused.
         let _ = saw_grant_then_invite_accept;
+        emit_vector(
+            "consent.or_set_replay",
+            vector,
+            json!({"name": name, "moves": moves.len()}),
+        );
     }
     if !(covered_grant_accept
         && covered_revoke_block
@@ -349,9 +381,7 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
         let expected_cj = required_str(vector, "expected_canonical_json")?;
         let actual_cj = canonical_json(components)?;
         if actual_cj != expected_cj {
-            bail!(
-                "vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}"
-            );
+            bail!("vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}");
         }
         let expected_subject = required_str(vector, "expected_state_subject")?;
         let actual_subject = compute_state_subject(components)?;
@@ -361,6 +391,16 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
             );
         }
         covered.insert(kind);
+        emit_vector(
+            "composite_state_subject.encoded",
+            vector,
+            json!({
+                "name": name,
+                "kind": kind,
+                "state_subject": actual_subject,
+                "canonical_json": actual_cj,
+            }),
+        );
     }
 
     for kind in kinds {
@@ -492,9 +532,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     for vector in component_vectors {
         let component_type = required_str(vector, "contrix_component_type")?;
         if !registered_components.contains(component_type) {
-            bail!(
-                "mimi component vector references unknown component_type {component_type}"
-            );
+            bail!("mimi component vector references unknown component_type {component_type}");
         }
         let direction = required_str(vector, "direction")?;
         match direction {
@@ -517,11 +555,14 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
                 contrix_only += 1;
             }
             other => {
-                bail!(
-                    "mimi component vector {component_type} unknown direction {other}"
-                );
+                bail!("mimi component vector {component_type} unknown direction {other}");
             }
         }
+        emit_vector(
+            "mimi_components.mapping",
+            vector,
+            json!({"component_type": component_type, "direction": direction}),
+        );
     }
 
     if bidirectional < 5 {
@@ -610,16 +651,14 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                     tighten_disclosure(parent_disclosure, branch_disclosure, overrides_allowed)?;
                 let composed_visibility =
                     tighten_visibility(parent_visibility, branch_visibility, overrides_allowed)?;
-                if let Some(declared) =
-                    expected.get("composed_disclosure").and_then(Value::as_str)
+                if let Some(declared) = expected.get("composed_disclosure").and_then(Value::as_str)
                     && declared != composed_disclosure
                 {
                     bail!(
                         "vector {name} composed_disclosure: expected {declared}, computed {composed_disclosure}"
                     );
                 }
-                if let Some(declared) =
-                    expected.get("composed_visibility").and_then(Value::as_str)
+                if let Some(declared) = expected.get("composed_visibility").and_then(Value::as_str)
                     && declared != composed_visibility
                 {
                     bail!(
@@ -664,25 +703,20 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             .and_then(Value::as_bool)
             .ok_or_else(|| anyhow!("vector {name} expected.is_locked missing"))?;
         if expected_is_locked != is_locked {
-            bail!(
-                "vector {name} is_locked: expected {expected_is_locked}, computed {is_locked}"
-            );
+            bail!("vector {name} is_locked: expected {expected_is_locked}, computed {is_locked}");
         }
 
         // Visibility-private fanout MUST be explicitly recorded so that
         // Sync Service implementations have a vector to check against.
         if eff_visibility == "private"
-            && expected.get("sync_service_fanout").and_then(Value::as_str)
-                != Some("sender_only")
+            && expected.get("sync_service_fanout").and_then(Value::as_str) != Some("sender_only")
         {
             bail!(
                 "vector {name} effective visibility=private must record sync_service_fanout=sender_only"
             );
         }
         if eff_disclosure == "disabled"
-            && expected
-                .get("sync_service_action")
-                .and_then(Value::as_str)
+            && expected.get("sync_service_action").and_then(Value::as_str)
                 != Some("drop_with_policy_violation")
         {
             bail!(
@@ -702,6 +736,18 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             "prefs_resolution_space_overrides_default" => covered_space_overrides_default = true,
             _ => {}
         }
+        emit_vector(
+            "read_receipt_policy.decision",
+            vector,
+            json!({
+                "name": name,
+                "decision": decision,
+                "is_send": is_send,
+                "is_locked": is_locked,
+                "effective_disclosure": eff_disclosure,
+                "effective_visibility": eff_visibility,
+            }),
+        );
     }
 
     if !(covered_required
@@ -728,9 +774,15 @@ fn tighten_disclosure(parent: &str, branch: &str, overrides_allowed: bool) -> Re
     if !valid.contains(&branch) {
         bail!("invalid branch disclosure {branch}");
     }
-    let is_tighter =
-        matches!((parent, branch), ("optional", "required") | ("optional", "disabled"));
-    Ok(if is_tighter || overrides_allowed { branch.to_owned() } else { parent.to_owned() })
+    let is_tighter = matches!(
+        (parent, branch),
+        ("optional", "required") | ("optional", "disabled")
+    );
+    Ok(if is_tighter || overrides_allowed {
+        branch.to_owned()
+    } else {
+        parent.to_owned()
+    })
 }
 
 fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Result<String> {
@@ -825,9 +877,7 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
             })
             .collect::<Result<_>>()?;
         if view_leaves != input_ids {
-            bail!(
-                "vector {name} effective_anchor_view.leaves drift from input anchor ids"
-            );
+            bail!("vector {name} effective_anchor_view.leaves drift from input anchor ids");
         }
 
         // (2) when there are >= 2 concurrent leaves, frontier == leaves.
@@ -845,14 +895,10 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
             })
             .collect::<Result<_>>()?;
         if anchors.len() >= 2 && view_frontier != view_leaves {
-            bail!(
-                "vector {name} concurrent multi-leaf frontier MUST equal leaves set"
-            );
+            bail!("vector {name} concurrent multi-leaf frontier MUST equal leaves set");
         }
         if anchors.len() == 1 && !view_frontier.is_empty() && view_frontier != view_leaves {
-            bail!(
-                "vector {name} single-leaf view frontier must be empty or equal to leaves"
-            );
+            bail!("vector {name} single-leaf view frontier must be empty or equal to leaves");
         }
 
         // (3) signed compaction equivalence
@@ -863,18 +909,12 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
                 let comp_frontier: std::collections::BTreeSet<String> = compaction
                     .get("frontier")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} signed_compaction missing frontier[]")
-                    })?
+                    .ok_or_else(|| anyhow!("vector {name} signed_compaction missing frontier[]"))?
                     .iter()
                     .map(|v| {
-                        v.as_str()
-                            .map(ToOwned::to_owned)
-                            .ok_or_else(|| {
-                                anyhow!(
-                                    "vector {name} signed_compaction frontier entry not a string"
-                                )
-                            })
+                        v.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                            anyhow!("vector {name} signed_compaction frontier entry not a string")
+                        })
                     })
                     .collect::<Result<_>>()?;
                 if comp_frontier != view_frontier {
@@ -923,6 +963,16 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
             "compaction_preserves_bottom_diagnostics" => covered_bottom_preserved = true,
             _ => {}
         }
+        emit_vector(
+            "anchor_view_compaction.view",
+            vector,
+            json!({
+                "name": name,
+                "leaves": view_leaves,
+                "frontier": view_frontier,
+                "anchor_count": anchors.len(),
+            }),
+        );
     }
 
     if !(covered_single_leaf && covered_multi_leaf_clean && covered_bottom_preserved) {
@@ -960,7 +1010,9 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
                     .get("bottom_diagnostics")
                     .and_then(Value::as_array)
                     .ok_or_else(|| {
-                        anyhow!("negative vector {name} drift_compaction missing bottom_diagnostics")
+                        anyhow!(
+                            "negative vector {name} drift_compaction missing bottom_diagnostics"
+                        )
                     })?;
                 if drift_diags.iter().count() >= leaf_diags.len() {
                     bail!(
@@ -997,14 +1049,14 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
 
 fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
     let Some(rest) = id.strip_prefix("cx:anchor:sha256:") else {
-        bail!(
-            "{ctx} anchor id {id} must use cx:anchor:sha256:<hex> special form"
-        );
+        bail!("{ctx} anchor id {id} must use cx:anchor:sha256:<hex> special form");
     };
-    if rest.len() != 64 || !rest.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()) {
-        bail!(
-            "{ctx} anchor id {id} sha256 segment must be exactly 64 lowercase hex chars"
-        );
+    if rest.len() != 64
+        || !rest
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+    {
+        bail!("{ctx} anchor id {id} sha256 segment must be exactly 64 lowercase hex chars");
     }
     Ok(())
 }
@@ -1043,9 +1095,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
         let shape = required_str(vector, "shape")?;
         let cell_id = required_str(vector, "cell_id")?;
         if !cell_id.starts_with("cx:cell:cx.component.anchorer.v1:") {
-            bail!(
-                "vector {name} cell_id must be the anchorer.v1 cell, got {cell_id}"
-            );
+            bail!("vector {name} cell_id must be the anchorer.v1 cell, got {cell_id}");
         }
         match name {
             "single_did_happy_path"
@@ -1075,16 +1125,12 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                             .and_then(Value::as_u64)
                             .ok_or_else(|| anyhow!("vector {name} threshold missing n"))?;
                         if k == 0 || k > n {
-                            bail!(
-                                "vector {name} threshold k={k} n={n} must satisfy 1 <= k <= n"
-                            );
+                            bail!("vector {name} threshold k={k} n={n} must satisfy 1 <= k <= n");
                         }
                         let members = value
                             .get("members")
                             .and_then(Value::as_array)
-                            .ok_or_else(|| {
-                                anyhow!("vector {name} threshold missing members[]")
-                            })?;
+                            .ok_or_else(|| anyhow!("vector {name} threshold missing members[]"))?;
                         if members.len() as u64 != n {
                             bail!(
                                 "vector {name} threshold members.len()={} != n={n}",
@@ -1096,9 +1142,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                         let members = value
                             .get("members")
                             .and_then(Value::as_array)
-                            .ok_or_else(|| {
-                                anyhow!("vector {name} open_set missing members[]")
-                            })?;
+                            .ok_or_else(|| anyhow!("vector {name} open_set missing members[]"))?;
                         if members.is_empty() {
                             bail!("vector {name} open_set members[] must be non-empty");
                         }
@@ -1124,9 +1168,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                     "outcome",
                 )?;
                 if outcome != "value" {
-                    bail!(
-                        "vector {name} happy path must expect outcome=value, got {outcome}"
-                    );
+                    bail!("vector {name} happy path must expect outcome=value, got {outcome}");
                 }
                 covered.insert(name);
             }
@@ -1134,9 +1176,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                 let ops = vector
                     .get("concurrent_anchored_ops")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} missing concurrent_anchored_ops[]")
-                    })?;
+                    .ok_or_else(|| anyhow!("vector {name} missing concurrent_anchored_ops[]"))?;
                 if ops.len() < 2 {
                     bail!(
                         "vector {name} must declare at least 2 concurrent anchored ops to surface Bottom"
@@ -1171,6 +1211,11 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
             }
             other => bail!("vector {name}: unexpected name {other}"),
         }
+        emit_vector(
+            "anchorer_cell.shape",
+            vector,
+            json!({"name": name, "shape": shape, "cell_id": cell_id}),
+        );
     }
     for required in [
         "single_did_happy_path",
@@ -1277,16 +1322,12 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
                 let prior_ids: Vec<&str> = prior
                     .get("move_ids")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} prior_bottom missing move_ids[]")
-                    })?
+                    .ok_or_else(|| anyhow!("vector {name} prior_bottom missing move_ids[]"))?
                     .iter()
                     .filter_map(Value::as_str)
                     .collect();
                 if prior_ids.len() < 2 {
-                    bail!(
-                        "vector {name} prior_bottom MUST have ≥ 2 conflicting move_ids"
-                    );
+                    bail!("vector {name} prior_bottom MUST have ≥ 2 conflicting move_ids");
                 }
                 let repair = vector
                     .get("repair_move")
@@ -1300,12 +1341,9 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
                     .collect();
                 let prior_set: std::collections::BTreeSet<&str> =
                     prior_ids.iter().copied().collect();
-                let head_set: std::collections::BTreeSet<&str> =
-                    head_in.iter().copied().collect();
+                let head_set: std::collections::BTreeSet<&str> = head_in.iter().copied().collect();
                 if prior_set != head_set {
-                    bail!(
-                        "vector {name} repair_move.head_in MUST equal prior_bottom.move_ids set"
-                    );
+                    bail!("vector {name} repair_move.head_in MUST equal prior_bottom.move_ids set");
                 }
                 let _ = required_str(repair, "recovery_capability")?;
                 let outcome = required_str(
@@ -1315,9 +1353,7 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
                     "outcome",
                 )?;
                 if outcome != "value" {
-                    bail!(
-                        "vector {name} expected outcome=value (single anchored repair op)"
-                    );
+                    bail!("vector {name} expected outcome=value (single anchored repair op)");
                 }
                 covered_head_in_resolves = true;
             }
@@ -1325,13 +1361,9 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
                 let ops = vector
                     .get("concurrent_anchored_ops")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} missing concurrent_anchored_ops[]")
-                    })?;
+                    .ok_or_else(|| anyhow!("vector {name} missing concurrent_anchored_ops[]"))?;
                 if ops.len() < 2 {
-                    bail!(
-                        "vector {name} self-authorising vector must have ≥ 2 concurrent ops"
-                    );
+                    bail!("vector {name} self-authorising vector must have ≥ 2 concurrent ops");
                 }
                 let any_self_auth = ops.iter().any(|op| {
                     op.get("value")
@@ -1363,21 +1395,18 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
                     .ok_or_else(|| anyhow!("vector {name} missing repair_move"))?;
                 let _ = required_str(repair, "recovery_capability")?;
                 let _ = required_str(repair, "issuer_did")?;
-                let endorsement = repair
-                    .get("anchorer_endorsement")
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} manual repair missing anchorer_endorsement")
-                    })?;
+                let endorsement = repair.get("anchorer_endorsement").ok_or_else(|| {
+                    anyhow!("vector {name} manual repair missing anchorer_endorsement")
+                })?;
                 if required_str(endorsement, "alg")? != "EdDSA" {
-                    bail!(
-                        "vector {name} anchorer_endorsement.alg must be EdDSA"
-                    );
+                    bail!("vector {name} anchorer_endorsement.alg must be EdDSA");
                 }
                 let _ = required_str(endorsement, "anchorer_did")?;
                 covered_manual_repair = true;
             }
             other => bail!("vector unexpected name {other}"),
         }
+        emit_vector("conflict_repair.vector", vector, json!({"name": name}));
     }
     if !(covered_head_in_resolves && covered_self_auth_rejected && covered_manual_repair) {
         bail!(
@@ -1421,10 +1450,7 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
             }
         }
     }
-    for required in [
-        "repair_missing_recovery_capability",
-        "repair_head_in_drift",
-    ] {
+    for required in ["repair_missing_recovery_capability", "repair_head_in_drift"] {
         if !neg_codes.contains(required) {
             bail!(
                 "conflict_repair fixture must include negative vector with reason_code={required}"
@@ -1476,9 +1502,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                 let mut tags_seen: Vec<&str> = Vec::new();
                 for op in ops {
                     if required_str(op, "op")? != "or_set_add" {
-                        bail!(
-                            "vector {name} accumulate vector ops must all be or_set_add"
-                        );
+                        bail!("vector {name} accumulate vector ops must all be or_set_add");
                     }
                     tags_seen.push(required_str(op, "tag")?);
                 }
@@ -1600,15 +1624,14 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                     "cx.component.mls.group_state.v1",
                 ] {
                     if !cell_families.contains(required) {
-                        bail!(
-                            "vector {name} MLS commit must write cell family {required}"
-                        );
+                        bail!("vector {name} MLS commit must write cell family {required}");
                     }
                 }
                 covered.insert(name);
             }
             other => bail!("vector {name}: unexpected name {other}"),
         }
+        emit_vector("mls_covered_frontier.vector", vector, json!({"name": name}));
     }
     for required in [
         "covered_frontier_accumulates_governance_refs_idempotent",
@@ -1641,9 +1664,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
             );
         }
         if required_str(expected, "missing_precondition")? != "covered_frontier" {
-            bail!(
-                "negative vector {name} missing_precondition must be covered_frontier"
-            );
+            bail!("negative vector {name} missing_precondition must be covered_frontier");
         }
         match name {
             "e2ee_message_missing_covered_frontier_precondition_rejected" => {
@@ -1656,9 +1677,9 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                     .ok_or_else(|| {
                         anyhow!("negative vector {name} e2ee_move missing preconditions[]")
                     })?;
-                let has_cf = preconds.iter().any(|p| {
-                    p.get("kind").and_then(Value::as_str) == Some("covered_frontier")
-                });
+                let has_cf = preconds
+                    .iter()
+                    .any(|p| p.get("kind").and_then(Value::as_str) == Some("covered_frontier"));
                 if has_cf {
                     bail!(
                         "negative vector {name} declared a covered_frontier precondition; this vector must omit it"
@@ -1778,7 +1799,12 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         let surface = required_str(group, "surface")?;
         let tier = required_str(group, "tier")?;
         let mut ops: BTreeSet<String> = BTreeSet::new();
-        for op in group.get("operations").and_then(Value::as_array).into_iter().flatten() {
+        for op in group
+            .get("operations")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             if let Some(s) = op.as_str() {
                 ops.insert(s.to_owned());
             }
@@ -1802,7 +1828,11 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     let catalog = fixture
         .get("surface_catalog")
         .ok_or_else(|| anyhow!("discovery fixture missing surface_catalog"))?;
-    for (key, expected) in [("core", &live_core), ("extension", &live_ext), ("interop_bridge", &live_bridge)] {
+    for (key, expected) in [
+        ("core", &live_core),
+        ("extension", &live_ext),
+        ("interop_bridge", &live_bridge),
+    ] {
         let declared: BTreeSet<String> = catalog
             .get(key)
             .and_then(Value::as_array)
@@ -1819,9 +1849,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     // Post-C16 surfaces MUST be present under their canonical names.
     for required in ["blob_storage", "realtime_media", "moderation_reports"] {
         if !live_ext.contains(required) {
-            bail!(
-                "operation-registry surface_groups missing post-C16 surface {required}"
-            );
+            bail!("operation-registry surface_groups missing post-C16 surface {required}");
         }
     }
 
@@ -1874,14 +1902,10 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         let actual_ext = surfaces.iter().any(|s| live_ext.contains(s));
         let actual_bridge = surfaces.iter().any(|s| live_bridge.contains(s));
         if actual_core != core_present {
-            bail!(
-                "vector {name} core_present drift: expected {core_present} got {actual_core}"
-            );
+            bail!("vector {name} core_present drift: expected {core_present} got {actual_core}");
         }
         if actual_ext != ext_present {
-            bail!(
-                "vector {name} extension_present drift: expected {ext_present} got {actual_ext}"
-            );
+            bail!("vector {name} extension_present drift: expected {ext_present} got {actual_ext}");
         }
         if actual_bridge != bridge_present {
             bail!(
@@ -1941,7 +1965,9 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         }
 
         match name {
-            "core_only_sut_advertises_core_implies_no_extension_or_bridge" => covered_core_only = true,
+            "core_only_sut_advertises_core_implies_no_extension_or_bridge" => {
+                covered_core_only = true
+            }
             "extension_advertised_blob_storage_post_c16_split" => covered_ext_blob = true,
             "extension_advertised_realtime_media_alone_does_not_imply_blob" => {
                 covered_ext_realtime = true
@@ -1955,6 +1981,17 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
             }
             other => bail!("discovery fixture unexpected positive vector {other}"),
         }
+        emit_vector(
+            "discovery_profile.advertise",
+            vector,
+            json!({
+                "name": name,
+                "advertised_surfaces": surfaces,
+                "core_present": actual_core,
+                "extension_present": actual_ext,
+                "interop_bridge_present": actual_bridge,
+            }),
+        );
     }
     if !(covered_core_only
         && covered_ext_blob
@@ -1990,7 +2027,9 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         }
         match name {
             "interop_bridge_mimi_not_advertised_when_external_protocol_unsupported" => {
-                if required_str(expected, "rejection_reason")? != "interop_bridge_surface_not_advertised" {
+                if required_str(expected, "rejection_reason")?
+                    != "interop_bridge_surface_not_advertised"
+                {
                     bail!(
                         "negative vector {name} rejection_reason must be interop_bridge_surface_not_advertised"
                     );
@@ -1998,7 +2037,8 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
                 neg_bridge_unsupported = true;
             }
             "extension_call_blocked_when_surface_not_advertised" => {
-                if required_str(expected, "rejection_reason")? != "extension_surface_not_advertised" {
+                if required_str(expected, "rejection_reason")? != "extension_surface_not_advertised"
+                {
                     bail!(
                         "negative vector {name} rejection_reason must be extension_surface_not_advertised"
                     );
@@ -2039,9 +2079,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
                     .filter_map(Value::as_str)
                     .collect();
                 if !surfaces.contains(&"media") {
-                    bail!(
-                        "negative vector {name} must declare the legacy combined `media` token"
-                    );
+                    bail!("negative vector {name} must declare the legacy combined `media` token");
                 }
                 if live_ext.contains("media") {
                     bail!(
@@ -2123,15 +2161,10 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
             .and_then(Value::as_array)
             .ok_or_else(|| anyhow!("vector {name} missing members[]"))?;
         if members.len() as u64 != n {
-            bail!(
-                "vector {name} members.len()={} != n={n}",
-                members.len()
-            );
+            bail!("vector {name} members.len()={} != n={n}", members.len());
         }
-        let member_set: std::collections::BTreeSet<&str> = members
-            .iter()
-            .filter_map(Value::as_str)
-            .collect();
+        let member_set: std::collections::BTreeSet<&str> =
+            members.iter().filter_map(Value::as_str).collect();
         let partials = vector
             .get("partials")
             .and_then(Value::as_array)
@@ -2146,14 +2179,10 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
         for partial in partials {
             let signer_did = required_str(partial, "signer_did")?;
             if !member_set.contains(signer_did) {
-                bail!(
-                    "vector {name} positive partial signer_did {signer_did} not in members[]"
-                );
+                bail!("vector {name} positive partial signer_did {signer_did} not in members[]");
             }
             if !seen_signers.insert(signer_did) {
-                bail!(
-                    "vector {name} positive partial duplicate signer_did {signer_did}"
-                );
+                bail!("vector {name} positive partial duplicate signer_did {signer_did}");
             }
             let kid = required_str(partial, "kid")?;
             if kid.is_empty() {
@@ -2182,17 +2211,23 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
         }
         match name {
             "exact_k_of_n_partials_aggregate_to_multi" => covered_aggregate_at_k = true,
-            "k_plus_one_partials_aggregate_with_all_partials" => {
-                covered_aggregate_above_k = true
-            }
-            "individual_partial_verification_is_per_partial" => {
-                covered_per_partial_verifier = true
-            }
+            "k_plus_one_partials_aggregate_with_all_partials" => covered_aggregate_above_k = true,
+            "individual_partial_verification_is_per_partial" => covered_per_partial_verifier = true,
             "k_of_n_with_open_set_overlay_still_keys_off_threshold_k" => {
                 covered_sparse_subset = true
             }
             other => bail!("threshold_multisig fixture unexpected positive vector {other}"),
         }
+        emit_vector(
+            "threshold_multisig.aggregate",
+            vector,
+            json!({
+                "name": name,
+                "k": k,
+                "n": n,
+                "partials": partials.len(),
+            }),
+        );
     }
     if !(covered_aggregate_at_k
         && covered_aggregate_above_k
@@ -2249,9 +2284,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
                     .and_then(Value::as_u64)
                     .ok_or_else(|| anyhow!("negative vector {name} missing expected.required"))?;
                 if required != k {
-                    bail!(
-                        "negative vector {name} expected.required {required} != k {k}"
-                    );
+                    bail!("negative vector {name} expected.required {required} != k {k}");
                 }
                 if collected >= required {
                     bail!(
@@ -2270,10 +2303,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
                 }
                 neg_zero_partials = true;
             }
-            (
-                "partial_signer_not_in_member_set_rejected",
-                "partial_signer_not_in_anchorer_set",
-            ) => {
+            ("partial_signer_not_in_member_set_rejected", "partial_signer_not_in_anchorer_set") => {
                 let members: std::collections::BTreeSet<&str> = vector
                     .get("members")
                     .and_then(Value::as_array)
@@ -2380,26 +2410,20 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
         let name = required_str(vector, "name")?;
         let seed_source = required_str(vector, "seed_source")?;
         if !VALID_SEED_SOURCES.contains(&seed_source) {
-            bail!(
-                "vector {name} seed_source {seed_source} not in {VALID_SEED_SOURCES:?}"
-            );
+            bail!("vector {name} seed_source {seed_source} not in {VALID_SEED_SOURCES:?}");
         }
         let _ = required_str(vector, "did")?;
         let _ = required_str(vector, "kid")?;
         let body_hash = required_str(vector, "canonical_body_sha256")?;
         if !super::looks_like_sha256_digest(body_hash) {
-            bail!(
-                "vector {name} canonical_body_sha256 {body_hash} not a sha256:<64-hex> digest"
-            );
+            bail!("vector {name} canonical_body_sha256 {body_hash} not a sha256:<64-hex> digest");
         }
         let expected = vector
             .get("expected")
             .ok_or_else(|| anyhow!("vector {name} missing expected"))?;
         let outcome = required_str(expected, "outcome")?;
         if !VALID_POSITIVE_OUTCOMES.contains(&outcome) {
-            bail!(
-                "vector {name} outcome {outcome} not in {VALID_POSITIVE_OUTCOMES:?}"
-            );
+            bail!("vector {name} outcome {outcome} not in {VALID_POSITIVE_OUTCOMES:?}");
         }
         // Cross-shape: ephemeral seed ⇒ outcome MUST be
         // non_deterministic_signature (and vice-versa).
@@ -2425,9 +2449,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
             }
             "different_seeds_produce_different_signatures_for_same_body" => {
                 if outcome != "different_signatures" {
-                    bail!(
-                        "vector {name} must declare outcome=different_signatures; got {outcome}"
-                    );
+                    bail!("vector {name} must declare outcome=different_signatures; got {outcome}");
                 }
                 let seeds = vector
                     .get("seeds")
@@ -2447,9 +2469,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
                 if expected.get("verify_via").and_then(Value::as_str)
                     != Some("verify_ed25519_move_signature")
                 {
-                    bail!(
-                        "vector {name} must declare verify_via=verify_ed25519_move_signature"
-                    );
+                    bail!("vector {name} must declare verify_via=verify_ed25519_move_signature");
                 }
                 covered_round_trip_verify = true;
             }
@@ -2463,6 +2483,15 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
             }
             other => bail!("production_signing fixture unexpected positive vector {other}"),
         }
+        emit_vector(
+            "production_signing.signature",
+            vector,
+            json!({
+                "name": name,
+                "seed_source": seed_source,
+                "outcome": outcome,
+            }),
+        );
     }
     if !(covered_deterministic
         && covered_ephemeral
@@ -2499,9 +2528,9 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
         match (drift_kind, reason) {
             ("wrong_verifying_key", "signature_verification_failed") => neg_wrong_key = true,
             ("tampered_canonical_body", "payload_hash_mismatch") => neg_tampered = true,
-            (k, r) => bail!(
-                "negative vector {name}: drift.kind={k} not paired with reason_code={r}"
-            ),
+            (k, r) => {
+                bail!("negative vector {name}: drift.kind={k} not paired with reason_code={r}")
+            }
         }
     }
     if !(neg_wrong_key && neg_tampered) {
@@ -2538,10 +2567,18 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
     let fixture = load_local_fixture("event_kind_lattice_dispatch_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.event_kind_lattice_dispatch_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.event_kind_lattice_dispatch_vectors.v1",
+    )?;
 
     const CORE_LATTICES: &[&str] = &[
-        "or-set", "mv-register", "cas-register", "fsm", "counter", "ordered-log",
+        "or-set",
+        "mv-register",
+        "cas-register",
+        "fsm",
+        "counter",
+        "ordered-log",
     ];
     const VALID_BOTTOM_MODES: &[&str] = &["reject", "expose"];
 
@@ -2638,7 +2675,10 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
                 )
             })?;
             // Single lattice already enforced above.
-            let live = live_lattices.iter().next().expect("non-empty by construction");
+            let live = live_lattices
+                .iter()
+                .next()
+                .expect("non-empty by construction");
             if live != *expected_lattice {
                 bail!(
                     "cell_family {family}: live lattice={live} != expected lattice={expected_lattice} (group={group})"
@@ -2681,16 +2721,8 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
                 "live_registry",
                 "single_lattice_per_cell_family",
             )
-            | (
-                "cell_family_namespace_is_cx_component",
-                "live_registry",
-                "namespace_ok",
-            )
-            | (
-                "bottom_mode_is_reject_or_expose",
-                "live_registry",
-                "bottom_mode_ok",
-            ) => {
+            | ("cell_family_namespace_is_cx_component", "live_registry", "namespace_ok")
+            | ("bottom_mode_is_reject_or_expose", "live_registry", "bottom_mode_ok") => {
                 covered_invariants.insert(name);
             }
             (
@@ -2728,6 +2760,11 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
                 "event_kind_lattice_dispatch fixture unexpected vector ({other_name}, scope={other_scope}, outcome={other_outcome})"
             ),
         }
+        emit_vector(
+            "event_kind_lattice_dispatch.invariant",
+            vector,
+            json!({"name": name, "scope": scope, "outcome": outcome}),
+        );
     }
     for required in [
         "every_active_reducer_input_durable_kind_with_cell_family_declares_one_lattice",
@@ -2789,15 +2826,13 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
             ("invalid_bottom", "bottom_invalid_value") => {
                 let b = required_str(drift, "bottom")?;
                 if VALID_BOTTOM_MODES.contains(&b) {
-                    bail!(
-                        "negative vector {name} drift.bottom {b} IS valid — not a real drift"
-                    );
+                    bail!("negative vector {name} drift.bottom {b} IS valid — not a real drift");
                 }
                 neg_invalid_bottom = true;
             }
-            (k, r) => bail!(
-                "negative vector {name} drift.kind={k} not paired with reason_code={r}"
-            ),
+            (k, r) => {
+                bail!("negative vector {name} drift.kind={k} not paired with reason_code={r}")
+            }
         }
     }
     if !(neg_non_core && neg_wrong_ns && neg_invalid_bottom) {
@@ -2814,22 +2849,39 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
     let fixture = load_local_fixture("event_kind_payload_coverage_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.event_kind_payload_coverage_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.event_kind_payload_coverage_vectors.v1",
+    )?;
 
     let registry = super::load_artifact_json("registry/event-kind-registry.json")?;
     let event_kinds = registry
         .get("event_kinds")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
-    let mut live_kind_meta: BTreeMap<String, (Option<String>, Option<String>, Option<String>, String)> =
-        BTreeMap::new();
+    let mut live_kind_meta: BTreeMap<
+        String,
+        (Option<String>, Option<String>, Option<String>, String),
+    > = BTreeMap::new();
     for entry in event_kinds {
         let kind = required_str(entry, "event_kind")?;
         let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
-        let cell_family = entry.get("cell_family").and_then(Value::as_str).map(|s| s.to_owned());
-        let lattice = entry.get("lattice").and_then(Value::as_str).map(|s| s.to_owned());
-        let bottom = entry.get("bottom").and_then(Value::as_str).map(|s| s.to_owned());
-        live_kind_meta.insert(kind.to_owned(), (cell_family, lattice, bottom, status.to_owned()));
+        let cell_family = entry
+            .get("cell_family")
+            .and_then(Value::as_str)
+            .map(|s| s.to_owned());
+        let lattice = entry
+            .get("lattice")
+            .and_then(Value::as_str)
+            .map(|s| s.to_owned());
+        let bottom = entry
+            .get("bottom")
+            .and_then(Value::as_str)
+            .map(|s| s.to_owned());
+        live_kind_meta.insert(
+            kind.to_owned(),
+            (cell_family, lattice, bottom, status.to_owned()),
+        );
     }
 
     let positives = fixture
@@ -2861,22 +2913,37 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
         let live_family = live_family.as_deref().ok_or_else(|| {
             anyhow!("vector {name} event_kind {kind} has no cell_family in registry")
         })?;
-        let live_lattice = live_lattice.as_deref().ok_or_else(|| {
-            anyhow!("vector {name} event_kind {kind} has no lattice in registry")
-        })?;
-        let live_bottom = live_bottom.as_deref().ok_or_else(|| {
-            anyhow!("vector {name} event_kind {kind} has no bottom in registry")
-        })?;
+        let live_lattice = live_lattice
+            .as_deref()
+            .ok_or_else(|| anyhow!("vector {name} event_kind {kind} has no lattice in registry"))?;
+        let live_bottom = live_bottom
+            .as_deref()
+            .ok_or_else(|| anyhow!("vector {name} event_kind {kind} has no bottom in registry"))?;
         if live_family != claimed_family {
-            bail!("vector {name} cell_family drift: claimed {claimed_family}, registry {live_family}");
+            bail!(
+                "vector {name} cell_family drift: claimed {claimed_family}, registry {live_family}"
+            );
         }
         if live_lattice != claimed_lattice {
-            bail!("vector {name} lattice drift: claimed {claimed_lattice}, registry {live_lattice}");
+            bail!(
+                "vector {name} lattice drift: claimed {claimed_lattice}, registry {live_lattice}"
+            );
         }
         if live_bottom != claimed_bottom {
             bail!("vector {name} bottom drift: claimed {claimed_bottom}, registry {live_bottom}");
         }
         covered_tuples.insert((claimed_family.to_owned(), claimed_lattice.to_owned()));
+        emit_vector(
+            "event_kind_payload_coverage.kind",
+            v,
+            json!({
+                "name": name,
+                "event_kind": kind,
+                "cell_family": claimed_family,
+                "lattice": claimed_lattice,
+                "bottom": claimed_bottom,
+            }),
+        );
     }
     if covered_tuples.len() < 6 {
         bail!(
@@ -2894,11 +2961,17 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
     let mut neg_lattice = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing expected.outcome"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing expected.outcome"))?;
         if outcome != "reject" {
             bail!("negative {name} expected outcome=reject");
         }
-        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        let drift = v
+            .pointer("/drift/kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
         match drift {
             "unknown_kind" => {
                 let synth = required_str(v, "event_kind")?;
@@ -2910,7 +2983,9 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
             "cell_family_mismatch" => {
                 let claimed = required_str(v, "claimed_cell_family")?;
                 let kind = required_str(v, "event_kind")?;
-                let (live_family, _, _, _) = live_kind_meta.get(kind).ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
+                let (live_family, _, _, _) = live_kind_meta
+                    .get(kind)
+                    .ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
                 if live_family.as_deref() == Some(claimed) {
                     bail!("negative {name} claimed_cell_family equals registry — not a real drift");
                 }
@@ -2919,7 +2994,9 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
             "lattice_mismatch" => {
                 let claimed = required_str(v, "claimed_lattice")?;
                 let kind = required_str(v, "event_kind")?;
-                let (_, live_lattice, _, _) = live_kind_meta.get(kind).ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
+                let (_, live_lattice, _, _) = live_kind_meta
+                    .get(kind)
+                    .ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
                 if live_lattice.as_deref() == Some(claimed) {
                     bail!("negative {name} claimed_lattice equals registry — not a real drift");
                 }
@@ -2929,7 +3006,9 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
         }
     }
     if !(neg_unknown && neg_family && neg_lattice) {
-        bail!("event_kind_payload_coverage fixture must cover unknown_kind, cell_family_mismatch, lattice_mismatch negatives");
+        bail!(
+            "event_kind_payload_coverage fixture must cover unknown_kind, cell_family_mismatch, lattice_mismatch negatives"
+        );
     }
 
     Ok(())
@@ -2940,17 +3019,23 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
     let fixture = load_local_fixture("operation_registry_coverage_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.operation_registry_coverage_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.operation_registry_coverage_vectors.v1",
+    )?;
 
     let op_registry = super::load_artifact_json("registry/operation-registry.json")?;
     let event_kind_registry = super::load_artifact_json("registry/event-kind-registry.json")?;
-    let cap_action_registry = super::load_artifact_json("registry/capability-action-registry.json")?;
+    let cap_action_registry =
+        super::load_artifact_json("registry/capability-action-registry.json")?;
 
     let valid_tiers: BTreeSet<&str> = ["core", "extension", "interop_bridge", "deployment_local"]
         .into_iter()
         .collect();
 
-    let operations = op_registry.get("operations").and_then(Value::as_array)
+    let operations = op_registry
+        .get("operations")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("operation-registry missing operations[]"))?;
     let mut op_ids: BTreeSet<String> = BTreeSet::new();
     for entry in operations {
@@ -2958,7 +3043,9 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         op_ids.insert(id.to_owned());
     }
 
-    let surface_groups = op_registry.get("surface_groups").and_then(Value::as_array)
+    let surface_groups = op_registry
+        .get("surface_groups")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("operation-registry missing surface_groups[]"))?;
     let mut op_tier: BTreeMap<String, String> = BTreeMap::new();
     for group in surface_groups {
@@ -2966,16 +3053,22 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         if !valid_tiers.contains(tier) {
             bail!("surface_group declares invalid tier {tier}");
         }
-        let ops = group.get("operations").and_then(Value::as_array)
+        let ops = group
+            .get("operations")
+            .and_then(Value::as_array)
             .ok_or_else(|| anyhow!("surface_group missing operations[]"))?;
         for op in ops {
-            let id = op.as_str().ok_or_else(|| anyhow!("surface_group operation must be string"))?;
+            let id = op
+                .as_str()
+                .ok_or_else(|| anyhow!("surface_group operation must be string"))?;
             if !op_ids.contains(id) {
                 bail!("surface_group references operation_id {id} not in operations[]");
             }
             if let Some(prev) = op_tier.insert(id.to_owned(), tier.to_owned()) {
                 if prev != tier {
-                    bail!("operation_id {id} declared in two surface_groups with different tiers {prev} / {tier}");
+                    bail!(
+                        "operation_id {id} declared in two surface_groups with different tiers {prev} / {tier}"
+                    );
                 }
             }
         }
@@ -2986,9 +3079,13 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         }
     }
 
-    let actions = cap_action_registry.get("actions").and_then(Value::as_array)
+    let actions = cap_action_registry
+        .get("actions")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("capability-action-registry missing actions[]"))?;
-    let event_kinds = event_kind_registry.get("event_kinds").and_then(Value::as_array)
+    let event_kinds = event_kind_registry
+        .get("event_kinds")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
     let mut live_event_kinds: BTreeSet<String> = BTreeSet::new();
     for entry in event_kinds {
@@ -3000,29 +3097,48 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         let _risk = required_str(entry, "risk_tier")?;
         if let Some(targets) = entry.get("target_event_kinds").and_then(Value::as_array) {
             for t in targets {
-                let kind = t.as_str().ok_or_else(|| anyhow!("action {action_id} target_event_kind must be string"))?;
+                let kind = t.as_str().ok_or_else(|| {
+                    anyhow!("action {action_id} target_event_kind must be string")
+                })?;
                 if !live_event_kinds.contains(kind) {
-                    bail!("capability action {action_id} target_event_kind {kind} not in event-kind-registry");
+                    bail!(
+                        "capability action {action_id} target_event_kind {kind} not in event-kind-registry"
+                    );
                 }
             }
         }
     }
 
-    let vectors = fixture.get("vectors").and_then(Value::as_array)
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("operation_registry_coverage fixture missing vectors[]"))?;
     let mut covered: BTreeSet<&str> = BTreeSet::new();
     for v in vectors {
         let name = required_str(v, "name")?;
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
         if outcome == "tier_match" {
             let op = required_str(v, "operation_id")?;
-            let expected_tier = v.pointer("/expected/tier").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.tier"))?;
-            let live = op_tier.get(op).ok_or_else(|| anyhow!("vector {name} op {op} not in any surface_group"))?;
+            let expected_tier = v
+                .pointer("/expected/tier")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("vector {name} missing expected.tier"))?;
+            let live = op_tier
+                .get(op)
+                .ok_or_else(|| anyhow!("vector {name} op {op} not in any surface_group"))?;
             if live != expected_tier {
                 bail!("vector {name} tier drift: op {op} live={live}, expected={expected_tier}");
             }
         }
         covered.insert(name);
+        emit_vector(
+            "operation_registry_coverage.vector",
+            v,
+            json!({"name": name, "outcome": outcome}),
+        );
     }
     for required in [
         "every_operation_belongs_to_a_surface_group",
@@ -3039,14 +3155,19 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         }
     }
 
-    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("operation_registry_coverage fixture missing negative_vectors[]"))?;
     let mut neg_orphan = false;
     let mut neg_tier = false;
     let mut neg_target = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        let drift = v
+            .pointer("/drift/kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
         match drift {
             "operation_not_in_any_surface_group" => {
                 let synth = required_str(v, "synthetic_operation_id")?;
@@ -3058,7 +3179,9 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
             "tier_mismatch" => {
                 let op = required_str(v, "operation_id")?;
                 let claimed_tier = required_str(v, "claimed_tier")?;
-                let live = op_tier.get(op).ok_or_else(|| anyhow!("negative {name} op {op} not in surface_group"))?;
+                let live = op_tier
+                    .get(op)
+                    .ok_or_else(|| anyhow!("negative {name} op {op} not in surface_group"))?;
                 if live == claimed_tier {
                     bail!("negative {name} claimed_tier equals live — not a drift");
                 }
@@ -3075,7 +3198,9 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         }
     }
     if !(neg_orphan && neg_tier && neg_target) {
-        bail!("operation_registry_coverage fixture must cover orphaned op, tier mismatch, target dangling negatives");
+        bail!(
+            "operation_registry_coverage fixture must cover orphaned op, tier mismatch, target dangling negatives"
+        );
     }
 
     Ok(())
@@ -3087,17 +3212,26 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
     let fixture = load_local_fixture("error_code_registry_coverage_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.error_code_registry_coverage_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.error_code_registry_coverage_vectors.v1",
+    )?;
 
     let registry = super::load_artifact_json("registry/error-code-registry.json")?;
-    let codes_arr = registry.get("codes").and_then(Value::as_array)
+    let codes_arr = registry
+        .get("codes")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("error-code-registry missing codes[]"))?;
-    let valid_scopes: BTreeSet<&str> = ["client", "server", "both", "endpoint"].into_iter().collect();
+    let valid_scopes: BTreeSet<&str> = ["client", "server", "both", "endpoint"]
+        .into_iter()
+        .collect();
 
     let mut live_codes: BTreeMap<String, (i64, String)> = BTreeMap::new();
     for c in codes_arr {
         let code = required_str(c, "code")?;
-        let http = c.get("http_status").and_then(Value::as_i64)
+        let http = c
+            .get("http_status")
+            .and_then(Value::as_i64)
             .ok_or_else(|| anyhow!("code {code} missing http_status (integer)"))?;
         if !(400..=599).contains(&http) {
             bail!("code {code} has http_status {http} outside 400-599 range");
@@ -3113,49 +3247,94 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
         live_codes.insert(code.to_owned(), (http, scope.to_owned()));
     }
 
-    let expected_refs = fixture.get("expected_referenced_codes").and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("error_code_registry_coverage fixture missing expected_referenced_codes[]"))?;
+    let expected_refs = fixture
+        .get("expected_referenced_codes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow!("error_code_registry_coverage fixture missing expected_referenced_codes[]")
+        })?;
     for r in expected_refs {
         let code = required_str(r, "code")?;
-        let exp_http = r.get("expected_http_status").and_then(Value::as_i64)
+        let exp_http = r
+            .get("expected_http_status")
+            .and_then(Value::as_i64)
             .ok_or_else(|| anyhow!("ref {code} missing expected_http_status"))?;
         let exp_scope = required_str(r, "expected_scope")?;
-        let live = live_codes.get(code).ok_or_else(|| anyhow!("expected referenced code {code} missing from registry"))?;
+        let live = live_codes
+            .get(code)
+            .ok_or_else(|| anyhow!("expected referenced code {code} missing from registry"))?;
         if live.0 != exp_http {
-            bail!("code {code} http_status drift: live={}, expected={exp_http}", live.0);
+            bail!(
+                "code {code} http_status drift: live={}, expected={exp_http}",
+                live.0
+            );
         }
         if live.1 != exp_scope {
-            bail!("code {code} scope drift: live={}, expected={exp_scope}", live.1);
+            bail!(
+                "code {code} scope drift: live={}, expected={exp_scope}",
+                live.1
+            );
         }
     }
 
-    let vectors = fixture.get("vectors").and_then(Value::as_array)
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("error_code_registry_coverage fixture missing vectors[]"))?;
     for v in vectors {
         let name = required_str(v, "name")?;
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
         if outcome == "code_match" {
             let code = required_str(v, "code")?;
-            let live = live_codes.get(code).ok_or_else(|| anyhow!("vector {name} code {code} not in registry"))?;
-            let exp_http = v.pointer("/expected/http_status").and_then(Value::as_i64).ok_or_else(|| anyhow!("vector {name} missing expected.http_status"))?;
-            let exp_scope = v.pointer("/expected/scope").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.scope"))?;
+            let live = live_codes
+                .get(code)
+                .ok_or_else(|| anyhow!("vector {name} code {code} not in registry"))?;
+            let exp_http = v
+                .pointer("/expected/http_status")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| anyhow!("vector {name} missing expected.http_status"))?;
+            let exp_scope = v
+                .pointer("/expected/scope")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("vector {name} missing expected.scope"))?;
             if live.0 != exp_http {
-                bail!("vector {name} code {code} http_status drift: live={}, exp={exp_http}", live.0);
+                bail!(
+                    "vector {name} code {code} http_status drift: live={}, exp={exp_http}",
+                    live.0
+                );
             }
             if live.1 != exp_scope {
-                bail!("vector {name} code {code} scope drift: live={}, exp={exp_scope}", live.1);
+                bail!(
+                    "vector {name} code {code} scope drift: live={}, exp={exp_scope}",
+                    live.1
+                );
             }
         }
+        emit_vector(
+            "error_code_registry_coverage.vector",
+            v,
+            json!({"name": name, "outcome": outcome}),
+        );
     }
 
-    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("error_code_registry_coverage fixture missing negative_vectors[]"))?;
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow!("error_code_registry_coverage fixture missing negative_vectors[]")
+        })?;
     let mut neg_unknown = false;
     let mut neg_scope = false;
     let mut neg_status = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        let drift = v
+            .pointer("/drift/kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
         match drift {
             "code_not_in_registry" => {
                 let synth = required_str(v, "synthetic_code")?;
@@ -3172,7 +3351,10 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
                 neg_scope = true;
             }
             "http_status_out_of_range" => {
-                let synth = v.get("synthetic_http_status").and_then(Value::as_i64).ok_or_else(|| anyhow!("negative {name} missing synthetic_http_status"))?;
+                let synth = v
+                    .get("synthetic_http_status")
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| anyhow!("negative {name} missing synthetic_http_status"))?;
                 if (400..=599).contains(&synth) {
                     bail!("negative {name} synthetic http_status {synth} is in valid range");
                 }
@@ -3182,7 +3364,9 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
         }
     }
     if !(neg_unknown && neg_scope && neg_status) {
-        bail!("error_code_registry_coverage fixture must cover unknown code, invalid scope, out-of-range http_status negatives");
+        bail!(
+            "error_code_registry_coverage fixture must cover unknown code, invalid scope, out-of-range http_status negatives"
+        );
     }
 
     Ok(())
@@ -3193,12 +3377,20 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("state_resolution_quarantine_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.state_resolution_quarantine_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.state_resolution_quarantine_vectors.v1",
+    )?;
 
-    let vectors = fixture.get("vectors").and_then(Value::as_array)
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("state_resolution_quarantine fixture missing vectors[]"))?;
     if vectors.len() < 5 {
-        bail!("state_resolution_quarantine fixture has {} vectors, expected >= 5", vectors.len());
+        bail!(
+            "state_resolution_quarantine fixture has {} vectors, expected >= 5",
+            vectors.len()
+        );
     }
 
     let mut covered_quarantine = 0usize;
@@ -3208,37 +3400,68 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
         let name = required_str(v, "name")?;
         let lattice = required_str(v, "lattice")?;
         let bottom = required_str(v, "bottom")?;
-        let ops = v.get("ops").and_then(Value::as_array).ok_or_else(|| anyhow!("vector {name} missing ops[]"))?;
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        let ops = v
+            .get("ops")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("vector {name} missing ops[]"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
 
         match (lattice, bottom, outcome) {
             ("cas-register", "reject", "all_heads_quarantined")
             | ("fsm", "reject", "all_heads_quarantined") => {
-                let picks = v.pointer("/expected/reducer_picks_winner").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.reducer_picks_winner"))?;
+                let picks = v
+                    .pointer("/expected/reducer_picks_winner")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing expected.reducer_picks_winner")
+                    })?;
                 if picks {
                     bail!("vector {name} reducer_picks_winner must be false");
                 }
-                let admin = v.pointer("/expected/admin_escalation_required").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.admin_escalation_required"))?;
+                let admin = v
+                    .pointer("/expected/admin_escalation_required")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing expected.admin_escalation_required")
+                    })?;
                 if !admin {
                     bail!("vector {name} admin_escalation_required must be true");
                 }
-                let quarantined = v.pointer("/expected/quarantined_op_ids").and_then(Value::as_array).ok_or_else(|| anyhow!("vector {name} missing expected.quarantined_op_ids"))?;
+                let quarantined = v
+                    .pointer("/expected/quarantined_op_ids")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow!("vector {name} missing expected.quarantined_op_ids"))?;
                 let q_set: BTreeSet<&str> = quarantined.iter().filter_map(Value::as_str).collect();
-                let op_set: BTreeSet<&str> = ops.iter().filter_map(|o| o.get("op_id").and_then(Value::as_str)).collect();
+                let op_set: BTreeSet<&str> = ops
+                    .iter()
+                    .filter_map(|o| o.get("op_id").and_then(Value::as_str))
+                    .collect();
                 if q_set != op_set {
-                    bail!("vector {name} quarantined_op_ids must equal full ops[] set; q={q_set:?} ops={op_set:?}");
+                    bail!(
+                        "vector {name} quarantined_op_ids must equal full ops[] set; q={q_set:?} ops={op_set:?}"
+                    );
                 }
                 covered_quarantine += 1;
             }
             ("cas-register", "reject", "repair_admits_winner") => {
-                let escalation = v.get("admin_escalation").ok_or_else(|| anyhow!("vector {name} missing admin_escalation"))?;
+                let escalation = v
+                    .get("admin_escalation")
+                    .ok_or_else(|| anyhow!("vector {name} missing admin_escalation"))?;
                 let _ = required_str(escalation, "kind")?;
                 let _ = required_str(escalation, "endorsed_winner_op_id")?;
                 covered_admin_escalation = true;
                 covered_quarantine += 1;
             }
             ("or-set", "expose", "or_set_union") => {
-                let admin = v.pointer("/expected/admin_escalation_required").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.admin_escalation_required"))?;
+                let admin = v
+                    .pointer("/expected/admin_escalation_required")
+                    .and_then(Value::as_bool)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing expected.admin_escalation_required")
+                    })?;
                 if admin {
                     bail!("vector {name} or-set must NOT require admin escalation");
                 }
@@ -3246,6 +3469,11 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
             }
             (l, b, o) => bail!("vector {name} unexpected (lattice={l}, bottom={b}, outcome={o})"),
         }
+        emit_vector(
+            "state_resolution_quarantine.vector",
+            v,
+            json!({"name": name, "lattice": lattice, "bottom": bottom, "outcome": outcome}),
+        );
     }
 
     if covered_quarantine < 4 {
@@ -3258,13 +3486,18 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
         bail!("state_resolution_quarantine fixture must cover or-set non-quarantine union");
     }
 
-    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("state_resolution_quarantine fixture missing negative_vectors[]"))?;
     let mut saw_hlc = false;
     let mut saw_actor = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        let drift = v
+            .pointer("/drift/kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
         match drift {
             "hlc_tiebreak_attempt" => saw_hlc = true,
             "actor_priority_tiebreak_attempt" => saw_actor = true,
@@ -3272,7 +3505,9 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
         }
     }
     if !(saw_hlc && saw_actor) {
-        bail!("state_resolution_quarantine fixture must cover HLC tiebreak + actor priority forbidden vectors");
+        bail!(
+            "state_resolution_quarantine fixture must cover HLC tiebreak + actor priority forbidden vectors"
+        );
     }
 
     Ok(())
@@ -3285,21 +3520,35 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("membership_fsm_fixture.json")?;
     validate_profile(&fixture, "cx.profile.membership_fsm_vectors.v1")?;
 
-    let valid_states: BTreeSet<&str> = ["invited", "join", "leave", "ban", "kick", "knock"].into_iter().collect();
+    let valid_states: BTreeSet<&str> = ["invited", "join", "leave", "ban", "kick", "knock"]
+        .into_iter()
+        .collect();
     let legal_table: &[(&str, &str, bool)] = &[
-        ("invited", "join", false), ("invited", "leave", false), ("invited", "ban", true),
-        ("join", "leave", false), ("join", "ban", true), ("join", "kick", true),
-        ("leave", "invited", false), ("leave", "ban", true),
+        ("invited", "join", false),
+        ("invited", "leave", false),
+        ("invited", "ban", true),
+        ("join", "leave", false),
+        ("join", "ban", true),
+        ("join", "kick", true),
+        ("leave", "invited", false),
+        ("leave", "ban", true),
         ("ban", "leave", true),
-        ("kick", "invited", false), ("kick", "knock", false),
-        ("knock", "invited", false), ("knock", "leave", false),
+        ("kick", "invited", false),
+        ("kick", "knock", false),
+        ("knock", "invited", false),
+        ("knock", "leave", false),
     ];
     let legal_set: BTreeSet<(&str, &str)> = legal_table.iter().map(|(f, t, _)| (*f, *t)).collect();
 
-    let legal = fixture.get("legal_transitions").and_then(Value::as_array)
+    let legal = fixture
+        .get("legal_transitions")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("membership_fsm fixture missing legal_transitions[]"))?;
     if legal.len() < 8 {
-        bail!("membership_fsm fixture has {} legal_transitions, expected >= 8", legal.len());
+        bail!(
+            "membership_fsm fixture has {} legal_transitions, expected >= 8",
+            legal.len()
+        );
     }
     for v in legal {
         let name = required_str(v, "name")?;
@@ -3314,20 +3563,36 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
         if !legal_set.contains(&(from, to)) {
             bail!("legal {name}: transition {from}→{to} is NOT in canonical FSM table");
         }
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("legal {name} missing expected.outcome"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("legal {name} missing expected.outcome"))?;
         if outcome != "accept" {
             bail!("legal {name}: outcome must be accept, got {outcome}");
         }
-        let next = v.pointer("/expected/next_state").and_then(Value::as_str).ok_or_else(|| anyhow!("legal {name} missing expected.next_state"))?;
+        let next = v
+            .pointer("/expected/next_state")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("legal {name} missing expected.next_state"))?;
         if next != to {
             bail!("legal {name}: next_state {next} != to {to}");
         }
+        emit_vector(
+            "membership_fsm.legal",
+            v,
+            json!({"name": name, "from": from, "to": to, "next_state": next}),
+        );
     }
 
-    let illegal = fixture.get("illegal_transitions").and_then(Value::as_array)
+    let illegal = fixture
+        .get("illegal_transitions")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("membership_fsm fixture missing illegal_transitions[]"))?;
     if illegal.len() < 7 {
-        bail!("membership_fsm fixture has {} illegal_transitions, expected >= 7", illegal.len());
+        bail!(
+            "membership_fsm fixture has {} illegal_transitions, expected >= 7",
+            illegal.len()
+        );
     }
     for v in illegal {
         let name = required_str(v, "name")?;
@@ -3341,16 +3606,28 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
             bail!("illegal {name}: to state {to} not in known set");
         }
         let in_table = legal_set.contains(&(from, to));
-        let admin_required = legal_table.iter().find(|(f, t, _)| *f == from && *t == to).map(|(_, _, a)| *a).unwrap_or(false);
+        let admin_required = legal_table
+            .iter()
+            .find(|(f, t, _)| *f == from && *t == to)
+            .map(|(_, _, a)| *a)
+            .unwrap_or(false);
         let is_actually_illegal = !in_table || (admin_required && actor == "self");
         if !is_actually_illegal {
-            bail!("illegal {name}: transition {from}→{to} (actor={actor}) is actually legal in canonical table");
+            bail!(
+                "illegal {name}: transition {from}→{to} (actor={actor}) is actually legal in canonical table"
+            );
         }
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("illegal {name} missing expected.outcome"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("illegal {name} missing expected.outcome"))?;
         if outcome != "reject" {
             bail!("illegal {name}: outcome must be reject");
         }
-        let reason = v.pointer("/expected/reason_code").and_then(Value::as_str).ok_or_else(|| anyhow!("illegal {name} missing expected.reason_code"))?;
+        let reason = v
+            .pointer("/expected/reason_code")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("illegal {name} missing expected.reason_code"))?;
         if reason != "fsm_transition_forbidden" {
             bail!("illegal {name}: reason_code must be fsm_transition_forbidden, got {reason}");
         }
@@ -3367,13 +3644,27 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
     validate_profile(&fixture, "cx.profile.constraint_family_vectors.v1")?;
 
     let valid_types: BTreeSet<&str> = [
-        "temporal", "field_access", "type_restriction", "scope_limitation",
-        "delegation_control", "quota", "claim_based", "confidentiality",
-    ].into_iter().collect();
-    let valid_classes: BTreeSet<&str> = ["stateless", "grant_local", "space_state", "external"].into_iter().collect();
-    let valid_effects: BTreeSet<&str> = ["allow", "deny", "quarantine", "require_review"].into_iter().collect();
+        "temporal",
+        "field_access",
+        "type_restriction",
+        "scope_limitation",
+        "delegation_control",
+        "quota",
+        "claim_based",
+        "confidentiality",
+    ]
+    .into_iter()
+    .collect();
+    let valid_classes: BTreeSet<&str> = ["stateless", "grant_local", "space_state", "external"]
+        .into_iter()
+        .collect();
+    let valid_effects: BTreeSet<&str> = ["allow", "deny", "quarantine", "require_review"]
+        .into_iter()
+        .collect();
 
-    let vectors = fixture.get("vectors").and_then(Value::as_array)
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("constraint_family fixture missing vectors[]"))?;
 
     let mut covered_types: BTreeSet<String> = BTreeSet::new();
@@ -3383,7 +3674,9 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         if !valid_types.contains(ct) {
             bail!("vector {name} constraint_type {ct} not in schema enum");
         }
-        let constraint = v.get("constraint").ok_or_else(|| anyhow!("vector {name} missing constraint object"))?;
+        let constraint = v
+            .get("constraint")
+            .ok_or_else(|| anyhow!("vector {name} missing constraint object"))?;
         let body_ct = required_str(constraint, "constraint_type")?;
         if body_ct != ct {
             bail!("vector {name} constraint.constraint_type {body_ct} != outer {ct}");
@@ -3396,20 +3689,38 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         if !valid_classes.contains(class) {
             bail!("vector {name} evaluation_class {class} not valid");
         }
-        let outcome = v.pointer("/expected/outcome").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
+        let outcome = v
+            .pointer("/expected/outcome")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
         if outcome != "shape_ok" {
             bail!("vector {name} expected.outcome must be shape_ok");
         }
-        let exp_class = v.pointer("/expected/evaluation_class").and_then(Value::as_str).ok_or_else(|| anyhow!("vector {name} missing expected.evaluation_class"))?;
+        let exp_class = v
+            .pointer("/expected/evaluation_class")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.evaluation_class"))?;
         if exp_class != class {
-            bail!("vector {name} expected.evaluation_class {exp_class} != constraint.evaluation_class {class}");
+            bail!(
+                "vector {name} expected.evaluation_class {exp_class} != constraint.evaluation_class {class}"
+            );
         }
-        let fast = v.pointer("/expected/fast_path_eligible").and_then(Value::as_bool).ok_or_else(|| anyhow!("vector {name} missing expected.fast_path_eligible"))?;
+        let fast = v
+            .pointer("/expected/fast_path_eligible")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("vector {name} missing expected.fast_path_eligible"))?;
         let expect_fast = matches!(class, "stateless" | "grant_local");
         if fast != expect_fast {
-            bail!("vector {name} fast_path_eligible={fast} but evaluation_class={class} (expected fast={expect_fast})");
+            bail!(
+                "vector {name} fast_path_eligible={fast} but evaluation_class={class} (expected fast={expect_fast})"
+            );
         }
         covered_types.insert(ct.to_owned());
+        emit_vector(
+            "constraint_family.shape",
+            v,
+            json!({"name": name, "constraint_type": ct, "evaluation_class": class, "effect": effect, "fast_path_eligible": fast}),
+        );
     }
 
     for required in &valid_types {
@@ -3418,10 +3729,15 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         }
     }
 
-    let fast_tests = fixture.get("fast_path_tests").and_then(Value::as_array)
+    let fast_tests = fixture
+        .get("fast_path_tests")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("constraint_family fixture missing fast_path_tests[]"))?;
     if fast_tests.len() < 4 {
-        bail!("constraint_family fixture has {} fast_path_tests, expected >= 4", fast_tests.len());
+        bail!(
+            "constraint_family fixture has {} fast_path_tests, expected >= 4",
+            fast_tests.len()
+        );
     }
     let mut covered_classes: BTreeSet<String> = BTreeSet::new();
     for v in fast_tests {
@@ -3430,28 +3746,45 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         if !valid_classes.contains(class) {
             bail!("fast_path_test {name} evaluation_class {class} invalid");
         }
-        let cacheable = v.get("expected_cacheable").and_then(Value::as_bool).ok_or_else(|| anyhow!("fast_path_test {name} missing expected_cacheable"))?;
+        let cacheable = v
+            .get("expected_cacheable")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("fast_path_test {name} missing expected_cacheable"))?;
         let expect = matches!(class, "stateless" | "grant_local");
         if cacheable != expect {
-            bail!("fast_path_test {name} expected_cacheable={cacheable}, evaluation_class={class}, expected {expect}");
+            bail!(
+                "fast_path_test {name} expected_cacheable={cacheable}, evaluation_class={class}, expected {expect}"
+            );
         }
         covered_classes.insert(class.to_owned());
     }
     if covered_classes.len() < 4 {
-        bail!("constraint_family fixture fast_path_tests must cover all 4 evaluation_classes; got {} ({:?})", covered_classes.len(), covered_classes);
+        bail!(
+            "constraint_family fixture fast_path_tests must cover all 4 evaluation_classes; got {} ({:?})",
+            covered_classes.len(),
+            covered_classes
+        );
     }
 
-    let negatives = fixture.get("negative_vectors").and_then(Value::as_array)
+    let negatives = fixture
+        .get("negative_vectors")
+        .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("constraint_family fixture missing negative_vectors[]"))?;
     let mut saw_unknown = false;
     let mut saw_loosen = false;
     let mut saw_unknown_subtype = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let drift = v.pointer("/drift/kind").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
+        let drift = v
+            .pointer("/drift/kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("negative {name} missing drift.kind"))?;
         match drift {
             "unknown_constraint_type" => {
-                let body_ct = v.pointer("/constraint/constraint_type").and_then(Value::as_str).ok_or_else(|| anyhow!("negative {name} missing constraint.constraint_type"))?;
+                let body_ct = v
+                    .pointer("/constraint/constraint_type")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("negative {name} missing constraint.constraint_type"))?;
                 if valid_types.contains(body_ct) {
                     bail!("negative {name} constraint_type {body_ct} is actually valid");
                 }
@@ -3464,7 +3797,9 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
                 let canon_rank = class_strictness_rank(canonical);
                 let claimed_rank = class_strictness_rank(claimed);
                 if claimed_rank >= canon_rank {
-                    bail!("negative {name} claimed class {claimed} is not strictly looser than canonical {canonical}");
+                    bail!(
+                        "negative {name} claimed class {claimed} is not strictly looser than canonical {canonical}"
+                    );
                 }
                 saw_loosen = true;
             }
@@ -3475,14 +3810,19 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
         }
     }
     if !(saw_unknown && saw_loosen && saw_unknown_subtype) {
-        bail!("constraint_family fixture must cover unknown_constraint_type, evaluation_class loosen, unknown_subtype negatives");
+        bail!(
+            "constraint_family fixture must cover unknown_constraint_type, evaluation_class loosen, unknown_subtype negatives"
+        );
     }
 
     // C3-C6 — cross-family composition compositions: validate that the
     // combined_evaluation_class is the strictness-max of every member family
     // and fast_path_eligible follows accordingly. Optional in the fixture
     // (older fixtures may omit it); when present, all entries must validate.
-    if let Some(compositions) = fixture.get("cross_family_compositions").and_then(Value::as_array) {
+    if let Some(compositions) = fixture
+        .get("cross_family_compositions")
+        .and_then(Value::as_array)
+    {
         if compositions.len() < 4 {
             bail!(
                 "constraint_family fixture cross_family_compositions has {} entries, expected >= 4",
@@ -3520,10 +3860,8 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
                     max_class = class;
                 }
             }
-            let declared_combined = required_str(
-                v.pointer("/expected").unwrap(),
-                "combined_evaluation_class",
-            )?;
+            let declared_combined =
+                required_str(v.pointer("/expected").unwrap(), "combined_evaluation_class")?;
             if declared_combined != max_class {
                 bail!(
                     "composition {name} declared combined_evaluation_class={declared_combined} but max-of-families is {max_class}"
@@ -3625,9 +3963,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} missing envelope"))?;
         let envelope_id = required_str(envelope, "envelope_id")?;
         if !envelope_id.starts_with("cx:envelope:") {
-            bail!(
-                "vector {name} envelope_id {envelope_id} must use cx:envelope:<uuidv7> form"
-            );
+            bail!("vector {name} envelope_id {envelope_id} must use cx:envelope:<uuidv7> form");
         }
         let sender = required_str(envelope, "sender_device_id")?;
         let key_ref = required_str(envelope, "key_ref")?;
@@ -3714,9 +4050,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
                     .map(|a| a.iter().filter_map(Value::as_str).collect())
                     .unwrap_or_default();
                 if !dedup.contains(envelope_id) {
-                    bail!(
-                        "vector {name} replay variant must list envelope_id in dedup_cache_seen"
-                    );
+                    bail!("vector {name} replay variant must list envelope_id in dedup_cache_seen");
                 }
             }
             _ => unreachable!(),
@@ -3734,9 +4068,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
     ];
     for required in required_reasons {
         if !covered_reasons.contains(required) {
-            bail!(
-                "device_message_negative fixture must cover reason_code {required}"
-            );
+            bail!("device_message_negative fixture must cover reason_code {required}");
         }
     }
 
@@ -3748,7 +4080,10 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("redaction_history_visibility_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.redaction_history_visibility_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.redaction_history_visibility_vectors.v1",
+    )?;
 
     let vectors = fixture
         .get("vectors")
@@ -3761,8 +4096,9 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
         );
     }
 
-    let valid_visibility: BTreeSet<&str> =
-        ["world_readable", "shared", "joined", "invited"].into_iter().collect();
+    let valid_visibility: BTreeSet<&str> = ["world_readable", "shared", "joined", "invited"]
+        .into_iter()
+        .collect();
 
     let mut saw_author = false;
     let mut saw_member_hidden = false;
@@ -3793,9 +4129,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
         let redacts = required_str(redaction, "redacts")?;
         let original_id = required_str(original, "event_id")?;
         if redacts != original_id {
-            bail!(
-                "vector {name} redaction.redacts {redacts} != original.event_id {original_id}"
-            );
+            bail!("vector {name} redaction.redacts {redacts} != original.event_id {original_id}");
         }
 
         let expected = v
@@ -3813,9 +4147,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
         match (viewer_role, visibility) {
             ("author", _) => {
                 if !tombstone_visible || !original_visible {
-                    bail!(
-                        "vector {name} author MUST see both tombstone and original content"
-                    );
+                    bail!("vector {name} author MUST see both tombstone and original content");
                 }
                 saw_author = true;
             }
@@ -3840,34 +4172,38 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
                     }
                     let mv = v.get("unredaction_move").unwrap();
                     if required_str(mv, "kind")? != "cx.message.unredact" {
-                        bail!(
-                            "vector {name} unredaction_move kind must be cx.message.unredact"
-                        );
+                        bail!("vector {name} unredaction_move kind must be cx.message.unredact");
                     }
                     let removes = mv
                         .get("removes")
                         .and_then(Value::as_array)
                         .ok_or_else(|| anyhow!("vector {name} unredact missing removes[]"))?;
                     let red_id = required_str(redaction, "event_id")?;
-                    let listed: Vec<&str> =
-                        removes.iter().filter_map(Value::as_str).collect();
+                    let listed: Vec<&str> = removes.iter().filter_map(Value::as_str).collect();
                     if !listed.contains(&red_id) {
-                        bail!(
-                            "vector {name} unredact removes[] must reference redaction event_id"
-                        );
+                        bail!("vector {name} unredact removes[] must reference redaction event_id");
                     }
                     saw_unredact = true;
                 } else {
                     if !tombstone_visible || original_visible {
-                        bail!(
-                            "vector {name} member must see tombstone but NOT original content"
-                        );
+                        bail!("vector {name} member must see tombstone but NOT original content");
                     }
                     saw_member_hidden = true;
                 }
             }
             (role, vis) => bail!("vector {name} unexpected (viewer_role={role}, visibility={vis})"),
         }
+        emit_vector(
+            "redaction_history_visibility.vector",
+            v,
+            json!({
+                "name": name,
+                "history_visibility": visibility,
+                "viewer_role": viewer_role,
+                "tombstone_visible": tombstone_visible,
+                "original_content_visible": original_visible,
+            }),
+        );
     }
 
     if !(saw_author && saw_member_hidden && saw_world_readable_remove && saw_unredact) {
@@ -3883,7 +4219,10 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
 /// reserved-name collision rejection.
 pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_key_encoding_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.composite_state_key_encoding_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.composite_state_key_encoding_vectors.v1",
+    )?;
 
     let vectors = fixture
         .get("vectors")
@@ -3904,9 +4243,7 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
         let expected_cj = required_str(v, "expected_canonical_json")?;
         let actual_cj = canonical_json(components)?;
         if actual_cj != expected_cj {
-            bail!(
-                "vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}"
-            );
+            bail!("vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}");
         }
         let expected_subject = required_str(v, "expected_state_subject")?;
         let actual_subject = compute_state_subject(components)?;
@@ -3915,13 +4252,24 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
                 "vector {name} state_subject drift: expected {expected_subject}, got {actual_subject}"
             );
         }
+        emit_vector(
+            "composite_state_key_encoding.encoded",
+            v,
+            json!({
+                "name": name,
+                "state_subject": actual_subject,
+                "canonical_json": actual_cj,
+            }),
+        );
     }
 
     // Ordering-negative: the wrong-order array MUST hash to a different subject.
     let ordering = fixture
         .get("ordering_negative_vectors")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("composite_state_key_encoding fixture missing ordering_negative_vectors[]"))?;
+        .ok_or_else(|| {
+            anyhow!("composite_state_key_encoding fixture missing ordering_negative_vectors[]")
+        })?;
     let mut saw_ordering = false;
     for v in ordering {
         let name = required_str(v, "name")?;
@@ -3948,7 +4296,9 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     let reserved = fixture
         .get("reserved_name_negatives")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("composite_state_key_encoding fixture missing reserved_name_negatives[]"))?;
+        .ok_or_else(|| {
+            anyhow!("composite_state_key_encoding fixture missing reserved_name_negatives[]")
+        })?;
     if reserved.len() < 2 {
         bail!(
             "composite_state_key_encoding fixture must include >= 2 reserved-name negatives (one per reserved token)"
@@ -3969,9 +4319,7 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
             bail!("reserved negative {name} outcome must be reject");
         }
         if required_str(expected, "reason_code")? != "reserved_state_subject_component" {
-            bail!(
-                "reserved negative {name} reason_code must be reserved_state_subject_component"
-            );
+            bail!("reserved negative {name} reason_code must be reserved_state_subject_component");
         }
         let token = required_str(expected, "reserved_token")?;
         let token_present = components.iter().any(|c| c.as_str() == Some(token));
@@ -4038,7 +4386,9 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
                 let frontier = v
                     .pointer("/expected/covered_frontier_after")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("vector {name} missing expected.covered_frontier_after"))?;
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing expected.covered_frontier_after")
+                    })?;
                 if !frontier.is_empty() {
                     bail!("vector {name} genesis must yield empty covered_frontier");
                 }
@@ -4082,8 +4432,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
                 if added.is_empty() {
                     bail!("vector {name} join must declare members_added");
                 }
-                let computed_after: BTreeSet<&str> =
-                    prior_members.union(&added).copied().collect();
+                let computed_after: BTreeSet<&str> = prior_members.union(&added).copied().collect();
                 if computed_after != after_members {
                     bail!(
                         "vector {name} members_after {after_members:?} != prior_members ∪ members_added {computed_after:?}"
@@ -4146,9 +4495,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
                     .map(|a| a.iter().filter_map(Value::as_str).collect())
                     .unwrap_or_default();
                 if frontier_after.len() != 3 {
-                    bail!(
-                        "vector {name} covered_frontier_after must have all 3 attested refs"
-                    );
+                    bail!("vector {name} covered_frontier_after must have all 3 attested refs");
                 }
                 saw_frontier_accum = true;
             }
@@ -4166,20 +4513,23 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
                 if inputs[0].as_str() != Some(move_id) {
                     bail!("vector {name} AAD inputs[0] must be move_id");
                 }
-                if required_str(
-                    v.pointer("/expected").unwrap(),
-                    "aad_pinning",
-                )? != "sha256"
-                {
+                if required_str(v.pointer("/expected").unwrap(), "aad_pinning")? != "sha256" {
                     bail!("vector {name} aad_pinning must be sha256");
                 }
                 saw_aad_pin = true;
             }
             other => bail!("vector unexpected name {other}"),
         }
+        emit_vector("mls_e2ee_basic.vector", v, json!({"name": name}));
     }
 
-    if !(saw_genesis && saw_epoch_advance && saw_member_join && saw_member_leave && saw_frontier_accum && saw_aad_pin) {
+    if !(saw_genesis
+        && saw_epoch_advance
+        && saw_member_join
+        && saw_member_leave
+        && saw_frontier_accum
+        && saw_aad_pin)
+    {
         bail!(
             "mls_e2ee_basic fixture must cover genesis + epoch_advance + member_join + member_leave + frontier_accum + aad_pin"
         );
@@ -4224,9 +4574,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
         }
     }
     if !(saw_skip && saw_aad_mismatch) {
-        bail!(
-            "mls_e2ee_basic fixture must cover epoch_skip + aad_mismatch negatives"
-        );
+        bail!("mls_e2ee_basic fixture must cover epoch_skip + aad_mismatch negatives");
     }
 
     Ok(())
@@ -4270,9 +4618,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
                     .get("self_signing_key")
                     .ok_or_else(|| anyhow!("vector {name} missing self_signing_key"))?;
                 if required_str(self_sign, "signed_by")? != master_id {
-                    bail!(
-                        "vector {name} self_signing_key.signed_by must point to master_key"
-                    );
+                    bail!("vector {name} self_signing_key.signed_by must point to master_key");
                 }
                 let leaves = v
                     .get("device_leaf_keys")
@@ -4362,10 +4708,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
                 if !revoked {
                     bail!("vector {name} master_key.revoked must be true");
                 }
-                let outcome = required_str(
-                    v.pointer("/expected").unwrap(),
-                    "outcome",
-                )?;
+                let outcome = required_str(v.pointer("/expected").unwrap(), "outcome")?;
                 if outcome != "reject" {
                     bail!("vector {name} outcome must be reject");
                 }
@@ -4378,6 +4721,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
             }
             other => bail!("vector unexpected name {other}"),
         }
+        emit_vector("device_verification.vector", v, json!({"name": name}));
     }
 
     if !(saw_cross_sign && saw_user_sign && saw_sas && saw_emoji && saw_revoked_master) {
@@ -4469,6 +4813,11 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
                 }
                 saw_admin_override = true;
             }
+            emit_vector(
+                "history_visibility.admin_override",
+                v,
+                json!({"name": name, "visibility": visibility}),
+            );
             continue;
         }
 
@@ -4485,6 +4834,11 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
                 }
             }
             saw_redacted_view = true;
+            emit_vector(
+                "history_visibility.redacted",
+                v,
+                json!({"name": name, "visibility": visibility}),
+            );
             continue;
         }
 
@@ -4493,9 +4847,7 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
         let viewer = v
             .get("viewer")
             .ok_or_else(|| anyhow!("vector {name} missing viewer"))?;
-        let membership = viewer
-            .get("membership_state")
-            .and_then(Value::as_str);
+        let membership = viewer.get("membership_state").and_then(Value::as_str);
         if membership == Some("ban") {
             saw_ban_transition = true;
         }
@@ -4556,6 +4908,17 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
                 );
             }
         }
+        emit_vector(
+            "history_visibility.projection",
+            v,
+            json!({
+                "name": name,
+                "visibility": visibility,
+                "membership": membership,
+                "visible_count": visible_expected.len(),
+                "hidden_count": hidden_expected.len(),
+            }),
+        );
     }
 
     let required_visibilities = ["joined", "invited", "world_readable", "shared"];
@@ -4585,9 +4948,8 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
         if outcome != "reject" {
             bail!("negative {name} outcome must be reject");
         }
-        let reason = expected_reason(v).ok_or_else(|| {
-            anyhow!("negative {name} missing expected.reason_code")
-        })?;
+        let reason = expected_reason(v)
+            .ok_or_else(|| anyhow!("negative {name} missing expected.reason_code"))?;
         if !["history_visibility_denied", "capability_not_held"].contains(&reason) {
             bail!("negative {name} unknown reason_code {reason}");
         }
@@ -4726,9 +5088,7 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
                 kdf.expand(info, &mut next)
                     .map_err(|e| anyhow!("HKDF expand failed: {e}"))?;
                 if next == seed {
-                    bail!(
-                        "vector {name} HKDF output equals seed — KDF must be non-identity"
-                    );
+                    bail!("vector {name} HKDF output equals seed — KDF must be non-identity");
                 }
                 saw_advance = true;
             }
@@ -4772,13 +5132,9 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
                 let leaver_can_new = v
                     .pointer("/expected/leaver_can_decrypt_new")
                     .and_then(Value::as_bool)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} missing leaver_can_decrypt_new")
-                    })?;
+                    .ok_or_else(|| anyhow!("vector {name} missing leaver_can_decrypt_new"))?;
                 if leaver_can_new {
-                    bail!(
-                        "vector {name} forward-secrecy bound: leaver MUST NOT decrypt new chain"
-                    );
+                    bail!("vector {name} forward-secrecy bound: leaver MUST NOT decrypt new chain");
                 }
                 saw_rotation = true;
             }
@@ -4793,17 +5149,14 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
                 let window_start = v
                     .get("recipient_window_start")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} missing recipient_window_start")
-                    })?;
+                    .ok_or_else(|| anyhow!("vector {name} missing recipient_window_start"))?;
                 if earlier >= window_start {
                     bail!(
                         "vector {name} earlier_index ({earlier}) MUST be strictly before window_start ({window_start})"
                     );
                 }
-                let reason = expected_reason(v).ok_or_else(|| {
-                    anyhow!("vector {name} missing reason_code")
-                })?;
+                let reason = expected_reason(v)
+                    .ok_or_else(|| anyhow!("vector {name} missing reason_code"))?;
                 if reason != "forward_secrecy_bound_violation" {
                     bail!("vector {name} reason_code must be forward_secrecy_bound_violation");
                 }
@@ -4811,6 +5164,11 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
             }
             other => bail!("vector unexpected name {other}"),
         }
+        emit_vector(
+            "megolm_ratcheting.vector",
+            v,
+            json!({"name": name, "outcome": outcome}),
+        );
     }
 
     if !(saw_seed && saw_advance && saw_old_decrypt && saw_rotation && saw_forward_bound) {
@@ -4826,9 +5184,8 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
     let mut saw_reuse = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let reason = expected_reason(v).ok_or_else(|| {
-            anyhow!("negative {name} missing reason_code")
-        })?;
+        let reason =
+            expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
         match reason {
             "ratchet_index_non_monotonic" => {
                 let prior = v
@@ -4961,16 +5318,12 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                     .and_then(Value::as_u64)
                     .ok_or_else(|| anyhow!("vector {name} missing kdf_iterations"))?;
                 if iters < 600_000 {
-                    bail!(
-                        "vector {name} kdf_iterations {iters} below spec floor 600000"
-                    );
+                    bail!("vector {name} kdf_iterations {iters} below spec floor 600000");
                 }
                 let key_len = v
                     .get("master_key_length_bytes")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} missing master_key_length_bytes")
-                    })?;
+                    .ok_or_else(|| anyhow!("vector {name} missing master_key_length_bytes"))?;
                 if key_len != 32 {
                     bail!("vector {name} master_key_length_bytes must be 32");
                 }
@@ -4987,9 +5340,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                 let opaque = v
                     .pointer("/expected/server_seen_plaintext")
                     .and_then(Value::as_bool)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} missing server_seen_plaintext")
-                    })?;
+                    .ok_or_else(|| anyhow!("vector {name} missing server_seen_plaintext"))?;
                 if opaque {
                     bail!("vector {name} server_seen_plaintext MUST be false");
                 }
@@ -5028,6 +5379,11 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
             }
             other => bail!("vector unexpected name {other}"),
         }
+        emit_vector(
+            "key_backup_encryption.vector",
+            v,
+            json!({"name": name, "outcome": outcome}),
+        );
     }
     if !(saw_kdf && saw_opaque && saw_restore && saw_rotation_vector) {
         bail!("key_backup_encryption fixture missing coverage");
@@ -5041,7 +5397,8 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     let mut saw_wrong_pp = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let reason = expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
+        let reason =
+            expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
         match reason {
             "kdf_iteration_count_too_low" => {
                 let iters = v
@@ -5049,9 +5406,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                     .and_then(Value::as_u64)
                     .ok_or_else(|| anyhow!("negative {name} missing kdf_iterations"))?;
                 if iters >= 600_000 {
-                    bail!(
-                        "negative {name} declares low_iter but kdf_iterations {iters} >= 600000"
-                    );
+                    bail!("negative {name} declares low_iter but kdf_iterations {iters} >= 600000");
                 }
                 saw_low_iter = true;
             }
@@ -5083,7 +5438,10 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
 /// and asserts fast/slow path classification matches.
 pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("constraint_evaluation_class_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.constraint_evaluation_class_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.constraint_evaluation_class_vectors.v1",
+    )?;
 
     let mapping = fixture
         .get("canonical_mapping")
@@ -5160,7 +5518,11 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
             .pointer("/expected/classification")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("vector {name} missing expected.classification"))?;
-        let expect_classification = if expect_fast { "fast_path" } else { "slow_path" };
+        let expect_classification = if expect_fast {
+            "fast_path"
+        } else {
+            "slow_path"
+        };
         if classification != expect_classification {
             bail!(
                 "vector {name} classification {classification} disagrees with class {class} (expected {expect_classification})"
@@ -5172,6 +5534,17 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
             slow_seen = true;
         }
         covered_families.insert(family.to_owned());
+        emit_vector(
+            "constraint_evaluation_class.classify",
+            v,
+            json!({
+                "name": name,
+                "family": family,
+                "evaluation_class": class,
+                "fast_path_eligible": fast,
+                "classification": classification,
+            }),
+        );
     }
     let required_families = [
         "temporal",
@@ -5185,15 +5558,11 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
     ];
     for required in required_families {
         if !covered_families.contains(required) {
-            bail!(
-                "constraint_evaluation_class fixture missing coverage for family {required}"
-            );
+            bail!("constraint_evaluation_class fixture missing coverage for family {required}");
         }
     }
     if !(fast_seen && slow_seen) {
-        bail!(
-            "constraint_evaluation_class fixture must cover both fast-path and slow-path"
-        );
+        bail!("constraint_evaluation_class fixture must cover both fast-path and slow-path");
     }
 
     let negatives = fixture
@@ -5202,9 +5571,8 @@ pub fn run_constraint_evaluation_class_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("constraint_evaluation_class fixture missing negative_vectors[]"))?;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let reason = expected_reason(v).ok_or_else(|| {
-            anyhow!("negative {name} missing reason_code")
-        })?;
+        let reason =
+            expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
         if reason != "evaluation_class_mismatch" {
             bail!("negative {name} reason_code must be evaluation_class_mismatch");
         }
@@ -5257,7 +5625,11 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
         "restore_execute",
         "final_state_observe",
     ];
-    let valid_actions = ["recover_session_grants", "restore_key_backup", "rotate_recovery_key"];
+    let valid_actions = [
+        "recover_session_grants",
+        "restore_key_backup",
+        "rotate_recovery_key",
+    ];
 
     let mut covered_steps = std::collections::BTreeSet::<String>::new();
     for v in vectors {
@@ -5292,9 +5664,7 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
                     .and_then(Value::as_u64)
                     .ok_or_else(|| anyhow!("vector {name} missing approvals_received"))?;
                 if received < required {
-                    bail!(
-                        "vector {name} approvals_received {received} < required {required}"
-                    );
+                    bail!("vector {name} approvals_received {received} < required {required}");
                 }
             }
             "recovery_ticket_mint" => {
@@ -5346,6 +5716,11 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
             _ => unreachable!(),
         }
         covered_steps.insert(step.to_owned());
+        emit_vector(
+            "recovery_bridge_full_chain.step",
+            v,
+            json!({"name": name, "step": step, "outcome": outcome}),
+        );
     }
     if covered_steps.len() < 3 {
         bail!(
@@ -5362,7 +5737,8 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
     let mut saw_double_consume = false;
     for v in negatives {
         let name = required_str(v, "name")?;
-        let reason = expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
+        let reason =
+            expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
         match reason {
             "recovery_proof_expired" => {
                 let in_past = v
@@ -5377,9 +5753,7 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
             "ticket_already_consumed" => {
                 let before = required_str(v, "ticket_state_before")?;
                 if before != "executed" {
-                    bail!(
-                        "negative {name} double-consume ticket_state_before must be executed"
-                    );
+                    bail!("negative {name} double-consume ticket_state_before must be executed");
                 }
                 let outcome = expected_outcome(v, name)?;
                 if outcome != "idempotent_replay" {
@@ -5393,9 +5767,7 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
         }
     }
     if !(saw_expired && saw_double_consume) {
-        bail!(
-            "recovery_bridge_full_chain negatives must cover expired_proof + double_consume"
-        );
+        bail!("recovery_bridge_full_chain negatives must cover expired_proof + double_consume");
     }
 
     Ok(())
@@ -5484,10 +5856,10 @@ pub fn run_recovery_ticket_state_machine_check() -> Result<()> {
         }
     }
     let illegal_paths: &[&[&str]] = &[
-        &["executing", "executed"],            // missing issued
-        &["issued", "executed"],                // skip executing
-        &["issued", "executing", "issued"],    // backward
-        &["issued", "expired", "executing"],   // post-terminal
+        &["executing", "executed"],          // missing issued
+        &["issued", "executed"],             // skip executing
+        &["issued", "executing", "issued"],  // backward
+        &["issued", "expired", "executing"], // post-terminal
     ];
     for path in illegal_paths {
         if validate_ticket_state_transitions(path) {
@@ -5526,7 +5898,15 @@ pub fn run_history_visibility_projection_matrix_check() -> Result<()> {
         ("invited", Some("invite"), None, Some(200), None, 250, true),
         ("invited", Some("join"), Some(100), Some(80), None, 90, true),
         // shared: members use join_ts; non-members use shared_since_ts.
-        ("shared", Some("join"), Some(100), None, Some(200), 150, true),
+        (
+            "shared",
+            Some("join"),
+            Some(100),
+            None,
+            Some(200),
+            150,
+            true,
+        ),
         ("shared", None, None, None, Some(200), 150, false),
         ("shared", None, None, None, Some(200), 250, true),
     ];
@@ -5662,9 +6042,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
         }
         if let Some(aus) = v.get("alice_user_signing") {
             if required_str(aus, "signed_by")? != "did:cx:user:alice#master" {
-                bail!(
-                    "vector {name} alice_user_signing.signed_by must be alice#master"
-                );
+                bail!("vector {name} alice_user_signing.signed_by must be alice#master");
             }
         }
 
@@ -5674,25 +6052,19 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                     .get("bob_master")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_master"))?;
                 if required_str(bm, "signed_by")? != "did:cx:user:alice#user-signing" {
-                    bail!(
-                        "vector {name} bob_master must be signed by alice#user-signing"
-                    );
+                    bail!("vector {name} bob_master must be signed by alice#user-signing");
                 }
                 let bss = v
                     .get("bob_self_signing")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_self_signing"))?;
                 if required_str(bss, "signed_by")? != "did:cx:user:bob#master" {
-                    bail!(
-                        "vector {name} bob_self_signing must be signed by bob#master"
-                    );
+                    bail!("vector {name} bob_self_signing must be signed by bob#master");
                 }
                 let bdl = v
                     .get("bob_device_leaf")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_device_leaf"))?;
                 if required_str(bdl, "signed_by")? != "did:cx:user:bob#self-signing" {
-                    bail!(
-                        "vector {name} bob_device_leaf must be signed by bob#self-signing"
-                    );
+                    bail!("vector {name} bob_device_leaf must be signed by bob#self-signing");
                 }
                 let path: Vec<&str> = v
                     .pointer("/expected/trust_path")
@@ -5722,9 +6094,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
                 if !trans {
-                    bail!(
-                        "vector {name} expected.transitively_trusted must be true"
-                    );
+                    bail!("vector {name} expected.transitively_trusted must be true");
                 }
                 if outcome != "accept" {
                     bail!("vector {name} outcome must be accept");
@@ -5743,9 +6113,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                     bail!("vector {name} outcome must be reject");
                 }
                 if expected_reason(v) != Some("trust_anchor_master_revoked") {
-                    bail!(
-                        "vector {name} reason_code must be trust_anchor_master_revoked"
-                    );
+                    bail!("vector {name} reason_code must be trust_anchor_master_revoked");
                 }
                 saw_revoke = true;
             }
@@ -5764,17 +6132,13 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
                 if !needs_re {
-                    bail!(
-                        "vector {name} bob_user_signing_new.needs_re_anchor must be true"
-                    );
+                    bail!("vector {name} bob_user_signing_new.needs_re_anchor must be true");
                 }
                 if outcome != "reject" {
                     bail!("vector {name} outcome must be reject pending re-anchor");
                 }
                 if expected_reason(v) != Some("trust_anchor_stale_after_rotation") {
-                    bail!(
-                        "vector {name} reason_code must be trust_anchor_stale_after_rotation"
-                    );
+                    bail!("vector {name} reason_code must be trust_anchor_stale_after_rotation");
                 }
                 saw_rotate = true;
             }
@@ -5783,18 +6147,19 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                     bail!("vector {name} outcome must be reject");
                 }
                 if expected_reason(v) != Some("trust_anchor_alg_disallowed") {
-                    bail!(
-                        "vector {name} reason_code must be trust_anchor_alg_disallowed"
-                    );
+                    bail!("vector {name} reason_code must be trust_anchor_alg_disallowed");
                 }
             }
             other => bail!("device_cross_signing_trust unexpected vector {other}"),
         }
+        emit_vector(
+            "device_cross_signing_trust.vector",
+            v,
+            json!({"name": name, "outcome": outcome, "trust_anchor_actor_did": trust_anchor_actor}),
+        );
     }
     if !(saw_full_chain && saw_transitive && saw_revoke && saw_rotate) {
-        bail!(
-            "device_cross_signing_trust must cover full_chain + transitive + revoke + rotate"
-        );
+        bail!("device_cross_signing_trust must cover full_chain + transitive + revoke + rotate");
     }
     Ok(())
 }
@@ -5842,10 +6207,14 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
                 // pulled space's frontier.
                 let f1 = v
                     .pointer("/expected/server_b_frontier_after_S1_pull")
-                    .ok_or_else(|| anyhow!("vector {name} missing server_b_frontier_after_S1_pull"))?;
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing server_b_frontier_after_S1_pull")
+                    })?;
                 let f2 = v
                     .pointer("/expected/server_b_frontier_after_S2_pull")
-                    .ok_or_else(|| anyhow!("vector {name} missing server_b_frontier_after_S2_pull"))?;
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing server_b_frontier_after_S2_pull")
+                    })?;
                 if f1.get("space_S1").and_then(Value::as_u64) != Some(1)
                     || f1.get("space_S2").and_then(Value::as_u64) != Some(0)
                 {
@@ -5883,9 +6252,7 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
                     bail!("vector {name} outcome must be reject");
                 }
                 if expected_reason(v) != Some("cross_space_move_forbidden") {
-                    bail!(
-                        "vector {name} reason_code must be cross_space_move_forbidden"
-                    );
+                    bail!("vector {name} reason_code must be cross_space_move_forbidden");
                 }
                 let claimed = v
                     .pointer("/push_payload/claimed_space_id")
@@ -5896,9 +6263,7 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("vector {name} missing actual_anchor_space_id"))?;
                 if claimed == actual {
-                    bail!(
-                        "vector {name} cross-space negative requires claimed != actual space_id"
-                    );
+                    bail!("vector {name} cross-space negative requires claimed != actual space_id");
                 }
                 saw_cross_reject = true;
             }
@@ -5948,6 +6313,11 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
             }
             other => bail!("multi_space_federation unexpected vector {other}"),
         }
+        emit_vector(
+            "multi_space_federation.vector",
+            v,
+            json!({"name": name, "outcome": outcome}),
+        );
     }
     if !(saw_isolation && saw_concurrent && saw_cross_reject && saw_per_space_seq) {
         bail!(
@@ -5960,7 +6330,10 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
 /// E4 Round 27 — frontier conflict resolution via lattice join.
 pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("frontier_conflict_resolution_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.frontier_conflict_resolution_vectors.v1")?;
+    validate_profile(
+        &fixture,
+        "cx.profile.frontier_conflict_resolution_vectors.v1",
+    )?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -5992,9 +6365,7 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} missing expected.resolution"))?;
         match (kind, resolution) {
             ("cas_register", "bottom") => {
-                let diag = v
-                    .pointer("/expected/diagnostic")
-                    .and_then(Value::as_str);
+                let diag = v.pointer("/expected/diagnostic").and_then(Value::as_str);
                 if diag != Some("cas_register_conflict") {
                     bail!(
                         "vector {name} cas_register conflict diagnostic must be cas_register_conflict"
@@ -6009,9 +6380,7 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
                     if !idem {
-                        bail!(
-                            "vector {name} second_pull_replay must claim idempotent_replay"
-                        );
+                        bail!("vector {name} second_pull_replay must claim idempotent_replay");
                     }
                     saw_idempotent = true;
                 } else {
@@ -6025,9 +6394,7 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
                     .map(|a| a.iter().filter_map(Value::as_str).collect())
                     .unwrap_or_default();
                 if final_set.len() < 2 {
-                    bail!(
-                        "vector {name} or_set union must contain at least 2 elements"
-                    );
+                    bail!("vector {name} or_set union must contain at least 2 elements");
                 }
                 saw_or_set_union = true;
             }
@@ -6041,16 +6408,17 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
                     .and_then(Value::as_i64)
                     .ok_or_else(|| anyhow!("vector {name} missing final_count"))?;
                 if total != final_count {
-                    bail!(
-                        "vector {name} sum {total} != expected final_count {final_count}"
-                    );
+                    bail!("vector {name} sum {total} != expected final_count {final_count}");
                 }
                 saw_counter_sum = true;
             }
-            (k, r) => bail!(
-                "vector {name} unexpected (kind, resolution) pair ({k}, {r})"
-            ),
+            (k, r) => bail!("vector {name} unexpected (kind, resolution) pair ({k}, {r})"),
         }
+        emit_vector(
+            "frontier_conflict_resolution.vector",
+            v,
+            json!({"name": name, "cell_kind": kind, "resolution": resolution}),
+        );
     }
     if !(saw_cas_bottom && saw_or_set_union && saw_counter_sum && saw_idempotent) {
         bail!(
@@ -6098,8 +6466,14 @@ pub fn run_late_arriving_anchor_fixture_suite() -> Result<()> {
             .and_then(Value::as_array)
             .map(|a| a.iter().filter_map(Value::as_str).collect())
             .unwrap_or_default();
-        let count_before = before.get("message_count").and_then(Value::as_u64).unwrap_or(0);
-        let count_after = after.get("message_count").and_then(Value::as_u64).unwrap_or(0);
+        let count_before = before
+            .get("message_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let count_after = after
+            .get("message_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         let new_projections = projected_after.len() as i64 - projected_before.len() as i64;
         let count_delta = count_after as i64 - count_before as i64;
         if new_projections != count_delta {
@@ -6125,7 +6499,11 @@ pub fn run_late_arriving_anchor_fixture_suite() -> Result<()> {
                 saw_mixed = true;
             }
             "duplicate_anchor_application_no_double_effect" => {
-                if !v.get("duplicate_apply").and_then(Value::as_bool).unwrap_or(false) {
+                if !v
+                    .get("duplicate_apply")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
                     bail!("vector {name} duplicate_apply must be true");
                 }
                 if count_delta != 0 {
@@ -6137,11 +6515,18 @@ pub fn run_late_arriving_anchor_fixture_suite() -> Result<()> {
             }
             other => bail!("late_arriving_anchor unexpected vector {other}"),
         }
+        emit_vector(
+            "late_arriving_anchor.vector",
+            v,
+            json!({
+                "name": name,
+                "count_delta": count_delta,
+                "new_projections": new_projections,
+            }),
+        );
     }
     if !(saw_metadata_only && saw_mixed && saw_duplicate) {
-        bail!(
-            "late_arriving_anchor must cover metadata_only + mixed + duplicate_apply"
-        );
+        bail!("late_arriving_anchor must cover metadata_only + mixed + duplicate_apply");
     }
     Ok(())
 }
@@ -6183,27 +6568,19 @@ pub fn run_redacted_cross_server_fixture_suite() -> Result<()> {
         match name {
             "redaction_propagates_to_peer_b_member_sees_tombstone" => {
                 if viewer_is_author {
-                    bail!(
-                        "vector {name} viewer_is_author must be false for member-tombstone case"
-                    );
+                    bail!("vector {name} viewer_is_author must be false for member-tombstone case");
                 }
                 if projection != "tombstone_only" || body_visible {
-                    bail!(
-                        "vector {name} member view must be tombstone_only with body hidden"
-                    );
+                    bail!("vector {name} member view must be tombstone_only with body hidden");
                 }
                 saw_member_tombstone = true;
             }
             "redaction_propagates_author_audit_view_full_body" => {
                 if !viewer_is_author {
-                    bail!(
-                        "vector {name} viewer_is_author must be true for author audit"
-                    );
+                    bail!("vector {name} viewer_is_author must be true for author audit");
                 }
                 if projection != "audit_view" || !body_visible {
-                    bail!(
-                        "vector {name} author view must be audit_view with body visible"
-                    );
+                    bail!("vector {name} author view must be audit_view with body visible");
                 }
                 saw_author_audit = true;
             }
@@ -6213,24 +6590,28 @@ pub fn run_redacted_cross_server_fixture_suite() -> Result<()> {
                     .and_then(Value::as_bool)
                     .unwrap_or(false)
                 {
-                    bail!(
-                        "vector {name} redaction_then_un_redaction must be true"
-                    );
+                    bail!("vector {name} redaction_then_un_redaction must be true");
                 }
                 if !body_visible || projection != "body_visible" {
-                    bail!(
-                        "vector {name} un-redaction must restore body_visible"
-                    );
+                    bail!("vector {name} un-redaction must restore body_visible");
                 }
                 saw_un_redaction = true;
             }
             other => bail!("redacted_cross_server unexpected vector {other}"),
         }
+        emit_vector(
+            "redacted_cross_server.vector",
+            v,
+            json!({
+                "name": name,
+                "viewer_is_author": viewer_is_author,
+                "projection": projection,
+                "body_visible": body_visible,
+            }),
+        );
     }
     if !(saw_member_tombstone && saw_author_audit && saw_un_redaction) {
-        bail!(
-            "redacted_cross_server must cover member_tombstone + author_audit + un_redaction"
-        );
+        bail!("redacted_cross_server must cover member_tombstone + author_audit + un_redaction");
     }
     Ok(())
 }
@@ -6293,9 +6674,7 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("vector {name} missing stage_after_second_approval"))?;
                 if after_first != "approving" || after_second != "approved" {
-                    bail!(
-                        "vector {name} multi-admin gate must transition approving → approved"
-                    );
+                    bail!("vector {name} multi-admin gate must transition approving → approved");
                 }
                 saw_two_of_two_approval = true;
             }
@@ -6304,9 +6683,7 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                     bail!("vector {name} outcome must be reject (dedup)");
                 }
                 if expected_reason(v) != Some("duplicate_approver") {
-                    bail!(
-                        "vector {name} reason_code must be duplicate_approver"
-                    );
+                    bail!("vector {name} reason_code must be duplicate_approver");
                 }
                 saw_duplicate_approver = true;
             }
@@ -6314,7 +6691,11 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                 if outcome != "accept" {
                     bail!("vector {name} outcome must be accept");
                 }
-                if !v.get("crash_simulated").and_then(Value::as_bool).unwrap_or(false) {
+                if !v
+                    .get("crash_simulated")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
                     bail!("vector {name} crash_simulated must be true");
                 }
                 let resumes = v
@@ -6365,9 +6746,7 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                     .pointer("/expected/final_artifact_state")
                     .and_then(Value::as_str);
                 if final_state != Some("downloaded") {
-                    bail!(
-                        "vector {name} final_artifact_state must be downloaded"
-                    );
+                    bail!("vector {name} final_artifact_state must be downloaded");
                 }
                 let integrity = v
                     .pointer("/expected/integrity_check_passed")
@@ -6383,9 +6762,7 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                     bail!("vector {name} outcome must be reject");
                 }
                 if expected_reason(v) != Some("artifact_integrity_mismatch") {
-                    bail!(
-                        "vector {name} reason_code must be artifact_integrity_mismatch"
-                    );
+                    bail!("vector {name} reason_code must be artifact_integrity_mismatch");
                 }
                 let expected_hash = v
                     .pointer("/artifact/expected_sha256")
@@ -6404,14 +6781,17 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                     .and_then(Value::as_str)
                     != Some("failed")
                 {
-                    bail!(
-                        "vector {name} ticket_state_after must be failed on integrity mismatch"
-                    );
+                    bail!("vector {name} ticket_state_after must be failed on integrity mismatch");
                 }
                 saw_integrity_mismatch = true;
             }
             other => bail!("restore_full_workflows unexpected vector {other}"),
         }
+        emit_vector(
+            "restore_full_workflows.vector",
+            v,
+            json!({"name": name, "outcome": outcome}),
+        );
     }
     if !(saw_two_of_two_approval
         && saw_duplicate_approver

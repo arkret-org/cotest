@@ -5,8 +5,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, eventually, expect_audit_action, expect_json,
-    expect_response, expect_status,
+    ContrixServer, eventually, expect_audit_action, expect_json, expect_response, expect_status,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
@@ -228,4 +227,3 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     Ok(())
 }
-

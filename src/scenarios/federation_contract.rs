@@ -100,7 +100,12 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(legacy_transaction["accepted"].as_array().unwrap().is_empty());
+    assert!(
+        legacy_transaction["accepted"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         legacy_transaction["rejected"][0]["operation_id"],
         "cx:operation:federation-txn-legacy-contract"

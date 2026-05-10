@@ -1,11 +1,8 @@
-
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{
-    ContrixServer, expect_json,
-};
+use crate::harness::{ContrixServer, expect_json};
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let server = ContrixServer::spawn("identity-surface").await?;
@@ -120,4 +117,3 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
 
     Ok(())
 }
-

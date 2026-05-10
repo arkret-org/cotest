@@ -69,7 +69,9 @@ fn move_id(suffix: &str) -> MoveId {
     // exactly 64 lowercase hex characters.
     let suffix = suffix.to_ascii_lowercase();
     assert!(
-        suffix.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        suffix
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
         "test fixture suffix '{suffix}' must be lowercase hex"
     );
     let padding = 64usize.saturating_sub(suffix.len());
@@ -94,15 +96,27 @@ fn op_remove(tag: &str) -> LatticeOp {
 }
 
 fn op_set(value: serde_json::Value) -> LatticeOp {
-    LatticeOp { op_type: LatticeOpType::Set, value: Some(value), ..base_op() }
+    LatticeOp {
+        op_type: LatticeOpType::Set,
+        value: Some(value),
+        ..base_op()
+    }
 }
 
 fn op_inc(value: u64) -> LatticeOp {
-    LatticeOp { op_type: LatticeOpType::Inc, value: Some(json!(value)), ..base_op() }
+    LatticeOp {
+        op_type: LatticeOpType::Inc,
+        value: Some(json!(value)),
+        ..base_op()
+    }
 }
 
 fn op_dec(value: u64) -> LatticeOp {
-    LatticeOp { op_type: LatticeOpType::Dec, value: Some(json!(value)), ..base_op() }
+    LatticeOp {
+        op_type: LatticeOpType::Dec,
+        value: Some(json!(value)),
+        ..base_op()
+    }
 }
 
 fn op_transition(from: serde_json::Value, to: serde_json::Value) -> LatticeOp {
@@ -139,7 +153,10 @@ fn base_op() -> LatticeOp {
 
 fn or_set_basic_add_remove_commute() -> Result<()> {
     let lattice = OrSet;
-    let cref = cell("cx.component.consent.v1", "cx.consent.01js0cc0000000000000000000");
+    let cref = cell(
+        "cx.component.consent.v1",
+        "cx.consent.01js0cc0000000000000000000",
+    );
     let m1 = move_id("aa");
     let m2 = move_id("bb");
     let m3 = move_id("cc");
@@ -182,7 +199,10 @@ fn or_set_basic_add_remove_commute() -> Result<()> {
 
 fn or_set_idempotent_re_add_after_remove() -> Result<()> {
     let lattice = OrSet;
-    let cref = cell("cx.component.consent.v1", "cx.consent.01js0cc0000000000000000000");
+    let cref = cell(
+        "cx.component.consent.v1",
+        "cx.consent.01js0cc0000000000000000000",
+    );
     let ops = vec![
         AnchoredOp::new(move_id("aa"), op_add("red")),
         AnchoredOp::new(move_id("bb"), op_remove("red")),
@@ -199,7 +219,10 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
 
 fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let lattice = CasRegister;
-    let cref = cell("cx.component.space.policy.v1", "cx.space.01js0sp0000000000000000000");
+    let cref = cell(
+        "cx.component.space.policy.v1",
+        "cx.space.01js0sp0000000000000000000",
+    );
     // Two anchored Moves concurrently set the cell to distinct values.
     let ops = vec![
         AnchoredOp::new(move_id("aa"), op_set(json!({"role": "admin"}))),
@@ -209,11 +232,16 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let bottom = match resolved {
         CellState::Bottom(b) => b,
         CellState::Value(_) => {
-            bail!("CasRegister concurrent set must produce Bottom (cas-register conflict semantics)")
+            bail!(
+                "CasRegister concurrent set must produce Bottom (cas-register conflict semantics)"
+            )
         }
     };
     if !matches!(bottom.kind, contrix_core::BottomKind::Conflict) {
-        bail!("CasRegister Bottom kind expected Conflict, got {:?}", bottom.kind);
+        bail!(
+            "CasRegister Bottom kind expected Conflict, got {:?}",
+            bottom.kind
+        );
     }
     if bottom.move_ids.len() < 2 {
         bail!(
@@ -226,8 +254,14 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
 
 fn cas_register_single_set_returns_value() -> Result<()> {
     let lattice = CasRegister;
-    let cref = cell("cx.component.space.policy.v1", "cx.space.01js0sp0000000000000000001");
-    let ops = vec![AnchoredOp::new(move_id("dd"), op_set(json!({"role": "admin"})))];
+    let cref = cell(
+        "cx.component.space.policy.v1",
+        "cx.space.01js0sp0000000000000000001",
+    );
+    let ops = vec![AnchoredOp::new(
+        move_id("dd"),
+        op_set(json!({"role": "admin"})),
+    )];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("CasRegister with a single anchored set must NOT Bottom; got {resolved:?}");
@@ -330,7 +364,10 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
 
 fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
     let lattice = MvRegister;
-    let cref = cell("cx.component.flow.title.v1", "cx.flow.01js0fl0000000000000000000");
+    let cref = cell(
+        "cx.component.flow.title.v1",
+        "cx.flow.01js0fl0000000000000000000",
+    );
     // MvRegister surfaces multiple concurrent values. The SDK's reference
     // implementation defaults to a Bottom-shaped result with both heads in
     // `heads[]` (callers can flip to `bottom = expose` to render multi-value
@@ -353,7 +390,8 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
                 .iter()
                 .filter_map(|h| h.as_str())
                 .collect::<Vec<_>>();
-            heads_have_both.contains(&"Title A") && heads_have_both.contains(&"Title B")
+            heads_have_both.contains(&"Title A")
+                && heads_have_both.contains(&"Title B")
                 && b.move_ids.len() >= 2
         }
     };
@@ -369,13 +407,25 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
 
 fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let lattice = OrderedLog;
-    let cref = cell("cx.component.audit_log.v1", "cx.space.01js0sp0000000000000000000");
+    let cref = cell(
+        "cx.component.audit_log.v1",
+        "cx.space.01js0sp0000000000000000000",
+    );
     // Two issuers, both with monotonic issuer_seq. Join must produce a
     // deterministic linearization that includes all entries.
     let ops = vec![
-        AnchoredOp::new(move_id("77"), op_append(json!({"actor": "alice", "msg": "hi"}), 1)),
-        AnchoredOp::new(move_id("88"), op_append(json!({"actor": "bob", "msg": "hello"}), 1)),
-        AnchoredOp::new(move_id("99"), op_append(json!({"actor": "alice", "msg": "ack"}), 2)),
+        AnchoredOp::new(
+            move_id("77"),
+            op_append(json!({"actor": "alice", "msg": "hi"}), 1),
+        ),
+        AnchoredOp::new(
+            move_id("88"),
+            op_append(json!({"actor": "bob", "msg": "hello"}), 1),
+        ),
+        AnchoredOp::new(
+            move_id("99"),
+            op_append(json!({"actor": "alice", "msg": "ack"}), 2),
+        ),
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -498,9 +548,9 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     let resolved = lattice.join(&cref, &ops);
     let bottom = match resolved {
         CellState::Bottom(b) => b,
-        CellState::Value(_) => bail!(
-            "Anchorer concurrent reconfig MUST Bottom (split anchorer is a Space-wide pause)"
-        ),
+        CellState::Value(_) => {
+            bail!("Anchorer concurrent reconfig MUST Bottom (split anchorer is a Space-wide pause)")
+        }
     };
     if !matches!(bottom.kind, contrix_core::BottomKind::Conflict) {
         bail!(
@@ -571,10 +621,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
                 "claims": "winner",
             })),
         ),
-        AnchoredOp::new(
-            move_id("b3"),
-            op_set(json!({"role": "moderator"})),
-        ),
+        AnchoredOp::new(move_id("b3"), op_set(json!({"role": "moderator"}))),
     ];
     let resolved = lattice.join(&cref, &ops);
     if !resolved.is_bottom() {
@@ -606,21 +653,30 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     // Two MLS commits attest to overlapping governance frontier refs; the
     // or-set surfaces the union without bottom.
     let ops = vec![
-        AnchoredOp::new(move_id("c1"), op_add("cx:event:01970e58-0007-7000-8000-000000000001")),
-        AnchoredOp::new(move_id("c2"), op_add("cx:event:01970e58-0007-7000-8000-000000000002")),
-        AnchoredOp::new(move_id("c3"), op_add("cx:event:01970e58-0007-7000-8000-000000000001")), // duplicate add
+        AnchoredOp::new(
+            move_id("c1"),
+            op_add("cx:event:01970e58-0007-7000-8000-000000000001"),
+        ),
+        AnchoredOp::new(
+            move_id("c2"),
+            op_add("cx:event:01970e58-0007-7000-8000-000000000002"),
+        ),
+        AnchoredOp::new(
+            move_id("c3"),
+            op_add("cx:event:01970e58-0007-7000-8000-000000000001"),
+        ), // duplicate add
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!(
-            "covered_frontier or-set must accumulate refs without Bottom; got {resolved:?}"
-        );
+        bail!("covered_frontier or-set must accumulate refs without Bottom; got {resolved:?}");
     }
     let serialized = match &resolved {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000001") || !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000002") {
+    if !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000001")
+        || !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000002")
+    {
         bail!("covered_frontier did not surface both governance refs: {serialized}");
     }
     Ok(())
@@ -635,9 +691,18 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     // remove erases ONLY the matching prior add. The remaining governance
     // ref MUST stay visible.
     let ops = vec![
-        AnchoredOp::new(move_id("c4"), op_add("cx:event:01970e58-0007-7000-8000-000000000003")),
-        AnchoredOp::new(move_id("c5"), op_add("cx:event:01970e58-0007-7000-8000-000000000004")),
-        AnchoredOp::new(move_id("c6"), op_remove("cx:event:01970e58-0007-7000-8000-000000000003")),
+        AnchoredOp::new(
+            move_id("c4"),
+            op_add("cx:event:01970e58-0007-7000-8000-000000000003"),
+        ),
+        AnchoredOp::new(
+            move_id("c5"),
+            op_add("cx:event:01970e58-0007-7000-8000-000000000004"),
+        ),
+        AnchoredOp::new(
+            move_id("c6"),
+            op_remove("cx:event:01970e58-0007-7000-8000-000000000003"),
+        ),
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -653,9 +718,7 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
         );
     }
     if serialized.contains("cx:event:01970e58-0007-7000-8000-000000000003") {
-        bail!(
-            "covered_frontier should drop the rotated ref after causal remove: {serialized}"
-        );
+        bail!("covered_frontier should drop the rotated ref after causal remove: {serialized}");
     }
     Ok(())
 }

@@ -4,9 +4,7 @@ use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{
-    ContrixServer, expect_api_error, expect_json,
-};
+use crate::harness::{ContrixServer, expect_api_error, expect_json};
 
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let server = ContrixServer::spawn("directory-privacy").await?;
@@ -171,7 +169,10 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(secret_resolved["space_preview"]["space_id"], secret_space_id);
+    assert_eq!(
+        secret_resolved["space_preview"]["space_id"],
+        secret_space_id
+    );
 
     let all_space_ids = vec![
         public_space_id.clone(),
@@ -195,7 +196,10 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .iter()
         .filter_map(|entry| entry["space_id"].as_str().map(ToOwned::to_owned))
         .collect();
-    assert_eq!(anonymous_index_ids, BTreeSet::from([public_space_id.clone()]));
+    assert_eq!(
+        anonymous_index_ids,
+        BTreeSet::from([public_space_id.clone()])
+    );
 
     let alice_index = expect_json(
         alice.post("/api/v1/index/query").json(&json!({
@@ -221,7 +225,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(anonymous_bob_actors["results"].as_array().unwrap().is_empty());
+    assert!(
+        anonymous_bob_actors["results"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let anonymous_bob_users = expect_json(
         server
@@ -230,7 +239,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(anonymous_bob_users["results"].as_array().unwrap().is_empty());
+    assert!(
+        anonymous_bob_users["results"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let anonymous_alice = expect_json(
         server
@@ -240,7 +254,10 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(anonymous_alice["results"][0]["did"], "did:web:alice.example");
+    assert_eq!(
+        anonymous_alice["results"][0]["did"],
+        "did:web:alice.example"
+    );
 
     let alice_before_contact = expect_json(
         alice
@@ -249,7 +266,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(alice_before_contact["results"].as_array().unwrap().is_empty());
+    assert!(
+        alice_before_contact["results"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let bob_self = expect_json(
         bob.post("/api/v1/directory/search-actors")
@@ -289,7 +311,10 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(alice_user_after_contact["results"][0]["handle"], "@bob-privacy");
+    assert_eq!(
+        alice_user_after_contact["results"][0]["handle"],
+        "@bob-privacy"
+    );
 
     let anonymous_after_contact = expect_json(
         server
@@ -299,7 +324,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(anonymous_after_contact["results"].as_array().unwrap().is_empty());
+    assert!(
+        anonymous_after_contact["results"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     Ok(())
 }

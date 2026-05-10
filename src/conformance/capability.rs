@@ -1,12 +1,13 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
     CapabilityFixture, ResourceRef, ResourceSelector, load_fixture_value, parse_fixture_value,
     required_str, validate_profile,
 };
+use crate::transcripts::record_vector_event;
 
 pub fn run_capability_fixture_suite() -> Result<()> {
     let value = load_fixture_value("capability-fixture.json")?;
@@ -34,9 +35,21 @@ pub fn run_capability_fixture_suite() -> Result<()> {
                     space_id: selector.space_id.clone(),
                     entity_type: Some("note".to_owned()),
                 };
-                if !selector.matches(&task) || selector.matches(&note) {
+                let matches_task = selector.matches(&task);
+                let matches_note = selector.matches(&note);
+                if !matches_task || matches_note {
                     bail!("capability fixture {} selector grammar mismatch", case.name);
                 }
+                record_vector_event(
+                    "capability.resource_selector_grammar",
+                    &json!({
+                        "selector_space_id": selector.space_id,
+                        "selector_entity_type": selector.entity_type,
+                        "selector_kind": selector.kind,
+                    }),
+                    &json!({"matches_task": true, "matches_note": false}),
+                    &json!({"matches_task": matches_task, "matches_note": matches_note}),
+                );
             }
             "constraint_fail_closed" => {
                 let grant = CapabilityGrant {
@@ -46,9 +59,19 @@ pub fn run_capability_fixture_suite() -> Result<()> {
                     revoked_claims: BTreeSet::new(),
                     scope: selector_scope("task")?,
                 };
-                if grant.is_usable(&BTreeSet::new()) {
+                let usable = grant.is_usable(&BTreeSet::new());
+                if usable {
                     bail!("capability fixture {} did not fail closed", case.name);
                 }
+                record_vector_event(
+                    "capability.constraint_fail_closed",
+                    &json!({
+                        "required_claims": ["employee"],
+                        "presented_claims": Vec::<String>::new(),
+                    }),
+                    &json!({"usable": false}),
+                    &json!({"usable": usable}),
+                );
             }
             "approval_proposal" => {
                 let grant = CapabilityGrant {
@@ -58,12 +81,22 @@ pub fn run_capability_fixture_suite() -> Result<()> {
                     revoked_claims: BTreeSet::new(),
                     scope: selector_scope("task")?,
                 };
-                if grant.is_usable(&BTreeSet::new()) {
+                let usable = grant.is_usable(&BTreeSet::new());
+                if usable {
                     bail!(
                         "capability fixture {} allowed unapproved proposal",
                         case.name
                     );
                 }
+                record_vector_event(
+                    "capability.approval_proposal",
+                    &json!({
+                        "approval_mode": "ProposalThenApprove",
+                        "approved": false,
+                    }),
+                    &json!({"usable": false}),
+                    &json!({"usable": usable}),
+                );
             }
             "claim_revocation" => {
                 let grant = CapabilityGrant {
@@ -73,9 +106,20 @@ pub fn run_capability_fixture_suite() -> Result<()> {
                     revoked_claims: BTreeSet::from(["employee".to_owned()]),
                     scope: selector_scope("task")?,
                 };
-                if grant.is_usable(&BTreeSet::from(["employee".to_owned()])) {
+                let usable = grant.is_usable(&BTreeSet::from(["employee".to_owned()]));
+                if usable {
                     bail!("capability fixture {} ignored revoked claim", case.name);
                 }
+                record_vector_event(
+                    "capability.claim_revocation",
+                    &json!({
+                        "required_claims": ["employee"],
+                        "revoked_claims": ["employee"],
+                        "presented_claims": ["employee"],
+                    }),
+                    &json!({"usable": false}),
+                    &json!({"usable": usable}),
+                );
             }
             "delegation_cycle_and_scope_narrowing" => {
                 let parent = Delegation {

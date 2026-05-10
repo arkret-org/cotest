@@ -4,6 +4,7 @@ pub mod authz_policy_presence;
 pub mod bridge_contracts;
 pub mod collaboration_workflow;
 pub mod delivery_media;
+pub mod directory_service;
 pub mod events_entity_backfill;
 pub mod extension_surface_gaps;
 pub mod federation_collaboration;

@@ -173,4 +173,3 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
 
     Ok(())
 }
-

@@ -4,6 +4,7 @@ use anyhow::{Result, bail};
 use serde_json::{Value, json};
 
 use super::{FederationFixture, canonical_json, load_fixture, sha256_prefixed};
+use crate::transcripts::record_vector_event;
 
 pub fn run_federation_fixture_suite() -> Result<()> {
     let fixture = load_fixture::<FederationFixture>("federation-fixture.json")?;
@@ -26,6 +27,20 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 if signature_input != canonical {
                     bail!("federation fixture {} hash mismatch", case.name);
                 }
+                record_vector_event(
+                    "federation.http_message_signature_hash",
+                    &json!({
+                        "method": request.method.clone(),
+                        "target": request.target.clone(),
+                        "body": request.body.clone(),
+                    }),
+                    &json!({"signature_input_eq_canonical": true}),
+                    &json!({
+                        "signature_input": signature_input,
+                        "canonical": canonical.clone(),
+                        "signature_input_eq_canonical": true,
+                    }),
+                );
             }
             "origin_destination_service_did_mismatch" => {
                 let verdict = validate_origin_destination(
@@ -36,27 +51,76 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 if verdict == FederationVerdict::Accepted {
                     bail!("federation fixture {} accepted DID mismatch", case.name);
                 }
+                record_vector_event(
+                    "federation.origin_destination_service_did_mismatch",
+                    &json!({
+                        "origin": "did:web:remote.example",
+                        "signed_destination": "did:web:wrong.example",
+                        "expected_destination": "did:web:local.example",
+                    }),
+                    &json!({"verdict": "Rejected"}),
+                    &json!({"verdict": format!("{verdict:?}")}),
+                );
             }
             "replay_protection" => {
-                if !replay_cache.insert("txn-1".to_owned()) {
+                let first = replay_cache.insert("txn-1".to_owned());
+                if !first {
                     bail!("federation fixture {} cache failed first insert", case.name);
                 }
-                if replay_cache.insert("txn-1".to_owned()) {
+                let second = replay_cache.insert("txn-1".to_owned());
+                if second {
                     bail!("federation fixture {} missed replay", case.name);
                 }
+                record_vector_event(
+                    "federation.replay_protection",
+                    &json!({"txn_id": "txn-1"}),
+                    &json!({"first_insert": true, "duplicate_insert": false}),
+                    &json!({"first_insert": first, "duplicate_insert": second}),
+                );
             }
             "fork_quarantine" => {
-                let first = register_history_head(&mut fork_table, "cx:space:01970e58-0006-7000-8000-000000000001", "sha256:a");
-                let second = register_history_head(&mut fork_table, "cx:space:01970e58-0006-7000-8000-000000000001", "sha256:b");
+                let first = register_history_head(
+                    &mut fork_table,
+                    "cx:space:01970e58-0006-7000-8000-000000000001",
+                    "sha256:a",
+                );
+                let second = register_history_head(
+                    &mut fork_table,
+                    "cx:space:01970e58-0006-7000-8000-000000000001",
+                    "sha256:b",
+                );
                 if first != FederationVerdict::Accepted || second != FederationVerdict::Quarantined
                 {
                     bail!("federation fixture {} did not quarantine fork", case.name);
                 }
+                record_vector_event(
+                    "federation.fork_quarantine",
+                    &json!({
+                        "space_id": "cx:space:01970e58-0006-7000-8000-000000000001",
+                        "head_a": "sha256:a",
+                        "head_b": "sha256:b",
+                    }),
+                    &json!({"first": "Accepted", "second": "Quarantined"}),
+                    &json!({
+                        "first": format!("{first:?}"),
+                        "second": format!("{second:?}"),
+                    }),
+                );
             }
             "pull_authorization" => {
-                if authorize_pull(false, false) != FederationVerdict::Blinded {
+                let verdict = authorize_pull(false, false);
+                if verdict != FederationVerdict::Blinded {
                     bail!("federation fixture {} exposed unauthorized pull", case.name);
                 }
+                record_vector_event(
+                    "federation.pull_authorization",
+                    &json!({
+                        "has_backfill_capability": false,
+                        "has_plaintext_visibility": false,
+                    }),
+                    &json!({"verdict": "Blinded"}),
+                    &json!({"verdict": format!("{verdict:?}")}),
+                );
             }
             _ => bail!("unknown federation fixture case {}", case.name),
         }
@@ -86,7 +150,7 @@ impl SignedFederationRequest {
     }
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FederationVerdict {
     Accepted,
     Rejected,

@@ -9,9 +9,10 @@
 //! sections in `event-auth-state-resolution.md` §5.3.
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{load_fixture_value, required_str, validate_profile};
+use crate::transcripts::record_vector_event;
 
 /// Public entry point retained so the release-gate cargo_filter list can
 /// reference both `state_resolution_fixture_suite_matches_reference_semantics`
@@ -83,6 +84,20 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     bail!("vector {name} expected.atomicity must be 'all_effects_or_none'");
                 }
                 seen_atomic = true;
+                record_vector_event(
+                    "state_resolution.multi_cell_ban_revokes_grants_atomically",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "min_preconditions": 2,
+                        "min_effects": 2,
+                        "atomicity": "all_effects_or_none",
+                    }),
+                    &json!({
+                        "preconditions": preconditions.len(),
+                        "effects": effects.len(),
+                        "atomicity": atomicity,
+                    }),
+                );
             }
             "cas_register_conflict_returns_bottom" => {
                 let lat = vector
@@ -105,6 +120,20 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     bail!("vector {name} dependent_move_result must be 'fail_bottom'");
                 }
                 seen_cas_bottom = true;
+                record_vector_event(
+                    "state_resolution.cas_register_conflict_returns_bottom",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "lattice_type": "cas-register",
+                        "query_status": "bottom",
+                        "dependent_move_result": "fail_bottom",
+                    }),
+                    &json!({
+                        "lattice_type": lat,
+                        "query_status": bot_status,
+                        "dependent_move_result": dep,
+                    }),
+                );
             }
             "anchor_batch_pre_state_prevents_self_satisfaction" => {
                 let anchor_result = vector
@@ -114,6 +143,12 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     bail!("vector {name} expected.anchor_result must be 'reject'");
                 }
                 seen_anchor_batch_pre_state = true;
+                record_vector_event(
+                    "state_resolution.anchor_batch_pre_state_prevents_self_satisfaction",
+                    &json!({"vector": vector.clone()}),
+                    &json!({"anchor_result": "reject"}),
+                    &json!({"anchor_result": anchor_result}),
+                );
             }
             "mls_commit_move_requires_covered_frontier" => {
                 let verify = vector
@@ -123,6 +158,12 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     bail!("vector {name} expected.verify_move must be 'fail_precondition'");
                 }
                 seen_mls_covered_frontier = true;
+                record_vector_event(
+                    "state_resolution.mls_commit_move_requires_covered_frontier",
+                    &json!({"vector": vector.clone()}),
+                    &json!({"verify_move": "fail_precondition"}),
+                    &json!({"verify_move": verify}),
+                );
             }
             "anchorer_cell_bottom_pauses_space_until_recovery" => {
                 let space_state = vector
@@ -132,17 +173,27 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     bail!("vector {name} expected.space_state must be 'anchorer_paused'");
                 }
                 seen_anchorer_recovery = true;
+                record_vector_event(
+                    "state_resolution.anchorer_cell_bottom_pauses_space_until_recovery",
+                    &json!({"vector": vector.clone()}),
+                    &json!({"space_state": "anchorer_paused"}),
+                    &json!({"space_state": space_state}),
+                );
             }
             "signed_compaction_anchor_equals_effective_view" => {
                 let preserves = vector
                     .pointer("/expected/preserves_bottom_diagnostics")
                     .and_then(Value::as_bool);
                 if preserves != Some(true) {
-                    bail!(
-                        "vector {name} expected.preserves_bottom_diagnostics must be true"
-                    );
+                    bail!("vector {name} expected.preserves_bottom_diagnostics must be true");
                 }
                 seen_signed_compaction = true;
+                record_vector_event(
+                    "state_resolution.signed_compaction_anchor_equals_effective_view",
+                    &json!({"vector": vector.clone()}),
+                    &json!({"preserves_bottom_diagnostics": true}),
+                    &json!({"preserves_bottom_diagnostics": preserves}),
+                );
             }
             "anchor_dag_genesis_and_multi_leaf_join" => {
                 let cases = vector
@@ -150,9 +201,17 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     .and_then(Value::as_array)
                     .ok_or_else(|| anyhow!("vector {name} missing cases[]"))?;
                 if cases.len() < 4 {
-                    bail!("vector {name} requires at least 4 cases (genesis / non-genesis-empty / multi-leaf-view / signed-compaction)");
+                    bail!(
+                        "vector {name} requires at least 4 cases (genesis / non-genesis-empty / multi-leaf-view / signed-compaction)"
+                    );
                 }
                 seen_genesis_multi_leaf = true;
+                record_vector_event(
+                    "state_resolution.anchor_dag_genesis_and_multi_leaf_join",
+                    &json!({"vector": vector.clone()}),
+                    &json!({"min_cases": 4}),
+                    &json!({"cases": cases.len()}),
+                );
             }
             _ => bail!("unknown move-anchor-lattice vector: {name}"),
         }

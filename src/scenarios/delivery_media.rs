@@ -283,18 +283,16 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
         bob.get(&format!(
             "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
         ))
-            .header("range", "bytes=99-100"),
+        .header("range", "bytes=99-100"),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
     .await?;
     expect_api_error(
-        server
-            .http()
-            .get(server.url(&format!(
-                "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
-                alice.token
-            ))),
+        server.http().get(server.url(&format!(
+            "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment&access_token={}",
+            alice.token
+        ))),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )

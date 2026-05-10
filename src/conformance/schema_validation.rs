@@ -126,9 +126,8 @@ pub fn run_schema_validation_suite() -> Result<()> {
             for (field, prop) in properties {
                 let mut prop_schema = prop.clone();
                 if let Value::Object(map) = &mut prop_schema {
-                    map.entry("$schema").or_insert(json!(
-                        "https://json-schema.org/draft/2020-12/schema"
-                    ));
+                    map.entry("$schema")
+                        .or_insert(json!("https://json-schema.org/draft/2020-12/schema"));
                     if let Some(defs) = &parent_defs {
                         map.entry("$defs").or_insert_with(|| defs.clone());
                     }
@@ -137,9 +136,7 @@ pub fn run_schema_validation_suite() -> Result<()> {
                     .with_registry(&registry)
                     .with_base_uri(actual_id)
                     .build(&prop_schema)
-                    .map_err(|err| {
-                        anyhow!("compile property {schema_id}#{field} failed: {err}")
-                    })?;
+                    .map_err(|err| anyhow!("compile property {schema_id}#{field} failed: {err}"))?;
                 compiled_property_validators += 1;
 
                 if let Some(enum_values) = prop.get("enum").and_then(Value::as_array) {
@@ -156,11 +153,7 @@ pub fn run_schema_validation_suite() -> Result<()> {
 
                 if let Some(pattern) = prop.get("pattern").and_then(Value::as_str) {
                     if pattern.starts_with("^cx:") {
-                        for bogus in [
-                            json!("cx:invalid:!!!"),
-                            json!("not-a-typed-id"),
-                            json!(""),
-                        ] {
+                        for bogus in [json!("cx:invalid:!!!"), json!("not-a-typed-id"), json!("")] {
                             if prop_validator.is_valid(&bogus) {
                                 bail!(
                                     "schema {schema_id} property {field} accepted invalid typed-id {bogus}"

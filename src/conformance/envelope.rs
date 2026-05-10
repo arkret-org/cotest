@@ -473,9 +473,9 @@ fn validate_event_envelope(
             .map(ToOwned::to_owned)
     };
     let valid_ref = |s: &str| s.starts_with("cx:");
-    let extra_refs_invalid = extra_refs.iter().any(|value| {
-        extract_ref_id(value).map_or(true, |id| !valid_ref(&id))
-    });
+    let extra_refs_invalid = extra_refs
+        .iter()
+        .any(|value| extract_ref_id(value).map_or(true, |id| !valid_ref(&id)));
     let prev_refs_invalid = prev_refs.iter().any(|value| {
         value
             .as_str()

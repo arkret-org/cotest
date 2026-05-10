@@ -309,12 +309,15 @@ fn validate_event_kind_registry(
             }
             let lattice = required_str(entry, "lattice")?;
             const ALLOWED_LATTICES: &[&str] = &[
-                "or-set", "mv-register", "cas-register", "fsm", "counter", "ordered-log",
+                "or-set",
+                "mv-register",
+                "cas-register",
+                "fsm",
+                "counter",
+                "ordered-log",
             ];
             if !ALLOWED_LATTICES.contains(&lattice) {
-                bail!(
-                    "reducer-input kind {event_kind} lattice {lattice} not in core set"
-                );
+                bail!("reducer-input kind {event_kind} lattice {lattice} not in core set");
             }
             let bottom = required_str(entry, "bottom")?;
             if bottom != "reject" && bottom != "expose" {
@@ -378,8 +381,16 @@ fn validate_event_kind_registry(
     // payload.consent_id. cx.space.host{,.transfer} are intentionally
     // removed (anchorer cell governs Anchor signing).
     let required_kinds: &[(&str, &str, &str)] = &[
-        ("cx.consent.grant", "or-set", "cx.component.consent.grant.v1"),
-        ("cx.consent.revoke", "or-set", "cx.component.consent.grant.v1"),
+        (
+            "cx.consent.grant",
+            "or-set",
+            "cx.component.consent.grant.v1",
+        ),
+        (
+            "cx.consent.revoke",
+            "or-set",
+            "cx.component.consent.grant.v1",
+        ),
     ];
     for (kind, expected_lattice, expected_cell_family) in required_kinds {
         let entry = event_kinds
@@ -390,9 +401,7 @@ fn validate_event_kind_registry(
             })?;
         let lattice = required_str(entry, "lattice")?;
         if lattice != *expected_lattice {
-            bail!(
-                "wire-model kind {kind} must have lattice={expected_lattice}, got {lattice}"
-            );
+            bail!("wire-model kind {kind} must have lattice={expected_lattice}, got {lattice}");
         }
         let cell_family = required_str(entry, "cell_family")?;
         if cell_family != *expected_cell_family {
@@ -448,10 +457,7 @@ fn validate_operation_registry(
     // Applet). Validate that the spec-declared tier vocabulary contains all
     // four values so future cotest tier filtering doesn't silently drop
     // adapter ops as `unknown_tier`.
-    if let Some(tiers) = registry
-        .get("capability_tiers")
-        .and_then(|t| t.as_array())
-    {
+    if let Some(tiers) = registry.get("capability_tiers").and_then(|t| t.as_array()) {
         let tier_set: std::collections::BTreeSet<&str> = tiers
             .iter()
             .filter_map(|t| t.get("name").and_then(Value::as_str))
@@ -514,9 +520,7 @@ fn validate_id_kind_registry(
             );
         }
         if !wire_form.ends_with("<uuid>") {
-            bail!(
-                "id kind {id_kind} wire_form must terminate in <uuid>: {wire_form}"
-            );
+            bail!("id kind {id_kind} wire_form must terminate in <uuid>: {wire_form}");
         }
     }
     let mut kinds = regular_kinds;
@@ -530,9 +534,7 @@ fn validate_id_kind_registry(
     // the older `ulid_pattern` / `typed_ulid_pattern` which are now forbidden
     // wire-tokens). Validator rejects fixtures that retain the old field
     // names so a stale spec snapshot fails loudly.
-    if registry.get("ulid_pattern").is_some()
-        || registry.get("typed_ulid_pattern").is_some()
-    {
+    if registry.get("ulid_pattern").is_some() || registry.get("typed_ulid_pattern").is_some() {
         bail!(
             "id-kind registry retains legacy ulid_pattern / typed_ulid_pattern fields; spec post-2026-05-09 mandates uuid_pattern / typed_uuid_pattern"
         );
@@ -577,7 +579,9 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     // typo in a future spec snapshot doesn't slip through.
     if let Some(tiers) = registry.get("anchor_profile_tiers") {
         let map = tiers.as_object().ok_or_else(|| {
-            anyhow!("anchor_profile_tiers must be an object mapping tier name → array of profile ids")
+            anyhow!(
+                "anchor_profile_tiers must be an object mapping tier name → array of profile ids"
+            )
         })?;
         for (tier_name, tier_ids) in map {
             // tier_rules is a sibling-style descriptor in profile_tiers; if
@@ -592,9 +596,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
             })?;
             for entry in arr {
                 let s = entry.as_str().ok_or_else(|| {
-                    anyhow!(
-                        "anchor_profile_tiers.{tier_name} entry must be a string profile id"
-                    )
+                    anyhow!("anchor_profile_tiers.{tier_name} entry must be a string profile id")
                 })?;
                 if !s.starts_with("cx.profile.anchor.") {
                     bail!(
@@ -610,13 +612,11 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     // single_did / threshold / open_set / mixed_recovery.
     if let Some(arr) = registry.get("anchor_profiles").and_then(Value::as_array) {
         for entry in arr {
-            let s = entry.as_str().ok_or_else(|| {
-                anyhow!("anchor_profiles entry must be a string profile id")
-            })?;
+            let s = entry
+                .as_str()
+                .ok_or_else(|| anyhow!("anchor_profiles entry must be a string profile id"))?;
             if !s.starts_with("cx.profile.anchor.") {
-                bail!(
-                    "anchor_profiles entry {s} must use cx.profile.anchor.* namespace"
-                );
+                bail!("anchor_profiles entry {s} must use cx.profile.anchor.* namespace");
             }
         }
     }
@@ -759,9 +759,7 @@ fn validate_profile_requirements(
         })?;
     let required_event_kinds = string_array_field(mls_binding, "required_event_kinds")?;
     if !required_event_kinds.iter().any(|k| *k == "cx.mls.commit") {
-        bail!(
-            "mls_governance_binding.full.v1 required_event_kinds must include cx.mls.commit"
-        );
+        bail!("mls_governance_binding.full.v1 required_event_kinds must include cx.mls.commit");
     }
     let feature_discovery = mls_binding
         .get("feature_discovery")

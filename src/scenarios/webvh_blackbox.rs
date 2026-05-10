@@ -13,20 +13,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 
-use crate::scenarios::_helpers::external_binary::{ExternalBinarySpec, spawn_required};
-
-const STARID_SPEC: ExternalBinarySpec = ExternalBinarySpec {
-    service: "starid",
-    bin_env: "STARID_BIN",
-    sibling_path: &["starid", "target", "debug"],
-    bind_env: "STARID_BIND",
-    extra_env: &[
-        ("STARID_SERVICE_DID", "did:web:starid.cotest.local"),
-        ("STARID_DEVELOPMENT_MODE", "true"),
-    ],
-    health_path: "/health",
-    health_timeout: Duration::from_secs(20),
-};
+use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 
 /// Spawn a `starid` binary and assert 5 webvh conformance vectors:
 ///   1. /health              — liveness pings 200
@@ -94,15 +81,10 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     }
 
     // ── Vector 5: GET on a POST-only route surfaces 405/404 ───────────────
-    let resp = client
-        .get(proc.url("/api/v1/webvh/dids"))
-        .send()
-        .await?;
+    let resp = client.get(proc.url("/api/v1/webvh/dids")).send().await?;
     let status = resp.status().as_u16();
     if !(status == 405 || status == 404) {
-        bail!(
-            "GET /api/v1/webvh/dids expected 405 (method not allowed) or 404, got {status}"
-        );
+        bail!("GET /api/v1/webvh/dids expected 405 (method not allowed) or 404, got {status}");
     }
 
     Ok(())

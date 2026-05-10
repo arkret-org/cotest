@@ -1,11 +1,8 @@
-
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{
-    ContrixServer, expect_api_error, expect_json, expect_status,
-};
+use crate::harness::{ContrixServer, expect_api_error, expect_json, expect_status};
 
 const DEMO_SPACE_ID: &str = "cx:space:0196419b-0000-7000-8000-000000000000";
 pub async fn discovery_and_index_demo_projection_shapes_work() -> Result<()> {
@@ -199,4 +196,3 @@ pub async fn discovery_and_index_demo_projection_shapes_work() -> Result<()> {
 
     Ok(())
 }
-

@@ -139,4 +139,3 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     Ok(())
 }
-

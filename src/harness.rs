@@ -87,7 +87,85 @@ impl ContrixServer {
         }
     }
 
+    /// C33.4 — spawn a pre-built soland binary directly (no `cargo run`).
+    /// Mirrors `spawn_process` but invokes the binary at `bin_path` with
+    /// `--bind <addr>` so federation scenarios can promote out of the slow
+    /// `cargo run --manifest-path` path when a SOLAND_BIN is supplied.
+    async fn spawn_external_binary(name: &str, bin_path: &Path) -> Result<Self> {
+        Self::spawn_external_binary_with_env(name, bin_path, &[]).await
+    }
+
+    /// C36.2 — extension of `spawn_external_binary` that injects extra env
+    /// vars into the child process. Used by `spawn_process` so the fast
+    /// pre-built-binary path supports the same `extra_env` knob the slow
+    /// `cargo run` path always supported.
+    async fn spawn_external_binary_with_env(
+        name: &str,
+        bin_path: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> Result<Self> {
+        let port = free_port()?;
+        let bind = format!("127.0.0.1:{port}");
+        let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
+        let service_did = format!("did:web:{name}.cotest.local");
+        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{port}-blobs"));
+        let log_path = service_log_path(name)?;
+        initialize_service_log(log_path.as_deref(), name, "external_binary")?;
+        let _ = fs::remove_dir_all(&blob_root);
+        fs::create_dir_all(&blob_root)?;
+        let (stdout, stderr) = service_log_stdio(log_path.as_deref())?;
+
+        let mut command = Command::new(bin_path);
+        command
+            .arg("--bind")
+            .arg(&bind)
+            .env_remove("DATABASE_URL")
+            .env("SERVERX_PUBLIC_BASE_URL", base_url.as_str())
+            .env("SERVERX_SERVICE_DID", &service_did)
+            .env("SERVERX_DEVELOPMENT_MODE", "1")
+            .env("SERVERX_BLOB_ROOT", &blob_root)
+            .stdout(stdout)
+            .stderr(stderr);
+        for &(key, value) in extra_env {
+            command.env(key, value);
+        }
+        let mut child = command.spawn().with_context(|| {
+            format!(
+                "failed to start external soland binary at {}",
+                bin_path.display()
+            )
+        })?;
+
+        if let Err(error) = wait_until_healthy(base_url.clone()).await {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+
+        Ok(Self {
+            handle: SutHandle::Local(child),
+            base_url,
+            service_did,
+            blob_root: Some(blob_root),
+            log_path,
+        })
+    }
+
     async fn spawn_process(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
+        // C36.2 — fast path: if a pre-built `soland` binary is available
+        // (either via `SOLAND_BIN=` or the sibling-checkout convention
+        // `../soland/target/debug/soland[.exe]`), spawn it directly. This
+        // avoids the historical cargo-lock deadlock where `cargo run`
+        // invoked from inside `cargo test` waits forever on the workspace
+        // lock the test runner already holds.
+        //
+        // Falls back to the slow `cargo run --manifest-path` path for
+        // legacy contributors who haven't built the sibling binary yet.
+        use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
+        if let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) {
+            return Self::spawn_external_binary_with_env(name, &bin_path, extra_env).await;
+        }
+
         let port = free_port()?;
         let bind = format!("127.0.0.1:{port}");
         let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
@@ -301,6 +379,41 @@ impl TestServerGroup {
             servers: vec![ContrixServer::spawn(name).await?],
             docker_network: None,
         })
+    }
+
+    /// C33.4 — fast path that spawns `count` pre-built soland binaries via
+    /// the [`external_binary`] helper. Returns `Ok(None)` when the binary
+    /// cannot be located or required env vars are missing — scenarios use
+    /// this to silently skip federation tests on CI runners that have no
+    /// `soland.exe` built and no `SOLAND_BIN=...` set, while still running
+    /// the full multi-node flow on developer machines that do.
+    ///
+    /// Falls back to the slow `cargo run` `multi` path if `SOLAND_BIN` is
+    /// unset *and* the sibling binary is also unavailable — callers that
+    /// want strict skip semantics should prefer this constructor; callers
+    /// that want best-effort spin-up via cargo can keep using `multi`.
+    pub async fn try_multi_external(name: &str, count: usize) -> Result<Option<Self>> {
+        use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
+
+        let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) else {
+            return Ok(None);
+        };
+
+        let mut servers = Vec::with_capacity(count);
+        for index in 0..count {
+            match ContrixServer::spawn_external_binary(&format!("{name}-{index}"), &bin_path).await
+            {
+                Ok(server) => servers.push(server),
+                Err(error) => {
+                    drop(servers);
+                    return Err(error);
+                }
+            }
+        }
+        Ok(Some(Self {
+            servers,
+            docker_network: None,
+        }))
     }
 
     pub async fn multi(name: &str, count: usize) -> Result<Self> {

@@ -4,6 +4,7 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::{RedactionFixture, load_fixture};
+use crate::transcripts::record_vector_event;
 
 pub fn run_redaction_fixture_suite() -> Result<()> {
     let fixture = load_fixture::<RedactionFixture>("redaction-fixture.json")?;
@@ -15,40 +16,82 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
     for case in fixture.cases {
         match case.name.as_str() {
             "preserved_fields" => {
-                let redacted = redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
-                for field in case.preserve.unwrap_or_default() {
-                    if redacted.get(&field).is_none() {
+                let redacted =
+                    redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
+                let preserve = case.preserve.clone().unwrap_or_default();
+                for field in &preserve {
+                    if redacted.get(field).is_none() {
                         bail!("redaction fixture {} did not preserve {}", case.name, field);
                     }
                 }
                 if redacted.get("content").is_some() {
                     bail!("redaction fixture {} leaked content", case.name);
                 }
+                record_vector_event(
+                    "redaction.preserved_fields",
+                    &json!({"target": target.clone()}),
+                    &json!({"preserve": preserve, "content_present": false}),
+                    &json!({"redacted": redacted, "content_present": redacted.get("content").is_some()}),
+                );
             }
             "dangling_redaction" => {
                 let mut tracker = RedactionTracker::default();
-                let state = tracker.push_redaction("cx:event:01970e58-0004-7000-8000-000000000002", "cx:event:01970e58-0004-7000-8000-000000000001");
+                let state = tracker.push_redaction(
+                    "cx:event:01970e58-0004-7000-8000-000000000002",
+                    "cx:event:01970e58-0004-7000-8000-000000000001",
+                );
                 if state != RedactionState::Pending {
                     bail!("redaction fixture {} expected pending state", case.name);
                 }
+                record_vector_event(
+                    "redaction.dangling_redaction",
+                    &json!({
+                        "target_event_id": "cx:event:01970e58-0004-7000-8000-000000000002",
+                        "redaction_event_id": "cx:event:01970e58-0004-7000-8000-000000000001",
+                    }),
+                    &json!({"state": "Pending"}),
+                    &json!({"state": format!("{state:?}")}),
+                );
             }
             "late_target_event" => {
                 let mut tracker = RedactionTracker::default();
-                tracker.push_redaction("cx:event:01970e58-0004-7000-8000-000000000003", "cx:event:01970e58-0004-7000-8000-000000000001");
-                let materialized =
-                    tracker.materialize_target(&sample_event_with_id("cx:event:01970e58-0004-7000-8000-000000000003"))?;
+                tracker.push_redaction(
+                    "cx:event:01970e58-0004-7000-8000-000000000003",
+                    "cx:event:01970e58-0004-7000-8000-000000000001",
+                );
+                let materialized = tracker.materialize_target(&sample_event_with_id(
+                    "cx:event:01970e58-0004-7000-8000-000000000003",
+                ))?;
                 if materialized.get("content").is_some() {
                     bail!(
                         "redaction fixture {} failed to materialize as redacted",
                         case.name
                     );
                 }
-                if materialized["redacted_because"] != "cx:event:01970e58-0004-7000-8000-000000000001" {
+                if materialized["redacted_because"]
+                    != "cx:event:01970e58-0004-7000-8000-000000000001"
+                {
                     bail!("redaction fixture {} lost redaction reference", case.name);
                 }
+                record_vector_event(
+                    "redaction.late_target_event",
+                    &json!({
+                        "target_event_id": "cx:event:01970e58-0004-7000-8000-000000000003",
+                        "redaction_event_id": "cx:event:01970e58-0004-7000-8000-000000000001",
+                    }),
+                    &json!({
+                        "content_present": false,
+                        "redacted_because": "cx:event:01970e58-0004-7000-8000-000000000001",
+                    }),
+                    &json!({
+                        "materialized": materialized.clone(),
+                        "redacted_because": materialized["redacted_because"].clone(),
+                    }),
+                );
             }
             "audit_visibility" => {
-                let redacted = redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
+                let redacted =
+                    redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
                 let audit = audit_tombstone(&redacted)?;
                 if audit.get("content").is_some() {
                     bail!(
@@ -59,9 +102,22 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                 if audit["redacts"] != target["event_id"] {
                     bail!("redaction fixture {} lost target reference", case.name);
                 }
+                record_vector_event(
+                    "redaction.audit_visibility",
+                    &json!({"target": target.clone()}),
+                    &json!({
+                        "audit_content_present": false,
+                        "redacts": target["event_id"].clone(),
+                    }),
+                    &json!({
+                        "audit": audit.clone(),
+                        "redacts": audit["redacts"].clone(),
+                    }),
+                );
             }
             "snapshot_pruning_stub" => {
-                let redacted = redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
+                let redacted =
+                    redact_event(&target, "cx:event:01970e58-0004-7000-8000-000000000001")?;
                 // After redaction, snapshot should retain verification stub
                 if redacted.get("content").is_some() {
                     bail!(
@@ -78,6 +134,21 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                 if redacted["redacts"] != target["event_id"] {
                     bail!("redaction fixture {} lost redaction reference", case.name);
                 }
+                record_vector_event(
+                    "redaction.snapshot_pruning_stub",
+                    &json!({"target": target.clone()}),
+                    &json!({
+                        "content_present": false,
+                        "proofs_present": false,
+                        "redacts": target["event_id"].clone(),
+                    }),
+                    &json!({
+                        "redacted": redacted.clone(),
+                        "content_present": redacted.get("content").is_some(),
+                        "proofs_present": redacted.get("proofs").is_some(),
+                        "redacts": redacted["redacts"].clone(),
+                    }),
+                );
             }
             _ => bail!("unknown redaction fixture case {}", case.name),
         }

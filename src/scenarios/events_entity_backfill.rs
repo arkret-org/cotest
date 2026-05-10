@@ -149,9 +149,7 @@ pub async fn repo_entity_state_operations_are_submitted_and_backfilled() -> Resu
     let backfill = expect_json(
         server
             .http()
-            .get(server.url(&format!(
-                "/api/v1/events?spaces={space_id}&limit=10"
-            )))
+            .get(server.url(&format!("/api/v1/events?spaces={space_id}&limit=10")))
             .bearer_auth(&alice),
         StatusCode::OK,
     )

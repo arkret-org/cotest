@@ -2,6 +2,7 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::{PrivacySecurityFixture, load_fixture_value, parse_fixture_value};
+use crate::transcripts::record_vector_event;
 
 pub fn run_privacy_security_fixture_suite() -> Result<()> {
     let value = load_fixture_value("privacy-security-fixture.json")?;
@@ -22,6 +23,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
+                record_vector_event(
+                    "privacy.private_blob_head_range_anti_enumeration",
+                    &json!({"hidden_request": true, "missing_request": false}),
+                    &json!({"hidden_error": "not_found", "missing_error": "not_found"}),
+                    &json!({"hidden_error": hidden, "missing_error": missing}),
+                );
             }
             "push_blind_wakeup_payload" => {
                 let payload = blind_wakeup_payload();
@@ -31,6 +38,16 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
+                record_vector_event(
+                    "privacy.push_blind_wakeup_payload",
+                    &json!({}),
+                    &json!({"body_present": false, "members_present": false}),
+                    &json!({
+                        "payload": payload.clone(),
+                        "body_present": payload.get("body").is_some(),
+                        "members_present": payload.get("members").is_some(),
+                    }),
+                );
             }
             "hidden_space_resolve_indistinguishable" => {
                 if case.operation_id.as_deref() != Some("cx.directory.resolve_space")
@@ -46,6 +63,22 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
+                record_vector_event(
+                    "privacy.hidden_space_resolve_indistinguishable",
+                    &json!({"operation_id": case.operation_id.clone()}),
+                    &json!({
+                        "operation_id": "cx.directory.resolve_space",
+                        "same_http_status": 404,
+                    }),
+                    &json!({
+                        "operation_id": case.operation_id.clone(),
+                        "same_http_status": case
+                            .expected
+                            .as_ref()
+                            .and_then(|expected| expected.get("same_http_status"))
+                            .cloned(),
+                    }),
+                );
             }
             "private_contact_discovery_padding_and_cardinality" => {
                 let input = case
@@ -66,6 +99,19 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
+                record_vector_event(
+                    "privacy.private_contact_discovery_padding_and_cardinality",
+                    &json!({
+                        "contacts": contact_count,
+                        "target_batch_size": target_batch_size,
+                    }),
+                    &json!({"target_batch_size_gt_contacts": true}),
+                    &json!({
+                        "target_batch_size": target_batch_size,
+                        "contact_count": contact_count,
+                        "target_batch_size_gt_contacts": target_batch_size > contact_count as u64,
+                    }),
+                );
             }
             "plaintext_visible_service_required_for_private_body_processing" => {
                 let expected = case
@@ -83,13 +129,33 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
+                record_vector_event(
+                    "privacy.plaintext_visible_service_required_for_private_body_processing",
+                    &json!({}),
+                    &json!({"decision": "deny", "must_not_forward_plaintext": true}),
+                    &json!({
+                        "decision": expected.get("decision").cloned(),
+                        "must_not_forward_plaintext": expected
+                            .get("must_not_forward_plaintext")
+                            .cloned(),
+                    }),
+                );
             }
             "pairwise_did_resolve_proof" => {
-                if resolve_private_did(None).is_ok()
-                    || resolve_private_did(Some("holder-proof")).is_err()
-                {
+                let no_proof = resolve_private_did(None);
+                let with_proof = resolve_private_did(Some("holder-proof"));
+                if no_proof.is_ok() || with_proof.is_err() {
                     bail!("privacy fixture {} proof requirement mismatch", case.name);
                 }
+                record_vector_event(
+                    "privacy.pairwise_did_resolve_proof",
+                    &json!({"no_proof_request": null, "with_proof_request": "holder-proof"}),
+                    &json!({"no_proof_ok": false, "with_proof_ok": true}),
+                    &json!({
+                        "no_proof_ok": no_proof.is_ok(),
+                        "with_proof_ok": with_proof.is_ok(),
+                    }),
+                );
             }
             "encrypted_payload_forwarding_without_plaintext" => {
                 let forwarded = forwarded_encrypted_payload();
@@ -101,6 +167,19 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
+                record_vector_event(
+                    "privacy.encrypted_payload_forwarding_without_plaintext",
+                    &json!({}),
+                    &json!({
+                        "plaintext_present": false,
+                        "ciphertext": "opaque-ciphertext",
+                    }),
+                    &json!({
+                        "forwarded": forwarded.clone(),
+                        "plaintext_present": forwarded.get("plaintext").is_some(),
+                        "ciphertext": forwarded["ciphertext"].clone(),
+                    }),
+                );
             }
             _ => bail!("unknown privacy fixture case {}", case.name),
         }

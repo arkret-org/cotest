@@ -76,6 +76,20 @@
       ]
     },
     {
+      "profile_id": "cx.profile.directory_service.v1",
+      "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\artifacts\\profiles\\conformance-profiles.json",
+      "summary_status": "partial",
+      "requirements": [
+        { "name": "Directory describe / profile discovery", "status": "implemented", "sources": ["directory_service"], "tests": ["teabay_directory_service_profile_is_discoverable"] },
+        { "name": "Query face: search / resolve envelope", "status": "implemented", "sources": ["teabay_it"], "tests": ["postgres_query_and_psi_conformance_smoke"] },
+        { "name": "Private Contact Discovery", "status": "implemented", "sources": ["teabay_it"], "tests": ["postgres_query_and_psi_conformance_smoke"] },
+        { "name": "Operator admin surface", "status": "implemented", "sources": ["teabay_it", "directory_service"], "tests": ["postgres_query_and_psi_conformance_smoke", "teabay_directory_service_profile_is_discoverable"] },
+        { "name": "Push ingest verify chain", "status": "partial", "sources": ["teabay_unit", "teabay_it"], "tests": ["postgres_query_and_psi_conformance_smoke"] },
+        { "name": "Pull revalidation worker", "status": "partial", "sources": ["teabay_unit"], "tests": [] },
+        { "name": "Divergence worker", "status": "partial", "sources": ["teabay_unit"], "tests": [] }
+      ]
+    },
+    {
       "profile_id": "cx.profile.index_node.v1",
       "spec_ref": "E:\\Works\\contrix-dev\\contrix-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",

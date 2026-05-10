@@ -6,5 +6,6 @@
 pub mod conformance;
 pub mod harness;
 pub mod scenarios;
+pub mod transcripts;
 
 pub const HARNESS_NAME: &str = "cotest";

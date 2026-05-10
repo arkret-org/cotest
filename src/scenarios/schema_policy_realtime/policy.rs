@@ -156,4 +156,3 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
 
     Ok(())
 }
-

@@ -22,8 +22,8 @@ Recommended entrypoints:
 
 - `process` mode is the fast local path and spawns the SUT with `cargo run`.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
-  attach live `coauth`, `floria`, `sodmin`, or `yougen` services through base
-  URLs or managed service commands.
+  attach live `coauth`, `floria`, `sodmin`, `yougen`, or `teabay` services
+  through base URLs or managed service commands.
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
@@ -48,6 +48,11 @@ cargo test --tests -- --nocapture
 If `COTEST_SUT_MANIFEST` is not set, the harness falls back to the bundled
 default `soland` checkout. `SERVERX_MANIFEST` is still accepted as a legacy
 override to avoid breaking older local workflows.
+
+The teabay Directory Service bridge is optional in normal runs. Set
+`TEABAY_BASE_URL=http://127.0.0.1:7781` to attach an already running Directory,
+or build `../teabay` and provide `DATABASE_URL` so cotest can spawn it through
+the `TEABAY_BIN`/sibling-binary convention.
 
 ## Runtime Modes
 
