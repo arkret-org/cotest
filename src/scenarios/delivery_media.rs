@@ -113,7 +113,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/device-noauth"))
+            .post(server.url("/api/v1/device_messages"))
+            .header("Idempotency-Key", "device-noauth")
             .json(&json!({"messages": {}})),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
@@ -122,8 +123,9 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     expect_api_error(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/device-bad-json"))
+            .post(server.url("/api/v1/device_messages"))
             .bearer_auth(&token)
+            .header("Idempotency-Key", "device-bad-json")
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -134,8 +136,9 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let send = expect_json(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/device-idempotent-txn"))
+            .post(server.url("/api/v1/device_messages"))
             .bearer_auth(&token)
+            .header("Idempotency-Key", "device-idempotent-txn")
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
@@ -154,8 +157,9 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let duplicate = expect_json(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/device-idempotent-txn"))
+            .post(server.url("/api/v1/device_messages"))
             .bearer_auth(&token)
+            .header("Idempotency-Key", "device-idempotent-txn")
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {

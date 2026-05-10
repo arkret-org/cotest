@@ -119,8 +119,9 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     let send = expect_json(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/protocol-device-txn"))
+            .post(server.url("/api/v1/device_messages"))
             .bearer_auth(&token)
+            .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
@@ -139,8 +140,9 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     let duplicate_send = expect_json(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/protocol-device-txn"))
+            .post(server.url("/api/v1/device_messages"))
             .bearer_auth(&token)
+            .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
@@ -188,8 +190,9 @@ pub async fn repo_keys_device_blob_push_and_moderation_surfaces_work() -> Result
     let verification_send = expect_json(
         server
             .http()
-            .put(server.url("/api/v1/device_messages/protocol-verification-txn"))
+            .post(server.url("/api/v1/device_messages"))
             .bearer_auth(&token)
+            .header("Idempotency-Key", "protocol-verification-txn")
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
