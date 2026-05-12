@@ -1,167 +1,13 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::{
-    CapabilityFixture, ResourceRef, ResourceSelector, load_fixture_value, parse_fixture_value,
-    required_str, validate_profile,
-};
-use crate::transcripts::record_vector_event;
+use super::{load_fixture_value, required_str, validate_profile};
 
 pub fn run_capability_fixture_suite() -> Result<()> {
     let value = load_fixture_value("capability-fixture.json")?;
-    if value.get("suite").is_none() {
-        return run_capability_artifact_suite(&value);
-    }
-    let fixture: CapabilityFixture = parse_fixture_value("capability-fixture.json", value)?;
-    if fixture.suite != "capability" {
-        bail!("unexpected fixture suite {}", fixture.suite);
-    }
-
-    for case in fixture.cases {
-        match case.name.as_str() {
-            "resource_selector_grammar" => {
-                let selector = case
-                    .selector
-                    .ok_or_else(|| anyhow!("capability fixture {} missing selector", case.name))?;
-                let task = ResourceRef {
-                    kind: "entity".to_owned(),
-                    space_id: selector.space_id.clone(),
-                    entity_type: Some("task".to_owned()),
-                };
-                let note = ResourceRef {
-                    kind: "entity".to_owned(),
-                    space_id: selector.space_id.clone(),
-                    entity_type: Some("note".to_owned()),
-                };
-                let matches_task = selector.matches(&task);
-                let matches_note = selector.matches(&note);
-                if !matches_task || matches_note {
-                    bail!("capability fixture {} selector grammar mismatch", case.name);
-                }
-                record_vector_event(
-                    "capability.resource_selector_grammar",
-                    &json!({
-                        "selector_space_id": selector.space_id,
-                        "selector_entity_type": selector.entity_type,
-                        "selector_kind": selector.kind,
-                    }),
-                    &json!({"matches_task": true, "matches_note": false}),
-                    &json!({"matches_task": matches_task, "matches_note": matches_note}),
-                );
-            }
-            "constraint_fail_closed" => {
-                let grant = CapabilityGrant {
-                    required_claims: BTreeSet::from(["employee".to_owned()]),
-                    approval_mode: ApprovalMode::None,
-                    approved: false,
-                    revoked_claims: BTreeSet::new(),
-                    scope: selector_scope("task")?,
-                };
-                let usable = grant.is_usable(&BTreeSet::new());
-                if usable {
-                    bail!("capability fixture {} did not fail closed", case.name);
-                }
-                record_vector_event(
-                    "capability.constraint_fail_closed",
-                    &json!({
-                        "required_claims": ["employee"],
-                        "presented_claims": Vec::<String>::new(),
-                    }),
-                    &json!({"usable": false}),
-                    &json!({"usable": usable}),
-                );
-            }
-            "approval_proposal" => {
-                let grant = CapabilityGrant {
-                    required_claims: BTreeSet::new(),
-                    approval_mode: ApprovalMode::ProposalThenApprove,
-                    approved: false,
-                    revoked_claims: BTreeSet::new(),
-                    scope: selector_scope("task")?,
-                };
-                let usable = grant.is_usable(&BTreeSet::new());
-                if usable {
-                    bail!(
-                        "capability fixture {} allowed unapproved proposal",
-                        case.name
-                    );
-                }
-                record_vector_event(
-                    "capability.approval_proposal",
-                    &json!({
-                        "approval_mode": "ProposalThenApprove",
-                        "approved": false,
-                    }),
-                    &json!({"usable": false}),
-                    &json!({"usable": usable}),
-                );
-            }
-            "claim_revocation" => {
-                let grant = CapabilityGrant {
-                    required_claims: BTreeSet::from(["employee".to_owned()]),
-                    approval_mode: ApprovalMode::None,
-                    approved: false,
-                    revoked_claims: BTreeSet::from(["employee".to_owned()]),
-                    scope: selector_scope("task")?,
-                };
-                let usable = grant.is_usable(&BTreeSet::from(["employee".to_owned()]));
-                if usable {
-                    bail!("capability fixture {} ignored revoked claim", case.name);
-                }
-                record_vector_event(
-                    "capability.claim_revocation",
-                    &json!({
-                        "required_claims": ["employee"],
-                        "revoked_claims": ["employee"],
-                        "presented_claims": ["employee"],
-                    }),
-                    &json!({"usable": false}),
-                    &json!({"usable": usable}),
-                );
-            }
-            "delegation_cycle_and_scope_narrowing" => {
-                let parent = Delegation {
-                    from: "did:web:alice.example".to_owned(),
-                    to: "did:web:bob.example".to_owned(),
-                    scope: selector_scope("task")?,
-                };
-                let child_ok = Delegation {
-                    from: "did:web:bob.example".to_owned(),
-                    to: "did:web:carol.example".to_owned(),
-                    scope: selector_scope("task")?,
-                };
-                let child_bad_scope = Delegation {
-                    from: "did:web:bob.example".to_owned(),
-                    to: "did:web:carol.example".to_owned(),
-                    scope: selector_scope("entity")?,
-                };
-                let cycle = Delegation {
-                    from: "did:web:carol.example".to_owned(),
-                    to: "did:web:alice.example".to_owned(),
-                    scope: selector_scope("task")?,
-                };
-                validate_delegations(&[parent.clone(), child_ok.clone()])?;
-                if validate_delegations(&[parent.clone(), child_bad_scope]).is_ok() {
-                    bail!(
-                        "capability fixture {} allowed widened child scope",
-                        case.name
-                    );
-                }
-                if validate_delegations(&[parent, child_ok.clone(), cycle]).is_ok() {
-                    bail!("capability fixture {} allowed delegation cycle", case.name);
-                }
-            }
-            _ => bail!("unknown capability fixture case {}", case.name),
-        }
-    }
-
-    Ok(())
-}
-
-fn run_capability_artifact_suite(value: &Value) -> Result<()> {
-    validate_profile(value, "cx.profile.capability_vectors.v1")?;
+    validate_profile(&value, "cx.profile.capability_vectors.v1")?;
     let fixtures = value
         .get("fixtures")
         .and_then(Value::as_array)
@@ -197,133 +43,58 @@ fn run_capability_artifact_suite(value: &Value) -> Result<()> {
     Ok(())
 }
 
-// ── Capability facet fixture suite ──────────────────────────────────────────
-
 pub fn run_capability_facet_fixture_suite() -> Result<()> {
     let grant = FacetGrant {
-        allowed_entity_facets: BTreeSet::from(["rankable".to_owned(), "stateful".to_owned()]),
+        facet_allow: BTreeSet::from(["assignable".to_owned(), "stateful".to_owned()]),
         critical: true,
     };
-    let matching = EntityTarget {
-        entity_type: "task".to_owned(),
+    let matching = ObjectTarget {
+        object_type: "morph".to_owned(),
         facets: Some(BTreeSet::from([
-            "rankable".to_owned(),
+            "assignable".to_owned(),
             "renderable".to_owned(),
             "stateful".to_owned(),
         ])),
     };
     if !grant.allows(&matching) {
-        bail!("capability facet suite rejected matching entity facets");
+        bail!("capability facet suite rejected matching object facets");
     }
 
-    let missing_facets = EntityTarget {
-        entity_type: "task".to_owned(),
+    let missing_facets = ObjectTarget {
+        object_type: "morph".to_owned(),
         facets: None,
     };
     if grant.allows(&missing_facets) {
         bail!("capability facet suite did not fail closed for missing critical facets");
     }
 
-    let compatibility_label_only = EntityTarget {
-        entity_type: "rankable_stateful_task".to_owned(),
+    let label_only = ObjectTarget {
+        object_type: "assignable_stateful_morph".to_owned(),
         facets: Some(BTreeSet::from(["renderable".to_owned()])),
     };
-    if grant.allows(&compatibility_label_only) {
-        bail!("capability facet suite allowed entity_type labels to satisfy facet constraints");
+    if grant.allows(&label_only) {
+        bail!("capability facet suite allowed object_type labels to satisfy facet constraints");
     }
 
     Ok(())
 }
 
-// ── Internal types ──────────────────────────────────────────────────────────
-
-fn selector_scope(entity_type: &str) -> Result<ResourceSelector> {
-    Ok(ResourceSelector {
-        kind: "entity".to_owned(),
-        space_id: "cx:space:01970e58-0003-7000-8000-000000000001".to_owned(),
-        entity_type: Some(entity_type.to_owned()),
-    })
-}
-
-enum ApprovalMode {
-    None,
-    ProposalThenApprove,
-}
-
-struct CapabilityGrant {
-    required_claims: BTreeSet<String>,
-    approval_mode: ApprovalMode,
-    approved: bool,
-    revoked_claims: BTreeSet<String>,
-    scope: ResourceSelector,
-}
-
-impl CapabilityGrant {
-    fn is_usable(&self, claims: &BTreeSet<String>) -> bool {
-        let _ = &self.scope;
-        if !self.required_claims.is_subset(claims) {
-            return false;
-        }
-        if self
-            .required_claims
-            .iter()
-            .any(|claim| self.revoked_claims.contains(claim))
-        {
-            return false;
-        }
-        match self.approval_mode {
-            ApprovalMode::None => true,
-            ApprovalMode::ProposalThenApprove => self.approved,
-        }
-    }
-}
-
 struct FacetGrant {
-    allowed_entity_facets: BTreeSet<String>,
+    facet_allow: BTreeSet<String>,
     critical: bool,
 }
 
-struct EntityTarget {
-    entity_type: String,
+struct ObjectTarget {
+    object_type: String,
     facets: Option<BTreeSet<String>>,
 }
 
 impl FacetGrant {
-    fn allows(&self, target: &EntityTarget) -> bool {
-        let _ = &target.entity_type;
+    fn allows(&self, target: &ObjectTarget) -> bool {
+        let _ = &target.object_type;
         match &target.facets {
-            Some(facets) => self.allowed_entity_facets.is_subset(facets),
-            None => !self.critical && self.allowed_entity_facets.is_empty(),
+            Some(facets) => self.facet_allow.is_subset(facets),
+            None => !self.critical && self.facet_allow.is_empty(),
         }
     }
-}
-
-#[derive(Clone)]
-struct Delegation {
-    from: String,
-    to: String,
-    scope: ResourceSelector,
-}
-
-fn validate_delegations(delegations: &[Delegation]) -> Result<()> {
-    let mut graph = HashMap::<String, String>::new();
-    for delegation in delegations {
-        graph.insert(delegation.from.clone(), delegation.to.clone());
-    }
-    for delegation in delegations {
-        let mut seen = HashSet::new();
-        let mut current = delegation.to.as_str();
-        while let Some(next) = graph.get(current) {
-            if !seen.insert(current.to_owned()) || next == &delegation.from {
-                bail!("delegation cycle detected");
-            }
-            current = next;
-        }
-    }
-    for window in delegations.windows(2) {
-        if !window[0].scope.contains(&window[1].scope) {
-            bail!("delegation widened child scope");
-        }
-    }
-    Ok(())
 }

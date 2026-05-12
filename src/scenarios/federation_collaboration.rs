@@ -157,22 +157,6 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     .await?;
     assert_eq!(txn["accepted"][0], "cx:operation:federation-bob-message-01");
 
-    let alice_thread = expect_json(
-        server_a
-            .http()
-            .get(server_a.url("/api/v1/index/thread?thread_id=cx:thread:federation"))
-            .bearer_auth(&alice),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(
-        alice_thread["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|event| event["content"]["body"] == "hello alice from server b")
-    );
-
     let key_upload = expect_json(
         server_b
             .http()
@@ -180,16 +164,14 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
             .bearer_auth(&bob)
             .json(&json!({
                 "device_id": "dev_bob_b",
-                "device_keys": {"alg": "mls-rfc9420", "key": "bob-device-key"},
-                "one_time_keys": [{"key_id": "bob-otk1", "key": "bob-one-time"}],
+                "one_time_keys": {"signed_curve25519:bob-otk1": {"key_id": "bob-otk1", "key": "bob-one-time"}},
                 "fallback_keys": {},
-                "mls_key_packages": [{"package_id": "bob-mls-package", "key": "opaque"}],
-                "device_signature": {"alg": "none"}
+                "device_signature": {"alg": "EdDSA", "signature": "bob-device-signature"}
             })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(key_upload["one_time_key_counts"]["signed_curve25519"], 1);
+    assert_eq!(key_upload["one_time_key_counts"]["total"], 1);
 
     let device_message = expect_json(
         server_b

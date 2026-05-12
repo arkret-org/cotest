@@ -229,18 +229,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc14f565cf027a105f7a44ccf9e5b424348421a1d8952a8fc9d499d313107789"
 
 [[package]]
-name = "contrix-client"
-version = "0.7.0"
-dependencies = [
- "contrix-core",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "contrix-core"
 version = "0.7.0"
 dependencies = [
@@ -256,6 +244,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "contrix-http-client"
+version = "0.7.0"
+dependencies = [
+ "contrix-core",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "contrix-identifiers"
 version = "0.7.0"
 dependencies = [
@@ -265,16 +265,6 @@ dependencies = [
  "sha2",
  "thiserror",
  "uuid",
-]
-
-[[package]]
-name = "contrix-lattice"
-version = "0.7.0"
-dependencies = [
- "contrix-core",
- "serde",
- "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -311,9 +301,8 @@ dependencies = [
  "base64",
  "chacha20poly1305",
  "chrono",
- "contrix-client",
  "contrix-core",
- "contrix-lattice",
+ "contrix-http-client",
  "hkdf",
  "jsonschema",
  "pbkdf2",

@@ -174,49 +174,6 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         secret_space_id
     );
 
-    let all_space_ids = vec![
-        public_space_id.clone(),
-        listed_space_id.clone(),
-        restricted_space_id.clone(),
-        unlisted_space_id.clone(),
-        invite_only_space_id.clone(),
-        secret_space_id.clone(),
-    ];
-    let anonymous_index = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/index/query"))
-            .json(&json!({"space_ids": all_space_ids})),
-        StatusCode::OK,
-    )
-    .await?;
-    let anonymous_index_ids: BTreeSet<_> = anonymous_index["results"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|entry| entry["space_id"].as_str().map(ToOwned::to_owned))
-        .collect();
-    assert_eq!(
-        anonymous_index_ids,
-        BTreeSet::from([public_space_id.clone()])
-    );
-
-    let alice_index = expect_json(
-        alice.post("/api/v1/index/query").json(&json!({
-            "space_ids": [
-                public_space_id,
-                listed_space_id,
-                restricted_space_id,
-                unlisted_space_id,
-                invite_only_space_id,
-                secret_space_id
-            ]
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(alice_index["results"].as_array().unwrap().len(), 6);
-
     let anonymous_bob_actors = expect_json(
         server
             .http()

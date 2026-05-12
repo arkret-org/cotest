@@ -1,6 +1,5 @@
-//! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`,
-//! `multi_service_bridge_contract_matrix_scaffold`, and
-//! `session_grant_exchange_uses_configured_coauth_introspection`.
+//! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
+//! and `session_grant_exchange_uses_configured_coauth_introspection`.
 //!
 //! Pure mechanical extraction from the previous `bridge_contracts.rs` —
 //! no logic changes.

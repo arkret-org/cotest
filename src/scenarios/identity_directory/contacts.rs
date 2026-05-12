@@ -1,11 +1,9 @@
-use std::time::Duration;
-
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, eventually, expect_audit_action, expect_json, expect_response, expect_status,
+    ContrixServer, expect_audit_action, expect_json, expect_response, expect_status,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
@@ -131,45 +129,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             "hello directory workflow",
         )
         .await?;
-
-    let notifications = eventually(
-        "notification projection",
-        Duration::from_secs(2),
-        Duration::from_millis(50),
-        || {
-            let server = &server;
-            let bob_actor = bob.actor.clone();
-            let event_id = sent["event_id"].as_str().unwrap().to_owned();
-            async move {
-                let body = expect_json(
-                    server
-                        .http()
-                        .get(server.url(&format!("/api/v1/index/notifications?actor={bob_actor}"))),
-                    StatusCode::OK,
-                )
-                .await?;
-                if body["unread_count"]
-                    .as_u64()
-                    .is_some_and(|count| count >= 1)
-                    && body["notifications"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .any(|notification| notification["event_ref"] == event_id)
-                {
-                    Ok(body)
-                } else {
-                    Err(anyhow!("notification for {event_id} not projected yet"))
-                }
-            }
-        },
-    )
-    .await?;
-    assert!(
-        notifications["unread_count"]
-            .as_u64()
-            .is_some_and(|count| count >= 1)
-    );
 
     let exported = expect_json(
         alice.get(&format!("/api/v1/spaces/{shared_space_id}/export")),

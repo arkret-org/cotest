@@ -750,10 +750,10 @@ function New-ReleaseGate {
                     "push_and_moderation_edges_are_enforced"
                 )))
     $checks.Add((New-ReleaseGateCheck `
-                -Id "recovery_restore_surface" `
-                -Description "Key backup, restore-ticket lifecycle, recovery discovery, and stack-bundle surfaces stay coherent." `
+                -Id "key_backup_surface" `
+                -Description "Key backup CRUD stays coherent with the protocol surface." `
                 -Tests $Tests `
-                -RequiredTests @("repo_keys_device_blob_push_and_moderation_surfaces_work")))
+                -RequiredTests @("events_keys_device_blob_push_and_moderation_surfaces_work")))
     $checks.Add((New-ReleaseGateCheck `
                 -Id "device_session_revoke" `
                 -Description "Logout revokes the bound session/device path and rejects further bearer use." `

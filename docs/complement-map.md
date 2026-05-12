@@ -103,9 +103,9 @@ scenarios side by side.
 - Collaboration and policy:
   space lifecycle, membership, permissions, sync projection, and private
   plaintext policy enforcement.
-- Repo and sync:
-  commit submission, idempotency, CAS conflicts, read paths, repo sync,
-  directory/index parameter handling, and expanded commit reads.
+- Events and sync:
+  event submission, idempotency, dependency conflicts, read paths, event sync,
+  directory/index parameter handling, and expanded event reads.
 - Identity, authz, and realtime:
   identity resolution/log/receipts, grant and policy document lifecycle,
   presence/typing, push rules, and WebRTC signaling.

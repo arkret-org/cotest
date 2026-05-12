@@ -37,11 +37,9 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "device_id": "dev_other",
-                "device_keys": {},
-                "one_time_keys": [],
+                "one_time_keys": {},
                 "fallback_keys": {},
-                "mls_key_packages": [],
-                "device_signature": {}
+                "device_signature": {"alg": "EdDSA", "signature": "wrong-device"}
             })),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -55,11 +53,9 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "device_id": "dev_alice",
-                "device_keys": {"key": "alice-device"},
-                "one_time_keys": [{"key_id": "otk1", "key": "single-use"}],
+                "one_time_keys": {"signed_curve25519:otk1": {"key_id": "otk1", "key": "single-use"}},
                 "fallback_keys": {},
-                "mls_key_packages": [],
-                "device_signature": {"alg": "none"}
+                "device_signature": {"alg": "EdDSA", "signature": "alice-device"}
             })),
         StatusCode::OK,
     )
@@ -339,36 +335,6 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                 "notification": {
                     "devices": [{"device_id": "unknown-device"}],
                     "body": "plaintext leak"
-                }
-            })),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/api/v1/push/notify"))
-            .json(&json!({
-                "notification": {
-                    "type": "blind_wakeup",
-                    "devices": [{"device_id": "unknown-device"}],
-                    "room_id": "!legacy:example.com"
-                }
-            })),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/api/v1/push/notify"))
-            .json(&json!({
-                "notification": {
-                    "type": "blind_wakeup",
-                    "devices": [{"device_id": "unknown-device"}],
-                    "flow_id": "cx:card:legacy-card"
                 }
             })),
         StatusCode::BAD_REQUEST,

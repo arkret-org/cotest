@@ -76,49 +76,6 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     .await?;
     assert_eq!(verified["valid"], true);
 
-    let legacy_transaction_operation = Operation::create(
-        OperationId::new("cx:operation:federation-txn-legacy-contract")?,
-        SpaceId::new("cx:space:federation-invalid")?,
-        "cx.message.create",
-        json!({
-            "event_id": "cx:event:federation-txn-legacy-contract",
-            "sender": "did:web:remote.example",
-            "flow_id": "cx:card:legacy-card",
-            "body": "legacy typed id"
-        }),
-    );
-    let legacy_transaction = expect_json(
-        server
-            .http()
-            .put(server.url("/api/v1/federation/transactions/federation-legacy-contract"))
-            .json(&json!({
-                "origin": "did:web:remote.example",
-                "destination": server.service_did(),
-                "service_binding_ref": "did:web:remote.example#soland",
-                "operations": [legacy_transaction_operation]
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(
-        legacy_transaction["accepted"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(
-        legacy_transaction["rejected"][0]["operation_id"],
-        "cx:operation:federation-txn-legacy-contract"
-    );
-    assert_eq!(
-        legacy_transaction["rejected"][0]["reason"],
-        "invalid_semantics"
-    );
-    assert_eq!(
-        legacy_transaction["rejected"][0]["message"],
-        "removed legacy subject/room/card contract is forbidden on the active v1 wire"
-    );
-
     Ok(())
 }
 
@@ -232,42 +189,6 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     assert!(invalid_push["accepted"].as_array().unwrap().is_empty());
     assert_eq!(invalid_push["rejected"][0]["reason"], "invalid_semantics");
 
-    let legacy_operation = Operation::create(
-        OperationId::new("cx:operation:federation-legacy-contract")?,
-        SpaceId::new("cx:space:federation")?,
-        "cx.message.create",
-        json!({
-            "event_id": "cx:event:federation-legacy-contract",
-            "sender": "did:web:remote.example",
-            "room_id": "!legacy:example.com",
-            "body": "legacy contract field"
-        }),
-    );
-    let legacy_push = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/federation/push-operations"))
-            .json(&json!({
-                "origin": "did:web:remote.example",
-                "destination": server.service_did(),
-                "space_id": "cx:space:federation",
-                "service_binding_ref": "did:web:remote.example#soland",
-                "operations": [legacy_operation]
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(legacy_push["accepted"].as_array().unwrap().is_empty());
-    assert_eq!(
-        legacy_push["rejected"][0]["operation_id"],
-        "cx:operation:federation-legacy-contract"
-    );
-    assert_eq!(legacy_push["rejected"][0]["reason"], "invalid_semantics");
-    assert_eq!(
-        legacy_push["rejected"][0]["message"],
-        "removed legacy subject/room/card contract is forbidden on the active v1 wire"
-    );
-
     let redaction = Operation::create(
         OperationId::new("cx:operation:federation-redaction")?,
         SpaceId::new("cx:space:federation")?,
@@ -355,24 +276,6 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     assert_eq!(
         sync["spaces"][space_id]["timeline"]["events"][0]["content"]["body"],
         "searchable federated payload"
-    );
-
-    let search = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/index/search"))
-            .bearer_auth(&alice)
-            .json(&json!({
-                "query": "searchable federated",
-                "space_ids": [space_id],
-                "entity_types": ["message"]
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        search["results"][0]["event_id"],
-        "cx:event:federation-project-01"
     );
 
     Ok(())

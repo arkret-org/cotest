@@ -4,7 +4,9 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, dev_login, expect_json, expect_status, register_account};
+use crate::harness::{
+    ContrixServer, dev_login, expect_json, expect_status, register_account, send_message,
+};
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let server = ContrixServer::spawn("collaboration-workflow").await?;
@@ -118,54 +120,16 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .any(|member| member == "did:web:bob.example")
     );
 
-    let sent = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/messages/send"))
-            .bearer_auth(&alice)
-            .json(&json!({
-                "space_id": space_id,
-                "thread_id": "cx:thread:collaboration",
-                "content": {"body": "hello from collaboration workflow"},
-                "encrypted": false
-            })),
-        StatusCode::CREATED,
+    let sent = send_message(
+        &server,
+        &alice,
+        "did:web:alice.example",
+        &space_id,
+        "cx:thread:collaboration",
+        "hello from collaboration workflow",
     )
     .await?;
-    assert!(
-        sent["operation_id"]
-            .as_str()
-            .unwrap()
-            .starts_with("cx:operation:")
-    );
-
-    let thread = expect_json(
-        server
-            .http()
-            .get(server.url("/api/v1/index/thread?thread_id=cx:thread:collaboration"))
-            .bearer_auth(&bob),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        thread["events"][0]["content"]["body"],
-        "hello from collaboration workflow"
-    );
-
-    let search = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/index/search"))
-            .bearer_auth(&bob)
-            .json(&json!({
-                "query": "collaboration",
-                "space_ids": [space_id],
-                "entity_types": ["message"]
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(search["results"][0]["event_id"], sent["event_id"]);
+    assert!(sent["event_id"].as_str().unwrap().starts_with("cx:event:"));
 
     let bob_sync = expect_json(
         server

@@ -230,73 +230,6 @@ fn rank_order_entry_id(entry: &Value) -> Result<String> {
     bail!("encoding rank_order entry missing flow_id");
 }
 
-// ── Facet renderer query fixture suite ──────────────────────────────────────
-
-pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
-    let request = json!({
-        "projection": "collection",
-        "preset": "kanban",
-        "renderer": "board",
-        "view_id": "cx:view:019641be-0000-7000-8000-000000000000",
-        "facets": ["stateful", "rankable"],
-        "limit": 50
-    });
-    validate_query_renderer(&request)?;
-    let required_facets = request_facets(&request)?;
-    let entities = vec![
-        json!({
-            "id": "cx:entity:019641a5-0000-7000-8000-000000000000",
-            "entity_type": "task",
-            "facets": ["stateful", "rankable", "renderable"],
-            "title": "Rankable task"
-        }),
-        json!({
-            "id": "cx:entity:01964155-0000-7000-8000-000000000000",
-            "entity_type": "note",
-            "facets": ["stateful", "renderable"],
-            "title": "State-only note"
-        }),
-    ];
-    let visible = filter_entities_by_facets(&entities, &required_facets)?;
-    if visible.len() != 1
-        || value_field_str(&visible[0], "id")? != "cx:entity:019641a5-0000-7000-8000-000000000000"
-    {
-        bail!("facet renderer query suite did not filter by requested facets");
-    }
-
-    let response = json!({
-        "projection": "collection",
-        "preset": "kanban",
-        "view_id": "cx:view:019641be-0000-7000-8000-000000000000",
-        "frontier": {"state_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
-        "groups": [{
-            "key": "todo",
-            "title": "Todo",
-            "source": {"model": "field_value", "field": "fields.status", "value": "todo"},
-            "items": [{
-                "entity": visible[0].clone(),
-                "position": {"model": "field_value", "container_id": "todo", "rank": "F"}
-            }],
-            "next_cursor": null,
-            "limited": false
-        }]
-    });
-    validate_response_entities_against_request_facets(&response, &request, "facet_renderer_query")?;
-
-    let invalid_renderer = json!({
-        "projection": "collection",
-        "preset": "kanban",
-        "renderer": "table",
-        "view_id": "cx:view:019641be-0000-7000-8000-000000000000",
-        "facets": ["stateful", "rankable"]
-    });
-    if validate_query_renderer(&invalid_renderer).is_ok() {
-        bail!("facet renderer query suite accepted mismatched renderer");
-    }
-
-    Ok(())
-}
-
 // ── Projection position discriminator fixture suite ─────────────────────────
 
 pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
@@ -308,8 +241,8 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
         }),
         json!({
             "model": "relation_container",
-            "scope_container_id": "cx:entity:019640b6-8000-7000-8000-000000000000",
-            "container_id": "cx:entity:019640c0-8000-7000-8000-000000000000",
+            "scope_container_id": "cx:place:019640b6-8000-7000-8000-000000000000",
+            "container_id": "cx:place:019640c0-8000-7000-8000-000000000000",
             "relation_kind": "contains",
             "relation_id": "cx:relation:01970e58-0002-7000-8000-000000000001",
             "rank": "V"
@@ -337,7 +270,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
 
     let invalid = json!({
         "model": "relation_container",
-        "container_id": "cx:entity:019640c0-8000-7000-8000-000000000000",
+        "container_id": "cx:place:019640c0-8000-7000-8000-000000000000",
         "relation_kind": "contains",
         "rank": "F"
     });
@@ -349,59 +282,6 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
 }
 
 // ── Shared validation helpers (encoding/projection) ─────────────────────────
-
-pub(crate) fn validate_query_renderer(request: &Value) -> Result<()> {
-    let projection = value_field_str(request, "projection")?;
-    let renderer = value_field_str(request, "renderer")?;
-    let preset = request
-        .get("preset")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned)
-        .or_else(|| infer_preset_from_renderer(projection, renderer).map(ToOwned::to_owned))
-        .ok_or_else(|| {
-            anyhow!("unsupported projection/renderer mapping {projection}/{renderer}")
-        })?;
-    let expected = expected_renderer(projection, &preset).ok_or_else(|| {
-        anyhow!("unsupported projection/preset renderer mapping {projection}/{preset}")
-    })?;
-    if renderer != expected {
-        bail!("renderer {renderer} does not match {projection}/{preset}; expected {expected}");
-    }
-    Ok(())
-}
-
-fn infer_preset_from_renderer(projection: &str, renderer: &str) -> Option<&'static str> {
-    match (projection, renderer) {
-        ("collection", "board") => Some("kanban"),
-        ("collection", "table") => Some("table"),
-        ("collection", "calendar") => Some("calendar"),
-        ("collection", "gantt") => Some("gantt"),
-        ("timeline", "chat") => Some("chat"),
-        ("timeline", "timeline") => Some("timeline"),
-        ("graph", "graph") => Some("graph"),
-        ("graph", "tree") => Some("tree"),
-        ("document", "document") => Some("document"),
-        ("composite", "dashboard") => Some("dashboard"),
-        _ => None,
-    }
-}
-
-pub(crate) fn expected_renderer(projection: &str, preset: &str) -> Option<&'static str> {
-    match (projection, preset) {
-        ("collection", "kanban") => Some("board"),
-        ("collection", "table") => Some("table"),
-        ("collection", "calendar") => Some("calendar"),
-        ("collection", "gantt") => Some("gantt"),
-        ("collection", "matrix") => Some("table"),
-        ("timeline", "chat") => Some("chat"),
-        ("timeline", "timeline") => Some("timeline"),
-        ("graph", "graph") => Some("graph"),
-        ("graph", "tree") => Some("tree"),
-        ("document", "document") => Some("document"),
-        ("composite", "dashboard") => Some("dashboard"),
-        _ => None,
-    }
-}
 
 pub(crate) fn validate_projection_position(position: &Value) -> Result<()> {
     match value_field_str(position, "model")? {
@@ -451,97 +331,4 @@ fn require_position_field<'a>(position: &'a Value, field: &str) -> Result<&'a st
 
 fn require_rank(position: &Value) -> Result<()> {
     super::validate_rank(require_position_field(position, "rank")?, RANK_MAX_LENGTH)
-}
-
-pub(crate) fn validate_response_entities_against_request_facets(
-    response: &Value,
-    request: &Value,
-    case_name: &str,
-) -> Result<()> {
-    let required_facets = request_facets(request)?;
-    validate_nested_entities(response, &required_facets, case_name)
-}
-
-pub(crate) fn request_facets(request: &Value) -> Result<std::collections::BTreeSet<String>> {
-    use std::collections::BTreeSet;
-    request
-        .get("facets")
-        .and_then(Value::as_array)
-        .map(|facets| {
-            facets
-                .iter()
-                .map(|facet| {
-                    facet
-                        .as_str()
-                        .map(str::to_owned)
-                        .ok_or_else(|| anyhow!("query facet must be a string"))
-                })
-                .collect::<Result<BTreeSet<_>>>()
-        })
-        .unwrap_or_else(|| Ok(BTreeSet::new()))
-}
-
-fn filter_entities_by_facets(
-    entities: &[Value],
-    required_facets: &std::collections::BTreeSet<String>,
-) -> Result<Vec<Value>> {
-    let mut filtered = Vec::new();
-    for entity in entities {
-        let facets = entity_facets(entity)?;
-        if required_facets.is_subset(&facets) {
-            filtered.push(entity.clone());
-        }
-    }
-    Ok(filtered)
-}
-
-pub(crate) fn validate_nested_entities(
-    value: &Value,
-    required_facets: &std::collections::BTreeSet<String>,
-    case_name: &str,
-) -> Result<()> {
-    match value {
-        Value::Object(object) => {
-            if object.contains_key("entity_type") && object.contains_key("facets") {
-                validate_entity(value, required_facets, case_name)?;
-            }
-            for child in object.values() {
-                validate_nested_entities(child, required_facets, case_name)?;
-            }
-        }
-        Value::Array(items) => {
-            for item in items {
-                validate_nested_entities(item, required_facets, case_name)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_entity(
-    entity: &Value,
-    required_facets: &std::collections::BTreeSet<String>,
-    case_name: &str,
-) -> Result<()> {
-    if !value_field_str(entity, "id")?.starts_with("cx:entity:") {
-        bail!("sync fixture {case_name} entity id was invalid");
-    }
-    let facets = entity_facets(entity)?;
-    if !required_facets.is_subset(&facets) {
-        bail!("sync fixture {case_name} entity did not satisfy requested facets");
-    }
-    Ok(())
-}
-
-fn entity_facets(entity: &Value) -> Result<std::collections::BTreeSet<String>> {
-    super::value_array(super::required_field(entity, "facets")?, "entity.facets")?
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| anyhow!("entity facet was not string"))
-        })
-        .collect()
 }

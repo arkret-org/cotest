@@ -9,7 +9,7 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
         &[
             (
                 "SERVERX_DID_RESOLVER_ALLOW_METHODS",
-                "did:web,did:key,did:uuid,did:webvh",
+                "did:web,did:key,did:webvh",
             ),
             (
                 "SERVERX_STARID_WEBVH_RESOLVER_URL",

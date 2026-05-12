@@ -25,9 +25,9 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         alice.post("/api/v1/policies").json(&json!({
             "scope": space_id,
             "subject_ref": bob.actor,
-            "policy_type": "message.send",
+            "policy_type": "cx.message.create",
             "effect": "deny",
-            "actions": ["message.send"],
+            "actions": ["cx.message.create"],
             "resource": {"kind": "space", "space_id": space_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}]
         })),
@@ -67,7 +67,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .json(&json!({
                 "request_id": "cx:req:policy-deny",
                 "request_canonical_hash": REQUEST_HASH,
-                "action": "message.send",
+                "action": "cx.message.create",
                 "actor": bob.actor,
                 "space_id": space_id,
                 "source": {"kind": "space", "space_id": space_id}
@@ -84,9 +84,9 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "policy_id": policy_id,
             "scope": space_id,
             "subject_ref": bob.actor,
-            "policy_type": "message.send",
+            "policy_type": "cx.message.create",
             "effect": "deny",
-            "actions": ["message.send"],
+            "actions": ["cx.message.create"],
             "resource": {"kind": "space", "space_id": space_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}],
             "active": false
@@ -103,7 +103,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .json(&json!({
                 "request_id": "cx:req:policy-allow",
                 "request_canonical_hash": REQUEST_HASH,
-                "action": "message.send",
+                "action": "cx.message.create",
                 "actor": bob.actor,
                 "space_id": space_id,
                 "source": {"kind": "space", "space_id": space_id}

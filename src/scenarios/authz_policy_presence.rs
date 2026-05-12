@@ -238,7 +238,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_id": "req-allow",
                 "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "message.send",
+                "action": "cx.message.create",
                 "actor": "did:web:alice.example",
                 "source": {"service": "soland"}
             })),
@@ -274,7 +274,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_id": "req-invalid",
                 "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "message.send",
+                "action": "cx.message.create",
                 "actor": "alice",
                 "source": {"service": "soland"}
             })),

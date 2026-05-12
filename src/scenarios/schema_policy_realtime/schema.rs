@@ -17,7 +17,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let builtins = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/schemas?kind=entity&limit=20")),
+            .get(server.url("/api/v1/schemas?kind=flow&limit=20")),
         StatusCode::OK,
     )
     .await?;
@@ -26,13 +26,13 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|schema| schema["schema_id"] == "cx.schema.entity.generic.v1")
+            .any(|schema| schema["schema_id"] == "cx.schema.flow.v1")
     );
 
     let registered = expect_json(
         alice.post("/api/v1/schemas").json(&json!({
             "schema_id": schema_id,
-            "kind": "entity",
+            "kind": "morph",
             "version": "1",
             "name": "Widget schema",
             "definition": {
@@ -61,7 +61,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     expect_api_error(
         alice.post("/api/v1/schemas").json(&json!({
             "schema_id": "com.example.schema.invalid.v1",
-            "kind": "entity",
+            "kind": "morph",
             "version": "1",
             "definition": {
                 "$id": "com.example.schema.other.v1"
@@ -75,7 +75,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     expect_api_error(
         bob.post("/api/v1/schemas").json(&json!({
             "schema_id": schema_id,
-            "kind": "entity",
+            "kind": "morph",
             "version": "2",
             "definition": {
                 "$id": schema_id,
@@ -90,7 +90,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let deactivated = expect_json(
         alice.post("/api/v1/schemas").json(&json!({
             "schema_id": schema_id,
-            "kind": "entity",
+            "kind": "morph",
             "version": "2",
             "name": "Widget schema",
             "active": false,
@@ -121,7 +121,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let active_list = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/schemas?kind=entity&limit=200")),
+            .get(server.url("/api/v1/schemas?kind=morph&limit=200")),
         StatusCode::OK,
     )
     .await?;
@@ -136,7 +136,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let inactive_list = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/schemas?kind=entity&include_inactive=true&limit=200")),
+            .get(server.url("/api/v1/schemas?kind=morph&include_inactive=true&limit=200")),
         StatusCode::OK,
     )
     .await?;

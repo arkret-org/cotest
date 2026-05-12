@@ -9,12 +9,6 @@ async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn multi_service_bridge_contract_matrix_scaffold() -> Result<()> {
-    cotest::scenarios::bridge_contracts::multi_service_bridge_contract_matrix_scaffold().await
-}
-
-#[tokio::test]
-#[serial]
 async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     cotest::scenarios::bridge_contracts::starid_optional_resolver_profile_is_discoverable().await
 }

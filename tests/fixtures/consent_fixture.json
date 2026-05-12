@@ -141,7 +141,7 @@
         },
         {
           "move_id": "cx:event:01970e58-0000-7000-8000-000000000031",
-          "kind": "cx.message.send",
+          "kind": "cx.message.create",
           "actor_id": "did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9",
           "preconditions": [
             {

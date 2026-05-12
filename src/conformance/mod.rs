@@ -30,9 +30,7 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 pub use capability::run_capability_facet_fixture_suite;
 pub use capability::run_capability_fixture_suite;
 pub use encoding::run_encoding_fixture_suite;
-pub use encoding::run_facet_renderer_query_fixture_suite;
 pub use encoding::run_projection_position_discriminator_fixture_suite;
-pub use envelope::run_deprecated_event_alias_suite;
 pub use envelope::run_event_envelope_fixture_suite;
 pub use federation::run_federation_fixture_suite;
 pub use lattice_round_trip::run_lattice_round_trip_suite;
@@ -71,17 +69,13 @@ pub use wire_model::run_megolm_ratcheting_fixture_suite;
 pub use wire_model::run_membership_fsm_fixture_suite;
 pub use wire_model::run_mimi_components_fixture_suite;
 pub use wire_model::run_mls_e2ee_basic_fixture_suite;
-pub use wire_model::run_mls_move_covered_frontier_fixture_suite;
 pub use wire_model::run_multi_admin_distinct_approver_gate_check;
 pub use wire_model::run_multi_space_federation_fixture_suite;
 pub use wire_model::run_operation_registry_coverage_fixture_suite;
 pub use wire_model::run_production_signing_fixture_suite;
 pub use wire_model::run_read_receipt_policy_fixture_suite;
-pub use wire_model::run_recovery_bridge_full_chain_fixture_suite;
-pub use wire_model::run_recovery_ticket_state_machine_check;
 pub use wire_model::run_redacted_cross_server_fixture_suite;
 pub use wire_model::run_redaction_history_visibility_fixture_suite;
-pub use wire_model::run_restore_full_workflows_fixture_suite;
 pub use wire_model::run_state_resolution_quarantine_fixture_suite;
 pub use wire_model::run_threshold_multisig_fixture_suite;
 
@@ -177,24 +171,6 @@ pub(crate) struct RedactionCase {
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct CapabilityFixture {
-    pub(crate) suite: String,
-    pub(crate) cases: Vec<CapabilityCase>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct CapabilityCase {
-    pub(crate) name: String,
-    pub(crate) selector: Option<ResourceSelector>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct SyncFixture {
-    pub(crate) suite: String,
-    pub(crate) cases: Vec<SyncCase>,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct FederationFixture {
     pub(crate) suite: String,
     pub(crate) cases: Vec<NamedCase>,
@@ -214,58 +190,16 @@ pub(crate) struct NamedCase {
     pub(crate) expected: Option<Value>,
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct SyncCase {
-    pub(crate) name: String,
-    #[serde(flatten)]
-    pub(crate) fields: BTreeMap<String, Value>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct ResourceSelector {
-    pub(crate) kind: String,
-    pub(crate) space_id: String,
-    pub(crate) entity_type: Option<String>,
-}
-
-impl ResourceSelector {
-    pub(crate) fn matches(&self, resource: &ResourceRef) -> bool {
-        self.kind == resource.kind
-            && self.space_id == resource.space_id
-            && match (&self.entity_type, &resource.entity_type) {
-                (Some(expected), Some(actual)) => expected == actual,
-                (Some(_), None) => false,
-                (None, _) => true,
-            }
-    }
-
-    pub(crate) fn contains(&self, child: &Self) -> bool {
-        self.kind == child.kind
-            && self.space_id == child.space_id
-            && match (&self.entity_type, &child.entity_type) {
-                (Some(parent), Some(current)) => parent == current,
-                (Some(_), None) => false,
-                (None, _) => true,
-            }
-    }
-}
-
-pub(crate) struct ResourceRef {
-    pub(crate) kind: String,
-    pub(crate) space_id: String,
-    pub(crate) entity_type: Option<String>,
-}
-
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct RankEdge {
     pub(crate) relation_id: String,
-    pub(crate) entity_id: String,
+    pub(crate) object_ref: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub(crate) struct RankAssignment {
     pub(crate) relation_id: String,
-    pub(crate) entity_id: String,
+    pub(crate) object_ref: String,
     pub(crate) rank: String,
 }
 
@@ -302,10 +236,6 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
                 return candidate;
             }
         }
-        let legacy = root.join("fixtures").join(file_name);
-        if legacy.is_file() {
-            return legacy;
-        }
     }
 
     spec_artifacts_root()
@@ -317,7 +247,6 @@ fn spec_artifact_candidates(root: &Path) -> Vec<PathBuf> {
     vec![
         root.to_owned(),
         root.join("spec").join("v1").join("artifacts"),
-        root.join("artifacts"),
     ]
 }
 
@@ -405,12 +334,6 @@ pub(crate) fn value_field_str<'a>(value: &'a Value, field: &str) -> Result<&'a s
     required_field(value, field)?
         .as_str()
         .ok_or_else(|| anyhow!("object field {field} must be a string"))
-}
-
-pub(crate) fn value_field_bool(value: &Value, field: &str) -> Result<bool> {
-    required_field(value, field)?
-        .as_bool()
-        .ok_or_else(|| anyhow!("object field {field} must be a bool"))
 }
 
 pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
@@ -598,7 +521,7 @@ pub(crate) fn rebalance_assignments(edges: &[RankEdge]) -> Result<Vec<RankAssign
                 (-1.0 + (((index + 1) as f64 * alphabet_span) / denominator)).round() as i32;
             Ok(RankAssignment {
                 relation_id: edge.relation_id.clone(),
-                entity_id: edge.entity_id.clone(),
+                object_ref: edge.object_ref.clone(),
                 rank: rank_char_at(rank_index)?.to_string(),
             })
         })

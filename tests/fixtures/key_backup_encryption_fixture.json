@@ -2,18 +2,19 @@
   "profile": "cx.profile.key_backup_encryption_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: crypto-media/encryption-and-audit.md (recovery-key envelope) + extensions/key-backup.md. Client encrypts megolm session keys + cross-signing keys + private device keys with a passphrase-derived recovery key (PBKDF2-HMAC-SHA512 with at-least 600k iterations + 16-byte random salt → 32-byte master key) before uploading. Server stores opaque blob keyed by (account_did, backup_version). Server NEVER sees plaintext. Restore: client downloads blob, re-derives key from passphrase + salt, decrypts. Rotation: client mints new (passphrase, salt, version) and re-encrypts all session keys; new uploads target version_new; server retains version_old until client confirms migration completion.",
+  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and cx.schema.key_backup.v1. Client encrypts MLS history / secret-storage material with a passphrase-derived recovery key before PUT /api/v1/keys/backups/{backup_id}. Server stores an opaque cx.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
   "encoder": {
     "kdf": "PBKDF2-HMAC-SHA512",
     "kdf_iterations_min": 600000,
     "kdf_salt_bytes": 16,
     "master_key_bytes": 32,
-    "envelope_aead": "ChaCha20-Poly1305",
-    "envelope_nonce_bytes": 12,
-    "session_key_blob_field": "encrypted_session_keys_b64",
-    "backup_version_id_format": "cx:keybackup:<account_did>:v<n>",
-    "server_endpoint_upload": "POST /api/v1/key_backup/blobs",
-    "server_endpoint_restore": "GET /api/v1/key_backup/blobs/{version_id}"
+    "envelope_aead": "XChaCha20-Poly1305",
+    "envelope_nonce_bytes": 24,
+    "ciphertext_field": "ciphertext",
+    "backup_id_format": "cx:backup:<uuid-v7>",
+    "backup_version_format": "kb_<label>",
+    "server_endpoint_upload": "PUT /api/v1/keys/backups/{backup_id}",
+    "server_endpoint_restore": "GET /api/v1/keys/backups/{backup_id}"
   },
   "vectors": [
     {
@@ -34,23 +35,25 @@
     },
     {
       "name": "server_side_blob_storage_opaque",
-      "comment": "After client encrypts, the upload contains: {version_id, salt_b64, kdf_iterations, encrypted_session_keys_b64, ciphertext_nonce_b64, auth_tag_b64}. Server treats the encrypted_session_keys_b64 as opaque bytes and persists by (account_did, version_id). Server CANNOT decrypt without the passphrase.",
-      "version_id": "cx:keybackup:did:web:alice.example:v1",
+      "comment": "After client encrypts, the upload is cx.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
+      "backup_id": "cx:backup:01964137-0000-7000-8000-000000000000",
+      "backup_version": "kb_1",
       "blob_size_bytes": 4096,
       "server_treats_as_opaque": true,
       "server_decrypt_capable": false,
-      "stored_at": "GET /api/v1/key_backup/blobs/cx:keybackup:did:web:alice.example:v1",
+      "stored_at": "GET /api/v1/keys/backups/cx:backup:01964137-0000-7000-8000-000000000000",
       "expected": {
         "outcome": "accept",
         "server_seen_plaintext": false,
-        "blob_persisted_keyed_by": ["account_did", "version_id"],
+        "blob_persisted_keyed_by": ["backup_id"],
         "rationale": "Zero-knowledge backup: server stores ciphertext blob + KDF parameters; cannot derive plaintext without the user's passphrase."
       }
     },
     {
       "name": "restore_path_redrives_key_and_decrypts",
-      "comment": "Client restores: GET /api/v1/key_backup/blobs/{version_id} → re-derive master key from cached passphrase + downloaded salt + iterations → decrypt with ChaCha20-Poly1305 using nonce + auth_tag from blob → recover session_keys map. Successful decryption proves passphrase correctness AND blob integrity.",
-      "version_id": "cx:keybackup:did:web:alice.example:v1",
+      "comment": "Client restores: GET /api/v1/keys/backups/{backup_id} → re-derive master key from local passphrase + envelope salt + iterations → decrypt with XChaCha20-Poly1305 using envelope nonce/auth tag → recover MLS history or secret-storage material. Successful decryption proves passphrase correctness and blob integrity.",
+      "backup_id": "cx:backup:01964137-0000-7000-8000-000000000000",
+      "backup_version": "kb_1",
       "passphrase_correct": true,
       "salt_b64": "AAECAwQFBgcICQoLDA0ODw",
       "kdf_iterations": 600000,
@@ -65,9 +68,11 @@
     },
     {
       "name": "rotation_mints_new_version_and_reencrypts",
-      "comment": "User rotates passphrase. Client: derives new master key with NEW (passphrase_new, salt_new), re-encrypts ALL session keys, uploads to version_id_new. Server retains version_old until client sends migration_complete=true (or version_old TTL expires, default 30 days). Old version_id MAY be deleted after grace period; the rotation MUST NOT silently drop session keys (atomic re-encrypt + upload).",
-      "old_version_id": "cx:keybackup:did:web:alice.example:v1",
-      "new_version_id": "cx:keybackup:did:web:alice.example:v2",
+      "comment": "User rotates passphrase. Client derives a new master key with a new salt, re-encrypts all covered material, and uploads a new backup object/version. Server retains the old envelope until migration is confirmed or retention expires. Rotation must not silently drop covered material.",
+      "old_backup_id": "cx:backup:01964137-0000-7000-8000-000000000000",
+      "new_backup_id": "cx:backup:01964137-0000-7000-8000-000000000002",
+      "old_backup_version": "kb_1",
+      "new_backup_version": "kb_2",
       "new_salt_b64": "EBESExQVFhcYGRobHB0eHw",
       "session_keys_re_encrypted_count": 12,
       "new_kdf_iterations": 600000,

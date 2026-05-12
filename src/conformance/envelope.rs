@@ -36,66 +36,6 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-pub fn run_deprecated_event_alias_suite() -> Result<()> {
-    let event_kind_registry = load_artifact_json("registry/event-kind-registry.json")?;
-    let event_kinds = event_kind_metadata(&event_kind_registry)?;
-
-    // Skip if deprecated alias not yet in registry (spec may not have it)
-    if let Some(alias) = event_kinds.get("cx.marker.read") {
-        if alias.status != "deprecated"
-            || alias.wire_scope != "deprecated_alias"
-            || alias.replaced_by.as_deref() != Some("cx.read.marker")
-        {
-            bail!("deprecated read marker alias metadata drifted");
-        }
-
-        if canonical_event_kind_for_consumer("cx.marker.read", &event_kinds)
-            != Some("cx.read.marker")
-        {
-            bail!("consumer compatibility failed to map cx.marker.read to cx.read.marker");
-        }
-        if canonical_event_kind_for_consumer("cx.read.marker", &event_kinds)
-            != Some("cx.read.marker")
-        {
-            bail!("canonical read marker kind was not stable");
-        }
-
-        let event = sample_envelope_event(
-            "cx.marker.read",
-            1,
-            "01970e589d21-0001-a13f9c2e",
-            "2026-05-02T00:00:00Z",
-            json!({"event_id": "cx:event:019a6aa0-0000-7000-8000-000000000000"}),
-        );
-        let decision = validate_event_envelope(
-            &event,
-            &event_kinds,
-            &EventEnvelopeContext::default_for_durable_history(),
-        )?;
-        assert_event_decision(
-            &decision,
-            "reject",
-            Some("schema_violation"),
-            "deprecated_alias",
-        )?;
-    }
-
-    // Validate all deprecated aliases in registry have proper metadata
-    for (kind, info) in &event_kinds {
-        if info.status == "deprecated" && info.wire_scope == "deprecated_alias" {
-            if info.replaced_by.is_none() {
-                bail!("deprecated alias {kind} missing replaced_by");
-            }
-            let canonical = canonical_event_kind_for_consumer(kind, &event_kinds);
-            if canonical.as_deref() != info.replaced_by.as_deref() {
-                bail!("deprecated alias {kind} canonical mapping drifted");
-            }
-        }
-    }
-
-    Ok(())
-}
-
 // ── Internal validation functions ───────────────────────────────────────────
 
 fn validate_crypto_signature_event_vector(
@@ -344,25 +284,21 @@ fn validate_event_envelope(
         ));
     }
 
-    // Spec event-schema.json (post-2026-05-08) required fields:
+    // Spec event-schema.json required fields:
     //   event_id, kind, space_id, actor_id, actor_seq, created_at,
     //   prev_refs, refs, payload, proofs
-    // Notable changes vs older revisions:
-    //   - `auth_refs` was renamed / folded into `refs`.
-    //   - `hlc` is property-only, no longer required.
-    //   - `content` was renamed to `payload` (cotest historically accepted
-    //     either; we still accept both for back-compat with old fixtures).
-    //
     // `refs` MUST be present per spec — negative fixture
     // `reject_missing_refs[role=authorized_by]` exercises this. `prev_refs`
-    // is also required but historic synthetic events omit it; treat its
-    // absence as empty array further down.
+    // is also required.
     for field in [
         "event_id",
         "space_id",
         "actor_id",
         "actor_seq",
         "created_at",
+        "prev_refs",
+        "refs",
+        "payload",
         "proofs",
     ] {
         if event.get(field).is_none() {
@@ -371,23 +307,6 @@ fn validate_event_envelope(
                 format!("missing required Event field {field}"),
             ));
         }
-    }
-    // Refs (or legacy auth_refs) must be present per spec — even an empty
-    // array is OK; the negative case exercises full absence.
-    if event.get("refs").is_none() && event.get("auth_refs").is_none() {
-        return Ok(EventEnvelopeDecision::reject(
-            "schema_violation",
-            "refs[role=authorized_by] is required before auth backfill can run",
-        ));
-    }
-    // Payload field: spec moved from `content` to `payload`; accept both
-    // for back-compat with pre-rename fixtures.
-    let content = event.get("payload").or_else(|| event.get("content"));
-    if content.is_none() {
-        return Ok(EventEnvelopeDecision::reject(
-            "schema_violation",
-            "missing required Event field payload",
-        ));
     }
     if event
         .get("schema")
@@ -419,24 +338,21 @@ fn validate_event_envelope(
         ));
     }
     let actor_seq = value_field_u64(event, "actor_seq")?;
-    // Spec C13/C18 made `prev_refs` + `refs` required. Legacy negative
-    // fixtures predating this change omit them while testing OTHER error
-    // conditions (e.g. unsupported critical feature), so we tolerate their
-    // absence here and treat as empty arrays. Top-level missing-field
-    // detection runs further up.
-    let empty_refs: Vec<Value> = Vec::new();
-    let prev_refs: &Vec<Value> = match event.get("prev_refs") {
-        Some(value) => value_array(value, "event.prev_refs")?,
-        None => &empty_refs,
-    };
-    let extra_refs: &Vec<Value> = match event.get("refs") {
-        Some(value) => value_array(value, "event.refs")?,
-        None => match event.get("auth_refs") {
-            Some(value) => value_array(value, "event.auth_refs")?,
-            None => &empty_refs,
-        },
-    };
-    let content = content.unwrap();
+    let prev_refs = value_array(
+        event
+            .get("prev_refs")
+            .ok_or_else(|| anyhow!("event.prev_refs missing after required-field check"))?,
+        "event.prev_refs",
+    )?;
+    let extra_refs = value_array(
+        event
+            .get("refs")
+            .ok_or_else(|| anyhow!("event.refs missing after required-field check"))?,
+        "event.refs",
+    )?;
+    let content = event
+        .get("payload")
+        .ok_or_else(|| anyhow!("event.payload missing after required-field check"))?;
     if !content.is_object() {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
@@ -698,18 +614,6 @@ pub(crate) fn event_kind_metadata(registry: &Value) -> Result<HashMap<String, Ev
     Ok(event_kinds)
 }
 
-pub(crate) fn canonical_event_kind_for_consumer<'a>(
-    kind: &'a str,
-    event_kinds: &'a HashMap<String, EventKindInfo>,
-) -> Option<&'a str> {
-    let info = event_kinds.get(kind)?;
-    if info.wire_scope == "deprecated_alias" {
-        info.replaced_by.as_deref()
-    } else {
-        Some(kind)
-    }
-}
-
 pub(crate) fn event_without_proofs(event: &Value) -> Result<Value> {
     let object = event
         .as_object()
@@ -834,10 +738,7 @@ fn sample_envelope_event(
     created_at: &str,
     content: Value,
 ) -> Value {
-    // C13/C18 wire shape: `auth_refs` folded into `refs`; `content` renamed
-    // to `payload`; `space_version` removed (event evolution carried by
-    // `requirements`). Synthetic events emit the new spec shape directly so
-    // the validator's permissive back-compat does not mask drift.
+    // Synthetic events emit the active spec shape directly.
     json!({
         "schema": "cx.schema.event.v1",
         "event_id": "cx:event:019a6b10-0000-7000-8000-000000000000",

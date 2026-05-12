@@ -3,8 +3,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, add_member, create_space, dev_login, expect_api_error, expect_json,
-    register_account, send_message,
+    ContrixServer, add_member, create_space, dev_login, event_envelope, expect_api_error,
+    expect_json, register_account, send_message,
 };
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
@@ -108,16 +108,20 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/messages/send"))
+            .post(server.url("/api/v1/events"))
             .bearer_auth(&bob)
-            .json(&json!({
-                "space_id": space_id,
-                "thread_id": "cx:thread:space-denied",
-                "content": {"body": "not a member"},
-                "encrypted": false
-            })),
+            .json(&event_envelope(
+                "did:web:bob-visible.example",
+                &space_id,
+                "cx.message.create",
+                json!({
+                    "body": "not a member",
+                    "content": {"body": "not a member"},
+                    "thread_id": "cx:thread:space-denied",
+                }),
+            )),
         StatusCode::FORBIDDEN,
-        "capability_denied",
+        "policy_denied",
     )
     .await?;
 
@@ -125,6 +129,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     send_message(
         &server,
         &bob,
+        "did:web:bob-visible.example",
         &space_id,
         "cx:thread:space",
         "member can send",
@@ -142,16 +147,20 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/messages/send"))
+            .post(server.url("/api/v1/events"))
             .bearer_auth(&alice)
-            .json(&json!({
-                "space_id": space_id,
-                "thread_id": "cx:thread:space",
-                "content": {"body": "after delete"},
-                "encrypted": false
-            })),
+            .json(&event_envelope(
+                "did:web:alice.example",
+                &space_id,
+                "cx.message.create",
+                json!({
+                    "body": "after delete",
+                    "content": {"body": "after delete"},
+                    "thread_id": "cx:thread:space",
+                }),
+            )),
         StatusCode::FORBIDDEN,
-        "capability_denied",
+        "policy_denied",
     )
     .await?;
 

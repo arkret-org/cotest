@@ -37,7 +37,7 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 - `delivery_media`: device key upload/query/claim, to-device delivery, blob
   upload/download, range, hash validation, anti-enumeration, and query-string
   auth rejection.
-- `events_entity_backfill`: event creation, entity projection, timeline reads,
+- `events_backfill`: event creation, timeline reads,
   and missing-event recovery surfaces.
 - `identity_directory_index`: identity describe/resolve/document/log/receipt,
   directory discoverability/privacy, export, audit, notifications, and inbox
@@ -52,8 +52,6 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
   gaps so missing routes are tracked by tests instead of ignored placeholders.
 - `protocol_payloads`: payload envelope, encrypted content, receipts, and
   protocol object acceptance.
-- `repo_sync_index`: repo submit, idempotency, read paths, expanded commit
-  reads, repo sync, and parameter edge coverage.
 - `space_permissions`: membership, owner-only mutation, deleted-space behavior,
   non-member denial, and private visibility policy checks.
 - `conformance_fixtures`: offline spec-owned artifact suites for Event
@@ -105,3 +103,60 @@ by conformance profiles such as `cx.profile.core_event_store.v1`,
 `cx.profile.chat_mvp.v1`, and `cx.profile.principal_server_events_api.v1`. The
 runner emits `ci-profile.*`, `coverage-gate.*`, and `secret-scan.*` artifacts
 and can fail on coverage regressions with `-FailOnCoverageRegression`.
+
+## Joint UI E2E
+
+The Rust suites above remain the authoritative API/protocol conformance layer.
+Browser-level user simulation is intentionally separate and lives under
+`e2e/`, with `scripts/run-joint-e2e.ps1` as the local entrypoint.
+
+The joint E2E runner currently targets the first live-product slice:
+
+- start or attach `soland`
+- start or attach `yougen` web
+- optionally start or attach `coauth`; `-StartCoauth` generates a fresh coauth
+  YAML config, starts ephemeral Docker PostgreSQL, runs migrations, and wires
+  soland's OAuth/session-grant introspection URLs and static service bearers
+- run Playwright tests with multiple isolated browser contexts
+- save step screenshots, traces, videos, HAR, console/network JSONL, JUnit,
+  HTML report, and service logs under
+  `artifacts/runs/<timestamp>/joint-e2e/`
+- copy the latest run to `artifacts/latest/joint-e2e/`
+
+The smoke spec covers environment health, invalid server URL UI handling,
+coauth discovery/topology, coauth metadata failure UI handling, live invalid
+session-grant rejection, generated-user registration through the product
+account form, Alice/Bob isolated dev-login sessions, contact request/acceptance,
+private Space lifecycle administration, bidirectional timeline messages with
+edit/redaction, permission-denied UI/API paths, session refresh/logout/revoked
+bearer behavior, and Alice creating a live Space and persisting a message.
+
+The mobile spec is tagged `@mobile` and runs only under the `mobile-chrome`
+project. It validates the mobile shell navigation, authenticated connect state,
+Space creation, timeline message send, and a Space Admin screenshot path.
+
+The coauth/soland test mapping is fixed by the runner:
+
+- soland audience/service DID: `did:web:soland.joint-e2e.local`
+- coauth service/issuer DID: `did:web:coauth.joint-e2e.local`
+- coauth publishes soland under `contrix.principal_servers`
+- soland introspects OAuth bearer tokens at `<coauth>/oauth2/introspect`
+- soland introspects legacy session grants at
+  `<coauth>/api/v1/session-grants/introspect`
+- the static bearer values are local E2E-only defaults and never exposed to the
+  browser
+
+Recommended local run:
+
+```powershell
+.\scripts\run-joint-e2e.ps1 -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
+```
+
+Omit `-SkipNpmInstall` on a fresh checkout so the script installs the local
+Playwright dependencies in `e2e/`.
+
+`joint-smoke` currently runs the desktop Chrome smoke matrix. `joint-full`
+runs desktop Chrome plus the mobile Chrome project in the same artifact run.
