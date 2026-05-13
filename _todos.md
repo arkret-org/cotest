@@ -49,6 +49,6 @@
 - [x] T4.1 将 joint E2E summary 链接到 `artifacts/latest/`，并输出截图索引。
 - [x] T4.2 增加 `joint-smoke` 与 `joint-full` 运行 profile 或独立脚本参数。
 - [x] T4.3 引入 trace/video/HAR/console/network 失败归档。
-- [ ] T4.4 对登录页、Space admin、timeline、权限错误页建立可控视觉 baseline。
-- [ ] T4.5 为 CI 准备 Node、Playwright browser、Dioxus CLI、Docker/PostgreSQL 前置检查。
-- [ ] T4.6 将稳定后的 joint smoke 纳入 release-gate 前置检查。
+- [x] T4.4 对登录页、Space admin、timeline、权限错误页建立可控视觉 baseline。
+- [x] T4.5 为 CI 准备 Node、Playwright browser、Dioxus CLI、Docker/PostgreSQL 前置检查。
+- [x] T4.6 将稳定后的 joint smoke 纳入 release-gate 前置检查。

@@ -135,6 +135,13 @@ The mobile spec is tagged `@mobile` and runs only under the `mobile-chrome`
 project. It validates the mobile shell navigation, authenticated connect state,
 Space creation, timeline message send, and a Space Admin screenshot path.
 
+The visual baseline spec is tagged `@visual` and runs only under the
+`visual-chrome` project. It captures controlled baseline images for the login
+panel, timeline message state, permission-denied Space lifecycle state, and
+Space Admin. The runner writes these files under
+`artifacts/runs/<timestamp>/joint-e2e/visual-baselines/` with
+`visual-baselines.md` and a hash manifest.
+
 The coauth/soland test mapping is fixed by the runner:
 
 - soland audience/service DID: `did:web:soland.joint-e2e.local`
@@ -158,5 +165,16 @@ Recommended local run:
 Omit `-SkipNpmInstall` on a fresh checkout so the script installs the local
 Playwright dependencies in `e2e/`.
 
-`joint-smoke` currently runs the desktop Chrome smoke matrix. `joint-full`
-runs desktop Chrome plus the mobile Chrome project in the same artifact run.
+The runner performs a preflight before starting services: Node/npm/npx,
+Playwright config/package/browser registry, default cargo/dx startup tools,
+and Docker/coauth/PostgreSQL image availability when `-StartCoauth` is used.
+The preflight is written to `preflight.json` and `preflight.md`.
+
+`joint-smoke` currently runs the desktop smoke matrix. `joint-full` runs
+desktop Chrome, mobile Chrome, and visual Chrome projects in the same artifact
+run. Release gate integration calls the joint smoke through the Chromium
+project so CI can use Playwright-managed browser installation.
+
+`scripts/run-cotest.ps1 -Profile release-gate` now invokes joint smoke as an
+additional release-gate check and writes `joint-smoke-gate.*`. Use
+`-SkipJointSmokeGate` only for local protocol-only release-gate debugging.

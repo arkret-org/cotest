@@ -42,3 +42,10 @@ export function screenshotRoot(): string {
     path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local", "screenshots")
   );
 }
+
+export function visualBaselineRoot(): string {
+  return (
+    optionalEnv("COTEST_UI_VISUAL_BASELINE_DIR") ??
+    path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local", "visual-baselines")
+  );
+}

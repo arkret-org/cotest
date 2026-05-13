@@ -16,7 +16,8 @@ param(
     [string[]]$DockerCacheFrom = @(),
     [string]$DockerCacheTo,
     [switch]$DockerPull,
-    [switch]$DockerNoCache
+    [switch]$DockerNoCache,
+    [switch]$SkipJointSmokeGate
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +28,57 @@ function Test-DockerImagePresent {
 
     & docker image inspect $ImageTag *> $null
     return $LASTEXITCODE -eq 0
+}
+
+function Invoke-JointSmokeGate {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$RunDir,
+        [Parameter(Mandatory = $true)][string]$RawLog
+    )
+
+    $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
+    $jointOutputRoot = Join-Path $RunDir "joint-smoke"
+    $psExe = (Get-Process -Id $PID).Path
+    $args = @(
+        "-NoProfile",
+        "-File", $jointScript,
+        "-OutputRoot", $jointOutputRoot,
+        "-StartCoauth",
+        "-RunProfile", "joint-smoke",
+        "-PlaywrightProject", "chromium"
+    )
+    if (Test-Path (Join-Path $RepoRoot "e2e\node_modules")) {
+        $args += "-SkipNpmInstall"
+    }
+
+    Add-Content -Path $RawLog -Value ""
+    Add-Content -Path $RawLog -Value "=== joint-smoke release gate ==="
+    $startedAt = Get-Date
+    $output = & $psExe @args 2>&1
+    $exitCode = $LASTEXITCODE
+    $output | Add-Content -Path $RawLog
+    $finishedAt = Get-Date
+
+    $summaryJson = $null
+    $summaryMd = $null
+    $summaryCandidates = @(Get-ChildItem -Path (Join-Path $jointOutputRoot "runs") -Recurse -Filter "summary.json" -ErrorAction SilentlyContinue |
+        Where-Object { (Split-Path -Leaf (Split-Path -Parent $_.FullName)) -eq "joint-e2e" } |
+        Sort-Object LastWriteTime)
+    if ($summaryCandidates.Count -gt 0) {
+        $summaryJson = $summaryCandidates[-1].FullName
+        $summaryMd = Join-Path (Split-Path -Parent $summaryJson) "summary.md"
+    }
+
+    [pscustomobject]@{
+        generated_at     = $finishedAt.ToString("o")
+        started_at       = $startedAt.ToString("o")
+        status           = if ($exitCode -eq 0) { "passed" } else { "failed" }
+        exit_code        = $exitCode
+        output_root      = $jointOutputRoot
+        summary_json     = $summaryJson
+        summary_markdown = $summaryMd
+    }
 }
 
 function Get-CiProfileConfig {
@@ -238,6 +290,7 @@ function New-SummaryMarkdown {
     $lines.Add("- metadata: $($Summary.metadata_path)")
     $lines.Add("- coverage_matrix: $($Summary.coverage_matrix_path)")
     $lines.Add("- coverage_gate: $($Summary.coverage_gate_path) ($($Summary.coverage_gate_status))")
+    $lines.Add("- joint_smoke_gate: $($Summary.joint_smoke_gate_path) ($($Summary.joint_smoke_status))")
     $lines.Add("- release_gate: $($Summary.release_gate_path) ($($Summary.release_gate_status))")
     $lines.Add("- unresolved_gaps: $($Summary.unresolved_gaps_path)")
     $lines.Add("- ci_profile: $($Summary.ci_profile_path)")
@@ -321,6 +374,7 @@ function New-SummaryHtml {
     <p>junit xml: <code>$(ConvertTo-HtmlSafe $Summary.junit_xml)</code></p>
     <p>coverage matrix: <code>$(ConvertTo-HtmlSafe $Summary.coverage_matrix_path)</code></p>
     <p>coverage gate: <code>$(ConvertTo-HtmlSafe $Summary.coverage_gate_path)</code> ($(ConvertTo-HtmlSafe $Summary.coverage_gate_status))</p>
+    <p>joint smoke gate: <code>$(ConvertTo-HtmlSafe $Summary.joint_smoke_gate_path)</code> ($(ConvertTo-HtmlSafe $Summary.joint_smoke_status))</p>
     <p>release gate: <code>$(ConvertTo-HtmlSafe $Summary.release_gate_path)</code> ($(ConvertTo-HtmlSafe $Summary.release_gate_status))</p>
     <p>unresolved gaps: <code>$(ConvertTo-HtmlSafe $Summary.unresolved_gaps_path)</code></p>
     <p>ci profile: <code>$(ConvertTo-HtmlSafe $Summary.ci_profile_path)</code></p>
@@ -705,7 +759,8 @@ function New-ReleaseGate {
         [Parameter(Mandatory = $true)]$Tests,
         [Parameter(Mandatory = $true)]$CoverageGate,
         [Parameter(Mandatory = $true)]$SecretScan,
-        [Parameter(Mandatory = $true)]$SpecSyncGate
+        [Parameter(Mandatory = $true)]$SpecSyncGate,
+        [AllowNull()]$JointSmokeGate
     )
 
     if ($Profile -ne "release-gate") {
@@ -781,12 +836,21 @@ function New-ReleaseGate {
                 -RequiredTests @() `
                 -AdditionalGatePassed ($SecretScan.status -eq "passed") `
                 -AdditionalGateReason "secret_scan_failed"))
+    $jointSmokeStatus = if ($JointSmokeGate) { $JointSmokeGate.status } else { "skipped" }
+    $checks.Add((New-ReleaseGateCheck `
+                -Id "joint_smoke" `
+                -Description "Live soland + yougen + coauth browser smoke completes before release." `
+                -Tests $Tests `
+                -RequiredTests @() `
+                -AdditionalGatePassed ($jointSmokeStatus -eq "passed" -or $jointSmokeStatus -eq "skipped") `
+                -AdditionalGateReason "joint_smoke_failed"))
 
     $failedChecks = @($checks | Where-Object { $_.status -ne "passed" })
     [pscustomobject]@{
         generated_at = (Get-Date).ToString("o")
         profile      = $Profile
         status       = if ($failedChecks.Count -eq 0) { "passed" } else { "failed" }
+        joint_smoke  = $JointSmokeGate
         checks       = @($checks.ToArray())
     }
 }
@@ -800,6 +864,9 @@ function New-ReleaseGateMarkdown {
     $lines.Add("- status: $($Gate.status)")
     $lines.Add("- profile: $($Gate.profile)")
     $lines.Add("- generated_at: $($Gate.generated_at)")
+    if ($Gate.PSObject.Properties.Name -contains "joint_smoke" -and $Gate.joint_smoke) {
+        $lines.Add("- joint_smoke: $($Gate.joint_smoke.status) ($($Gate.joint_smoke.summary_markdown))")
+    }
     $lines.Add("")
     $lines.Add("| Check | Status | Reason | Required tests |")
     $lines.Add("| --- | --- | --- | --- |")
@@ -809,6 +876,22 @@ function New-ReleaseGateMarkdown {
         $reason = if ($check.reason) { $check.reason } else { "-" }
         $lines.Add("| $($check.id) | $($check.status) | $reason | $requiredText |")
     }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function New-JointSmokeGateMarkdown {
+    param([Parameter(Mandatory = $true)]$Gate)
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# joint smoke gate")
+    $lines.Add("")
+    $lines.Add("- status: $($Gate.status)")
+    $lines.Add("- generated_at: $($Gate.generated_at)")
+    $lines.Add("- started_at: $($Gate.started_at)")
+    $lines.Add("- exit_code: $($Gate.exit_code)")
+    $lines.Add("- output_root: $($Gate.output_root)")
+    $lines.Add("- summary_json: $($Gate.summary_json)")
+    $lines.Add("- summary_markdown: $($Gate.summary_markdown)")
     return ($lines -join [Environment]::NewLine)
 }
 
@@ -1303,6 +1386,8 @@ $coverageJson = Join-Path $runDir "coverage-matrix.json"
 $coverageMd = Join-Path $runDir "coverage-matrix.md"
 $coverageGateJson = Join-Path $runDir "coverage-gate.json"
 $coverageGateMd = Join-Path $runDir "coverage-gate.md"
+$jointSmokeGateJson = Join-Path $runDir "joint-smoke-gate.json"
+$jointSmokeGateMd = Join-Path $runDir "joint-smoke-gate.md"
 $releaseGateJson = Join-Path $runDir "release-gate.json"
 $releaseGateMd = Join-Path $runDir "release-gate.md"
 $gapsJson = Join-Path $runDir "unresolved-gaps.json"
@@ -1451,6 +1536,21 @@ $metadata = [pscustomobject]@{
     spec         = $specMetadata
     sync_gate    = $specSyncGate
 }
+$jointSmokeGate = [pscustomobject]@{
+    generated_at     = (Get-Date).ToString("o")
+    started_at       = $null
+    status           = "skipped"
+    exit_code        = $null
+    output_root      = $null
+    summary_json     = $null
+    summary_markdown = $null
+}
+if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
+    $jointSmokeGate = Invoke-JointSmokeGate -RepoRoot $repoRoot -RunDir $runDir -RawLog $rawLog
+    if ($jointSmokeGate.status -eq "failed") {
+        $exitCode = 1
+    }
+}
 $scanRoots = @($rawLog, $transcriptNdjson, $serviceLogDir)
 $scanFiles = 0
 foreach ($root in $scanRoots) {
@@ -1479,7 +1579,8 @@ $releaseGate = New-ReleaseGate `
     -Tests $tests `
     -CoverageGate $coverageGate `
     -SecretScan $secretScan `
-    -SpecSyncGate $specSyncGate
+    -SpecSyncGate $specSyncGate `
+    -JointSmokeGate $jointSmokeGate
 if ($Profile -eq "release-gate" -and $releaseGate.status -eq "failed") {
     $exitCode = 1
 }
@@ -1504,6 +1605,8 @@ $summary = [pscustomobject]@{
     coverage_matrix_path = $coverageJson
     coverage_gate_path   = $coverageGateJson
     coverage_gate_status = $coverageGate.status
+    joint_smoke_gate_path = $jointSmokeGateJson
+    joint_smoke_status    = $jointSmokeGate.status
     release_gate_path    = $releaseGateJson
     release_gate_status  = $releaseGate.status
     unresolved_gaps_path = $gapsJson
@@ -1518,6 +1621,7 @@ $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UT
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $metadataJson -Encoding UTF8
 $coverage | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageJson -Encoding UTF8
 $coverageGate | ConvertTo-Json -Depth 8 | Set-Content -Path $coverageGateJson -Encoding UTF8
+$jointSmokeGate | ConvertTo-Json -Depth 8 | Set-Content -Path $jointSmokeGateJson -Encoding UTF8
 $releaseGate | ConvertTo-Json -Depth 8 | Set-Content -Path $releaseGateJson -Encoding UTF8
 ConvertTo-Json -InputObject @($unresolved) -Depth 6 | Set-Content -Path $gapsJson -Encoding UTF8
 ConvertTo-Json -InputObject @($registryGaps) -Depth 6 | Set-Content -Path (Join-Path $runDir "registry-gaps.json") -Encoding UTF8
@@ -1544,6 +1648,9 @@ $coverageMarkdown | Set-Content -Path $coverageMd -Encoding UTF8
 
 $coverageGateMarkdown = New-CoverageGateMarkdown -Gate $coverageGate
 $coverageGateMarkdown | Set-Content -Path $coverageGateMd -Encoding UTF8
+
+$jointSmokeGateMarkdown = New-JointSmokeGateMarkdown -Gate $jointSmokeGate
+$jointSmokeGateMarkdown | Set-Content -Path $jointSmokeGateMd -Encoding UTF8
 
 $releaseGateMarkdown = New-ReleaseGateMarkdown -Gate $releaseGate
 $releaseGateMarkdown | Set-Content -Path $releaseGateMd -Encoding UTF8
@@ -1573,6 +1680,8 @@ $artifactFiles = @(
     $coverageMd,
     $coverageGateJson,
     $coverageGateMd,
+    $jointSmokeGateJson,
+    $jointSmokeGateMd,
     $releaseGateJson,
     $releaseGateMd,
     $gapsJson,
@@ -1613,6 +1722,7 @@ Write-Host "  junit    : $junitXml"
 Write-Host "  html     : $summaryHtml"
 Write-Host "  coverage : $coverageMd"
 Write-Host "  gate     : $coverageGateMd"
+Write-Host "  joint    : $jointSmokeGateMd"
 Write-Host "  release  : $releaseGateMd"
 Write-Host "  gaps     : $gapsMd"
 Write-Host "  ci       : $ciProfileMd"
