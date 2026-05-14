@@ -19,6 +19,8 @@ const visualOutsider: JointUser = {
   displayName: "Visual Outsider",
 };
 
+test.describe.configure({ mode: "serial" });
+
 test("controlled desktop visual baselines for login, timeline, permission, and space admin @visual", async ({
   browser,
   request,
@@ -81,6 +83,81 @@ test("controlled desktop visual baselines for login, timeline, permission, and s
   } finally {
     await outsider.close();
     await owner.close();
+  }
+});
+
+test("controlled desktop visual baselines for dashboard, directory, settings, and notifications @visual", async ({
+  browser,
+  request,
+}, testInfo) => {
+  const user: JointUser = {
+    name: "visual-shell",
+    did: "did:web:visual-shell.example",
+    deviceId: "cx:device:01904100-0000-7000-8000-000000000203",
+    handle: "@visual-shell-e2e",
+    displayName: "Visual Shell",
+  };
+  await ensureRegistered(request, user);
+  const token = await issueDevSession(request, user);
+  const actor = await openUserPage(browser, user, token);
+
+  try {
+    await actor.gotoHome();
+    await expect(actor.page.getByTestId("dashboard-panel")).toBeVisible({ timeout: 120_000 });
+    await visualBaselineShot(actor.page, testInfo, "dashboard-panel", actor.page.getByTestId("dashboard-panel"));
+
+    await actor.gotoDirectory();
+    await visualBaselineShot(actor.page, testInfo, "directory-panel", actor.page.getByTestId("directory-panel"));
+
+    await actor.gotoSettings();
+    await visualBaselineShot(actor.page, testInfo, "settings-panel", actor.page.getByTestId("settings-panel"));
+
+    await actor.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+    await expect(actor.page.getByTestId("notifications-panel")).toBeVisible({ timeout: 120_000 });
+    await visualBaselineShot(
+      actor.page,
+      testInfo,
+      "notifications-panel",
+      actor.page.getByTestId("notifications-panel"),
+    );
+  } finally {
+    await actor.close();
+  }
+});
+
+test("controlled mobile visual baselines for shellbar and nav drawer @visual @mobile", async ({
+  browser,
+  request,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "visual-chrome", "visual project only");
+
+  const user: JointUser = {
+    name: "visual-mobile",
+    did: "did:web:visual-mobile.example",
+    deviceId: "cx:device:01904100-0000-7000-8000-000000000204",
+    handle: "@visual-mobile-e2e",
+    displayName: "Visual Mobile",
+  };
+  await ensureRegistered(request, user);
+  const token = await issueDevSession(request, user);
+  const actor = await openUserPage(browser, user, token);
+
+  try {
+    await actor.page.setViewportSize({ width: 390, height: 844 });
+    await actor.gotoHome();
+    await expect(actor.page.getByTestId("mobile-shellbar")).toBeVisible({ timeout: 120_000 });
+    await visualBaselineShot(actor.page, testInfo, "mobile-shellbar", actor.page.getByTestId("mobile-shellbar"));
+
+    await actor.page.getByTestId("mobile-nav-toggle").click();
+    await expect(actor.page.getByTestId("mobile-nav-drawer")).toBeVisible();
+    await visualBaselineShot(
+      actor.page,
+      testInfo,
+      "mobile-nav-drawer",
+      actor.page.getByTestId("mobile-nav-drawer"),
+    );
+  } finally {
+    await actor.close();
   }
 });
 

@@ -1,1 +1,173 @@
-//! E2 Round 26 / federation two-node real Move replay.}//!}//! Spawns two real `soland` binaries on independent ports/blob roots,}//! confirms they negotiate basic federation handshake (`/api/v1/server/describe`}//! reachable on both, distinct service DIDs), then exercises the federation}//! Move forwarding path: register an account on server_a, mint a Move into a}//! space, push the canonical Move to server_b via `/api/v1/federation/anchors`,}//! and confirm both nodes converge on the same anchored frontier.}//!}//! wired the spawn through the reusable `external_binary` helper:}//! `TestServerGroup::try_multi_external` resolves `SOLAND_BIN` (or sibling-}//! checkout `contrix-dev/soland/target/debug/soland[.exe]`) and spawns the}//! pre-built binary directly — no `cargo run` slow path. When neither is}//! available the scenario silently returns `Ok(())` so CI runners that have}//! not built soland do not flake.}//!}//! fixed the `device_id` fixture to use a wire-canonical}//! `cx:device:<uuidv7>` (was `"device-alice-e2"`, which the strict}//! `contrix_identifiers::DeviceId` validator rejects), confirmed the actor}//! registration + space-create + message-send round-trip succeeds against}//! a real soland, and removed the wrapper's `#[ignore]` so default}//! `cargo test` runs the full federation scenario whenever a soland binary}//! is locatable (and silently skips otherwise).}}use anyhow::{Context, Result};}use contrix_core::identifiers::new_prefixed_uuid7;}use reqwest::StatusCode;}use serde_json::json;}}use crate::harness::{TestServerGroup, expect_json, expect_response};}}/// Spawns two `soland` instances (pre-built binary, located via SOLAND_BIN}/// env or sibling checkout) and runs the round-26 federation real Move-}/// replay scenario:}///   1. distinct service DIDs (basic handshake invariant)}///   2. server_a registers an account + creates a space + sends a message Move}///   3. server_a's anchor leaves are fetched}///   4. server_b accepts the same anchor leaves via the federation push endpoint}///   5. server_b's `/api/v1/federation/anchors` reports the pushed leaves}///}/// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling}/// `contrix-dev/soland/target/debug/soland[.exe]` exists (silent skip path).}pub async fn two_node_federation_harness_starts() -> Result<()> {}    let Some(group) = TestServerGroup::try_multi_external("e2-federation-two-node", 2).await?}    else {}        // Silent skip — caller is `--ignored`-gated and we already failed the}        // binary lookup (`SOLAND_BIN` unset + no sibling-checkout binary).}        return Ok(());}    };}    assert_eq!(group.len(), 2, "two-node group must have exactly 2 servers");}}    let server_a = group.server(0);}    let server_b = group.server(1);}}    // ── Step 1: handshake ────────────────────────────────────────────────}    let describe_a = expect_json(}        server_a.http().get(server_a.url("/api/v1/server/describe")),}        StatusCode::OK,}    )}    .await?;}    let describe_b = expect_json(}        server_b.http().get(server_b.url("/api/v1/server/describe")),}        StatusCode::OK,}    )}    .await?;}    assert_eq!(describe_a["service_type"], "principal_server");}    assert_eq!(describe_b["service_type"], "principal_server");}    assert_ne!(}        server_a.service_did(),}        server_b.service_did(),}        "two-node federation requires distinct service DIDs"}    );}}    // ── Step 2: actor + space + message Move on server_a ────────────────}    // `device_id` MUST be a canonical Contrix wire DeviceId per}    // `contrix_identifiers::DeviceId`. Mint a fresh UUIDv7-backed device id}    // at runtime so the fixture is wire-canonical and unique per run.}    let device_alice = new_prefixed_uuid7("cx:device:");}    let actor_a = server_a}        .register_client(}            "did:web:alice.e2.federation.cotest.local",}            "@alice-e2",}            &device_alice,}        )}        .await}        .context("register actor on server_a")?;}    let space_id = actor_a}        .create_space("e2-federation-two-node-space")}        .await}        .context("create space on server_a")?;}    let _msg = actor_a}        .send_message(&space_id, "thread-e2", "hello from server_a")}        .await}        .context("send message Move on server_a")?;}}    // ── Step 3: pull anchors from server_a ──────────────────────────────}    // The MAL-12 round-25 federation endpoints expose:}    //   GET /api/v1/federation/anchors?space_id=...}    //   POST /api/v1/federation/anchors  (peer-push)}    //}    // We tolerate either shape — newer soland builds may return the leaf}    // anchors directly, older builds may emit an empty array if the space}    // hasn't yet rolled an Anchor. The harness asserts the response shape}    // is well-formed JSON, not a specific anchor count.}    let anchors_a_response = expect_response(}        server_a.http().get(format!(}            "{}/api/v1/federation/anchors?space_id={}",}            server_a.base_url().as_str().trim_end_matches('/'),}            space_id}        )),}        StatusCode::OK,}    )}    .await}    .context("fetch federation anchors from server_a")?;}    let anchors_a = anchors_a_response.json()?;}    assert!(}        anchors_a.is_object() || anchors_a.is_array(),}        "anchors response must be JSON object or array, got: {anchors_a}"}    );}}    // ── Step 4: push the same anchors to server_b ────────────────────────}    // The push endpoint is idempotent and accepts the leaf bundle. If}    // server_a returned no anchors yet (anchorer hasn't fired), we still}    // exercise the push handler with an empty bundle so the round-trip}    // surface is touched.}    let push_body = if anchors_a.is_array() {}        json!({ "space_id": space_id, "anchors": anchors_a })}    } else if let Some(arr) = anchors_a.get("anchors") {}        json!({ "space_id": space_id, "anchors": arr })}    } else {}        json!({ "space_id": space_id, "anchors": [] })}    };}}    // server_b must accept the push and respond 200/202/204 OR a 4xx if the}    // space is unknown there (peer not yet introduced) — both are acceptable}    // signals that the federation surface is wired. The hard requirement is}    // the endpoint exists and returns structured JSON / no panics.}    let push_response = server_b}        .http()}        .post(format!(}            "{}/api/v1/federation/anchors",}            server_b.base_url().as_str().trim_end_matches('/')}        ))}        .json(&push_body)}        .send()}        .await}        .context("push federation anchors to server_b")?;}    let status = push_response.status();}    if !(status.is_success() || status.is_client_error()) {}        return Err(anyhow::anyhow!(}            "server_b federation push returned unexpected status {status}"}        ));}    }}}    // ── Step 5: confirm server_b's anchors endpoint is reachable ─────────}    let anchors_b = expect_json(}        server_b.http().get(format!(}            "{}/api/v1/federation/anchors?space_id={}",}            server_b.base_url().as_str().trim_end_matches('/'),}            space_id}        )),}        StatusCode::OK,}    )}    .await}    .context("fetch federation anchors from server_b")?;}    assert!(}        anchors_b.is_object() || anchors_b.is_array(),}        "server_b anchors response must be JSON object or array"}    );}}    Ok(())}}}
+//! E2 Round 26 / C33.4 — federation two-node real Move replay.
+//!
+//! Spawns two real `soland` binaries on independent ports/blob roots,
+//! confirms they negotiate basic federation handshake (`/api/v1/server/describe`
+//! reachable on both, distinct service DIDs), then exercises the federation
+//! Move forwarding path: register an account on server_a, mint a Move into a
+//! space, push the canonical Move to server_b via `/api/v1/federation/anchors`,
+//! and confirm both nodes converge on the same anchored frontier.
+//!
+//! C33.4 wired the spawn through the reusable `external_binary` helper:
+//! `TestServerGroup::try_multi_external` resolves `SOLAND_BIN` (or sibling-
+//! checkout `contrix-dev/soland/target/debug/soland[.exe]`) and spawns the
+//! pre-built binary directly — no `cargo run` slow path. When neither is
+//! available the scenario silently returns `Ok(())` so CI runners that have
+//! not built soland do not flake.
+//!
+//! C35.2 fixed the `device_id` fixture to use a wire-canonical
+//! `cx:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
+//! `contrix_identifiers::DeviceId` validator rejects), confirmed the actor
+//! registration + space-create + message-send round-trip succeeds against
+//! a real soland, and removed the wrapper's `#[ignore]` so default
+//! `cargo test` runs the full federation scenario whenever a soland binary
+//! is locatable (and silently skips otherwise).
+
+use anyhow::{Context, Result};
+use contrix_core::identifiers::new_prefixed_uuid7;
+use reqwest::StatusCode;
+use serde_json::json;
+
+use crate::harness::{TestServerGroup, expect_json, expect_response};
+
+/// Spawns two `soland` instances (pre-built binary, located via SOLAND_BIN
+/// env or sibling checkout) and runs the round-26 federation real Move-
+/// replay scenario:
+///   1. distinct service DIDs (basic handshake invariant)
+///   2. server_a registers an account + creates a space + sends a message Move
+///   3. server_a's anchor leaves are fetched
+///   4. server_b accepts the same anchor leaves via the federation push endpoint
+///   5. server_b's `/api/v1/federation/anchors` reports the pushed leaves
+///
+/// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling
+/// `contrix-dev/soland/target/debug/soland[.exe]` exists (silent skip path).
+pub async fn two_node_federation_harness_starts() -> Result<()> {
+    let Some(group) = TestServerGroup::try_multi_external("e2-federation-two-node", 2).await?
+    else {
+        // Silent skip — caller is `--ignored`-gated and we already failed the
+        // binary lookup (`SOLAND_BIN` unset + no sibling-checkout binary).
+        return Ok(());
+    };
+    assert_eq!(group.len(), 2, "two-node group must have exactly 2 servers");
+
+    let server_a = group.server(0);
+    let server_b = group.server(1);
+
+    // ── Step 1: handshake ────────────────────────────────────────────────
+    let describe_a = expect_json(
+        server_a.http().get(server_a.url("/api/v1/server/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    let describe_b = expect_json(
+        server_b.http().get(server_b.url("/api/v1/server/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(describe_a["service_type"], "principal_server");
+    assert_eq!(describe_b["service_type"], "principal_server");
+    assert_ne!(
+        server_a.service_did(),
+        server_b.service_did(),
+        "two-node federation requires distinct service DIDs"
+    );
+
+    // ── Step 2: actor + space + message Move on server_a ────────────────
+    // C35.2 — `device_id` MUST be a canonical Contrix wire DeviceId per
+    // `contrix_identifiers::DeviceId` (`dev_*` legacy form OR
+    // `cx:device:<uuidv7>`). Mint a fresh UUIDv7-backed device id at runtime
+    // so the fixture is wire-canonical and unique per run.
+    let device_alice = new_prefixed_uuid7("cx:device:");
+    let actor_a = server_a
+        .register_client(
+            "did:web:alice.e2.federation.cotest.local",
+            "@alice-e2",
+            &device_alice,
+        )
+        .await
+        .context("register actor on server_a")?;
+    let space_id = actor_a
+        .create_space("e2-federation-two-node-space")
+        .await
+        .context("create space on server_a")?;
+    let _msg = actor_a
+        .send_message(&space_id, "thread-e2", "hello from server_a")
+        .await
+        .context("send message Move on server_a")?;
+
+    // ── Step 3: pull anchors from server_a ──────────────────────────────
+    // The MAL-12 round-25 federation endpoints expose:
+    //   GET /api/v1/federation/anchors?space_id=...
+    //   POST /api/v1/federation/anchors  (peer-push)
+    //
+    // We tolerate either shape — newer soland builds may return the leaf
+    // anchors directly, older builds may emit an empty array if the space
+    // hasn't yet rolled an Anchor. The harness asserts the response shape
+    // is well-formed JSON, not a specific anchor count.
+    let anchors_a_response = expect_response(
+        server_a.http().get(format!(
+            "{}/api/v1/federation/anchors?space_id={}",
+            server_a.base_url().as_str().trim_end_matches('/'),
+            space_id
+        )),
+        StatusCode::OK,
+    )
+    .await
+    .context("fetch federation anchors from server_a")?;
+    let anchors_a = anchors_a_response.json()?;
+    assert!(
+        anchors_a.is_object() || anchors_a.is_array(),
+        "anchors response must be JSON object or array, got: {anchors_a}"
+    );
+
+    // ── Step 4: push the same anchors to server_b ────────────────────────
+    // The push endpoint is idempotent and accepts the leaf bundle. If
+    // server_a returned no anchors yet (anchorer hasn't fired), we still
+    // exercise the push handler with an empty bundle so the round-trip
+    // surface is touched.
+    let push_body = if anchors_a.is_array() {
+        json!({ "space_id": space_id, "anchors": anchors_a })
+    } else if let Some(arr) = anchors_a.get("anchors") {
+        json!({ "space_id": space_id, "anchors": arr })
+    } else {
+        json!({ "space_id": space_id, "anchors": [] })
+    };
+
+    // server_b must accept the push and respond 200/202/204 OR a 4xx if the
+    // space is unknown there (peer not yet introduced) — both are acceptable
+    // signals that the federation surface is wired. The hard requirement is
+    // the endpoint exists and returns structured JSON / no panics.
+    let push_response = server_b
+        .http()
+        .post(format!(
+            "{}/api/v1/federation/anchors",
+            server_b.base_url().as_str().trim_end_matches('/')
+        ))
+        .json(&push_body)
+        .send()
+        .await
+        .context("push federation anchors to server_b")?;
+    let status = push_response.status();
+    if !(status.is_success() || status.is_client_error()) {
+        return Err(anyhow::anyhow!(
+            "server_b federation push returned unexpected status {status}"
+        ));
+    }
+
+    // ── Step 5: confirm server_b's anchors endpoint is reachable ─────────
+    let anchors_b = expect_json(
+        server_b.http().get(format!(
+            "{}/api/v1/federation/anchors?space_id={}",
+            server_b.base_url().as_str().trim_end_matches('/'),
+            space_id
+        )),
+        StatusCode::OK,
+    )
+    .await
+    .context("fetch federation anchors from server_b")?;
+    assert!(
+        anchors_b.is_object() || anchors_b.is_array(),
+        "server_b anchors response must be JSON object or array"
+    );
+
+    Ok(())
+}

@@ -131,6 +131,37 @@ private Space lifecycle administration, bidirectional timeline messages with
 edit/redaction, permission-denied UI/API paths, session refresh/logout/revoked
 bearer behavior, and Alice creating a live Space and persisting a message.
 
+Phase 5 adds focused product-surface specs that target yougen UI features
+that the smoke matrix does not exercise:
+
+- `onboarding.spec.ts` walks `/onboarding` through DID method, handle, device,
+  and recovery steps, exercises the `onboarding-progress` tabs, and asserts
+  `onboarding-finish` routes to the dashboard.
+- `directory-tabs.spec.ts` covers the protocol-objects, spaces, organizations,
+  actors, and handles directory tabs plus the four-axis search policy banner
+  and contact tooling form.
+- `consent-flow.spec.ts` drives the `consent-grant-demo` card in
+  `/settings/privacy`, validating empty-input feedback and the Move submission
+  status for both `consent-grant-submit` and `consent-revoke-submit`.
+- `quarantine-smoke.spec.ts` renders `/quarantine`, exercises
+  `quarantine-refresh-button`, asserts `quarantine-status` or
+  `quarantine-empty` is present, and fills the reject-reason input.
+- `chat-interactions.spec.ts` exercises the `/chat/:space_id` view: send,
+  open the reaction picker, render `chat-reactions`, open the reply banner,
+  and post a reply that renders `chat-reply-indicator`.
+- `failure-paths.spec.ts` route-mocks `POST /api/v1/events` to return 500,
+  asserts `chat-message-error` and `chat-retry-button` appear, clears the
+  mock, and confirms `chat-retry-button` recovers the send.
+- `notifications-smoke.spec.ts` renders `/notifications`, cycles the grouping
+  segmented control, exercises `toggle-archived`, `refresh-notifications`,
+  `mark-all-read`, and asserts the muted/empty fallback state.
+- `mobile-core.spec.ts` adds a mobile login error path and a mobile nav-drawer
+  tour covering `mobile-directory-nav-button`, `mobile-settings-nav-button`,
+  `mobile-topbar-notifications-button`, and `mobile-theme-toggle`.
+- `visual-baseline.spec.ts` adds desktop baselines for `dashboard-panel`,
+  `directory-panel`, `settings-panel`, `notifications-panel`, and 390x844
+  mobile baselines for `mobile-shellbar` and `mobile-nav-drawer`.
+
 The mobile spec is tagged `@mobile` and runs only under the `mobile-chrome`
 project. It validates the mobile shell navigation, authenticated connect state,
 Space creation, timeline message send, and a Space Admin screenshot path.

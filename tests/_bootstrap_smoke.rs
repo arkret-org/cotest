@@ -1,1 +1,86 @@
-//! smoke test for the new bootstrap helpers — `#[ignore]` by default}//! so it only runs on demand (`cargo test --test _bootstrap_smoke -- --ignored`).}//!}//! Exists primarily so `coauth_bootstrap` / `floria_bootstrap` get a lightning}//! bring-up + tear-down round-trip independent of the larger bridge matrix}//! scenario, which is useful during local Docker debugging.}}use anyhow::Result;}use cotest::scenarios::_helpers::coauth_bootstrap::{}    bootstrap_coauth_config, spawn_coauth_with_db, spawn_ephemeral_postgres,}};}use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;}}#[tokio::test(flavor = "multi_thread")]}#[ignore]}async fn dump_patched_coauth_config() -> Result<()> {}    use std::path::Path;}    let bin = Path::new("D:/Works/contrix-dev/coauth/target/debug/coauth.exe");}    if !bin.exists() {}        eprintln!("skip: coauth binary not found");}        return Ok(());}    }}    let bundle = bootstrap_coauth_config(}        bin,}        "postgresql://contrix:contrix@127.0.0.1:5432/contrix",}        "127.0.0.1:9999",}    )?;}    eprintln!("internal_addr: {}", bundle.internal_addr);}    eprintln!("---");}    eprintln!("{}", std::fs::read_to_string(bundle.file.path())?);}    Ok(())}}}}#[tokio::test(flavor = "multi_thread")]}#[ignore]}async fn ephemeral_postgres_starts_and_stops() -> Result<()> {}    let pg = spawn_ephemeral_postgres()?;}    match pg {}        Some(pg) => {}            assert!(pg.connect_url.starts_with("postgresql://"));}            eprintln!("ok: ephemeral pg up at {}", pg.connect_url);}        }}        None => {}            eprintln!("skip: docker not available");}        }}    }}    Ok(())}}}}#[tokio::test(flavor = "multi_thread")]}#[ignore]}async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {}    match spawn_coauth_with_db().await? {}        Some(handle) => {}            eprintln!(}                "ok: coauth up at {} (health at {})",}                handle.base_url(),}                handle.health_url()}            );}            // Hit /health one more time via reqwest to confirm. Health is}            // on the SEPARATE internal listener — see SpawnedCoauth docs.}            let resp = reqwest::get(handle.health_url()).await?;}            assert!(resp.status().is_success(), "health: {}", resp.status());}        }}        None => {}            eprintln!("skip: coauth bootstrap reported missing prerequisites (docker / binary)");}        }}    }}    Ok(())}}}}#[tokio::test(flavor = "multi_thread")]}#[ignore]}async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {}    match spawn_floria_with_config().await? {}        Some(handle) => {}            eprintln!("ok: floria up at {}", handle.base_url());}            let resp = reqwest::get(format!("{}/health", handle.base_url())).await?;}            assert!(resp.status().is_success(), "health: {}", resp.status());}        }}        None => {}            eprintln!("skip: floria bootstrap reported missing binary");}        }}    }}    Ok(())}}}
+//! C34.3 smoke test for the new bootstrap helpers — `#[ignore]` by default
+//! so it only runs on demand (`cargo test --test _bootstrap_smoke -- --ignored`).
+//!
+//! Exists primarily so `coauth_bootstrap` / `floria_bootstrap` get a lightning
+//! bring-up + tear-down round-trip independent of the larger bridge matrix
+//! scenario, which is useful during local Docker debugging.
+
+use anyhow::Result;
+use cotest::scenarios::_helpers::coauth_bootstrap::{
+    bootstrap_coauth_config, spawn_coauth_with_db, spawn_ephemeral_postgres,
+};
+use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn dump_patched_coauth_config() -> Result<()> {
+    use std::path::Path;
+    let bin = Path::new("D:/Works/contrix-dev/coauth/target/debug/coauth.exe");
+    if !bin.exists() {
+        eprintln!("skip: coauth binary not found");
+        return Ok(());
+    }
+    let bundle = bootstrap_coauth_config(
+        bin,
+        "postgresql://contrix:contrix@127.0.0.1:5432/contrix",
+        "127.0.0.1:9999",
+    )?;
+    eprintln!("internal_addr: {}", bundle.internal_addr);
+    eprintln!("---");
+    eprintln!("{}", std::fs::read_to_string(bundle.file.path())?);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
+    let pg = spawn_ephemeral_postgres()?;
+    match pg {
+        Some(pg) => {
+            assert!(pg.connect_url.starts_with("postgresql://"));
+            eprintln!("ok: ephemeral pg up at {}", pg.connect_url);
+        }
+        None => {
+            eprintln!("skip: docker not available");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
+    match spawn_coauth_with_db().await? {
+        Some(handle) => {
+            eprintln!(
+                "ok: coauth up at {} (health at {})",
+                handle.base_url(),
+                handle.health_url()
+            );
+            // Hit /health one more time via reqwest to confirm. Health is
+            // on the SEPARATE internal listener — see SpawnedCoauth docs.
+            let resp = reqwest::get(handle.health_url()).await?;
+            assert!(resp.status().is_success(), "health: {}", resp.status());
+        }
+        None => {
+            eprintln!("skip: coauth bootstrap reported missing prerequisites (docker / binary)");
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
+    match spawn_floria_with_config().await? {
+        Some(handle) => {
+            eprintln!("ok: floria up at {}", handle.base_url());
+            let resp = reqwest::get(format!("{}/health", handle.base_url())).await?;
+            assert!(resp.status().is_success(), "health: {}", resp.status());
+        }
+        None => {
+            eprintln!("skip: floria bootstrap reported missing binary");
+        }
+    }
+    Ok(())
+}

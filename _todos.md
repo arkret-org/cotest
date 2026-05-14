@@ -52,3 +52,20 @@
 - [x] T4.4 对登录页、Space admin、timeline、权限错误页建立可控视觉 baseline。
 - [x] T4.5 为 CI 准备 Node、Playwright browser、Dioxus CLI、Docker/PostgreSQL 前置检查。
 - [x] T4.6 将稳定后的 joint smoke 纳入 release-gate 前置检查。
+
+## Phase 5: spec 覆盖补齐 (规划日期 2026-05-14)
+
+差距分析: Phase 1-4 已经覆盖了健康检查、错误登录、注册、联系人、Space lifecycle、消息发送/编辑/redaction、权限矩阵、会话刷新/登出/失效、移动端核心路径、视觉 baseline。但相对 contrix-spec/v1 的产品面，下列 UI 流程仍未在 Playwright 层覆盖。Phase 5 把这些缺口补齐，全部基于 yougen 中实际存在的 `data-testid`，不依赖未实现的 UI surface。
+
+- [x] T5.1 新增 `e2e/tests/onboarding.spec.ts`: 通过 `/onboarding` 走 DID method → Handle → Device → Recovery 四步，校验 `onboarding-progress` 切换、各步面板可见、Recovery 三选项切换 (`recovery-vault` / `recovery-social` / `recovery-key`)、`onboarding-finish` 链接落到 Dashboard。
+- [x] T5.2 新增 `e2e/tests/directory-tabs.spec.ts`: 覆盖 `tab-objects` / `tab-spaces` / `tab-organizations` / `tab-actors` / `tab-handles` 五个 tab 切换、`directory-three-axes-banner` 可见、`directory-contact-tools` 表单可见。
+- [x] T5.3 新增 `e2e/tests/consent-flow.spec.ts`: 在 `/settings/privacy` 渲染 `consent-grant-demo`，填空校验、Space ID 校验、提交 `consent-grant-submit` 后 `consent-grant-status` 渲染 Move 结果或 reason；`consent-revoke-submit` 走相同路径。
+- [x] T5.4 新增 `e2e/tests/quarantine-smoke.spec.ts`: `/quarantine` 渲染 `quarantine-panel` + `quarantine-header`，点击 `quarantine-refresh-button` 后 `quarantine-status` 或 `quarantine-empty` 至少出现一项。
+- [x] T5.5 新增 `e2e/tests/chat-interactions.spec.ts`: Alice/Bob 进入 `/chat/<space>`，发送消息，Bob 通过 `chat-react-button` 打开 `chat-reaction-picker` 选择 emoji，Alice 看到 `chat-reactions`；Bob 点 `chat-reply-button`，Alice 看到 `chat-reply-indicator`/`chat-reply-banner` 行为。
+- [x] T5.6 新增 `e2e/tests/failure-paths.spec.ts`: 通过 Playwright route mock 把 `POST /api/v1/events` 临时返回 500，Alice 在 chat 发送消息后看到 `chat-message-error` + `chat-retry-button`；清掉 mock 后点击 retry 让消息进入 timeline。
+- [x] T5.7 新增 `e2e/tests/notifications-smoke.spec.ts`: `/notifications` 渲染 `notifications-panel`、`mark-all-read` 按钮可点击、空/筛选状态出现 `notifications-muted-empty` 或 `notification-item`。
+- [x] T5.8 扩展 `mobile-core.spec.ts` (`@mobile`): 新增 mobile login error 截图、`mobile-directory-nav-button` → 进入 directory、`mobile-settings-nav-button` → 进入 settings、`mobile-topbar-notifications-button` → 进入 notifications。
+- [x] T5.9 扩展 `visual-baseline.spec.ts` (`@visual`): 为 `dashboard-panel`、`directory-panel`、`settings-panel`、`notifications-panel` 增加 baseline，移动端给 `mobile-shellbar` + `mobile-nav-drawer` 增加 390x844 baseline。
+- [x] T5.10 更新 `docs/test-strategy.md` Joint UI E2E 段落, 描述 Phase 5 新增的 spec 与 testids 覆盖关系。
+- [x] T5.11 对所有新增 spec 跑 `npx tsc --noEmit` 通过类型检查。
+
