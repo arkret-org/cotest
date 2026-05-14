@@ -40,10 +40,7 @@ test("notifications panel renders toolbar, grouping segments, and mark-all-read 
     const itemCount = await actor.page.getByTestId("notification-item").count();
     if (itemCount === 0) {
       const empty = actor.page.getByTestId("notifications-muted-empty");
-      const fallback = actor.page.getByTestId("notifications-panel").locator(".event").last();
-      const hasEmptyTestid = (await empty.count()) > 0;
-      const hasFallback = (await fallback.count()) > 0;
-      expect(hasEmptyTestid || hasFallback).toBeTruthy();
+      await expect(empty).toBeVisible();
       await stepShot(actor.page, testInfo, "04-empty-state");
     } else {
       await stepShot(actor.page, testInfo, "04-items-visible");

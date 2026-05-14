@@ -154,7 +154,7 @@ that the smoke matrix does not exercise:
   mock, and confirms `chat-retry-button` recovers the send.
 - `notifications-smoke.spec.ts` renders `/notifications`, cycles the grouping
   segmented control, exercises `toggle-archived`, `refresh-notifications`,
-  `mark-all-read`, and asserts the muted/empty fallback state.
+  `mark-all-read`, and asserts the muted/empty state.
 - `mobile-core.spec.ts` adds a mobile login error path and a mobile nav-drawer
   tour covering `mobile-directory-nav-button`, `mobile-settings-nav-button`,
   `mobile-topbar-notifications-button`, and `mobile-theme-toggle`.
@@ -178,8 +178,8 @@ The coauth/soland test mapping is fixed by the runner:
 - soland audience/service DID: `did:web:soland.joint-e2e.local`
 - coauth service/issuer DID: `did:web:coauth.joint-e2e.local`
 - coauth publishes soland under `contrix.principal_servers`
-- soland introspects OAuth bearer tokens at `<coauth>/oauth2/introspect`
-- soland introspects legacy session grants at
+- soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
+- soland introspects session grants at
   `<coauth>/api/v1/session-grants/introspect`
 - the static bearer values are local E2E-only defaults and never exposed to the
   browser

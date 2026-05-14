@@ -641,7 +641,7 @@ try {
                 "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={3}; " +
                 "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={4}; "
             ) -f `
-                (Quote-PsLiteral "$coauthTrimmed/oauth2/introspect"),
+                (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
                 (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
                 (Quote-PsLiteral "$coauthTrimmed/api/v1/session-grants/introspect"),
                 (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
@@ -817,7 +817,7 @@ $summary = [pscustomobject]@{
     coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
     coauth_config = $coauthConfigPath
     coauth_postgres_container = if ($ephemeralPostgres) { $ephemeralPostgres.ContainerName } else { $null }
-    coauth_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth2/introspect" } else { $null }
+    coauth_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
     coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/api/v1/session-grants/introspect" } else { $null }
     screenshots = $screenshotDir
     visual_baselines = $visualBaselineDir

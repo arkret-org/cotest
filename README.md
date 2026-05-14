@@ -46,8 +46,7 @@ cargo test --tests -- --nocapture
 ```
 
 If `COTEST_SUT_MANIFEST` is not set, the harness falls back to the bundled
-default `soland` checkout. `SERVERX_MANIFEST` is still accepted as a legacy
-override to avoid breaking older local workflows.
+default `soland` checkout.
 
 The teabay Directory Service bridge is optional in normal runs. Set
 `TEABAY_BASE_URL=http://127.0.0.1:7781` to attach an already running Directory,

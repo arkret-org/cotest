@@ -61,7 +61,7 @@ test("coauth discovery advertises the soland principal-server topology", async (
   expect(discoveryResponse.ok()).toBeTruthy();
   const discovery = await discoveryResponse.json();
   expect(discovery.issuer).toBe(coauthWithSlash);
-  expect(discovery.introspection_endpoint).toBe(`${coauth}/oauth2/introspect`);
+  expect(discovery.introspection_endpoint).toBe(`${coauth}/oauth/introspect`);
   expect(discovery["org.contrix.service_did"]).toBe(coauthServiceDid());
 
   const discoveryPrincipal = expect.arrayContaining([

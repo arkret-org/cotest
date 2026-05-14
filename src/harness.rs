@@ -862,7 +862,6 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
 
 fn sut_manifest() -> PathBuf {
     std::env::var_os("COTEST_SUT_MANIFEST")
-        .or_else(|| std::env::var_os("SERVERX_MANIFEST"))
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))

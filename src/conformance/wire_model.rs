@@ -506,11 +506,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("component_mapping missing vectors"))?;
 
     // Build the live cell_family set from the spec event-kind registry to
-    // catch fixture entries that drift away from the canonical names. The
-    // Move/Anchor/Lattice rebase (spec 2026-05-08) renamed the registry's
-    // per-kind component descriptor from `component_type` to `cell_family`;
-    // older fixtures may still call it `contrix_component_type` but the
-    // canonical authority is now `cell_family`.
+    // catch fixture entries that drift away from the canonical names.
     let event_kind_registry = super::load_artifact_json("registry/event-kind-registry.json")?;
     let mut registered_components = std::collections::BTreeSet::new();
     for entry in event_kind_registry
@@ -520,10 +516,6 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     {
         if let Some(cell_family) = entry.get("cell_family").and_then(Value::as_str) {
             registered_components.insert(cell_family.to_owned());
-        }
-        // Back-compat: accept legacy component_type entries if any remain.
-        if let Some(component_type) = entry.get("component_type").and_then(Value::as_str) {
-            registered_components.insert(component_type.to_owned());
         }
     }
 
