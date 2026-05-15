@@ -43,9 +43,19 @@ export class JointUserPage {
     await expect(this.page.getByTestId("login-panel")).toBeVisible({ timeout: 120_000 });
   }
 
-  async gotoProduct() {
-    await this.page.goto("/product", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("product-panel")).toBeVisible({ timeout: 120_000 });
+  async gotoSetup() {
+    await this.page.goto("/setup", { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("space-lifecycle-flow")).toBeVisible({ timeout: 120_000 });
+  }
+
+  async gotoOnboarding() {
+    await this.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("account-flow")).toBeVisible({ timeout: 120_000 });
+  }
+
+  async gotoSpaceAdmin(spaceId: string) {
+    await this.page.goto(`/space/${spaceId}/admin`, { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
   }
 
   async gotoDirectory() {
@@ -56,6 +66,49 @@ export class JointUserPage {
   async gotoSettings() {
     await this.page.goto("/settings", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("settings-panel")).toBeVisible({ timeout: 120_000 });
+  }
+
+  // Drive yougen's multi-step new-space wizard end-to-end and return the
+  // created space id. Mirrors src/views/setup.rs (Basics → Boundary → Seed →
+  // create-space-button). The old single-form "/product" flow is gone.
+  async createSpace(opts: {
+    title: string;
+    summary?: string;
+    discoverability?: string;
+    joinRule?: string;
+    historyVisibility?: string;
+    seedMembers?: string[];
+  }): Promise<string> {
+    await this.gotoSetup();
+    const flow = this.page.getByTestId("space-lifecycle-flow").first();
+
+    await flow.getByTestId("space-title-input").fill(opts.title);
+    if (opts.summary !== undefined) {
+      await flow.getByTestId("space-summary-input").fill(opts.summary);
+    }
+    await flow.getByTestId("new-space-next-button").first().click();
+
+    if (opts.discoverability !== undefined) {
+      await flow.getByTestId("space-discoverability-input").selectOption(opts.discoverability);
+    }
+    if (opts.joinRule !== undefined) {
+      await flow.getByTestId("space-policy-join-rule-input").selectOption(opts.joinRule);
+    }
+    if (opts.historyVisibility !== undefined) {
+      await flow.getByTestId("space-policy-history-visibility-input").selectOption(opts.historyVisibility);
+    }
+    await flow.getByTestId("new-space-next-button").first().click();
+
+    if (opts.seedMembers && opts.seedMembers.length > 0) {
+      await flow.getByTestId("seed-members-input").fill(opts.seedMembers.join("\n"));
+    }
+    await flow.getByTestId("create-space-button").click();
+
+    await expect(flow).toContainText(/created cx:space:/, { timeout: 30_000 });
+    const text = await flow.innerText();
+    const match = text.match(/created (cx:space:[^\s]+)/);
+    expect(match, `created space id in: ${text}`).not.toBeNull();
+    return match![1];
   }
 
   async connect() {

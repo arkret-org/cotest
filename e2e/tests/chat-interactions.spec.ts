@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { stepShot } from "../helpers/screenshots";
 import { ensureRegistered, issueDevSession, openUserPage, uniqueUser } from "../helpers/users";
 
@@ -20,15 +20,12 @@ test("chat panel exposes reactions and reply composer transitions", async ({
   const reply = `replying to ${stamp}`;
 
   try {
-    await actor.gotoProduct();
-    const spaceFlow = actor.page.getByTestId("space-lifecycle-flow").first();
-    await spaceFlow.getByTestId("space-title-input").fill(title);
-    await spaceFlow.getByTestId("space-summary-input").fill("chat interactions coverage");
-    await spaceFlow.getByTestId("space-discoverability-input").fill("public");
-    await spaceFlow.getByTestId("member-did-input").fill(member.did);
-    await spaceFlow.getByTestId("create-space-button").click();
-    await expect(spaceFlow).toContainText(/created cx:space:/);
-    const spaceId = await extractCreatedSpaceId(actor.page);
+    const spaceId = await actor.createSpace({
+      title,
+      summary: "chat interactions coverage",
+      discoverability: "public",
+      seedMembers: [member.did],
+    });
 
     await actor.page.goto(`/chat/${spaceId}`, { waitUntil: "domcontentloaded" });
     await expect(actor.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
@@ -65,10 +62,3 @@ test("chat panel exposes reactions and reply composer transitions", async ({
     await actor.close();
   }
 });
-
-async function extractCreatedSpaceId(page: Page): Promise<string> {
-  const text = await page.getByTestId("space-lifecycle-flow").first().innerText();
-  const match = text.match(/created (cx:space:[^\s]+)/);
-  expect(match, `created space id in: ${text}`).not.toBeNull();
-  return match![1];
-}

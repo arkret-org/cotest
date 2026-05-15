@@ -1,0 +1,1 @@
+- [Spec is the canonical source, not the current frontend](feedback_spec_is_canonical.md) — when e2e tests and yougen disagree, the protocol (`../contrix-spec`) decides; don't add routes to make stale tests pass

@@ -357,10 +357,10 @@ function New-CoauthJointConfig {
 
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
     $configPath = Join-Path $JointDir "coauth.yaml"
-    $generateOutput = & $CoauthBinary config generate 2>&1
+    $generateLog = Join-Path $JointDir "coauth-config-generate.log"
+    $generateOutput = & $CoauthBinary config generate 2>"$generateLog"
     if ($LASTEXITCODE -ne 0) {
-        $generateOutput | Set-Content -Path (Join-Path $JointDir "coauth-config-generate.log") -Encoding UTF8
-        throw "coauth config generate failed"
+        throw "coauth config generate failed; see $generateLog"
     }
     $generateOutput | Set-Content -Path $rawConfig -Encoding UTF8
 

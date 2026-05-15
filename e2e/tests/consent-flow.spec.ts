@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { stepShot } from "../helpers/screenshots";
 import { ensureRegistered, issueDevSession, openUserPage, uniqueUser } from "../helpers/users";
 
@@ -14,15 +14,11 @@ test("consent grant + revoke demo card validates input and surfaces a Move statu
   const actor = await openUserPage(browser, user, token);
 
   try {
-    await actor.gotoProduct();
-    const spaceFlow = actor.page.getByTestId("space-lifecycle-flow").first();
-    const title = `Consent Demo Space ${Date.now()}`;
-    await spaceFlow.getByTestId("space-title-input").fill(title);
-    await spaceFlow.getByTestId("space-summary-input").fill("consent move PoC");
-    await spaceFlow.getByTestId("space-discoverability-input").fill("public");
-    await spaceFlow.getByTestId("create-space-button").click();
-    await expect(spaceFlow).toContainText(/created cx:space:/);
-    const spaceId = await extractCreatedSpaceId(actor.page);
+    const spaceId = await actor.createSpace({
+      title: `Consent Demo Space ${Date.now()}`,
+      summary: "consent move PoC",
+      discoverability: "public",
+    });
     await stepShot(actor.page, testInfo, "01-space-ready");
 
     await actor.page.goto("/settings/privacy", { waitUntil: "domcontentloaded" });
@@ -55,10 +51,3 @@ test("consent grant + revoke demo card validates input and surfaces a Move statu
     await actor.close();
   }
 });
-
-async function extractCreatedSpaceId(page: Page): Promise<string> {
-  const text = await page.getByTestId("space-lifecycle-flow").first().innerText();
-  const match = text.match(/created (cx:space:[^\s]+)/);
-  expect(match, `created space id in: ${text}`).not.toBeNull();
-  return match![1];
-}
