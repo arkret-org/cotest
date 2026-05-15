@@ -68,9 +68,6 @@ export class JointUserPage {
     await expect(this.page.getByTestId("settings-panel")).toBeVisible({ timeout: 120_000 });
   }
 
-  // Drive yougen's multi-step new-space wizard end-to-end and return the
-  // created space id. Mirrors src/views/setup.rs (Basics → Boundary → Seed →
-  // create-space-button). The old single-form "/product" flow is gone.
   async createSpace(opts: {
     title: string;
     summary?: string;

@@ -17,7 +17,6 @@ const VISUAL_BASELINE_CSS = `
   [data-testid="server-url-input"],
   [data-testid="login-server-url"],
   [data-testid="settings-server-url-input"],
-  [data-testid="selected-space-id-input"],
   [data-testid="sync-cursor"],
   [data-testid="mobile-sync-cursor"],
   [data-testid="event-fact"],

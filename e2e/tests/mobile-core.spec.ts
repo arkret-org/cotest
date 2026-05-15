@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { stepShot } from "../helpers/screenshots";
 import { bob, ensureRegistered, issueDevSession, openUser, openUserPage, uniqueUser } from "../helpers/users";
 
@@ -36,21 +36,14 @@ test("mobile core path: login, navigation, timeline, message, and space admin sc
     );
     await stepShot(page, testInfo, "02-mobile-authenticated");
 
-    await page.getByTestId("mobile-product-nav-button").click();
-    await expect(page.getByTestId("product-panel")).toBeVisible();
-    const spaceFlow = page.getByTestId("space-lifecycle-flow").first();
-    await spaceFlow.getByTestId("space-title-input").fill(title);
-    await spaceFlow.getByTestId("space-summary-input").fill("mobile core coverage");
-    await spaceFlow.getByTestId("space-discoverability-input").fill("public");
-    await spaceFlow.getByTestId("member-did-input").fill(bob.did);
-    await spaceFlow.getByTestId("create-space-button").click();
-    await expect(spaceFlow).toContainText(/created cx:space:/);
-    const spaceId = await extractCreatedSpaceId(page);
+    const spaceId = await actor.createSpace({
+      title,
+      summary: "mobile core coverage",
+      discoverability: "public",
+      seedMembers: [bob.did],
+    });
     await stepShot(page, testInfo, "03-mobile-space-created");
 
-    await page.getByTestId("mobile-nav-toggle").click();
-    await page.getByTestId("mobile-timeline-nav-button").click();
-    await expect(page.getByTestId("timeline")).toBeVisible();
     await page.goto(`/timeline/${spaceId}`, { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
     await page.getByTestId("composer-input").fill(message);
@@ -129,9 +122,3 @@ test("mobile nav drawer routes to directory, settings, and notifications @mobile
   }
 });
 
-async function extractCreatedSpaceId(page: Page): Promise<string> {
-  const text = await page.getByTestId("space-lifecycle-flow").first().innerText();
-  const match = text.match(/created (cx:space:[^\s]+)/);
-  expect(match, `created space id in: ${text}`).not.toBeNull();
-  return match![1];
-}

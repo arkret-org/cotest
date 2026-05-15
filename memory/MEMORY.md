@@ -1,1 +1,2 @@
 - [Spec is the canonical source, not the current frontend](feedback_spec_is_canonical.md) — when e2e tests and yougen disagree, the protocol (`../contrix-spec`) decides; don't add routes to make stale tests pass
+- [E2E must model multi-user/multi-server scenarios](feedback_e2e_scenario_driven.md) — design business flows first, no thin per-page smoke tests
