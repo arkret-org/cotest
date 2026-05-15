@@ -23,6 +23,8 @@ param(
     [switch]$SkipBrowserInstall,
     [switch]$KeepServices,
     [switch]$SkipPreflight,
+    [switch]$DualSoland,
+    [string]$SolandBetaServiceDid = "did:web:soland-beta.joint-e2e.local",
     [ValidateSet("joint-smoke", "joint-full")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
@@ -43,7 +45,9 @@ function Resolve-PlaywrightProjects {
         return @("chrome")
     }
     if ($RunProfile -eq "joint-full" -and -not $PlaywrightProjectWasExplicit) {
-        return @("chrome", "mobile-chrome", "visual-chrome")
+        # Joint scenarios all run on the chrome project after the @mobile /
+        # @visual smoke tests were retired in favor of scenario-driven specs.
+        return @("chrome")
     }
 
     $projects = @()
@@ -544,6 +548,15 @@ if (-not $SolandBaseUrl) {
 } else {
     $solandPort = $null
 }
+$solandBetaPort = $null
+$solandBetaBaseUrl = $null
+if ($DualSoland) {
+    if ($SolandCommand) {
+        throw "-DualSoland is incompatible with -SolandCommand; the harness must generate both soland invocations."
+    }
+    $solandBetaPort = Get-FreeTcpPort
+    $solandBetaBaseUrl = "http://127.0.0.1:$solandBetaPort"
+}
 if (-not $YougenBaseUrl) {
     $yougenPort = Get-FreeTcpPort
     $YougenBaseUrl = "http://127.0.0.1:$yougenPort"
@@ -629,25 +642,39 @@ try {
         Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
     }
 
-    if (-not $SolandCommand -and $solandPort) {
-        $generatedSolandCommand = $true
-        $solandCoauthEnv = ""
-        if ($CoauthBaseUrl) {
-            $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
-            $solandCoauthEnv = (
-                "`$env:SOLAND_OAUTH_INTROSPECTION_URL={0}; " +
-                "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={1}; " +
-                "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={2}; " +
-                "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={3}; " +
-                "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={4}; "
-            ) -f `
-                (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
-                (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
-                (Quote-PsLiteral "$coauthTrimmed/api/v1/session-grants/introspect"),
-                (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
-                (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer)
+    $solandCoauthEnv = ""
+    if ($CoauthBaseUrl) {
+        $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
+        $solandCoauthEnv = (
+            "`$env:SOLAND_OAUTH_INTROSPECTION_URL={0}; " +
+            "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={1}; " +
+            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={2}; " +
+            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={3}; " +
+            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={4}; "
+        ) -f `
+            (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
+            (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
+            (Quote-PsLiteral "$coauthTrimmed/api/v1/session-grants/introspect"),
+            (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
+            (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer)
+    }
+
+    function Build-SolandCommand {
+        param(
+            [Parameter(Mandatory = $true)][string]$BaseUrl,
+            [Parameter(Mandatory = $true)][string]$ServiceDid,
+            [Parameter(Mandatory = $true)][string]$ObjectsRoot,
+            [Parameter(Mandatory = $true)][int]$Port,
+            [string]$FederationPeers = ""
+        )
+        $federationEnv = ""
+        if ($FederationPeers) {
+            $federationEnv = (
+                "`$env:SOLAND_FEDERATION_POLICY='Mesh'; " +
+                "`$env:SOLAND_FEDERATION_PEERS={0}; "
+            ) -f (Quote-PsLiteral $FederationPeers)
         }
-        $SolandCommand = (
+        return (
             "`$env:DATABASE_URL=''; " +
             "`$env:SOLAND_PUBLIC_BASE_URL={0}; " +
             "`$env:SOLAND_SERVICE_DID={1}; " +
@@ -656,21 +683,46 @@ try {
             "`$env:SOLAND_OBJECT_STORAGE_BACKEND='filesystem'; " +
             "`$env:SOLAND_OBJECT_STORAGE_LOCAL_ROOT={3}; " +
             "{4}" +
-            "cargo run --manifest-path {5} -- --bind 127.0.0.1:{6}"
+            "{5}" +
+            "cargo run --manifest-path {6} -- --bind 127.0.0.1:{7}"
         ) -f `
-            (Quote-PsLiteral $SolandBaseUrl),
-            (Quote-PsLiteral $SolandServiceDid),
+            (Quote-PsLiteral $BaseUrl),
+            (Quote-PsLiteral $ServiceDid),
             (Quote-PsLiteral $YougenBaseUrl),
-            (Quote-PsLiteral (Join-Path $jointDir "soland-objects")),
+            (Quote-PsLiteral $ObjectsRoot),
             $solandCoauthEnv,
+            $federationEnv,
             (Quote-PsLiteral $SutManifest),
-            $solandPort
+            $Port
+    }
+
+    if (-not $SolandCommand -and $solandPort) {
+        $generatedSolandCommand = $true
+        $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
+        $SolandCommand = Build-SolandCommand `
+            -BaseUrl $SolandBaseUrl `
+            -ServiceDid $SolandServiceDid `
+            -ObjectsRoot (Join-Path $jointDir "soland-objects") `
+            -Port $solandPort `
+            -FederationPeers $alphaPeer
     }
     if ($SolandCommand) {
         $solandWorkingDirectory = if ($generatedSolandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
-        $managedServices.Add((Start-ManagedCommand -Name "soland" -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir))
+        $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
+        $managedServices.Add((Start-ManagedCommand -Name $solandName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir))
     }
     Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+
+    if ($DualSoland) {
+        $solandBetaCommand = Build-SolandCommand `
+            -BaseUrl $solandBetaBaseUrl `
+            -ServiceDid $SolandBetaServiceDid `
+            -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
+            -Port $solandBetaPort `
+            -FederationPeers $SolandBaseUrl
+        $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
 
     if (-not $YougenCommand -and $yougenPort) {
         $YougenCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false"
@@ -720,6 +772,17 @@ try {
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
     $env:COTEST_YOUGEN_BASE_URL = $YougenBaseUrl
+    if ($DualSoland) {
+        $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
+        $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
+        $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
+        $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
+    } else {
+        Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_DID -ErrorAction SilentlyContinue
+    }
     if ($CoauthBaseUrl) {
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
         $env:COTEST_COAUTH_SERVICE_DID = $CoauthServiceDid
@@ -802,6 +865,80 @@ if (Test-Path $visualBaselineManifest) {
 }
 $visualBaselineLines | Set-Content -Path $visualBaselineIndex -Encoding UTF8
 
+# Scenario report: group junit testcases by spec file (= scenario) and emit
+# pass / fail / skipped counts so reviewers can read scenario-level health
+# without crunching the raw junit.xml.
+$scenariosReport = Join-Path $jointDir "scenarios.md"
+$junitPath = Join-Path $jointDir "junit.xml"
+$scenarioLines = @("# joint e2e scenarios", "")
+if (Test-Path $junitPath) {
+    try {
+        [xml]$junit = Get-Content -Path $junitPath -Raw
+        # Playwright JUnit nests <testsuites><testsuite ...><testcase ...>; the
+        # outer suite name is the project, inner suite name is the spec file.
+        $suiteList = @($junit.testsuites.testsuite)
+        $totals = [pscustomobject]@{
+            passed = 0
+            failed = 0
+            skipped = 0
+            fixme = 0
+        }
+        $scenarioGroups = @{}
+        foreach ($suite in $suiteList) {
+            $suiteName = if ($suite.name) { $suite.name } else { "<unnamed>" }
+            # Try to extract the spec file name (e.g. "s1-single-server-triad.spec.ts").
+            $specMatch = [regex]::Match($suiteName, "(s\d[a-zA-Z0-9\-]*\.spec\.ts)")
+            $scenarioKey = if ($specMatch.Success) { $specMatch.Groups[1].Value } else { $suiteName }
+            if (-not $scenarioGroups.ContainsKey($scenarioKey)) {
+                $scenarioGroups[$scenarioKey] = New-Object System.Collections.Generic.List[object]
+            }
+            foreach ($case in @($suite.testcase)) {
+                $caseName = if ($case.name) { $case.name } else { "<unnamed test>" }
+                $status = "passed"
+                if ($case.failure) { $status = "failed"; $totals.failed += 1 }
+                elseif ($case.skipped) {
+                    $status = "skipped"; $totals.skipped += 1
+                    if ($caseName -match "fixme|fixmed") { $status = "fixme"; $totals.fixme += 1; $totals.skipped -= 1 }
+                }
+                else { $totals.passed += 1 }
+                $time = if ($case.time) { [math]::Round([double]$case.time, 2) } else { 0 }
+                $scenarioGroups[$scenarioKey].Add([pscustomobject]@{
+                    name = $caseName
+                    status = $status
+                    time = $time
+                }) | Out-Null
+            }
+        }
+        $scenarioLines += "## totals"
+        $scenarioLines += ""
+        $scenarioLines += "- passed: $($totals.passed)"
+        $scenarioLines += "- failed: $($totals.failed)"
+        $scenarioLines += "- skipped: $($totals.skipped)"
+        $scenarioLines += "- fixme (pending spec implementation): $($totals.fixme)"
+        $scenarioLines += ""
+        foreach ($key in $scenarioGroups.Keys | Sort-Object) {
+            $scenarioLines += "## $key"
+            $scenarioLines += ""
+            foreach ($case in $scenarioGroups[$key]) {
+                $marker = switch ($case.status) {
+                    "passed"  { "[x]" }
+                    "failed"  { "[F]" }
+                    "skipped" { "[S]" }
+                    "fixme"   { "[~]" }
+                    default   { "[?]" }
+                }
+                $scenarioLines += "- $marker ($($case.time)s) $($case.name)"
+            }
+            $scenarioLines += ""
+        }
+    } catch {
+        $scenarioLines += "- failed to parse junit.xml: $($_.Exception.Message)"
+    }
+} else {
+    $scenarioLines += "- junit.xml not present; playwright may have failed before emitting reports"
+}
+$scenarioLines | Set-Content -Path $scenariosReport -Encoding UTF8
+
 $summary = [pscustomobject]@{
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
     run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
@@ -812,6 +949,9 @@ $summary = [pscustomobject]@{
     exit_code = $exitCode
     soland_base_url = $SolandBaseUrl
     soland_service_did = $SolandServiceDid
+    soland_beta_base_url = $solandBetaBaseUrl
+    soland_beta_service_did = if ($DualSoland) { $SolandBetaServiceDid } else { $null }
+    dual_soland = [bool]$DualSoland
     yougen_base_url = $YougenBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
@@ -830,6 +970,7 @@ $summary = [pscustomobject]@{
     junit_xml = Join-Path $jointDir "junit.xml"
     screenshot_index = $screenshotIndex
     visual_baseline_index = $visualBaselineIndex
+    scenarios_report = $scenariosReport
     services = $serviceLogDir
 }
 $summaryJson = Join-Path $jointDir "summary.json"
@@ -847,6 +988,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - exit_code: $($summary.exit_code)
 - soland_base_url: $($summary.soland_base_url)
 - soland_service_did: $($summary.soland_service_did)
+- soland_beta_base_url: $($summary.soland_beta_base_url)
+- soland_beta_service_did: $($summary.soland_beta_service_did)
+- dual_soland: $($summary.dual_soland)
 - yougen_base_url: $($summary.yougen_base_url)
 - coauth_base_url: $($summary.coauth_base_url)
 - coauth_service_did: $($summary.coauth_service_did)
@@ -864,6 +1008,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - junit_xml: $($summary.junit_xml)
 - screenshot_index: $($summary.screenshot_index)
 - visual_baseline_index: $($summary.visual_baseline_index)
+- scenarios_report: $($summary.scenarios_report)
 - services: $($summary.services)
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
@@ -875,6 +1020,9 @@ Write-Host "  status      : $($summary.status)"
 Write-Host "  profile     : $($summary.run_profile)"
 Write-Host "  projects    : $($summary.playwright_projects)"
 Write-Host "  soland      : $SolandBaseUrl"
+if ($DualSoland) {
+    Write-Host "  soland-beta : $solandBetaBaseUrl"
+}
 Write-Host "  yougen      : $YougenBaseUrl"
 if ($CoauthBaseUrl) {
     Write-Host "  coauth      : $CoauthBaseUrl"

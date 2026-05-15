@@ -1,8 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { expect, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { diagnosticsRoot, solandBaseUrl } from "./env";
+import {
+  expect,
+  type APIRequestContext,
+  type Browser,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
 
 export type JointUser = {
   name: string;
@@ -18,6 +25,21 @@ export type UserSession = {
   diagnosticsDir: string;
   consoleLines: string[];
   networkLines: string[];
+  serverUrl: string;
+};
+
+export type OpenUserOpts = {
+  sessionToken?: string;
+  server?: SolandKey;
+};
+
+export type CreateSpaceOpts = {
+  title: string;
+  summary?: string;
+  discoverability?: string;
+  joinRule?: string;
+  historyVisibility?: string;
+  seedMembers?: string[];
 };
 
 export class JointUserPage {
@@ -31,6 +53,10 @@ export class JointUserPage {
 
   get page(): Page {
     return this.session.page;
+  }
+
+  get serverUrl(): string {
+    return this.session.serverUrl;
   }
 
   async gotoHome() {
@@ -53,11 +79,6 @@ export class JointUserPage {
     await expect(this.page.getByTestId("account-flow")).toBeVisible({ timeout: 120_000 });
   }
 
-  async gotoSpaceAdmin(spaceId: string) {
-    await this.page.goto(`/space/${spaceId}/admin`, { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
-  }
-
   async gotoDirectory() {
     await this.page.goto("/directory", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("directory-panel")).toBeVisible({ timeout: 120_000 });
@@ -68,14 +89,17 @@ export class JointUserPage {
     await expect(this.page.getByTestId("settings-panel")).toBeVisible({ timeout: 120_000 });
   }
 
-  async createSpace(opts: {
-    title: string;
-    summary?: string;
-    discoverability?: string;
-    joinRule?: string;
-    historyVisibility?: string;
-    seedMembers?: string[];
-  }): Promise<string> {
+  async gotoSpaceAdmin(spaceId: string) {
+    await this.page.goto(`/space/${spaceId}/admin`, { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
+  }
+
+  async gotoTimelineSpace(spaceId: string) {
+    await this.page.goto(`/timeline/${spaceId}`, { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
+  }
+
+  async createSpace(opts: CreateSpaceOpts): Promise<string> {
     await this.gotoSetup();
     const flow = this.page.getByTestId("space-lifecycle-flow").first();
 
@@ -108,53 +132,69 @@ export class JointUserPage {
     return match![1];
   }
 
-  async connect() {
-    await this.page.getByTestId("connect-button").click();
-    await expect(this.page.getByTestId("status-label")).toContainText(
-      /Connected|Online|Empty|authenticated|principal_server/,
+  // Drive the space admin invite-member form to invite `targetDid` into spaceId.
+  // Caller MUST already have gotoSpaceAdmin(spaceId) or this navigates there.
+  async inviteFromAdmin(spaceId: string, targetDid: string) {
+    await this.gotoSpaceAdmin(spaceId);
+    const invite = this.page.getByTestId("invite-member");
+    await invite.getByTestId("invite-target-input").fill(targetDid);
+    await invite.getByTestId("send-invite-button").click();
+    await expect(this.page.getByTestId("space-admin-panel")).toContainText(
+      new RegExp(`invited ${escapeRegex(targetDid)}`),
+      { timeout: 30_000 },
     );
   }
 
-  async expectPrincipal() {
-    await expect(this.page.getByTestId("principal-context")).toContainText(this.user.did);
+  // Find the invite row addressed to this user inside /space/:id/admin's
+  // space-invites list and click accept. Yougen surfaces all invites in
+  // the admin list (`invite-row`) regardless of whether the viewer is
+  // currently a member; the row is keyed on target DID.
+  async acceptInvite(spaceId: string) {
+    await this.gotoSpaceAdmin(spaceId);
+    const row = this.page
+      .getByTestId("invite-row")
+      .filter({ hasText: this.user.did })
+      .first();
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    await row.getByTestId("accept-invite-button").click();
+    await expect(row).toContainText(/active|accepted|joined/, { timeout: 30_000 });
+  }
+
+  // Send a message into spaceId's timeline. Asserts persistence write-status.
+  async sendTimelineMessage(spaceId: string, body: string) {
+    if (!this.page.url().includes(`/timeline/${spaceId}`)) {
+      await this.gotoTimelineSpace(spaceId);
+    }
+    await this.page.getByTestId("composer-input").fill(body);
+    await this.page.getByTestId("send-button").click();
+    await expect(this.page.getByTestId("timeline")).toContainText(body, { timeout: 30_000 });
+    await expect(this.page.getByTestId("write-status")).toContainText(/persisted/, {
+      timeout: 30_000,
+    });
+  }
+
+  // Read visible timeline event texts as an array (deduped on `body`).
+  async readTimelineTexts(spaceId: string): Promise<string[]> {
+    if (!this.page.url().includes(`/timeline/${spaceId}`)) {
+      await this.gotoTimelineSpace(spaceId);
+    }
+    const events = this.page.getByTestId("timeline-event");
+    const count = await events.count();
+    const out: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      out.push((await events.nth(i).innerText()).trim());
+    }
+    return out;
+  }
+
+  timelineEvent(body: string): Locator {
+    return this.page.getByTestId("timeline-event").filter({ hasText: body }).first();
   }
 
   async close() {
     await closeUser(this.session);
   }
 }
-
-export const alice: JointUser = {
-  name: "alice",
-  did: "did:web:alice.example",
-  deviceId: "cx:device:01904100-0000-7000-8000-000000000101",
-  handle: "@alice-joint-e2e",
-  displayName: "Alice Joint E2E",
-};
-
-export const bob: JointUser = {
-  name: "bob",
-  did: "did:web:bob.example",
-  deviceId: "cx:device:01904100-0000-7000-8000-000000000102",
-  handle: "@bob-joint-e2e",
-  displayName: "Bob Joint E2E",
-};
-
-export const admin: JointUser = {
-  name: "admin",
-  did: "did:web:admin.example",
-  deviceId: "cx:device:01904100-0000-7000-8000-000000000103",
-  handle: "@admin-joint-e2e",
-  displayName: "Admin Joint E2E",
-};
-
-export const guest: JointUser = {
-  name: "guest",
-  did: "did:web:guest.example",
-  deviceId: "cx:device:01904100-0000-7000-8000-000000000104",
-  handle: "@guest-joint-e2e",
-  displayName: "Guest Joint E2E",
-};
 
 export function uniqueUser(prefix: string): JointUser {
   const stamp = randomUUID();
@@ -169,8 +209,12 @@ export function uniqueUser(prefix: string): JointUser {
   };
 }
 
-export async function ensureRegistered(request: APIRequestContext, user: JointUser) {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/account/register`, {
+export async function ensureRegistered(
+  request: APIRequestContext,
+  user: JointUser,
+  opts: { server?: SolandKey } = {},
+) {
+  const response = await request.post(`${solandBaseUrl(opts.server)}/api/v1/account/register`, {
     data: {
       did: user.did,
       handle: user.handle,
@@ -181,8 +225,12 @@ export async function ensureRegistered(request: APIRequestContext, user: JointUs
   expect([201, 409]).toContain(response.status());
 }
 
-export async function issueDevSession(request: APIRequestContext, user: JointUser): Promise<string> {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/auth/dev-login`, {
+export async function issueDevSession(
+  request: APIRequestContext,
+  user: JointUser,
+  opts: { server?: SolandKey } = {},
+): Promise<string> {
+  const response = await request.post(`${solandBaseUrl(opts.server)}/api/v1/auth/dev-login`, {
     data: {
       actor: user.did,
       device_id: user.deviceId,
@@ -198,8 +246,10 @@ export async function issueDevSession(request: APIRequestContext, user: JointUse
 export async function openUser(
   browser: Browser,
   user: JointUser,
-  sessionToken = "",
+  opts: OpenUserOpts = {},
 ): Promise<UserSession> {
+  const serverUrl = solandBaseUrl(opts.server);
+  const sessionToken = opts.sessionToken ?? "";
   const diagnosticsDir = path.join(diagnosticsRoot(), sanitize(`${Date.now()}-${user.name}`));
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const context = await browser.newContext({
@@ -214,7 +264,7 @@ export async function openUser(
       window.localStorage.setItem("yougen.config.v1", JSON.stringify(config));
     },
     {
-      server_url: solandBaseUrl(),
+      server_url: serverUrl,
       account_did: user.did,
       device_id: user.deviceId,
       session_token: sessionToken,
@@ -266,15 +316,15 @@ export async function openUser(
       );
     }
   });
-  return { context, page, diagnosticsDir, consoleLines, networkLines };
+  return { context, page, diagnosticsDir, consoleLines, networkLines, serverUrl };
 }
 
 export async function openUserPage(
   browser: Browser,
   user: JointUser,
-  sessionToken = "",
+  opts: OpenUserOpts = {},
 ): Promise<JointUserPage> {
-  return new JointUserPage(user, await openUser(browser, user, sessionToken));
+  return new JointUserPage(user, await openUser(browser, user, opts));
 }
 
 export async function closeUser(session: UserSession) {
@@ -289,4 +339,8 @@ function sanitize(value: string): string {
     .replace(/[^a-zA-Z0-9_.-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return cleaned || "session";
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

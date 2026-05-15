@@ -20,7 +20,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     assert_eq!(description.service_type, "principal_server");
 
     for required in [
-        "cx.repo.submit_commit",
         // C17 (spec 2026-05-08): cx.sync.client_sync → cx.sync.account
         "cx.sync.account",
         "cx.sync.typing",

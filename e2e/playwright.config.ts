@@ -29,23 +29,11 @@ export default defineConfig({
   projects: [
     {
       name: "chrome",
-      grepInvert: /@mobile|@visual/,
       use: { ...devices["Desktop Chrome"], channel: "chrome" },
     },
     {
       name: "chromium",
-      grepInvert: /@mobile|@visual/,
       use: { ...devices["Desktop Chrome"] },
-    },
-    {
-      name: "mobile-chrome",
-      grep: /@mobile/,
-      use: { ...devices["Pixel 5"], channel: "chrome" },
-    },
-    {
-      name: "visual-chrome",
-      grep: /@visual/,
-      use: { ...devices["Desktop Chrome"], channel: "chrome" },
     },
   ],
 });

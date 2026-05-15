@@ -13,12 +13,45 @@ export function optionalEnv(name: string): string | undefined {
   return value ? value : undefined;
 }
 
-export function solandBaseUrl(): string {
+export type SolandKey = "alpha" | "beta" | "default";
+
+export function solandBaseUrl(key: SolandKey = "default"): string {
+  if (key === "alpha") {
+    return requiredEnv("COTEST_SOLAND_ALPHA_BASE_URL").replace(/\/$/, "");
+  }
+  if (key === "beta") {
+    return requiredEnv("COTEST_SOLAND_BETA_BASE_URL").replace(/\/$/, "");
+  }
   return requiredEnv("COTEST_SOLAND_BASE_URL").replace(/\/$/, "");
 }
 
-export function solandServiceDid(): string {
+export function solandServiceDid(key: SolandKey = "default"): string {
+  if (key === "alpha") {
+    return optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ?? "did:web:soland-alpha.joint-e2e.local";
+  }
+  if (key === "beta") {
+    return optionalEnv("COTEST_SOLAND_BETA_SERVICE_DID") ?? "did:web:soland-beta.joint-e2e.local";
+  }
   return optionalEnv("COTEST_SOLAND_SERVICE_DID") ?? "did:web:soland.joint-e2e.local";
+}
+
+// True when the dual-soland topology (used by S2 cross-server federation)
+// has been provisioned by the harness. Scenarios consult this to skip
+// rather than fail when running on the single-server profile.
+export function hasDualSoland(): boolean {
+  return Boolean(
+    optionalEnv("COTEST_SOLAND_ALPHA_BASE_URL") && optionalEnv("COTEST_SOLAND_BETA_BASE_URL"),
+  );
+}
+
+export function yougenBaseUrl(key: SolandKey = "default"): string {
+  if (key === "alpha") {
+    return optionalEnv("COTEST_YOUGEN_ALPHA_BASE_URL")?.replace(/\/$/, "") ?? yougenBaseUrl();
+  }
+  if (key === "beta") {
+    return optionalEnv("COTEST_YOUGEN_BETA_BASE_URL")?.replace(/\/$/, "") ?? yougenBaseUrl();
+  }
+  return requiredEnv("COTEST_YOUGEN_BASE_URL").replace(/\/$/, "");
 }
 
 export function coauthBaseUrl(): string | undefined {
