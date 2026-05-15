@@ -1,22 +1,22 @@
-// S1 — Single-server triad collaboration
-// Contract: e2e/scenarios/S1-single-server-triad.md
+// Single-server triad collaboration
+// Contract: e2e/scenarios/messaging/triad-collaboration.md
 // Spec refs:
 //   - models/space-and-place.md §2-§3
 //   - models/flow-and-message.md §8, §8.4, §8.5
 
 import { expect, test } from "@playwright/test";
-import { stepShot } from "../helpers/screenshots";
+import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
   type JointUserPage,
-} from "../helpers/users";
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("S1 — single-server triad collaboration", () => {
+test.describe("single-server triad collaboration", () => {
   test("alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone", async ({
     browser,
     request,

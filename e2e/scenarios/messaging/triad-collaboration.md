@@ -1,10 +1,10 @@
-# S1 — 单服务器三方协作
+# 单服务器三方协作
 
 ## 目标
 
 验证在同一个 principal server 上,三个 actor 完成「建空间 → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_visibility` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
 
-不验证:跨服务器联邦 (见 S2)、审核封禁 (见 S5)、knock 申请 (见 S6)、第三方邮件邀请 (后续 S3)、设备授权 (后续 S4)。
+不验证:跨服务器联邦 (见 federation/cross-server)、审核封禁 (见 spaces/moderation-ban)、knock 申请 (见 spaces/knock-application)、第三方邮件邀请 (后续 invites/third-party)、设备授权 (后续 identity/account-device-auth)。
 
 ## Spec 锚点
 
@@ -25,7 +25,7 @@
 
 ## Actors
 
-| 名字 | DID | 在 S1 中的角色 | 注册时机 |
+| 名字 | DID | 在 messaging/triad-collaboration 中的角色 | 注册时机 |
 |---|---|---|---|
 | alice | `did:web:alice-s1-<uuid>.example` | 空间创建者 / owner | 测试开始前 |
 | bob | `did:web:bob-s1-<uuid>.example` | 早期成员;邀请阶段加入 | 测试开始前 |
@@ -42,7 +42,7 @@
 ### Phase A — 建空间 + 早期邀请
 
 1. **alice** 通过 `/setup` 多步向导建空间 `S`:
-   - title = `"S1 Triad Space ${stamp}"`
+   - title = `"messaging/triad-collaboration Triad Space ${stamp}"`
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `joined` ← 关键:carol 加入前的消息对她不可见
@@ -104,7 +104,7 @@
 - **E1.2 history_visibility=shared**:同样的步骤改用 `shared` 而不是 `joined`,carol 应该看到 `M1/M2/M2'/tombstone`(`shared` 允许新成员读"应该共享的"历史) — spec §3.4 / §3.7
 - **E1.3 history_visibility=world_readable**:carol 在加入空间**之前**就能通过 `/timeline/${spaceId}` 看到消息(在 spec 里 `world_readable` 允许未加入者读历史) — 这一条要小心,因为它跨过了 join_rule 的 gate
 
-后两条建议拆成独立的小 spec(`S1.2`、`S1.3`),保持主 scenario 紧凑。
+后两条建议拆成独立的小 spec(`messaging/triad-collaboration.2`、`spaces/history-world-readable`),保持主 scenario 紧凑。
 
 ## Implementation notes
 

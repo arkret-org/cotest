@@ -1,4 +1,4 @@
-# S5 — 审核 + 封禁
+# 审核 + 封禁
 
 ## 目标
 
@@ -8,7 +8,7 @@
 2. **Moderation Policy** 层:ban 决策 MUST anchored,写入 `cx.component.moderation_state.v1` cell,跨 peer 一致
 3. **Personal Blocklist** 层:接收方本地 mute/block 不影响其他人的视图
 
-不验证:跨服务器同步 (见 S2;但 S5 的 ban anchor 应当在 S2 拓扑下也跨 peer 一致 — 可作为 S2+S5 组合测试,本 scenario 先在单服务器跑)、E2EE franking (spec §3.4,需要 MLS,后续单独 scenario)。
+不验证:跨服务器同步 (见 federation/cross-server;但 spaces/moderation-ban 的 ban anchor 应当在 federation/cross-server 拓扑下也跨 peer 一致 — 可作为 federation/cross-server+spaces/moderation-ban 组合测试,本 scenario 先在单服务器跑)、E2EE franking (spec §3.4,需要 MLS,后续单独 scenario)。
 
 ## Spec 锚点
 
@@ -26,7 +26,7 @@
 
 ## 拓扑
 
-- 1 × soland + 1 × coauth (与 S1 同)
+- 1 × soland + 1 × coauth (与 messaging/triad-collaboration 同)
 
 ## Actors
 
@@ -138,7 +138,7 @@
 - **yougen UI 缺口**:举报入口、moderator 报告列表、个人 mute/block UI — 当前 yougen 是否有这些 testid 需要查;如缺,先把 scenario 完成 spec 文档,实测时通过 soland HTTP API 直接驱动
 - 现有 `/space/:id/admin` 应该有 ban / unban 入口 — 需要查 space_admin.rs 的 testid (例如有没有 `ban-member-button`)
 - 测试侧需要直接读 `cx.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /api/v1/spaces/${spaceId}/cells/cx.component.moderation_state.v1` 或等价 endpoint
-- 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 S2+S5 组合测试
+- 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 
 ## 总耗时预估
 

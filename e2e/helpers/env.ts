@@ -62,6 +62,22 @@ export function coauthServiceDid(): string {
   return optionalEnv("COTEST_COAUTH_SERVICE_DID") ?? "did:web:coauth.joint-e2e.local";
 }
 
+export function mockIdpBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_IDP_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockEmailBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_EMAIL_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockWitnessBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_WITNESS_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockWitnessDid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_WITNESS_DID");
+}
+
 export function diagnosticsRoot(): string {
   return path.join(
     optionalEnv("COTEST_JOINT_RUN_DIR") ?? path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local"),

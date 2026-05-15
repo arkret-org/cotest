@@ -1,5 +1,5 @@
-// S6 — Knock application + review + cooldown
-// Contract: e2e/scenarios/S6-knock-cooldown.md
+// Knock application + review + cooldown
+// Contract: e2e/scenarios/spaces/knock-application.md
 // Spec refs:
 //   - models/space-and-place.md §3.3-§3.6 (join policy, application, review)
 //   - §3.11 reuse limits / cooldown
@@ -15,17 +15,17 @@
 // once those handlers ship.
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../helpers/env";
+import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
-} from "../helpers/users";
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("S6 — knock + application + cooldown", () => {
+test.describe("knock + application + cooldown", () => {
   test("alice opens a knock space and lists bob in member.state=knock after he knocks", async ({
     browser,
     request,

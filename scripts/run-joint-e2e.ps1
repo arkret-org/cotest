@@ -25,11 +25,22 @@ param(
     [switch]$SkipPreflight,
     [switch]$DualSoland,
     [string]$SolandBetaServiceDid = "did:web:soland-beta.joint-e2e.local",
+    [switch]$StartMockIdp,
+    [switch]$StartMockEmail,
+    [switch]$StartMockWitness,
+    [switch]$StartMocks,
+    [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
     [ValidateSet("joint-smoke", "joint-full")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
     [string]$Grep
 )
+
+if ($StartMocks) {
+    $StartMockIdp = $true
+    $StartMockEmail = $true
+    $StartMockWitness = $true
+}
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
@@ -573,6 +584,25 @@ if ($StartCoauth -and -not $CoauthBaseUrl) {
     $coauthPort = $null
 }
 
+$mockIdpPort = $null
+$mockIdpBaseUrl = $null
+if ($StartMockIdp) {
+    $mockIdpPort = Get-FreeTcpPort
+    $mockIdpBaseUrl = "http://127.0.0.1:$mockIdpPort"
+}
+$mockEmailPort = $null
+$mockEmailBaseUrl = $null
+if ($StartMockEmail) {
+    $mockEmailPort = Get-FreeTcpPort
+    $mockEmailBaseUrl = "http://127.0.0.1:$mockEmailPort"
+}
+$mockWitnessPort = $null
+$mockWitnessBaseUrl = $null
+if ($StartMockWitness) {
+    $mockWitnessPort = Get-FreeTcpPort
+    $mockWitnessBaseUrl = "http://127.0.0.1:$mockWitnessPort"
+}
+
 $managedServices = New-Object System.Collections.Generic.List[object]
 $ephemeralPostgres = $null
 $exitCode = 1
@@ -605,6 +635,26 @@ try {
             -YougenCommand $YougenCommand `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
+    }
+
+    # Start mock services first so coauth/soland configurations can reference them.
+    $mocksRoot = Join-Path $repoRoot "e2e\mocks"
+    if ($StartMockIdp) {
+        $mockIdpCmd = "`$env:MOCK_IDP_PORT='$mockIdpPort'; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-idp.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-idp" -Command $mockIdpCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockIdpBaseUrl/.well-known/openid-configuration" -TimeoutSeconds 30
+    }
+    if ($StartMockEmail) {
+        $mockEmailCmd = "`$env:MOCK_EMAIL_PORT='$mockEmailPort'; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-email.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-email" -Command $mockEmailCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockEmailBaseUrl/jwks" -TimeoutSeconds 30
+    }
+    if ($StartMockWitness) {
+        $mockWitnessCmd = (
+            "`$env:MOCK_WITNESS_PORT='$mockWitnessPort'; `$env:MOCK_WITNESS_DID={0}; node {1}"
+        ) -f (Quote-PsLiteral $MockWitnessDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-witness" -Command $mockWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockWitnessBaseUrl/api/v1/witness/policy" -TimeoutSeconds 30
     }
 
     if ($StartCoauth) {
@@ -790,6 +840,23 @@ try {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_DID -ErrorAction SilentlyContinue
     }
+    if ($mockIdpBaseUrl) {
+        $env:COTEST_MOCK_IDP_BASE_URL = $mockIdpBaseUrl
+    } else {
+        Remove-Item Env:COTEST_MOCK_IDP_BASE_URL -ErrorAction SilentlyContinue
+    }
+    if ($mockEmailBaseUrl) {
+        $env:COTEST_MOCK_EMAIL_BASE_URL = $mockEmailBaseUrl
+    } else {
+        Remove-Item Env:COTEST_MOCK_EMAIL_BASE_URL -ErrorAction SilentlyContinue
+    }
+    if ($mockWitnessBaseUrl) {
+        $env:COTEST_MOCK_WITNESS_BASE_URL = $mockWitnessBaseUrl
+        $env:COTEST_MOCK_WITNESS_DID = $MockWitnessDid
+    } else {
+        Remove-Item Env:COTEST_MOCK_WITNESS_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_WITNESS_DID -ErrorAction SilentlyContinue
+    }
 
     $playwrightArgs = @("playwright", "test", "--config", "playwright.config.ts")
     foreach ($project in $playwrightProjects) {
@@ -952,6 +1019,10 @@ $summary = [pscustomobject]@{
     soland_beta_base_url = $solandBetaBaseUrl
     soland_beta_service_did = if ($DualSoland) { $SolandBetaServiceDid } else { $null }
     dual_soland = [bool]$DualSoland
+    mock_idp_base_url = $mockIdpBaseUrl
+    mock_email_base_url = $mockEmailBaseUrl
+    mock_witness_base_url = $mockWitnessBaseUrl
+    mock_witness_did = if ($mockWitnessBaseUrl) { $MockWitnessDid } else { $null }
     yougen_base_url = $YougenBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
@@ -991,6 +1062,10 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - soland_beta_base_url: $($summary.soland_beta_base_url)
 - soland_beta_service_did: $($summary.soland_beta_service_did)
 - dual_soland: $($summary.dual_soland)
+- mock_idp_base_url: $($summary.mock_idp_base_url)
+- mock_email_base_url: $($summary.mock_email_base_url)
+- mock_witness_base_url: $($summary.mock_witness_base_url)
+- mock_witness_did: $($summary.mock_witness_did)
 - yougen_base_url: $($summary.yougen_base_url)
 - coauth_base_url: $($summary.coauth_base_url)
 - coauth_service_did: $($summary.coauth_service_did)
@@ -1022,6 +1097,15 @@ Write-Host "  projects    : $($summary.playwright_projects)"
 Write-Host "  soland      : $SolandBaseUrl"
 if ($DualSoland) {
     Write-Host "  soland-beta : $solandBetaBaseUrl"
+}
+if ($mockIdpBaseUrl) {
+    Write-Host "  mock-idp    : $mockIdpBaseUrl"
+}
+if ($mockEmailBaseUrl) {
+    Write-Host "  mock-email  : $mockEmailBaseUrl"
+}
+if ($mockWitnessBaseUrl) {
+    Write-Host "  mock-witness: $mockWitnessBaseUrl ($MockWitnessDid)"
 }
 Write-Host "  yougen      : $YougenBaseUrl"
 if ($CoauthBaseUrl) {

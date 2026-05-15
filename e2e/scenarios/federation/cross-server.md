@@ -1,10 +1,10 @@
-# S2 — 跨服务器联邦
+# 跨服务器联邦
 
 ## 目标
 
 验证两个独立 principal server 之间的联邦推送能完成完整的协作链路:跨服务器邀请、被邀方接受、双向消息推送、anchor frontier 收敛、撤销服务委托后停止推送。证明协议是 federated 的 — 单一服务器不是全局权威,信任根是签名 Event + RFC 9421 HTTP Message Signature + 服务绑定快照。
 
-不验证:第三方邮件邀请 (后续 S3,本 scenario 用 DID-to-DID 直接邀请)、knock 审核 (S6)、moderation (S5)。
+不验证:第三方邮件邀请 (后续 invites/third-party,本 scenario 用 DID-to-DID 直接邀请)、knock 审核 (spaces/knock-application)、moderation (spaces/moderation-ban)。
 
 ## Spec 锚点
 
@@ -107,7 +107,7 @@
 17. **bob** (在 β) 发 `M_b = "bob from beta ${stamp}"`
     - β 上 reducer 接受,push 到 α
 18. 断言:α 那边 alice 30s 内 timeline 含 `M_b`
-19. (Edit + redact 子流程可选;主要验证传播方向,不重复 S1 的 message 内部细节)
+19. (Edit + redact 子流程可选;主要验证传播方向,不重复 messaging/triad-collaboration 的 message 内部细节)
 
 ### Phase E — Frontier 一致性
 

@@ -1,5 +1,5 @@
-// S5 — Moderation + ban
-// Contract: e2e/scenarios/S5-moderation-ban.md
+// Moderation + ban
+// Contract: e2e/scenarios/spaces/moderation-ban.md
 // Spec refs:
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
 //   - §2.5 Moderation MUST anchored
@@ -8,18 +8,18 @@
 //   - §5.2 Ban via cx.member.state{membership="ban"}
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../helpers/env";
-import { stepShot } from "../helpers/screenshots";
+import { solandBaseUrl } from "../../helpers/env";
+import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
-} from "../helpers/users";
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("S5 — moderation and ban", () => {
+test.describe("moderation and ban", () => {
   test("report → owner bans mallory via cx.member.state Move → post-ban writes rejected → tombstone via redact", async ({
     browser,
     request,

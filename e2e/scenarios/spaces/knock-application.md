@@ -1,4 +1,4 @@
-# S6 — Knock 申请 + 审核 + Cooldown
+# Knock 申请 + 审核 + Cooldown
 
 ## 目标
 
@@ -10,7 +10,7 @@
 4. reject 后 `cooldown_after_reject`(默认 72h) 内同一 actor 再申请被 reducer 拒绝
 5. application 正文只对 reviewer 可见,Matrix knock.reason spam 通道被堵
 
-不验证:自动解析路径(§3.5,留作 S6.2 子 scenario)、E2EE Space 中 application encryption envelope(§3.7,需要 MLS)、Policy Server runtime challenge(§3.10)。
+不验证:自动解析路径(§3.5,留作 spaces/knock-auto-resolve 子 scenario)、E2EE Space 中 application encryption envelope(§3.7,需要 MLS)、Policy Server runtime challenge(§3.10)。
 
 ## Spec 锚点
 
@@ -48,7 +48,7 @@
 ### Phase A — alice 建 knock 空间 + join policy
 
 1. **alice** 通过 yougen 建空间 `S` (走 `/setup`,但需要扩 join policy 配置 UI;若 yougen 缺,这一步通过直接 API call 或 cli 注入 cell):
-   - title = `"S6 Knock Space ${stamp}"`
+   - title = `"spaces/knock-application Knock Space ${stamp}"`
    - discoverability = `listed`
    - join_rule = `knock`
    - history_visibility = `joined`
@@ -148,7 +148,7 @@
 
 ### Phase H — `auto_reject_if_choice_in` (sub-test E6.3,需要 multi_choice gate)
 
-如果 join policy 改成包含 `single_choice` question 且有 `auto_reject_if_choice_in`,applicant 选了被禁选项:reducer / 审核服务自动生成 `decision=reject`(§3.3.3 末)。这一条建议放后续 scenario,不堵 S6 主流程。
+如果 join policy 改成包含 `single_choice` question 且有 `auto_reject_if_choice_in`,applicant 选了被禁选项:reducer / 审核服务自动生成 `decision=reject`(§3.3.3 末)。这一条建议放后续 scenario,不堵 spaces/knock-application 主流程。
 
 ## Observable assertions (合并清单)
 

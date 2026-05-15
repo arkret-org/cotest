@@ -1,5 +1,5 @@
-// S2 — Cross-server federation
-// Contract: e2e/scenarios/S2-cross-server-federation.md
+// Cross-server federation
+// Contract: e2e/scenarios/federation/cross-server.md
 // Spec refs:
 //   - sync/federation.md §2.1-§2.4 (trust roots, Anchor finality, profiles)
 //   - §3.1-§3.2 DID server identity + RFC 9421 request signature
@@ -21,14 +21,14 @@
 //   ✗ cx.invite.create on a remote DID does NOT trigger federation push.
 
 import { expect, test } from "@playwright/test";
-import { hasDualSoland, solandBaseUrl } from "../helpers/env";
-import { stepShot } from "../helpers/screenshots";
+import { hasDualSoland, solandBaseUrl } from "../../helpers/env";
+import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
-} from "../helpers/users";
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -39,7 +39,7 @@ test.beforeEach(() => {
   );
 });
 
-test.describe("S2 — cross-server federation", () => {
+test.describe("cross-server federation", () => {
   test("both soland instances expose /federation/push-operations and /federation/pull-operations endpoints", async ({
     request,
   }) => {
