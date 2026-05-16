@@ -1,3 +1,4 @@
+mod agent_workspace;
 mod capability;
 mod encoding;
 mod envelope;
@@ -27,6 +28,10 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
+pub use agent_workspace::{
+    run_agent_workspace_fsm_fixture_suite, run_agent_workspace_registry_suite,
+    run_agent_workspace_schema_suite,
+};
 pub use capability::run_capability_facet_fixture_suite;
 pub use capability::run_capability_fixture_suite;
 pub use encoding::run_encoding_fixture_suite;
