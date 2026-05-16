@@ -1,0 +1,111 @@
+// Team onboarding workflow — Mei welcomes new hire Yuki
+// Contract: e2e/scenarios/workflows/team-onboarding.md
+// Spec refs:
+//   - models/space-and-place.md §2-§3 (Space + Join Policy)
+//   - models/flow-and-message.md §8 (reply/edit)
+//
+// Realistic story: Manager Mei creates a welcome space, seeds Yuki, exchanges
+// a reply + edit timeline thread, and wraps the day with a short reply.
+// Kept timeline-only to stay aligned with feature surface that's solid;
+// kanban-driven onboarding tasks live in workflows/kanban-week.
+
+import { expect, test } from "@playwright/test";
+import { stepShot } from "../../helpers/screenshots";
+import {
+  ensureRegistered,
+  issueDevSession,
+  openUserPage,
+  uniqueUser,
+} from "../../helpers/users";
+
+test.describe.configure({ mode: "serial" });
+
+test.describe("workflow: team onboarding", () => {
+  test("mei seeds yuki into welcome space, exchanges reply + edit + wrap-up", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    const stamp = Date.now();
+    const mei = uniqueUser("wf-onboard-mei");
+    const yuki = uniqueUser("wf-onboard-yuki");
+    await Promise.all([ensureRegistered(request, mei), ensureRegistered(request, yuki)]);
+    const [meiToken, yukiToken] = await Promise.all([
+      issueDevSession(request, mei),
+      issueDevSession(request, yuki),
+    ]);
+    const meiPage = await openUserPage(browser, mei, { sessionToken: meiToken });
+    const yukiPage = await openUserPage(browser, yuki, { sessionToken: yukiToken });
+
+    const welcome = `Hi Yuki, welcome aboard! Ping me if anything blocks you. ${stamp}`;
+    const welcomeEdited = `${welcome} (Onboarding hub: https://corp.example/onboarding)`;
+    const yukiThanks = `Thanks Mei — happy to be here. ${stamp}`;
+    const wrap = `Great progress today — see you tomorrow ${stamp}`;
+    const yukiWrap = `Will do, see you tomorrow! ${stamp}`;
+
+    try {
+      // Phase A — welcome space + seed invite.
+      const spaceId = await meiPage.createSpace({
+        title: `Welcome to the team ${stamp}`,
+        summary: "Day-1 onboarding hub",
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [yuki.did],
+      });
+      await yukiPage.acceptInvite(spaceId);
+      await meiPage.sendTimelineMessage(spaceId, welcome);
+      await stepShot(meiPage.page, testInfo, "A-welcome");
+
+      // Phase B — Yuki picks up the welcome and replies.
+      await yukiPage.gotoTimelineSpace(spaceId);
+      await expect(yukiPage.page.getByTestId("timeline")).toContainText(welcome, {
+        timeout: 30_000,
+      });
+      const welcomeOnYuki = yukiPage.timelineEvent(welcome);
+      await welcomeOnYuki.getByTestId("reply-button").click();
+      await expect(yukiPage.page.getByTestId("reply-to-banner")).toBeVisible();
+      await yukiPage.sendTimelineMessage(spaceId, yukiThanks);
+      await expect(yukiPage.timelineEvent(yukiThanks)).toBeVisible({ timeout: 30_000 });
+      await expect(
+        yukiPage.timelineEvent(yukiThanks).getByTestId("reply-indicator"),
+      ).toBeVisible({ timeout: 30_000 });
+      await stepShot(yukiPage.page, testInfo, "B-yuki-replied");
+
+      // Phase C — Mei edits the welcome in place; Yuki sees the patched copy.
+      await meiPage.gotoTimelineSpace(spaceId);
+      await expect(meiPage.timelineEvent(welcome)).toBeVisible({ timeout: 30_000 });
+      await meiPage.timelineEvent(welcome).getByTestId("edit-button").click();
+      await meiPage.page.getByTestId("edit-composer").locator("textarea").fill(welcomeEdited);
+      await meiPage.page.getByTestId("save-edit-button").click();
+      await expect(meiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
+      await expect(meiPage.page.getByTestId("write-status")).toContainText(/revised/);
+      await yukiPage.gotoTimelineSpace(spaceId);
+      await expect(yukiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
+      await stepShot(meiPage.page, testInfo, "C-welcome-edited");
+
+      // Phase D — close the day with a small back-and-forth.
+      await meiPage.sendTimelineMessage(spaceId, wrap);
+      await yukiPage.gotoTimelineSpace(spaceId);
+      await expect(yukiPage.timelineEvent(wrap)).toBeVisible({ timeout: 30_000 });
+      await yukiPage.sendTimelineMessage(spaceId, yukiWrap);
+      await meiPage.gotoTimelineSpace(spaceId);
+      await expect(meiPage.timelineEvent(yukiWrap)).toBeVisible({ timeout: 30_000 });
+      await stepShot(meiPage.page, testInfo, "D-wrap-up");
+    } finally {
+      await Promise.allSettled([yukiPage.close(), meiPage.close()]);
+    }
+  });
+
+  test.fixme(
+    "E-onboarding.1 mei pins the welcome message so yuki keeps seeing it at the top",
+    async () => {
+      // yougen gap: pinned-message UI; spec models/flow-and-message.md §8.6.
+    },
+  );
+
+  test.fixme(
+    "E-onboarding.2 mei edits welcome twice; write-status reflects revision count",
+    async () => {
+      // yougen gap: write-status reports `revised` but not a numeric counter.
+    },
+  );
+});
