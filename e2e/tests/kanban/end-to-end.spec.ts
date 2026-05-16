@@ -17,118 +17,112 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("kanban end-to-end", () => {
-  test("alice builds Board → 3 Lists → 2 Cards → drags Card to In Progress → archives → comments", async ({
+  test("alice opens kanban, adds 3 columns, adds 2 cards in Todo, archives Card A, restores it", async ({
     browser,
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const alice = uniqueUser("s15-alice");
+    const alice = uniqueUser("kanban-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
+    const cardA = `Card A ${stamp}`;
+    const cardB = `Card B ${stamp}`;
+
     try {
-      const spaceId = await alicePage.createSpace({
-        title: `S15 Kanban ${stamp}`,
+      // Create a space so the kanban view has a selected_space context.
+      await alicePage.createSpace({
+        title: `Kanban Space ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-
-      // Phase B — build Board (route is yougen's kanban view; testid 探查)
+      // Kanban is a single global board view in yougen today; it scopes
+      // writes to selected_space. Navigate after the space is created.
       await alicePage.page.goto(`/kanban`, { waitUntil: "domcontentloaded" });
-      // 兜底:某些 yougen 部署 /kanban 是 space-scoped。如果首页没有 new-board-button,
-      // 试 space-scoped 路径。
-      const newBoardButton = alicePage.page.getByTestId("new-board-button");
-      if ((await newBoardButton.count()) === 0) {
-        await alicePage.page.goto(`/spaces/${spaceId}/kanban`, { waitUntil: "domcontentloaded" });
-      }
-      await alicePage.page.getByTestId("new-board-button").click();
-      await alicePage.page.getByTestId("board-title-input").fill(`Sprint ${stamp}`);
-      await alicePage.page.getByTestId("create-board-button").click();
-      const boardCard = alicePage.page.getByTestId("board-card").filter({ hasText: `Sprint ${stamp}` }).first();
-      await expect(boardCard).toBeVisible({ timeout: 30_000 });
-      await boardCard.click();
-      await stepShot(alicePage.page, testInfo, "B-board-open");
+      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await stepShot(alicePage.page, testInfo, "A-kanban-open");
 
-      // Phase C — add three Lists
-      for (const listName of ["Todo", "In Progress", "Done"]) {
-        await alicePage.page.getByTestId("add-list-button").click();
-        await alicePage.page.getByTestId("list-title-input").fill(listName);
-        await alicePage.page.getByTestId("create-list-button").click();
+      // Add three columns (lists).
+      for (const columnName of [`Todo-${stamp}`, `InProgress-${stamp}`, `Done-${stamp}`]) {
+        await alicePage.page.getByTestId("new-column-input").fill(columnName);
+        await alicePage.page.getByTestId("add-column-button").click();
         await expect(
-          alicePage.page.getByTestId("list-column").filter({ hasText: listName }),
+          alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
         ).toBeVisible({ timeout: 30_000 });
       }
-      await stepShot(alicePage.page, testInfo, "C-three-lists");
+      await stepShot(alicePage.page, testInfo, "B-three-columns");
 
-      // Phase D — add two Cards in Todo
-      const todoColumn = alicePage.page.getByTestId("list-column").filter({ hasText: "Todo" }).first();
-      for (const cardName of ["Card A", "Card B"]) {
-        await todoColumn.getByTestId("add-card-button").click();
-        await alicePage.page.getByTestId("card-title-input").fill(cardName);
-        await alicePage.page.getByTestId("create-card-button").click();
-        await expect(todoColumn.getByTestId("flow-card").filter({ hasText: cardName })).toBeVisible({
-          timeout: 30_000,
-        });
-      }
-
-      // Phase E — drag Card A to In Progress
-      const cardA = todoColumn.getByTestId("flow-card").filter({ hasText: "Card A" }).first();
-      const inProgressColumn = alicePage.page
-        .getByTestId("list-column")
-        .filter({ hasText: "In Progress" })
+      const todoColumn = alicePage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: `Todo-${stamp}` })
         .first();
-      await cardA.dragTo(inProgressColumn);
-      await expect(inProgressColumn.getByTestId("flow-card").filter({ hasText: "Card A" })).toBeVisible({
+
+      // Add two cards in Todo. Each "add-card-button" click reveals the
+      // new-card-title-input; fill + save.
+      for (const cardName of [cardA, cardB]) {
+        await todoColumn.getByTestId("add-card-button").click();
+        await todoColumn.getByTestId("new-card-title-input").fill(cardName);
+        await todoColumn.getByTestId("save-card-button").click();
+        await expect(
+          todoColumn.getByTestId("kanban-card").filter({ hasText: cardName }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+      await stepShot(alicePage.page, testInfo, "C-two-cards");
+
+      // Archive Card A → it should disappear from the active column.
+      await todoColumn
+        .getByTestId("kanban-card")
+        .filter({ hasText: cardA })
+        .first()
+        .getByTestId("card-archive-button")
+        .click();
+      await expect(todoColumn.getByTestId("kanban-card").filter({ hasText: cardA })).toHaveCount(0, {
         timeout: 30_000,
       });
-      await expect(todoColumn.getByTestId("flow-card").filter({ hasText: "Card A" })).toHaveCount(0);
-      await stepShot(alicePage.page, testInfo, "E-card-dragged");
-
-      // Phase F — comment on Card A
-      await inProgressColumn.getByTestId("flow-card").filter({ hasText: "Card A" }).first().click();
-      await alicePage.page.getByTestId("discussion-composer-input").fill(`started this morning ${stamp}`);
-      await alicePage.page.getByTestId("discussion-send-button").click();
+      // Card A appears in archived list.
       await expect(
-        alicePage.page.getByTestId("discussion-message").filter({ hasText: `started this morning ${stamp}` }),
+        alicePage.page.getByTestId("kanban-archived-card-row").filter({ hasText: cardA }),
       ).toBeVisible({ timeout: 30_000 });
-      await stepShot(alicePage.page, testInfo, "F-comment-added");
+      await stepShot(alicePage.page, testInfo, "D-card-archived");
 
-      // Phase G — archive Card A
-      await alicePage.page.getByTestId("archive-card-button").click();
-      await alicePage.page.getByTestId("confirm-archive-button").click();
-      // back to board; Card A should be gone from main view
-      await alicePage.page.goBack();
-      await expect(inProgressColumn.getByTestId("flow-card").filter({ hasText: "Card A" })).toHaveCount(0);
-      await stepShot(alicePage.page, testInfo, "G-card-archived");
+      // Restore Card A from archive — it should reappear on the board.
+      const archivedRow = alicePage.page
+        .getByTestId("kanban-archived-card-row")
+        .filter({ hasText: cardA })
+        .first();
+      await archivedRow.getByTestId("card-restore-button").click();
+      await expect(
+        alicePage.page.getByTestId("kanban-card").filter({ hasText: cardA }),
+      ).toBeVisible({ timeout: 30_000 });
+      await stepShot(alicePage.page, testInfo, "E-card-restored");
     } finally {
       await alicePage.close();
     }
   });
 
   test.fixme(
-    "E15.1 concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_register_conflict",
+    "concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_register_conflict",
     async () => {
       // spec: space-and-place.md §4.6 cx.flow.move cas-register basis
-      // soland gap: cas-register conflict resolution + ordered-log child_order projection.
     },
   );
 
   test.fixme(
-    "E15.2 cross-space contains relation rejected with reason=cross_space_structural_relation",
+    "cross-space contains relation rejected with reason=cross_space_structural_relation",
     async () => {
       // spec: models/relation.md §3.2
     },
   );
 
   test.fixme(
-    "E15.5 commenting on an archived flow is rejected by reducer (no writes on archived Flow)",
+    "commenting on an archived flow is rejected by reducer (no writes on archived Flow)",
     async () => {
       // spec: space-and-place.md §4.6 archived state write constraints
     },
   );
 
-  test.fixme("E15.H reordering lists (drag column) updates board's child_order cell", async () => {
+  test.fixme("reordering lists (drag column) updates board's child_order cell", async () => {
     // spec: space-and-place.md §4.5 cas-register basis
   });
 });

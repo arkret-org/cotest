@@ -13,9 +13,30 @@ import {
   issueDevSession,
   openUserPage,
   uniqueUser,
+  type JointUserPage,
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
+
+async function gotoChat(page: JointUserPage, spaceId: string) {
+  if (!page.page.url().includes(`/chat/${spaceId}`)) {
+    await page.page.goto(`/chat/${spaceId}`, { waitUntil: "domcontentloaded" });
+  }
+  await expect(page.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
+  // Wait for the discussion list to populate at least one channel — yougen's
+  // send-chat-button silently no-ops if no selected_channel matches a known
+  // channel (chat.rs:2186-2189). Sync hydrates the channel list after mount.
+  await expect(page.page.getByTestId("channel-item").first()).toBeVisible({ timeout: 30_000 });
+}
+
+async function sendChat(page: JointUserPage, spaceId: string, body: string) {
+  await gotoChat(page, spaceId);
+  await page.page.getByTestId("chat-input").fill(body);
+  await page.page.getByTestId("send-chat-button").click();
+  await expect(
+    page.page.getByTestId("chat-message").filter({ hasText: body }),
+  ).toBeVisible({ timeout: 30_000 });
+}
 
 test.describe("chat advanced", () => {
   test("reactions converge (OR-Set) and replies render with reply indicator", async ({
@@ -53,34 +74,35 @@ test.describe("chat advanced", () => {
       await bobPage.acceptInvite(spaceId);
       await carolPage.acceptInvite(spaceId);
 
-      // Reactions (OR-Set)
-      await alicePage.sendTimelineMessage(spaceId, m1);
-      await bobPage.gotoTimelineSpace(spaceId);
-      await carolPage.gotoTimelineSpace(spaceId);
+      await sendChat(alicePage, spaceId, m1);
 
-      const bobOnM1 = bobPage.timelineEvent(m1);
+      await gotoChat(bobPage, spaceId);
+      const bobOnM1 = bobPage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
+      await expect(bobOnM1).toBeVisible({ timeout: 30_000 });
       await bobOnM1.getByTestId("chat-react-button").click();
-      const picker = bobPage.page.getByTestId("chat-reaction-picker");
-      await expect(picker).toBeVisible();
-      await picker.getByRole("button").first().click();
+      const bobPicker = bobPage.page.getByTestId("chat-reaction-picker");
+      await expect(bobPicker).toBeVisible();
+      await bobPicker.getByRole("button").first().click();
       await expect(bobOnM1.getByTestId("chat-reactions")).toBeVisible({ timeout: 30_000 });
 
-      const carolOnM1 = carolPage.timelineEvent(m1);
+      await gotoChat(carolPage, spaceId);
+      const carolOnM1 = carolPage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
+      await expect(carolOnM1).toBeVisible({ timeout: 30_000 });
       await carolOnM1.getByTestId("chat-react-button").click();
       await carolPage.page.getByTestId("chat-reaction-picker").getByRole("button").first().click();
       await expect(carolOnM1.getByTestId("chat-reactions")).toBeVisible({ timeout: 30_000 });
 
-      // alice should see both reactions (OR-Set convergence)
-      await alicePage.gotoTimelineSpace(spaceId);
-      const aliceOnM1 = alicePage.timelineEvent(m1);
+      await gotoChat(alicePage, spaceId);
+      const aliceOnM1 = alicePage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
       await expect(aliceOnM1.getByTestId("chat-reactions")).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "reactions-converged");
 
-      // Reply chain
-      await bobOnM1.getByTestId("chat-reply-button").click();
+      await gotoChat(bobPage, spaceId);
+      const bobOnM1Reload = bobPage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
+      await bobOnM1Reload.getByTestId("chat-reply-button").click();
       await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
-      await bobPage.sendTimelineMessage(spaceId, m2);
-      const bobOnM2 = bobPage.timelineEvent(m2);
+      await sendChat(bobPage, spaceId, m2);
+      const bobOnM2 = bobPage.page.getByTestId("chat-message").filter({ hasText: m2 }).first();
       await expect(bobOnM2.getByTestId("chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "reply-chain");
     } finally {
@@ -90,26 +112,30 @@ test.describe("chat advanced", () => {
 
   test.fixme("E14.D mentions route notifications only to the mentioned actor", async () => {
     // spec: discovery/push-notifications.md §4.3.1 mention_routing_hint
-    // soland gap: mention routing + notification queue projection.
   });
 
   test.fixme("E14.E poll create + vote + close (vote replacement per actor)", async () => {
     // spec: models/content-types.md §4.9 polls
-    // soland gap: cx.content.poll{,.response} reducer.
   });
 
-  test.fixme("E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async () => {
-    // spec: profiles-presence.md §3.5
-    // soland gap: ephemeral cx.typing signal routing through Sync Service.
-  });
+  test.fixme(
+    "E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000",
+    async () => {
+      // spec: profiles-presence.md §3.5
+    },
+  );
 
-  test.fixme("E14.G presence state propagates online/offline within 1s after page open/close", async () => {
-    // spec: profiles-presence.md §3.2-§3.4
-    // soland gap: cx.presence ephemeral channel.
-  });
+  test.fixme(
+    "E14.G presence state propagates online/offline within 1s after page open/close",
+    async () => {
+      // spec: profiles-presence.md §3.2-§3.4
+    },
+  );
 
-  test.fixme("E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext", async () => {
-    // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
-    // soland gap: E2EE mention routing.
-  });
+  test.fixme(
+    "E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext",
+    async () => {
+      // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
+    },
+  );
 });

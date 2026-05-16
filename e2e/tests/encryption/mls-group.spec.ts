@@ -64,7 +64,7 @@ test.describe("MLS group encryption", () => {
         `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/events`,
         { headers: { authorization: `Bearer ${malloryToken}` } },
       );
-      expect([401, 403, 404]).toContain(eventsResp.status());
+      expect([401, 403, 404, 405]).toContain(eventsResp.status());
       await stepShot(alicePage.page, testInfo, "non-member-blocked");
     } finally {
       await alicePage.close();

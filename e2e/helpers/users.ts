@@ -26,6 +26,7 @@ export type UserSession = {
   consoleLines: string[];
   networkLines: string[];
   serverUrl: string;
+  sessionToken: string;
 };
 
 export type OpenUserOpts = {
@@ -70,7 +71,9 @@ export class JointUserPage {
   }
 
   async gotoSetup() {
-    await this.page.goto("/setup", { waitUntil: "domcontentloaded" });
+    // yougen's /setup is the Overview; the new-space wizard lives at the
+    // /setup/spaces section. yougen/src/routes.rs §SetupSection.
+    await this.page.goto("/setup/spaces", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("space-lifecycle-flow")).toBeVisible({ timeout: 120_000 });
   }
 
@@ -92,6 +95,35 @@ export class JointUserPage {
   async gotoSpaceAdmin(spaceId: string) {
     await this.page.goto(`/space/${spaceId}/admin`, { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
+  }
+
+  // Navigate to a specific space admin section (Members / Access / etc.).
+  // yougen routes are `/space/:id/admin/:section`; the Overview landing
+  // doesn't show member rows or other section-specific testids.
+  // After the panel mounts, click the section tab to ensure active_section
+  // matches the URL — yougen's initial render can momentarily fall back
+  // to Overview while signals settle.
+  async gotoSpaceAdminSection(spaceId: string, section: string) {
+    await this.page.goto(`/space/${spaceId}/admin/${section}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
+    const sectionLabel: Record<string, string> = {
+      members: "Members",
+      access: "Access",
+      security: "Security & MLS",
+      governance: "Governance",
+      federation: "Federation",
+      repair: "Repair & Danger",
+    };
+    const label = sectionLabel[section];
+    if (label) {
+      const tabs = this.page.getByTestId("space-admin-sections");
+      const tab = tabs.getByRole("link", { name: label, exact: true }).first();
+      if ((await tab.count()) > 0) {
+        await tab.click();
+      }
+    }
   }
 
   async gotoTimelineSpace(spaceId: string) {
@@ -133,10 +165,12 @@ export class JointUserPage {
   }
 
   // Drive the space admin invite-member form to invite `targetDid` into spaceId.
-  // Caller MUST already have gotoSpaceAdmin(spaceId) or this navigates there.
+  // The invite-member card lives under the Members section in yougen, not the
+  // Overview landing.
   async inviteFromAdmin(spaceId: string, targetDid: string) {
-    await this.gotoSpaceAdmin(spaceId);
+    await this.gotoSpaceAdminSection(spaceId, "members");
     const invite = this.page.getByTestId("invite-member");
+    await expect(invite).toBeVisible({ timeout: 30_000 });
     await invite.getByTestId("invite-target-input").fill(targetDid);
     await invite.getByTestId("send-invite-button").click();
     await expect(this.page.getByTestId("space-admin-panel")).toContainText(
@@ -145,19 +179,49 @@ export class JointUserPage {
     );
   }
 
-  // Find the invite row addressed to this user inside /space/:id/admin's
-  // space-invites list and click accept. Yougen surfaces all invites in
-  // the admin list (`invite-row`) regardless of whether the viewer is
-  // currently a member; the row is keyed on target DID.
+  // Accept a pending invite for this user. Yougen's space-admin invite
+  // list is session-local (only invites created in the current session
+  // appear), so a fresh-context invitee can't see seed-members invites
+  // via the UI. We list invites + accept via soland HTTP API instead
+  // (`GET /api/v1/authz/invites`, `POST /api/v1/spaces/{id}/invite/accept`).
   async acceptInvite(spaceId: string) {
-    await this.gotoSpaceAdmin(spaceId);
-    const row = this.page
-      .getByTestId("invite-row")
-      .filter({ hasText: this.user.did })
-      .first();
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await row.getByTestId("accept-invite-button").click();
-    await expect(row).toContainText(/active|accepted|joined/, { timeout: 30_000 });
+    const serverUrl = this.session.serverUrl;
+    const token = this.session.sessionToken;
+    if (!token) {
+      throw new Error("acceptInvite: no session_token captured on session");
+    }
+    const listResp = await this.page.request.get(`${serverUrl}/api/v1/authz/invites`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!listResp.ok()) {
+      throw new Error(
+        `acceptInvite: list /authz/invites returned ${listResp.status()} for ${this.user.did}`,
+      );
+    }
+    const body = (await listResp.json()) as {
+      invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
+    };
+    const invite = (body.invites ?? []).find(
+      (i) => i.space_id === spaceId && i.invitee === this.user.did,
+    );
+    if (!invite) {
+      throw new Error(
+        `acceptInvite: no pending invite for ${this.user.did} in space ${spaceId} ` +
+          `(visible invites: ${JSON.stringify(body.invites ?? [])})`,
+      );
+    }
+    const acceptResp = await this.page.request.post(
+      `${serverUrl}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite/accept`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+        data: { invite_id: invite.invite_id },
+      },
+    );
+    if (!acceptResp.ok()) {
+      throw new Error(
+        `acceptInvite: POST .../invite/accept returned ${acceptResp.status()} for invite ${invite.invite_id}`,
+      );
+    }
   }
 
   // Send a message into spaceId's timeline. Asserts persistence write-status.
@@ -270,6 +334,28 @@ export async function openUser(
       session_token: sessionToken,
     },
   );
+  // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's
+  // dev WS reconnects mid-test the overlay covers the page and blocks pointer
+  // events, even though the app underneath is interactive. We never want to
+  // observe it during e2e — kill it permanently via CSS injected on every
+  // navigation.
+  await context.addInitScript(() => {
+    const inject = () => {
+      if (!document.head) return;
+      const id = "__cotest_hide_dx_toast";
+      if (document.getElementById(id)) return;
+      const style = document.createElement("style");
+      style.id = id;
+      style.textContent =
+        "#__dx-toast,#__dx-toast-container{display:none!important;visibility:hidden!important;pointer-events:none!important}";
+      document.head.appendChild(style);
+    };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", inject);
+    } else {
+      inject();
+    }
+  });
   const page = await context.newPage();
   const consoleLines: string[] = [];
   const networkLines: string[] = [];
@@ -316,7 +402,7 @@ export async function openUser(
       );
     }
   });
-  return { context, page, diagnosticsDir, consoleLines, networkLines, serverUrl };
+  return { context, page, diagnosticsDir, consoleLines, networkLines, serverUrl, sessionToken };
 }
 
 export async function openUserPage(

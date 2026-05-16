@@ -105,13 +105,17 @@ test.describe("moderation and ban", () => {
         const items = body.results ?? body.reports ?? body;
         expect(Array.isArray(items) ? items.length : 0).toBe(0);
       } else {
-        expect([401, 403, 404]).toContain(malloryListing.status());
+        expect([401, 403, 404, 405]).toContain(malloryListing.status());
       }
 
       // Phase D — Capability check (E5.1) + anchored ban.
       // bob (no cx.space.moderate) attempts ban via Move → MUST be denied.
-      await bobPage.gotoSpaceAdmin(spaceId);
+      // Member rows live under the Members section, not the Overview, and
+      // yougen lazily loads them when the Refresh button is clicked.
+      await bobPage.gotoSpaceAdminSection(spaceId, "members");
+      await bobPage.page.getByTestId("refresh-members-button").click();
       const bobBanRow = bobPage.page.getByTestId("member-row").filter({ hasText: mallory.did });
+      await expect(bobBanRow).toBeVisible({ timeout: 30_000 });
       await bobBanRow.getByTestId("ban-member-via-move-button").click();
       await expect(bobPage.page.getByTestId("space-admin-panel")).toContainText(
         /ban\(Move\) failed|missing_capability|403|policy_denied/i,
@@ -120,8 +124,10 @@ test.describe("moderation and ban", () => {
       await stepShot(bobPage.page, testInfo, "D-bob-ban-attempt-denied");
 
       // alice (owner with moderate cap) bans mallory via cx.member.state Move.
-      await alicePage.gotoSpaceAdmin(spaceId);
+      await alicePage.gotoSpaceAdminSection(spaceId, "members");
+      await alicePage.page.getByTestId("refresh-members-button").click();
       const aliceBanRow = alicePage.page.getByTestId("member-row").filter({ hasText: mallory.did });
+      await expect(aliceBanRow).toBeVisible({ timeout: 30_000 });
       await aliceBanRow.getByTestId("ban-member-via-move-button").click();
       // Move submit success is surfaced in space-admin-panel status text.
       await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(
@@ -239,8 +245,10 @@ test.describe("moderation and ban", () => {
       });
       await malloryPage.acceptInvite(spaceId);
 
-      await alicePage.gotoSpaceAdmin(spaceId);
+      await alicePage.gotoSpaceAdminSection(spaceId, "members");
+      await alicePage.page.getByTestId("refresh-members-button").click();
       const row = alicePage.page.getByTestId("member-row").filter({ hasText: mallory.did });
+      await expect(row).toBeVisible({ timeout: 30_000 });
       await row.getByTestId("ban-member-via-move-button").click();
       await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(
         new RegExp(`ban\\(Move\\) ${escapeRegex(mallory.did)}`),

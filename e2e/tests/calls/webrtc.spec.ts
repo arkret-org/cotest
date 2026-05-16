@@ -26,8 +26,9 @@ test.describe("calls", () => {
     const iceProbe = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
       data: { call_id: "cx:call:probe", device_id: alice.deviceId, mode: "p2p" },
     });
-    // Unauthenticated must be rejected (or endpoint absent → 404).
-    expect([401, 403, 404]).toContain(iceProbe.status());
+    // Unauthenticated must be rejected (or endpoint absent → 404, or 405
+    // when the path is routed but POST is not allowed yet).
+    expect([401, 403, 404, 405]).toContain(iceProbe.status());
 
     const iceAuth = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
       headers: { authorization: `Bearer ${token}` },

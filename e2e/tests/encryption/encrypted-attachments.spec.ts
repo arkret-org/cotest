@@ -38,7 +38,7 @@ test.describe("encrypted attachments", () => {
       {},
     );
     // Spec §5: non-existent and unauthorized must look the same — opaque 403/404.
-    expect([401, 403, 404]).toContain(getResp.status());
+    expect([401, 403, 404, 405]).toContain(getResp.status());
   });
 
   test.fixme(

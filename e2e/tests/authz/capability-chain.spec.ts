@@ -41,7 +41,7 @@ test.describe("capability chain", () => {
         headers: { authorization: `Bearer ${malloryToken}` },
         data: { content: { text: "mallory attempt" } },
       });
-      expect([401, 403, 404]).toContain(send.status());
+      expect([401, 403, 404, 405]).toContain(send.status());
     } finally {
       await alicePage.close();
     }

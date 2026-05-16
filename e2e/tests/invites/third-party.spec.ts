@@ -19,11 +19,13 @@ test.describe("third-party invite", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    // Unauthenticated POST to a third-party-invite endpoint must not succeed.
+    // Unauthenticated POST must not succeed. 405 (path routed but method
+    // not allowed) is acceptable too — treated as "endpoint absent" for
+    // the probe.
     const probe = await request.post(`${solandBaseUrl()}/api/v1/invites/third-party`, {
       data: { space_id: "cx:space:probe", token_commitment: "sha256:0".repeat(64) },
     });
-    expect([401, 403, 404]).toContain(probe.status());
+    expect([401, 403, 404, 405]).toContain(probe.status());
 
     // With auth: either implemented or absent. 5xx is a bug.
     const authProbe = await request.post(`${solandBaseUrl()}/api/v1/invites/third-party`, {

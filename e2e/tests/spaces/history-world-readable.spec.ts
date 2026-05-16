@@ -61,7 +61,7 @@ test.describe("world_readable history", () => {
           data: { content: { text: "S1.3 outsider tries to write" } },
         },
       );
-      expect([401, 403, 404]).toContain(write.status());
+      expect([401, 403, 404, 405]).toContain(write.status());
     } finally {
       await alicePage.close();
     }

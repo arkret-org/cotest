@@ -68,13 +68,15 @@ test.describe("single-server triad collaboration", () => {
       });
       await stepShot(bobPage.page, testInfo, "B-bob-received-m1");
 
-      // Reply to M1, then edit.
+      // Reply to M1, then edit. Timeline view's reply testids:
+      // reply-button, reply-to-banner (composer banner), reply-indicator (per
+      // event marker). yougen/src/views/timeline.rs.
       const m1Event = bobPage.timelineEvent(m1);
-      await m1Event.getByTestId("chat-reply-button").click();
-      await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
+      await m1Event.getByTestId("reply-button").click();
+      await expect(bobPage.page.getByTestId("reply-to-banner")).toBeVisible();
       await bobPage.sendTimelineMessage(spaceId, m2);
       const m2EventOnBob = bobPage.timelineEvent(m2);
-      await expect(m2EventOnBob.getByTestId("chat-reply-indicator")).toBeVisible();
+      await expect(m2EventOnBob.getByTestId("reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "B-bob-replied");
 
       await m2EventOnBob.getByTestId("edit-button").click();
