@@ -71,6 +71,8 @@
       "comment": "User rotates passphrase. Client derives a new master key with a new salt, re-encrypts all covered material, and uploads a new backup object/version. Server retains the old envelope until migration is confirmed or retention expires. Rotation must not silently drop covered material.",
       "old_backup_id": "cx:backup:01964137-0000-7000-8000-000000000000",
       "new_backup_id": "cx:backup:01964137-0000-7000-8000-000000000002",
+      "old_version_id": "kb_1",
+      "new_version_id": "kb_2",
       "old_backup_version": "kb_1",
       "new_backup_version": "kb_2",
       "new_salt_b64": "EBESExQVFhcYGRobHB0eHw",

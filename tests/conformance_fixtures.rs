@@ -34,6 +34,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// C39.8 — artifact-driven profile matrix. Builds the must-test matrix
+    /// from conformance-profiles.json and hard-fails synthetic server claims
+    /// that advertise a profile without its required operations.
+    profile_matrix_suite_matches_artifact_contracts,
+    "profile_matrix",
+    cotest::conformance::run_profile_matrix_suite,
+);
+
+conformance_test!(
     schema_validation_suite_matches_reference_semantics,
     "schema_validation",
     cotest::conformance::run_schema_validation_suite,
@@ -127,6 +136,24 @@ conformance_test!(
     privacy_security_fixture_suite_matches_reference_semantics,
     "privacy_security_fixture",
     cotest::conformance::run_privacy_security_fixture_suite,
+);
+
+conformance_test!(
+    /// C40.5 — security negative profile vectors. Hard-fails bad signatures,
+    /// canonical-byte conflicts, schema/payload violations, replay, downgrade,
+    /// and query-string auth leakage.
+    security_negative_profile_suite_matches_reference_semantics,
+    "security_negative_profile",
+    cotest::conformance::run_security_negative_profile_suite,
+);
+
+conformance_test!(
+    /// C41.9 — scaffold/profile claim gate. A service cannot claim a full
+    /// profile while exposing 501/scaffold/placeholder critical paths or an
+    /// unhealthy production signing posture.
+    scaffold_profile_gate_suite_matches_reference_semantics,
+    "scaffold_profile_gate",
+    cotest::conformance::run_scaffold_profile_gate_suite,
 );
 
 conformance_test!(

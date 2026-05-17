@@ -56,10 +56,7 @@ const EXPECTED_OPERATIONS: &[&str] = &[
 ];
 
 const EXPECTED_SCHEMAS: &[(&str, &str)] = &[
-    (
-        "cx.schema.agent_task.v1",
-        "schemas/agent-task.schema.json",
-    ),
+    ("cx.schema.agent_task.v1", "schemas/agent-task.schema.json"),
     (
         "cx.schema.content.mention_redirect.v1",
         "schemas/content-mention-redirect.schema.json",
@@ -160,9 +157,8 @@ pub fn run_agent_workspace_registry_suite() -> Result<()> {
 pub fn run_agent_workspace_schema_suite() -> Result<()> {
     // Each declared schema file exists, parses, and announces its $id.
     for (schema_id, relative_path) in EXPECTED_SCHEMAS {
-        let raw = load_artifact_json(relative_path).map_err(|err| {
-            anyhow!("schema {schema_id} ({relative_path}) failed to load: {err}")
-        })?;
+        let raw = load_artifact_json(relative_path)
+            .map_err(|err| anyhow!("schema {schema_id} ({relative_path}) failed to load: {err}"))?;
         let id = raw.get("$id").and_then(Value::as_str);
         if !matches!(id, Some(s) if s.contains(schema_id.trim_end_matches(".v1"))) {
             // Schema $id uses a URL form (.../<file>.schema.json), so we
@@ -191,9 +187,9 @@ pub fn run_agent_workspace_schema_suite() -> Result<()> {
     for (schema_id, expected_file) in EXPECTED_SCHEMAS {
         match by_id.get(*schema_id) {
             None => bail!("schema-registry missing {schema_id}"),
-            Some(actual) if *actual != *expected_file => bail!(
-                "schema-registry {schema_id} → {actual} but expected {expected_file}"
-            ),
+            Some(actual) if *actual != *expected_file => {
+                bail!("schema-registry {schema_id} → {actual} but expected {expected_file}")
+            }
             _ => {}
         }
     }
@@ -209,7 +205,10 @@ pub fn run_agent_workspace_schema_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("attached_authority missing oneOf"))?;
     if one_of.len() != 2 {
-        bail!("attached_authority oneOf MUST have exactly 2 variants in v1, got {}", one_of.len());
+        bail!(
+            "attached_authority oneOf MUST have exactly 2 variants in v1, got {}",
+            one_of.len()
+        );
     }
     let kinds: std::collections::BTreeSet<&str> = one_of
         .iter()
@@ -275,9 +274,7 @@ pub fn run_agent_workspace_fsm_fixture_suite() -> Result<()> {
     ];
     for vid in &required {
         if !vector_ids.contains(*vid) {
-            bail!(
-                "agent_workspace conformance dir missing required land vector {vid}"
-            );
+            bail!("agent_workspace conformance dir missing required land vector {vid}");
         }
     }
 
@@ -286,10 +283,7 @@ pub fn run_agent_workspace_fsm_fixture_suite() -> Result<()> {
     for fixture_path in &found {
         let raw = fs::read_to_string(fixture_path)?;
         let value: Value = serde_json::from_str(&raw)?;
-        let vid = value
-            .get("vector_id")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let vid = value.get("vector_id").and_then(Value::as_str).unwrap_or("");
         if vid.starts_with("15-4-reservation-") {
             // Each reservation vector documents one of:
             //   * head_eq:"__unset__"      (singleton-once-set path; also `set __unset__` on cleanup)
@@ -322,10 +316,8 @@ pub fn run_agent_workspace_fsm_fixture_suite() -> Result<()> {
                 .is_some();
             let head_eq_unset =
                 predicate_op == Some("head_eq") && predicate_value == Some(RESERVATION_SENTINEL);
-            let head_eq_known =
-                predicate_op == Some("head_eq") && predicate_value.is_some();
-            let head_in_recovery =
-                predicate_op == Some("head_in") && predicate_values_present;
+            let head_eq_known = predicate_op == Some("head_eq") && predicate_value.is_some();
+            let head_in_recovery = predicate_op == Some("head_in") && predicate_values_present;
             let concurrent_bottom = bottom_diag
                 && value
                     .get("input_moves")
@@ -386,7 +378,10 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
         "unauthorized",
         "schema_violation",
     ];
-    let is_negative = value.get("negative").and_then(Value::as_bool).unwrap_or(false);
+    let is_negative = value
+        .get("negative")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let check_reducer_result = |result: &str| -> Result<()> {
         if !valid_results.contains(&result) {
             bail!(
@@ -405,7 +400,10 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
     };
 
     let has_input_event = value.get("input_event").is_some();
-    let has_input_events = value.get("input_events").and_then(Value::as_array).is_some();
+    let has_input_events = value
+        .get("input_events")
+        .and_then(Value::as_array)
+        .is_some();
     let has_input_move = value.get("input_move").is_some();
     let has_input_moves = value.get("input_moves").and_then(Value::as_array).is_some();
     let has_input_steps = value.get("input_steps").and_then(Value::as_array).is_some();
@@ -432,7 +430,12 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
         let outcomes = value
             .get("expected_outcomes")
             .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("{}: input_events[] requires expected_outcomes[]", path.display()))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "{}: input_events[] requires expected_outcomes[]",
+                    path.display()
+                )
+            })?;
         if outcomes.is_empty() {
             bail!("{}: expected_outcomes[] is empty", path.display());
         }
@@ -440,7 +443,12 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
             let result = outcome
                 .get("reducer_result")
                 .and_then(Value::as_str)
-                .ok_or_else(|| anyhow!("{}: expected_outcomes[i] missing reducer_result", path.display()))?;
+                .ok_or_else(|| {
+                    anyhow!(
+                        "{}: expected_outcomes[i] missing reducer_result",
+                        path.display()
+                    )
+                })?;
             check_reducer_result(result)?;
         }
     } else if has_input_steps {
@@ -458,26 +466,46 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
         let invariants = value
             .get("expected_delivery_invariants")
             .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("{}: input_notification requires expected_delivery_invariants[]", path.display()))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "{}: input_notification requires expected_delivery_invariants[]",
+                    path.display()
+                )
+            })?;
         if invariants.is_empty() {
-            bail!("{}: expected_delivery_invariants[] is empty", path.display());
+            bail!(
+                "{}: expected_delivery_invariants[] is empty",
+                path.display()
+            );
         }
     } else if has_sub_cases {
         // sub_cases-driven negative vector: each sub_case has expected_reason;
         // top-level expected_outcome.reducer_result still required.
         let cases = value.get("sub_cases").and_then(Value::as_array).unwrap();
         for case in cases {
-            if case.get("expected_reason").and_then(Value::as_str).is_none() {
+            if case
+                .get("expected_reason")
+                .and_then(Value::as_str)
+                .is_none()
+            {
                 bail!("{}: sub_cases[i] missing expected_reason", path.display());
             }
         }
-        let expected = value
-            .get("expected_outcome")
-            .ok_or_else(|| anyhow!("{}: sub_cases[] still requires top-level expected_outcome", path.display()))?;
+        let expected = value.get("expected_outcome").ok_or_else(|| {
+            anyhow!(
+                "{}: sub_cases[] still requires top-level expected_outcome",
+                path.display()
+            )
+        })?;
         let result = expected
             .get("reducer_result")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("{}: expected_outcome missing reducer_result", path.display()))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "{}: expected_outcome missing reducer_result",
+                    path.display()
+                )
+            })?;
         check_reducer_result(result)?;
     } else {
         // Single-shot / single-Move / multi-Move: require expected_outcome.reducer_result.
@@ -487,7 +515,12 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
         let result = expected
             .get("reducer_result")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("{}: missing expected_outcome.reducer_result", path.display()))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "{}: missing expected_outcome.reducer_result",
+                    path.display()
+                )
+            })?;
         check_reducer_result(result)?;
     }
     Ok(())

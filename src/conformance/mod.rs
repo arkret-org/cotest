@@ -5,9 +5,12 @@ mod envelope;
 mod federation;
 mod lattice_round_trip;
 mod privacy;
+mod profile_matrix;
 mod redaction;
 mod registry;
+mod scaffold_gate;
 mod schema_validation;
+mod security_negative;
 mod state_resolution;
 mod sync;
 mod wire_model;
@@ -36,13 +39,16 @@ pub use capability::run_capability_facet_fixture_suite;
 pub use capability::run_capability_fixture_suite;
 pub use encoding::run_encoding_fixture_suite;
 pub use encoding::run_projection_position_discriminator_fixture_suite;
-pub use envelope::run_event_envelope_fixture_suite;
+pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
 pub use lattice_round_trip::run_lattice_round_trip_suite;
 pub use privacy::run_privacy_security_fixture_suite;
+pub use profile_matrix::{run_profile_matrix_suite, validate_server_profile_claims};
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
+pub use scaffold_gate::run_scaffold_profile_gate_suite;
 pub use schema_validation::run_schema_validation_suite;
+pub use security_negative::run_security_negative_profile_suite;
 pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };
@@ -62,6 +68,7 @@ pub use wire_model::run_discovery_profile_fixture_suite;
 pub use wire_model::run_error_code_registry_coverage_fixture_suite;
 pub use wire_model::run_event_kind_lattice_dispatch_fixture_suite;
 pub use wire_model::run_event_kind_payload_coverage_fixture_suite;
+pub use wire_model::run_facet_renderer_query_fixture_suite;
 pub use wire_model::run_frontier_conflict_resolution_fixture_suite;
 pub use wire_model::run_history_visibility_fixture_suite;
 pub use wire_model::run_history_visibility_projection_matrix_check;
@@ -74,13 +81,17 @@ pub use wire_model::run_megolm_ratcheting_fixture_suite;
 pub use wire_model::run_membership_fsm_fixture_suite;
 pub use wire_model::run_mimi_components_fixture_suite;
 pub use wire_model::run_mls_e2ee_basic_fixture_suite;
+pub use wire_model::run_mls_move_covered_frontier_fixture_suite;
 pub use wire_model::run_multi_admin_distinct_approver_gate_check;
 pub use wire_model::run_multi_space_federation_fixture_suite;
 pub use wire_model::run_operation_registry_coverage_fixture_suite;
 pub use wire_model::run_production_signing_fixture_suite;
 pub use wire_model::run_read_receipt_policy_fixture_suite;
+pub use wire_model::run_recovery_bridge_full_chain_fixture_suite;
+pub use wire_model::run_recovery_ticket_state_machine_check;
 pub use wire_model::run_redacted_cross_server_fixture_suite;
 pub use wire_model::run_redaction_history_visibility_fixture_suite;
+pub use wire_model::run_restore_full_workflows_fixture_suite;
 pub use wire_model::run_state_resolution_quarantine_fixture_suite;
 pub use wire_model::run_threshold_multisig_fixture_suite;
 
@@ -246,6 +257,20 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
     spec_artifacts_root()
         .join(ARTIFACT_FIXTURES_DIR)
         .join(file_name)
+}
+
+pub(crate) fn local_fixture_path(file_name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(file_name)
+}
+
+pub(crate) fn load_local_fixture_value(file_name: &str) -> Result<Value> {
+    let path = local_fixture_path(file_name);
+    let raw = fs::read_to_string(&path)?;
+    serde_json::from_str(&raw)
+        .map_err(|error| anyhow!("failed to parse local fixture {}: {error}", path.display()))
 }
 
 fn spec_artifact_candidates(root: &Path) -> Vec<PathBuf> {

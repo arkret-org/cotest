@@ -19,16 +19,19 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     assert_eq!(description.protocol_version, "1.0");
     assert_eq!(description.service_type, "principal_server");
 
+    let server_describe = expect_json(
+        server.http().get(server.url("/api/v1/server/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    crate::conformance::validate_server_profile_claims(&server_describe)?;
+
     for required in [
         // C17 (spec 2026-05-08): cx.sync.client_sync → cx.sync.account
         "cx.sync.account",
-        "cx.sync.typing",
         "cx.directory.search_spaces",
-        "cx.index.query",
         "cx.authz.check",
-        "cx.schemas.register",
-        "cx.push.rules",
-        "cx.webrtc.create_session",
+        "cx.push.register_device",
         "cx.policy.check",
         "cx.moderation.report",
     ] {
@@ -38,6 +41,22 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
                 .iter()
                 .any(|op| op == required),
             "missing supported operation {required}"
+        );
+    }
+    let local_extensions =
+        server_describe["limits"]["profile_status"]["local_extension_operations"]
+            .as_array()
+            .expect("local extension operation list");
+    for extension in [
+        "cx.extension.soland.sync.typing",
+        "cx.extension.soland.index.query",
+        "cx.extension.soland.schemas.register",
+        "cx.extension.soland.push.rules",
+        "cx.extension.soland.webrtc.create_session",
+    ] {
+        assert!(
+            local_extensions.iter().any(|op| op == extension),
+            "missing local extension operation {extension}"
         );
     }
 

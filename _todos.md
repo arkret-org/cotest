@@ -69,3 +69,37 @@
 - [x] T5.10 更新 `docs/test-strategy.md` Joint UI E2E 段落, 描述 Phase 5 新增的 spec 与 testids 覆盖关系。
 - [x] T5.11 对所有新增 spec 跑 `npx tsc --noEmit` 通过类型检查。
 
+## Phase 6: 反向填充 cotest fixme(2026-05-17)
+
+joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `describe.fixme` 容器自带的 2 行,其余 192 个全部是单测 `test.fixme(...)` 占位。这些占位需要等服务端 / 客户端实现到位才能转实测。
+
+服务端 / 客户端 gap 已经写进各项目 `_todos.md`:
+- `../soland/_todos.md` "E2E gap backlog" 表 — 125 行 ID,覆盖 ~142 fixme(server / reducer / projection / federation / MLS / WebRTC / 备份 / WebVH)
+- `../yougen/_todos.md` E 段 "cotest joint-e2e fixme 反推的 yougen 侧 gap" — 30 行 ID,覆盖 ~50 fixme(UI / 视图 / 向导 / outbox / testid)
+
+下面是 cotest 端配套需要做的 harness 改造,不是 yougen / soland 业务:
+
+### 6.A harness 缺失的 mock 服务
+
+| ID | 主题 | 用途 | acceptance |
+|---|---|---|---|
+| **H-MOCK-IDP-1** | mock OIDC IdP | `tests/identity/onboarding.spec.ts` "bob registers via OIDC bridge" 与 `account-device-auth.spec.ts` 都需要 | `e2e/mocks/mock-idp.mjs` 起 HTTP server,实现 `/discovery`、`/authorize`、`/token` 三端点 + 测试用静态 ID Token;`run-joint-e2e.ps1 -StartMockIdp` 已有占位,但 mock-idp.mjs 仅是骨架 — 补齐到能让 coauth 真正完成 OIDC token exchange |
+| **H-MOCK-EMAIL-1** | mock email verification service | `onboarding.spec.ts` "carol registers via email-only" + `invites/third-party.spec.ts` "mock verification service receives invite token" | `e2e/mocks/mock-email.mjs` 起 HTTP server,记录所有"发出"的邮件 + token 内嵌的 verification link;暴露 `/inbox/{email}` 给测试取最近的 token;coauth / soland 把 SMTP 调用替换为 HTTP POST 到 mock |
+| **H-MOCK-AUDIT-AGENT-1** | mock audit-agent | `encryption/audited-e2ee.spec.ts` "report triggers audit_disclosure_policy.trigger; audit-agent is invited" | mock audit-agent 服务持有自己的 DID + signing key + KeyPackage(if E2EE);被邀请进 space 后能 acknowledge invite,生成 `cx.audit.accessed` 事件;`/inspect` 端点给测试看它收到的 `cx.moderation.frank` 列表 |
+| **H-MOCK-WITNESS-1** | mock did:webvh witness | `identity/webvh-rotation.spec.ts` 多个用例 + onboarding 的 did:webvh genesis | 现有 `e2e/mocks/mock-witness.mjs` 是骨架,需要扩到能:接受 entry rotation co-sign 请求、按测试场景模拟 offline(>24h timestamp)、提供 `/inspect` 看签发历史 |
+
+### 6.B harness 反向工程 fixme → 实测的流水
+
+| ID | 主题 | 描述 |
+|---|---|---|
+| **H-SHIM-1** | fixme → test 自动重写脚本 | `scripts/promote-fixme.ps1 -SpecPath <file>:<line> -NewBody '...'` 把指定 fixme 整段替换成实测;先验证当前 test 在该位置仍是 fixme(防止 race);用于服务端 feature 落地后批量切换 |
+| **H-SHIM-2** | per-feature 选择性跳过 | 让 `run-joint-e2e.ps1 -Profile joint-smoke` 通过 grep 标签(测试名带 `@fully-implemented`)只跑已落地的;avoid CI noise during incremental rollout |
+| **H-SHIM-3** | service-log gap 报告 | run-joint-e2e 结束后扫所有 service stderr 找 `WARN.*denied|FORBIDDEN|reject` 行写进 summary.md,让失败原因更直接(参见 2026-05-17 kanban 修复就是靠这条 WARN) |
+
+### 6.C 当前已落地
+
+| 项 | 落地 | 说明 |
+|---|---|---|
+| 192 fixme 全部分类归入各项目 _todos.md | ✅ 2026-05-17 | soland 125 行 + yougen 30 行 + harness ~10 行,每行 stable ID |
+| kanban `/kanban` → `/kanban/${space_id}` 修复 | ✅ 2026-05-17 | `e2e/tests/kanban/end-to-end.spec.ts:42` + `workflows/kanban-week.spec.ts:49`;创建新 space 后必须带 space_id 路由,否则 selected_space 回退到 demo space → 403/capability_denied → 卡片乐观 UI 回滚 |
+| agent_workspace Rust e2e | ✅ 2026-05-17 | `tests/agent_workspace_e2e.rs` 真实跑通,401 + 401 + openapi operationId 三条全过 |

@@ -1854,6 +1854,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     let mut covered_ext_blob = false;
     let mut covered_ext_realtime = false;
     let mut covered_ext_moderation = false;
+    let mut covered_ext_agent_workspace = false;
     let mut covered_bridge_mimi = false;
     let mut covered_bridge_applet = false;
 
@@ -1967,6 +1968,9 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
             "extension_advertised_moderation_reports_post_c16_split" => {
                 covered_ext_moderation = true
             }
+            "extension_advertised_agent_workspace_requires_explicit_surface" => {
+                covered_ext_agent_workspace = true
+            }
             "interop_bridge_mimi_advertised_when_supported" => covered_bridge_mimi = true,
             "interop_bridge_applet_advertised_when_third_party_host_supported" => {
                 covered_bridge_applet = true
@@ -1989,11 +1993,12 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         && covered_ext_blob
         && covered_ext_realtime
         && covered_ext_moderation
+        && covered_ext_agent_workspace
         && covered_bridge_mimi
         && covered_bridge_applet)
     {
         bail!(
-            "discovery fixture must cover (a) core-only, (b) blob_storage / realtime_media / moderation_reports post-C16 split, and (c) mimi_interop + applet bridge advertisement"
+            "discovery fixture must cover (a) core-only, (b) blob_storage / realtime_media / moderation_reports / agent_workspace extension advertisement, and (c) mimi_interop + applet bridge advertisement"
         );
     }
 
@@ -3194,6 +3199,84 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
             "operation_registry_coverage fixture must cover orphaned op, tier mismatch, target dangling negatives"
         );
     }
+
+    Ok(())
+}
+
+/// Facet renderer/query structural guard. The historical fixture was folded
+/// into the canonical `view.schema.json`; keep this suite as an executable
+/// regression so stale Morph/View query shapes do not silently reappear.
+pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
+    let schema = super::load_artifact_json("schemas/view.schema.json")?;
+    let required = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("view schema missing required[]"))?;
+    for field in [
+        "id",
+        "schema",
+        "space_id",
+        "kind",
+        "query",
+        "created_by",
+        "created_at",
+    ] {
+        if !required.iter().any(|value| value.as_str() == Some(field)) {
+            bail!("view schema required[] missing {field}");
+        }
+    }
+
+    let renderer_enum = schema
+        .pointer("/$defs/view_renderer/enum")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("view schema missing $defs.view_renderer.enum"))?;
+    for renderer in [
+        "board", "list", "table", "timeline", "graph", "document", "custom",
+    ] {
+        if !renderer_enum
+            .iter()
+            .any(|value| value.as_str() == Some(renderer))
+        {
+            bail!("view renderer enum missing {renderer}");
+        }
+    }
+
+    let query_properties = schema
+        .pointer("/$defs/query/properties")
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("view schema missing $defs.query.properties"))?;
+    for field in [
+        "space_ids",
+        "object_types",
+        "morph_types",
+        "facets",
+        "filters",
+        "order_by",
+    ] {
+        if !query_properties.contains_key(field) {
+            bail!("view query properties missing {field}");
+        }
+    }
+    if schema
+        .pointer("/$defs/query/additionalProperties")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        bail!("view query must preserve forward-compatible additional properties");
+    }
+
+    emit_vector(
+        "facet_renderer_query.schema",
+        &json!({
+            "schema": "cx.schema.view.v1",
+            "required_query": "query",
+            "facet_field": "facets"
+        }),
+        json!({
+            "renderer_count": renderer_enum.len(),
+            "query_property_count": query_properties.len()
+        }),
+    );
 
     Ok(())
 }

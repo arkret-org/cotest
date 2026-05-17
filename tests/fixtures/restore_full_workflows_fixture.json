@@ -1,0 +1,71 @@
+{
+  "profile": "cx.profile.restore_full_workflows_vectors.v1",
+  "version": "2026-05-17",
+  "vectors": [
+    {
+      "name": "two_of_two_multi_admin_approval_unblocks_restore",
+      "ticket_id": "cx:req:01964200-0000-7000-8000-000000000001",
+      "required_approvals": 2,
+      "approval_sequence": [
+        { "admin_did": "did:web:admin-a.example" },
+        { "admin_did": "did:web:admin-b.example" }
+      ],
+      "expected": {
+        "outcome": "accept",
+        "stage_after_first_approval": "approving",
+        "stage_after_second_approval": "approved"
+      }
+    },
+    {
+      "name": "two_of_two_duplicate_admin_approval_does_not_count_twice",
+      "ticket_id": "cx:req:01964200-0000-7000-8000-000000000002",
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "duplicate_approver"
+      }
+    },
+    {
+      "name": "executor_restart_survival_resumes_from_persisted_stage",
+      "ticket_id": "cx:req:01964200-0000-7000-8000-000000000003",
+      "crash_simulated": true,
+      "executor_progress_before_crash": {
+        "chunks_done": 2
+      },
+      "expected": {
+        "outcome": "accept",
+        "resumes_from_persisted_progress": true,
+        "executor_progress_after_restart": {
+          "chunks_done": 2
+        }
+      }
+    },
+    {
+      "name": "artifact_upload_verify_then_download_round_trip",
+      "ticket_id": "cx:req:01964200-0000-7000-8000-000000000004",
+      "lifecycle_events": [
+        { "event": "upload_complete" },
+        { "event": "integrity_verified" },
+        { "event": "download_initiated" },
+        { "event": "download_complete" }
+      ],
+      "expected": {
+        "outcome": "accept",
+        "final_artifact_state": "downloaded",
+        "integrity_check_passed": true
+      }
+    },
+    {
+      "name": "artifact_integrity_mismatch_blocks_download",
+      "ticket_id": "cx:req:01964200-0000-7000-8000-000000000005",
+      "artifact": {
+        "expected_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "actual_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "artifact_integrity_mismatch",
+        "ticket_state_after": "failed"
+      }
+    }
+  ]
+}

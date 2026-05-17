@@ -32,14 +32,17 @@ test.describe("kanban end-to-end", () => {
 
     try {
       // Create a space so the kanban view has a selected_space context.
-      await alicePage.createSpace({
+      const spaceId = await alicePage.createSpace({
         title: `Kanban Space ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-      // Kanban is a single global board view in yougen today; it scopes
-      // writes to selected_space. Navigate after the space is created.
-      await alicePage.page.goto(`/kanban`, { waitUntil: "domcontentloaded" });
+      // Kanban scopes writes to selected_space; navigate with the explicit
+      // space_id so the route resolves to the freshly-created space (plain
+      // `/kanban` falls back to the first preview, which on a fresh session
+      // is the hardcoded demo space the test user is NOT a member of, and
+      // every cx.flow.* event would 403 with capability_denied).
+      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await stepShot(alicePage.page, testInfo, "A-kanban-open");
 

@@ -8,6 +8,7 @@ use super::{
     required_field, required_str, sha256_prefixed, validate_profile, value_array, value_field_str,
     value_field_u64,
 };
+use crate::transcripts::record_vector_event;
 
 pub fn run_event_envelope_fixture_suite() -> Result<()> {
     let event_kind_registry = load_artifact_json("registry/event-kind-registry.json")?;
@@ -32,6 +33,63 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
         validate_event_envelope_negative_case(case, &event_kinds)?;
     }
     validate_synthetic_event_envelope_negatives(&event_kinds)?;
+
+    Ok(())
+}
+
+pub fn run_deprecated_event_alias_suite() -> Result<()> {
+    let event_kind_registry = load_artifact_json("registry/event-kind-registry.json")?;
+    let event_kinds = event_kind_metadata(&event_kind_registry)?;
+    let mut deprecated_aliases = Vec::new();
+
+    for (kind, info) in &event_kinds {
+        if info.status == "deprecated" || info.wire_scope == "deprecated_alias" {
+            let replacement = info
+                .replaced_by
+                .as_deref()
+                .ok_or_else(|| anyhow!("deprecated alias {kind} missing replaced_by"))?;
+            if !event_kinds.contains_key(replacement) {
+                bail!("deprecated alias {kind} points to unknown replacement {replacement}");
+            }
+            let mut event = sample_envelope_event(
+                kind,
+                1,
+                "01970e589d21-0001-a13f9c2e",
+                "2026-05-02T00:00:00Z",
+                json!({
+                    "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
+                    "body": "legacy alias"
+                }),
+            );
+            event["refs"] = json!([]);
+            let decision = validate_event_envelope(
+                &event,
+                &event_kinds,
+                &EventEnvelopeContext::default_for_durable_history(),
+            )?;
+            assert_event_decision(
+                &decision,
+                "reject",
+                Some("schema_violation"),
+                "deprecated_alias_producer_rejected",
+            )?;
+            deprecated_aliases.push(kind.clone());
+        }
+    }
+
+    record_vector_event(
+        "event_envelope.deprecated_alias",
+        &json!({
+            "deprecated_aliases": deprecated_aliases,
+        }),
+        &json!({
+            "producer_behavior": "reject",
+            "replacement_required": true,
+        }),
+        &json!({
+            "status": "ok",
+        }),
+    );
 
     Ok(())
 }

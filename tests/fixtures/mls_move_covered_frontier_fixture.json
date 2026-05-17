@@ -1,0 +1,84 @@
+{
+  "profile": "cx.profile.mls_covered_frontier_vectors.v1",
+  "version": "2026-05-17",
+  "vectors": [
+    {
+      "name": "covered_frontier_accumulates_governance_refs_idempotent",
+      "cell_id": "cx:cell:cx.component.mls.covered_frontier.v1:demo-space",
+      "anchored_ops": [
+        { "op": "or_set_add", "tag": "anchor-a" },
+        { "op": "or_set_add", "tag": "anchor-a" },
+        { "op": "or_set_add", "tag": "anchor-b" }
+      ],
+      "expected": {
+        "outcome": "accept",
+        "active_tags": ["anchor-a", "anchor-b"]
+      }
+    },
+    {
+      "name": "rotation_removes_old_ref_keeps_others",
+      "anchored_ops": [
+        { "op": "or_set_add", "tag": "epoch-1" },
+        { "op": "or_set_add", "tag": "epoch-2" },
+        { "op": "or_set_remove", "tag": "epoch-1" }
+      ],
+      "expected": {
+        "outcome": "accept",
+        "active_tags": ["epoch-2"]
+      }
+    },
+    {
+      "name": "governance_move_not_blocked_by_covered_frontier",
+      "governance_move": {
+        "preconditions": []
+      },
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "name": "mls_commit_attests_three_cells_in_one_move",
+      "mls_commit_move": {
+        "covered_frontier_attests_to": "epoch-2",
+        "effects": [
+          { "cell": "cx:cell:cx.component.mls.covered_frontier.v1:demo-space" },
+          { "cell": "cx:cell:cx.component.mls.epoch.v1:demo-space" },
+          { "cell": "cx:cell:cx.component.mls.group_state.v1:demo-space" }
+        ]
+      },
+      "expected": {
+        "outcome": "accept"
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "e2ee_message_missing_covered_frontier_precondition_rejected",
+      "e2ee_move": {
+        "preconditions": []
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "fail_precondition",
+        "missing_precondition": "covered_frontier"
+      }
+    },
+    {
+      "name": "e2ee_message_with_stale_covered_frontier_ref_rejected",
+      "active_tags_at_send_time": ["epoch-2"],
+      "e2ee_move": {
+        "preconditions": [
+          {
+            "kind": "covered_frontier",
+            "attests_to": "epoch-1"
+          }
+        ]
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "fail_precondition",
+        "missing_precondition": "covered_frontier"
+      }
+    }
+  ]
+}

@@ -9,7 +9,7 @@
     "registry": "registry/event-kind-registry.json"
   },
   "expected_cell_family_lattice_bindings": {
-    "comment": "Canonical lattice per cell-family. Mirrors the LIVE event-kind-registry.json exactly (40 spec families, 2026-05-09). soland/src/reducer/lattice_kinds.rs::default_lattice_registry adds 3 SDK-side families (cx.component.mls.covered_frontier.v1, cx.component.mls.epoch.v1, cx.component.anchorer.v1) ahead of the spec; once those land in the spec registry they MUST be added here. Round 22 expectation set; future spec drift surfaces here as a hard failure.",
+    "comment": "Canonical lattice per cell-family. Mirrors the LIVE event-kind-registry.json exactly (46 spec families, 2026-05-17). soland/src/reducer/lattice_kinds.rs::default_lattice_registry adds 3 SDK-side families (cx.component.mls.covered_frontier.v1, cx.component.mls.epoch.v1, cx.component.anchorer.v1) ahead of the spec; once those land in the spec registry they MUST be added here. Future spec drift surfaces here as a hard failure.",
     "or_set_families": [
       "cx.component.consent.grant.v1",
       "cx.component.capability.grant.v1",
@@ -41,17 +41,23 @@
       "cx.component.space.schema.v1",
       "cx.component.space.inheritance_policy.v1",
       "cx.component.flow.position.v1",
-      "cx.component.place.parent.v1"
+      "cx.component.place.parent.v1",
+      "cx.component.agent_workspace.reservation.v1",
+      "cx.component.cross_signing.publish.v1"
     ],
     "fsm_families": [
-      "cx.component.member.state.v1"
+      "cx.component.member.state.v1",
+      "cx.component.agent_task.execution_state.v1",
+      "cx.component.agent_task.transparency.v1",
+      "cx.component.agent_task.source_authority.v1"
     ],
     "ordered_log_families": [
       "cx.component.space.create.v1",
       "cx.component.space.child.v1",
       "cx.component.space.parent.v1",
       "cx.component.account.status.v1",
-      "cx.component.policy.rule.v1"
+      "cx.component.policy.rule.v1",
+      "cx.component.cross_signing.reset.v1"
     ],
     "mv_register_families": [
       "cx.component.profile.create.v1",

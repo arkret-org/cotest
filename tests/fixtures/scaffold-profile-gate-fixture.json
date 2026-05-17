@@ -1,0 +1,103 @@
+{
+  "suite": "scaffold_profile_gate",
+  "profile": "cx.profile.privacy_security_vectors.v1",
+  "cases": [
+    {
+      "name": "coauth_admin_full_claim_with_501_is_rejected",
+      "expect": "reject",
+      "describe": {
+        "service": "coauth",
+        "supported_profiles": ["cx.profile.principal_server.v1"],
+        "admin_surfaces": [
+          {
+            "path": "/api/admin/v1/devices",
+            "status": 501,
+            "stability": "scaffold"
+          }
+        ]
+      }
+    },
+    {
+      "name": "yougen_full_e2ee_claim_with_placeholder_crypto_is_rejected",
+      "expect": "reject",
+      "describe": {
+        "service": "yougen",
+        "supported_profiles": [
+          "cx.profile.full_client.v1",
+          "cx.profile.e2ee_client.v1"
+        ],
+        "client_status": {
+          "production_fallbacks": [
+            "legacy placeholder ciphertext",
+            "demo ed25519 signing"
+          ]
+        }
+      }
+    },
+    {
+      "name": "soland_principal_claim_with_outbound_push_scaffold_is_rejected",
+      "expect": "reject",
+      "describe": {
+        "service": "soland",
+        "supported_profiles": ["cx.profile.principal_server.v1"],
+        "limits": {
+          "profile_status": {
+            "limitations": [
+              {
+                "area": "federation.outbound_push",
+                "stability": "scaffold",
+                "reason": "durable outbound fanout is not implemented"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "soland_limited_profile_in_unsupported_with_limitation_is_allowed",
+      "expect": "pass",
+      "describe": {
+        "service": "soland",
+        "supported_profiles": ["cx.profile.mimi_interop.v1"],
+        "unsupported_profiles": [
+          {
+            "profile": "cx.profile.principal_server.v1",
+            "status": "unsupported",
+            "reason": "durable outbound fanout is not claimed"
+          }
+        ],
+        "limits": {
+          "profile_status": {
+            "limitations": [
+              {
+                "area": "federation.outbound_push",
+                "reason": "durable outbound fanout is not claimed"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "starid_production_health_cannot_be_ok_with_ephemeral_receipt_key",
+      "expect": "reject",
+      "describe": {
+        "service": "starid",
+        "ok": true,
+        "development_mode": false,
+        "receipt_signing_key_stable": false
+      }
+    },
+    {
+      "name": "starid_production_unhealthy_with_ephemeral_receipt_key_is_allowed",
+      "expect": "pass",
+      "describe": {
+        "service": "starid",
+        "ok": false,
+        "development_mode": false,
+        "receipt_signing_key_stable": false,
+        "unhealthy_reason": "production_receipt_signing_key_not_configured"
+      }
+    }
+  ]
+}

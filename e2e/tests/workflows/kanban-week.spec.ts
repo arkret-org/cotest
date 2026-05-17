@@ -40,13 +40,16 @@ test.describe("workflow: kanban week-in-review", () => {
     const planTask = `Plan tomorrow's standup agenda ${stamp}`;
 
     try {
-      // Phase A — kanban opens against a fresh space.
-      await patPage.createSpace({
+      // Phase A — kanban opens against a fresh space. Navigate with the
+      // explicit space_id so writes route to this space; plain `/kanban`
+      // falls back to the hardcoded demo space the test user is not a
+      // member of, and every cx.flow.* event would 403.
+      const spaceId = await patPage.createSpace({
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-      await patPage.page.goto(`/kanban`, { waitUntil: "domcontentloaded" });
+      await patPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
       await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
 
       for (const columnName of [todayList, doingList, doneList]) {

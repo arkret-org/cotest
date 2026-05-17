@@ -1,0 +1,71 @@
+{
+  "profile": "cx.profile.recovery_bridge_full_chain_vectors.v1",
+  "version": "2026-05-17",
+  "vectors": [
+    {
+      "name": "principal_cache_lookup_resolves_principal_space",
+      "step": "principal_cache_lookup",
+      "account_did": "did:web:alice.example",
+      "expected": {
+        "outcome": "accept",
+        "principal_space_id": "cx:space:01964200-0000-7000-8000-000000000001"
+      }
+    },
+    {
+      "name": "recovery_action_proof_has_required_approvals",
+      "step": "recovery_action_proof",
+      "action_kind": "restore_key_backup",
+      "approvals_required": 2,
+      "approvals_received": 2,
+      "expected": {
+        "outcome": "accept"
+      }
+    },
+    {
+      "name": "recovery_ticket_mint_issues_consume_once_ticket",
+      "step": "recovery_ticket_mint",
+      "ticket_state": "issued",
+      "expected": {
+        "outcome": "accept",
+        "ttl_seconds": 3600,
+        "consume_once": true
+      }
+    },
+    {
+      "name": "restore_execute_consumes_ticket_to_executed",
+      "step": "restore_execute",
+      "ticket_state_transitions": ["issued", "executing", "executed"],
+      "expected": {
+        "outcome": "accept",
+        "ticket_state_after": "executed"
+      }
+    },
+    {
+      "name": "final_state_observe_emits_audit_log",
+      "step": "final_state_observe",
+      "space_id": "cx:space:01964200-0000-7000-8000-000000000001",
+      "expected": {
+        "outcome": "accept",
+        "audit_log_emitted": true
+      }
+    }
+  ],
+  "negative_vectors": [
+    {
+      "name": "expired_recovery_proof_rejected",
+      "proof_exp_in_past": true,
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "recovery_proof_expired"
+      }
+    },
+    {
+      "name": "executed_ticket_double_consume_is_idempotent_replay",
+      "ticket_state_before": "executed",
+      "expected": {
+        "outcome": "idempotent_replay",
+        "reason_code": "ticket_already_consumed"
+      }
+    }
+  ]
+}
