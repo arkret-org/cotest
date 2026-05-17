@@ -446,3 +446,36 @@ conformance_test!(
     "multi_admin_distinct_approver_gate_round_27",
     cotest::conformance::run_multi_admin_distinct_approver_gate_check,
 );
+
+// ── cx.profile.agent_workspace.v1 ──────────────────────────────────────
+// Spec: contrix-spec/spec/v1/zh/extensions/agent-workspace-profile.md
+// Fixtures: contrix-spec/spec/v1/artifacts/conformance/agent-workspace/
+// Tracked in contrix-spec/_todos.md AW-1..AW-4.
+
+conformance_test!(
+    /// agent_workspace: event-kinds / capability-actions / operations /
+    /// id-kinds / schema-registry all carry the new agent_workspace surface
+    /// with profile_gate=cx.profile.agent_workspace.v1.
+    agent_workspace_registry_surface,
+    "agent_workspace_registry_surface",
+    cotest::conformance::run_agent_workspace_registry_suite,
+);
+
+conformance_test!(
+    /// agent_workspace: 4 new schema files parse + appear in schema-registry
+    /// + capability-grant carries the attached_authority oneOf extension
+    /// (spec PR 1.2) with only anchored_event_ref + state_witness in v1.
+    agent_workspace_schema_surface,
+    "agent_workspace_schema_surface",
+    cotest::conformance::run_agent_workspace_schema_suite,
+);
+
+conformance_test!(
+    /// agent_workspace: 9 land FSM / reservation / recovery fixtures parse
+    /// + carry the documented invariants (head_eq:"__unset__" for singleton
+    /// path, head_in for §8 recovery, bottom_diagnostic for ⊥ collapse, no
+    /// unreachable Rev 7 transitions returning `accepted`).
+    agent_workspace_fsm_and_reservation_fixtures,
+    "agent_workspace_fsm_and_reservation_fixtures",
+    cotest::conformance::run_agent_workspace_fsm_fixture_suite,
+);

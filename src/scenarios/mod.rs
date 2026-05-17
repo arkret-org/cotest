@@ -1,4 +1,5 @@
 pub mod _helpers;
+pub mod agent_workspace_e2e;
 pub mod api_contracts_auth;
 pub mod authz_policy_presence;
 pub mod bridge_contracts;
