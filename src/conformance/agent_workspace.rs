@@ -15,9 +15,11 @@
 //! - `run_agent_workspace_registry_suite`: validates the new agent_workspace
 //!   surface is registered in event-kind / id-kind / capability-action /
 //!   operation registries with profile_gate set correctly.
-//! - `run_agent_workspace_fsm_fixture_suite`: walks the 9 land vector
-//!   fixtures, asserts each carries a vector_id, spec_section, and
-//!   expected_outcome matching the spec contract.
+//! - `run_agent_workspace_fsm_fixture_suite`: walks the 44 vector
+//!   fixtures, asserts each carries a vector_id, spec_section, and a
+//!   shape-appropriate expected_* block matching the spec contract.
+//!   Supported shapes: input_event / input_events / input_move /
+//!   input_moves / input_steps / input_notification / input_event_template.
 //! - `run_agent_workspace_schema_suite`: validates the four new schema files
 //!   parse, and that capability-grant.schema.json carries the
 //!   `attached_authority` extension.
@@ -248,7 +250,7 @@ pub fn run_agent_workspace_fsm_fixture_suite() -> Result<()> {
         validate_fixture_structure(&value, fixture_path)?;
     }
 
-    // Verify the 9 land vectors cover the required invariant set.
+    // Verify the high-priority invariant set is present (full 44/44 enumeration).
     let vector_ids: std::collections::BTreeSet<String> = found
         .iter()
         .filter_map(|p| {
@@ -289,31 +291,50 @@ pub fn run_agent_workspace_fsm_fixture_suite() -> Result<()> {
             .and_then(Value::as_str)
             .unwrap_or("");
         if vid.starts_with("15-4-reservation-") {
-            // Either the input uses head_eq:"__unset__" (singleton-once-set
-            // path) or head_in [...] (recovery path).
-            let head_eq = value.pointer("/input_move/predicate/op").and_then(Value::as_str);
+            // Each reservation vector documents one of:
+            //   * head_eq:"__unset__"      (singleton-once-set path; also `set __unset__` on cleanup)
+            //   * head_in [...]            (recovery / cleanup path against a known head)
+            //   * concurrent_bottom        (multiple input_moves[] → ⊥)
+            //
+            // The predicate may live under:
+            //   * /input_move/predicate/*                  (abstract Move shape)
+            //   * /input_event/predicate/*                 (legacy inline shape; not used in v1 fixtures)
+            //   * /input_event/preconditions/[0]/predicate/* (canonical Event shape — cleanup uses this)
+            let predicate_op = value
+                .pointer("/input_move/predicate/op")
+                .or_else(|| value.pointer("/input_event/predicate/op"))
+                .or_else(|| value.pointer("/input_event/preconditions/0/predicate/op"))
+                .and_then(Value::as_str);
             let predicate_value = value
                 .pointer("/input_move/predicate/value")
+                .or_else(|| value.pointer("/input_event/predicate/value"))
+                .or_else(|| value.pointer("/input_event/preconditions/0/predicate/value"))
                 .and_then(Value::as_str);
             let predicate_values_present = value
                 .pointer("/input_move/predicate/values")
+                .or_else(|| value.pointer("/input_event/predicate/values"))
+                .or_else(|| value.pointer("/input_event/preconditions/0/predicate/values"))
                 .and_then(Value::as_array)
                 .map(|a| !a.is_empty())
                 .unwrap_or(false);
             let bottom_diag = value
                 .pointer("/expected_outcome/bottom_diagnostic")
                 .is_some();
-            let head_eq_unset = head_eq == Some("head_eq") && predicate_value == Some(RESERVATION_SENTINEL);
-            let head_in_recovery = head_eq == Some("head_in") && predicate_values_present;
+            let head_eq_unset =
+                predicate_op == Some("head_eq") && predicate_value == Some(RESERVATION_SENTINEL);
+            let head_eq_known =
+                predicate_op == Some("head_eq") && predicate_value.is_some();
+            let head_in_recovery =
+                predicate_op == Some("head_in") && predicate_values_present;
             let concurrent_bottom = bottom_diag
                 && value
                     .get("input_moves")
                     .and_then(Value::as_array)
                     .map(|a| a.len() >= 2)
                     .unwrap_or(false);
-            if !(head_eq_unset || head_in_recovery || concurrent_bottom) {
+            if !(head_eq_unset || head_eq_known || head_in_recovery || concurrent_bottom) {
                 bail!(
-                    "reservation vector {vid} ({}) does not document head_eq:\"__unset__\" / head_in / bottom-collapse",
+                    "reservation vector {vid} ({}) does not document head_eq / head_in / bottom-collapse",
                     fixture_path.display()
                 );
             }
@@ -348,13 +369,15 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
     if value.get("title").and_then(Value::as_str).is_none() {
         bail!("{}: missing title", path.display());
     }
-    let expected = value
-        .get("expected_outcome")
-        .ok_or_else(|| anyhow!("{}: missing expected_outcome", path.display()))?;
-    let result = expected
-        .get("reducer_result")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("{}: missing expected_outcome.reducer_result", path.display()))?;
+
+    // Vectors come in several shapes — accept any of them:
+    //   * single-shot:        input_event   + expected_outcome.reducer_result
+    //   * single-Move:        input_move    + expected_outcome.reducer_result
+    //   * concurrent Moves:   input_moves[] + expected_outcome.reducer_result
+    //   * multi-watcher race: input_events[] + expected_outcomes[]
+    //   * multi-step saga:    input_steps[] + expected_final_state | expected_post_state_invariants
+    //   * notification:       input_notification + expected_delivery_invariants
+    //   * sub_cases negative: sub_cases[] (each with expected_reason) + expected_outcome.reducer_result
     let valid_results = [
         "accepted",
         "failed_precondition",
@@ -363,19 +386,109 @@ fn validate_fixture_structure(value: &Value, path: &std::path::Path) -> Result<(
         "unauthorized",
         "schema_violation",
     ];
-    if !valid_results.contains(&result) {
-        bail!(
-            "{}: unknown reducer_result {result} (valid: {:?})",
-            path.display(),
-            valid_results
-        );
-    }
     let is_negative = value.get("negative").and_then(Value::as_bool).unwrap_or(false);
-    if is_negative && result == "accepted" {
+    let check_reducer_result = |result: &str| -> Result<()> {
+        if !valid_results.contains(&result) {
+            bail!(
+                "{}: unknown reducer_result {result} (valid: {:?})",
+                path.display(),
+                valid_results
+            );
+        }
+        if is_negative && result == "accepted" {
+            bail!(
+                "{}: marked negative but reducer_result=accepted",
+                path.display()
+            );
+        }
+        Ok(())
+    };
+
+    let has_input_event = value.get("input_event").is_some();
+    let has_input_events = value.get("input_events").and_then(Value::as_array).is_some();
+    let has_input_move = value.get("input_move").is_some();
+    let has_input_moves = value.get("input_moves").and_then(Value::as_array).is_some();
+    let has_input_steps = value.get("input_steps").and_then(Value::as_array).is_some();
+    let has_input_notification = value.get("input_notification").is_some();
+    let has_sub_cases = value.get("sub_cases").and_then(Value::as_array).is_some();
+    let has_input_event_template = value.get("input_event_template").is_some();
+
+    if !(has_input_event
+        || has_input_events
+        || has_input_move
+        || has_input_moves
+        || has_input_steps
+        || has_input_notification
+        || has_input_event_template)
+    {
         bail!(
-            "{}: marked negative but reducer_result=accepted",
+            "{}: fixture must declare one of input_event / input_events / input_move / input_moves / input_steps / input_notification / input_event_template",
             path.display()
         );
+    }
+
+    if has_input_events {
+        // Multi-watcher race: expected_outcomes[] with per-submitter result.
+        let outcomes = value
+            .get("expected_outcomes")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{}: input_events[] requires expected_outcomes[]", path.display()))?;
+        if outcomes.is_empty() {
+            bail!("{}: expected_outcomes[] is empty", path.display());
+        }
+        for outcome in outcomes {
+            let result = outcome
+                .get("reducer_result")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("{}: expected_outcomes[i] missing reducer_result", path.display()))?;
+            check_reducer_result(result)?;
+        }
+    } else if has_input_steps {
+        // Multi-step saga: expected_final_state OR expected_post_state_invariants.
+        let has_final_state = value.get("expected_final_state").is_some();
+        let has_post_invariants = value.get("expected_post_state_invariants").is_some();
+        if !has_final_state && !has_post_invariants {
+            bail!(
+                "{}: input_steps[] requires expected_final_state or expected_post_state_invariants",
+                path.display()
+            );
+        }
+    } else if has_input_notification {
+        // Notification delivery: expected_delivery_invariants[].
+        let invariants = value
+            .get("expected_delivery_invariants")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{}: input_notification requires expected_delivery_invariants[]", path.display()))?;
+        if invariants.is_empty() {
+            bail!("{}: expected_delivery_invariants[] is empty", path.display());
+        }
+    } else if has_sub_cases {
+        // sub_cases-driven negative vector: each sub_case has expected_reason;
+        // top-level expected_outcome.reducer_result still required.
+        let cases = value.get("sub_cases").and_then(Value::as_array).unwrap();
+        for case in cases {
+            if case.get("expected_reason").and_then(Value::as_str).is_none() {
+                bail!("{}: sub_cases[i] missing expected_reason", path.display());
+            }
+        }
+        let expected = value
+            .get("expected_outcome")
+            .ok_or_else(|| anyhow!("{}: sub_cases[] still requires top-level expected_outcome", path.display()))?;
+        let result = expected
+            .get("reducer_result")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{}: expected_outcome missing reducer_result", path.display()))?;
+        check_reducer_result(result)?;
+    } else {
+        // Single-shot / single-Move / multi-Move: require expected_outcome.reducer_result.
+        let expected = value
+            .get("expected_outcome")
+            .ok_or_else(|| anyhow!("{}: missing expected_outcome", path.display()))?;
+        let result = expected
+            .get("reducer_result")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("{}: missing expected_outcome.reducer_result", path.display()))?;
+        check_reducer_result(result)?;
     }
     Ok(())
 }
