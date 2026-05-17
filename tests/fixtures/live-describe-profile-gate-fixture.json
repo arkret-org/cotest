@@ -1,0 +1,130 @@
+{
+  "suite": "live_describe_profile_gate",
+  "profile": "cx.profile.live_describe_profile_gate_vectors.v1",
+  "cases": [
+    {
+      "name": "soland_principal_claim_with_scaffold_limitation_is_rejected",
+      "expect": "reject",
+      "source": {
+        "mode": "fixture",
+        "path": "/api/v1/server/describe"
+      },
+      "describe": {
+        "service": "soland",
+        "service_type": "principal_server",
+        "supported_profiles": [
+          "cx.profile.principal_server.v1"
+        ],
+        "supported_operations": [
+          "cx.server.describe"
+        ],
+        "limits": {
+          "profile_status": {
+            "limitations": [
+              {
+                "feature": "federation.outbound_push",
+                "status": "limitation",
+                "detail": "durable fanout is still a scaffold path"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "floria_push_gateway_describe_without_full_profile_claim_passes",
+      "expect": "pass",
+      "source": {
+        "mode": "fixture",
+        "path": "/api/v1/server/describe"
+      },
+      "describe": {
+        "service": "floria",
+        "operation_id": "cx.push.notify",
+        "supported_profiles": [
+          "cx.profile.push_gateway.v1"
+        ],
+        "supported_providers": [
+          "webpush",
+          "fcm"
+        ],
+        "limits": {
+          "max_request_size_bytes": 65536,
+          "rate_limit_scopes": [
+            "origin_service",
+            "push_key_hash"
+          ]
+        },
+        "auth_modes": [
+          "http-message-signature",
+          "service-did"
+        ]
+      }
+    },
+    {
+      "name": "teabay_directory_describe_with_non_full_profile_limitations_passes",
+      "expect": "pass",
+      "source": {
+        "mode": "fixture",
+        "path": "/api/v1/directory/describe"
+      },
+      "describe": {
+        "service": "teabay",
+        "service_did": "did:web:teabay.example",
+        "discovery_profiles": [
+          "cx.profile.directory_service.v1"
+        ],
+        "ingest_modes": [
+          "announce"
+        ],
+        "limitations": [
+          {
+            "feature": "webhook_fanout_delivery",
+            "status": "best_effort",
+            "detail": "delivery retry durability is not claimed by this sample"
+          }
+        ]
+      }
+    },
+    {
+      "name": "starid_production_health_cannot_be_ok_with_ephemeral_receipt_key",
+      "expect": "reject",
+      "source": {
+        "mode": "fixture",
+        "path": "/describe"
+      },
+      "describe": {
+        "service": "starid",
+        "ok": true,
+        "development_mode": false,
+        "receipt_signing_key_stable": false,
+        "profiles": [
+          "cx.identity.webvh.v1",
+          "cx.identity.registry.v1"
+        ]
+      }
+    },
+    {
+      "name": "coauth_principal_claim_with_501_admin_surface_is_rejected",
+      "expect": "reject",
+      "source": {
+        "mode": "fixture",
+        "path": "/api/v1/server/describe"
+      },
+      "describe": {
+        "service": "coauth",
+        "service_type": "auth_server",
+        "supported_profiles": [
+          "cx.profile.principal_server.v1"
+        ],
+        "admin_surfaces": [
+          {
+            "name": "device_revoke",
+            "path": "/api/admin/v1/devices/{id}/revoke",
+            "status": 501
+          }
+        ]
+      }
+    }
+  ]
+}

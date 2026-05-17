@@ -50,7 +50,8 @@
         "multi_service_bridge_contract_matrix_scaffold",
         "teabay_directory_service_profile_is_discoverable",
         "starid_optional_resolver_profile_is_discoverable",
-        "session_grant_exchange_uses_configured_coauth_introspection"
+        "session_grant_exchange_uses_configured_coauth_introspection",
+        "live_describe_profile_claim_gate_from_env"
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": [
@@ -77,6 +78,9 @@
         "discovery_profile_fixture_suite_matches_reference_semantics",
         "sync_fixture_suite_matches_reference_semantics",
         "privacy_security_fixture_suite_matches_reference_semantics",
+        "yougen_client_profile_manifest_suite_matches_reference_semantics",
+        "coauth_account_lifecycle_fixture_suite_matches_reference_semantics",
+        "live_describe_profile_gate_suite_matches_reference_semantics",
         "consent_fixture_suite_matches_reference_semantics",
         "composite_state_subject_fixture_suite_matches_reference_semantics",
         "mimi_components_fixture_suite_matches_reference_semantics",

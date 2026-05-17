@@ -83,19 +83,85 @@ test.describe("handle management", () => {
     expect(code).toBe("handle_already_claimed");
   });
 
-  test.fixme(
-    "handle transfer: alice transfers handle to bob (alice signs cx.handle.transfer); bob's profile.handle becomes the transferred handle; alice's clears or rolls back",
-    async () => {
-      // server gap: cx.handle.transfer dual-sign flow + alice rollback path.
-    },
-  );
+  test("handle transfer: alice transfers handle to bob; bob's profile.handle becomes the transferred handle; alice's clears to a synthetic placeholder", async ({
+    request,
+  }) => {
+    // spec: identity/identity-handles.md — handle transfer is a dual
+    // operation: source clears, target receives. Verified via
+    // `POST /api/v1/account/handle/transfer`.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s29-transfer-alice-${stamp}`);
+    const bob = uniqueUser(`s29-transfer-bob-${stamp}`);
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const aliceToken = await issueDevSession(request, alice);
+    const bobToken = await issueDevSession(request, bob);
 
-  test.fixme(
-    "grace period: released handle cannot be claimed for N days; mallory's immediate claim is rejected, claim after grace succeeds",
-    async () => {
-      // server gap: handle release ledger + grace_period_ttl timer.
-    },
-  );
+    const transferred = alice.handle; // alice's handle string at registration time.
+    const transfer = await request.post(
+      `${solandBaseUrl()}/api/v1/account/handle/transfer`,
+      {
+        headers: { authorization: `Bearer ${aliceToken}` },
+        data: { target_did: bob.did },
+      },
+    );
+    expect(transfer.status()).toBe(200);
+    const transferBody = await transfer.json();
+    expect(transferBody.handle).toBe(transferred.toLowerCase());
+    expect(transferBody.to_did).toBe(bob.did);
+    expect(transferBody.from_did).toBe(alice.did);
+    // alice now carries a synthetic placeholder (not the transferred handle).
+    expect(transferBody.from_handle).not.toBe(transferred.toLowerCase());
+
+    // /account/me on each side reflects the new mapping.
+    const aliceMe = await (await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+      headers: { authorization: `Bearer ${aliceToken}` },
+    })).json();
+    expect(aliceMe.handle).not.toBe(transferred.toLowerCase());
+    const bobMe = await (await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+      headers: { authorization: `Bearer ${bobToken}` },
+    })).json();
+    expect(bobMe.handle).toBe(transferred.toLowerCase());
+  });
+
+  test("grace period: released handle cannot be claimed immediately; claim after the grace window succeeds", async ({
+    request,
+  }) => {
+    // spec: identity/identity-handles.md — released handles enter a
+    // cooldown so stale references resolve gracefully. Dev grace window
+    // is HANDLE_GRACE_PERIOD_SECONDS = 5s; test rides that timer.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s29-grace-alice-${stamp}`);
+    const mallory = uniqueUser(`s29-grace-mallory-${stamp}`);
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, mallory)]);
+    const aliceToken = await issueDevSession(request, alice);
+    const malloryToken = await issueDevSession(request, mallory);
+
+    const releasedHandle = alice.handle;
+    // alice renames → original handle is released into grace.
+    const rename = await request.post(`${solandBaseUrl()}/api/v1/account/handle`, {
+      headers: { authorization: `Bearer ${aliceToken}` },
+      data: { handle: `@alice-renamed-${stamp}` },
+    });
+    expect(rename.status()).toBe(200);
+
+    // mallory's immediate claim is rejected with handle_in_grace_period.
+    const immediate = await request.post(`${solandBaseUrl()}/api/v1/account/handle`, {
+      headers: { authorization: `Bearer ${malloryToken}` },
+      data: { handle: releasedHandle },
+    });
+    expect(immediate.status()).toBe(409);
+    const immediateBody = await immediate.json();
+    expect(immediateBody?.error?.errcode).toBe("handle_in_grace_period");
+
+    // After the grace window (5s) mallory's claim succeeds.
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+    const afterGrace = await request.post(`${solandBaseUrl()}/api/v1/account/handle`, {
+      headers: { authorization: `Bearer ${malloryToken}` },
+      data: { handle: releasedHandle },
+    });
+    expect(afterGrace.status()).toBe(200);
+    expect((await afterGrace.json()).handle).toBe(releasedHandle.toLowerCase());
+  });
 
   test("E29.1 invalid handle format (too short / disallowed chars) is rejected with handle_invalid_format", async ({
     request,
@@ -124,10 +190,23 @@ test.describe("handle management", () => {
     expect(badCharBody?.error?.errcode).toBe("handle_invalid_format");
   });
 
-  test.fixme(
-    "E29.2 transfer to non-existent DID is rejected with target_did_unknown",
-    async () => {
-      // server gap: paired with the transfer fixme above.
-    },
-  );
+  test("E29.2 transfer to non-existent DID is rejected with target_did_unknown", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s29-e292-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const transfer = await request.post(
+      `${solandBaseUrl()}/api/v1/account/handle/transfer`,
+      {
+        headers: { authorization: `Bearer ${aliceToken}` },
+        data: { target_did: `did:web:ghost-${stamp}.example` },
+      },
+    );
+    expect(transfer.status()).toBe(404);
+    const body = await transfer.json();
+    expect(body?.error?.errcode).toBe("target_did_unknown");
+  });
 });

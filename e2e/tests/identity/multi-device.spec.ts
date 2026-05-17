@@ -91,12 +91,25 @@ test.describe("multi-device pairing + revocation", () => {
     },
   );
 
-  test.fixme(
-    "E10.4 a device cannot revoke itself (must be revoked from a peer device)",
-    async () => {
-      // safety invariant — avoids self-lockout.
-    },
-  );
+  test("E10.4 a device cannot revoke itself (must be revoked from a peer device)", async ({
+    request,
+  }) => {
+    // spec: identity/device-lifecycle.md §7 — self-revoke is rejected
+    // up front so a principal cannot lock themselves out from their
+    // only authenticated device.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s10-self-revoke-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const selfRevoke = await request.post(
+      `${solandBaseUrl()}/api/v1/devices/${encodeURIComponent(alice.deviceId)}/revoke`,
+      { headers: { authorization: `Bearer ${aliceToken}` }, data: {} },
+    );
+    expect(selfRevoke.status()).toBe(400);
+    const body = await selfRevoke.json();
+    expect(body?.error?.errcode).toBe("cannot_self_revoke");
+  });
 
   test.fixme(
     "E10.E to-device message queued for Device 2 before revocation is dropped after revocation (spec §7 line 341 grace drop)",

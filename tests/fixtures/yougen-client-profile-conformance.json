@@ -1,0 +1,180 @@
+{
+  "suite": "yougen_client_profile_conformance",
+  "profile": "cx.profile.yougen_client_blackbox_manifest.v1",
+  "service": "yougen",
+  "target_profiles": [
+    "cx.profile.full_client.v1",
+    "cx.profile.e2ee_client.v1"
+  ],
+  "runnable_harness": {
+    "kind": "headless_contract",
+    "runner": "cotest.yougen.headless_contract.v1",
+    "certification": {
+      "status": "certified",
+      "format": "json",
+      "profiles": [
+        "cx.profile.full_client.v1",
+        "cx.profile.e2ee_client.v1"
+      ],
+      "evidence_ref": "target/conformance-transcripts/yougen_client_profile_manifest.jsonl"
+    },
+    "triggered_paths": [
+      {
+        "flow": "oidc_session_grant",
+        "executed": true,
+        "operations": [
+          "oidc_callback",
+          "session_grant_exchange"
+        ]
+      },
+      {
+        "flow": "secure_store_handoff",
+        "executed": true,
+        "operations": [
+          "secure_store_handoff"
+        ]
+      },
+      {
+        "flow": "device_verification",
+        "executed": true,
+        "operations": [
+          "device_verification_start",
+          "device_verification_complete"
+        ]
+      },
+      {
+        "flow": "e2ee_fail_closed",
+        "executed": true,
+        "operations": [
+          "encrypted_event_open",
+          "encrypted_reply_attempt"
+        ]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "oidc_callback_exchanges_coauth_session_grant",
+      "flow": "oidc_session_grant",
+      "profile": "cx.profile.full_client.v1",
+      "expect": "pass",
+      "environment": {
+        "production": true
+      },
+      "black_box_operations": [
+        "oidc_callback",
+        "session_grant_exchange"
+      ],
+      "request_trace": [
+        {
+          "method": "GET",
+          "path": "/oauth/callback",
+          "status": 302
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/auth/session-grant/exchange",
+          "status": 200
+        }
+      ],
+      "observed": {
+        "callback_status": 302,
+        "session_grant_token_type": "Bearer",
+        "dev_login_used": false,
+        "fallbacks": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "secure_store_handoff_keeps_session_material_out_of_dom_storage",
+      "flow": "secure_store_handoff",
+      "profile": "cx.profile.full_client.v1",
+      "expect": "pass",
+      "environment": {
+        "production": true
+      },
+      "black_box_operations": [
+        "secure_store_handoff"
+      ],
+      "observed": {
+        "host_secret_bridge_called": true,
+        "plaintext_session_in_local_storage": false,
+        "persistent_key_material_location": "host_secure_store",
+        "fallbacks": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "device_verification_promotes_cross_signed_sas_device_to_trusted",
+      "flow": "device_verification",
+      "profile": "cx.profile.e2ee_client.v1",
+      "expect": "pass",
+      "environment": {
+        "production": true
+      },
+      "black_box_operations": [
+        "device_verification_start",
+        "device_verification_complete"
+      ],
+      "observed": {
+        "verification_methods": [
+          "cross_signing",
+          "sas"
+        ],
+        "trust_state_before": "unverified",
+        "trust_state_after": "trusted",
+        "fallbacks": [
+          "none"
+        ]
+      }
+    },
+    {
+      "name": "e2ee_missing_room_key_blocks_plaintext_render_and_write",
+      "flow": "e2ee_fail_closed",
+      "profile": "cx.profile.e2ee_client.v1",
+      "expect": "fail",
+      "environment": {
+        "production": true
+      },
+      "black_box_operations": [
+        "encrypted_event_open",
+        "encrypted_reply_attempt"
+      ],
+      "observed": {
+        "error_code": "key_missing",
+        "ciphertext_preserved": true,
+        "fallbacks": [
+          "none"
+        ]
+      },
+      "expected": {
+        "failure_mode": "fail_closed",
+        "plaintext_fallback": false,
+        "write_blocked": true
+      }
+    },
+    {
+      "name": "native_secure_enclave_absence_is_explicit_unsupported_not_fallback",
+      "flow": "platform_secure_enclave",
+      "profile": "cx.profile.e2ee_client.v1",
+      "expect": "unsupported",
+      "environment": {
+        "production": true
+      },
+      "black_box_operations": [
+        "secure_store_handoff"
+      ],
+      "observed": {
+        "fallbacks": [
+          "none"
+        ]
+      },
+      "unsupported": {
+        "claim_status": "not_claimed",
+        "reason": "Web runner does not expose a native secure enclave; host secure-store bridge remains the supported path."
+      }
+    }
+  ]
+}

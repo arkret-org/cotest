@@ -157,6 +157,44 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// C42.4 — Yougen full/e2ee client black-box manifest. Covers OIDC
+    /// callback/session grant, host secure-store handoff, device
+    /// verification, and E2EE fail-closed behavior.
+    yougen_client_profile_manifest_suite_matches_reference_semantics,
+    "yougen_client_profile_manifest",
+    cotest::conformance::run_yougen_client_profile_manifest_suite,
+);
+
+conformance_test!(
+    /// C43.6 — Coauth deployment account lifecycle vectors. Covers local
+    /// OIDC provider/JWKS auth-code callback/session grant, DID binding, device revoke,
+    /// account status transitions, policy dry-run audit, and production
+    /// no-silent-fallback behavior.
+    coauth_account_lifecycle_fixture_suite_matches_reference_semantics,
+    "coauth_account_lifecycle_fixture",
+    cotest::conformance::run_coauth_account_lifecycle_fixture_suite,
+);
+
+conformance_test!(
+    /// C42.6 — live describe profile-claim gate fixtures for soland,
+    /// floria, teabay, starid, and coauth. Full profile claims with
+    /// limitation/scaffold/501 blockers hard-fail.
+    live_describe_profile_gate_suite_matches_reference_semantics,
+    "live_describe_profile_gate",
+    cotest::conformance::run_live_describe_profile_gate_suite,
+);
+
+conformance_test!(
+    /// C43.4 — principal-server full-profile certification gate. Soland must
+    /// remain explicitly not_certified while full claims require operations,
+    /// schemas, event kinds, durable signed federation, and minimum
+    /// admin/agent/applet/media surfaces.
+    principal_server_certification_gate_suite_matches_reference_semantics,
+    "principal_server_certification_gate",
+    cotest::conformance::run_principal_server_certification_gate_suite,
+);
+
+conformance_test!(
     consent_fixture_suite_matches_reference_semantics,
     "consent_fixture",
     cotest::conformance::run_consent_fixture_suite,

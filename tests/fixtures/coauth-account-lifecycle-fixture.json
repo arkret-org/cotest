@@ -1,0 +1,160 @@
+{
+  "suite": "coauth_account_lifecycle",
+  "profile": "cx.profile.coauth_account_lifecycle_vectors.v1",
+  "service": "coauth",
+  "cases": [
+    {
+      "name": "local_oidc_provider_callback_issues_session_grant",
+      "phase": "oidc_callback_session_grant",
+      "expect": "pass",
+      "idp": {
+        "kind": "local_oidc_provider",
+        "issuer": "http://127.0.0.1:0/mock-idp",
+        "subject": "alice@example.test",
+        "jwks": {
+          "keys": [
+            {
+              "kty": "OKP",
+              "crv": "Ed25519",
+              "kid": "coauth-local-oidc-1",
+              "x": "11qYAYdkLJfGeQJx4R8N5Zp8hvtwMhYiQgmS6q0E3zA"
+            }
+          ]
+        },
+        "authorization_code": {
+          "code": "authcode_fixture_alice_001",
+          "method": "S256",
+          "pkce_verified": true
+        },
+        "callback": {
+          "state": "state_fixture_alice_001",
+          "nonce": "nonce_fixture_alice_001",
+          "redirect_uri": "http://127.0.0.1:0/auth/callback"
+        },
+        "id_token_claims": {
+          "iss": "http://127.0.0.1:0/mock-idp",
+          "sub": "alice@example.test",
+          "aud": "coauth-local-client",
+          "nonce": "nonce_fixture_alice_001"
+        }
+      },
+      "operations": [
+        "oidc_authorization_callback",
+        "session_grant_issue"
+      ],
+      "fallbacks": [
+        "none"
+      ],
+      "observed": {
+        "callback_status": 302,
+        "dev_or_password_fallback_used": false,
+        "session_grant": {
+          "active": true,
+          "scope": "urn:contrix:principal-server:session.bind",
+          "audience": "did:web:soland.local"
+        }
+      }
+    },
+    {
+      "name": "account_did_binding_records_proof",
+      "phase": "account_did_binding",
+      "expect": "pass",
+      "operations": [
+        "account_did_bind"
+      ],
+      "fallbacks": [
+        "none"
+      ],
+      "observed": {
+        "dev_or_password_fallback_used": false,
+        "account": {
+          "id": "acct_alice",
+          "did": "did:webvh:example.test:alice"
+        },
+        "binding": {
+          "status": "bound",
+          "method": "oidc_binding_proof",
+          "proof_jws": "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJhY2N0X2FsaWNlIn0.signature"
+        }
+      }
+    },
+    {
+      "name": "device_revoke_and_account_status_lifecycle_are_auditable",
+      "phase": "device_revoke_account_status_lifecycle",
+      "expect": "pass",
+      "operations": [
+        "device_revoke",
+        "account_status_update"
+      ],
+      "fallbacks": [
+        "none"
+      ],
+      "observed": {
+        "device_status_sequence": [
+          "active",
+          "revoked"
+        ],
+        "revoked_device_session_active": false,
+        "account_status_sequence": [
+          "active",
+          "suspended",
+          "reactivated",
+          "closed"
+        ],
+        "audit_actions": [
+          "device.revoked",
+          "account.suspended",
+          "account.reactivated",
+          "account.closed"
+        ]
+      }
+    },
+    {
+      "name": "policy_dry_run_emits_audit_without_persisted_effect",
+      "phase": "policy_dry_run_audit",
+      "expect": "pass",
+      "operations": [
+        "policy_dry_run"
+      ],
+      "fallbacks": [
+        "none"
+      ],
+      "request": {
+        "dry_run": true,
+        "policy_ref": "cedar:default",
+        "action": "cx.session.grant"
+      },
+      "observed": {
+        "persisted_effect": false,
+        "audit": {
+          "action": "policy.dry_run",
+          "decision": "allow",
+          "policy_engine": "cedar"
+        }
+      }
+    },
+    {
+      "name": "production_oidc_outage_rejects_without_local_password_or_dev_fallback",
+      "phase": "production_no_silent_fallback",
+      "expect": "reject",
+      "environment": {
+        "production": true
+      },
+      "operations": [
+        "oidc_authorization_callback"
+      ],
+      "fallbacks": [
+        "none"
+      ],
+      "fault": {
+        "upstream_oidc_available": false
+      },
+      "observed": {
+        "rejected": true,
+        "status": 503,
+        "error": "upstream_oidc_unavailable",
+        "dev_or_password_fallback_used": false
+      }
+    }
+  ]
+}

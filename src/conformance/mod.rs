@@ -1,9 +1,11 @@
 mod agent_workspace;
 mod capability;
+mod coauth_lifecycle;
 mod encoding;
 mod envelope;
 mod federation;
 mod lattice_round_trip;
+mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
 mod redaction;
@@ -14,6 +16,7 @@ mod security_negative;
 mod state_resolution;
 mod sync;
 mod wire_model;
+mod yougen_client;
 
 use std::{
     collections::BTreeMap,
@@ -37,16 +40,24 @@ pub use agent_workspace::{
 };
 pub use capability::run_capability_facet_fixture_suite;
 pub use capability::run_capability_fixture_suite;
+pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
 pub use encoding::run_encoding_fixture_suite;
 pub use encoding::run_projection_position_discriminator_fixture_suite;
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
 pub use lattice_round_trip::run_lattice_round_trip_suite;
+pub use principal_server_certification::{
+    PrincipalCertificationStatus, run_principal_server_certification_gate_suite,
+    validate_principal_server_certification,
+};
 pub use privacy::run_privacy_security_fixture_suite;
 pub use profile_matrix::{run_profile_matrix_suite, validate_server_profile_claims};
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
-pub use scaffold_gate::run_scaffold_profile_gate_suite;
+pub use scaffold_gate::{
+    run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
+    validate_scaffold_profile_gate,
+};
 pub use schema_validation::run_schema_validation_suite;
 pub use security_negative::run_security_negative_profile_suite;
 pub use state_resolution::{
@@ -94,6 +105,7 @@ pub use wire_model::run_redaction_history_visibility_fixture_suite;
 pub use wire_model::run_restore_full_workflows_fixture_suite;
 pub use wire_model::run_state_resolution_quarantine_fixture_suite;
 pub use wire_model::run_threshold_multisig_fixture_suite;
+pub use yougen_client::run_yougen_client_profile_manifest_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
 

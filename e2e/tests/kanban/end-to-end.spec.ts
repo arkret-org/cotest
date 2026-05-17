@@ -6,6 +6,7 @@
 //   - models/relation.md §3.2 (contains)
 
 import { expect, test } from "@playwright/test";
+import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
@@ -114,7 +115,13 @@ test.describe("kanban end-to-end", () => {
   test.fixme(
     "cross-space contains relation rejected with reason=cross_space_structural_relation",
     async () => {
-      // spec: models/relation.md §3.2
+      // spec: models/relation.md §3.2 — structural relations MUST stay
+      // within a single Space. Server enforcement landed (relation.rs
+      // cross-space check), but driving the test through the kanban UI
+      // is brittle (yougen page load + kanban panel render hits 180s
+      // timeout under joint-e2e contention). Re-enable once a
+      // programmatic flow-creation helper (signed cx.flow.create POST)
+      // lands or yougen's kanban view stabilizes its load timing.
     },
   );
 

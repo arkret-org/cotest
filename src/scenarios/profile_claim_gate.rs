@@ -1,0 +1,174 @@
+use anyhow::{Context, Result, anyhow, bail};
+use reqwest::StatusCode;
+use serde_json::Value;
+use url::Url;
+
+use crate::conformance::validate_scaffold_profile_gate;
+
+struct DescribeTarget {
+    service: String,
+    url: String,
+}
+
+pub async fn live_describe_profile_claim_gate_from_env() -> Result<()> {
+    let targets = configured_targets()?;
+    if targets.is_empty() {
+        return Ok(());
+    }
+
+    let client = reqwest::Client::new();
+    for target in targets {
+        let response = client
+            .get(&target.url)
+            .send()
+            .await
+            .with_context(|| format!("fetch describe for {}", target.service))?;
+        let status = response.status();
+        let mut body: Value = response
+            .json()
+            .await
+            .with_context(|| format!("parse describe JSON for {}", target.service))?;
+        if status != StatusCode::OK {
+            bail!(
+                "describe for {} returned status {status}: {body}",
+                target.service
+            );
+        }
+        if body.get("service").is_none() {
+            body["service"] = Value::String(target.service.clone());
+        }
+        validate_scaffold_profile_gate(&body)
+            .with_context(|| format!("profile claim gate failed for {}", target.service))?;
+    }
+
+    Ok(())
+}
+
+fn configured_targets() -> Result<Vec<DescribeTarget>> {
+    let mut targets = Vec::new();
+    add_exact_targets(
+        &mut targets,
+        std::env::var("COTEST_PROFILE_GATE_DESCRIBE_URLS").ok(),
+    )?;
+    add_base_targets(
+        &mut targets,
+        std::env::var("COTEST_PROFILE_GATE_BASE_URLS").ok(),
+        "/api/v1/server/describe",
+    )?;
+
+    for (service, exact_env, base_env, default_path) in [
+        (
+            "soland",
+            "COTEST_SOLAND_DESCRIBE_URL",
+            "COTEST_SOLAND_BASE_URL",
+            "/api/v1/server/describe",
+        ),
+        (
+            "floria",
+            "COTEST_FLORIA_DESCRIBE_URL",
+            "COTEST_FLORIA_BASE_URL",
+            "/api/v1/server/describe",
+        ),
+        (
+            "teabay",
+            "COTEST_TEABAY_DESCRIBE_URL",
+            "COTEST_TEABAY_BASE_URL",
+            "/api/v1/directory/describe",
+        ),
+        (
+            "starid",
+            "COTEST_STARID_DESCRIBE_URL",
+            "COTEST_STARID_BASE_URL",
+            "/describe",
+        ),
+        (
+            "coauth",
+            "COTEST_COAUTH_DESCRIBE_URL",
+            "COTEST_COAUTH_BASE_URL",
+            "/api/v1/server/describe",
+        ),
+    ] {
+        if let Ok(url) = std::env::var(exact_env)
+            && !url.trim().is_empty()
+        {
+            targets.push(DescribeTarget {
+                service: service.to_owned(),
+                url: url.trim().to_owned(),
+            });
+        }
+        if let Ok(base) = std::env::var(base_env)
+            && !base.trim().is_empty()
+        {
+            targets.push(DescribeTarget {
+                service: service.to_owned(),
+                url: join_url(base.trim(), default_path)?,
+            });
+        }
+    }
+
+    Ok(targets)
+}
+
+fn add_exact_targets(targets: &mut Vec<DescribeTarget>, raw: Option<String>) -> Result<()> {
+    let Some(raw) = raw else {
+        return Ok(());
+    };
+    for item in split_targets(&raw) {
+        let (service, url) = parse_service_url(item, None)?;
+        targets.push(DescribeTarget { service, url });
+    }
+    Ok(())
+}
+
+fn add_base_targets(
+    targets: &mut Vec<DescribeTarget>,
+    raw: Option<String>,
+    default_path: &str,
+) -> Result<()> {
+    let Some(raw) = raw else {
+        return Ok(());
+    };
+    for item in split_targets(&raw) {
+        let (service, base) = parse_service_url(item, Some(default_path))?;
+        targets.push(DescribeTarget { service, url: base });
+    }
+    Ok(())
+}
+
+fn split_targets(raw: &str) -> impl Iterator<Item = &str> {
+    raw.split([',', ';'])
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+}
+
+fn parse_service_url(item: &str, append_path: Option<&str>) -> Result<(String, String)> {
+    let (service, url) = if let Some((service, url)) = item.split_once('=') {
+        (service.trim().to_owned(), url.trim().to_owned())
+    } else {
+        let parsed = Url::parse(item).with_context(|| format!("invalid describe URL {item}"))?;
+        let service = parsed
+            .host_str()
+            .map(|host| host.split('.').next().unwrap_or("service").to_owned())
+            .unwrap_or_else(|| "service".to_owned());
+        (service, item.to_owned())
+    };
+    if service.is_empty() {
+        bail!("describe target has empty service label: {item}");
+    }
+    let url = match append_path {
+        Some(path) => join_url(&url, path)?,
+        None => {
+            Url::parse(&url).with_context(|| format!("invalid describe URL {url}"))?;
+            url
+        }
+    };
+    Ok((service, url))
+}
+
+fn join_url(base: &str, path: &str) -> Result<String> {
+    let parsed = Url::parse(base).with_context(|| format!("invalid base URL {base}"))?;
+    parsed
+        .join(path.trim_start_matches('/'))
+        .map(|url| url.to_string())
+        .map_err(|error| anyhow!("failed to append {path} to {base}: {error}"))
+}

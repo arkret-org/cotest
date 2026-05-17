@@ -3,6 +3,7 @@
 // Spec: discovery/push-notifications.md §2-§4, discovery/client-preferences.md
 
 import { expect, test } from "@playwright/test";
+import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
@@ -63,10 +64,57 @@ test.describe("notifications", () => {
     async () => {},
   );
 
-  test.fixme(
-    "mark-all-read clears unread badges and marks notification rows as read",
-    async () => {},
-  );
+  test("mark-all-read clears unread badges and marks notification rows as read", async ({
+    request,
+  }) => {
+    // spec: discovery/push-notifications.md — `last_read_at` marker is
+    // the canonical "everything before this is read" cursor. Asserted
+    // via the dedicated `POST /api/v1/notifications/mark-all-read` +
+    // `GET /api/v1/notifications` pair.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s23-mark-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const auth = { authorization: `Bearer ${aliceToken}` };
+
+    // Pre-mark: last_read_at is null.
+    const before = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+      headers: auth,
+    });
+    expect(before.status()).toBe(200);
+    const beforeBody = await before.json();
+    expect(beforeBody.last_read_at == null).toBe(true);
+
+    // mark-all-read writes a marker.
+    const mark = await request.post(
+      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      { headers: auth, data: {} },
+    );
+    expect(mark.status()).toBe(200);
+    const markBody = await mark.json();
+    expect(typeof markBody.marked_at).toBe("string");
+    expect(markBody.actor).toBe(alice.did);
+
+    // Post-mark: last_read_at reflects the marker.
+    const after = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+      headers: auth,
+    });
+    expect(after.status()).toBe(200);
+    const afterBody = await after.json();
+    expect(afterBody.last_read_at).toBe(markBody.marked_at);
+    expect(afterBody.unread_count).toBe(0);
+
+    // Idempotency / advancement: a second call advances the marker.
+    await new Promise((r) => setTimeout(r, 20));
+    const mark2 = await request.post(
+      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      { headers: auth, data: {} },
+    );
+    const mark2Body = await mark2.json();
+    expect(new Date(mark2Body.marked_at).getTime()).toBeGreaterThanOrEqual(
+      new Date(markBody.marked_at).getTime(),
+    );
+  });
 
   test.fixme(
     "E2EE space with evaluation_locus=client: server sends blind wake; client decrypts and evaluates 'contains_keyword' rule locally",

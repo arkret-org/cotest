@@ -1,0 +1,145 @@
+{
+  "suite": "principal_server_certification_gate",
+  "profile": "cx.profile.principal_server_certification_gate.v1",
+  "cases": [
+    {
+      "name": "soland_reports_principal_server_not_certified_with_signed_retry_boundary",
+      "expect": "not_certified",
+      "describe": {
+        "service": "soland",
+        "service_type": "principal_server",
+        "supported_profiles": [
+          "cx.profile.principal_server_events_api.v1"
+        ],
+        "certification": {
+          "principal_server": {
+            "status": "not_certified",
+            "reason": "full profile remains gated until every production surface is enabled"
+          }
+        },
+        "federation": {
+          "outbound": {
+            "http_message_signatures": true,
+            "durable_retry_queue": true,
+            "retry_worker": true,
+            "dead_letter_audit": true
+          }
+        },
+        "limitations": [
+          {
+            "feature": "principal_server_full_profile",
+            "status": "not_certified"
+          }
+        ]
+      }
+    },
+    {
+      "name": "full_principal_server_claim_without_durable_federation_is_rejected",
+      "expect": "reject",
+      "describe": {
+        "service": "candidate",
+        "supported_profiles": [
+          "cx.profile.principal_server.v1"
+        ],
+        "certification": {
+          "principal_server": {
+            "status": "certified"
+          }
+        },
+        "supported_operations": [
+          "cx.server.describe",
+          "cx.sync.describe",
+          "cx.sync.account",
+          "cx.events.subscribe",
+          "cx.events.query",
+          "cx.sync.get_snapshot_head",
+          "cx.authz.check"
+        ],
+        "supported_event_kinds": [
+          "cx.space.create",
+          "cx.member.state",
+          "cx.flow.create",
+          "cx.message.create",
+          "cx.capability.grant",
+          "cx.capability.revoke"
+        ],
+        "supported_schemas": [
+          "cx.schema.client_sync_response.v1",
+          "cx.schema.snapshot.v1",
+          "cx.schema.capability.v1",
+          "cx.schema.grant_constraint.v1"
+        ],
+        "federation": {
+          "outbound": {
+            "http_message_signatures": true,
+            "durable_retry_queue": false,
+            "retry_worker": false,
+            "dead_letter_audit": false
+          }
+        },
+        "principal_server_minimum": {
+          "admin": {"status": "supported"},
+          "agent": {"status": "supported"},
+          "applet": {"status": "supported"},
+          "media": {"status": "supported"}
+        }
+      }
+    },
+    {
+      "name": "full_principal_server_claim_requires_all_minimum_surfaces",
+      "expect": "certified",
+      "describe": {
+        "service": "certified-reference",
+        "supported_profiles": [
+          "cx.profile.principal_server.v1"
+        ],
+        "certification": {
+          "principal_server": {
+            "status": "certified"
+          }
+        },
+        "supported_operations": [
+          "cx.server.describe",
+          "cx.sync.describe",
+          "cx.sync.account",
+          "cx.events.subscribe",
+          "cx.events.query",
+          "cx.sync.get_snapshot_head",
+          "cx.authz.check",
+          "cx.admin.device.revoke",
+          "cx.agent.task.submit",
+          "cx.applet.install",
+          "cx.media.session.offer"
+        ],
+        "supported_event_kinds": [
+          "cx.space.create",
+          "cx.member.state",
+          "cx.flow.create",
+          "cx.message.create",
+          "cx.capability.grant",
+          "cx.capability.revoke"
+        ],
+        "supported_schemas": [
+          "cx.schema.client_sync_response.v1",
+          "cx.schema.snapshot.v1",
+          "cx.schema.capability.v1",
+          "cx.schema.grant_constraint.v1"
+        ],
+        "federation": {
+          "outbound": {
+            "http_message_signatures": true,
+            "durable_retry_queue": true,
+            "retry_worker": true,
+            "dead_letter_audit": true
+          }
+        },
+        "principal_server_minimum": {
+          "admin": {"status": "supported"},
+          "agent": {"status": "supported"},
+          "applet": {"status": "supported"},
+          "media": {"status": "supported"}
+        }
+      }
+    }
+  ]
+}
