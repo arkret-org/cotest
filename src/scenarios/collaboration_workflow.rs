@@ -29,7 +29,8 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let hidden_bob = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/directory/search-users?q=bob")),
+            .post(server.url("/api/v1/directory/search-users"))
+            .json(&json!({"q": "bob"})),
         StatusCode::OK,
     )
     .await?;
@@ -70,8 +71,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let visible_bob = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/directory/search-users?q=bob"))
-            .bearer_auth(&alice),
+            .post(server.url("/api/v1/directory/search-users"))
+            .bearer_auth(&alice)
+            .json(&json!({"q": "bob"})),
         StatusCode::OK,
     )
     .await?;

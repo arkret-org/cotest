@@ -192,7 +192,8 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_bob_users = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/directory/search-users?q=bob-privacy")),
+            .post(server.url("/api/v1/directory/search-users"))
+            .json(&json!({"q": "bob-privacy"})),
         StatusCode::OK,
     )
     .await?;
@@ -264,7 +265,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     assert_eq!(alice_after_contact["results"][0]["did"], bob.actor);
 
     let alice_user_after_contact = expect_json(
-        alice.get("/api/v1/directory/search-users?q=bob-privacy"),
+        alice
+            .post("/api/v1/directory/search-users")
+            .json(&json!({"q": "bob-privacy"})),
         StatusCode::OK,
     )
     .await?;

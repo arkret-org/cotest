@@ -9,7 +9,10 @@ use crate::harness::{
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = ContrixServer::spawn("authz-grants").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "cx:device:01904100-0000-7000-8000-a11ce0000001",
+        )
         .await?;
     let bob = server
         .register_client("did:web:bob-authz.example", "@bob-authz", "dev_bob")
@@ -172,7 +175,10 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let server = ContrixServer::spawn("presence-policy").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "cx:device:01904100-0000-7000-8000-a11ce0000001",
+        )
         .await?;
 
     expect_status(
@@ -205,7 +211,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let push_registration = expect_json(
         alice.post("/api/v1/push/register-device").json(&json!({
-            "device_id": "dev_alice",
+            "device_id": alice.device_id.as_str(),
             "push_gateway": "https://push.example",
             "push_key": "opaque",
             "platform": "desktop",
@@ -221,7 +227,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .http()
             .post(server.url("/api/v1/push/unregister-device"))
             .json(&json!({
-                "device_id": "dev_alice",
+                "device_id": alice.device_id.as_str(),
                 "push_key": "opaque",
                 "app_id": "clientx"
             })),
@@ -284,19 +290,18 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
 
     let ice = expect_json(
-        server
-            .http()
-            .post(server.url("/contrix/v1/ice-config"))
-            .json(&json!({})),
+        alice.post("/contrix/v1/ice-config").json(&json!({
+            "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
+            "call_id": "cx:call:01964137-0000-7000-8000-000000000001",
+            "actor_id": alice.actor.as_str(),
+            "device_id": alice.device_id.as_str()
+        })),
         StatusCode::OK,
     )
     .await?;
-    assert!(
-        ice["service_did"]
-            .as_str()
-            .is_some_and(|service_did| !service_did.is_empty())
-    );
+    assert_eq!(ice["actor_id"], alice.actor);
     assert!(ice["ice_servers"].is_array());
+    assert!(ice["signature"].is_object());
 
     Ok(())
 }
