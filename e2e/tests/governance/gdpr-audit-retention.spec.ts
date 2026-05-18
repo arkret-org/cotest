@@ -77,7 +77,9 @@ test.describe("GDPR / audit / retention", () => {
     });
     expect(erase.status()).toBe(200);
     const eraseBody = await erase.json();
-    expect(eraseBody.state).toBe("erasure_pending");
+    expect(eraseBody.state).toBe("erased");
+    expect(eraseBody.erasure_receipt?.schema).toBe("cx.schema.erasure_receipt.v1");
+    expect(eraseBody.erasure_receipt?.outcome).toBe("completed");
 
     // Subsequent /account/me with the same bearer returns 401 account_erased.
     const me = await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
@@ -139,7 +141,7 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(false);
   });
 
-  test("audit log contains cx.audit.exported, cx.audit.erasure_initiated, cx.audit.erasure_completed entries", async ({
+  test("audit log contains cx.audit.exported, cx.audit.erasure_initiated, cx.audit.erasure_receipt entries", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §3 + §8 — every export / erasure
@@ -169,7 +171,13 @@ test.describe("GDPR / audit / retention", () => {
     const actions = auditEvents.map((e) => e.action);
     expect(actions).toContain("cx.audit.exported");
     expect(actions).toContain("cx.audit.erasure_initiated");
-    expect(actions).toContain("cx.audit.erasure_completed");
+    expect(actions).toContain("cx.audit.erasure_receipt");
+    const receiptEvent = auditEvents.find((e) => e.action === "cx.audit.erasure_receipt") as
+      | { payload?: { schema?: string; outcome?: string; proofs?: unknown[] } }
+      | undefined;
+    expect(receiptEvent?.payload?.schema).toBe("cx.schema.erasure_receipt.v1");
+    expect(receiptEvent?.payload?.outcome).toBe("completed");
+    expect(Array.isArray(receiptEvent?.payload?.proofs)).toBe(true);
   });
 
   test.fixme(
