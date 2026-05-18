@@ -478,6 +478,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// S4 — cx.profile.cross_signing.reset.v1 parser-level conformance
+    /// vectors: proof family, generation monotonicity, replay cache, clock
+    /// skew, and successor-publish window.
+    cross_signing_reset_fixture_suite_matches_reference_semantics,
+    "cross_signing_reset_fixture",
+    cotest::conformance::run_cross_signing_reset_fixture_suite,
+);
+
+conformance_test!(
     /// Round-27 E3 — multi-space federation per-space anchor isolation +
     /// cross-space rejection.
     multi_space_federation_fixture_suite_matches_reference_semantics,

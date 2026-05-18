@@ -37,8 +37,10 @@ param(
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
+    [switch]$StartMockAuditAgent,
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
+    [string]$MockAuditAgentDid,
     [ValidateSet("joint-smoke", "joint-full")]
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
@@ -49,6 +51,7 @@ if ($StartMocks) {
     $StartMockIdp = $true
     $StartMockEmail = $true
     $StartMockWitness = $true
+    $StartMockAuditAgent = $true
 }
 
 $ErrorActionPreference = "Stop"
@@ -700,6 +703,12 @@ if ($StartMockWitness) {
     $mockWitnessPort = Get-FreeTcpPort
     $mockWitnessBaseUrl = "http://127.0.0.1:$mockWitnessPort"
 }
+$mockAuditAgentPort = $null
+$mockAuditAgentBaseUrl = $null
+if ($StartMockAuditAgent) {
+    $mockAuditAgentPort = Get-FreeTcpPort
+    $mockAuditAgentBaseUrl = "http://127.0.0.1:$mockAuditAgentPort"
+}
 
 $managedServices = New-Object System.Collections.Generic.List[object]
 $ephemeralPostgres = $null
@@ -758,6 +767,15 @@ try {
         ) -f (Quote-PsLiteral $MockWitnessDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-witness" -Command $mockWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockWitnessBaseUrl/api/v1/witness/policy" -TimeoutSeconds 30
+    }
+    if ($StartMockAuditAgent) {
+        $auditEnv = "`$env:MOCK_AUDIT_AGENT_PORT='$mockAuditAgentPort'"
+        if ($MockAuditAgentDid) {
+            $auditEnv = "$auditEnv; `$env:MOCK_AUDIT_AGENT_DID=" + (Quote-PsLiteral $MockAuditAgentDid)
+        }
+        $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/api/v1/audit-agent/identity" -TimeoutSeconds 30
     }
 
     if ($StartCoauth) {
@@ -1043,13 +1061,31 @@ try {
         Remove-Item Env:COTEST_MOCK_WITNESS_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_WITNESS_DID -ErrorAction SilentlyContinue
     }
+    if ($mockAuditAgentBaseUrl) {
+        $env:COTEST_MOCK_AUDIT_AGENT_BASE_URL = $mockAuditAgentBaseUrl
+        if ($MockAuditAgentDid) {
+            $env:COTEST_MOCK_AUDIT_AGENT_DID = $MockAuditAgentDid
+        } else {
+            Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
+        }
+    } else {
+        Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
+    }
 
     $playwrightArgs = @("playwright", "test", "--config", "playwright.config.ts")
     foreach ($project in $playwrightProjects) {
         $playwrightArgs += @("--project", $project)
     }
-    if ($Grep) {
-        $playwrightArgs += @("--grep", $Grep)
+    # H-SHIM-2: joint-smoke profile auto-filters to tests tagged
+    # @fully-implemented so CI does not block on fixme placeholders during
+    # incremental rollout. An explicit -Grep overrides this.
+    $effectiveGrep = $Grep
+    if (-not $effectiveGrep -and $RunProfile -eq "joint-smoke") {
+        $effectiveGrep = "@fully-implemented"
+    }
+    if ($effectiveGrep) {
+        $playwrightArgs += @("--grep", $effectiveGrep)
     }
     $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
     $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"
@@ -1117,6 +1153,52 @@ if (Test-Path $visualBaselineManifest) {
     $visualBaselineLines += "- manifest: [$relativeManifest]($relativeManifest)"
 }
 $visualBaselineLines | Set-Content -Path $visualBaselineIndex -Encoding UTF8
+
+# H-SHIM-3: service-log gap report. Scan each managed service's stderr log
+# for WARN/denied/FORBIDDEN/reject lines and aggregate into service-gaps.md
+# so reviewers can spot why an expected feature did not light up without
+# tail-grepping every log file by hand.
+$serviceGapsReport = Join-Path $jointDir "service-gaps.md"
+$serviceGapPattern = '(?i)(WARN|ERROR).*(denied|FORBIDDEN|capability_denied|policy_reject|reject|unauthorized)'
+$serviceGapMaxPerService = 50
+$serviceGapLines = @("# joint e2e service gap signals", "",
+    "Aggregated WARN/ERROR lines containing denied / FORBIDDEN / reject keywords.",
+    "Use these as starting points when a fixme could not be promoted because the",
+    "server rejected the request.",
+    "")
+if (Test-Path $serviceLogDir) {
+    $stderrFiles = @(Get-ChildItem -Path $serviceLogDir -Recurse -File -Filter "*.stderr.log" -ErrorAction SilentlyContinue |
+        Sort-Object FullName)
+    if ($stderrFiles.Count -eq 0) {
+        $serviceGapLines += "- no service stderr logs found"
+    } else {
+        foreach ($file in $stderrFiles) {
+            $matchesList = @(Select-String -LiteralPath $file.FullName -Pattern $serviceGapPattern -ErrorAction SilentlyContinue)
+            if ($matchesList.Count -eq 0) { continue }
+            $relative = [System.IO.Path]::GetRelativePath($jointDir, $file.FullName)
+            $serviceGapLines += "## $relative"
+            $serviceGapLines += ""
+            $shown = 0
+            foreach ($match in $matchesList) {
+                if ($shown -ge $serviceGapMaxPerService) { break }
+                $line = $match.Line.Trim()
+                if ($line.Length -gt 280) { $line = $line.Substring(0, 280) + "…" }
+                $serviceGapLines += "- L$($match.LineNumber): $line"
+                $shown++
+            }
+            if ($matchesList.Count -gt $shown) {
+                $serviceGapLines += "- (…$($matchesList.Count - $shown) more match(es) truncated)"
+            }
+            $serviceGapLines += ""
+        }
+        if ($serviceGapLines.Count -le 6) {
+            $serviceGapLines += "- no WARN/ERROR gap signals detected across services"
+        }
+    }
+} else {
+    $serviceGapLines += "- service log directory missing"
+}
+$serviceGapLines | Set-Content -Path $serviceGapsReport -Encoding UTF8
 
 # Scenario report: group junit testcases by spec file (= scenario) and emit
 # pass / fail / skipped counts so reviewers can read scenario-level health
@@ -1209,6 +1291,8 @@ $summary = [pscustomobject]@{
     mock_email_base_url = $mockEmailBaseUrl
     mock_witness_base_url = $mockWitnessBaseUrl
     mock_witness_did = if ($mockWitnessBaseUrl) { $MockWitnessDid } else { $null }
+    mock_audit_agent_base_url = $mockAuditAgentBaseUrl
+    mock_audit_agent_did = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
     yougen_base_url = $YougenBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
@@ -1233,6 +1317,7 @@ $summary = [pscustomobject]@{
     screenshot_index = $screenshotIndex
     visual_baseline_index = $visualBaselineIndex
     scenarios_report = $scenariosReport
+    service_gaps_report = $serviceGapsReport
     services = $serviceLogDir
 }
 $summaryJson = Join-Path $jointDir "summary.json"
@@ -1257,6 +1342,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_email_base_url: $($summary.mock_email_base_url)
 - mock_witness_base_url: $($summary.mock_witness_base_url)
 - mock_witness_did: $($summary.mock_witness_did)
+- mock_audit_agent_base_url: $($summary.mock_audit_agent_base_url)
+- mock_audit_agent_did: $($summary.mock_audit_agent_did)
 - yougen_base_url: $($summary.yougen_base_url)
 - coauth_base_url: $($summary.coauth_base_url)
 - coauth_service_did: $($summary.coauth_service_did)
@@ -1279,6 +1366,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - screenshot_index: $($summary.screenshot_index)
 - visual_baseline_index: $($summary.visual_baseline_index)
 - scenarios_report: $($summary.scenarios_report)
+- service_gaps_report: $($summary.service_gaps_report)
 - services: $($summary.services)
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
@@ -1301,6 +1389,10 @@ if ($mockEmailBaseUrl) {
 }
 if ($mockWitnessBaseUrl) {
     Write-Host "  mock-witness: $mockWitnessBaseUrl ($MockWitnessDid)"
+}
+if ($mockAuditAgentBaseUrl) {
+    $auditAgentLabel = if ($MockAuditAgentDid) { " ($MockAuditAgentDid)" } else { "" }
+    Write-Host "  mock-audit-agent: $mockAuditAgentBaseUrl$auditAgentLabel"
 }
 Write-Host "  yougen      : $YougenBaseUrl"
 if ($CoauthBaseUrl) {

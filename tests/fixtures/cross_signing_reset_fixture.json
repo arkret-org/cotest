@@ -1,0 +1,128 @@
+{
+  "profile": "cx.profile.cross_signing.reset.v1",
+  "version": "2026-05-19",
+  "comment": "S4 — parser-level vectors for the high-risk cx.cross_signing.reset profile. Spec authority: crypto-media/device-lifecycle.md section 14 and artifacts/profiles/conformance-profiles.json profile cx.profile.cross_signing.reset.v1. Reset retires the current SSK/USK generation, requires one valid proof family, MUST increment generation by exactly one, rejects replay of the same (principal_id, previous_generation), bounds issued_at clock skew, and requires a successor cx.cross_signing.publish within the recovery window.",
+  "parameters": {
+    "max_clock_skew_seconds": 300,
+    "successor_publish_required_within_seconds": 86400
+  },
+  "vectors": [
+    {
+      "name": "principal_signing_reset_accepts_generation_plus_one",
+      "event_kind": "cx.cross_signing.reset",
+      "schema_id": "cx.schema.cross_signing_reset.v1",
+      "principal_id": "did:web:alice.example",
+      "previous_generation": 7,
+      "new_generation": 8,
+      "issued_at": "2026-05-19T00:00:00Z",
+      "proof": {
+        "kind": "principal_signing",
+        "signed_by": "did:web:alice.example#principal",
+        "signature_b64": "U0lHX0FMSUNFX1BSSU5DSVBBTF9SRVNFVF8wMDAwMDA"
+      },
+      "successor_publish": {
+        "event_kind": "cx.cross_signing.publish",
+        "schema_id": "cx.schema.cross_signing_publish.v1",
+        "generation": 8,
+        "observed_within_seconds": 3600
+      },
+      "expected": {
+        "outcome": "accept",
+        "rationale": "new_generation is previous_generation + 1 and the principal-grade proof is followed by a generation-8 publish within the 24h recovery window."
+      }
+    },
+    {
+      "name": "generation_gap_rejects",
+      "event_kind": "cx.cross_signing.reset",
+      "schema_id": "cx.schema.cross_signing_reset.v1",
+      "principal_id": "did:web:alice.example",
+      "previous_generation": 7,
+      "new_generation": 10,
+      "issued_at": "2026-05-19T00:00:00Z",
+      "proof": {
+        "kind": "principal_signing",
+        "signed_by": "did:web:alice.example#principal",
+        "signature_b64": "U0lHX0FMSUNFX1BSSU5DSVBBTF9HQVBfMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cross_signing_reset_generation_mismatch",
+        "rationale": "new_generation must be exactly previous_generation + 1; gaps indicate skipped reset state or attempted rollback confusion."
+      }
+    },
+    {
+      "name": "clock_skew_exceeded_rejects",
+      "event_kind": "cx.cross_signing.reset",
+      "schema_id": "cx.schema.cross_signing_reset.v1",
+      "principal_id": "did:web:alice.example",
+      "previous_generation": 7,
+      "new_generation": 8,
+      "issued_at": "2026-05-19T00:30:01Z",
+      "receiver_now": "2026-05-19T00:00:00Z",
+      "observed_clock_skew_seconds": 1801,
+      "proof": {
+        "kind": "recovery_unlock",
+        "signed_by": "did:web:alice.example#recovery",
+        "signature_b64": "U0lHX0FMSUNFX1JFQ09WRVJZX1NLRVdfMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cross_signing_reset_clock_skew_exceeded",
+        "rationale": "issued_at exceeds the profile max_clock_skew_seconds bound."
+      }
+    },
+    {
+      "name": "replay_same_previous_generation_rejects",
+      "event_kind": "cx.cross_signing.reset",
+      "schema_id": "cx.schema.cross_signing_reset.v1",
+      "principal_id": "did:web:alice.example",
+      "previous_generation": 7,
+      "new_generation": 8,
+      "issued_at": "2026-05-19T00:00:00Z",
+      "seen_reset_tuple": true,
+      "proof": {
+        "kind": "device_quorum",
+        "threshold": 2,
+        "signatures": [
+          {
+            "device_id": "cx:device:alice-1",
+            "signed_by": "did:cx:dev:alice-1#leaf",
+            "signature_b64": "U0lHX0FMSUNFXREVWMV9SRVNFVF8wMDAwMDAwMDA"
+          },
+          {
+            "device_id": "cx:device:alice-2",
+            "signed_by": "did:cx:dev:alice-2#leaf",
+            "signature_b64": "U0lHX0FMSUNFXREVWMl9SRVNFVF8wMDAwMDAwMDA"
+          }
+        ]
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cross_signing_reset_replayed",
+        "rationale": "The tuple (principal_id, previous_generation) was already consumed by a reset in the replay cache."
+      }
+    },
+    {
+      "name": "successor_publish_window_expired_rejects_device_authorization",
+      "event_kind": "cx.cross_signing.reset",
+      "schema_id": "cx.schema.cross_signing_reset.v1",
+      "principal_id": "did:web:alice.example",
+      "previous_generation": 7,
+      "new_generation": 8,
+      "issued_at": "2026-05-19T00:00:00Z",
+      "elapsed_since_reset_seconds": 90000,
+      "successor_publish": null,
+      "proof": {
+        "kind": "trusted_recovery_service",
+        "service_id": "did:web:recovery.example",
+        "signed_by": "did:web:recovery.example#attest",
+        "signature_b64": "U0lHX1JFQ09WRVJZX1NFUlZJQ0VfMDAwMDAwMDAwMDA"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cross_signing_reset_publish_window_expired",
+        "rationale": "After an accepted reset, no device authorization under the new generation is usable until the successor publish arrives; after 24h the recovery window is expired."
+      }
+    }
+  ]
+}

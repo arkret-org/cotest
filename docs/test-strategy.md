@@ -213,9 +213,37 @@ desktop Chrome, mobile Chrome, and visual Chrome projects in the same artifact
 run. Release gate integration calls the joint smoke through the Chromium
 project so CI can use Playwright-managed browser installation.
 
+`joint-smoke` defaults to `--grep @fully-implemented` so fixme-tagged
+placeholders pending server-side feature work do not block the smoke
+profile. An explicit `-Grep ...` overrides the auto-filter. Use the tag
+`@fully-implemented` on `test.describe(...)` (or individual tests) once a
+spec is wired end-to-end against real services.
+
 `scripts/run-cotest.ps1 -Profile release-gate` now invokes joint smoke as an
 additional release-gate check and writes `joint-smoke-gate.*`. Use
 `-SkipJointSmokeGate` only for local protocol-only release-gate debugging.
+
+### Mock services
+
+`run-joint-e2e.ps1` can spin up four in-process mock services under
+`e2e/mocks/` to cover spec sections that depend on external infrastructure.
+Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
+`-StartMockWitness`, `-StartMockAuditAgent`) or all at once with
+`-StartMocks`. Specs read the live base URLs via the helpers in
+`e2e/helpers/env.ts` (`mockIdpBaseUrl()`, `mockEmailBaseUrl()`,
+`mockWitnessBaseUrl()`, `mockAuditAgentBaseUrl()`).
+
+| mock | covers spec sections | key endpoints |
+|------|---------------------|---------------|
+| `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
+| `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/api/v1/verification/send` (with `ttl_seconds` + `body_html`), `/inbox?to=`, `/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
+| `mock-witness.mjs` | S9 did:webvh rotation | `/api/v1/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/policy`, `/health` test hook, `/inspect` |
+| `mock-audit-agent.mjs` | S25 audited E2EE / `cx.audit.accessed` | `/api/v1/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `cx.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
+
+`e2e/tests/harness/mocks-selftest.spec.ts` is the contract pin for these
+mocks. It is tagged `@fully-implemented` so the `joint-smoke` profile runs
+it automatically; each case skips itself when the corresponding mock is
+not started for the current run.
 
 ## Per-test state isolation
 

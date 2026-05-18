@@ -88,9 +88,9 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 | **H-MOCK-AUDIT-AGENT-1** | mock audit-agent | `encryption/audited-e2ee.spec.ts` "report triggers audit_disclosure_policy.trigger; audit-agent is invited" | mock audit-agent 服务持有自己的 DID + signing key + KeyPackage(if E2EE);被邀请进 space 后能 acknowledge invite,生成 `cx.audit.accessed` 事件;`/inspect` 端点给测试看它收到的 `cx.moderation.frank` 列表 |
 | **H-MOCK-WITNESS-1** | mock did:webvh witness | `identity/webvh-rotation.spec.ts` 多个用例 + onboarding 的 did:webvh genesis | 现有 `e2e/mocks/mock-witness.mjs` 是骨架,需要扩到能:接受 entry rotation co-sign 请求、按测试场景模拟 offline(>24h timestamp)、提供 `/inspect` 看签发历史 |
 
-#### Per-mock 实现状态 (CT-15, 2026-05-18 审计)
+#### Per-mock 实现状态 (CT-15, 2026-05-19 更新)
 
-文件实际情况:`e2e/mocks/` 下当前只有三个 mjs (`mock-idp.mjs` / `mock-email.mjs` / `mock-witness.mjs`),**没有** `mock-audit-agent.mjs`。所有四个 mock 都缺 `/inspect` 端点。
+文件实际情况:`e2e/mocks/` 下现在有 4 个 mjs (`mock-idp.mjs` / `mock-email.mjs` / `mock-witness.mjs` / `mock-audit-agent.mjs`),并新增 `e2e/mocks/_shared/{inspect.mjs,keypairs.mjs}` 公共模块。所有四个 mock 都已经实现 `/inspect` 端点(支持 `GET` 查询、`DELETE` 重置)。
 
 ##### H-MOCK-IDP-1 implementation status
 
@@ -101,10 +101,10 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] `/authorize` 端点 — 接 `login_hint` / `redirect_uri` / `state` / `client_id`,302 redirect 回 RP 带 `code`+`state`
 - [x] `/token` 端点 — form-encoded `code` → 返 `{access_token, token_type, id_token, expires_in}`
 - [x] 静态 ID Token 返 (RS256 签名,`iss`/`sub`/`aud`/`email`/`email_verified` claims)
-- [ ] `/inspect` 端点 (测试用,看 mock 收到的 `code` / `audience` / 签发的 token 历史)
-- [ ] 测试场景化的 sub/email 注入 (目前从 `login_hint` 推断;需要每个 scenario 显式设置)
-- [ ] PKCE 校验 (S256 / plain) — coauth 走 PKCE 流程时会失败
-- [ ] error 响应矩阵 (`invalid_grant` / `invalid_client` / `unauthorized_client`) — 现在仅有一个通用错误
+- [x] `/inspect` 端点 — 暴露 authorize / tokens / scenarios 三条日志 (2026-05-19)
+- [x] 测试场景化的 sub/email 注入 — `POST /scenarios {login_hint, sub?, email?, force_error?}` (2026-05-19)
+- [x] PKCE 校验 (S256 / plain) — `/authorize` 接收 `code_challenge`+`code_challenge_method`, `/token` 校验 `code_verifier`,不匹配返 `invalid_grant` (2026-05-19)
+- [x] error 响应矩阵 — 通过 scenario 的 `force_error` 可强制 `invalid_grant` / `invalid_client` / `unauthorized_client` 等任意 OIDC 错误 (2026-05-19)
 
 ##### H-MOCK-EMAIL-1 implementation status
 
@@ -115,10 +115,10 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] `/api/v1/verification/inbox?to=email` — 列出该地址收到的所有邮件
 - [x] `/api/v1/verification/claim` — token+did → 签 `binding_proof` JWT (RS256,`purpose=third_party_invite_binding`,`token_commitment` 用 sha256:hex 编码)
 - [x] token 双重消费检测 (`409 token_already_consumed`)
-- [ ] `/inspect` 端点 (全局 dump,而不是 per-email — onboarding 不知道用户的 email 时用得到)
-- [ ] coauth/soland 把 SMTP 调用替换为 HTTP POST 到本 mock (服务端侧改动,**不在 harness 范围**;需要 `../coauth/_todos.md` 配套 task)
-- [ ] HTML / multipart body 渲染断言 (现在只存原始 string)
-- [ ] 过期 token 验证 (TTL 字段在 binding_proof 里有 `exp=now+600`,但 inbox token 本身不带 TTL)
+- [x] `/inspect` 端点 — 全局 dump (sent 日志 + claims 日志 + 所有 token 状态) (2026-05-19)
+- [ ] coauth/soland 把 SMTP 调用替换为 HTTP POST 到本 mock (服务端侧改动,**不在 harness 范围**;需要 `../coauth/_todos.md` 配套 task) — **跨项目, 不在 cotest 内**
+- [x] HTML / multipart body 渲染断言 — `send` 接收 `body_html`,inbox 存储并通过 `/inspect` 暴露 (2026-05-19)
+- [x] 过期 token 验证 — inbox token 现在带 `expires_at` (`MOCK_EMAIL_TOKEN_TTL_SECONDS` 控制 TTL,默认 15 分钟),过期返 `410 token_expired` (2026-05-19)
 
 ##### H-MOCK-WITNESS-1 implementation status
 
@@ -129,45 +129,48 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] `/api/v1/witness/sign` — entry_hash → 签 witness JWT (claims:`iss`/`sub=scid`/`entry_hash`/`entry_number`/`exp=now+24h`)
 - [x] `/api/v1/witness/health` 测试钩子 — `POST {state:"healthy"|"down"}` 翻状态;`down` 时 `/sign` 返 503
 - [x] offline 模拟 (通过 health=down 实现 `>24h degraded window` 的关键路径)
-- [ ] `/inspect` 端点 (看签发历史:已签的 entry_hash 列表 + 各自 timestamp)
-- [ ] 真实 prev_entry_hash 链校验 (现在裸签,任何 entry_hash 都签;`identity-did.md §3.4` 要求链校验)
-- [ ] 多 witness 仲裁 (`quorum > 1` 场景 — 需要起多个 mock-witness 进程并互相 cross-sign)
-- [ ] backdated/forged timestamp 拒绝 (`identity-did.md §8.2` 紧急 rotation 要求 witness 拒签 stale entry)
+- [x] `/inspect` 端点 — 暴露 signed 日志 + 每个 scid 的链头 (last_entry_number, last_entry_hash) (2026-05-19)
+- [x] 真实 prev_entry_hash 链校验 — `/sign` 现在校验 `entry_number` 单调递增和 `prev_entry_hash` 与上一条一致,不匹配返 `409 prev_entry_hash_mismatch` / `non_monotonic_entry_number` / `unknown_chain_with_prev` (2026-05-19)
+- [x] backdated/forged timestamp 拒绝 — `entry_timestamp` 比 `MOCK_WITNESS_STALE_SECONDS`(默认 24h)旧返 `422 entry_timestamp_stale` (2026-05-19)
+- [~] 多 witness 仲裁 (`quorum > 1` 场景) — mock 单实例本身支持任意 DID,但 `run-joint-e2e.ps1` 当前只起一个 witness 进程;quorum 场景需要 harness 循环起 N 个进程(对应 `-MockWitnessExtraDids`)。**暂缓**,等第一个 quorum spec 落地再做 — 见 H-HARNESS-MULTIWIT-1
 
 ##### H-MOCK-AUDIT-AGENT-1 implementation status
 
-源文件:**不存在**。`e2e/mocks/mock-audit-agent.mjs` 需要从零创建。
+源文件:`cotest/e2e/mocks/mock-audit-agent.mjs` (2026-05-19 创建,Ed25519 keypair + 自动生成 DID + MLS KeyPackage 桩)
 
-- [ ] 创建 `e2e/mocks/mock-audit-agent.mjs` 文件 (骨架级别都没有)
-- [ ] audit-agent 自身的 DID + Ed25519 signing key 自动生成 (每次启动随机或读 env)
-- [ ] KeyPackage 发布 (E2EE space 需要 MLS KeyPackage 才能被 invite)
-- [ ] `/api/v1/audit-agent/inbox` 端点 — 列出收到的 `cx.moderation.frank` / `cx.audit.report` 事件
-- [ ] 自动 acknowledge invite — 收到 invite 后回 `cx.audit.accessed`
-- [ ] 自动生成 audit binding signed proof (依赖 SDK-5 audit binding API 落地)
-- [ ] `/inspect` 端点给 spec 测试看 mock 当前持有的 events / acks 状态
-- [ ] `run-joint-e2e.ps1` 增加 `-StartMockAuditAgent` 开关(现有 IdP 开关一致)
-- [ ] coauth/soland 配置侧把 `cx.audit_disclosure_policy.audit_agent_did` 指向 mock 自动生成的 DID
+- [x] 创建 `e2e/mocks/mock-audit-agent.mjs` 文件 (2026-05-19)
+- [x] audit-agent 自身的 DID + Ed25519 signing key 自动生成 — 默认 `did:web:audit-agent.joint-e2e.local#<rand>`,可通过 `MOCK_AUDIT_AGENT_DID` 固定 (2026-05-19)
+- [x] KeyPackage 发布 — `GET /api/v1/audit-agent/identity` 返 `key_package` 占位 blob (E2EE invite 时由 soland 转发到组) (2026-05-19)
+- [x] `/api/v1/audit-agent/events` + `/api/v1/audit-agent/inbox` 端点 — 接收并列出 `cx.moderation.frank` / `cx.audit.report` 事件 (2026-05-19)
+- [x] 自动 acknowledge invite — `POST /api/v1/audit-agent/invite` 收到 invite 后生成并记录一条 `cx.audit.accessed` envelope (2026-05-19)
+- [x] 自动生成 audit binding signed proof — Ed25519 签名嵌入 `cx.audit.accessed.binding_proof`,可通过 `/jwks` 验证 (2026-05-19)
+- [x] `/inspect` 端点 — dump inbox / invites / accessed 三个 log,以及 agent_did 和 public_jwk (2026-05-19)
+- [x] `run-joint-e2e.ps1` 增加 `-StartMockAuditAgent` 开关(`-StartMocks` 自动开启);新增 `-MockAuditAgentDid` 参数允许固定 DID;summary.json/.md 输出 `mock_audit_agent_base_url` (2026-05-19)
+- [ ] coauth/soland 配置侧把 `cx.audit_disclosure_policy.audit_agent_did` 指向 mock 自动生成的 DID — **跨项目,服务端 todo**;cotest 已经通过 `COTEST_MOCK_AUDIT_AGENT_BASE_URL` / `COTEST_MOCK_AUDIT_AGENT_DID` 把 mock 信息 export 给 spec,服务端配置生成需在 `../soland/_todos.md` / `../coauth/_todos.md` 跟进
 
-#### 提议的文件布局 (落地后)
+#### 实际文件布局 (2026-05-19 落地)
 
 ```
 cotest/e2e/mocks/
-  mock-idp.mjs           ← 已存在,补 /inspect + PKCE
-  mock-email.mjs         ← 已存在,补 /inspect
-  mock-witness.mjs       ← 已存在,补 /inspect + 链校验 + 多 witness
-  mock-audit-agent.mjs   ← 新建,从零
+  mock-idp.mjs           ← /inspect + PKCE + scenarios + force_error ✅
+  mock-email.mjs         ← /inspect + body_html + token expiry (TTL) ✅
+  mock-witness.mjs       ← /inspect + prev_entry_hash 链校验 + stale 拒签 ✅
+  mock-audit-agent.mjs   ← 新建 ✅
   _shared/
-    inspect.mjs          ← 统一的 /inspect 中间件(所有 mock 共用)
-    keypairs.mjs         ← 统一的 Ed25519/RS256 keypair helper
+    inspect.mjs          ← 统一的 /inspect 中间件(GET dump + DELETE 重置)✅
+    keypairs.mjs         ← 统一的 Ed25519/RS256 keypair helper ✅
 ```
 
 ### 6.B harness 反向工程 fixme → 实测的流水
 
-| ID | 主题 | 描述 |
-|---|---|---|
-| **H-SHIM-1** | fixme → test 自动重写脚本 | `scripts/promote-fixme.ps1 -SpecPath <file>:<line> -NewBody '...'` 把指定 fixme 整段替换成实测;先验证当前 test 在该位置仍是 fixme(防止 race);用于服务端 feature 落地后批量切换 |
-| **H-SHIM-2** | per-feature 选择性跳过 | 让 `run-joint-e2e.ps1 -Profile joint-smoke` 通过 grep 标签(测试名带 `@fully-implemented`)只跑已落地的;avoid CI noise during incremental rollout |
-| **H-SHIM-3** | service-log gap 报告 | run-joint-e2e 结束后扫所有 service stderr 找 `WARN.*denied|FORBIDDEN|reject` 行写进 summary.md,让失败原因更直接(参见 2026-05-17 kanban 修复就是靠这条 WARN) |
+- [x] **H-SHIM-1** fixme → test 自动重写脚本 — `scripts/promote-fixme.ps1 -SpecPath <file>:<line> -NewBody '...'` 把指定 fixme 整段替换成实测;先验证当前位置仍是 `test.fixme(...)`(防止 race),通过 bracket-counter 找到匹配的 `)` 即使 body 跨多行;支持 `-DryRun` 预览。Smoke tested 2026-05-19 (2026-05-19 ✅)
+- [x] **H-SHIM-2** per-feature 选择性跳过 — `run-joint-e2e.ps1 -RunProfile joint-smoke` 现在自动加 `--grep @fully-implemented`,只跑测试名带该 tag 的实测;显式 `-Grep` 仍可覆盖。fixme 占位不再阻塞 smoke CI (2026-05-19 ✅)
+- [x] **H-SHIM-3** service-log gap 报告 — `run-joint-e2e.ps1` 结束阶段扫所有 service stderr (`Select-String` 正则 `(WARN|ERROR).*(denied|FORBIDDEN|capability_denied|policy_reject|reject|unauthorized)`),分服务列出最多 50 行匹配,写入 `service-gaps.md`,并把路径加入 `summary.json/.md` (2026-05-19 ✅)
+
+### 6.D 后续 follow-up (deferred)
+
+- [ ] **H-HARNESS-MULTIWIT-1** multi-witness quorum 编排 — `mock-witness.mjs` 单实例已经能用任意 DID 启动,但 `run-joint-e2e.ps1` 当前只起一个进程。等第一个 quorum spec 实际落地时,把 `-MockWitnessExtraDids "did:web:...,did:web:..."` 之类参数加到 run script,循环 spawn 额外 witness 并把 base URL/DID 列表通过 `COTEST_MOCK_WITNESS_QUORUM_BASE_URLS` / `COTEST_MOCK_WITNESS_QUORUM_DIDS` export 给 spec
+- [ ] **H-SHIM-4** promote-fixme 反向 demotion — `scripts/demote-test.ps1`,当回归测试失败但功能未回退到 fixme 时,临时把 test 转 `test.fixme` 保 CI;附 reason 注释。低优先级,失败时手工注释即可
 
 ### 6.C 当前已落地
 
@@ -176,3 +179,31 @@ cotest/e2e/mocks/
 | 192 fixme 全部分类归入各项目 _todos.md | ✅ 2026-05-17 | soland 125 行 + yougen 30 行 + harness ~10 行,每行 stable ID |
 | kanban `/kanban` → `/kanban/${space_id}` 修复 | ✅ 2026-05-17 | `e2e/tests/kanban/end-to-end.spec.ts:42` + `workflows/kanban-week.spec.ts:49`;创建新 space 后必须带 space_id 路由,否则 selected_space 回退到 demo space → 403/capability_denied → 卡片乐观 UI 回滚 |
 | agent_workspace Rust e2e | ✅ 2026-05-17 | `tests/agent_workspace_e2e.rs` 真实跑通,401 + 401 + openapi operationId 三条全过 |
+| event_idempotency_replay Rust scenario | ✅ 2026-05-18 | `tests/event_idempotency_replay.rs` + `src/scenarios/event_idempotency_replay.rs`,验证同一 event_id 二次 POST 返 `status=duplicate,idempotent=true` 且 projection 只发生一次 |
+| H-MOCK-IDP-1 / EMAIL-1 / WITNESS-1 全部子项 | ✅ 2026-05-19 | 见 §6.A 各 implementation status |
+| H-MOCK-AUDIT-AGENT-1 (harness 侧) | ✅ 2026-05-19 | `mock-audit-agent.mjs` 全功能,run-joint-e2e `-StartMockAuditAgent` 开关到位;遗留服务端配置项已转 soland/coauth 项目 todo |
+| H-SHIM-1/2/3 | ✅ 2026-05-19 | `promote-fixme.ps1`、joint-smoke `--grep @fully-implemented` 自动启用、`service-gaps.md` 报告 |
+
+## Phase 7: 持续维护和扩展 (2026-05-19 起)
+
+Phase 6 把 harness 侧的 mock 服务全部补齐之后,joint-e2e 主体上可以承接服务端 / 客户端 feature 落地,逐步把 192 个 fixme 占位转为实测。下面是 cotest 仓自身的持续维护项,不是反推到 soland/yougen 的服务端任务。
+
+### 7.A 自动化覆盖
+
+- [x] T7.1 新增 `e2e/tests/harness/mocks-selftest.spec.ts` (2026-05-19),直接 hit 各 mock 的端点 + `/inspect` 验证行为契约:
+  - idp: `POST /scenarios` → PKCE-S256 `/authorize`+`/token` happy path 验证 sub/email/audience;`force_error=unauthorized_client` 路径返 400 + 正确 OIDC `error` 字段
+  - email: `ttl_seconds=1` → wait 1.5s → claim 返 `410 token_expired`;另起 longer-ttl token 走 happy path 拿到 binding_proof 和 token_commitment
+  - witness: scid 顺序签 entry 1/2,prev_entry_hash mismatch 返 `409 prev_entry_hash_mismatch`,skip-number 返 `409 non_monotonic_entry_number`,stale timestamp (2024-01-01) 返 `422 entry_timestamp_stale`
+  - audit-agent: `/identity` 拿 did + key_package,`/invite` 自动 emit `cx.audit.accessed` 含 binding_proof,`/accessed` 列出 emitted envelope,`/jwks` 暴露 Ed25519 公钥
+  - 全部 4 个 case 已在 4 个 mock 同时运行的环境跑过,2026-05-19 4 passed
+- [x] T7.2 mocks-selftest 标记 `@fully-implemented` (`test.describe("harness mocks selftest @fully-implemented", ...)`),`joint-smoke` 自动 grep 该 tag 后这套 selftest 会跟着跑,任何 mock 行为漂移会被立即拦截 (2026-05-19)
+
+### 7.B Rust scenario 反向覆盖
+
+- [ ] T7.3 review `src/scenarios/event_idempotency_replay.rs` (2026-05-18 新增) 是否需要在 `_report.md` 的 spec 覆盖矩阵里登记;现在 `tests/event_idempotency_replay.rs` 用 `serial_test::serial` 串行运行,确认 `TestServerGroup` 隔离仍然成立。
+- [ ] T7.4 把同类的事件流幂等 / replay 场景扩展到 redaction、tombstone、edit chain (cx.message.update / cx.message.redact);currently only `cx.message.create` 被覆盖。
+
+### 7.C harness 文档同步
+
+- [x] T7.5 `docs/test-strategy.md` "Joint UI E2E" 段新增 "Mock services" 子节,列 4 个 mock 的 spec section + 关键端点表;同时记录 `joint-smoke` 现在默认 `--grep @fully-implemented` 的行为 (2026-05-19)
+- [x] T7.6 `_report.md` 新增 §9.5 "Harness mock 服务",指向各 mock 文件、列对应 spec section、说明 `_shared` 公共模块、引出 `mocks-selftest.spec.ts` 契约固定点 (2026-05-19)

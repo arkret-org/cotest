@@ -82,6 +82,7 @@ pub use wire_model::run_conflict_repair_fixture_suite;
 pub use wire_model::run_consent_fixture_suite;
 pub use wire_model::run_constraint_evaluation_class_fixture_suite;
 pub use wire_model::run_constraint_family_fixture_suite;
+pub use wire_model::run_cross_signing_reset_fixture_suite;
 pub use wire_model::run_device_cross_signing_trust_fixture_suite;
 pub use wire_model::run_device_message_negative_fixture_suite;
 pub use wire_model::run_device_verification_fixture_suite;

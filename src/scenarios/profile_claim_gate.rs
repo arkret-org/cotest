@@ -44,6 +44,60 @@ pub async fn live_describe_profile_claim_gate_from_env() -> Result<()> {
     Ok(())
 }
 
+pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
+    let unknown = serde_json::json!({
+        "supported_profiles": ["cx.profile.not_registered.v1"],
+        "supported_operations": [],
+    });
+    expect_profile_rejected(&unknown, "unknown claimed profile")?;
+
+    let failed = serde_json::json!({
+        "supported_profiles": ["cx.profile.core_event_store.v1"],
+        "supported_operations": [
+            "cx.server.describe",
+            "cx.events.describe",
+            "cx.events.submit",
+            "cx.events.get",
+            "cx.events.batch_get",
+            "cx.events.query",
+            "cx.events.frontier"
+        ],
+        "supported_event_kinds": [
+            "cx.space.create",
+            "cx.member.state"
+        ],
+        "supported_event_schemas": [
+            "cx.schema.event.v1",
+            "cx.schema.event_payload.v1",
+            "cx.schema.event_batch_receipt.v1",
+            "cx.schema.cursor.v1",
+            "cx.schema.anchor.v1"
+        ],
+        "conformance_results": {
+            "cx.profile.core_event_store.v1": {
+                "status": "failed",
+                "failed_suites": ["event_envelope_fixture"]
+            }
+        }
+    });
+    expect_profile_rejected(&failed, "failed conformance results")?;
+
+    let limited = serde_json::json!({
+        "supported_profiles": ["cx.profile.soland_limited_server.v1"],
+        "supported_operations": [],
+    });
+    expect_profile_rejected(&limited, "limited profile")?;
+
+    Ok(())
+}
+
+fn expect_profile_rejected(describe: &Value, label: &str) -> Result<()> {
+    if crate::conformance::validate_server_profile_claims(describe).is_ok() {
+        bail!("profile gate accepted {label} claim: {describe}");
+    }
+    Ok(())
+}
+
 fn configured_targets() -> Result<Vec<DescribeTarget>> {
     let mut targets = Vec::new();
     add_exact_targets(

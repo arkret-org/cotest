@@ -6239,6 +6239,170 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
     Ok(())
 }
 
+/// S4 — cross-signing reset hardening vectors. These are parser-level
+/// conformance guards for `cx.profile.cross_signing.reset.v1`: reset proof
+/// family, generation monotonicity, replay rejection, clock skew, and the
+/// successor publish recovery window.
+pub fn run_cross_signing_reset_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("cross_signing_reset_fixture.json")?;
+    validate_profile(&fixture, "cx.profile.cross_signing.reset.v1")?;
+    let parameters = fixture
+        .get("parameters")
+        .ok_or_else(|| anyhow!("cross_signing_reset fixture missing parameters"))?;
+    let max_clock_skew = parameters
+        .get("max_clock_skew_seconds")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("cross_signing_reset missing max_clock_skew_seconds"))?;
+    if !(60..=900).contains(&max_clock_skew) {
+        bail!("cross_signing_reset max_clock_skew_seconds must be in 60..=900");
+    }
+    let publish_window = parameters
+        .get("successor_publish_required_within_seconds")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            anyhow!("cross_signing_reset missing successor_publish_required_within_seconds")
+        })?;
+    if publish_window != 86_400 {
+        bail!("cross_signing_reset successor publish window must default to 86400s");
+    }
+
+    let vectors = fixture
+        .get("vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("cross_signing_reset fixture missing vectors[]"))?;
+    if vectors.len() < 4 {
+        bail!(
+            "cross_signing_reset fixture requires >= 4 vectors, got {}",
+            vectors.len()
+        );
+    }
+
+    let mut saw_accept = false;
+    let mut saw_generation = false;
+    let mut saw_replay = false;
+    let mut saw_clock = false;
+    let mut saw_publish_window = false;
+    for v in vectors {
+        let name = required_str(v, "name")?;
+        let outcome = expected_outcome(v, name)?;
+        if required_str(v, "event_kind")? != "cx.cross_signing.reset" {
+            bail!("vector {name} event_kind must be cx.cross_signing.reset");
+        }
+        if required_str(v, "schema_id")? != "cx.schema.cross_signing_reset.v1" {
+            bail!("vector {name} schema_id must be cx.schema.cross_signing_reset.v1");
+        }
+        let previous = v
+            .get("previous_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("vector {name} missing previous_generation"))?;
+        let new = v
+            .get("new_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("vector {name} missing new_generation"))?;
+        let proof = v
+            .get("proof")
+            .ok_or_else(|| anyhow!("vector {name} missing proof"))?;
+        let proof_kind = required_str(proof, "kind")?;
+        if !matches!(
+            proof_kind,
+            "principal_signing" | "recovery_unlock" | "device_quorum" | "trusted_recovery_service"
+        ) {
+            bail!("vector {name} uses unknown reset proof kind {proof_kind}");
+        }
+
+        match name {
+            "principal_signing_reset_accepts_generation_plus_one" => {
+                if outcome != "accept" {
+                    bail!("vector {name} outcome must be accept");
+                }
+                if new != previous + 1 {
+                    bail!("vector {name} new_generation must equal previous_generation + 1");
+                }
+                if proof_kind != "principal_signing" {
+                    bail!("vector {name} must use principal_signing proof");
+                }
+                let successor_kind = v
+                    .pointer("/successor_publish/event_kind")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| anyhow!("vector {name} missing successor publish"))?;
+                if successor_kind != "cx.cross_signing.publish" {
+                    bail!("vector {name} successor publish must be cx.cross_signing.publish");
+                }
+                saw_accept = true;
+            }
+            "generation_gap_rejects" => {
+                if outcome != "reject"
+                    || expected_reason(v) != Some("cross_signing_reset_generation_mismatch")
+                {
+                    bail!("vector {name} must reject with cross_signing_reset_generation_mismatch");
+                }
+                if new == previous + 1 {
+                    bail!("vector {name} must contain a real generation gap");
+                }
+                saw_generation = true;
+            }
+            "clock_skew_exceeded_rejects" => {
+                if outcome != "reject"
+                    || expected_reason(v) != Some("cross_signing_reset_clock_skew_exceeded")
+                {
+                    bail!("vector {name} must reject with cross_signing_reset_clock_skew_exceeded");
+                }
+                let skew = v
+                    .get("observed_clock_skew_seconds")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("vector {name} missing observed_clock_skew_seconds"))?;
+                if skew <= max_clock_skew {
+                    bail!("vector {name} skew must exceed max_clock_skew_seconds");
+                }
+                saw_clock = true;
+            }
+            "replay_same_previous_generation_rejects" => {
+                if outcome != "reject" || expected_reason(v) != Some("cross_signing_reset_replayed")
+                {
+                    bail!("vector {name} must reject with cross_signing_reset_replayed");
+                }
+                if !v
+                    .get("seen_reset_tuple")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    bail!("vector {name} must mark seen_reset_tuple=true");
+                }
+                saw_replay = true;
+            }
+            "successor_publish_window_expired_rejects_device_authorization" => {
+                if outcome != "reject"
+                    || expected_reason(v) != Some("cross_signing_reset_publish_window_expired")
+                {
+                    bail!(
+                        "vector {name} must reject with cross_signing_reset_publish_window_expired"
+                    );
+                }
+                let elapsed = v
+                    .get("elapsed_since_reset_seconds")
+                    .and_then(Value::as_u64)
+                    .ok_or_else(|| anyhow!("vector {name} missing elapsed_since_reset_seconds"))?;
+                if elapsed <= publish_window {
+                    bail!("vector {name} elapsed time must exceed successor publish window");
+                }
+                saw_publish_window = true;
+            }
+            other => bail!("cross_signing_reset unexpected vector {other}"),
+        }
+        emit_vector(
+            "cross_signing_reset.vector",
+            v,
+            json!({"name": name, "outcome": outcome, "proof_kind": proof_kind}),
+        );
+    }
+    if !(saw_accept && saw_generation && saw_clock && saw_replay && saw_publish_window) {
+        bail!(
+            "cross_signing_reset must cover accept + generation_mismatch + clock_skew + replay + publish_window"
+        );
+    }
+    Ok(())
+}
+
 /// E3 Round 27 — multi-space federation. Per-space anchor isolation +
 /// cross-space rejection.
 pub fn run_multi_space_federation_fixture_suite() -> Result<()> {

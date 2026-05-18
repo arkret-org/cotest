@@ -2,44 +2,35 @@
 // and S7 (email onboarding).
 //
 // Endpoints:
-//   POST /api/v1/verification/send   { to, token, subject?, body? }
+//   POST /api/v1/verification/send   { to, token, subject?, body?, body_html?, ttl_seconds? }
 //     Captures the message in-memory. Returns 200 + message_id.
 //   GET  /api/v1/verification/inbox?to=email   → list of received messages
 //   POST /api/v1/verification/claim  { token, did }
-//     If token exists, marks consumed and returns a binding_proof
-//     (signed with the service's RSA key) attesting "token holder = did".
+//     If token exists and not expired, marks consumed and returns a
+//     binding_proof (signed with the service's RSA key) attesting
+//     "token holder = did".
 //   GET  /jwks   → service public key for verifying binding_proof
+//   GET  /inspect → all sent emails + all token state (global dump)
+//   DELETE /inspect → clear log
 //
 // In-memory only. State resets per harness run.
 
 import { createServer } from "node:http";
-import { createSign, generateKeyPairSync, randomUUID } from "node:crypto";
+import { createSign, randomUUID } from "node:crypto";
+import { createRsaKeyPair, b64url } from "./_shared/keypairs.mjs";
+import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
 
 const port = parseInt(process.env.MOCK_EMAIL_PORT ?? "0", 10);
+const defaultTtlSeconds = parseInt(process.env.MOCK_EMAIL_TOKEN_TTL_SECONDS ?? "900", 10);
 
-const { publicKey, privateKey } = generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-});
-const publicKeyJwk = publicKey.export({ format: "jwk" });
-const jwks = {
-  keys: [
-    {
-      ...publicKeyJwk,
-      kid: "mock-email-key-1",
-      alg: "RS256",
-      use: "sig",
-    },
-  ],
-};
+const { privateKey, jwks } = createRsaKeyPair("mock-email-key-1");
 
-// to -> [{ message_id, token, subject, body, received_at }]
+// to -> [{ message_id, token, subject, body, body_html, received_at, expires_at }]
 const inbox = new Map();
-// token -> { to, consumed: boolean, did?: string, consumed_at?: string }
+// token -> { to, consumed, did?, consumed_at?, expires_at, body_html? }
 const tokens = new Map();
-
-function b64url(input) {
-  return Buffer.from(input).toString("base64url");
-}
+const sendLog = new InspectLog("sent");
+const claimLog = new InspectLog("claims");
 
 function signBindingProof({ token_commitment, did, issuer, audience }) {
   const header = { alg: "RS256", typ: "JWT", kid: "mock-email-key-1" };
@@ -77,6 +68,24 @@ const server = createServer(async (req, res) => {
 
   const issuer = `http://127.0.0.1:${server.address()?.port ?? port}`;
 
+  if (url.pathname === "/inspect") {
+    const handled = handleInspect(req, res, {
+      service: "mock-email",
+      logs: [sendLog, claimLog],
+      extra: {
+        token_count: tokens.size,
+        inbox_count: inbox.size,
+        // Snapshot of all tokens with their state, useful when the test
+        // does not know which email the user picked.
+        tokens: Array.from(tokens.entries()).map(([token, entry]) => ({
+          token,
+          ...entry,
+        })),
+      },
+    });
+    if (handled) return;
+  }
+
   if (url.pathname === "/jwks") {
     res.end(JSON.stringify(jwks));
     return;
@@ -89,20 +98,32 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_to_or_token" }));
       return;
     }
+    const ttl = Number.isFinite(body.ttl_seconds) ? body.ttl_seconds : defaultTtlSeconds;
+    const expiresAtMs = Date.now() + ttl * 1000;
     const message_id = `msg-${randomUUID()}`;
     const message = {
       message_id,
       token: body.token,
       subject: body.subject ?? "Contrix invite",
       body: body.body ?? `You've been invited. Open: invite://${body.token}`,
+      body_html:
+        body.body_html ??
+        `<p>You've been invited.</p><p><a href="invite://${body.token}">Accept invite</a></p>`,
       received_at: new Date().toISOString(),
+      expires_at: new Date(expiresAtMs).toISOString(),
     };
     const list = inbox.get(body.to) ?? [];
     list.push(message);
     inbox.set(body.to, list);
-    tokens.set(body.token, { to: body.to, consumed: false });
+    tokens.set(body.token, {
+      to: body.to,
+      consumed: false,
+      expires_at: message.expires_at,
+      body_html: message.body_html,
+    });
+    sendLog.record({ to: body.to, token: body.token, message_id, expires_at: message.expires_at });
     res.statusCode = 200;
-    res.end(JSON.stringify({ message_id }));
+    res.end(JSON.stringify({ message_id, expires_at: message.expires_at }));
     return;
   }
 
@@ -126,13 +147,21 @@ const server = createServer(async (req, res) => {
     }
     const entry = tokens.get(body.token);
     if (!entry) {
+      claimLog.record({ token: body.token, did: body.did, error: "token_unknown" });
       res.statusCode = 404;
       res.end(JSON.stringify({ error: "token_unknown" }));
       return;
     }
     if (entry.consumed) {
+      claimLog.record({ token: body.token, did: body.did, error: "token_already_consumed" });
       res.statusCode = 409;
       res.end(JSON.stringify({ error: "token_already_consumed" }));
+      return;
+    }
+    if (entry.expires_at && Date.parse(entry.expires_at) < Date.now()) {
+      claimLog.record({ token: body.token, did: body.did, error: "token_expired" });
+      res.statusCode = 410;
+      res.end(JSON.stringify({ error: "token_expired", expires_at: entry.expires_at }));
       return;
     }
     entry.consumed = true;
@@ -146,7 +175,19 @@ const server = createServer(async (req, res) => {
       did: body.did,
       issuer,
     });
-    res.end(JSON.stringify({ binding_proof, token_commitment, consumed_at: entry.consumed_at }));
+    claimLog.record({
+      token: body.token,
+      did: body.did,
+      consumed_at: entry.consumed_at,
+      token_commitment,
+    });
+    res.end(
+      JSON.stringify({
+        binding_proof,
+        token_commitment,
+        consumed_at: entry.consumed_at,
+      }),
+    );
     return;
   }
 

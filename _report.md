@@ -556,6 +556,21 @@ async function shot(page, name) {
 - 初期截图只作为证据归档，不建议马上做全页面像素回归。动态数据、时间、光标、滚动位置都会导致 flake。
 - 多用户消息同步不能依赖固定 sleep，应使用轮询 UI 状态或后端 API 状态。
 
+## 9.5 Harness mock 服务 (2026-05-19 补)
+
+`e2e/mocks/` 下有四个 in-process mock 服务,由 `run-joint-e2e.ps1` 可选启动 (`-StartMocks` 一次全开,或单独 `-StartMockIdp` / `-StartMockEmail` / `-StartMockWitness` / `-StartMockAuditAgent`)。每个 mock 都暴露 `GET /inspect` 用于断言侧的 dump 和 `DELETE /inspect` 用于场景间复位;签名秘钥通过 `GET /jwks` 暴露,可被 spec 用来验证 mock 自己签的 JWT/binding_proof。
+
+| 文件 | 主要负责的 spec section | 关键端点 / 行为 |
+|------|------------------------|----------------|
+| `e2e/mocks/mock-idp.mjs` | S4/S7 OIDC bridge | `/.well-known/openid-configuration` + `/jwks`;`/authorize` 接 PKCE `code_challenge`/`code_challenge_method`,`/token` 校验 `code_verifier` 不匹配返 `invalid_grant`;`POST /scenarios` 绑定 `login_hint -> {sub,email,force_error}` 让 spec 灵活注入身份或强制 OIDC 错误 |
+| `e2e/mocks/mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/api/v1/verification/send` 接 `body_html` + `ttl_seconds`,`/inbox?to=` 返历史邮件,`/claim` 验 token (过期返 `410 token_expired`,已用返 `409 token_already_consumed`,成功返签好的 `binding_proof` JWT) |
+| `e2e/mocks/mock-witness.mjs` | S9 did:webvh rotation | `/sign` 校验 `entry_number` 单调和 `prev_entry_hash` 与链头一致 (`409 prev_entry_hash_mismatch` / `non_monotonic_entry_number`),并按 `MOCK_WITNESS_STALE_SECONDS`(默认 24h)拒签 backdated entry (`422 entry_timestamp_stale`);`/health` 是测试钩子,可临时翻 down 触发 503 模拟 24h degraded window |
+| `e2e/mocks/mock-audit-agent.mjs` | S25 audited E2EE | 自动生成 Ed25519 keypair + DID (`MOCK_AUDIT_AGENT_DID` 可固定);`/identity` 暴露 DID + MLS KeyPackage 占位;`/invite` 自动 ACK 并签 `cx.audit.accessed` envelope(含 binding_proof),`/accessed` 列出所有 emitted envelope |
+
+共享 helper 在 `e2e/mocks/_shared/`:`keypairs.mjs` 统一封装 Ed25519/RSA 生成 + `b64url`,`inspect.mjs` 提供共用 InspectLog + `/inspect` 中间件。
+
+新增 spec `e2e/tests/harness/mocks-selftest.spec.ts` 是这套 mock 的契约固定点:同时跑 4 个 mock case,任何 mock 行为漂移会被 joint-smoke 立即拦截。Spec 标 `@fully-implemented`,无需服务端配合即可在 `joint-smoke` profile 直接通过。
+
 ## 10. 结论
 
 当前 `cotest` 已经是比较完整的 soland/API/协议黑盒测试套件，覆盖了大量后端业务和合规场景，包括注册、联系人、消息、Space、权限和 federation。但它现在不是三方产品级 UI E2E 测试框架。

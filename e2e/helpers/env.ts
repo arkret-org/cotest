@@ -78,6 +78,14 @@ export function mockWitnessDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_WITNESS_DID");
 }
 
+export function mockAuditAgentBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_AUDIT_AGENT_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockAuditAgentDid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_AUDIT_AGENT_DID");
+}
+
 export function diagnosticsRoot(): string {
   return path.join(
     optionalEnv("COTEST_JOINT_RUN_DIR") ?? path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local"),
