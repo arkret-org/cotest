@@ -13,9 +13,9 @@ FROM rust:1.92-bookworm
 WORKDIR /app
 COPY --from=build /workspace/soland/target/release/soland /usr/local/bin/soland
 
-ENV SERVERX_BIND=0.0.0.0:8008
-ENV SERVERX_DEVELOPMENT_MODE=1
-ENV SERVERX_BLOB_ROOT=/tmp/soland-blobs
+ENV SOLAND_BIND=0.0.0.0:8008
+ENV SOLAND_DEVELOPMENT_MODE=1
+ENV SOLAND_BLOB_ROOT=/tmp/soland-blobs
 
 EXPOSE 8008
 

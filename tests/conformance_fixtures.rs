@@ -43,6 +43,22 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Lane H / spec sync dc01ad7 — runtime profile gate registry. Loads
+    /// conformance-profiles.json and emits a per-profile status entry for the
+    /// 5 new vector profiles (discovery / event_kind_lattice_dispatch /
+    /// event_kind_payload_coverage / operation_registry_coverage /
+    /// error_code_registry_coverage) plus the 6 new implementation profiles
+    /// (agent_workspace.{v1,lite,governed,strict} / e2ee_relaxed /
+    /// directory_service). Vector profiles whose required_cotest_suites
+    /// resolve in the suite registry report `certified`; missing suites
+    /// report `skipped(suite_not_implemented)`; implementation profiles
+    /// report `unsupported` per the spec's default_unsupported_behavior.
+    profile_registry_gate_suite_matches_artifact_contracts,
+    "profile_registry_gate",
+    cotest::conformance::run_profile_registry_gate_suite,
+);
+
+conformance_test!(
     schema_validation_suite_matches_reference_semantics,
     "schema_validation",
     cotest::conformance::run_schema_validation_suite,
@@ -510,6 +526,27 @@ conformance_test!(
     multi_admin_distinct_approver_gate_round_27,
     "multi_admin_distinct_approver_gate_round_27",
     cotest::conformance::run_multi_admin_distinct_approver_gate_check,
+);
+
+conformance_test!(
+    /// CT-2 — mixed lattice cell types (cas-register + or-set + mv-register)
+    /// updating concurrently in the same Move batch / Anchor frontier. Spec:
+    /// models/space-and-place.md (lattice cell registry / co_write_policy) +
+    /// authz/event-auth-state-resolution.md §3 / §5.3.
+    lattice_mixed_kinds_suite_matches_reference_semantics,
+    "lattice_mixed_kinds",
+    cotest::conformance::run_lattice_mixed_kinds_suite,
+);
+
+conformance_test!(
+    /// CT-3 — snapshot v2 tampered Merkle vectors. A snapshot whose chunk
+    /// payload or inclusion-proof branch has been mutated MUST be rejected
+    /// with `digest_mismatch`, even when a local Merkle recompute is
+    /// internally consistent against the mutation. Spec:
+    /// conformance/snapshot-schema.md §3 / §4 / §5 / §6.
+    snapshot_v2_tampered_merkle_suite_matches_reference_semantics,
+    "snapshot_v2_tampered_merkle",
+    cotest::conformance::run_snapshot_v2_tampered_merkle_suite,
 );
 
 // ── cx.profile.agent_workspace.v1 ──────────────────────────────────────

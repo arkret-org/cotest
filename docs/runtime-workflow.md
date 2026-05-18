@@ -68,9 +68,9 @@ depends on the sibling checkout `contrix-rust-sdk`. The workspace root
 The image contract is intentionally simple:
 
 - start `soland` as the entrypoint
-- listen on `SERVERX_BIND`
-- honor `SERVERX_PUBLIC_BASE_URL`, `SERVERX_SERVICE_DID`,
-  `SERVERX_DEVELOPMENT_MODE`, and `SERVERX_BLOB_ROOT`
+- listen on `SOLAND_BIND`
+- honor `SOLAND_PUBLIC_BASE_URL`, `SOLAND_SERVICE_DID`,
+  `SOLAND_DEVELOPMENT_MODE`, and `SOLAND_BLOB_ROOT`
 - expose port `8008`
 
 The current implementation source-builds `soland` inside Docker:
@@ -201,7 +201,7 @@ limited to the selected profile's `required_coverage_profiles`, unless
   processes and exports their URLs to the scenario layer; cotest still owns
   SUT process lifecycle.
 - In `docker` mode, each server is a detached `docker run --rm` container with
-  its own mapped host port, temp blob root, and `SERVERX_*` runtime env.
+  its own mapped host port, temp blob root, and `SOLAND_*` runtime env.
 - Multi-server Docker scenarios create one unique bridge network per test group
   and remove it on drop, mirroring Complement's deployment scoping.
 - Both runtimes use the same host-side health polling and the same actor/test

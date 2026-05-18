@@ -42,18 +42,23 @@ impl SpawnedFloria {
 
 /// Render a minimal floria YAML config bound to `127.0.0.1:<port>` with a
 /// single `custom` pushkin so `PushkinRegistry::from_config` does not bail
-/// on the empty-apps guard. The rendered config disables all auth gates
-/// (notify_auth, dedup, rate-limits) — production-mode guards are off so
-/// `Config::validate` passes without any extra knobs.
-pub fn render_floria_config(bind_port: u16) -> Result<NamedTempFile> {
-    // The custom pushkin only needs a URL. We point at a 127.0.0.1 sink that
-    // we never actually push to — the bridge matrix scenario only hits
-    // `/health` + describe surfaces, which never round-trip to the provider.
+/// on the empty-apps guard. Callers can pass a per-run receiver URL; otherwise
+/// the config uses a placeholder 127.0.0.1 sink for health-only bootstraps.
+/// The rendered config disables all auth gates (notify_auth, dedup,
+/// rate-limits) — production-mode guards are off so `Config::validate` passes
+/// without any extra knobs.
+pub fn render_floria_config(
+    bind_port: u16,
+    custom_pushkin_url: Option<&str>,
+) -> Result<NamedTempFile> {
+    // The custom pushkin only needs a URL. Health-only callers use a
+    // placeholder sink that is never reached; CT-7 passes its mock receiver.
     //
     // `notify_dedup_ttl_seconds: 0` disables the dedup backend entirely so
     // the redis branch isn't reached.
+    let custom_pushkin_url = custom_pushkin_url.unwrap_or("http://127.0.0.1:1/cotest-floria-sink");
     let body = format!(
-        "http:\n  bind_addresses:\n    - 127.0.0.1\n  port: {bind_port}\n  notify_dedup_ttl_seconds: 0\n  notify_dedup:\n    backend: memory\n    key_prefix: cotest-floria\n  notify_auth: {{}}\n  notify_rate_limits:\n    window_seconds: 60\n\napps:\n  cotest.placeholder:\n    type: custom\n    url: http://127.0.0.1:1/cotest-floria-sink\n"
+        "http:\n  bind_addresses:\n    - 127.0.0.1\n  port: {bind_port}\n  notify_dedup_ttl_seconds: 0\n  notify_dedup:\n    backend: memory\n    key_prefix: cotest-floria\n  notify_auth: {{}}\n  notify_rate_limits:\n    window_seconds: 60\n\napps:\n  cotest.placeholder:\n    type: custom\n    url: {custom_pushkin_url}\n"
     );
 
     let mut tmp = tempfile::Builder::new()
@@ -71,6 +76,14 @@ pub fn render_floria_config(bind_port: u16) -> Result<NamedTempFile> {
 ///
 /// Returns `Ok(None)` if the floria binary is missing or fails to come up.
 pub async fn spawn_floria_with_config() -> Result<Option<SpawnedFloria>> {
+    spawn_floria_with_custom_pushkin_url(None).await
+}
+
+/// Spawn floria using either the default placeholder pushkin URL or a
+/// caller-supplied mock receiver URL.
+pub async fn spawn_floria_with_custom_pushkin_url(
+    custom_pushkin_url: Option<&str>,
+) -> Result<Option<SpawnedFloria>> {
     let probe_spec = ExternalBinarySpec {
         service: "floria",
         bin_env: "FLORIA_BIN",
@@ -93,7 +106,7 @@ pub async fn spawn_floria_with_config() -> Result<Option<SpawnedFloria>> {
         Err(_) => return Ok(None),
     };
     let bind_addr = format!("127.0.0.1:{bind_port}");
-    let config_file = match render_floria_config(bind_port) {
+    let config_file = match render_floria_config(bind_port, custom_pushkin_url) {
         Ok(f) => f,
         Err(_) => return Ok(None),
     };

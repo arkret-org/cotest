@@ -10,6 +10,7 @@ use cotest::scenarios::_helpers::coauth_bootstrap::{
     bootstrap_coauth_config, spawn_coauth_with_db, spawn_ephemeral_postgres,
 };
 use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
+use cotest::scenarios::four_service_smoke::four_service_smoke_run;
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -83,4 +84,21 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// CT-6 — four-service joint bootstrap smoke (soland + coauth + starid + teabay).
+///
+/// Marked `#[ignore]` because the full stack needs docker (for coauth's
+/// ephemeral postgres), sibling `coauth.exe` / `starid.exe` / `teabay.exe`
+/// binaries, AND a `DATABASE_URL` for teabay. Run with:
+///
+///   cargo test --test _bootstrap_smoke four_service_joint_smoke -- --ignored
+///
+/// When all prereqs are present the test boots the stack and asserts every
+/// service answers /health with 2xx; when any piece is missing it bails with
+/// a descriptive message naming the missing dependency.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn four_service_joint_smoke() -> Result<()> {
+    four_service_smoke_run().await
 }

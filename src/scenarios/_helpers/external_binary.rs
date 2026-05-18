@@ -192,6 +192,17 @@ pub fn skip_reason(spec: &ExternalBinarySpec) -> Option<SkipReason> {
 /// healthy, and return the handle. Returns `Ok(None)` when the binary cannot
 /// be located OR a `required_env_vars` entry is missing.
 pub async fn try_spawn(spec: &ExternalBinarySpec) -> Result<Option<SpawnedExternalProcess>> {
+    try_spawn_with_extra_env(spec, &[]).await
+}
+
+/// Spawn like [`try_spawn`] while adding caller-supplied env vars on top of
+/// `spec.extra_env`. Dynamic entries are applied last, so callers can override
+/// a static spec value when a scenario needs per-run wiring such as a freshly
+/// allocated mock service URL.
+pub async fn try_spawn_with_extra_env(
+    spec: &ExternalBinarySpec,
+    extra_env: &[(&str, &str)],
+) -> Result<Option<SpawnedExternalProcess>> {
     if skip_reason(spec).is_some() {
         return Ok(None);
     }
@@ -213,6 +224,9 @@ pub async fn try_spawn(spec: &ExternalBinarySpec) -> Result<Option<SpawnedExtern
     }
     command.stdout(Stdio::null()).stderr(Stdio::null());
     for &(key, value) in spec.extra_env {
+        command.env(key, value);
+    }
+    for &(key, value) in extra_env {
         command.env(key, value);
     }
 
@@ -319,9 +333,9 @@ pub const SOLAND_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     service: "soland",
     bin_env: "SOLAND_BIN",
     sibling_path: &["soland", "target", "debug"],
-    bind_env: "SERVERX_BIND",
+    bind_env: "SOLAND_BIND",
     bind_arg: Some("--bind"),
-    extra_env: &[("SERVERX_DEVELOPMENT_MODE", "1")],
+    extra_env: &[("SOLAND_DEVELOPMENT_MODE", "1")],
     extra_args: &[],
     required_env_vars: &[],
     health_path: "/health",

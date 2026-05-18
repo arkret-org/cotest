@@ -11,6 +11,13 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 - Multi-server scenarios start two or more real server processes and verify
   federation-facing behavior through public endpoints.
 - Shared lifecycle and actor helpers live in `src/harness.rs`.
+- Reusable fixture builders live in `src/fixtures/`. See the
+  [Fixture builders](#fixture-builders) section below for the
+  `TestActorBuilder` fluent API that replaces the per-scenario
+  `register_account` + `dev_login` + `create_space` boilerplate.
+- The same module hosts [`EventTimeline`](#failure-event-timeline) — a
+  rendered view of the harness's `transcript.ndjson` that panic hooks dump to
+  stderr when a scenario assertion fails.
 - Scenario logic lives in `src/scenarios/`; `tests/` stays as thin wrappers so
   the project remains the test harness, not a pile of ad hoc integration files.
 - The harness now supports both local process spawning and Docker-backed SUT
@@ -209,3 +216,132 @@ project so CI can use Playwright-managed browser installation.
 `scripts/run-cotest.ps1 -Profile release-gate` now invokes joint smoke as an
 additional release-gate check and writes `joint-smoke-gate.*`. Use
 `-SkipJointSmokeGate` only for local protocol-only release-gate debugging.
+
+## Per-test state isolation
+
+CT-12 (2026-05-18): cotest already gives each scenario complete state
+isolation through the per-spawn lifecycle in `ContrixServer`:
+
+- `ContrixServer::spawn*` allocates a fresh `127.0.0.1:<free-port>`, a
+  fresh `temp_dir().join("cotest-{name}-{port}-blobs")` blob root, and a
+  fresh `did:web:{name}.cotest.local` service DID per call.
+- `soland` keeps `AccountRecord`, `SpaceMetaRecord`, and
+  `ProjectionState` in process-local memory — there is no shared database
+  or filesystem anchor that survives the per-test process drop.
+- `Drop for ContrixServer` kills the spawned child (or removes the docker
+  container) and deletes the blob root.
+- `TestServerGroup::multi` extends the same per-process isolation across
+  every node in a federation scenario.
+
+That means a fresh `ContrixServer::spawn(label)` is already equivalent to
+"per-test fresh DB / state snapshot" — there is no shared `AccountRecord`
+or `SpaceMetaRecord` to snapshot and restore because the records never
+outlive the spawned process. The only process-global state cotest itself
+owns is the monotonic `NEXT_EVENT_SEQ` counter (correct under
+concurrency), the OnceLock-installed tracing subscriber in
+`src/transcripts.rs` (one-time global init; per-thread scenario binding),
+and the artifact `transcript.ndjson` referenced by
+`COTEST_TRANSCRIPT_PATH` / `COTEST_ARTIFACT_DIR` (line-atomic appends,
+interleaved when several tests run in parallel).
+
+`src/fixtures/scaffold.rs` ships `TestScaffold::fresh(label)` and
+`TestScaffold::fresh_multi(label, count)`, ergonomic wrappers over
+`ContrixServer::spawn` / `TestServerGroup::multi` that suffix the label
+with a `p<pid>-<seq>` token. The suffix guarantees that two parallel
+runs of the same scenario produce distinct service DIDs, transcript
+files, per-service log files, and on-disk blob roots without the
+scenario author having to coordinate names.
+
+Recommended migration cadence: when a scenario is touched for any other
+reason, swap `ContrixServer::spawn(label)` →
+`TestScaffold::fresh(label).server()`. Drop the surrounding
+`#[serial]` only after auditing that the test does not depend on the
+process-shared `transcript.ndjson` ordering — most scenarios do not.
+
+### Running in parallel
+
+```powershell
+cargo test --test federation_readiness --test conformance_fixtures `
+    --test transcript_smoke -- --test-threads=4
+```
+
+The three test binaries above currently run clean under
+`--test-threads=4` (verified 3x on 2026-05-18: 71 tests, 0 failures, 0
+flakes). The conformance suites are offline so they would parallelise
+even without CT-12; `federation_readiness` is included because its
+`TestScaffold::fresh_multi("federation-ready", 2)` exercises the
+multi-node scaffold and proves the unique-label suffix prevents service
+DID collisions when multiple parallel test threads ask for the same
+label.
+
+Scenarios that have NOT yet been migrated keep their `#[serial]` mark
+because their integration test wrappers in `tests/` use
+`serial_test::serial` to gate against the historical assumption of a
+single SUT per `cargo test` process. Once `TestScaffold::fresh` becomes
+the default entry point, the `#[serial]` mark can be removed at the
+wrapper level as well.
+
+## Fixture builders
+
+`src/fixtures/builders.rs` exposes `TestActorBuilder`, a fluent fixture for
+the common "register actor + login + pre-seed spaces" preamble. Replaces:
+
+```rust
+let bob = server
+    .register_client("did:web:bob.example", "@bob", "dev_bob")
+    .await?;
+let bob_space = bob.create_space("Some Space").await?;
+```
+
+with:
+
+```rust
+let bob = TestActorBuilder::new(&server, "@bob")
+    .with_did("did:web:bob.example")
+    .with_device("dev_bob")
+    .with_space("Some Space")
+    .create()
+    .await?;
+let bob_space = bob.first_space().expect("seeded space");
+let bob_client = bob.client(); // reuse existing TestActorClient API
+```
+
+Defaults the builder applies when fields are omitted:
+
+- DID: `did:web:<bare-handle>.example` (handle's leading `@` stripped)
+- primary device id: `dev_<bare-handle>`
+- spaces: none (`with_space` is opt-in)
+- `with_key_package(n)` records the requested KeyPackage count on the
+  returned `TestActor` for scenarios that want to assert provisioning shape;
+  the harness does not yet expose a publish endpoint, so no MLS key material
+  is produced.
+
+`with_device` can be called multiple times: the first call sets the primary
+device id, additional calls populate `TestActor.additional_devices` for
+scenarios that want to drive multi-device flows. Scenarios that need a
+working second-device client should call
+`server.demo_client(&actor.did, &device_label)` against the recorded labels.
+
+Two scenarios currently use the builder as a worked example:
+`src/scenarios/events_backfill.rs` and `src/scenarios/interaction_models.rs`.
+Other scenarios continue to use `register_client` / `demo_client` directly —
+migration is incremental and orthogonal to scenario logic.
+
+## Failure event timeline
+
+`src/fixtures/timeline.rs` exposes `EventTimeline`, a pretty-printable view
+of the redacted ndjson transcript the harness writes via
+`COTEST_TRANSCRIPT_PATH` / `COTEST_ARTIFACT_DIR`. Each row renders sender,
+op_id (event_id or fallback HTTP request line), kind, status, depends-on
+frontier (the `prev_refs` array on the event envelope), and payload digest.
+
+`install_failure_dump_hook()` chains a panic hook that loads the transcript
+from the env vars above and writes the rendered timeline to stderr before
+delegating to the previously-installed hook. The hook is idempotent; scenario
+entry points can call it unconditionally without leaking handlers.
+
+When the harness is not configured with a transcript path the hook is a
+no-op — the install still succeeds but no timeline is rendered, since there
+is nothing on disk to read. Scripts that already set
+`COTEST_ARTIFACT_DIR=artifacts/runs/<timestamp>` (e.g. `run-cotest.ps1`) pick
+up the timeline automatically.

@@ -2,37 +2,41 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
+use crate::fixtures::TestActorBuilder;
 use crate::harness::{ContrixServer, expect_json, expect_status};
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
     let server = ContrixServer::spawn("interaction-messages").await?;
+    // Alice is the demo identity the server pre-seeds at boot; the builder is
+    // for fresh accounts only.
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let bob = server
-        .register_client(
-            "did:web:bob-interaction.example",
-            "@bob-interaction",
-            "dev_bob",
-        )
+    // Bob / Carol / Dave are freshly registered via the builder. Default
+    // derivations (`did:web:<bare-handle>.example` and `dev_<bare-handle>`)
+    // would collide with other scenarios sharing the same server log dir, so
+    // each gets an explicit `-interaction` suffix in the DID/device.
+    let bob_actor = TestActorBuilder::new(&server, "@bob-interaction")
+        .with_did("did:web:bob-interaction.example")
+        .with_device("dev_bob")
+        .create()
         .await?;
-    let carol = server
-        .register_client(
-            "did:web:carol-interaction.example",
-            "@carol-interaction",
-            "dev_carol",
-        )
+    let carol_actor = TestActorBuilder::new(&server, "@carol-interaction")
+        .with_did("did:web:carol-interaction.example")
+        .with_device("dev_carol")
+        .create()
         .await?;
-    let dave = server
-        .register_client(
-            "did:web:dave-interaction.example",
-            "@dave-interaction",
-            "dev_dave",
-        )
+    let dave_actor = TestActorBuilder::new(&server, "@dave-interaction")
+        .with_did("did:web:dave-interaction.example")
+        .with_device("dev_dave")
+        .create()
         .await?;
+    let bob = bob_actor.client();
+    let carol = carol_actor.client();
+    let dave = dave_actor.client();
 
     let space_id = alice.create_space("Interaction Model Space").await?;
-    for member in [&bob, &carol, &dave] {
+    for member in [bob, carol, dave] {
         alice.add_member(&space_id, member).await?;
     }
 

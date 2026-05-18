@@ -65,7 +65,7 @@ fn cell(family: &str, subject: &str) -> CellRef {
 }
 
 fn move_id(suffix: &str) -> MoveId {
-    // MoveId regex: ^cx:move:sha256:[0-9a-f]{64}$ — pad the suffix to
+    // MoveId regex: ^sha256:[0-9a-f]{64}$ — pad the suffix to
     // exactly 64 lowercase hex characters.
     let suffix = suffix.to_ascii_lowercase();
     assert!(
@@ -75,7 +75,7 @@ fn move_id(suffix: &str) -> MoveId {
         "test fixture suffix '{suffix}' must be lowercase hex"
     );
     let padding = 64usize.saturating_sub(suffix.len());
-    let id = format!("cx:move:sha256:{suffix}{}", "0".repeat(padding));
+    let id = format!("sha256:{suffix}{}", "0".repeat(padding));
     MoveId::new(id).expect("test fixture move id should be valid")
 }
 

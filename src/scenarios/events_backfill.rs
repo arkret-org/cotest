@@ -2,20 +2,28 @@ use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::Value;
 
+use crate::fixtures::TestActorBuilder;
 use crate::harness::{TestServerGroup, expect_json};
 
 pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() -> Result<()> {
     let group = TestServerGroup::single("event-backfill").await?;
     let server = group.server(0);
+    // Alice is seeded as the existing demo identity (the harness pre-registers
+    // `did:web:alice.example` at server boot), so the builder shape uses
+    // `demo_client` directly here. Bob is freshly created via the builder so
+    // we can demonstrate the new fixture surface in a real scenario.
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let bob = server
-        .register_client("did:web:bob-backfill.example", "@bob-backfill", "dev_bob")
+    let bob = TestActorBuilder::new(server, "@bob-backfill")
+        .with_did("did:web:bob-backfill.example")
+        .with_device("dev_bob")
+        .create()
         .await?;
+    let bob_client = bob.client();
 
     let space_id = alice.create_space("Backfill Recovery Space").await?;
-    alice.add_member(&space_id, &bob).await?;
+    alice.add_member(&space_id, bob_client).await?;
 
     let sent = vec![
         alice
@@ -62,7 +70,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         .collect::<Vec<_>>();
     assert_eq!(recovered_message_ids, expected_message_ids);
 
-    let bob_sync = bob.sync().await?;
+    let bob_sync = bob_client.sync().await?;
     let synced_message_ids = json_array(&bob_sync["spaces"][&space_id]["timeline"], "events")?
         .iter()
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))

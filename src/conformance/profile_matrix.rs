@@ -49,6 +49,10 @@ const REQUIRED_COTEST_SUITES: &[(&str, &str)] = &[
         "operation_registry_coverage_fixture",
     ),
     (
+        "cx.profile.error_code_registry_coverage_vectors.v1",
+        "error_code_registry_coverage_fixture",
+    ),
+    (
         "cx.profile.privacy_security_vectors.v1",
         "security_negative_profile",
     ),

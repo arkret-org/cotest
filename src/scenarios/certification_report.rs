@@ -5,7 +5,8 @@ use serde_json::Value;
 use url::Url;
 
 use crate::conformance::{
-    PrincipalCertificationStatus, validate_principal_server_certification,
+    PrincipalCertificationStatus, ProfileGateReport, build_profile_gate_report,
+    render_profile_gate_report_markdown, validate_principal_server_certification,
     validate_scaffold_profile_gate,
 };
 
@@ -14,6 +15,12 @@ pub struct StackCertificationReport {
     pub schema: String,
     pub generated_at: String,
     pub services: Vec<ServiceCertificationEntry>,
+    /// Per-profile gate rollup (vector + implementation profile manifest
+    /// entries from `profile_registry::build_profile_gate_report`). Present
+    /// when the runtime gate report could be built from the spec artifact;
+    /// `None` when the artifact is unreachable (e.g. running from a release
+    /// tarball without `contrix-spec/`).
+    pub profile_gate: Option<ProfileGateReport>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -105,6 +112,11 @@ pub fn render_stack_certification_report_markdown(report: &StackCertificationRep
             service.describe_url.as_deref().unwrap_or(""),
             service.reason.as_deref().unwrap_or("")
         ));
+    }
+    if let Some(gate) = &report.profile_gate {
+        out.push_str("\n");
+        out.push_str("### Profile gate\n\n");
+        out.push_str(&render_profile_gate_report_markdown(gate));
     }
     out
 }
@@ -239,9 +251,17 @@ fn skipped_entry(service: &str, reason: &str) -> ServiceCertificationEntry {
 }
 
 fn report_with_services(services: Vec<ServiceCertificationEntry>) -> StackCertificationReport {
+    // Try to load the runtime profile-gate rollup. We deliberately swallow a
+    // load error (e.g. spec artifact unreachable in a packaged release run)
+    // and emit `profile_gate: None` rather than failing the whole
+    // certification report — the certification suite's profile_registry gate
+    // (run separately under `cargo test --test conformance_fixtures`) is the
+    // authoritative pass/fail signal.
+    let profile_gate = build_profile_gate_report().ok();
     StackCertificationReport {
         schema: "cx.cotest.live_stack_certification_report.v1".to_owned(),
         generated_at: chrono::Utc::now().to_rfc3339(),
         services,
+        profile_gate,
     }
 }

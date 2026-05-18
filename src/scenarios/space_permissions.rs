@@ -8,7 +8,9 @@ use crate::harness::{
 };
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
-    let server = ContrixServer::spawn("space-permissions").await?;
+    // CT-12: scaffold-driven, parallel-safe.
+    let scaffold = crate::fixtures::TestScaffold::fresh("space-permissions").await?;
+    let server = scaffold.server();
     let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
     let bob = register_account(
         &server,

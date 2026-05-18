@@ -8,11 +8,11 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
         "starid-optional",
         &[
             (
-                "SERVERX_DID_RESOLVER_ALLOW_METHODS",
+                "SOLAND_DID_RESOLVER_ALLOW_METHODS",
                 "did:web,did:key,did:webvh",
             ),
             (
-                "SERVERX_STARID_WEBVH_RESOLVER_URL",
+                "SOLAND_STARID_WEBVH_RESOLVER_URL",
                 "http://starid.cotest.local",
             ),
         ],

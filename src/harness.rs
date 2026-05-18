@@ -123,10 +123,10 @@ impl ContrixServer {
             .arg("--bind")
             .arg(&bind)
             .env_remove("DATABASE_URL")
-            .env("SERVERX_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SERVERX_SERVICE_DID", &service_did)
-            .env("SERVERX_DEVELOPMENT_MODE", "1")
-            .env("SERVERX_BLOB_ROOT", &blob_root)
+            .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
+            .env("SOLAND_SERVICE_DID", &service_did)
+            .env("SOLAND_DEVELOPMENT_MODE", "1")
+            .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
         for &(key, value) in extra_env {
@@ -191,10 +191,10 @@ impl ContrixServer {
             .arg("--bind")
             .arg(&bind)
             .env_remove("DATABASE_URL")
-            .env("SERVERX_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SERVERX_SERVICE_DID", &service_did)
-            .env("SERVERX_DEVELOPMENT_MODE", "1")
-            .env("SERVERX_BLOB_ROOT", &blob_root)
+            .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
+            .env("SOLAND_SERVICE_DID", &service_did)
+            .env("SOLAND_DEVELOPMENT_MODE", "1")
+            .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
         for &(key, value) in extra_env {
@@ -259,15 +259,15 @@ impl ContrixServer {
         }
         command
             .arg("--env")
-            .arg(format!("SERVERX_BIND=0.0.0.0:{container_port}"))
+            .arg(format!("SOLAND_BIND=0.0.0.0:{container_port}"))
             .arg("--env")
-            .arg(format!("SERVERX_PUBLIC_BASE_URL={public_base_url}"))
+            .arg(format!("SOLAND_PUBLIC_BASE_URL={public_base_url}"))
             .arg("--env")
-            .arg(format!("SERVERX_SERVICE_DID={service_did}"))
+            .arg(format!("SOLAND_SERVICE_DID={service_did}"))
             .arg("--env")
-            .arg("SERVERX_DEVELOPMENT_MODE=1")
+            .arg("SOLAND_DEVELOPMENT_MODE=1")
             .arg("--env")
-            .arg("SERVERX_BLOB_ROOT=/tmp/soland-blobs");
+            .arg("SOLAND_BLOB_ROOT=/tmp/soland-blobs");
         for &(key, value) in extra_env {
             command.arg("--env").arg(format!("{key}={value}"));
         }

@@ -4,15 +4,18 @@ mod coauth_lifecycle;
 mod encoding;
 mod envelope;
 mod federation;
+mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
+mod profile_registry;
 mod redaction;
 mod registry;
 mod scaffold_gate;
 mod schema_validation;
 mod security_negative;
+mod snapshot_v2_tampered_merkle;
 mod state_resolution;
 mod sync;
 mod wire_model;
@@ -45,6 +48,7 @@ pub use encoding::run_encoding_fixture_suite;
 pub use encoding::run_projection_position_discriminator_fixture_suite;
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
+pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
 pub use lattice_round_trip::run_lattice_round_trip_suite;
 pub use principal_server_certification::{
     PrincipalCertificationStatus, run_principal_server_certification_gate_suite,
@@ -52,6 +56,11 @@ pub use principal_server_certification::{
 };
 pub use privacy::run_privacy_security_fixture_suite;
 pub use profile_matrix::{run_profile_matrix_suite, validate_server_profile_claims};
+pub use profile_registry::{
+    ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
+    render_profile_gate_report_json, render_profile_gate_report_markdown,
+    run_profile_registry_gate_suite,
+};
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
 pub use scaffold_gate::{
@@ -60,6 +69,7 @@ pub use scaffold_gate::{
 };
 pub use schema_validation::run_schema_validation_suite;
 pub use security_negative::run_security_negative_profile_suite;
+pub use snapshot_v2_tampered_merkle::run_snapshot_v2_tampered_merkle_suite;
 pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };

@@ -10,12 +10,9 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let device_id = "dev_web";
     let coauth = MockCoauthIntrospectionServer::spawn(principal_did, device_id)?;
     let _env = EnvOverride::set(&[
+        ("SOLAND_SESSION_GRANT_INTROSPECTION_URL", Some(coauth.url())),
         (
-            "SERVERX_SESSION_GRANT_INTROSPECTION_URL",
-            Some(coauth.url()),
-        ),
-        (
-            "SERVERX_SESSION_GRANT_INTROSPECTION_BEARER",
+            "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER",
             Some("principal-token".to_owned()),
         ),
     ]);

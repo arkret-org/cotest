@@ -1,0 +1,73 @@
+{
+  "profile": "cx.profile.snapshot_v2_tampered_merkle_vectors.v1",
+  "version": "2026-05-18",
+  "comment": "CT-3 — verifies that a server (or client) MUST reject a snapshot whose chunk content has been mutated, even when a local Merkle branch is recomputed to be self-consistent against the mutated chunk. Spec authority: contrix-spec/spec/v1/zh/conformance/snapshot-schema.md §3 (chunk descriptor.sha256 covers chunk payload canonical JSON bytes), §4 (state_hash MUST be the canonical Merkle root over reducer output leaves), §5 (signature covers manifest payload), §6 (event_set_commitment.root + merkle_branch inclusion proofs). The signed manifest pins state_hash, event_set_commitment.root and each chunk.sha256 — recomputing a local Merkle branch from a mutated chunk does not recover the signed root, so the snapshot MUST be rejected. Spec note: snapshot-schema.md does not currently use the field name 'audit_path'; the normative inclusion-proof field is `merkle_branch` (§6). The errcode is `digest_mismatch` per error-code-registry.json (canonical entry for content/digest verification failure).",
+  "encoder": {
+    "verification_rule": "reject_if_local_recompute_does_not_match_signed_root",
+    "errcode_field": "expected.errcode"
+  },
+  "vectors": [
+    {
+      "name": "byte_flip_in_chunk_audit_path_recomputed_still_rejected",
+      "description": "Take a valid snapshot, flip one byte in chunks[0] payload bytes, then recompute the local merkle_branch for the mutated chunk so the local-recompute Merkle is internally consistent. The resulting recomputed event_set_commitment.root differs from the snapshot manifest's signed root — so verification MUST fail with digest_mismatch. The signed manifest pins the root; local recompute cannot rebind it.",
+      "snapshot_ref": "cx:snapshot:0196419a-8000-7000-8000-000000000000",
+      "tamper": {
+        "kind": "chunk_byte_flip",
+        "chunk_index": 0,
+        "byte_offset": 1024,
+        "recompute_local_branch": true
+      },
+      "manifest_signed_event_set_commitment_root": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifest_signed_chunk_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "local_recomputed_event_set_commitment_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "local_recomputed_chunk_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "local_recompute_internally_consistent": true,
+      "expected": {
+        "outcome": "reject",
+        "errcode": "digest_mismatch",
+        "errcode_scope": "chunk_sha256_or_event_set_commitment_root",
+        "rationale": "Even though the prover recomputed a self-consistent local Merkle, the signed manifest's chunk.sha256 and event_set_commitment.root are pinned by the snapshot signature (§5). Local recompute mismatching the signed root is the canonical digest_mismatch case."
+      }
+    },
+    {
+      "name": "byte_flip_in_audit_path_only",
+      "description": "Leave the chunk payload intact (chunk.sha256 unchanged) but flip one byte inside one element of the merkle_branch (inclusion-proof path) presented to the verifier. The branch no longer hashes up to the signed event_set_commitment.root, so the verifier MUST reject. Per snapshot-schema.md §6 rule 2, every merkle_branch MUST verify against commitment_root; a tampered branch fails this check.",
+      "snapshot_ref": "cx:snapshot:0196419a-8000-7000-8000-000000000000",
+      "tamper": {
+        "kind": "merkle_branch_byte_flip",
+        "branch_index_in_proof": 0,
+        "branch_element_index": 1,
+        "byte_offset": 7,
+        "leave_chunk_payload_intact": true
+      },
+      "manifest_signed_event_set_commitment_root": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifest_signed_chunk_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "local_recomputed_root_from_tampered_branch": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "expected": {
+        "outcome": "reject",
+        "errcode": "digest_mismatch",
+        "errcode_scope": "merkle_branch_does_not_match_commitment_root",
+        "rationale": "§6 rule 2: merkle_branch MUST verify against commitment_root. A byte flip in the branch alone breaks this; chunk content can still be canonical, but the proof is unusable."
+      }
+    },
+    {
+      "name": "chunk_count_mismatch",
+      "description": "Drop the last chunk from the snapshot's chunks[] array but keep the manifest's declared chunk count (e.g. event_set_commitment.covered_event_count or implied length from the signed manifest). The snapshot MUST be rejected. Per §4 (state_hash leaves are 1-to-1 with chunks[i].items[].object) and §5 (signature covers manifest payload), dropping a chunk falsifies state_hash recomputation and breaks the signed manifest's chunk coverage commitment.",
+      "snapshot_ref": "cx:snapshot:0196419a-8000-7000-8000-000000000000",
+      "tamper": {
+        "kind": "drop_last_chunk",
+        "chunks_present": 2,
+        "manifest_signed_chunk_count": 3
+      },
+      "manifest_signed_state_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifest_signed_event_set_commitment_root": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "local_recomputed_state_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "expected": {
+        "outcome": "reject",
+        "errcode": "digest_mismatch",
+        "errcode_scope": "state_hash_or_event_set_commitment_root",
+        "rationale": "Dropping a chunk reduces the leaf set used to recompute state_hash; the recomputed root cannot equal the signed state_hash. Even if the manifest tried to elide the count, the event_set_commitment.root would also fail recomputation."
+      }
+    }
+  ]
+}

@@ -88,6 +88,79 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 | **H-MOCK-AUDIT-AGENT-1** | mock audit-agent | `encryption/audited-e2ee.spec.ts` "report triggers audit_disclosure_policy.trigger; audit-agent is invited" | mock audit-agent 服务持有自己的 DID + signing key + KeyPackage(if E2EE);被邀请进 space 后能 acknowledge invite,生成 `cx.audit.accessed` 事件;`/inspect` 端点给测试看它收到的 `cx.moderation.frank` 列表 |
 | **H-MOCK-WITNESS-1** | mock did:webvh witness | `identity/webvh-rotation.spec.ts` 多个用例 + onboarding 的 did:webvh genesis | 现有 `e2e/mocks/mock-witness.mjs` 是骨架,需要扩到能:接受 entry rotation co-sign 请求、按测试场景模拟 offline(>24h timestamp)、提供 `/inspect` 看签发历史 |
 
+#### Per-mock 实现状态 (CT-15, 2026-05-18 审计)
+
+文件实际情况:`e2e/mocks/` 下当前只有三个 mjs (`mock-idp.mjs` / `mock-email.mjs` / `mock-witness.mjs`),**没有** `mock-audit-agent.mjs`。所有四个 mock 都缺 `/inspect` 端点。
+
+##### H-MOCK-IDP-1 implementation status
+
+源文件:`cotest/e2e/mocks/mock-idp.mjs` (146 行,RS256 静态 keypair)
+
+- [x] `/.well-known/openid-configuration` (discovery) 端点
+- [x] `/jwks` 端点 (公钥)
+- [x] `/authorize` 端点 — 接 `login_hint` / `redirect_uri` / `state` / `client_id`,302 redirect 回 RP 带 `code`+`state`
+- [x] `/token` 端点 — form-encoded `code` → 返 `{access_token, token_type, id_token, expires_in}`
+- [x] 静态 ID Token 返 (RS256 签名,`iss`/`sub`/`aud`/`email`/`email_verified` claims)
+- [ ] `/inspect` 端点 (测试用,看 mock 收到的 `code` / `audience` / 签发的 token 历史)
+- [ ] 测试场景化的 sub/email 注入 (目前从 `login_hint` 推断;需要每个 scenario 显式设置)
+- [ ] PKCE 校验 (S256 / plain) — coauth 走 PKCE 流程时会失败
+- [ ] error 响应矩阵 (`invalid_grant` / `invalid_client` / `unauthorized_client`) — 现在仅有一个通用错误
+
+##### H-MOCK-EMAIL-1 implementation status
+
+源文件:`cotest/e2e/mocks/mock-email.mjs` (161 行,RS256 keypair + in-memory inbox/token 表)
+
+- [x] `/jwks` 端点
+- [x] `/api/v1/verification/send` — 记录 `{to, token, subject, body}` 到 inbox
+- [x] `/api/v1/verification/inbox?to=email` — 列出该地址收到的所有邮件
+- [x] `/api/v1/verification/claim` — token+did → 签 `binding_proof` JWT (RS256,`purpose=third_party_invite_binding`,`token_commitment` 用 sha256:hex 编码)
+- [x] token 双重消费检测 (`409 token_already_consumed`)
+- [ ] `/inspect` 端点 (全局 dump,而不是 per-email — onboarding 不知道用户的 email 时用得到)
+- [ ] coauth/soland 把 SMTP 调用替换为 HTTP POST 到本 mock (服务端侧改动,**不在 harness 范围**;需要 `../coauth/_todos.md` 配套 task)
+- [ ] HTML / multipart body 渲染断言 (现在只存原始 string)
+- [ ] 过期 token 验证 (TTL 字段在 binding_proof 里有 `exp=now+600`,但 inbox token 本身不带 TTL)
+
+##### H-MOCK-WITNESS-1 implementation status
+
+源文件:`cotest/e2e/mocks/mock-witness.mjs` (132 行,RS256 keypair,默认 `did:web:witness.joint-e2e.local`)
+
+- [x] `/jwks` 端点
+- [x] `/api/v1/witness/policy` — 返 `{witness_did, health}`
+- [x] `/api/v1/witness/sign` — entry_hash → 签 witness JWT (claims:`iss`/`sub=scid`/`entry_hash`/`entry_number`/`exp=now+24h`)
+- [x] `/api/v1/witness/health` 测试钩子 — `POST {state:"healthy"|"down"}` 翻状态;`down` 时 `/sign` 返 503
+- [x] offline 模拟 (通过 health=down 实现 `>24h degraded window` 的关键路径)
+- [ ] `/inspect` 端点 (看签发历史:已签的 entry_hash 列表 + 各自 timestamp)
+- [ ] 真实 prev_entry_hash 链校验 (现在裸签,任何 entry_hash 都签;`identity-did.md §3.4` 要求链校验)
+- [ ] 多 witness 仲裁 (`quorum > 1` 场景 — 需要起多个 mock-witness 进程并互相 cross-sign)
+- [ ] backdated/forged timestamp 拒绝 (`identity-did.md §8.2` 紧急 rotation 要求 witness 拒签 stale entry)
+
+##### H-MOCK-AUDIT-AGENT-1 implementation status
+
+源文件:**不存在**。`e2e/mocks/mock-audit-agent.mjs` 需要从零创建。
+
+- [ ] 创建 `e2e/mocks/mock-audit-agent.mjs` 文件 (骨架级别都没有)
+- [ ] audit-agent 自身的 DID + Ed25519 signing key 自动生成 (每次启动随机或读 env)
+- [ ] KeyPackage 发布 (E2EE space 需要 MLS KeyPackage 才能被 invite)
+- [ ] `/api/v1/audit-agent/inbox` 端点 — 列出收到的 `cx.moderation.frank` / `cx.audit.report` 事件
+- [ ] 自动 acknowledge invite — 收到 invite 后回 `cx.audit.accessed`
+- [ ] 自动生成 audit binding signed proof (依赖 SDK-5 audit binding API 落地)
+- [ ] `/inspect` 端点给 spec 测试看 mock 当前持有的 events / acks 状态
+- [ ] `run-joint-e2e.ps1` 增加 `-StartMockAuditAgent` 开关(现有 IdP 开关一致)
+- [ ] coauth/soland 配置侧把 `cx.audit_disclosure_policy.audit_agent_did` 指向 mock 自动生成的 DID
+
+#### 提议的文件布局 (落地后)
+
+```
+cotest/e2e/mocks/
+  mock-idp.mjs           ← 已存在,补 /inspect + PKCE
+  mock-email.mjs         ← 已存在,补 /inspect
+  mock-witness.mjs       ← 已存在,补 /inspect + 链校验 + 多 witness
+  mock-audit-agent.mjs   ← 新建,从零
+  _shared/
+    inspect.mjs          ← 统一的 /inspect 中间件(所有 mock 共用)
+    keypairs.mjs         ← 统一的 Ed25519/RS256 keypair helper
+```
+
 ### 6.B harness 反向工程 fixme → 实测的流水
 
 | ID | 主题 | 描述 |

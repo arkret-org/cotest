@@ -2,10 +2,13 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
+use crate::fixtures::TestScaffold;
 use crate::harness::{ContrixServer, expect_api_error, expect_json, expect_status};
 
 pub async fn framework_errors_and_invalid_json_use_contrix_envelopes() -> Result<()> {
-    let server = ContrixServer::spawn("api-errors").await?;
+    // CT-12: scaffold-driven, parallel-safe.
+    let scaffold = TestScaffold::fresh("api-errors").await?;
+    let server = scaffold.server();
 
     let missing = expect_api_error(
         server.http().get(server.url("/api/v1/missing")),

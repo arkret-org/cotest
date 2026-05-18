@@ -1,10 +1,17 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{ContrixServer, expect_json, expect_status};
+use crate::fixtures::TestScaffold;
+use crate::harness::{expect_json, expect_status};
 
 pub async fn server_exposes_core_service_surface() -> Result<()> {
-    let server = ContrixServer::spawn("service-surface").await?;
+    // CT-12: TestScaffold::fresh — server is the same per-process
+    // isolated `ContrixServer` the scenario used before. The scaffold
+    // adds a process-unique suffix to `service-surface` so two
+    // copies of this scenario (e.g. under `--test-threads > 1`) get
+    // distinct service DIDs and on-disk artifact names.
+    let scaffold = TestScaffold::fresh("service-surface").await?;
+    let server = scaffold.server();
 
     let health = expect_json(server.http().get(server.url("/health")), StatusCode::OK).await?;
     assert_eq!(health["ok"], true);

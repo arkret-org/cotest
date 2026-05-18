@@ -1,0 +1,216 @@
+{
+  "profile": "cx.profile.lattice_mixed_kinds_vectors.v1",
+  "version": "2026-05-18",
+  "comment": "CT-2 — verifies Contrix state resolution when a single Space has cells of different lattice types (cas-register + or-set + mv-register) updating concurrently. Spec authority: contrix-spec/spec/v1/zh/models/space-and-place.md (lattice cell registry / co_write_policy) + contrix-spec/spec/v1/zh/authz/event-auth-state-resolution.md §3 (lattice_op kinds) and §5.3 (per-lattice reference impl). Each cell family has its own lattice; a single Move MAY write multiple cells, and concurrent Moves are resolved per-cell by the cell's own lattice — there is no cross-cell winner reconstruction.",
+  "notes": [
+    "Move objects in these vectors describe protocol-level semantics. Wire-required fields space_id / hlc / sig are elided for readability per the move-anchor-lattice-fixture convention.",
+    "Cell ids follow cx:cell:<component>:<subject>; subject placeholders use safe ULIDs and dotted DID forms.",
+    "expected_cell_states map cell_id → { lattice, value | heads | bottom } documenting the per-cell join after the Anchor batch."
+  ],
+  "vectors": [
+    {
+      "name": "cas_register_or_set_coexist",
+      "description": "A single Move writes one cas-register cell (space.locked) and one or-set cell (space.tags) in the same batch. Both effects apply atomically; the two cells advance independently under their own lattices.",
+      "pre_state": {
+        "anchor": "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "cells": {
+          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "cas-register",
+            "head": "cx:event:21084210-8421-7842-9084-210842108421",
+            "value": false
+          },
+          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "or-set",
+            "active_tags": []
+          }
+        }
+      },
+      "move": {
+        "id": "cx:event:6b5ad6b5-ad6b-7ad6-b5ad-6b5ad6b5ad6b",
+        "issuer": "did:web:admin.example",
+        "anchor_ref": "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "preconditions": [
+          {
+            "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+            "predicate": {
+              "op": "head_eq",
+              "value": "cx:event:21084210-8421-7842-9084-210842108421"
+            }
+          }
+        ],
+        "effects": [
+          {
+            "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+            "op": {
+              "kind": "set",
+              "value": true
+            }
+          },
+          {
+            "cell": "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+            "op": {
+              "kind": "add",
+              "tag": "tag:launch",
+              "value": "launch"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "verify_move": "pass",
+        "atomicity": "all_effects_or_none",
+        "cell_states": {
+          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "cas-register",
+            "value": true
+          },
+          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "or-set",
+            "active_tags": ["tag:launch"]
+          }
+        }
+      }
+    },
+    {
+      "name": "mv_register_concurrent_writers",
+      "description": "Two concurrent Moves from different actors set the same mv-register cell (space.draft_title) in the same Anchor batch. mv-register never reduces to a single winner; per event-auth-state-resolution.md §5.3.2 the join exposes both values as multiple heads. bottom=expose is the normal case for mv-register: projection surfaces {status:'conflict', heads:[...]} rather than choosing.",
+      "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+      "lattice": {
+        "type": "mv-register",
+        "bottom": "expose"
+      },
+      "concurrent_moves": [
+        {
+          "id": "cx:event:84210842-1084-7108-8210-842108421084",
+          "issuer": "did:web:alice.example",
+          "effects": [
+            {
+              "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "op": {
+                "kind": "set",
+                "value": "Launch Plan v1"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cx:event:a5294a52-94a5-794a-9294-a5294a5294a5",
+          "issuer": "did:web:bob.example",
+          "effects": [
+            {
+              "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "op": {
+                "kind": "set",
+                "value": "Launch Plan v2"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "query": {
+          "status": "conflict",
+          "heads": [
+            "cx:event:84210842-1084-7108-8210-842108421084",
+            "cx:event:a5294a52-94a5-794a-9294-a5294a5294a5"
+          ],
+          "values": ["Launch Plan v1", "Launch Plan v2"]
+        },
+        "last_write_wins": false,
+        "rationale": "mv-register exposes all concurrent set values as heads; spec §5.3.2 forbids picking a single winner. Authorization paths MUST NOT express trust via mv-register."
+      }
+    },
+    {
+      "name": "cas_or_set_mv_one_anchor",
+      "description": "All three lattice types are written across moves in one Anchor batch: cas-register (space.locked), or-set (space.tags), and mv-register (space.draft_title). The Anchor's state surface MUST contain all three expected outputs computed by each cell's own lattice. The Anchor batch verifies each Move against predecessor pre-state per §4.3 — Moves do NOT read each other's effects.",
+      "pre_state": {
+        "anchor": "cx:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "cells": {
+          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "cas-register",
+            "head": "cx:event:42108421-0842-7084-a108-421084210842",
+            "value": false
+          },
+          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "or-set",
+            "active_tags": ["tag:existing"]
+          },
+          "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "mv-register",
+            "heads": []
+          }
+        }
+      },
+      "anchor_frontier_moves": [
+        {
+          "id": "cx:event:c6318c63-18c6-718c-a318-c6318c6318c6",
+          "issuer": "did:web:admin.example",
+          "preconditions": [
+            {
+              "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "predicate": {
+                "op": "head_eq",
+                "value": "cx:event:42108421-0842-7084-a108-421084210842"
+              }
+            }
+          ],
+          "effects": [
+            {
+              "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "op": {
+                "kind": "set",
+                "value": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "cx:event:e739ce73-9ce7-79ce-b39c-e739ce739ce7",
+          "issuer": "did:web:alice.example",
+          "effects": [
+            {
+              "cell": "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "op": {
+                "kind": "add",
+                "tag": "tag:new",
+                "value": "new"
+              }
+            }
+          ]
+        },
+        {
+          "id": "cx:event:f8417f84-17f8-7f84-c417-f8417f8417f8",
+          "issuer": "did:web:bob.example",
+          "effects": [
+            {
+              "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "op": {
+                "kind": "set",
+                "value": "Single draft title"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "verify_anchor": "accept",
+        "state_surface": {
+          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "cas-register",
+            "value": true
+          },
+          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "or-set",
+            "active_tags": ["tag:existing", "tag:new"]
+          },
+          "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+            "lattice": "mv-register",
+            "heads": ["cx:event:f8417f84-17f8-7f84-c417-f8417f8417f8"],
+            "values": ["Single draft title"]
+          }
+        },
+        "rationale": "Each cell is resolved by its own lattice in isolation — there is no cross-cell winner reconstruction. The mv-register heads/values list has length 1 because only one Move set the cell in this batch (single-head case)."
+      }
+    }
+  ]
+}

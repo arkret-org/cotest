@@ -120,6 +120,16 @@
         "cx.profile.federation_minimal.v1",
         "cx.profile.e2ee_client.v1"
       ]
+    },
+    {
+      "profile_id": "soak",
+      "description": "Opt-in soak / volume regression runs (CT-18 100 actors x 10k messages, plus future long-running scenarios). NOT for default CI — requires dedicated runner capacity (self-hosted or nightly cron). Each scenario is itself marked #[ignore] and must be run with --ignored.",
+      "include_all_tests": false,
+      "cargo_filters": [
+        "soak_100_actors_10k_messages"
+      ],
+      "excluded_quarantine_labels": [],
+      "required_coverage_profiles": []
     }
   ],
   "quarantined_tests": []

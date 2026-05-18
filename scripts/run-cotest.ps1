@@ -6,7 +6,7 @@ param(
     [string]$SutImage = "cotest-soland:latest",
     [string]$OutputRoot,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "soak")]
     [string]$Profile = "all",
     [string[]]$RequiredCoverageProfiles = @(),
     [string]$CoverageBaselinePath,
@@ -174,7 +174,8 @@ function Get-CargoTestInvocations {
 function New-CargoTestArgs {
     param(
         [AllowNull()][string]$Filter,
-        [string[]]$Skips = @()
+        [string[]]$Skips = @(),
+        [switch]$IncludeIgnored
     )
 
     $args = @("test")
@@ -182,6 +183,12 @@ function New-CargoTestArgs {
         $args += $Filter
     }
     $args += @("--tests", "--no-fail-fast", "--", "--nocapture")
+    if ($IncludeIgnored) {
+        # The soak (CT-18) profile — and any future opt-in long-running
+        # profiles — must promote `#[ignore]`'d tests, otherwise the run
+        # would silently skip every scenario in the profile.
+        $args += "--ignored"
+    }
     foreach ($skip in $Skips) {
         if ($skip) {
             $args += @("--skip", $skip)
@@ -1459,8 +1466,13 @@ try {
     }
 
     $exitCode = 0
+    # Profiles whose scenarios are all `#[ignore]` by design (opt-in
+    # long-running runs). Promoting `--ignored` here keeps the per-test
+    # `#[ignore = "..."]` reason text intact while still letting the
+    # profile actually execute the scenarios.
+    $promoteIgnored = ($Profile -eq "soak")
     foreach ($invocation in $invocations) {
-        $cargoArgs = New-CargoTestArgs -Filter $invocation.filter -Skips @($invocation.skips)
+        $cargoArgs = New-CargoTestArgs -Filter $invocation.filter -Skips @($invocation.skips) -IncludeIgnored:$promoteIgnored
         $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs $cargoArgs -RawLog $rawLog -Label $invocation.label
         if ($invocationExitCode -ne 0 -and $exitCode -eq 0) {
             $exitCode = $invocationExitCode

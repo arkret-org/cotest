@@ -4,6 +4,8 @@
 //! Integration test files are intentionally thin entrypoints.
 
 pub mod conformance;
+pub mod fixtures;
+pub mod fuzz;
 pub mod harness;
 pub mod scenarios;
 pub mod transcripts;

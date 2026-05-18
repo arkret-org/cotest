@@ -2,14 +2,18 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{TestServerGroup, expect_json};
+use crate::fixtures::TestScaffold;
+use crate::harness::expect_json;
 
 pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()> {
-    let group = TestServerGroup::multi("federation-ready", 2).await?;
-    assert_eq!(group.len(), 2);
+    // CT-12: fresh_multi spawns two isolated soland processes with
+    // distinct service DIDs, ports, and blob roots — see
+    // fixtures::scaffold module docs for the full isolation audit.
+    let scaffold = TestScaffold::fresh_multi("federation-ready", 2).await?;
+    assert_eq!(scaffold.len(), 2);
 
-    let server_a = group.server(0);
-    let server_b = group.server(1);
+    let server_a = scaffold.server(0);
+    let server_b = scaffold.server(1);
 
     let describe_a = expect_json(
         server_a.http().get(server_a.url("/api/v1/server/describe")),
