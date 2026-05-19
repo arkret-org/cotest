@@ -38,7 +38,7 @@
 //! dev-mode reducer, despite the bare `knock` membership state being
 //! supported per `soland/src/reducer.rs::knock_state_visible_in_members_in_state_query`):
 //!
-//!   * `cx.space.join_rule` event kind not yet enforced by reducer (Space
+//!   * `cx.realm.join_rule` event kind not yet enforced by reducer (Space
 //!     create only stores `public: bool`, no enum); no path to set
 //!     `join_rule="knock"`.
 //!   * `member.application` / `.review` / `.cancel` event kinds not in
@@ -58,7 +58,7 @@ use anyhow::Result;
 
 /// CT-4 scenario probe. See module docs for the full matrix this exercises.
 ///
-/// Until the soland reducer wires up `cx.space.join_rule="knock"`,
+/// Until the soland reducer wires up `cx.realm.join_rule="knock"`,
 /// `member.application`, `member.application.review`, and the cooldown /
 /// TTL enforcement (§3.11), this scaffold returns immediately so the
 /// `#[ignore]`'d test surfaces in `cargo test --list` output without

@@ -29,6 +29,13 @@ fn synthetic_registry(dir: &std::path::Path) {
       "replacement": null,
       "allowed_contexts": ["changelog", "legacy_migration", "negative_test"],
       "notes": "Smoke fixture."
+    },
+    {
+      "id": "cx.space.delivery_binding_policy",
+      "rejection_level": "hard_reject",
+      "replacement": "cx.realm.delivery_binding_policy",
+      "allowed_contexts": ["changelog", "legacy_migration", "negative_test"],
+      "notes": "R1.8 Realm/Space inversion: delivery-binding policy attaches to the Realm security boundary, not the Space container."
     }
   ]
 }"#,
@@ -92,6 +99,41 @@ pub fn legacy_kind() -> &'static str {
         "expected unallowed violation, got: {findings:#?}"
     );
     assert!(violations.iter().any(|f| f.matched_token == "cx.flow.track.member"));
+
+    let _ = fs::remove_dir_all(&base);
+}
+
+#[test]
+fn detects_realm_inversion_legacy_event_kind() {
+    // R1.8: post Realm/Space inversion, the legacy
+    // `cx.space.delivery_binding_policy` event kind is a removed identifier.
+    // The scanner MUST surface it as a violation in regular source code.
+    let base = tmpdir("realm-inversion");
+    let registry = base.join("registry");
+    synthetic_registry(&registry);
+
+    let tree = base.join("downstream");
+    write(
+        &tree.join("src").join("legacy.rs"),
+        r#"
+pub fn legacy_policy() -> &'static str {
+    "cx.space.delivery_binding_policy"
+}
+"#,
+    );
+
+    let rules = load_all_rules_from(&registry).expect("load rules");
+    let findings = scan_tree(&tree, &rules).expect("scan");
+    let violations: Vec<_> = findings
+        .iter()
+        .filter(|f| !f.allowed_context_match
+            && f.matched_token == "cx.space.delivery_binding_policy")
+        .collect();
+    assert!(
+        !violations.is_empty(),
+        "expected scanner to flag cx.space.delivery_binding_policy as removed; \
+         got: {findings:#?}"
+    );
 
     let _ = fs::remove_dir_all(&base);
 }

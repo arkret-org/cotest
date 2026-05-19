@@ -83,7 +83,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let server = ContrixServer::spawn("federation-replay").await?;
     let operation = Operation::create(
         OperationId::new("cx:operation:federation-replay")?,
-        SpaceId::new("cx:space:federation")?,
+        SpaceId::new("cx:realm:federation")?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-replay",
@@ -100,7 +100,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             .json(&json!({
                 "origin": "did:web:remote.example",
                 "destination": server.service_did(),
-                "space_id": "cx:space:federation",
+                "realm_id": "cx:realm:federation",
                 "service_binding_ref": "did:web:remote.example#soland",
                 "operations": [operation.clone()]
             })),
@@ -113,7 +113,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let pulled = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/federation/pull-operations?space_id=cx:space:federation")),
+            .get(server.url("/api/v1/federation/pull-operations?space_id=cx:realm:federation")),
         StatusCode::OK,
     )
     .await?;
@@ -124,14 +124,14 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let bootstrap = expect_json(
         server.http().get(server.url(
-            "/api/v1/federation/pull-operations?space_id=cx:space:federation&snapshot_bootstrap=true",
+            "/api/v1/federation/pull-operations?space_id=cx:realm:federation&snapshot_bootstrap=true",
         )),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        bootstrap["snapshot_bootstrap"]["manifest"]["space_id"],
-        "cx:space:federation"
+        bootstrap["snapshot_bootstrap"]["manifest"]["realm_id"],
+        "cx:realm:federation"
     );
     assert!(
         bootstrap["snapshot_bootstrap"]["state_hash"]
@@ -147,7 +147,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             .json(&json!({
                 "origin": "did:web:remote.example",
                 "destination": server.service_did(),
-                "space_id": "cx:space:federation",
+                "realm_id": "cx:realm:federation",
                 "service_binding_ref": "did:web:remote.example#soland",
                 "operations": [operation]
             })),
@@ -163,7 +163,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let invalid_operation = Operation::create(
         OperationId::new("cx:operation:federation-invalid-envelope")?,
-        SpaceId::new("cx:space:federation")?,
+        SpaceId::new("cx:realm:federation")?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-invalid-envelope",
@@ -179,7 +179,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             .json(&json!({
                 "origin": "did:web:remote.example",
                 "destination": server.service_did(),
-                "space_id": "cx:space:federation",
+                "realm_id": "cx:realm:federation",
                 "service_binding_ref": "did:web:remote.example#soland",
                 "operations": [invalid_operation]
             })),
@@ -191,7 +191,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let redaction = Operation::create(
         OperationId::new("cx:operation:federation-redaction")?,
-        SpaceId::new("cx:space:federation")?,
+        SpaceId::new("cx:realm:federation")?,
         "cx.message.redact",
         json!({
             "event_id": "cx:event:federation-redaction",
@@ -205,7 +205,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             .json(&json!({
                 "origin": "did:web:remote.example",
                 "destination": server.service_did(),
-                "space_id": "cx:space:federation",
+                "realm_id": "cx:realm:federation",
                 "service_binding_ref": "did:web:remote.example#soland",
                 "operations": [redaction]
             })),
@@ -220,7 +220,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let redacted_pull = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/federation/pull-operations?space_id=cx:space:federation")),
+            .get(server.url("/api/v1/federation/pull-operations?space_id=cx:realm:federation")),
         StatusCode::OK,
     )
     .await?;
@@ -232,7 +232,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<()> {
     let server = ContrixServer::spawn("federation-project").await?;
     let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
-    let space_id = "cx:space:federation-project";
+    let space_id = "cx:realm:federation-project";
     let operation = Operation::create(
         OperationId::new("cx:operation:federation-project-01")?,
         SpaceId::new(space_id.to_owned())?,

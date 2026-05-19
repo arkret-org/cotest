@@ -12,7 +12,7 @@
     {
       "name": "single_did_happy_path",
       "shape": "single_did",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp01000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp01000000000000000000",
       "anchorer_value": {
         "shape": "single_did",
         "did": "did:web:hub.example"
@@ -29,7 +29,7 @@
     {
       "name": "threshold_k_of_n_happy_path",
       "shape": "threshold",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp02000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp02000000000000000000",
       "anchorer_value": {
         "shape": "threshold",
         "k": 2,
@@ -52,7 +52,7 @@
     {
       "name": "open_set_happy_path",
       "shape": "open_set",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp03000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp03000000000000000000",
       "anchorer_value": {
         "shape": "open_set",
         "members": [
@@ -72,7 +72,7 @@
     {
       "name": "mixed_recovery_happy_path",
       "shape": "mixed",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp04000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp04000000000000000000",
       "anchorer_value": {
         "shape": "mixed",
         "primary": "did:web:hub.example",
@@ -93,7 +93,7 @@
     {
       "name": "concurrent_reconfig_returns_bottom_conflict",
       "shape": "single_did",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp05000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp05000000000000000000",
       "concurrent_anchored_ops": [
         {
           "move_id": "cx:event:01970e58-0001-7a0b-800b-00000000000b",
@@ -123,7 +123,7 @@
     {
       "name": "signature_mismatch_rejected",
       "shape": "single_did",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp06000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp06000000000000000000",
       "anchorer_value": {
         "shape": "single_did",
         "did": "did:web:hub.example"
@@ -150,7 +150,7 @@
     {
       "name": "threshold_below_quorum_rejected",
       "shape": "threshold",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp07000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp07000000000000000000",
       "anchorer_value": {
         "shape": "threshold",
         "k": 2,
@@ -179,7 +179,7 @@
     {
       "name": "kn_geometry_violation_rejected",
       "shape": "threshold",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp08000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp08000000000000000000",
       "anchorer_value": {
         "shape": "threshold",
         "k": 4,
@@ -208,7 +208,7 @@
     {
       "name": "missing_cell_family_for_anchorer_kind_rejected",
       "shape": "single_did",
-      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.space.01js0sp09000000000000000000",
+      "cell_id": "cx:cell:cx.component.anchorer.v1:cx.realm.01js0sp09000000000000000000",
       "anchorer_value": {
         "shape": "single_did",
         "did": "did:web:hub.example"

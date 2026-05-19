@@ -35,20 +35,20 @@
       "expected_state_subject": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
     },
     {
-      "name": "space_policy_default",
-      "kind": "cx.space.policy",
-      "components_array": ["cx:space:01js0sp01000000000000000000", "default"],
-      "components_order_source": "[space_id, policy_name]",
-      "expected_canonical_json": "[\"cx:space:01js0sp01000000000000000000\",\"default\"]",
-      "expected_state_subject": "18_lKDow3LwluDlYlEpTahbJeV_jQD6teOncN2j24PM"
+      "name": "realm_policy_default",
+      "kind": "cx.realm.policy",
+      "components_array": ["cx:realm:01js0sp01000000000000000000", "default"],
+      "components_order_source": "[realm_id, policy_name]",
+      "expected_canonical_json": "[\"cx:realm:01js0sp01000000000000000000\",\"default\"]",
+      "expected_state_subject": "KKLQELTQ04MGrcVGKngqHBPgWwYt1D7C4t8iMqgu_k8"
     },
     {
-      "name": "space_member_carol",
-      "kind": "cx.space.member",
-      "components_array": ["cx:space:01js0sp01000000000000000000", "did:web:carol.example"],
-      "components_order_source": "[space_id, actor_id]",
-      "expected_canonical_json": "[\"cx:space:01js0sp01000000000000000000\",\"did:web:carol.example\"]",
-      "expected_state_subject": "AGszk3i4wz20hhaR62oM2_6XOCjFWmnZLISUxHD8KGY"
+      "name": "realm_member_carol",
+      "kind": "cx.realm.member",
+      "components_array": ["cx:realm:01js0sp01000000000000000000", "did:web:carol.example"],
+      "components_order_source": "[realm_id, actor_id]",
+      "expected_canonical_json": "[\"cx:realm:01js0sp01000000000000000000\",\"did:web:carol.example\"]",
+      "expected_state_subject": "XDmQTBsZ8oCrNEgL52vPBGrYLSSAf8GLTEv2nHef0V0"
     },
     {
       "name": "flow_track_member_alice_distinct_track",
@@ -82,7 +82,7 @@
     },
     {
       "name": "compaction_reserved_rejected",
-      "components_array": ["cx:space:01js0sp01000000000000000000", "__compaction__"],
+      "components_array": ["cx:realm:01js0sp01000000000000000000", "__compaction__"],
       "comment": "`__compaction__` is the spec-reserved compaction-marker surface name. Even when not the sole component, ANY position MUST trigger rejection.",
       "expected": {
         "outcome": "reject",

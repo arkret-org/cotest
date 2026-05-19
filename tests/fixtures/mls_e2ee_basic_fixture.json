@@ -16,23 +16,23 @@
     {
       "name": "genesis_move_creates_epoch_zero",
       "comment": "MLS group genesis: a creator Move (cx.mls.genesis) writes epoch=0, group_state=initial tree, covered_frontier=∅. The space_id is fresh; no prior epoch exists; bottom mode is reject — but at genesis there is nothing to conflict with.",
-      "space_id": "cx:space:01js0sp10000000000000000000",
+      "space_id": "cx:realm:01js0sp10000000000000000000",
       "kind": "cx.mls.genesis",
       "move_id": "cx:event:01970e58-0d01-7a01-8d01-000000000000",
       "creator_did": "did:web:alice.example",
       "effects": [
         {
-          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.space.01js0sp10000000000000000000",
+          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.realm.01js0sp10000000000000000000",
           "op": "set",
           "value": {"epoch_id": 0}
         },
         {
-          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.space.01js0sp10000000000000000000",
+          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.realm.01js0sp10000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "members": ["did:web:alice.example"]}
         },
         {
-          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp10000000000000000000",
+          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.realm.01js0sp10000000000000000000",
           "op": "or_set_init",
           "value": []
         }
@@ -48,7 +48,7 @@
     {
       "name": "epoch_advance_via_commit_zero_to_one",
       "comment": "An MLS commit Move advances the epoch CAS-register from 0 to 1, replaces the group_state tree_hash with a new one, and adds the attested governance ref to covered_frontier.",
-      "space_id": "cx:space:01js0sp11000000000000000000",
+      "space_id": "cx:realm:01js0sp11000000000000000000",
       "kind": "cx.mls.commit",
       "move_id": "cx:event:01970e58-0d02-7a02-8d02-000000000010",
       "committer_did": "did:web:alice.example",
@@ -56,17 +56,17 @@
       "covered_frontier_attests_to": "cx:event:01970e58-0d02-7a02-8d02-000000000005",
       "effects": [
         {
-          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.space.01js0sp11000000000000000000",
+          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.realm.01js0sp11000000000000000000",
           "op": "set",
           "value": {"epoch_id": 1}
         },
         {
-          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.space.01js0sp11000000000000000000",
+          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.realm.01js0sp11000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA"}
         },
         {
-          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp11000000000000000000",
+          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.realm.01js0sp11000000000000000000",
           "op": "or_set_add",
           "tag": "cx:event:01970e58-0d02-7a02-8d02-000000000005"
         }
@@ -81,7 +81,7 @@
     {
       "name": "member_join_via_commit",
       "comment": "MLS commit that adds a member: bob joins the group. The group_state.members set grows; epoch advances; covered_frontier accumulates the join-attesting governance ref.",
-      "space_id": "cx:space:01js0sp12000000000000000000",
+      "space_id": "cx:realm:01js0sp12000000000000000000",
       "kind": "cx.mls.commit",
       "move_id": "cx:event:01970e58-0d03-7a03-8d03-000000000020",
       "committer_did": "did:web:alice.example",
@@ -90,17 +90,17 @@
       "prior_members": ["did:web:alice.example"],
       "effects": [
         {
-          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.space.01js0sp12000000000000000000",
+          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.realm.01js0sp12000000000000000000",
           "op": "set",
           "value": {"epoch_id": 2}
         },
         {
-          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.space.01js0sp12000000000000000000",
+          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.realm.01js0sp12000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCA", "members": ["did:web:alice.example", "did:web:bob.example"]}
         },
         {
-          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp12000000000000000000",
+          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.realm.01js0sp12000000000000000000",
           "op": "or_set_add",
           "tag": "cx:event:01970e58-0d03-7a03-8d03-000000000015"
         }
@@ -116,7 +116,7 @@
     {
       "name": "member_leave_via_commit",
       "comment": "MLS commit that removes a member: bob leaves. The group_state.members set shrinks; tree is re-computed without bob's leaf. Epoch advances. covered_frontier still accumulates.",
-      "space_id": "cx:space:01js0sp13000000000000000000",
+      "space_id": "cx:realm:01js0sp13000000000000000000",
       "kind": "cx.mls.commit",
       "move_id": "cx:event:01970e58-0d04-7a04-8d04-000000000030",
       "committer_did": "did:web:alice.example",
@@ -125,17 +125,17 @@
       "prior_members": ["did:web:alice.example", "did:web:bob.example"],
       "effects": [
         {
-          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.space.01js0sp13000000000000000000",
+          "cell": "cx:cell:cx.component.mls.epoch.v1:cx.realm.01js0sp13000000000000000000",
           "op": "set",
           "value": {"epoch_id": 3}
         },
         {
-          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.space.01js0sp13000000000000000000",
+          "cell": "cx:cell:cx.component.mls.group_state.v1:cx.realm.01js0sp13000000000000000000",
           "op": "set",
           "value": {"tree_hash_b64": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDA", "members": ["did:web:alice.example"]}
         },
         {
-          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.space.01js0sp13000000000000000000",
+          "cell": "cx:cell:cx.component.mls.covered_frontier.v1:cx.realm.01js0sp13000000000000000000",
           "op": "or_set_add",
           "tag": "cx:event:01970e58-0d04-7a04-8d04-000000000025"
         }
@@ -151,7 +151,7 @@
     {
       "name": "covered_frontier_accumulates_across_three_epochs",
       "comment": "Sequential MLS commits across epochs 0→1→2→3 each add a distinct governance ref to covered_frontier. The or-set lattice surfaces all three refs as the active set (none rotated). Tests the cumulative 'covered_frontier_root' the AAD digest must include.",
-      "space_id": "cx:space:01js0sp14000000000000000000",
+      "space_id": "cx:realm:01js0sp14000000000000000000",
       "commits": [
         {
           "move_id": "cx:event:01970e58-0d05-7a05-8d05-000000000040",
@@ -183,7 +183,7 @@
     {
       "name": "encryption_aad_digest_pinning",
       "comment": "An E2EE message Move's ciphertext carries an Authenticated Associated Data (AAD) digest pin computed over (move_id || epoch_id || tree_hash || covered_frontier_root). A bit-flip in ANY of these inputs must produce a different SHA-256 digest. The recipient recomputes the digest from observed cell state and rejects if mismatched.",
-      "space_id": "cx:space:01js0sp15000000000000000000",
+      "space_id": "cx:realm:01js0sp15000000000000000000",
       "move_id": "cx:event:01970e58-0d06-7a06-8d06-000000000050",
       "epoch_id": 5,
       "tree_hash_b64": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEA",
@@ -206,7 +206,7 @@
     {
       "name": "epoch_skip_rejected",
       "comment": "An MLS commit that claims to advance from epoch 1 to epoch 5 (skipping 2,3,4) MUST reject — epoch advances must be monotonically +1 per commit; gaps indicate dropped commits or malicious replay.",
-      "space_id": "cx:space:01js0sp16000000000000000000",
+      "space_id": "cx:realm:01js0sp16000000000000000000",
       "move_id": "cx:event:01970e58-0d07-7a07-8d07-000000000060",
       "prior_epoch": 1,
       "claimed_epoch": 5,
@@ -219,7 +219,7 @@
     {
       "name": "aad_digest_mismatch_rejected",
       "comment": "Recipient observes group_state.tree_hash=X but ciphertext's AAD digest was computed over tree_hash=Y (the sender's stale tree). Recompute MUST diverge → reject pre-decryption.",
-      "space_id": "cx:space:01js0sp17000000000000000000",
+      "space_id": "cx:realm:01js0sp17000000000000000000",
       "move_id": "cx:event:01970e58-0d08-7a08-8d08-000000000070",
       "observed_tree_hash_b64": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGA",
       "claimed_aad_inputs_tree_hash_b64": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHA",

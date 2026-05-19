@@ -21,7 +21,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     expect_api_error(
         carol.post("/api/v1/sync/typing").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "typing": true
         })),
         StatusCode::FORBIDDEN,
@@ -31,7 +31,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let typing = expect_json(
         bob.post("/api/v1/sync/typing").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "scope_id": "cx:thread:typing",
             "typing": true,
             "timeout_ms": 4000
@@ -63,7 +63,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let stopped = expect_json(
         bob.post("/api/v1/sync/typing").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "scope_id": "cx:thread:typing",
             "typing": false
         })),

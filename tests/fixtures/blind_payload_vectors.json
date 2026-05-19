@@ -122,6 +122,18 @@
       }
     },
     {
+      "name": "rejects_realm_id",
+      "expected_reason_code": "forbidden_field",
+      "expected_field_path": "realm_id",
+      "payload": {
+        "notification": {
+          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "message",
+          "realm_id": "cx:realm:01JS0RM000000000000000000"
+        }
+      }
+    },
+    {
       "name": "rejects_thread_id",
       "expected_reason_code": "forbidden_field",
       "expected_field_path": "thread_id",

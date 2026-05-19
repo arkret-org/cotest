@@ -26,7 +26,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&json!({
                 "actor": bob.actor,
                 "action": "manage_space",
-                "resource": {"kind": "space", "space_id": space_id}
+                "resource": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -36,7 +36,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let manage_grant = expect_json(
         alice.post("/api/v1/authz/grants").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "subject": bob.actor,
             "resource": "*",
             "actions": ["manage_space"],
@@ -53,7 +53,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .get(server.url("/api/v1/authz/effective-grants"))
             .query(&[
                 ("subject", bob.actor.as_str()),
-                ("space_id", space_id.as_str()),
+                ("realm_id", space_id.as_str()),
             ]),
         StatusCode::OK,
     )
@@ -68,7 +68,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&json!({
                 "actor": bob.actor,
                 "action": "manage_space",
-                "resource": {"kind": "space", "space_id": space_id}
+                "resource": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -87,7 +87,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&json!({
                 "actor": bob.actor,
                 "action": "send",
-                "resource": {"kind": "space", "space_id": space_id}
+                "resource": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -96,7 +96,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let deny_send_grant = expect_json(
         alice.post("/api/v1/authz/grants").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "subject": bob.actor,
             "resource": "*",
             "actions": ["send"],
@@ -114,7 +114,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&json!({
                 "actor": bob.actor,
                 "action": "send",
-                "resource": {"kind": "space", "space_id": space_id}
+                "resource": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -136,7 +136,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&json!({
                 "actor": bob.actor,
                 "action": "send",
-                "resource": {"kind": "space", "space_id": space_id}
+                "resource": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -157,7 +157,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&json!({
                 "actor": bob.actor,
                 "action": "manage_space",
-                "resource": {"kind": "space", "space_id": space_id}
+                "resource": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -242,7 +242,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "req-allow",
-                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "cx.message.create",
                 "actor": "did:web:alice.example",
@@ -260,7 +260,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "req-review",
-                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "space.delete",
                 "actor": "did:web:alice.example",
@@ -278,7 +278,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "req-invalid",
-                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "cx.message.create",
                 "actor": "alice",
@@ -291,7 +291,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let ice = expect_json(
         alice.post("/contrix/v1/ice-config").json(&json!({
-            "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
+            "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
             "call_id": "cx:call:01964137-0000-7000-8000-000000000001",
             "actor_id": alice.actor.as_str(),
             "device_id": alice.device_id.as_str()

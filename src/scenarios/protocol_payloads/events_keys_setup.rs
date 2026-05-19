@@ -27,9 +27,9 @@ async fn submit_adapter_event(server: &ContrixServer, token: &str) -> Result<()>
         StatusCode::CREATED,
     )
     .await?;
-    let space_id = created_space["space_id"]
+    let space_id = created_space["realm_id"]
         .as_str()
-        .expect("space_id")
+        .expect("realm_id")
         .to_owned();
     let event = signed_message_event(
         "cx:event:0196419b-0000-7000-8000-000000000001",
@@ -80,7 +80,7 @@ fn signed_message_event(
         "kind": "cx.message.create",
         "actor_id": actor_id,
         "actor_seq": actor_seq,
-        "space_id": space_id,
+        "realm_id": space_id,
         "created_at": "2026-05-02T00:00:00Z",
         "hlc": format!("01970e589d21-{actor_seq:08x}-a13f9c2e"),
         "prev_refs": [],

@@ -291,7 +291,7 @@ pub fn assert_blind_wakeup_invariants(notification: &Value) -> Result<()> {
         "sender_did",
         "sender_display_name",
         "event_id",
-        "space_id",
+        "realm_id",
         "space_name",
         "kind",
         "message_body",

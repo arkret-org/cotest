@@ -343,14 +343,14 @@ fn validate_event_envelope(
     }
 
     // Spec event-schema.json required fields:
-    //   event_id, kind, space_id, actor_id, actor_seq, created_at,
+    //   event_id, kind, realm_id, actor_id, actor_seq, created_at,
     //   prev_refs, refs, payload, proofs
     // `refs` MUST be present per spec — negative fixture
     // `reject_missing_refs[role=authorized_by]` exercises this. `prev_refs`
     // is also required.
     for field in [
         "event_id",
-        "space_id",
+        "realm_id",
         "actor_id",
         "actor_seq",
         "created_at",
@@ -383,10 +383,10 @@ fn validate_event_envelope(
             "invalid event_id",
         ));
     }
-    if !value_field_str(event, "space_id")?.starts_with("cx:space:") {
+    if !value_field_str(event, "realm_id")?.starts_with("cx:realm:") {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "invalid space_id",
+            "invalid realm_id",
         ));
     }
     if !value_field_str(event, "actor_id")?.starts_with("did:") {
@@ -816,7 +816,7 @@ fn sample_envelope_event(
         "schema": "cx.schema.event.v1",
         "event_id": "cx:event:019a6b10-0000-7000-8000-000000000000",
         "kind": kind,
-        "space_id": "cx:space:019a7360-0000-7000-8000-000000000000",
+        "realm_id": "cx:realm:019a7360-0000-7000-8000-000000000000",
         "actor_id": "did:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,

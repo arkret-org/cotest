@@ -14,12 +14,12 @@
       "pre_state": {
         "anchor": "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "cells": {
-          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas-register",
             "head": "cx:event:21084210-8421-7842-9084-210842108421",
             "value": false
           },
-          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.tags.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or-set",
             "active_tags": []
           }
@@ -31,7 +31,7 @@
         "anchor_ref": "cx:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "preconditions": [
           {
-            "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+            "cell": "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
             "predicate": {
               "op": "head_eq",
               "value": "cx:event:21084210-8421-7842-9084-210842108421"
@@ -40,14 +40,14 @@
         ],
         "effects": [
           {
-            "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+            "cell": "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
             "op": {
               "kind": "set",
               "value": true
             }
           },
           {
-            "cell": "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+            "cell": "cx:cell:cx.component.realm.tags.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
             "op": {
               "kind": "add",
               "tag": "tag:launch",
@@ -60,11 +60,11 @@
         "verify_move": "pass",
         "atomicity": "all_effects_or_none",
         "cell_states": {
-          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas-register",
             "value": true
           },
-          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.tags.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or-set",
             "active_tags": ["tag:launch"]
           }
@@ -74,7 +74,7 @@
     {
       "name": "mv_register_concurrent_writers",
       "description": "Two concurrent Moves from different actors set the same mv-register cell (space.draft_title) in the same Anchor batch. mv-register never reduces to a single winner; per event-auth-state-resolution.md §5.3.2 the join exposes both values as multiple heads. bottom=expose is the normal case for mv-register: projection surfaces {status:'conflict', heads:[...]} rather than choosing.",
-      "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+      "cell": "cx:cell:cx.component.realm.draft_title.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
       "lattice": {
         "type": "mv-register",
         "bottom": "expose"
@@ -85,7 +85,7 @@
           "issuer": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "cell": "cx:cell:cx.component.realm.draft_title.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": "Launch Plan v1"
@@ -98,7 +98,7 @@
           "issuer": "did:web:bob.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "cell": "cx:cell:cx.component.realm.draft_title.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": "Launch Plan v2"
@@ -126,16 +126,16 @@
       "pre_state": {
         "anchor": "cx:anchor:sha256:2222222222222222222222222222222222222222222222222222222222222222",
         "cells": {
-          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas-register",
             "head": "cx:event:42108421-0842-7084-a108-421084210842",
             "value": false
           },
-          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.tags.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or-set",
             "active_tags": ["tag:existing"]
           },
-          "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.draft_title.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "mv-register",
             "heads": []
           }
@@ -147,7 +147,7 @@
           "issuer": "did:web:admin.example",
           "preconditions": [
             {
-              "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "cell": "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
               "predicate": {
                 "op": "head_eq",
                 "value": "cx:event:42108421-0842-7084-a108-421084210842"
@@ -156,7 +156,7 @@
           ],
           "effects": [
             {
-              "cell": "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "cell": "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": true
@@ -169,7 +169,7 @@
           "issuer": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "cell": "cx:cell:cx.component.realm.tags.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "add",
                 "tag": "tag:new",
@@ -183,7 +183,7 @@
           "issuer": "did:web:bob.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000",
+              "cell": "cx:cell:cx.component.realm.draft_title.v1:cx.realm.0196419b-0000-7000-8000-000000000000",
               "op": {
                 "kind": "set",
                 "value": "Single draft title"
@@ -195,15 +195,15 @@
       "expected": {
         "verify_anchor": "accept",
         "state_surface": {
-          "cx:cell:cx.component.space.locked.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.locked.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas-register",
             "value": true
           },
-          "cx:cell:cx.component.space.tags.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.tags.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "or-set",
             "active_tags": ["tag:existing", "tag:new"]
           },
-          "cx:cell:cx.component.space.draft_title.v1:cx.space.0196419b-0000-7000-8000-000000000000": {
+          "cx:cell:cx.component.realm.draft_title.v1:cx.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "mv-register",
             "heads": ["cx:event:f8417f84-17f8-7f84-c417-f8417f8417f8"],
             "values": ["Single draft title"]

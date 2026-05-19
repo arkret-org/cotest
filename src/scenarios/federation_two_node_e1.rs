@@ -126,7 +126,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // server_a returned no anchors yet (anchorer hasn't fired), we still
     // exercise the push handler with an empty bundle so the round-trip
     // surface is touched.
-    let push_body = json!({ "space_id": space_id, "anchors": anchors_a_list });
+    let push_body = json!({ "realm_id": space_id, "anchors": anchors_a_list });
 
     // server_b must accept the push and respond 200/202/204 OR a 4xx if the
     // space is unknown there (peer not yet introduced) — both are acceptable

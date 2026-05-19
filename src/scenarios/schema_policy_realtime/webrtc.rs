@@ -26,7 +26,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     expect_api_error(
         dave.post("/api/v1/webrtc/sessions").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "participants": [bob.actor]
         })),
         StatusCode::FORBIDDEN,
@@ -36,7 +36,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     let session = expect_json(
         alice.post("/api/v1/webrtc/sessions").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "participants": [bob.actor],
             "ttl_ms": 90_000
         })),

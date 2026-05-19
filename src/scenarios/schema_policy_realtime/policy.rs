@@ -28,7 +28,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "policy_type": "cx.message.create",
             "effect": "deny",
             "actions": ["cx.message.create"],
-            "resource": {"kind": "space", "space_id": space_id},
+            "resource": {"kind": "space", "realm_id": space_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}]
         })),
         StatusCode::OK,
@@ -69,8 +69,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_canonical_hash": REQUEST_HASH,
                 "action": "cx.message.create",
                 "actor": bob.actor,
-                "space_id": space_id,
-                "source": {"kind": "space", "space_id": space_id}
+                "realm_id": space_id,
+                "source": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )
@@ -87,7 +87,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "policy_type": "cx.message.create",
             "effect": "deny",
             "actions": ["cx.message.create"],
-            "resource": {"kind": "space", "space_id": space_id},
+            "resource": {"kind": "space", "realm_id": space_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}],
             "active": false
         })),
@@ -105,8 +105,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_canonical_hash": REQUEST_HASH,
                 "action": "cx.message.create",
                 "actor": bob.actor,
-                "space_id": space_id,
-                "source": {"kind": "space", "space_id": space_id}
+                "realm_id": space_id,
+                "source": {"kind": "space", "realm_id": space_id}
             })),
         StatusCode::OK,
     )

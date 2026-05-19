@@ -82,14 +82,14 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     // as a defence-in-depth signal that the production server never
     // exposes the proof path to unauthenticated clients.
     let actor = "did:web:alice.cotest.local";
-    let space_id = "cx:space:0196419b-0000-7000-8000-cot13t13t13t";
+    let realm_id = "cx:realm:0196419b-0000-7000-8000-cot13t13t13t";
     let event_id = "cx:event:0196419b-0000-7000-8000-pp1pp1pp1pp1";
     let envelope = json!({
         "event_id": event_id,
         "kind": "cx.message.create",
         "actor_id": actor,
         "actor_seq": 1,
-        "space_id": space_id,
+        "realm_id": realm_id,
         "created_at": "2026-05-19T00:00:00.000Z",
         "hlc": "1747613100000-0-cotest",
         "prev_refs": [],

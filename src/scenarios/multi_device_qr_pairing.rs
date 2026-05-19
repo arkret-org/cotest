@@ -228,7 +228,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //       "encryption_profile": "mls_rfc9420",
     //       "invitees": [bob.actor],
     //       "plaintext_visible_services": [],
-    //   })).await?["space_id"].as_str().unwrap().to_owned();
+    //   })).await?["realm_id"].as_str().unwrap().to_owned();
     //
     //   // Welcome device-B into the MLS group on `space_id`:
     //   alice.post(&format!("/api/v1/spaces/{space_id}/mls/welcomes"))

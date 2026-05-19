@@ -66,7 +66,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    let space_id = created_space["space_id"].as_str().unwrap().to_owned();
+    let space_id = created_space["realm_id"].as_str().unwrap().to_owned();
 
     let alice_message = Operation::create(
         OperationId::new("cx:operation:federation-alice-message-01")?,
@@ -90,7 +90,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
             .json(&json!({
                 "origin": server_a.service_did(),
                 "destination": server_b.service_did(),
-                "space_id": space_id,
+                "realm_id": space_id,
                 "service_binding_ref": "cotest",
                 "operations": [alice_message]
             })),
@@ -252,7 +252,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
             .post(server_b.url("/api/v1/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
-                "space_id": space_id,
+                "realm_id": space_id,
                 "target_ref": "cx:event:federation-alice-01",
                 "reason": "spam",
                 "reporter": "did:web:bob-b.example"

@@ -58,7 +58,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
         let event = json!({
             "event_id": "cx:event:01970e58-0003-7000-8000-000000000010",
             "kind": "cx.message.create",
-            "space_id": "cx:space:01970e58-0003-7000-8000-000000000011",
+            "realm_id": "cx:realm:01970e58-0003-7000-8000-000000000011",
             "content": {"body": "covered"},
             "proofs": [{"alg": "none"}],
             "unsigned": {"hint": "not covered"}

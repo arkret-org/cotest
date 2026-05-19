@@ -9,7 +9,7 @@
 //!   2. teabay (T3.4) hosts `cx.directory.resolve_handle(intent="member_add")`
 //!      and filters candidates against the target Space's
 //!      `allowed_recipient_services`.
-//!   3. soland (T3.3) projects `cx.space.delivery_binding_policy` and the
+//!   3. soland (T3.3) projects `cx.realm.delivery_binding_policy` and the
 //!      `cx.member.state{join}` reducer rejects bindings whose
 //!      `recipient_service_did` is not in the policy allow-list.
 //!   4. The SDK (T3.1) ships `MemberDeliveryBindingCandidate` and
@@ -61,7 +61,7 @@ use crate::scenarios::_helpers::four_service_bootstrap::{
 
 /// Stable Space DID used as the candidate audience for the happy path. Picked
 /// so the assertions read as a Space identifier and not as a free-form string.
-const TARGET_SPACE_ID: &str = "cx:space:0196419b-0000-7000-8000-handle2joinaa";
+const TARGET_SPACE_ID: &str = "cx:realm:0196419b-0000-7000-8000-handle2joinaa";
 
 /// Stable principal-server DID that appears as both the issuer and the
 /// recipient on the candidate. T3.4's allow-list test uses the same shape.
@@ -273,7 +273,7 @@ fn negative_case_expired() -> Result<()> {
 fn negative_case_audience_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
     let ctx = CandidateValidationContext::new(
-        "cx:space:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned(),
+        "cx:realm:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned(),
     );
 
     match candidate.validate(&ctx) {
@@ -442,7 +442,7 @@ async fn live_stack_probe() -> Result<()> {
             "intent": "member_add",
             "requester": PRINCIPAL_DID,
             "audience": TARGET_SPACE_ID,
-            "space_id": TARGET_SPACE_ID,
+            "realm_id": TARGET_SPACE_ID,
         }))
         .send()
         .await

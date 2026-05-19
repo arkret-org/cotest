@@ -47,9 +47,9 @@ pub async fn teabay_resolve_space_three_lookups_run() -> Result<()> {
     let url = proc.url("/api/v1/directory/resolve-space");
 
     // --- by space_id ------------------------------------------------------
-    let probe = json!({ "space_id": "cotest-tb2-space-id" });
+    let probe = json!({ "realm_id": "cotest-tb2-space-id" });
     let by_space_id = client.post(&url).json(&probe).send().await?;
-    assert_resolved_or_blinded_not_found(by_space_id, "space_id").await?;
+    assert_resolved_or_blinded_not_found(by_space_id, "realm_id").await?;
 
     // --- by alias ---------------------------------------------------------
     //

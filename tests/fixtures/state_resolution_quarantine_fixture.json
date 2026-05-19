@@ -10,7 +10,7 @@
   "vectors": [
     {
       "name": "cas_register_concurrent_fork_join_rule_quarantine_all_heads",
-      "cell_family": "cx.component.space.join_rule.v1",
+      "cell_family": "cx.component.realm.join_rule.v1",
       "lattice": "cas-register",
       "bottom": "reject",
       "ops": [
@@ -27,7 +27,7 @@
     },
     {
       "name": "cas_register_concurrent_fork_history_visibility_quarantine_all_heads",
-      "cell_family": "cx.component.space.history_visibility.v1",
+      "cell_family": "cx.component.realm.history_visibility.v1",
       "lattice": "cas-register",
       "bottom": "reject",
       "ops": [
@@ -49,7 +49,7 @@
     },
     {
       "name": "cas_register_admin_escalation_anchorer_endorse_one_head_unquarantines",
-      "cell_family": "cx.component.space.policy.v1",
+      "cell_family": "cx.component.realm.policy.v1",
       "lattice": "cas-register",
       "bottom": "reject",
       "ops": [
@@ -75,7 +75,7 @@
     },
     {
       "name": "cas_register_three_way_fork_quarantine_then_partial_repair",
-      "cell_family": "cx.component.space.upgrade.v1",
+      "cell_family": "cx.component.realm.upgrade.v1",
       "lattice": "cas-register",
       "bottom": "reject",
       "ops": [

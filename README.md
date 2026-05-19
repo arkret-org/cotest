@@ -8,6 +8,19 @@ helpers and client smoke coverage are useful.
 The current default server under test is the sibling
 `../soland/Cargo.toml` checkout.
 
+## Realm vs Space
+
+The harness uses the Phase 1–4 inverted vocabulary when constructing
+fixtures and assertions:
+
+- **Realm:** security boundary — membership, capability, E2EE, federation.
+  Old wire name: `Space`.
+- **Space:** navigation container — board, list, section, calendar bucket.
+  Old wire name: `Place`.
+
+Both legacy and new wire shapes are exercised so the soland reducer's
+back-compat aliases stay covered.
+
 ## Quick Start
 
 Recommended entrypoints:

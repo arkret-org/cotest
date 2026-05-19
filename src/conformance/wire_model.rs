@@ -627,8 +627,8 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 // cx.flow.track.read_receipt_policy), track-level read-receipt
                 // overrides are not in v1. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
-                // independent child Space (Flow.discussion_space_ref) whose
-                // own cx.space.read_receipt_policy composes against the
+                // independent child Space (Flow.discussion_realm_ref) whose
+                // own cx.realm.read_receipt_policy composes against the
                 // parent Space policy via the same tighten-only rules.
                 let parent = policy
                     .get("parent")
@@ -1745,7 +1745,7 @@ fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
         return Ok(send);
     }
     if let Some(lookup) = lookup
-        && let Some(space_id) = lookup.get("space_id").and_then(Value::as_str)
+        && let Some(space_id) = lookup.get("realm_id").and_then(Value::as_str)
         && let Some(spaces) = prefs.get("spaces").and_then(Value::as_object)
         && let Some(entry) = spaces.get(space_id)
         && let Some(send) = entry.get("send").and_then(Value::as_bool)
@@ -3225,7 +3225,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
     for field in [
         "id",
         "schema",
-        "space_id",
+        "realm_id",
         "kind",
         "query",
         "created_by",
@@ -3256,7 +3256,7 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow!("view schema missing $defs.query.properties"))?;
     for field in [
-        "space_ids",
+        "realm_ids",
         "object_types",
         "morph_types",
         "facets",
@@ -4829,7 +4829,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
 ///
 /// Spec: `data-structures/history-visibility.md` +
 /// `authz/event-auth-state-resolution.md`. The history_visibility cell
-/// (cas-register `cx:cell:cx.component.space.history_visibility.v1:<space_id>`)
+/// (cas-register `cx:cell:cx.component.realm.history_visibility.v1:<space_id>`)
 /// holds one of {joined, invited, world_readable, shared}. The reducer
 /// projects the timeline differently per viewer based on
 /// (membership_state, history_visibility, event_origin_ts vs viewer_join_ts /
@@ -5792,7 +5792,7 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
                 }
             }
             "final_state_observe" => {
-                let _ = required_str(v, "space_id")?;
+                let _ = required_str(v, "realm_id")?;
                 let _ = v
                     .pointer("/expected/audit_log_emitted")
                     .and_then(Value::as_bool)
@@ -6534,7 +6534,7 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
                 let mut s1_max = 0u64;
                 let mut s2_max = 0u64;
                 for h in history {
-                    let space = required_str(h, "space_id")?;
+                    let space = required_str(h, "realm_id")?;
                     let seq = h
                         .get("seq")
                         .and_then(Value::as_u64)

@@ -1,7 +1,7 @@
 //! CT-4 — Knock + member.application + cooldown matrix (entrypoint).
 //!
 //! Marked `#[ignore]` because the test depends on soland reducer support
-//! for `cx.space.join_rule="knock"`, `member.application` /
+//! for `cx.realm.join_rule="knock"`, `member.application` /
 //! `member.application.review` event kinds, and the §3.11 anti-abuse
 //! enforcement (cooldown_after_reject, application_ttl,
 //! max_open_applications_per_actor) — none of which currently land in

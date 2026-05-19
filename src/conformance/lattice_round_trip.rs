@@ -220,8 +220,8 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
 fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.space.policy.v1",
-        "cx.space.01js0sp0000000000000000000",
+        "cx.component.realm.policy.v1",
+        "cx.realm.01js0sp0000000000000000000",
     );
     // Two anchored Moves concurrently set the cell to distinct values.
     let ops = vec![
@@ -255,8 +255,8 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
 fn cas_register_single_set_returns_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.space.policy.v1",
-        "cx.space.01js0sp0000000000000000001",
+        "cx.component.realm.policy.v1",
+        "cx.realm.01js0sp0000000000000000001",
     );
     let ops = vec![AnchoredOp::new(
         move_id("dd"),
@@ -409,7 +409,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let lattice = OrderedLog;
     let cref = cell(
         "cx.component.audit_log.v1",
-        "cx.space.01js0sp0000000000000000000",
+        "cx.realm.01js0sp0000000000000000000",
     );
     // Two issuers, both with monotonic issuer_seq. Join must produce a
     // deterministic linearization that includes all entries.
@@ -446,7 +446,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 fn anchorer_cell(space_suffix: &str) -> CellRef {
     cell(
         "cx.component.anchorer.v1",
-        &format!("cx.space.01js{space_suffix}000000000000000000"),
+        &format!("cx.realm.01js{space_suffix}000000000000000000"),
     )
 }
 
@@ -577,8 +577,8 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
 fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.space.policy.v1",
-        "cx.space.01js0sp0000000000000000000",
+        "cx.component.realm.policy.v1",
+        "cx.realm.01js0sp0000000000000000000",
     );
     // Anchor view AFTER recovery: only the repair Move's anchored op is in
     // scope (the earlier conflict pair was rolled back / superseded by the
@@ -603,8 +603,8 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
 fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.space.policy.v1",
-        "cx.space.01js0sp0000000000000000001",
+        "cx.component.realm.policy.v1",
+        "cx.realm.01js0sp0000000000000000001",
     );
     // Two concurrent set-Moves where one self-references its own "winner"
     // capability remain a Bottom at the lattice layer — the cas-register
@@ -643,7 +643,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 fn covered_frontier_cell(space_suffix: &str) -> CellRef {
     cell(
         "cx.component.mls.covered_frontier.v1",
-        &format!("cx.space.01js{space_suffix}000000000000000000"),
+        &format!("cx.realm.01js{space_suffix}000000000000000000"),
     )
 }
 

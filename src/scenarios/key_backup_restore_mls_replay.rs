@@ -145,7 +145,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       "title": "ct11-e2ee-history",
     //       "encryption_profile": "mls_rfc9420",
     //       "plaintext_visible_services": [],
-    //   })).await?["space_id"].as_str().unwrap().to_owned();
+    //   })).await?["realm_id"].as_str().unwrap().to_owned();
     //
     //   // Each message is wrapped in a cx.mls.commit envelope.
     //   // Today soland has no MLS reducer; treat this as `cx.message.

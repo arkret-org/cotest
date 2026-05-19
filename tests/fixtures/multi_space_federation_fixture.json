@@ -12,9 +12,9 @@
       "comment": "server_a hosts 3 spaces (S1, S2, S3). Each ingests one Move. server_b federates pull on each space individually. Each replay updates only the target space's frontier on server_b; the other two stay empty.",
       "spaces": ["space_S1", "space_S2", "space_S3"],
       "moves_on_server_a": [
-        {"space_id": "space_S1", "kind": "cx.message.create", "seq": 1},
-        {"space_id": "space_S2", "kind": "cx.message.create", "seq": 1},
-        {"space_id": "space_S3", "kind": "cx.message.create", "seq": 1}
+        {"realm_id": "space_S1", "kind": "cx.message.create", "seq": 1},
+        {"realm_id": "space_S2", "kind": "cx.message.create", "seq": 1},
+        {"realm_id": "space_S3", "kind": "cx.message.create", "seq": 1}
       ],
       "expected": {
         "outcome": "accept",
@@ -30,12 +30,12 @@
       "comment": "Both server_a and server_b host two spaces each (S1 + S2). Both ingest Moves into S1 and S2 simultaneously. Bidirectional federation pull/push converges each space independently. After convergence, both nodes show the same frontier per space, but S1 and S2 frontiers stay distinct.",
       "spaces": ["space_S1", "space_S2"],
       "moves_on_server_a": [
-        {"space_id": "space_S1", "kind": "cx.message.create", "seq": 1},
-        {"space_id": "space_S2", "kind": "cx.message.create", "seq": 1}
+        {"realm_id": "space_S1", "kind": "cx.message.create", "seq": 1},
+        {"realm_id": "space_S2", "kind": "cx.message.create", "seq": 1}
       ],
       "moves_on_server_b": [
-        {"space_id": "space_S1", "kind": "cx.message.create", "seq": 2},
-        {"space_id": "space_S2", "kind": "cx.message.create", "seq": 2}
+        {"realm_id": "space_S1", "kind": "cx.message.create", "seq": 2},
+        {"realm_id": "space_S2", "kind": "cx.message.create", "seq": 2}
       ],
       "expected": {
         "outcome": "accept",
@@ -65,10 +65,10 @@
       "comment": "Each space's anchor sequence number increments independently. After 3 anchors in S1 and 1 in S2, S1.seq=3 and S2.seq=1, NOT a global counter.",
       "spaces": ["space_S1", "space_S2"],
       "anchor_history": [
-        {"space_id": "space_S1", "seq": 1},
-        {"space_id": "space_S1", "seq": 2},
-        {"space_id": "space_S2", "seq": 1},
-        {"space_id": "space_S1", "seq": 3}
+        {"realm_id": "space_S1", "seq": 1},
+        {"realm_id": "space_S1", "seq": 2},
+        {"realm_id": "space_S2", "seq": 1},
+        {"realm_id": "space_S1", "seq": 3}
       ],
       "expected": {
         "outcome": "accept",

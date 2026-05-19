@@ -13,7 +13,7 @@ pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
             .post(server.url("/api/v1/moderation/report"))
             .bearer_auth(token)
             .json(&json!({
-                "space_id": "cx:space:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "cx:event:demo",
                 "reason": "spam",
                 "reporter": "did:web:alice.example"

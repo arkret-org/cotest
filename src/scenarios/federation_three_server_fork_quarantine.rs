@@ -167,7 +167,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //               .json(&json!({
     //                   "origin": alpha.service_did(),
     //                   "destination": peer.service_did(),
-    //                   "space_id": space_id,
+    //                   "realm_id": space_id,
     //                   "operations": <alpha's bootstrap moves>,
     //               })),
     //           StatusCode::OK,
@@ -215,7 +215,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //               .json(&json!({
     //                   "origin": origin.service_did(),
     //                   "destination": peer.service_did(),
-    //                   "space_id": space_id,
+    //                   "realm_id": space_id,
     //                   "operations": [move_],
     //               })),
     //           StatusCode::OK,

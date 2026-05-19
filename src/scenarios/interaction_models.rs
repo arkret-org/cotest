@@ -95,7 +95,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let marker = expect_json(
         dave.post("/api/v1/read-markers").json(&json!({
-            "space_id": space_id,
+            "realm_id": space_id,
             "event_id": sent["event_id"],
             "scope_id": "cx:thread:interaction"
         })),

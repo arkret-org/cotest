@@ -329,7 +329,7 @@ fn validate_event_kind_registry(
             // itself, even when null). The explicit `cell_subject: null` form
             // declares "space-singleton cell" — one cell per space, keyed by
             // the implicit space_id from the envelope. Kinds where this is
-            // the right semantics (cx.space.policy / cx.space.history_visibility /
+            // the right semantics (cx.realm.policy / cx.realm.history_visibility /
             // cx.space.archive / ...) MUST still set the field to null rather
             // than omit it, so the schema-level intent is unambiguous. A
             // MISSING field is rejected.
@@ -365,7 +365,7 @@ fn validate_event_kind_registry(
     }
     // M11 (spec 2026-05-09): post-Move/Anchor/Lattice spec exposes 132
     // active kinds (110 baseline + 17 per-facet/lifecycle splits + 2
-    // consent kinds + 3 anchor/move/anchorer kinds; cx.space.host* removed in
+    // consent kinds + 3 anchor/move/anchorer kinds; cx.realm.host* removed in
     // favour of anchorer cell governance). The 134 floor in the round-20
     // mission was aspirational; the spec snapshot at f724863 carries 132,
     // and we hold the line at the spec count to avoid silently shrinking.
@@ -378,7 +378,7 @@ fn validate_event_kind_registry(
     // Holder-private consent (cell or-set) MUST be wired per Move/Anchor/Lattice
     // spec (2026-05-08): both grant and revoke share cell_family
     // cx.component.consent.grant.v1, lattice or-set, cell_subject keyed by
-    // payload.consent_id. cx.space.host{,.transfer} are intentionally
+    // payload.consent_id. cx.realm.host{,.transfer} are intentionally
     // removed (anchorer cell governs Anchor signing).
     let required_kinds: &[(&str, &str, &str)] = &[
         (

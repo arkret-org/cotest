@@ -72,7 +72,7 @@ const BOB_DID: &str = "did:web:bob.acme.example";
 const ALICE_HANDLE_URI: &str = "contrix://acme.example/users/alice";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
-const TARGET_SPACE_ID: &str = "cx:space:0196419b-0000-7000-8000-fullstacke2e1";
+const TARGET_SPACE_ID: &str = "cx:realm:0196419b-0000-7000-8000-fullstacke2e1";
 const STABLE_FLOW_ID: &str = "cx:flow:0196419b-0000-7000-8000-fullstackflow";
 const STABLE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-fullstackevt0";
 const SOURCE_REF_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-srcref0000001";
@@ -246,7 +246,7 @@ fn step_5_yougen_mock_send_message() -> Result<Value> {
         "kind": "cx.message.create",
         "actor_id": BOB_DID,
         "actor_seq": 1,
-        "space_id": TARGET_SPACE_ID,
+        "realm_id": TARGET_SPACE_ID,
         "flow_id": STABLE_FLOW_ID,
         "created_at": Utc::now().to_rfc3339(),
         "hlc": "1747613100000-0-cotest-yougen",
@@ -348,7 +348,8 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
         "sender",
         "sender_did",
         "event_id",
-        "space_id",
+        "realm_id",
+        "realm_id",
         "space_name",
         "flow_id",
         "message_body",
@@ -447,10 +448,12 @@ fn negative_did_document_fallback_rejected() -> Result<()> {
 }
 
 /// `stable_push_id_leak_rejected` — a blind payload smuggling
-/// `space_id` / `flow_id` / `event_id` MUST be rejected by the sanitizer.
+/// `realm_id` / `space_id` / `flow_id` / `event_id` MUST be rejected by the
+/// sanitizer.
 fn negative_stable_push_id_leak_rejected() -> Result<()> {
     let leaks: &[(&str, Value)] = &[
-        ("space_id", json!(TARGET_SPACE_ID)),
+        ("realm_id", json!(TARGET_SPACE_ID)),
+        ("realm_id", json!(TARGET_SPACE_ID)),
         ("flow_id", json!(STABLE_FLOW_ID)),
         ("event_id", json!(STABLE_EVENT_ID)),
     ];
@@ -564,7 +567,7 @@ async fn live_stack_probe() -> Result<()> {
             "intent": "member_add",
             "requester": PRINCIPAL_DID,
             "audience": TARGET_SPACE_ID,
-            "space_id": TARGET_SPACE_ID,
+            "realm_id": TARGET_SPACE_ID,
         }))
         .send()
         .await
@@ -591,7 +594,7 @@ async fn live_stack_probe() -> Result<()> {
             "kind": "cx.message.create",
             "actor_id": ALICE_DID,
             "actor_seq": 1,
-            "space_id": TARGET_SPACE_ID,
+            "realm_id": TARGET_SPACE_ID,
             "created_at": Utc::now().to_rfc3339(),
             "hlc": "1747613100000-0-cotest",
             "prev_refs": [],

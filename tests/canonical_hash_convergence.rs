@@ -59,7 +59,7 @@ fn vectors() -> Vec<CanonicalVector> {
             payload: json!({
                 "actor_id": "did:web:alice.example",
                 "event_id": "cx:event:01970e589d21-00000001-a13f9c2e",
-                "space_id": "cx:space:01904100-0000-7000-8000-668e2181b41d",
+                "realm_id": "cx:realm:01904100-0000-7000-8000-668e2181b41d",
                 "kind": "cx.message.create.v1",
                 "hlc": "01970e589d21-00000001-a13f9c2e",
                 "payload": {
@@ -70,7 +70,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "schema_version": 1,
             }),
             expected_digest:
-                "sha256:2228f1bf8347b57faf684a3bfc2ba7669db1100a5472f3f20fd5fa23cde6324f",
+                "sha256:149f07ce9ee047712e9412d9fbfd6224155c4c723efbe5628545a3a9ee8114e3",
         },
         CanonicalVector {
             label: "starid did:webvh update entry (proofless)",

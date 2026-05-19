@@ -43,11 +43,11 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    let invite_space_id = invite_space["space_id"].as_str().unwrap().to_owned();
+    let invite_space_id = invite_space["realm_id"].as_str().unwrap().to_owned();
 
     let invites = expect_json(bob.get("/api/v1/authz/invites"), StatusCode::OK).await?;
     assert_eq!(invites["invites"].as_array().unwrap().len(), 1);
-    assert_eq!(invites["invites"][0]["space_id"], invite_space_id);
+    assert_eq!(invites["invites"][0]["realm_id"], invite_space_id);
     let invite_token = invites["invites"][0]["invite_token"].as_str().unwrap();
 
     expect_status(
@@ -67,7 +67,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(invite_resolve["space_preview"]["space_id"], invite_space_id);
+    assert_eq!(invite_resolve["space_preview"]["realm_id"], invite_space_id);
 
     let listed_space = expect_json(
         alice.post("/api/v1/spaces").json(&json!({
@@ -77,7 +77,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    let listed_space_id = listed_space["space_id"].as_str().unwrap().to_owned();
+    let listed_space_id = listed_space["realm_id"].as_str().unwrap().to_owned();
     let listed_search = expect_json(
         server
             .http()
@@ -86,7 +86,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(listed_search["results"][0]["space_id"], listed_space_id);
+    assert_eq!(listed_search["results"][0]["realm_id"], listed_space_id);
 
     let unlisted_space = expect_json(
         alice.post("/api/v1/spaces").json(&json!({
@@ -96,7 +96,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    let unlisted_space_id = unlisted_space["space_id"].as_str().unwrap().to_owned();
+    let unlisted_space_id = unlisted_space["realm_id"].as_str().unwrap().to_owned();
     let unlisted_search = expect_json(
         server
             .http()
@@ -111,13 +111,13 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/directory/resolve-space"))
-            .json(&json!({"space_id": unlisted_space_id})),
+            .json(&json!({"realm_id": unlisted_space_id})),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        unlisted_resolve["space_preview"]["space_id"],
-        unlisted_space["space_id"]
+        unlisted_resolve["space_preview"]["realm_id"],
+        unlisted_space["realm_id"]
     );
 
     let shared_space_id = alice.create_space("Workflow Export Space").await?;

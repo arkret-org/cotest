@@ -93,14 +93,14 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    let space_id = created_space["space_id"].as_str().unwrap().to_owned();
+    let space_id = created_space["realm_id"].as_str().unwrap().to_owned();
     assert_eq!(created_space["owner"], "did:web:alice.example");
 
     expect_status(
         server
             .http()
             .post(server.url("/api/v1/directory/resolve-space"))
-            .json(&json!({"space_id": space_id})),
+            .json(&json!({"realm_id": space_id})),
         StatusCode::NOT_FOUND,
     )
     .await?;

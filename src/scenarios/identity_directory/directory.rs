@@ -65,12 +65,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
 
-    let public_space_id = public_space["space_id"].as_str().unwrap().to_owned();
-    let listed_space_id = listed_space["space_id"].as_str().unwrap().to_owned();
-    let restricted_space_id = restricted_space["space_id"].as_str().unwrap().to_owned();
-    let unlisted_space_id = unlisted_space["space_id"].as_str().unwrap().to_owned();
-    let invite_only_space_id = invite_only_space["space_id"].as_str().unwrap().to_owned();
-    let secret_space_id = secret_space["space_id"].as_str().unwrap().to_owned();
+    let public_space_id = public_space["realm_id"].as_str().unwrap().to_owned();
+    let listed_space_id = listed_space["realm_id"].as_str().unwrap().to_owned();
+    let restricted_space_id = restricted_space["realm_id"].as_str().unwrap().to_owned();
+    let unlisted_space_id = unlisted_space["realm_id"].as_str().unwrap().to_owned();
+    let invite_only_space_id = invite_only_space["realm_id"].as_str().unwrap().to_owned();
+    let secret_space_id = secret_space["realm_id"].as_str().unwrap().to_owned();
 
     let anonymous_search = expect_json(
         server
@@ -84,7 +84,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .as_array()
         .unwrap()
         .iter()
-        .filter_map(|space| space["space_id"].as_str().map(ToOwned::to_owned))
+        .filter_map(|space| space["realm_id"].as_str().map(ToOwned::to_owned))
         .collect();
     assert_eq!(
         anonymous_search_ids,
@@ -105,12 +105,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             server
                 .http()
                 .post(server.url("/api/v1/directory/resolve-space"))
-                .json(&json!({"space_id": resolvable_space_id.as_str()})),
+                .json(&json!({"realm_id": resolvable_space_id.as_str()})),
             StatusCode::OK,
         )
         .await?;
         assert_eq!(
-            resolved["space_preview"]["space_id"],
+            resolved["space_preview"]["realm_id"],
             resolvable_space_id.as_str()
         );
     }
@@ -119,7 +119,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/directory/resolve-space"))
-            .json(&json!({"space_id": invite_only_space_id.clone()})),
+            .json(&json!({"realm_id": invite_only_space_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -128,7 +128,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/directory/resolve-space"))
-            .json(&json!({"space_id": secret_space_id.clone()})),
+            .json(&json!({"realm_id": secret_space_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -139,7 +139,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .as_array()
         .unwrap()
         .iter()
-        .find(|invite| invite["space_id"].as_str() == Some(invite_only_space_id.as_str()))
+        .find(|invite| invite["realm_id"].as_str() == Some(invite_only_space_id.as_str()))
         .and_then(|invite| invite["invite_token"].as_str())
         .ok_or_else(|| anyhow!("missing invite token for invite-only space"))?;
     let invite_only_resolved = expect_json(
@@ -147,14 +147,14 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .http()
             .post(server.url("/api/v1/directory/resolve-space"))
             .json(&json!({
-                "space_id": invite_only_space_id.clone(),
+                "realm_id": invite_only_space_id.clone(),
                 "invite_token": invite_token
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        invite_only_resolved["space_preview"]["space_id"],
+        invite_only_resolved["space_preview"]["realm_id"],
         invite_only_space_id
     );
 
@@ -163,14 +163,14 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .http()
             .post(server.url("/api/v1/directory/resolve-space"))
             .json(&json!({
-                "space_id": secret_space_id.clone(),
+                "realm_id": secret_space_id.clone(),
                 "signed_link": "cotest-signed-link"
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        secret_resolved["space_preview"]["space_id"],
+        secret_resolved["space_preview"]["realm_id"],
         secret_space_id
     );
 

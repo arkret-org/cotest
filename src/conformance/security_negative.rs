@@ -117,7 +117,7 @@ fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
     for field in [
         "event_id",
         "kind",
-        "space_id",
+        "realm_id",
         "actor_id",
         "actor_seq",
         "created_at",
