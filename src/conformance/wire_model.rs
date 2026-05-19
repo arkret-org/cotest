@@ -3307,7 +3307,12 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
         .get("codes")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("error-code-registry missing codes[]"))?;
-    let valid_scopes: BTreeSet<&str> = ["client", "server", "both", "endpoint"]
+    // Round 2+3 cleanup (2026-05-20): the spec error-code-registry adds
+    // `service_call` scope (federation S2S errors) alongside the existing
+    // four. Keep `endpoint` (introduced in earlier rounds for read-side
+    // codes) and accept `service_call` so the registry coverage gate
+    // doesn't reject the new error codes.
+    let valid_scopes: BTreeSet<&str> = ["client", "server", "both", "endpoint", "service_call"]
         .into_iter()
         .collect();
 
@@ -3323,7 +3328,9 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
         }
         let scope = required_str(c, "scope")?;
         if !valid_scopes.contains(scope) {
-            bail!("code {code} has scope {scope} not in {{client, server, both, endpoint}}");
+            bail!(
+                "code {code} has scope {scope} not in {{client, server, both, endpoint, service_call}}"
+            );
         }
         let description = required_str(c, "description")?;
         if description.is_empty() {

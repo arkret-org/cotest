@@ -260,6 +260,26 @@ pub fn scan_tree(root: &Path, rules: &[ArtifactRule]) -> Result<Vec<Finding>> {
     Ok(out)
 }
 
+/// Walk `root` and scan for round 2+3 structural drift rules (see
+/// [`crate::round23_rules`]). Independent of the artifact-registry-driven
+/// path; both can be invoked by callers that want full coverage.
+pub fn scan_tree_round23(root: &Path) -> Result<Vec<crate::round23_rules::Round23Finding>> {
+    let mut out = Vec::new();
+    walk(root, &mut |file_path| {
+        let file_kind = FileKind::from_path(file_path);
+        if matches!(file_kind, FileKind::Other) {
+            return Ok(());
+        }
+        let raw = match fs::read_to_string(file_path) {
+            Ok(s) => s,
+            Err(_) => return Ok(()),
+        };
+        crate::round23_rules::scan_round23(file_path, &raw, &mut out);
+        Ok(())
+    })?;
+    Ok(out)
+}
+
 fn walk<F>(root: &Path, visit: &mut F) -> Result<()>
 where
     F: FnMut(&Path) -> Result<()>,

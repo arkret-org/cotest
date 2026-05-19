@@ -4,7 +4,7 @@
   "comment": "A4 Round 23 — error code registry coverage. Validator asserts: (a) every code in error-code-registry.json carries http_status (integer in canonical 4xx/5xx range), scope ∈ {client, server, both}, and a non-empty description; (b) any error code referenced by an event-payload schema enum (mls.commit_failed.failure_stage / quarantine reasons / etc.) — when surfaced via the registry — appears in the registry by name. Negative vectors cover (a) missing http_status, (b) invalid scope value, (c) referenced code missing from registry.",
   "encoder": {
     "error_code_registry": "registry/error-code-registry.json",
-    "valid_scopes": ["client", "server", "both"],
+    "valid_scopes": ["client", "server", "both", "endpoint", "service_call"],
     "min_http_status": 400,
     "max_http_status": 599
   },

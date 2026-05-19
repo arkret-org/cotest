@@ -49,25 +49,34 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            "hidden_space_resolve_indistinguishable" => {
-                if case.operation_id.as_deref() != Some("cx.directory.resolve_space")
-                    || case
-                        .expected
-                        .as_ref()
-                        .and_then(|expected| expected.get("same_http_status"))
-                        .and_then(Value::as_u64)
-                        != Some(404)
-                {
+            // Round 2+3 (2026-05-20): fixture case renamed from
+            // `hidden_space_resolve_indistinguishable` to
+            // `hidden_realm_resolve_indistinguishable` and the directory
+            // operation_id likewise migrated from `cx.directory.resolve_space`
+            // to `cx.directory.resolve_realm` per the Realm/Space inversion.
+            "hidden_realm_resolve_indistinguishable" => {
+                let op_id = case.operation_id.as_deref();
+                let same_http_ok = case
+                    .expected
+                    .as_ref()
+                    .and_then(|expected| expected.get("same_http_status"))
+                    .and_then(Value::as_u64)
+                    == Some(404);
+                let op_ok = matches!(
+                    op_id,
+                    Some("cx.directory.resolve_realm") | Some("cx.directory.resolve_space")
+                );
+                if !op_ok || !same_http_ok {
                     bail!(
                         "privacy fixture {} no longer proves indistinguishable resolve errors",
                         case.name
                     );
                 }
                 record_vector_event(
-                    "privacy.hidden_space_resolve_indistinguishable",
+                    "privacy.hidden_realm_resolve_indistinguishable",
                     &json!({"operation_id": case.operation_id.clone()}),
                     &json!({
-                        "operation_id": "cx.directory.resolve_space",
+                        "operation_id": "cx.directory.resolve_realm",
                         "same_http_status": 404,
                     }),
                     &json!({

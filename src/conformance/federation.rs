@@ -42,7 +42,12 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            "origin_destination_service_did_mismatch" => {
+            // Round 2+3 (2026-05-20): fixture case renamed from
+            // `origin_destination_service_did_mismatch` to
+            // `source_destination_service_did_mismatch`. The semantics
+            // (federation source DID ≠ signed destination DID → reject)
+            // are unchanged.
+            "source_destination_service_did_mismatch" => {
                 let verdict = validate_origin_destination(
                     "did:web:remote.example",
                     "did:web:wrong.example",
@@ -52,9 +57,9 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     bail!("federation fixture {} accepted DID mismatch", case.name);
                 }
                 record_vector_event(
-                    "federation.origin_destination_service_did_mismatch",
+                    "federation.source_destination_service_did_mismatch",
                     &json!({
-                        "origin": "did:web:remote.example",
+                        "source": "did:web:remote.example",
                         "signed_destination": "did:web:wrong.example",
                         "expected_destination": "did:web:local.example",
                     }),

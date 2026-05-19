@@ -18,6 +18,14 @@ const PROFILE_LIST_FIELDS: &[&str] = &[
     "hardening_profiles",
     "vector_profiles",
     "anchor_profiles",
+    // Round 2+3 (2026-05-20): the spec's conformance-profiles.json now
+    // declares a `candidate_profiles` group for unregistered workflow
+    // concept/action profiles gated fail-closed (see
+    // `candidate_profiles_tier_rule` in the spec). Candidate profiles
+    // MUST be recognised by the matrix loader so their
+    // `profile_requirements` entries don't trigger
+    // `not_declared_in_any_profile_catalog`.
+    "candidate_profiles",
 ];
 
 const MIXED_PROFILE_FIELDS: &[&str] = &[
