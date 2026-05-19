@@ -3892,77 +3892,77 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
 
     // C3-C6 — cross-family composition compositions: validate that the
     // combined_evaluation_class is the strictness-max of every member family
-    // and fast_path_eligible follows accordingly. Optional in the fixture
-    // (older fixtures may omit it); when present, all entries must validate.
-    if let Some(compositions) = fixture
+    // and fast_path_eligible follows accordingly.
+    let compositions = fixture
         .get("cross_family_compositions")
         .and_then(Value::as_array)
-    {
-        if compositions.len() < 4 {
+        .ok_or_else(|| {
+            anyhow!("constraint_family fixture missing cross_family_compositions[]")
+        })?;
+    if compositions.len() < 4 {
+        bail!(
+            "constraint_family fixture cross_family_compositions has {} entries, expected >= 4",
+            compositions.len()
+        );
+    }
+    let mut covered_pairs: BTreeSet<(String, String)> = BTreeSet::new();
+    for v in compositions {
+        let name = required_str(v, "name")?;
+        let families: Vec<&str> = v
+            .get("families")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("composition {name} missing families[]"))?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        if families.len() < 2 {
+            bail!("composition {name} must have at least 2 families");
+        }
+        for f in &families {
+            if !valid_types.contains(*f) {
+                bail!("composition {name} family {f} not a valid constraint_type");
+            }
+        }
+        // Combine class via strictness max; trust the fixture's declared
+        // canonical_for_family hints if absent, fall back to per-family
+        // canonical (subtype-blind).
+        let mut max_rank: u8 = 0;
+        let mut max_class: &str = "stateless";
+        for f in &families {
+            let class = canonical_evaluation_class(f);
+            let rank = class_strictness_rank(class);
+            if rank > max_rank {
+                max_rank = rank;
+                max_class = class;
+            }
+        }
+        let declared_combined =
+            required_str(v.pointer("/expected").unwrap(), "combined_evaluation_class")?;
+        if declared_combined != max_class {
             bail!(
-                "constraint_family fixture cross_family_compositions has {} entries, expected >= 4",
-                compositions.len()
+                "composition {name} declared combined_evaluation_class={declared_combined} but max-of-families is {max_class}"
             );
         }
-        let mut covered_pairs: BTreeSet<(String, String)> = BTreeSet::new();
-        for v in compositions {
-            let name = required_str(v, "name")?;
-            let families: Vec<&str> = v
-                .get("families")
-                .and_then(Value::as_array)
-                .ok_or_else(|| anyhow!("composition {name} missing families[]"))?
-                .iter()
-                .filter_map(Value::as_str)
-                .collect();
-            if families.len() < 2 {
-                bail!("composition {name} must have at least 2 families");
-            }
-            for f in &families {
-                if !valid_types.contains(*f) {
-                    bail!("composition {name} family {f} not a valid constraint_type");
-                }
-            }
-            // Combine class via strictness max; trust the fixture's declared
-            // canonical_for_family hints if absent, fall back to per-family
-            // canonical (subtype-blind).
-            let mut max_rank: u8 = 0;
-            let mut max_class: &str = "stateless";
-            for f in &families {
-                let class = canonical_evaluation_class(f);
-                let rank = class_strictness_rank(class);
-                if rank > max_rank {
-                    max_rank = rank;
-                    max_class = class;
-                }
-            }
-            let declared_combined =
-                required_str(v.pointer("/expected").unwrap(), "combined_evaluation_class")?;
-            if declared_combined != max_class {
-                bail!(
-                    "composition {name} declared combined_evaluation_class={declared_combined} but max-of-families is {max_class}"
-                );
-            }
-            let declared_fast = v
-                .pointer("/expected/fast_path_eligible")
-                .and_then(Value::as_bool)
-                .ok_or_else(|| anyhow!("composition {name} missing fast_path_eligible"))?;
-            let expect_fast = matches!(max_class, "stateless" | "grant_local");
-            if declared_fast != expect_fast {
-                bail!(
-                    "composition {name} fast_path_eligible={declared_fast} but combined={max_class} → expected {expect_fast}"
-                );
-            }
-            // Pair coverage across distinct family pairs.
-            let mut sorted = families.clone();
-            sorted.sort();
-            covered_pairs.insert((sorted[0].to_owned(), sorted[1].to_owned()));
-        }
-        if covered_pairs.len() < 4 {
+        let declared_fast = v
+            .pointer("/expected/fast_path_eligible")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("composition {name} missing fast_path_eligible"))?;
+        let expect_fast = matches!(max_class, "stateless" | "grant_local");
+        if declared_fast != expect_fast {
             bail!(
-                "constraint_family cross_family_compositions must cover at least 4 distinct family pairs; got {}",
-                covered_pairs.len()
+                "composition {name} fast_path_eligible={declared_fast} but combined={max_class} → expected {expect_fast}"
             );
         }
+        // Pair coverage across distinct family pairs.
+        let mut sorted = families.clone();
+        sorted.sort();
+        covered_pairs.insert((sorted[0].to_owned(), sorted[1].to_owned()));
+    }
+    if covered_pairs.len() < 4 {
+        bail!(
+            "constraint_family cross_family_compositions must cover at least 4 distinct family pairs; got {}",
+            covered_pairs.len()
+        );
     }
 
     Ok(())

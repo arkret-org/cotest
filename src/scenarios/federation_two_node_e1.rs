@@ -25,7 +25,7 @@
 use anyhow::{Context, Result};
 use contrix_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::harness::{TestServerGroup, expect_json, expect_response};
 
@@ -72,10 +72,10 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     );
 
     // ── Step 2: actor + space + message Move on server_a ────────────────
-    // C35.2 — `device_id` MUST be a canonical Contrix wire DeviceId per
-    // `contrix_identifiers::DeviceId` (`dev_*` legacy form OR
-    // `cx:device:<uuidv7>`). Mint a fresh UUIDv7-backed device id at runtime
-    // so the fixture is wire-canonical and unique per run.
+    // C35.2 — `device_id` MUST be a canonical Contrix wire DeviceId
+    // (`cx:device:<uuidv7>`) per `contrix_identifiers::DeviceId`. Mint a
+    // fresh UUIDv7-backed device id at runtime so the fixture is
+    // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("cx:device:");
     let actor_a = server_a
         .register_client(
@@ -96,13 +96,11 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 3: pull anchors from server_a ──────────────────────────────
     // The MAL-12 round-25 federation endpoints expose:
-    //   GET /api/v1/federation/anchors?space_id=...
+    //   GET /api/v1/federation/anchors?space_id=...   →  { anchors: [...] }
     //   POST /api/v1/federation/anchors  (peer-push)
     //
-    // We tolerate either shape — newer soland builds may return the leaf
-    // anchors directly, older builds may emit an empty array if the space
-    // hasn't yet rolled an Anchor. The harness asserts the response shape
-    // is well-formed JSON, not a specific anchor count.
+    // Spec mandates the envelope object with an `anchors` array; the count
+    // can be zero if the space has not yet rolled an Anchor.
     let anchors_a_response = expect_response(
         server_a.http().get(format!(
             "{}/api/v1/federation/anchors?space_id={}",
@@ -114,23 +112,21 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     .await
     .context("fetch federation anchors from server_a")?;
     let anchors_a = anchors_a_response.json()?;
-    assert!(
-        anchors_a.is_object() || anchors_a.is_array(),
-        "anchors response must be JSON object or array, got: {anchors_a}"
-    );
+    let anchors_a_list = anchors_a
+        .get("anchors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "anchors response must be an object with `anchors` array, got: {anchors_a}"
+            )
+        })?;
 
     // ── Step 4: push the same anchors to server_b ────────────────────────
     // The push endpoint is idempotent and accepts the leaf bundle. If
     // server_a returned no anchors yet (anchorer hasn't fired), we still
     // exercise the push handler with an empty bundle so the round-trip
     // surface is touched.
-    let push_body = if anchors_a.is_array() {
-        json!({ "space_id": space_id, "anchors": anchors_a })
-    } else if let Some(arr) = anchors_a.get("anchors") {
-        json!({ "space_id": space_id, "anchors": arr })
-    } else {
-        json!({ "space_id": space_id, "anchors": [] })
-    };
+    let push_body = json!({ "space_id": space_id, "anchors": anchors_a_list });
 
     // server_b must accept the push and respond 200/202/204 OR a 4xx if the
     // space is unknown there (peer not yet introduced) — both are acceptable
@@ -164,10 +160,11 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     )
     .await
     .context("fetch federation anchors from server_b")?;
-    assert!(
-        anchors_b.is_object() || anchors_b.is_array(),
-        "server_b anchors response must be JSON object or array"
-    );
+    if anchors_b.get("anchors").and_then(Value::as_array).is_none() {
+        return Err(anyhow::anyhow!(
+            "server_b anchors response must be an object with `anchors` array, got: {anchors_b}"
+        ));
+    }
 
     Ok(())
 }

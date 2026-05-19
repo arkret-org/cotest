@@ -431,25 +431,18 @@ fn validate_event_envelope(
         ));
     }
     let event_id = value_field_str(event, "event_id")?;
-    // Spec post-2026-05-08: `refs[]` entries are typed-ref objects
-    // `{id: "cx:<kind>:<ulid>", role, critical, ...}` — older fixtures use
-    // bare `"cx:event:<ulid>"` strings. Accept either form; reject the
-    // entry only when the embedded id (or string itself) is not a typed
-    // `cx:` ref. `prev_refs[]` remains a bare-string list of `cx:event:`
-    // ids per spec §refs.
-    let extract_ref_id = |value: &Value| -> Option<String> {
-        if let Some(s) = value.as_str() {
-            return Some(s.to_owned());
-        }
+    // Spec post-2026-05-08: `refs[]` entries MUST be typed-ref objects
+    // `{id: "cx:<kind>:<ulid>", role, critical, ...}`. v1 is unreleased,
+    // so no dual-pattern accommodation: bare string entries fail loudly.
+    // `prev_refs[]` is a bare-string list of `cx:event:` ids per spec
+    // §refs.
+    let valid_ref = |s: &str| s.starts_with("cx:");
+    let extra_refs_invalid = extra_refs.iter().any(|value| {
         value
             .get("id")
             .and_then(Value::as_str)
-            .map(ToOwned::to_owned)
-    };
-    let valid_ref = |s: &str| s.starts_with("cx:");
-    let extra_refs_invalid = extra_refs
-        .iter()
-        .any(|value| extract_ref_id(value).map_or(true, |id| !valid_ref(&id)));
+            .is_none_or(|id| !valid_ref(id))
+    });
     let prev_refs_invalid = prev_refs.iter().any(|value| {
         value
             .as_str()
@@ -807,7 +800,11 @@ fn sample_envelope_event(
         "created_at": created_at,
         "hlc": hlc,
         "prev_refs": [],
-        "refs": ["cx:event:5139099c-b114-7e4c-8149-a8048971a269"],
+        "refs": [{
+            "id": "cx:event:5139099c-b114-7e4c-8149-a8048971a269",
+            "role": "reply_to",
+            "critical": false
+        }],
         "payload": content,
         // Synthetic placeholder proof — uses the binding-object shape
         // (`domain` set), well-formed but non-sentinel `payload_hash`. The

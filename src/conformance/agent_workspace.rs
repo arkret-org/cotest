@@ -292,21 +292,17 @@ pub fn run_agent_workspace_fsm_fixture_suite() -> Result<()> {
             //
             // The predicate may live under:
             //   * /input_move/predicate/*                  (abstract Move shape)
-            //   * /input_event/predicate/*                 (legacy inline shape; not used in v1 fixtures)
             //   * /input_event/preconditions/[0]/predicate/* (canonical Event shape — cleanup uses this)
             let predicate_op = value
                 .pointer("/input_move/predicate/op")
-                .or_else(|| value.pointer("/input_event/predicate/op"))
                 .or_else(|| value.pointer("/input_event/preconditions/0/predicate/op"))
                 .and_then(Value::as_str);
             let predicate_value = value
                 .pointer("/input_move/predicate/value")
-                .or_else(|| value.pointer("/input_event/predicate/value"))
                 .or_else(|| value.pointer("/input_event/preconditions/0/predicate/value"))
                 .and_then(Value::as_str);
             let predicate_values_present = value
                 .pointer("/input_move/predicate/values")
-                .or_else(|| value.pointer("/input_event/predicate/values"))
                 .or_else(|| value.pointer("/input_event/preconditions/0/predicate/values"))
                 .and_then(Value::as_array)
                 .map(|a| !a.is_empty())
