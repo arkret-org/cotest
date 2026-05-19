@@ -622,13 +622,20 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 let visibility = required_str(policy, "visibility")?;
                 (disclosure.to_owned(), visibility.to_owned())
             }
-            "flow_branch" => {
+            "child_space" => {
+                // Per spec 2026-05-08 (removed-event-kinds.json:
+                // cx.flow.track.read_receipt_policy), track-level read-receipt
+                // overrides are not in v1. A discussion timeline that needs a
+                // distinct read-receipt policy MUST be upgraded to an
+                // independent child Space (Flow.discussion_space_ref) whose
+                // own cx.space.read_receipt_policy composes against the
+                // parent Space policy via the same tighten-only rules.
                 let parent = policy
                     .get("parent")
-                    .ok_or_else(|| anyhow!("vector {name} flow_branch missing parent"))?;
+                    .ok_or_else(|| anyhow!("vector {name} child_space missing parent"))?;
                 let branch = policy
                     .get("branch")
-                    .ok_or_else(|| anyhow!("vector {name} flow_branch missing branch"))?;
+                    .ok_or_else(|| anyhow!("vector {name} child_space missing branch"))?;
                 let parent_disclosure = required_str(parent, "disclosure")?;
                 let branch_disclosure = required_str(branch, "disclosure")?;
                 let parent_visibility = required_str(parent, "visibility")?;
@@ -1725,11 +1732,14 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
 }
 
 fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
+    // Resolution order per spec discovery/read-receipts.md §3.6 (post 2026-05-08
+    // wire-break): child_space → space → default. Track-level overrides removed
+    // from v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy).
     let lookup = vector.get("scope_lookup");
     if let Some(lookup) = lookup
-        && let Some(flow_id) = lookup.get("flow_id").and_then(Value::as_str)
-        && let Some(flows) = prefs.get("flows").and_then(Value::as_object)
-        && let Some(entry) = flows.get(flow_id)
+        && let Some(child_space_id) = lookup.get("child_space_id").and_then(Value::as_str)
+        && let Some(child_spaces) = prefs.get("child_spaces").and_then(Value::as_object)
+        && let Some(entry) = child_spaces.get(child_space_id)
         && let Some(send) = entry.get("send").and_then(Value::as_bool)
     {
         return Ok(send);

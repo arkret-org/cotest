@@ -621,7 +621,29 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
         "cx.container.rebalance" => {
             missing_payload_fields(content, &["board_id", "list_id", "rank"])
         }
-        "cx.member.state" => missing_payload_fields(content, &["membership"]),
+        "cx.member.state" => {
+            if let Some(err) = missing_payload_fields(content, &["membership"]) {
+                return Some(err);
+            }
+            // Spec 0a5ab85 (`membership_payload` conditional required):
+            // `membership=join` ⇒ `actor_id` + `delivery_status` required;
+            // `delivery_status=routable` ⇒ `delivery_binding` required.
+            if content.get("membership").and_then(Value::as_str) == Some("join") {
+                if let Some(err) = missing_payload_fields(content, &["actor_id", "delivery_status"])
+                {
+                    return Some(err);
+                }
+                if content.get("delivery_status").and_then(Value::as_str) == Some("routable")
+                    && content.get("delivery_binding").is_none()
+                {
+                    return Some(
+                        "payload content missing delivery_binding (delivery_status=routable)"
+                            .to_owned(),
+                    );
+                }
+            }
+            None
+        }
         _ => None,
     }
 }

@@ -1,7 +1,7 @@
 {
   "profile": "cx.profile.read_receipt_policy_vectors.v1",
-  "version": "2026-05-08",
-  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by component cells cx.component.space.read_receipt_policy.v1 and cx.component.flow.branch.read_receipt_policy.v1 (cas-register, bottom=reject). User preferences live under the actor-private account-data key cx.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (flow → space → default).",
+  "version": "2026-05-19",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell cx.component.space.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.discussion_space_ref) whose own cx.space.read_receipt_policy declares the override. User preferences live under the actor-private account-data key cx.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
   "vectors": [
     {
       "name": "disclosure_required_locks_client_send",
@@ -42,7 +42,7 @@
     },
     {
       "name": "visibility_private_fanout_only_to_sender",
-      "comment": "When visibility=private, Sync Service MUST only fanout the receipt to the original sender of the referenced event_id. Other Space/branch members MUST NOT observe it.",
+      "comment": "When visibility=private, Sync Service MUST only fanout the receipt to the original sender of the referenced event_id. Other Space members MUST NOT observe it.",
       "policy": {
         "scope": "space",
         "disclosure": "optional",
@@ -61,9 +61,9 @@
     },
     {
       "name": "branch_overrides_tighten_only",
-      "comment": "Flow branch policy MAY tighten the parent Space policy without scope_overrides_allowed=true. Optional → Required at the branch is a tightening (forces send), Members → Private is also a tightening (smaller audience).",
+      "comment": "A child Space (upgraded discussion timeline, Flow.discussion_space_ref) MAY tighten the parent Space's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the child Space is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy) — the child-Space surface is the only legitimate scope for a per-discussion override.",
       "policy": {
-        "scope": "flow_branch",
+        "scope": "child_space",
         "parent": {
           "disclosure": "optional",
           "visibility": "members",
@@ -89,9 +89,9 @@
     },
     {
       "name": "branch_overrides_loosen_rejected_when_not_allowed",
-      "comment": "When the parent Space declares scope_overrides_allowed=false, a Flow branch MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject.",
+      "comment": "When the parent Space declares scope_overrides_allowed=false, a child Space MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the child-Space cx.space.read_receipt_policy is the only surface.",
       "policy": {
-        "scope": "flow_branch",
+        "scope": "child_space",
         "parent": {
           "disclosure": "required",
           "visibility": "private",
@@ -113,12 +113,12 @@
         "is_send": true,
         "is_locked": true,
         "sync_service_fanout": "sender_only",
-        "reducer_action": "reject_loosening_branch_move"
+        "reducer_action": "reject_loosening_child_space_move"
       }
     },
     {
       "name": "prefs_resolution_flow_overrides_space",
-      "comment": "When policy is optional and the user has both space-level and flow-level overrides, the flow override wins (resolution order is flow → space → default).",
+      "comment": "When policy is optional and the user has both parent-Space-level and child-Space-level (discussion_space_ref) overrides, the child-Space override wins. Resolution order is child_space → space → default (track-level overrides are not in v1; see removed-event-kinds.json).",
       "policy": {
         "scope": "space",
         "disclosure": "optional",
@@ -130,13 +130,13 @@
         "spaces": {
           "cx:space:01JS0SP00000000000000RR000": { "send": false }
         },
-        "flows": {
-          "cx:flow:01JS1FL00000000000000RR000": { "send": true }
+        "child_spaces": {
+          "cx:space:01JS1CS00000000000000RR000": { "send": true }
         }
       },
       "scope_lookup": {
         "space_id": "cx:space:01JS0SP00000000000000RR000",
-        "flow_id": "cx:flow:01JS1FL00000000000000RR000"
+        "child_space_id": "cx:space:01JS1CS00000000000000RR000"
       },
       "expected": {
         "decision": "send",
@@ -146,7 +146,7 @@
     },
     {
       "name": "prefs_resolution_space_overrides_default",
-      "comment": "Without a flow-level override, the space-level override wins over the default.",
+      "comment": "Without a child-Space-level override, the parent-Space-level override wins over the default.",
       "policy": {
         "scope": "space",
         "disclosure": "optional",
