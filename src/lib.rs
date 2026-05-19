@@ -7,6 +7,8 @@ pub mod conformance;
 pub mod fixtures;
 pub mod fuzz;
 pub mod harness;
+pub mod literal_scanner;
+pub mod profile_validator;
 pub mod scenarios;
 pub mod transcripts;
 

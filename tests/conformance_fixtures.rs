@@ -590,3 +590,14 @@ conformance_test!(
     "agent_workspace_fsm_and_reservation_fixtures",
     cotest::conformance::run_agent_workspace_fsm_fixture_suite,
 );
+
+conformance_test!(
+    /// T1.1 — shared push blind-payload sanitizer vectors. Asserts the
+    /// chime / floria / SDK implementations stay aligned on the allow /
+    /// block lists for blind wakeup payloads (`push_target_id`,
+    /// `wakeup_kind`, `push_hint`, counts; everything else forbidden;
+    /// no `did:` / `cx:` literal in any other slot).
+    blind_payload_sanitizer_vectors,
+    "blind_payload_sanitizer",
+    cotest::conformance::run_blind_payload_sanitizer_suite,
+);

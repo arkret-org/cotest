@@ -1,4 +1,5 @@
 mod agent_workspace;
+mod blind_payload;
 mod capability;
 mod coauth_lifecycle;
 mod encoding;
@@ -40,6 +41,9 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 pub use agent_workspace::{
     run_agent_workspace_fsm_fixture_suite, run_agent_workspace_registry_suite,
     run_agent_workspace_schema_suite,
+};
+pub use blind_payload::{
+    run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
 pub use capability::run_capability_facet_fixture_suite;
 pub use capability::run_capability_fixture_suite;

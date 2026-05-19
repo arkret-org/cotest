@@ -17,6 +17,11 @@ chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["
 chrono = "0.4.42"
 contrix-http-client = { path = "../contrix-rust-sdk/crates/http-client" }
 contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
+# T5.3 (Round 22) — canonical hash convergence vectors in
+# `tests/canonical_hash_convergence.rs` exercise the high-level
+# `EventProofBuilder` facade alongside the low-level canonical helpers
+# to pin that every Contrix service hashes payloads identically.
+contrix-signatures = { path = "../contrix-rust-sdk/crates/signatures" }
 # lattice round-trip vectors: cotest exercises the SDK's
 # `contrix_core::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
@@ -40,3 +45,6 @@ url = "2.5.7"
 
 [dev-dependencies]
 serial_test = "3.2.0"
+# T8.2 — property tests for canonical-JSON / proof vectors and handle
+# claim validators across the SDK contract surface.
+proptest = { version = "1", default-features = false, features = ["std"] }
