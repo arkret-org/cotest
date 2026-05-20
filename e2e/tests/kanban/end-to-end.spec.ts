@@ -132,7 +132,66 @@ test.describe("kanban end-to-end", () => {
     },
   );
 
-  test.fixme("reordering lists (drag column) updates board's child_order cell", async () => {
+  test.fixme("reordering lists (drag column) updates board's child_order cell", async ({
+    browser,
+    request,
+  }, testInfo) => {
     // spec: space-and-place.md §4.5 cas-register basis
+    // yougen gap: stable column drag handles and child_order projection not yet verified.
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-order-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    const first = `First-${stamp}`;
+    const second = `Second-${stamp}`;
+    const third = `Third-${stamp}`;
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `Kanban Order ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+      });
+      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+
+      for (const columnName of [first, second, third]) {
+        await alicePage.page.getByTestId("new-column-input").fill(columnName);
+        await alicePage.page.getByTestId("add-column-button").click();
+        await expect(
+          alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+
+      const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
+      const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
+      await thirdColumn.getByTestId("column-drag-handle").dragTo(
+        firstColumn.getByTestId("column-drop-target-before"),
+      );
+      await stepShot(alicePage.page, testInfo, "columns-reordered");
+
+      const labels = await alicePage.page.getByTestId("kanban-column-title").allTextContents();
+      const firstIndex = labels.findIndex((label) => label.includes(first));
+      const secondIndex = labels.findIndex((label) => label.includes(second));
+      const thirdIndex = labels.findIndex((label) => label.includes(third));
+      expect(thirdIndex).toBeGreaterThanOrEqual(0);
+      expect(firstIndex).toBeGreaterThanOrEqual(0);
+      expect(secondIndex).toBeGreaterThanOrEqual(0);
+      expect(thirdIndex).toBeLessThan(firstIndex);
+      expect(firstIndex).toBeLessThan(secondIndex);
+
+      const cellResp = await request.get(
+        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/cells/cx.component.child_order.v1`,
+        { headers: { authorization: `Bearer ${aliceToken}` } },
+      );
+      expect(cellResp.status()).toBe(200);
+      const cellText = JSON.stringify(await cellResp.json());
+      expect(cellText.indexOf(third)).toBeLessThan(cellText.indexOf(first));
+      expect(cellText.indexOf(first)).toBeLessThan(cellText.indexOf(second));
+    } finally {
+      await alicePage.close();
+    }
   });
 });

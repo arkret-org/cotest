@@ -973,6 +973,7 @@ try {
             [Parameter(Mandatory = $true)][string]$ServiceDid,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
             [Parameter(Mandatory = $true)][int]$Port,
+            [Parameter(Mandatory = $true)][string]$LogFile,
             [string]$FederationPeers = ""
         )
         $federationEnv = ""
@@ -982,7 +983,25 @@ try {
                 "`$env:SOLAND_FEDERATION_PEERS={0}; "
             ) -f (Quote-PsLiteral $FederationPeers)
         }
+        # Forward the harness's RUST_LOG into the soland child so the runner
+        # can drive verbose tracing on demand (e.g. when debugging a specific
+        # projection path) without editing this file. The value is baked
+        # into the spawned PowerShell command string so it survives whatever
+        # env handling `Start-Process` applies.
+        #
+        # Default RUST_LOG to `info` so the soland-side tracing file
+        # (SOLAND_LOG_FILE below) actually contains the
+        # `tracing::info!(...)` events service code emits. Without an
+        # explicit filter, `EnvFilter::from_default_env()` falls back to
+        # OFF and the file is just startup metadata.
+        $rustLogForward = ""
+        if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) {
+            $rustLogForward = "`$env:RUST_LOG=" + (Quote-PsLiteral $env:RUST_LOG) + "; "
+        } else {
+            $rustLogForward = "`$env:RUST_LOG='info'; "
+        }
         return (
+            $rustLogForward +
             "`$env:DATABASE_URL=''; " +
             "`$env:SOLAND_PUBLIC_BASE_URL={0}; " +
             "`$env:SOLAND_SERVICE_DID={1}; " +
@@ -990,16 +1009,18 @@ try {
             "`$env:SOLAND_CORS_ALLOW_ORIGIN={2}; " +
             "`$env:SOLAND_OBJECT_STORAGE_BACKEND='filesystem'; " +
             "`$env:SOLAND_OBJECT_STORAGE_LOCAL_ROOT={3}; " +
-            "{4}" +
+            "`$env:SOLAND_LOG_FILE={4}; " +
             "{5}" +
             "{6}" +
             "{7}" +
-            "cargo run --manifest-path {8} -- --bind 127.0.0.1:{9}"
+            "{8}" +
+            "cargo run --manifest-path {9} -- --bind 127.0.0.1:{10}"
         ) -f `
             (Quote-PsLiteral $BaseUrl),
             (Quote-PsLiteral $ServiceDid),
             (Quote-PsLiteral $YougenBaseUrl),
             (Quote-PsLiteral $ObjectsRoot),
+            (Quote-PsLiteral $LogFile),
             $solandCoauthEnv,
             $solandStaridEnv,
             $solandTeabayEnv,
@@ -1008,6 +1029,15 @@ try {
             $Port
     }
 
+    # Per-instance tracing files. Windows fully-buffers stdout when
+    # `Start-Process -RedirectStandardOutput` is chained through
+    # `cargo run`, so the soland.stdout.log captured by the harness ends up
+    # holding only cargo's build output. The `SOLAND_LOG_FILE` path is a
+    # second, durable sink soland writes through a non-blocking
+    # tracing-appender (see soland/src/main.rs `init_tracing`). This is the
+    # file scenarios should `tail -f` when debugging projection / reducer
+    # paths against the runner.
+    $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
     if (-not $SolandCommand -and $solandPort) {
         $generatedSolandCommand = $true
         $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
@@ -1016,6 +1046,7 @@ try {
             -ServiceDid $SolandServiceDid `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
             -Port $solandPort `
+            -LogFile $solandTraceFile `
             -FederationPeers $alphaPeer
     }
     if ($SolandCommand) {
@@ -1026,11 +1057,13 @@ try {
     Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
 
     if ($DualSoland) {
+        $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
         $solandBetaCommand = Build-SolandCommand `
             -BaseUrl $solandBetaBaseUrl `
             -ServiceDid $SolandBetaServiceDid `
             -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
             -Port $solandBetaPort `
+            -LogFile $solandBetaTraceFile `
             -FederationPeers $SolandBaseUrl
         $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds

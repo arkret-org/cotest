@@ -56,12 +56,120 @@ test.describe("notifications", () => {
 
   test.fixme(
     "muting a space stops push notifications for new messages but mention still notifies (spec §3 mention override)",
-    async () => {},
+    async ({ browser, request }, testInfo) => {
+      // spec: push-notifications.md §3 + §4.3.1.
+      // soland gap: per-space notification preferences and mention override projection.
+      const stamp = Date.now();
+      const alice = uniqueUser("s23-mute-alice");
+      const bob = uniqueUser("s23-mute-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const normalMsg = `muted normal message ${stamp}`;
+      const mentionMsg = `@${bob.handle.replace(/^@/, "")} muted mention override ${stamp}`;
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S23 Muted ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          seedMembers: [bob.did],
+        });
+        await bobPage.acceptInvite(spaceId);
+
+        await bobPage.page.goto("/notifications/settings", { waitUntil: "domcontentloaded" });
+        await expect(bobPage.page.getByTestId("notification-settings-panel")).toBeVisible({
+          timeout: 30_000,
+        });
+        await bobPage.page.getByTestId("space-notification-target-input").fill(spaceId);
+        await bobPage.page.getByTestId("space-mute-toggle").check();
+        await expect(bobPage.page.getByTestId("notification-settings-status")).toContainText(
+          /muted/i,
+          { timeout: 30_000 },
+        );
+
+        await alicePage.sendTimelineMessage(spaceId, normalMsg);
+        await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+        await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible({
+          timeout: 30_000,
+        });
+        await expect(
+          bobPage.page.getByTestId("notification-item").filter({ hasText: normalMsg }),
+        ).toHaveCount(0);
+
+        await alicePage.sendTimelineMessage(spaceId, mentionMsg);
+        await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(
+          bobPage.page.getByTestId("notification-item").filter({ hasText: mentionMsg }),
+        ).toBeVisible({ timeout: 30_000 });
+        await stepShot(bobPage.page, testInfo, "muted-mention-override");
+      } finally {
+        await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      }
+    },
   );
 
   test.fixme(
     "Do-not-disturb window suppresses all notifications during configured hours; resumes after window ends",
-    async () => {},
+    async ({ browser, request }, testInfo) => {
+      // spec: push-notifications.md §3.2 do-not-disturb preference.
+      const stamp = Date.now();
+      const alice = uniqueUser("s23-dnd-alice");
+      const bob = uniqueUser("s23-dnd-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const suppressedMsg = `DND suppressed ${stamp}`;
+      const resumedMsg = `DND resumed ${stamp}`;
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S23 DND ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          seedMembers: [bob.did],
+        });
+        await bobPage.acceptInvite(spaceId);
+
+        await bobPage.page.goto("/notifications/settings", { waitUntil: "domcontentloaded" });
+        await expect(bobPage.page.getByTestId("notification-settings-panel")).toBeVisible({
+          timeout: 30_000,
+        });
+        await bobPage.page.getByTestId("dnd-enabled-toggle").check();
+        await bobPage.page.getByTestId("dnd-mode-select").selectOption("now");
+        await bobPage.page.getByTestId("save-notification-settings-button").click();
+        await expect(bobPage.page.getByTestId("notification-settings-status")).toContainText(
+          /do not disturb|dnd/i,
+          { timeout: 30_000 },
+        );
+
+        await alicePage.sendTimelineMessage(spaceId, suppressedMsg);
+        await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+        await expect(
+          bobPage.page.getByTestId("notification-item").filter({ hasText: suppressedMsg }),
+        ).toHaveCount(0);
+
+        await bobPage.page.goto("/notifications/settings", { waitUntil: "domcontentloaded" });
+        await bobPage.page.getByTestId("dnd-enabled-toggle").uncheck();
+        await bobPage.page.getByTestId("save-notification-settings-button").click();
+        await alicePage.sendTimelineMessage(spaceId, resumedMsg);
+        await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+        await expect(
+          bobPage.page.getByTestId("notification-item").filter({ hasText: resumedMsg }),
+        ).toBeVisible({ timeout: 30_000 });
+        await stepShot(bobPage.page, testInfo, "dnd-resumed");
+      } finally {
+        await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      }
+    },
   );
 
   test("mark-all-read clears unread badges and marks notification rows as read", async ({
@@ -125,6 +233,59 @@ test.describe("notifications", () => {
 
   test.fixme(
     "cross-device read state: marking read on device-2 clears unread on device-1 within sync window",
-    async () => {},
+    async ({ browser, request }, testInfo) => {
+      // spec: client-preferences.md read marker is per-account, synced to all devices.
+      const stamp = Date.now();
+      const alice = uniqueUser("s23-crossdev-alice");
+      const bob = uniqueUser("s23-crossdev-bob");
+      const bobDevice2 = {
+        ...bob,
+        name: `${bob.name}-device2`,
+        deviceId: `cx:device:01904100-0000-7000-8000-${String(stamp).padStart(12, "0").slice(-12)}`,
+      };
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken1, bobToken2] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+        issueDevSession(request, bobDevice2),
+      ]);
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const bobDevice1 = await openUserPage(browser, bob, { sessionToken: bobToken1 });
+      const bobDevice2Page = await openUserPage(browser, bobDevice2, { sessionToken: bobToken2 });
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S23 Cross Device ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          seedMembers: [bob.did],
+        });
+        await bobDevice1.acceptInvite(spaceId);
+        await alicePage.sendTimelineMessage(spaceId, `cross-device unread ${stamp}`);
+
+        await bobDevice1.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+        await expect(bobDevice1.page.getByTestId("unread-count")).toContainText(/[1-9]/, {
+          timeout: 30_000,
+        });
+
+        await bobDevice2Page.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+        await bobDevice2Page.page.getByTestId("mark-all-read-button").click();
+        await expect(bobDevice2Page.page.getByTestId("unread-count")).toContainText(/0/, {
+          timeout: 30_000,
+        });
+
+        await bobDevice1.page.reload({ waitUntil: "domcontentloaded" });
+        await expect(bobDevice1.page.getByTestId("unread-count")).toContainText(/0/, {
+          timeout: 30_000,
+        });
+        await stepShot(bobDevice1.page, testInfo, "device1-cleared-after-device2-read");
+      } finally {
+        await Promise.allSettled([
+          bobDevice2Page.close(),
+          bobDevice1.close(),
+          alicePage.close(),
+        ]);
+      }
+    },
   );
 });

@@ -118,32 +118,265 @@ test.describe("chat advanced", () => {
   },
   );
 
-  test.fixme("E14.D mentions route notifications only to the mentioned actor", async () => {
+  test.fixme("E14.D mentions route notifications only to the mentioned actor", async ({
+    browser,
+    request,
+  }, testInfo) => {
     // spec: discovery/push-notifications.md §4.3.1 mention_routing_hint
+    // soland gap: notification projection does not yet expose mention_routing_hint.
+    const stamp = Date.now();
+    const alice = uniqueUser("s14d-alice");
+    const bob = uniqueUser("s14d-bob");
+    const carol = uniqueUser("s14d-carol");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+      ensureRegistered(request, carol),
+    ]);
+    const [aliceToken, bobToken, carolToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+      issueDevSession(request, carol),
+    ]);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+
+    const mention = `@${bob.handle.replace(/^@/, "")} can you review the incident note? ${stamp}`;
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `S14D Mention ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [bob.did, carol.did],
+      });
+      await Promise.all([bobPage.acceptInvite(spaceId), carolPage.acceptInvite(spaceId)]);
+
+      await sendChat(alicePage, spaceId, mention);
+      await stepShot(alicePage.page, testInfo, "mention-sent");
+
+      await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+      await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        bobPage.page.getByTestId("notification-item").filter({ hasText: mention }),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(
+        bobPage.page.getByTestId("notification-item").filter({ hasText: /mention/i }),
+      ).toBeVisible({ timeout: 30_000 });
+
+      await carolPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+      await expect(carolPage.page.getByTestId("notifications-panel")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        carolPage.page.getByTestId("notification-item").filter({ hasText: mention }),
+      ).toHaveCount(0);
+      await stepShot(bobPage.page, testInfo, "mention-notification-routed");
+    } finally {
+      await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
+    }
   });
 
-  test.fixme("E14.E poll create + vote + close (vote replacement per actor)", async () => {
+  test.fixme("E14.E poll create + vote + close (vote replacement per actor)", async ({
+    browser,
+    request,
+  }, testInfo) => {
     // spec: models/content-types.md §4.9 polls
+    // yougen gap: poll composer and poll result controls are not wired.
+    const stamp = Date.now();
+    const alice = uniqueUser("s14e-alice");
+    const bob = uniqueUser("s14e-bob");
+    const carol = uniqueUser("s14e-carol");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+      ensureRegistered(request, carol),
+    ]);
+    const [aliceToken, bobToken, carolToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+      issueDevSession(request, carol),
+    ]);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+
+    const question = `Which rollout window should we use? ${stamp}`;
+    const optionA = `Now ${stamp}`;
+    const optionB = `After backup ${stamp}`;
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `S14E Poll ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [bob.did, carol.did],
+      });
+      await Promise.all([bobPage.acceptInvite(spaceId), carolPage.acceptInvite(spaceId)]);
+
+      await gotoChat(alicePage, spaceId);
+      await alicePage.page.getByTestId("open-poll-composer-button").click();
+      await alicePage.page.getByTestId("poll-question-input").fill(question);
+      await alicePage.page.getByTestId("poll-option-input").nth(0).fill(optionA);
+      await alicePage.page.getByTestId("poll-option-input").nth(1).fill(optionB);
+      await alicePage.page.getByTestId("send-poll-button").click();
+      const poll = alicePage.page.getByTestId("poll-card").filter({ hasText: question }).first();
+      await expect(poll).toBeVisible({ timeout: 30_000 });
+      await stepShot(alicePage.page, testInfo, "poll-created");
+
+      await gotoChat(bobPage, spaceId);
+      const bobPoll = bobPage.page.getByTestId("poll-card").filter({ hasText: question }).first();
+      await bobPoll.getByTestId("poll-option").filter({ hasText: optionA }).click();
+      await expect(bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA })).toContainText(/1/);
+
+      // Vote replacement: bob switches from optionA to optionB; optionA count
+      // drops back to zero and optionB becomes bob's single vote.
+      await bobPoll.getByTestId("poll-option").filter({ hasText: optionB }).click();
+      await expect(bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA })).toContainText(/0/);
+      await expect(bobPoll.getByTestId("poll-result-row").filter({ hasText: optionB })).toContainText(/1/);
+
+      await gotoChat(carolPage, spaceId);
+      const carolPoll = carolPage.page.getByTestId("poll-card").filter({ hasText: question }).first();
+      await carolPoll.getByTestId("poll-option").filter({ hasText: optionB }).click();
+      await expect(carolPoll.getByTestId("poll-result-row").filter({ hasText: optionB })).toContainText(/2/);
+
+      await gotoChat(alicePage, spaceId);
+      await poll.getByTestId("poll-close-button").click();
+      await expect(poll.getByTestId("poll-state")).toContainText(/closed/i, {
+        timeout: 30_000,
+      });
+      await expect(poll.getByTestId("poll-option")).toHaveCount(0);
+      await stepShot(alicePage.page, testInfo, "poll-closed");
+    } finally {
+      await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
+    }
   });
 
   test.fixme(
     "E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000",
-    async () => {
+    async ({ browser, request }, testInfo) => {
       // spec: profiles-presence.md §3.5
+      const stamp = Date.now();
+      const alice = uniqueUser("s14f-alice");
+      const bob = uniqueUser("s14f-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S14F Typing ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          seedMembers: [bob.did],
+        });
+        await bobPage.acceptInvite(spaceId);
+        await Promise.all([gotoChat(alicePage, spaceId), gotoChat(bobPage, spaceId)]);
+
+        await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
+        await expect(
+          bobPage.page.getByTestId("typing-indicator").filter({ hasText: alice.displayName }),
+        ).toBeVisible({ timeout: 1_000 });
+        await stepShot(bobPage.page, testInfo, "typing-visible");
+        await expect(
+          bobPage.page.getByTestId("typing-indicator").filter({ hasText: alice.displayName }),
+        ).toHaveCount(0, { timeout: 7_000 });
+      } finally {
+        await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      }
     },
   );
 
   test.fixme(
     "E14.G presence state propagates online/offline within 1s after page open/close",
-    async () => {
+    async ({ browser, request }, testInfo) => {
       // spec: profiles-presence.md §3.2-§3.4
+      const stamp = Date.now();
+      const alice = uniqueUser("s14g-alice");
+      const bob = uniqueUser("s14g-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S14G Presence ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          seedMembers: [bob.did],
+        });
+        await bobPage.acceptInvite(spaceId);
+        await Promise.all([gotoChat(alicePage, spaceId), gotoChat(bobPage, spaceId)]);
+
+        await expect(
+          alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
+        ).toContainText(/online/i, { timeout: 1_000 });
+        await stepShot(alicePage.page, testInfo, "presence-online");
+
+        await bobPage.close();
+        await expect(
+          alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
+        ).toContainText(/offline|last seen/i, { timeout: 5_000 });
+      } finally {
+        await Promise.allSettled([alicePage.close()]);
+      }
     },
   );
 
   test.fixme(
     "E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext",
-    async () => {
+    async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
+      const stamp = Date.now();
+      const alice = uniqueUser("s142-alice");
+      const bob = uniqueUser("s142-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S14.2 E2EE Mention ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          seedMembers: [bob.did],
+        });
+        await bobPage.acceptInvite(spaceId);
+        await alicePage.gotoSpaceAdminSection(spaceId, "security");
+        await alicePage.page.getByTestId("encryption-profile-select").selectOption("mls_rfc9420");
+        await alicePage.page.getByTestId("save-security-policy-button").click();
+        await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(/mls_rfc9420/i);
+
+        const mention = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
+        await sendChat(alicePage, spaceId, mention);
+        await stepShot(alicePage.page, testInfo, "e2ee-mention-sent");
+
+        const events = await request.get(
+          `${alicePage.serverUrl}/api/v1/events?space_id=${encodeURIComponent(spaceId)}`,
+          { headers: { authorization: `Bearer ${aliceToken}` } },
+        );
+        expect(events.status()).toBe(200);
+        const rawServerView = JSON.stringify(await events.json());
+        expect(rawServerView).not.toContain(bob.did);
+        expect(rawServerView).toContain("mention_sidecar_hash");
+      } finally {
+        await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      }
     },
   );
 });

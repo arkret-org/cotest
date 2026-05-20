@@ -3,7 +3,7 @@
 // Spec: identity/account-lifecycle.md §3, §8, models/space-and-place.md §2.2 (retention)
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import { hasDualSoland, solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -189,6 +189,72 @@ test.describe("GDPR / audit / retention", () => {
 
   test.fixme(
     "E27.3 cross-server erasure fan-out: alice's DID erased on α; β tombstones her events too within reconciliation window",
-    async () => {},
+    async ({ request }) => {
+      // spec: identity/account-lifecycle.md §8 + federation reconciliation:
+      // erasure receipt MUST fan out to remote servers that hold actor events.
+      test.skip(!hasDualSoland(), "requires DualSoland runner topology");
+
+      const stamp = Date.now();
+      const alice = uniqueUser(`s27-fanout-alice-${stamp}`);
+      const bob = uniqueUser(`s27-fanout-bob-${stamp}`);
+      await ensureRegistered(request, alice, { server: "alpha" });
+      await ensureRegistered(request, bob, { server: "beta" });
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice, { server: "alpha" }),
+        issueDevSession(request, bob, { server: "beta" }),
+      ]);
+
+      const create = await request.post(`${solandBaseUrl("alpha")}/api/v1/spaces`, {
+        headers: { authorization: `Bearer ${aliceToken}` },
+        data: {
+          title: `S27 fanout ${stamp}`,
+          discoverability: "listed",
+          join_rule: "invite",
+          federation: { allow_servers: ["beta"] },
+        },
+      });
+      expect(create.status()).toBe(201);
+      const created = await create.json();
+      const spaceId = created.space_id ?? created.id;
+      expect(spaceId).toBeTruthy();
+
+      const invite = await request.post(
+        `${solandBaseUrl("alpha")}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite`,
+        {
+          headers: { authorization: `Bearer ${aliceToken}` },
+          data: { invitee: bob.did },
+        },
+      );
+      expect(invite.status()).toBeLessThan(500);
+
+      const remoteBefore = await request.get(
+        `${solandBaseUrl("beta")}/api/v1/federation/actors/${encodeURIComponent(alice.did)}/events`,
+        { headers: { authorization: `Bearer ${bobToken}` } },
+      );
+      expect(remoteBefore.status()).toBe(200);
+      expect(JSON.stringify(await remoteBefore.json())).toContain(alice.did);
+
+      const erase = await request.post(`${solandBaseUrl("alpha")}/api/v1/account/erase`, {
+        headers: { authorization: `Bearer ${aliceToken}` },
+        data: {},
+      });
+      expect(erase.status()).toBe(200);
+      const eraseBody = await erase.json();
+      expect(eraseBody.erasure_receipt?.schema).toBe("cx.schema.erasure_receipt.v1");
+
+      await expect
+        .poll(
+          async () => {
+            const remoteAfter = await request.get(
+              `${solandBaseUrl("beta")}/api/v1/federation/actors/${encodeURIComponent(alice.did)}/events`,
+              { headers: { authorization: `Bearer ${bobToken}` } },
+            );
+            if (remoteAfter.status() !== 200) return "";
+            return JSON.stringify(await remoteAfter.json());
+          },
+          { timeout: 60_000 },
+        )
+        .toContain("[user erased]");
+    },
   );
 });
