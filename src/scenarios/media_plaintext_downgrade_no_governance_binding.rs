@@ -20,19 +20,66 @@
 //!
 //! This scenario covers the missing-policy_root path.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use contrix_core::{
+    ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
+    is_known_error_code,
+};
 
 pub const EXPECTED_MLS_GOVERNANCE_BINDING_STALE: &str = "mls_governance_binding_stale";
 pub const EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED: &str =
     "media_plaintext_service_not_authorised";
 
-/// Attempt to route plaintext media through an SFU that is not covered
-/// by the current `policy_root` governance binding.
+/// Wire-level executable check: the SDK constants for both media
+/// plaintext error codes agree with the cotest pins and the canonical
+/// registry recognises them.
 pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()> {
-    // TODO(round23-T12): wire to soland + SFU fixture. Must:
-    //   1. configure a Realm with `media_service_decrypts=true` but
-    //      omit `plaintext_visible_services[]` (or stale policy_root)
-    //   2. simulate SFU attempting plaintext path
-    //   3. assert one of the two expected error codes is returned
+    if ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE != EXPECTED_MLS_GOVERNANCE_BINDING_STALE {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE ({}) drifted from cotest pin ({}).",
+            ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
+            EXPECTED_MLS_GOVERNANCE_BINDING_STALE,
+        ));
+    }
+    if ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
+        != EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
+    {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED ({}) drifted from cotest pin ({}).",
+            ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+        ));
+    }
+    if !is_known_error_code(ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE) {
+        return Err(anyhow!(
+            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE}"
+        ));
+    }
+    if !is_known_error_code(ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED) {
+        return Err(anyhow!(
+            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED}"
+        ));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn media_plaintext_codes_pin_matches_sdk() {
+        media_plaintext_downgrade_no_governance_binding_run()
+            .await
+            .expect("SDK media plaintext error codes must agree with cotest pins");
+    }
+
+    #[test]
+    #[ignore = "TODO(round23-T12): needs live soland + SFU fixture"]
+    fn full_soland_sfu_plaintext_binding_check() {
+        // 1. configure a Realm with `media_service_decrypts=true` but
+        //    omit `plaintext_visible_services[]` (or stale policy_root)
+        // 2. simulate SFU attempting plaintext path
+        // 3. assert one of the two expected error codes is returned
+    }
 }

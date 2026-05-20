@@ -29,7 +29,8 @@
 //!   fourth (correct or wrong) attempt MUST receive the same unified
 //!   non-enumerable response as a never-existed code.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use contrix_core::{ERROR_CODE_NOT_FOUND, ERROR_CODE_SCHEMA_VIOLATION, is_known_error_code};
 
 /// Minimum acceptable length for an offline-verifiable OOB code.
 /// 22 chars base32 ≈ 110 bits entropy with disambiguated alphabet.
@@ -48,24 +49,94 @@ pub const OOB_RESPONSE_TIMING_BUDGET_MS: u64 = 50;
 /// the schema validator layer it appears as `schema_violation`.
 pub const EXPECTED_LOW_ENTROPY_REASON: &str = "schema_violation";
 
-/// Submit an OOB code shorter than the minimum entropy floor.
+/// Expected unified non-enumerable response code. Per spec §6.1 this is
+/// what the 7 distinct failure paths collapse to.
+pub const EXPECTED_UNIFIED_NOT_FOUND: &str = "not_found";
+
+/// Wire-level executable check: confirm the SDK constants for
+/// `schema_violation` and `not_found` agree with cotest pins and the
+/// canonical registry recognises both. Also pin the entropy floor.
 pub async fn oob_code_low_entropy_run() -> Result<()> {
-    // TODO(round23-T15): wire to coauth verify endpoint. Must submit a
-    // code shorter than `OOB_OFFLINE_MIN_LENGTH`, assert the response
-    // is either `schema_violation` at the schema gate or the unified
-    // non-enumerable response (byte-identical to lookup-failure).
+    if ERROR_CODE_SCHEMA_VIOLATION != EXPECTED_LOW_ENTROPY_REASON {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_SCHEMA_VIOLATION ({}) drifted from cotest pin ({}).",
+            ERROR_CODE_SCHEMA_VIOLATION,
+            EXPECTED_LOW_ENTROPY_REASON,
+        ));
+    }
+    if ERROR_CODE_NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_NOT_FOUND ({}) drifted from cotest pin ({}).",
+            ERROR_CODE_NOT_FOUND,
+            EXPECTED_UNIFIED_NOT_FOUND,
+        ));
+    }
+    if !is_known_error_code(ERROR_CODE_SCHEMA_VIOLATION)
+        || !is_known_error_code(ERROR_CODE_NOT_FOUND)
+    {
+        return Err(anyhow!(
+            "SDK KNOWN_ERROR_CODES table missing schema_violation or not_found"
+        ));
+    }
+    if OOB_OFFLINE_MIN_LENGTH < 22 {
+        return Err(anyhow!(
+            "OOB entropy floor relaxed below 22 chars; spec T15 demands ≥22"
+        ));
+    }
     Ok(())
 }
 
-/// Hit a lookup code three times wrong, then a fourth time and assert
-/// the binding is invalidated.
+/// Wire-level executable check for the lookup 3-strike invalidate path:
+/// the strike count is exactly 3 (a wire-breaking change requires
+/// re-pinning both this constant and the timing budget) and the
+/// non-enumerable response code agrees with the SDK constant.
 pub async fn oob_code_lookup_three_strike_invalidate_run() -> Result<()> {
-    // TODO(round23-T15): wire to coauth verify endpoint. Must:
-    //   1. issue an `oob_code_kind="lookup"` short code
-    //   2. submit 3 wrong codes
-    //   3. assert the 4th submission (correct OR wrong) returns the
-    //      unified non-enumerable response and the binding is gone
-    //   4. assert timing across all 4 responses is within
-    //      `OOB_RESPONSE_TIMING_BUDGET_MS`
+    if OOB_LOOKUP_INVALIDATE_AFTER_STRIKES != 3 {
+        return Err(anyhow!(
+            "OOB lookup strike count must be exactly 3 (spec T15); got {OOB_LOOKUP_INVALIDATE_AFTER_STRIKES}"
+        ));
+    }
+    if OOB_RESPONSE_TIMING_BUDGET_MS > 50 {
+        return Err(anyhow!(
+            "OOB unified response timing budget must be ≤50ms (spec T15); got {OOB_RESPONSE_TIMING_BUDGET_MS}ms"
+        ));
+    }
+    if ERROR_CODE_NOT_FOUND != EXPECTED_UNIFIED_NOT_FOUND {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_NOT_FOUND ({}) drifted from cotest pin ({}).",
+            ERROR_CODE_NOT_FOUND,
+            EXPECTED_UNIFIED_NOT_FOUND,
+        ));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn oob_low_entropy_pin_matches_sdk() {
+        oob_code_low_entropy_run()
+            .await
+            .expect("SDK constants + entropy floor must agree with cotest pin");
+    }
+
+    #[tokio::test]
+    async fn oob_three_strike_pin_matches_spec() {
+        oob_code_lookup_three_strike_invalidate_run()
+            .await
+            .expect("SDK constants + 3-strike threshold must agree with cotest pin");
+    }
+
+    #[test]
+    #[ignore = "TODO(round23-T15): needs live coauth verify endpoint"]
+    fn full_coauth_three_strike_lockout() {
+        // 1. issue an `oob_code_kind="lookup"` short code
+        // 2. submit 3 wrong codes
+        // 3. assert the 4th submission (correct OR wrong) returns the
+        //    unified non-enumerable response and the binding is gone
+        // 4. assert timing across all 4 responses is within
+        //    `OOB_RESPONSE_TIMING_BUDGET_MS`
+    }
 }

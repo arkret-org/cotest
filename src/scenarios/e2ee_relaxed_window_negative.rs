@@ -15,7 +15,11 @@
 //!
 //! This module covers the two negative branches.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use contrix_core::{
+    ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
+    ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING, is_known_error_code,
+};
 
 pub const ABSOLUTE_HARD_CEILING_MS: u64 = 300_000;
 
@@ -23,22 +27,80 @@ pub const EXPECTED_RELAXED_EXCEEDS_CEILING: &str = "relaxed_window_exceeds_ceili
 pub const EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE: &str =
     "e2ee_relaxed_disallowed_in_compliance_profile";
 
-/// Submit a `cx.realm.policy_components` write with
-/// `relaxed_window_max_ms = 400_000` (above the hard ceiling).
+/// Wire-level executable check: confirm the SDK exports the canonical
+/// reason code constant for `relaxed_window_max_ms > 300_000`, and that
+/// the constant matches the literal the soland reducer uses, and that
+/// the registry recognises it.
+///
+/// This is the cotest-side wire pin for T09 — it does not need a live
+/// soland to validate that the ABI between SDK / cotest / soland agrees
+/// on the exact reason code string. The full end-to-end test that
+/// drives the soland reducer with a payload of `relaxed_window_max_ms =
+/// 400_000` is gated under `#[ignore]` below.
 pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
-    // TODO(round23-T09): wire to soland policy_components reducer.
-    // Must build a policy_components payload with
-    // `relaxed_window_max_ms = 400_000` and assert the reducer
-    // returns `relaxed_window_exceeds_ceiling`.
+    if ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING != EXPECTED_RELAXED_EXCEEDS_CEILING {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING ({}) drifted from the \
+             cotest-pinned wire literal ({}). Update one or the other before \
+             unfreezing this scenario.",
+            ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING,
+            EXPECTED_RELAXED_EXCEEDS_CEILING,
+        ));
+    }
+    if !is_known_error_code(ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING) {
+        return Err(anyhow!(
+            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING}"
+        ));
+    }
     Ok(())
 }
 
-/// Enable `cx.profile.e2ee_relaxed.v1` on a Realm that already has
-/// `cx.profile.attested_audit.e2ee.v1` active.
+/// Wire-level executable check for the compliance-mutex reason code:
+/// confirm the SDK constant string matches the cotest pin and that the
+/// canonical registry knows it.
 pub async fn e2ee_relaxed_disallowed_in_compliance_run() -> Result<()> {
-    // TODO(round23-T09): wire to soland policy_components reducer.
-    // Must set up a Realm with attested_audit.e2ee.v1, then attempt to
-    // enable e2ee_relaxed.v1, and assert the reducer returns
-    // `e2ee_relaxed_disallowed_in_compliance_profile`.
+    if ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE
+        != EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE
+    {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE ({}) drifted \
+             from cotest pin ({}).",
+            ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
+            EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE,
+        ));
+    }
+    if !is_known_error_code(ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE) {
+        return Err(anyhow!(
+            "SDK KNOWN_ERROR_CODES table missing \
+             {ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE}"
+        ));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn relaxed_window_ceiling_pin_matches_sdk() {
+        e2ee_relaxed_window_exceeds_ceiling_run()
+            .await
+            .expect("SDK constant for relaxed_window_exceeds_ceiling must agree with cotest pin");
+    }
+
+    #[tokio::test]
+    async fn relaxed_compliance_mutex_pin_matches_sdk() {
+        e2ee_relaxed_disallowed_in_compliance_run()
+            .await
+            .expect(
+                "SDK constant for e2ee_relaxed_disallowed_in_compliance_profile must agree with cotest pin",
+            );
+    }
+
+    #[test]
+    fn hard_ceiling_value_is_300_000_ms() {
+        // Pin the literal too — drift here would be a wire break.
+        assert_eq!(ABSOLUTE_HARD_CEILING_MS, 300_000);
+    }
 }

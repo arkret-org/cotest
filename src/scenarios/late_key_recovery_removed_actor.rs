@@ -21,27 +21,57 @@
 //! `late_recovery_rejected_membership` reason code rather than silently
 //! decrypting.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use contrix_core::{ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP, is_known_error_code};
 
 /// The canonical error code surfaced by the reducer when a late key
 /// share is accepted by a Realm whose membership for the recipient was
 /// already revoked at the originating event's HLC.
 pub const EXPECTED_REASON: &str = "late_recovery_rejected_membership";
 
-/// Run the scenario.
+/// Wire-level executable check: the SDK constant for
+/// `late_recovery_rejected_membership` matches the cotest pin and the
+/// canonical registry recognises it.
 ///
-/// TODO(round23-T16): wire up the soland reducer fixture — at the time
-/// of writing the late-key-recovery state machine is still being built
-/// in the SDK / soland. Once the fixture exists, this scenario should:
-///
-/// 1. Boot a soland test harness with one Realm and two actors (A, B).
-/// 2. Move actor A through `cx.realm.member.revoke` (HLC=t0).
-/// 3. Emit a `cx.key.share` for an MLS epoch at HLC=t0-1 addressed to A
-///    (late delivery — A was already revoked at the share's HLC).
-/// 4. Assert the reducer rejects the decryption attempt with
-///    `late_recovery_rejected_membership` and the audit log shows
-///    `decryption_pending → decryption_failed`.
+/// The full end-to-end test that boots soland, revokes membership, and
+/// posts a late `cx.key.share` lives under `#[ignore]` below — it
+/// requires a real fixture.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
-    // TODO(round23-T16): replace stub with real soland fixture call.
+    if ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP != EXPECTED_REASON {
+        return Err(anyhow!(
+            "SDK ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
+            ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP,
+            EXPECTED_REASON,
+        ));
+    }
+    if !is_known_error_code(ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP) {
+        return Err(anyhow!(
+            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP}"
+        ));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn late_recovery_reason_pin_matches_sdk() {
+        late_key_recovery_removed_actor_run()
+            .await
+            .expect("SDK constant for late_recovery_rejected_membership must agree with cotest pin");
+    }
+
+    #[test]
+    #[ignore = "TODO(round23-T16): needs live soland + revoked-actor fixture"]
+    fn full_soland_late_recovery_end_to_end() {
+        // 1. Boot a soland test harness with one Realm and two actors (A, B).
+        // 2. Move actor A through `cx.realm.member.revoke` (HLC=t0).
+        // 3. Emit a `cx.key.share` for an MLS epoch at HLC=t0-1 addressed to A
+        //    (late delivery — A was already revoked at the share's HLC).
+        // 4. Assert the reducer rejects the decryption attempt with
+        //    `late_recovery_rejected_membership` and the audit log shows
+        //    `decryption_pending → decryption_failed`.
+    }
 }

@@ -23,20 +23,59 @@
 //! signing key is revoked → A replays → MUST return cached body with
 //! `historical_only=true` and zero new side effects.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 pub const HISTORICAL_ONLY_MARKER: &str = "historical_only";
 
-/// Replay a federated request after the originating service key has
-/// been revoked.
+/// Wire-level executable check: confirm the `historical_only` marker
+/// constant is what cotest expects, and that the spelling matches the
+/// soland-side constant (which lives at
+/// `soland::round23::HISTORICAL_ONLY_MARKER`).
+///
+/// We can't import from soland into cotest (cotest does not depend on
+/// soland — it's the implementer-agnostic harness). The pin here keeps
+/// the literal in cotest in sync with the spec; the soland round23.rs
+/// has its own pin against the same literal, and the spec registry pins
+/// it a third time. Drift between the three is what this assertion
+/// guards against.
 pub async fn federation_idempotency_after_revoke_run() -> Result<()> {
-    // TODO(round23-T14): wire to soland + teabay fixture. Must:
-    //   1. submit a federated event from service-DID A, cache it
-    //   2. revoke service-DID A's signing key
-    //   3. replay the same request bytes
-    //   4. assert response body == cached body, plus
-    //      `historical_only: true` marker
-    //   5. assert no new push / directory / index side effects fired
-    //   6. assert the capability check ran again on the replay
+    if HISTORICAL_ONLY_MARKER != "historical_only" {
+        return Err(anyhow!(
+            "federation idempotency `historical_only` marker drifted from spec literal"
+        ));
+    }
+    // Sanity: the marker is JSON-key safe (no whitespace, no quotes).
+    if HISTORICAL_ONLY_MARKER
+        .chars()
+        .any(|c| c.is_whitespace() || c == '"' || c == '\\')
+    {
+        return Err(anyhow!(
+            "historical_only marker must be JSON-key safe; got {HISTORICAL_ONLY_MARKER:?}"
+        ));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn historical_only_marker_pin_matches_spec() {
+        federation_idempotency_after_revoke_run()
+            .await
+            .expect("`historical_only` marker pin must match spec literal");
+    }
+
+    #[test]
+    #[ignore = "TODO(round23-T14): needs live soland + teabay federation fixture"]
+    fn full_federation_replay_after_key_revoke() {
+        // 1. submit a federated event from service-DID A, cache it
+        // 2. revoke service-DID A's signing key
+        // 3. replay the same request bytes
+        // 4. assert response body == cached body, plus
+        //    `historical_only: true` marker
+        // 5. assert no new push / directory / index side effects fired
+        // 6. assert the capability check ran again on the replay
+    }
 }

@@ -67,3 +67,63 @@ commit `8b7978d spec: round 2+3 cleanup`):
   function signatures and expected error codes are present so the
   harness compiles and the contract surface is pinned for the
   implementer projects.
+
+### Updated (round 2+3 scenario execution pass)
+
+Wired the 10 new round 2+3 scenarios so the **wire-level checks**
+execute as real `#[tokio::test]` assertions against the SDK error
+code constants (`contrix_core::ERROR_CODE_*`) instead of returning
+`Ok(())` unconditionally. The full live-server e2e branches remain
+`#[ignore]` with a clear `TODO(round23-T<XX>)` for the docker /
+fixture wiring follow-up. Net test-count delta: lib went from
+**36 → 53** passing tests; 7 new `#[ignore]` stubs surface in the
+ignored count.
+
+Scenarios that now execute real wire-level assertions
+(SDK constant ↔ cotest pin ↔ registry alignment):
+
+- `anchor_canonical_no_self_reference` — builds an Anchor via the
+  SDK, calls `anchor_canonical_bytes`, asserts the canonical bytes
+  exclude `"id":`, `"anchorer_sig"`, and `"jws"`, and recomputes the
+  id via `compute_anchor_id` (T01, fully executable).
+- `e2ee_relaxed_window_negative` (both branches, T09).
+- `cross_signing_reset_cross_domain` (both branches, T08) — also
+  exercises `TypedTrustDomainId::new` + `EventId::new` round-trip.
+- `moderation_appeal_flow_end_to_end` (T06) — also exercises
+  `TypedAppealId::new` round-trip.
+- `late_key_recovery_removed_actor` (T16).
+- `media_plaintext_downgrade_no_governance_binding` (T12).
+- `presign_blob_fail_closed` (both branches, T11) — plus a header
+  pin test for `Cache-Control` / `Referrer-Policy`.
+- `federation_idempotency_after_revoke` (T14) — pins
+  `HISTORICAL_ONLY_MARKER` literal.
+- `oob_code_entropy_and_lockout` (both branches, T15) — pins the
+  22-char entropy floor, 3-strike threshold, 50ms timing budget,
+  and unified `not_found` reason.
+- `consent_revoke_scope_any_cascade` (T17) — pins the
+  `superseded_by_any_revoke` marker and the 5 cache-invalidation
+  channels.
+
+Scenarios still gated `#[ignore]` (need live-server fixtures):
+
+- `full_soland_late_recovery_end_to_end` (T16)
+- `full_soland_sodmin_appeal_flow` (T06)
+- `full_soland_sfu_plaintext_binding_check` (T12)
+- `full_soland_presign_fail_closed` (T11)
+- `full_federation_replay_after_key_revoke` (T14)
+- `full_coauth_three_strike_lockout` (T15)
+- `full_soland_consent_cascade_and_cache_invalidation` (T17)
+
+Also added `tests/round23_tree_scan.rs` — a manual `#[ignore]`
+driver that walks the contrix-dev sibling projects (soland, floria,
+chime, yougen, teabay, coauth, sodmin, starid, contrix-rust-sdk,
+e2e, logos) with `scan_tree_round23` and prints residual structural
+findings. Invoke with `cargo test --test round23_tree_scan --
+--ignored --nocapture`.
+
+Baseline note: `cargo test --test conformance_fixtures` still
+reports the **70 passed / 1 failed** pre-existing
+`artifact_registry_suite` failure (a `cx:trust_domain:did.webvh.example`
+non-UUIDv7 payload in a contrix-spec fixture file from before this
+pass). That failure is unrelated to the round 2+3 scenario wiring
+and is not introduced or fixed here.
