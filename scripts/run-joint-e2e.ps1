@@ -38,6 +38,14 @@ param(
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
     [switch]$StartMockAuditAgent,
+    [switch]$StartMockPolicyServer,
+    [string]$MockPolicyServerDid,
+    [switch]$StartMockPushGateway,
+    [string]$MockPushGatewayIss,
+    [switch]$StartMockAppletRegistry,
+    [string]$MockAppletRegistryDid,
+    [switch]$StartMockTspEndpoint,
+    [string]$MockTspEndpointVid,
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
     [string]$MockAuditAgentDid,
@@ -52,6 +60,10 @@ if ($StartMocks) {
     $StartMockEmail = $true
     $StartMockWitness = $true
     $StartMockAuditAgent = $true
+    $StartMockPolicyServer = $true
+    $StartMockPushGateway = $true
+    $StartMockAppletRegistry = $true
+    $StartMockTspEndpoint = $true
 }
 
 $ErrorActionPreference = "Stop"
@@ -709,6 +721,30 @@ if ($StartMockAuditAgent) {
     $mockAuditAgentPort = Get-FreeTcpPort
     $mockAuditAgentBaseUrl = "http://127.0.0.1:$mockAuditAgentPort"
 }
+$mockPolicyServerPort = $null
+$mockPolicyServerBaseUrl = $null
+if ($StartMockPolicyServer) {
+    $mockPolicyServerPort = Get-FreeTcpPort
+    $mockPolicyServerBaseUrl = "http://127.0.0.1:$mockPolicyServerPort"
+}
+$mockPushGatewayPort = $null
+$mockPushGatewayBaseUrl = $null
+if ($StartMockPushGateway) {
+    $mockPushGatewayPort = Get-FreeTcpPort
+    $mockPushGatewayBaseUrl = "http://127.0.0.1:$mockPushGatewayPort"
+}
+$mockAppletRegistryPort = $null
+$mockAppletRegistryBaseUrl = $null
+if ($StartMockAppletRegistry) {
+    $mockAppletRegistryPort = Get-FreeTcpPort
+    $mockAppletRegistryBaseUrl = "http://127.0.0.1:$mockAppletRegistryPort"
+}
+$mockTspEndpointPort = $null
+$mockTspEndpointBaseUrl = $null
+if ($StartMockTspEndpoint) {
+    $mockTspEndpointPort = Get-FreeTcpPort
+    $mockTspEndpointBaseUrl = "http://127.0.0.1:$mockTspEndpointPort"
+}
 
 $managedServices = New-Object System.Collections.Generic.List[object]
 $ephemeralPostgres = $null
@@ -776,6 +812,42 @@ try {
         $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockAuditAgentBaseUrl/api/v1/audit-agent/identity" -TimeoutSeconds 30
+    }
+    if ($StartMockPolicyServer) {
+        $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
+        if ($MockPolicyServerDid) {
+            $envExpr = "$envExpr; `$env:MOCK_POLICY_SERVER_DID=" + (Quote-PsLiteral $MockPolicyServerDid)
+        }
+        $mockPolicyServerCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-policy-server.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-policy-server" -Command $mockPolicyServerCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockPolicyServerBaseUrl/api/v1/policy/health" -TimeoutSeconds 30
+    }
+    if ($StartMockPushGateway) {
+        $envExpr = "`$env:MOCK_PUSH_GATEWAY_PORT='$mockPushGatewayPort'"
+        if ($MockPushGatewayIss) {
+            $envExpr = "$envExpr; `$env:MOCK_PUSH_GATEWAY_ISS=" + (Quote-PsLiteral $MockPushGatewayIss)
+        }
+        $mockPushGatewayCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-push-gateway.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-push-gateway" -Command $mockPushGatewayCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockPushGatewayBaseUrl/jwks" -TimeoutSeconds 30
+    }
+    if ($StartMockAppletRegistry) {
+        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'"
+        if ($MockAppletRegistryDid) {
+            $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
+        }
+        $mockAppletRegistryCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-applet-registry.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
+    }
+    if ($StartMockTspEndpoint) {
+        $envExpr = "`$env:MOCK_TSP_ENDPOINT_PORT='$mockTspEndpointPort'"
+        if ($MockTspEndpointVid) {
+            $envExpr = "$envExpr; `$env:MOCK_TSP_ENDPOINT_VID=" + (Quote-PsLiteral $MockTspEndpointVid)
+        }
+        $mockTspEndpointCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-tsp-endpoint.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-tsp-endpoint" -Command $mockTspEndpointCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockTspEndpointBaseUrl/identity" -TimeoutSeconds 30
     }
 
     if ($StartCoauth) {
@@ -1071,6 +1143,44 @@ try {
     } else {
         Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
+    }
+    if ($mockPolicyServerBaseUrl) {
+        $env:COTEST_MOCK_POLICY_SERVER_BASE_URL = $mockPolicyServerBaseUrl
+        if ($MockPolicyServerDid) {
+            $env:COTEST_MOCK_POLICY_SERVER_DID = $MockPolicyServerDid
+        } else {
+            Remove-Item Env:COTEST_MOCK_POLICY_SERVER_DID -ErrorAction SilentlyContinue
+        }
+    } else {
+        Remove-Item Env:COTEST_MOCK_POLICY_SERVER_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_POLICY_SERVER_DID -ErrorAction SilentlyContinue
+    }
+    if ($mockPushGatewayBaseUrl) {
+        $env:COTEST_MOCK_PUSH_GATEWAY_BASE_URL = $mockPushGatewayBaseUrl
+    } else {
+        Remove-Item Env:COTEST_MOCK_PUSH_GATEWAY_BASE_URL -ErrorAction SilentlyContinue
+    }
+    if ($mockAppletRegistryBaseUrl) {
+        $env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL = $mockAppletRegistryBaseUrl
+        if ($MockAppletRegistryDid) {
+            $env:COTEST_MOCK_APPLET_REGISTRY_DID = $MockAppletRegistryDid
+        } else {
+            Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_DID -ErrorAction SilentlyContinue
+        }
+    } else {
+        Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_DID -ErrorAction SilentlyContinue
+    }
+    if ($mockTspEndpointBaseUrl) {
+        $env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL = $mockTspEndpointBaseUrl
+        if ($MockTspEndpointVid) {
+            $env:COTEST_MOCK_TSP_ENDPOINT_VID = $MockTspEndpointVid
+        } else {
+            Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_VID -ErrorAction SilentlyContinue
+        }
+    } else {
+        Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_VID -ErrorAction SilentlyContinue
     }
 
     $playwrightArgs = @("playwright", "test", "--config", "playwright.config.ts")

@@ -86,6 +86,34 @@ export function mockAuditAgentDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_AUDIT_AGENT_DID");
 }
 
+export function mockPolicyServerBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_POLICY_SERVER_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockPolicyServerDid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_POLICY_SERVER_DID");
+}
+
+export function mockPushGatewayBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_PUSH_GATEWAY_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockAppletRegistryBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockAppletRegistryDid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_DID");
+}
+
+export function mockTspEndpointBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_TSP_ENDPOINT_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockTspEndpointVid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_TSP_ENDPOINT_VID");
+}
+
 export function diagnosticsRoot(): string {
   return path.join(
     optionalEnv("COTEST_JOINT_RUN_DIR") ?? path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local"),

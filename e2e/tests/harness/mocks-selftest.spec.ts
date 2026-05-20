@@ -11,9 +11,13 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import {
+  mockAppletRegistryBaseUrl,
   mockAuditAgentBaseUrl,
   mockEmailBaseUrl,
   mockIdpBaseUrl,
+  mockPolicyServerBaseUrl,
+  mockPushGatewayBaseUrl,
+  mockTspEndpointBaseUrl,
   mockWitnessBaseUrl,
 } from "../../helpers/env";
 
@@ -201,5 +205,200 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const inspect = await (await request.get(`${baseUrl}/inspect`)).json();
     expect(inspect.kinds.invites.length).toBeGreaterThanOrEqual(1);
     expect(inspect.kinds.accessed.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("mock-policy-server: rule injection, deny + obligation, signed transcript", async ({
+    request,
+  }) => {
+    const baseUrl = mockPolicyServerBaseUrl();
+    test.skip(!baseUrl, "mock-policy-server not started for this run");
+
+    // Reset rules to a known baseline.
+    await request.delete(`${baseUrl}/scenarios`);
+
+    // Default allow when no rules match.
+    const allowResp = await request.post(`${baseUrl}/api/v1/policy/check`, {
+      data: { action: "cx.member.invite", actor: "did:web:alice", target: "did:web:carol" },
+    });
+    expect(allowResp.status()).toBe(200);
+    expect((await allowResp.json()).decision).toBe("allow");
+
+    // Inject a deny rule + obligation.
+    await request.post(`${baseUrl}/scenarios`, {
+      data: {
+        rules: [
+          {
+            action: "cx.member.invite",
+            actor: "did:web:alice",
+            target: "did:web:bob",
+            decision: "deny",
+            reason: "abuse_filter",
+            obligations: [{ kind: "log_event", target: "audit_log" }],
+          },
+        ],
+      },
+    });
+
+    const denyResp = await request.post(`${baseUrl}/api/v1/policy/check`, {
+      data: { action: "cx.member.invite", actor: "did:web:alice", target: "did:web:bob" },
+    });
+    expect(denyResp.status()).toBe(200);
+    const denyBody = await denyResp.json();
+    expect(denyBody.decision).toBe("deny");
+    expect(denyBody.reason).toBe("abuse_filter");
+    expect(Array.isArray(denyBody.obligations)).toBe(true);
+    expect(denyBody.obligations[0]?.kind).toBe("log_event");
+    expect(typeof denyBody.signed_transcript).toBe("string");
+    // JWT-shaped 3-segment transcript.
+    expect(denyBody.signed_transcript.split(".").length).toBe(3);
+
+    const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
+    expect(jwks.keys?.[0]?.kid).toBe("mock-policy-server-key-1");
+
+    const inspect = await (await request.get(`${baseUrl}/inspect`)).json();
+    expect(inspect.kinds.checks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("mock-push-gateway: register, notify, DnD suppression, blind-wake validation", async ({
+    request,
+  }) => {
+    const baseUrl = mockPushGatewayBaseUrl();
+    test.skip(!baseUrl, "mock-push-gateway not started for this run");
+
+    await request.delete(`${baseUrl}/scenarios`);
+
+    const pusherId = `selftest-pusher-${Date.now()}`;
+    const reg = await request.post(`${baseUrl}/api/v1/push/register`, {
+      data: {
+        pusher_id: pusherId,
+        app_id: "selftest",
+        push_key: "k",
+        push_token: "t",
+        device_did: "did:web:selftest-device",
+        kind: "http",
+      },
+    });
+    expect(reg.status()).toBe(200);
+
+    const notify = await request.post(`${baseUrl}/api/v1/push/notify`, {
+      data: {
+        pusher_id: pusherId,
+        payload: { title: "selftest", body: "hello" },
+        priority: "high",
+      },
+    });
+    expect(notify.status()).toBe(200);
+    const notifyBody = await notify.json();
+    expect(notifyBody.delivered).toBe(true);
+    expect(typeof notifyBody.delivery_receipt).toBe("string");
+    expect(notifyBody.delivery_receipt.split(".").length).toBe(3);
+
+    // Blind-wake payload MUST not contain plain content.
+    const blindBad = await request.post(`${baseUrl}/api/v1/push/notify`, {
+      data: {
+        pusher_id: pusherId,
+        blind_wake: true,
+        payload: { body: "leaked plaintext" },
+      },
+    });
+    // Mock rejects forbidden plaintext keys in blind-wake mode.
+    expect([400, 422]).toContain(blindBad.status());
+
+    const inbox = await (await request.get(`${baseUrl}/api/v1/push/inbox?pusher_id=${pusherId}`)).json();
+    expect(inbox.pusher_id).toBe(pusherId);
+    expect(Array.isArray(inbox.pushes)).toBe(true);
+    expect(inbox.pushes.length).toBeGreaterThanOrEqual(1);
+
+    const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
+    expect(jwks.keys?.[0]?.kid).toBe("mock-push-gateway-key-1");
+  });
+
+  test("mock-applet-registry: manifest registration, bot DID minting, ghost actor", async ({
+    request,
+  }) => {
+    const baseUrl = mockAppletRegistryBaseUrl();
+    test.skip(!baseUrl, "mock-applet-registry not started for this run");
+
+    const namespace = `selftest-${Date.now()}`;
+    const reg = await request.post(`${baseUrl}/api/v1/applets/register`, {
+      data: {
+        manifest: {
+          name: "selftest-bridge",
+          namespace,
+          capabilities: ["cx.message.send"],
+        },
+        manifest_signature: "selftest-signature",
+      },
+    });
+    expect(reg.status()).toBe(200);
+    const regBody = await reg.json();
+    expect(typeof regBody.applet_id).toBe("string");
+    expect(regBody.bot_actor_did.startsWith("did:web:applet.")).toBe(true);
+    expect(regBody.namespace).toBe(namespace);
+    expect(regBody.status).toBe("registered");
+
+    const ghost = await request.post(
+      `${baseUrl}/api/v1/applets/${regBody.applet_id}/ghost-actor`,
+      { data: { external_id: "u-42", display_name: "External User" } },
+    );
+    expect(ghost.status()).toBe(200);
+    const ghostBody = await ghost.json();
+    expect(ghostBody.ghost_actor_did.startsWith("did:web:ghost.")).toBe(true);
+    // Ghost actor accountability MUST point back to the registry/bot.
+    expect(ghostBody.accountability?.bot_actor_did).toBe(regBody.bot_actor_did);
+
+    const identity = await (await request.get(`${baseUrl}/identity`)).json();
+    expect(typeof identity.did).toBe("string");
+  });
+
+  test("mock-tsp-endpoint: relationship bootstrap, message ACK round-trip", async ({
+    request,
+  }) => {
+    const baseUrl = mockTspEndpointBaseUrl();
+    test.skip(!baseUrl, "mock-tsp-endpoint not started for this run");
+
+    await request.delete(`${baseUrl}/scenarios`);
+
+    const remoteVid = `did:web:alice-selftest-${Date.now()}.example`;
+    const bootstrap = await request.post(`${baseUrl}/tsp/relationship-bootstrap`, {
+      data: {
+        remote_vid: remoteVid,
+        remote_public_jwk: { kty: "OKP", crv: "Ed25519", x: "selftest-key" },
+      },
+    });
+    expect(bootstrap.status()).toBe(200);
+    const bsBody = await bootstrap.json();
+    expect(typeof bsBody.endpoint_vid).toBe("string");
+    expect(typeof bsBody.established_at).toBe("string");
+
+    // Posting a message before bootstrap fails; verify with a fresh remote.
+    const unestablishedRemote = `did:web:bob-${Date.now()}.example`;
+    const noRel = await request.post(`${baseUrl}/tsp/message`, {
+      data: {
+        from_vid: unestablishedRemote,
+        to_vid: bsBody.endpoint_vid,
+        payload_b64: Buffer.from(JSON.stringify({ type: "cx.invite.create" })).toString("base64url"),
+        signature_b64: "test-sig",
+      },
+    });
+    expect(noRel.status()).toBe(412);
+
+    // Established relationship can post.
+    const msg = await request.post(`${baseUrl}/tsp/message`, {
+      data: {
+        from_vid: remoteVid,
+        to_vid: bsBody.endpoint_vid,
+        payload_b64: Buffer.from(
+          JSON.stringify({ type: "cx.invite.create", target: bsBody.endpoint_vid }),
+        ).toString("base64url"),
+        signature_b64: "test-sig",
+      },
+    });
+    expect(msg.status()).toBe(200);
+    const msgBody = await msg.json();
+    expect(msgBody.accepted).toBe(true);
+
+    const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
+    expect(jwks.keys?.[0]?.kid).toBe("mock-tsp-endpoint-key-1");
   });
 });
