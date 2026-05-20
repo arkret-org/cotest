@@ -1087,7 +1087,18 @@ fn validate_typed_id_ref(value: &str, context: &str, id_kinds: &BTreeSet<String>
     // — Crockford base32, not UUID) that round-20 of the SDK started
     // rejecting at envelope-validation time. cotest fixtures and src
     // literals must mirror the same constraint.
-    const SPECIAL_FORM_KINDS: &[&str] = &["cursor", "blob", "mls", "pseudonym", "anchor", "cell"];
+    // Round-4 (spec f9bd7eb) adds `trust_domain` as the seventh special-form
+    // id kind. Its payload is `<scope>` (lowercase opaque label), not
+    // UUIDv7 — exempt from the UUID-shape check.
+    const SPECIAL_FORM_KINDS: &[&str] = &[
+        "cursor",
+        "blob",
+        "mls",
+        "pseudonym",
+        "anchor",
+        "cell",
+        "trust_domain",
+    ];
     if SPECIAL_FORM_KINDS.contains(&kind) {
         return Ok(());
     }

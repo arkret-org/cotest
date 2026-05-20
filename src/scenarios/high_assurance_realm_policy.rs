@@ -13,8 +13,8 @@
 
 use anyhow::{Result, anyhow};
 use contrix_core::{
-    Did, EncryptionProfile, FederationPolicy, HistoryVisibility, JoinRule, SecurityClass,
-    Space, SpaceId, Discoverability,
+    Did, Discoverability, EncryptionProfile, FederationPolicy, HistoryVisibility, JoinRule,
+    SecurityClass, Space, SpaceId, TypedTrustDomainId,
 };
 
 const REALM_ID: &str = "cx:space:01904100-0000-7000-8000-000000000aa1";
@@ -35,10 +35,16 @@ fn build_realm(
 ) -> Result<Space> {
     let id = realm_id()?;
     let principal = principal_did()?;
+    // TODO(round4-sdk-dep): A1 added required `trust_domain` to Space.
+    // Cotest uses a fixed canonical trust domain id here so the high-assurance
+    // policy scenario stays representative.
+    let trust_domain = TypedTrustDomainId::new("cx:trust_domain:example.net".to_owned())
+        .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Space {
         schema: "cx.profile.realm.v1".to_owned(),
         id,
         title: "Compliance Vault".to_owned(),
+        trust_domain,
         summary: None,
         security_class,
         created_by_principal: principal,

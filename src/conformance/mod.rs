@@ -13,8 +13,12 @@ mod profile_matrix;
 mod profile_registry;
 mod redaction;
 mod registry;
+mod round4_allowlist;
+mod round4_lint_parity;
 mod scaffold_gate;
 mod schema_validation;
+mod schema_validation_fixture;
+mod security_closure;
 mod security_negative;
 mod snapshot_v2_tampered_merkle;
 mod state_resolution;
@@ -67,11 +71,29 @@ pub use profile_registry::{
 };
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
+pub use round4_allowlist::{
+    ROUND4_NEW_CAPABILITY_ACTIONS, ROUND4_NEW_ERROR_CODES, ROUND4_NEW_OBJECT_REF_ID_KINDS,
+    ROUND4_NEW_OPENAPI_COMPONENTS, ROUND4_NEW_SCHEMA_DEFS, run_round4_drift_allowlist_suite,
+};
+pub use round4_lint_parity::{
+    run_policy_check_alignment_check, run_service_describe_alignment_check,
+    run_vector_reference_closure_check,
+};
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,
 };
 pub use schema_validation::run_schema_validation_suite;
+pub use schema_validation_fixture::{
+    SCHEMA_VALIDATION_FIXTURE, SCHEMA_VALIDATION_PROFILE, SchemaValidationCase,
+    SchemaValidationFixture, run_schema_validation_fixture_suite,
+};
+pub use security_closure::{
+    ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
+    SECURITY_CLOSURE_VECTORS_PROFILE, SecurityClosureExpected, SecurityClosureFixture,
+    SecurityClosureRunner, SecurityClosureStep, SecurityClosureVector,
+    run_security_closure_vectors_suite, validate_security_closure_fixture,
+};
 pub use security_negative::run_security_negative_profile_suite;
 pub use snapshot_v2_tampered_merkle::run_snapshot_v2_tampered_merkle_suite;
 pub use state_resolution::{

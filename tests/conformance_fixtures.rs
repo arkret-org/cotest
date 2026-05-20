@@ -65,6 +65,66 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Round 4 / A2 — schema-validation-fixture positive + negative cases
+    /// run against the schema referenced by `schema_ref`. Drift hard-fails.
+    schema_validation_fixture_suite_matches_reference_semantics,
+    "schema_validation_fixture",
+    cotest::conformance::run_schema_validation_fixture_suite,
+);
+
+conformance_test!(
+    /// Round 4 / A2 — security-closure-vectors runner contract.
+    /// Confirms the 12 `cx.vector.*` ids are present and every step
+    /// exposes the full `runner {given_state, operation, transcript,
+    /// expected_state_transition, expected_external_response,
+    /// expected_audit_reason}` quad.
+    security_closure_vectors_suite_matches_reference_semantics,
+    "security_closure_vectors",
+    cotest::conformance::run_security_closure_vectors_suite,
+);
+
+conformance_test!(
+    /// Round 4 / A2 — drift allowlist refresh: new capability action
+    /// (`cx.morph.create`), error codes (`delivery_binding_stale`,
+    /// `delivery_binding_handed_over`, `historical_only`), id_kinds
+    /// (`cx:space:`), and new schemas / OpenAPI components are present
+    /// in the canonical registry.
+    round4_drift_allowlist_suite_matches_canonical_registry,
+    "round4_drift_allowlist",
+    cotest::conformance::run_round4_drift_allowlist_suite,
+);
+
+conformance_test!(
+    /// Round 4 / A2 — lint parity: ServiceDescribe schema + OpenAPI
+    /// component required-field alignment, every `/*/describe` 200
+    /// response references ServiceDescribe.
+    round4_service_describe_alignment_check_matches_python_lint,
+    "round4_service_describe_alignment",
+    cotest::conformance::run_service_describe_alignment_check,
+);
+
+conformance_test!(
+    /// Round 4 / A2 — lint parity: /policy/check POST references
+    /// PolicyCheckRequest / PolicyCheckResponse, PolicyCheckRequest
+    /// requires `realm_id`, PolicyCheckResponse requires `bound_to`,
+    /// legacy `/contrix/v1/check` path is absent.
+    round4_policy_check_alignment_check_matches_python_lint,
+    "round4_policy_check_alignment",
+    cotest::conformance::run_policy_check_alignment_check,
+);
+
+conformance_test!(
+    /// Round 4 / A2 — lint parity: every `cx.vector.*` token referenced
+    /// from any fixture JSON resolves against the union of declared
+    /// vectors across the fixture set. Best-effort cotest mirror of
+    /// `check_vector_reference_closure` (the full Python pass also
+    /// parses prose markdown).
+    round4_vector_reference_closure_check_matches_python_lint,
+    "round4_vector_reference_closure",
+    cotest::conformance::run_vector_reference_closure_check,
+);
+
+conformance_test!(
     encoding_fixture_suite_matches_reference_semantics,
     "encoding_fixture",
     cotest::conformance::run_encoding_fixture_suite,

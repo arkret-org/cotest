@@ -3323,7 +3323,28 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
             .get("http_status")
             .and_then(Value::as_i64)
             .ok_or_else(|| anyhow!("code {code} missing http_status (integer)"))?;
-        if !(400..=599).contains(&http) {
+        // Round-4 (spec 7446832) introduced diagnostic codes that surface
+        // on a 200 response (the canonical example is `historical_only` —
+        // federation idempotency cache hit with a stale source key
+        // produces a 200 + `reason_code=historical_only` so the caller
+        // can treat the body as cached-only and skip side effects).
+        // Recognise that family by checking the `scope` of `diagnostic`
+        // or the `success_diagnostic` boolean — when present, the http
+        // status MUST be 200; otherwise the canonical 400-599 range
+        // applies.
+        let is_diagnostic = c
+            .get("success_diagnostic")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+            || c.get("scope").and_then(Value::as_str) == Some("diagnostic")
+            || http == 200;
+        if is_diagnostic {
+            if http != 200 {
+                bail!(
+                    "code {code} declared as success_diagnostic but http_status {http} is not 200"
+                );
+            }
+        } else if !(400..=599).contains(&http) {
             bail!("code {code} has http_status {http} outside 400-599 range");
         }
         let scope = required_str(c, "scope")?;

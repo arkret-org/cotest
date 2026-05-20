@@ -4,6 +4,43 @@ All notable changes to **cotest** are documented here.
 
 ## [Unreleased]
 
+### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
+
+Closes the round-4 protocol-review commits on the test-harness surface.
+See [`../_todos.md`](../_todos.md) for the workstream context.
+
+- **Added** 12 new executable security-closure vectors from
+  `contrix-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`:
+  `federation.idempotency_after_key_revoke`,
+  `webrtc.media_plaintext_downgrade`,
+  `identity_link.eager_invalidation`,
+  `identity_link.policy_tightening_invalidation`,
+  `late_key_recovery.removed_actor`,
+  `invite.oob_code_entropy`, `invite.failure_indistinguishable`,
+  `consent.scope_cascade`, `consent.cache_invalidation`,
+  `sync.soft_fail_reconcile`, `lattice.lww_open_set`,
+  `e2ee_relaxed.window_exceeds_ceiling`.
+- **Added** security-closure runner contract:
+  `{given_state, operation}` → assertions on
+  `{transcript, expected_state_transition, expected_external_response,
+  expected_audit_reason}`.
+- **Added** schema-validation-fixture runner: positive + negative cases
+  exercised against `schema_ref`.
+- **Added** drift-validator allowlist updates — capability action
+  `cx.morph.create`; error codes `delivery_binding_stale` /
+  `delivery_binding_handed_over` / `historical_only`; `cx:space:` joins
+  the `object_ref` id-kind context; new schema `$defs`
+  (`EventsSubscribeFrame`, `SnapshotBootstrap`,
+  `EventsFrontier{Account,Federation,AnonymousHealth}Response`,
+  `PolicyCheck{Request,Response}`, `FederationServiceBindingRef`,
+  `EventsSubmit{Batch,Federation}Request`, `third_party_invite`,
+  `space_state_transition_payload`, `space_object_tombstone_payload`).
+- **Added** 4 new literal-scanner rules: any `did:` whose method segment
+  contains `.` / `-` / `_` / `:`; any `cx.events.subscribe` string-payload
+  use (must be `EventsSubscribeFrame`); any `cx.cross_signing.publish`
+  payload missing `expected_previous_generation`; any
+  `compute_audit_policy_version_hash` call with fewer than 4 arguments.
+
 ### Added
 
 Track contrix-spec round 2+3 (commit range `f3c3bad..2a4d39b`, principal

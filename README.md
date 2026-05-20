@@ -21,6 +21,34 @@ fixtures and assertions:
 Both legacy and new wire shapes are exercised so the soland reducer's
 back-compat aliases stay covered.
 
+## Round R4 (protocol review closures)
+
+Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) adds:
+
+- **12 new security-closure vectors** (`cx.vector.*` from
+  `security-closure-vectors.json`) driven through a runner contract
+  `{given_state, operation}` → assertions on
+  `{transcript, expected_state_transition, expected_external_response,
+  expected_audit_reason}`.
+- **schema-validation-fixture runner** — positive and negative cases
+  exercised against `schema_ref`.
+- **Round R4 literal-scanner rules** — bad DID method segments,
+  string-payload `cx.events.subscribe` usage, `cx.cross_signing.publish`
+  without `expected_previous_generation`, and
+  `compute_audit_policy_version_hash` calls with fewer than 4 arguments.
+- **Drift-validator allowlists extended** for the new capability action
+  `cx.morph.create`, the three new error codes
+  (`delivery_binding_stale` / `_handed_over` / `historical_only`), the
+  `cx:space:` id-kind in `object_ref`, and the new schema `$defs`
+  (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
+  `EventsFrontier*Response` variants, `PolicyCheck{Request,Response}`,
+  `FederationServiceBindingRef`, `EventsSubmit{Batch,Federation}Request`,
+  and the `third_party_invite` / `space_state_transition_payload` /
+  `space_object_tombstone_payload` payloads).
+
+See [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
+[`../_todos.md`](../_todos.md) for the canonical wire-breaking list.
+
 ## Quick Start
 
 Recommended entrypoints:

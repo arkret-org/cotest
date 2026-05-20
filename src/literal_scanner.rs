@@ -280,6 +280,26 @@ pub fn scan_tree_round23(root: &Path) -> Result<Vec<crate::round23_rules::Round2
     Ok(out)
 }
 
+/// Walk `root` and scan for round-4 structural drift rules (see
+/// [`crate::round4_rules`]). DID method-segment tightening, EventsSubscribe
+/// type, cross_signing.publish CAS, audit_policy_version_hash arity.
+pub fn scan_tree_round4(root: &Path) -> Result<Vec<crate::round4_rules::Round4Finding>> {
+    let mut out = Vec::new();
+    walk(root, &mut |file_path| {
+        let file_kind = FileKind::from_path(file_path);
+        if matches!(file_kind, FileKind::Other) {
+            return Ok(());
+        }
+        let raw = match fs::read_to_string(file_path) {
+            Ok(s) => s,
+            Err(_) => return Ok(()),
+        };
+        crate::round4_rules::scan_round4(file_path, &raw, &mut out);
+        Ok(())
+    })?;
+    Ok(out)
+}
+
 fn walk<F>(root: &Path, visit: &mut F) -> Result<()>
 where
     F: FnMut(&Path) -> Result<()>,
@@ -332,6 +352,9 @@ fn should_skip_dir(dir: &Path) -> bool {
             | ".turbo"
             | "coverage"
             | ".cargo"
+            | "test-results"
+            | "playwright-report"
+            | "trace-kanban"
     )
 }
 
