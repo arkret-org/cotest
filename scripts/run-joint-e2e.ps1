@@ -1346,75 +1346,276 @@ $serviceGapLines | Set-Content -Path $serviceGapsReport -Encoding UTF8
 # Scenario report: group junit testcases by spec file (= scenario) and emit
 # pass / fail / skipped counts so reviewers can read scenario-level health
 # without crunching the raw junit.xml.
+#
+# G0.T4 (test-gap alignment): spec layout is now `tests/<domain>/<name>.spec.ts`
+# so the old `s\d-...` regex never matched. Playwright's JUnit reporter cannot
+# distinguish `test.fixme()` from `test.skip()` (both emit a bare <skipped/>),
+# so we pre-walk the spec source to harvest fixme titles and intersect them
+# against the junit testcase names. The drift section compares junit-observed
+# totals against the static-source counts so reviewers can spot crashes that
+# truncated the junit (junit_total < static_total) or fixme-detection misses.
 $scenariosReport = Join-Path $jointDir "scenarios.md"
 $junitPath = Join-Path $jointDir "junit.xml"
+
+# Extracts fixme test titles from a Playwright spec file. Handles both
+# `test.fixme("title", ...)` and `test.fixme('title', ...)`. Multi-line first
+# arguments (titles broken across lines for readability) are joined; trailing
+# args (the test body) are stripped. Returns @() on read failure.
+function Get-FixmeTitlesForSpec {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return @() }
+    $source = $null
+    try { $source = Get-Content -LiteralPath $Path -Raw -ErrorAction Stop } catch { return @() }
+    if ([string]::IsNullOrEmpty($source)) { return @() }
+    $titles = New-Object System.Collections.Generic.List[string]
+    # Match `test.fixme(<whitespace>"...."` or `test.fixme(<whitespace>'....'`.
+    # The (?s) flag lets `.` match newlines so titles broken across source
+    # lines are captured as one. Non-greedy + escape-aware: backslash-escaped
+    # quotes inside the title are tolerated.
+    $pattern = '(?s)test\.fixme\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|''((?:[^''\\]|\\.)*)'')'
+    foreach ($m in [regex]::Matches($source, $pattern)) {
+        $raw = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
+        # Unescape \" and \' so the title matches what Playwright emits in junit.
+        $raw = $raw -replace '\\"', '"' -replace "\\'", "'"
+        # Collapse any internal whitespace (including embedded newlines from a
+        # multi-line title literal) so the comparison against the junit name
+        # is whitespace-insensitive.
+        $normalized = ($raw -replace '\s+', ' ').Trim()
+        if ($normalized.Length -gt 0) { $titles.Add($normalized) | Out-Null }
+    }
+    return $titles.ToArray()
+}
+
+# Walks the spec source tree once and returns a hashtable keyed by the
+# canonical scenario key (`<domain>/<name>.spec.ts`) with per-spec
+# static counts: live tests, fixme tests, and the harvested fixme title set.
+function Get-StaticSpecStats {
+    param([Parameter(Mandatory)][string]$TestsRoot)
+    $result = @{}
+    if (-not (Test-Path -LiteralPath $TestsRoot)) { return $result }
+    $specFiles = @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -File -Filter "*.spec.ts" -ErrorAction SilentlyContinue)
+    foreach ($file in $specFiles) {
+        $rel = [System.IO.Path]::GetRelativePath($TestsRoot, $file.FullName) -replace '\\', '/'
+        $source = $null
+        try { $source = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop } catch { $source = "" }
+        $fixmeTitles = Get-FixmeTitlesForSpec -Path $file.FullName
+        # Count `test(` and `test.skip(` (but not `test.fixme`, `test.describe`,
+        # `test.beforeAll`, etc.) as "live" definitions.
+        $liveMatches = [regex]::Matches($source, '(?m)(^|[^.\w])test\s*\(\s*[''"]')
+        $skipMatches = [regex]::Matches($source, '(?s)test\.skip\s*\(\s*[''"]')
+        $live = $liveMatches.Count + $skipMatches.Count
+        $result[$rel] = [pscustomobject]@{
+            spec        = $rel
+            live        = $live
+            fixme       = $fixmeTitles.Count
+            fixmeTitles = $fixmeTitles
+        }
+    }
+    return $result
+}
+
+# Optional self-test: validates Get-FixmeTitlesForSpec against a known spec
+# (read-receipts.spec.ts has 8 fixme entries and 0 live tests as of G0.T4).
+if ($env:COTEST_SELFTEST -eq '1') {
+    $selftestSpec = Join-Path $e2eRoot "tests/messaging/read-receipts.spec.ts"
+    $selftestTitles = @(Get-FixmeTitlesForSpec -Path $selftestSpec)
+    if ($selftestTitles.Count -ne 8) {
+        throw "G0.T4 self-test failed: Get-FixmeTitlesForSpec returned $($selftestTitles.Count) titles for read-receipts.spec.ts (expected 8)"
+    }
+    Write-Host "[selftest] Get-FixmeTitlesForSpec: 8 entries for read-receipts.spec.ts (OK)"
+}
+
+# Build the static-source picture first so the drift section can be emitted
+# even when junit.xml is absent (playwright crashed before reporting).
+$testsRoot = Join-Path $e2eRoot "tests"
+$staticStats = Get-StaticSpecStats -TestsRoot $testsRoot
+
 $scenarioLines = @("# joint e2e scenarios", "")
+$junitByScenario = @{}
+$totals = [pscustomobject]@{
+    passed  = 0
+    failed  = 0
+    skipped = 0
+    fixme   = 0
+}
+$junitParseError = $null
 if (Test-Path $junitPath) {
     try {
         [xml]$junit = Get-Content -Path $junitPath -Raw
-        # Playwright JUnit nests <testsuites><testsuite ...><testcase ...>; the
-        # outer suite name is the project, inner suite name is the spec file.
+        # Playwright JUnit nests <testsuites><testsuite ...><testcase ...>;
+        # testsuite.name is the spec path, normally relative to the e2e tests
+        # dir. On Windows it uses backslashes (e.g. `identity\multi-device.spec.ts`).
         $suiteList = @($junit.testsuites.testsuite)
-        $totals = [pscustomobject]@{
-            passed = 0
-            failed = 0
-            skipped = 0
-            fixme = 0
-        }
-        $scenarioGroups = @{}
         foreach ($suite in $suiteList) {
             $suiteName = if ($suite.name) { $suite.name } else { "<unnamed>" }
-            # Try to extract the spec file name (e.g. "s1-single-server-triad.spec.ts").
-            $specMatch = [regex]::Match($suiteName, "(s\d[a-zA-Z0-9\-]*\.spec\.ts)")
-            $scenarioKey = if ($specMatch.Success) { $specMatch.Groups[1].Value } else { $suiteName }
-            if (-not $scenarioGroups.ContainsKey($scenarioKey)) {
-                $scenarioGroups[$scenarioKey] = New-Object System.Collections.Generic.List[object]
+            # Normalize backslashes to forward slashes so the key matches the
+            # canonical `<domain>/<name>.spec.ts` form used by the static walk.
+            $normalizedSuite = $suiteName -replace '\\', '/'
+            # Narrow: prefer `<domain>/<name>.spec.ts` (single nesting level
+            # under tests/). Fall back to the wider `*.spec.ts` anywhere in the
+            # suite name string for suites without a domain directory (e.g.
+            # `joint-smoke.spec.ts` lives at tests/ root).
+            $specMatch = [regex]::Match($normalizedSuite, '([a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*\.spec\.ts)')
+            if (-not $specMatch.Success) {
+                $specMatch = [regex]::Match($normalizedSuite, '([a-z0-9][a-z0-9-]*\.spec\.ts)')
+            }
+            $scenarioKey = if ($specMatch.Success) { $specMatch.Groups[1].Value } else { $normalizedSuite }
+            if (-not $junitByScenario.ContainsKey($scenarioKey)) {
+                $junitByScenario[$scenarioKey] = [pscustomobject]@{
+                    cases   = New-Object System.Collections.Generic.List[object]
+                    passed  = 0
+                    failed  = 0
+                    skipped = 0
+                    fixme   = 0
+                }
+            }
+            $bucket = $junitByScenario[$scenarioKey]
+            # Pre-compute the fixme title set (whitespace-normalized) for this
+            # scenario so each <skipped/> case can be classified deterministically.
+            $fixmeSet = @{}
+            if ($staticStats.ContainsKey($scenarioKey)) {
+                foreach ($t in $staticStats[$scenarioKey].fixmeTitles) { $fixmeSet[$t] = $true }
             }
             foreach ($case in @($suite.testcase)) {
                 $caseName = if ($case.name) { $case.name } else { "<unnamed test>" }
+                $normalizedCaseName = ($caseName -replace '\s+', ' ').Trim()
+                # NB: PowerShell evaluates an empty XmlElement (e.g. <skipped/>
+                # with no text content) as $false in a boolean test, so we use
+                # $null -ne <element> to detect presence instead.
+                $hasFailure = ($null -ne $case.failure)
+                $hasSkipped = ($null -ne $case.skipped)
                 $status = "passed"
-                if ($case.failure) { $status = "failed"; $totals.failed += 1 }
-                elseif ($case.skipped) {
-                    $status = "skipped"; $totals.skipped += 1
-                    if ($caseName -match "fixme|fixmed") { $status = "fixme"; $totals.fixme += 1; $totals.skipped -= 1 }
+                if ($hasFailure) {
+                    $status = "failed"; $totals.failed += 1; $bucket.failed += 1
                 }
-                else { $totals.passed += 1 }
+                elseif ($hasSkipped) {
+                    # Playwright JUnit reporter emits <skipped/> with no message
+                    # for BOTH test.skip() and test.fixme(). Newer versions
+                    # ALSO emit <property name="fixme" value=""/> on fixme'd
+                    # cases — use that as the primary signal when present,
+                    # then fall back to intersecting the case name with the
+                    # per-spec fixme title set harvested from source.
+                    $isFixme = $false
+                    if ($null -ne $case.properties -and $null -ne $case.properties.property) {
+                        foreach ($prop in @($case.properties.property)) {
+                            if ($prop.name -eq "fixme") { $isFixme = $true; break }
+                        }
+                    }
+                    if (-not $isFixme) {
+                        foreach ($title in $fixmeSet.Keys) {
+                            if ([string]::IsNullOrEmpty($title)) { continue }
+                            if ($normalizedCaseName -eq $title) { $isFixme = $true; break }
+                            if ($normalizedCaseName.EndsWith($title)) { $isFixme = $true; break }
+                            # Some Playwright JUnit reporters insert U+203A "›"
+                            # or plain ">" between describe and test title; an
+                            # EndsWith match against the bare title catches it,
+                            # and Contains() covers nested-describe edge cases.
+                            if ($normalizedCaseName.Contains($title)) { $isFixme = $true; break }
+                        }
+                    }
+                    if ($isFixme) {
+                        $status = "fixme"; $totals.fixme += 1; $bucket.fixme += 1
+                    } else {
+                        $status = "skipped"; $totals.skipped += 1; $bucket.skipped += 1
+                    }
+                }
+                else { $totals.passed += 1; $bucket.passed += 1 }
                 $time = if ($case.time) { [math]::Round([double]$case.time, 2) } else { 0 }
-                $scenarioGroups[$scenarioKey].Add([pscustomobject]@{
-                    name = $caseName
+                $bucket.cases.Add([pscustomobject]@{
+                    name   = $caseName
                     status = $status
-                    time = $time
+                    time   = $time
                 }) | Out-Null
             }
         }
-        $scenarioLines += "## totals"
-        $scenarioLines += ""
-        $scenarioLines += "- passed: $($totals.passed)"
-        $scenarioLines += "- failed: $($totals.failed)"
-        $scenarioLines += "- skipped: $($totals.skipped)"
-        $scenarioLines += "- fixme (pending spec implementation): $($totals.fixme)"
-        $scenarioLines += ""
-        foreach ($key in $scenarioGroups.Keys | Sort-Object) {
-            $scenarioLines += "## $key"
-            $scenarioLines += ""
-            foreach ($case in $scenarioGroups[$key]) {
-                $marker = switch ($case.status) {
-                    "passed"  { "[x]" }
-                    "failed"  { "[F]" }
-                    "skipped" { "[S]" }
-                    "fixme"   { "[~]" }
-                    default   { "[?]" }
-                }
-                $scenarioLines += "- $marker ($($case.time)s) $($case.name)"
-            }
-            $scenarioLines += ""
-        }
     } catch {
-        $scenarioLines += "- failed to parse junit.xml: $($_.Exception.Message)"
+        $junitParseError = $_.Exception.Message
     }
 } else {
-    $scenarioLines += "- junit.xml not present; playwright may have failed before emitting reports"
+    $junitParseError = "junit.xml not present; playwright may have failed before emitting reports"
 }
+
+$scenarioLines += "## totals"
+$scenarioLines += ""
+if ($junitParseError -and -not (Test-Path $junitPath)) {
+    $scenarioLines += "- $junitParseError"
+} elseif ($junitParseError) {
+    $scenarioLines += "- failed to parse junit.xml: $junitParseError"
+} else {
+    $scenarioLines += "- passed: $($totals.passed)"
+    $scenarioLines += "- failed: $($totals.failed)"
+    $scenarioLines += "- skipped: $($totals.skipped)"
+    $scenarioLines += "- fixme (pending spec implementation): $($totals.fixme)"
+}
+$scenarioLines += ""
+
+if ($junitByScenario.Count -gt 0) {
+    foreach ($key in $junitByScenario.Keys | Sort-Object) {
+        $scenarioLines += "## $key"
+        $scenarioLines += ""
+        foreach ($case in $junitByScenario[$key].cases) {
+            $marker = switch ($case.status) {
+                "passed"  { "[x]" }
+                "failed"  { "[F]" }
+                "skipped" { "[S]" }
+                "fixme"   { "[~]" }
+                default   { "[?]" }
+            }
+            $scenarioLines += "- $marker ($($case.time)s) $($case.name)"
+        }
+        $scenarioLines += ""
+    }
+}
+
+# Drift section: compare static-source counts vs junit-observed counts. The
+# union of keys catches both directions of drift — specs in the source tree
+# that junit never saw (likely crashed pre-report) and junit suites that
+# don't correspond to any static spec file (likely a key-extraction miss).
+$scenarioLines += "## drift vs static count"
+$scenarioLines += ""
+$scenarioLines += "Static counts come from a regex walk of tests/**/*.spec.ts;"
+$scenarioLines += "junit counts come from this run. `[!]` flags a divergence."
+$scenarioLines += ""
+$scenarioLines += "| spec | static live | static fixme | junit pass | junit fail | junit skip | junit fixme | flag |"
+$scenarioLines += "|------|-------------|--------------|------------|------------|------------|-------------|------|"
+$allKeys = New-Object System.Collections.Generic.HashSet[string]
+foreach ($k in $staticStats.Keys)      { [void]$allKeys.Add($k) }
+foreach ($k in $junitByScenario.Keys)  { [void]$allKeys.Add($k) }
+$driftAny = $false
+foreach ($key in ($allKeys | Sort-Object)) {
+    $sLive = 0; $sFixme = 0
+    if ($staticStats.ContainsKey($key)) {
+        $sLive = $staticStats[$key].live
+        $sFixme = $staticStats[$key].fixme
+    }
+    $jPass = 0; $jFail = 0; $jSkip = 0; $jFixme = 0
+    if ($junitByScenario.ContainsKey($key)) {
+        $jPass  = $junitByScenario[$key].passed
+        $jFail  = $junitByScenario[$key].failed
+        $jSkip  = $junitByScenario[$key].skipped
+        $jFixme = $junitByScenario[$key].fixme
+    }
+    $flag = ""
+    if (Test-Path $junitPath) {
+        $junitLiveSeen = $jPass + $jFail + $jSkip
+        if ($junitLiveSeen -ne $sLive) { $flag = "[!]" }
+        if ($jFixme -ne $sFixme)       { $flag = "[!]" }
+    } else {
+        # No junit: drift is undefined; report static-only with a dash.
+        $flag = "-"
+    }
+    if ($flag -eq "[!]") { $driftAny = $true }
+    $scenarioLines += "| $key | $sLive | $sFixme | $jPass | $jFail | $jSkip | $jFixme | $flag |"
+}
+$scenarioLines += ""
+if (-not (Test-Path $junitPath)) {
+    $scenarioLines += "Note: junit.xml absent — only static counts shown above."
+} elseif ($driftAny) {
+    $scenarioLines += "Drift detected — investigate `[!]` rows: either tests crashed before junit emission, or fixme parsing missed a title."
+} else {
+    $scenarioLines += "No drift — junit totals align with static-source counts."
+}
+
 $scenarioLines | Set-Content -Path $scenariosReport -Encoding UTF8
 
 $summary = [pscustomobject]@{
