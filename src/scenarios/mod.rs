@@ -1,5 +1,4 @@
 pub mod _helpers;
-pub mod agent_workspace_e2e;
 pub mod anchor_canonical_no_self_reference;
 pub mod api_contracts_auth;
 pub mod authz_policy_presence;

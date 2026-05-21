@@ -53,9 +53,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use contrix_core::{
-    CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
-    DeliveryMode, Did, HandleHintBindingSource, HandleUri, MemberDeliveryBindingCandidate,
-    RecipientServiceType, sanitize_blind_payload, sanitize_blind_payload_strict,
+    CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
+    Did, HandleHintBindingSource, HandleUri, MemberDeliveryBindingCandidate, RecipientServiceType,
+    sanitize_blind_payload, sanitize_blind_payload_strict,
 };
 use serde_json::{Value, json};
 
@@ -132,8 +132,8 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 /// is wired, the live-stack probe below additionally verifies the resolver's
 /// `/health` is up.
 fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
-    let _alice = Did::new(ALICE_DID.to_owned())
-        .context("starid MUST mint a parseable did:web for Alice")?;
+    let _alice =
+        Did::new(ALICE_DID.to_owned()).context("starid MUST mint a parseable did:web for Alice")?;
     // Build the rest of the candidate as if `cx.directory.resolve_handle`
     // returned it (T3.5 pattern).
     sample_candidate()
@@ -179,9 +179,7 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
             .recipient_service_did
             .as_str()
     {
-        bail!(
-            "T8.1 step 2: outer.recipient_service_did != hint.recipient_service_did"
-        );
+        bail!("T8.1 step 2: outer.recipient_service_did != hint.recipient_service_did");
     }
     Ok(())
 }
@@ -338,9 +336,7 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
     // (strict mode) — this is what a chime-side guard would call before
     // surfacing the wakeup to the user.
     sanitize_blind_payload_strict(inner).map_err(|e| {
-        anyhow!(
-            "T8.1 step 7: chime-side strict sanitiser rejected the wakeup ({e})"
-        )
+        anyhow!("T8.1 step 7: chime-side strict sanitiser rejected the wakeup ({e})")
     })?;
     // Belt-and-braces: the spec §4.5 forbidden fields MUST NOT appear at
     // any depth of the wrapper either.
@@ -432,8 +428,8 @@ fn step_9_revocation(original: &MemberDeliveryBindingCandidate) -> Result<()> {
 /// loophole that an inattentive directory implementation might leak.
 fn negative_did_document_fallback_rejected() -> Result<()> {
     let candidate = sample_candidate()?;
-    let mut value = serde_json::to_value(&candidate)
-        .context("serialise sample candidate to JSON")?;
+    let mut value =
+        serde_json::to_value(&candidate).context("serialise sample candidate to JSON")?;
     value["delivery_binding_hint"]["binding_source"] = json!("did_document_default");
     let parsed: std::result::Result<MemberDeliveryBindingCandidate, _> =
         serde_json::from_value(value);
@@ -471,11 +467,13 @@ fn negative_stable_push_id_leak_rejected() -> Result<()> {
         });
 
         match sanitize_blind_payload(&payload) {
-            Err(e) if matches!(
-                e.reason_code,
-                contrix_core::BlindPayloadReasonCode::ForbiddenField
-                    | contrix_core::BlindPayloadReasonCode::SensitiveLiteral
-            ) => {
+            Err(e)
+                if matches!(
+                    e.reason_code,
+                    contrix_core::BlindPayloadReasonCode::ForbiddenField
+                        | contrix_core::BlindPayloadReasonCode::SensitiveLiteral
+                ) =>
+            {
                 // Expected — the sanitizer correctly refused the leak.
             }
             Err(other) => bail!(

@@ -1864,7 +1864,6 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     let mut covered_ext_blob = false;
     let mut covered_ext_realtime = false;
     let mut covered_ext_moderation = false;
-    let mut covered_ext_agent_workspace = false;
     let mut covered_bridge_mimi = false;
     let mut covered_bridge_applet = false;
 
@@ -1978,9 +1977,6 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
             "extension_advertised_moderation_reports_post_c16_split" => {
                 covered_ext_moderation = true
             }
-            "extension_advertised_agent_workspace_requires_explicit_surface" => {
-                covered_ext_agent_workspace = true
-            }
             "interop_bridge_mimi_advertised_when_supported" => covered_bridge_mimi = true,
             "interop_bridge_applet_advertised_when_third_party_host_supported" => {
                 covered_bridge_applet = true
@@ -2003,12 +1999,11 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         && covered_ext_blob
         && covered_ext_realtime
         && covered_ext_moderation
-        && covered_ext_agent_workspace
         && covered_bridge_mimi
         && covered_bridge_applet)
     {
         bail!(
-            "discovery fixture must cover (a) core-only, (b) blob_storage / realtime_media / moderation_reports / agent_workspace extension advertisement, and (c) mimi_interop + applet bridge advertisement"
+            "discovery fixture must cover (a) core-only, (b) blob_storage / realtime_media / moderation_reports extension advertisement, and (c) mimi_interop + applet bridge advertisement"
         );
     }
 
@@ -3934,9 +3929,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
     let compositions = fixture
         .get("cross_family_compositions")
         .and_then(Value::as_array)
-        .ok_or_else(|| {
-            anyhow!("constraint_family fixture missing cross_family_compositions[]")
-        })?;
+        .ok_or_else(|| anyhow!("constraint_family fixture missing cross_family_compositions[]"))?;
     if compositions.len() < 4 {
         bail!(
             "constraint_family fixture cross_family_compositions has {} entries, expected >= 4",

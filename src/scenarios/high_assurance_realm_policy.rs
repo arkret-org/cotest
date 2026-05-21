@@ -20,13 +20,11 @@ use contrix_core::{
 const REALM_ID: &str = "cx:space:01904100-0000-7000-8000-000000000aa1";
 
 fn realm_id() -> Result<SpaceId> {
-    SpaceId::new(REALM_ID.to_owned())
-        .map_err(|err| anyhow!("invalid realm id: {err}"))
+    SpaceId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 
 fn principal_did() -> Result<Did> {
-    Did::new("did:web:alice.example".to_owned())
-        .map_err(|err| anyhow!("invalid did: {err}"))
+    Did::new("did:web:alice.example".to_owned()).map_err(|err| anyhow!("invalid did: {err}"))
 }
 
 fn build_realm(

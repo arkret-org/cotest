@@ -198,8 +198,8 @@ impl ProfileRoleTable {
             let role_str = value
                 .as_str()
                 .ok_or_else(|| anyhow!("profile_roles[{id}] must be a string"))?;
-            let role = ServiceRole::parse(role_str)
-                .with_context(|| format!("profile_roles[{id}]"))?;
+            let role =
+                ServiceRole::parse(role_str).with_context(|| format!("profile_roles[{id}]"))?;
             roles.insert(id.clone(), role);
         }
         Ok(Self {
@@ -264,8 +264,7 @@ pub fn validate_profile_claims(
     service_role: ServiceRole,
     table: &ProfileRoleTable,
 ) -> ProfileClaimOutcome {
-    let permitted: BTreeSet<ServiceRole> =
-        permitted_roles_for(service_role).into_iter().collect();
+    let permitted: BTreeSet<ServiceRole> = permitted_roles_for(service_role).into_iter().collect();
     let mut outcome = ProfileClaimOutcome::default();
     for (profile_id, claim_kind) in claims {
         match table.role_of(profile_id) {
@@ -316,13 +315,19 @@ pub fn assert_sdk_matches_artifact() -> Result<()> {
                     ));
                 }
             }
-            None => diffs.push(format!("{profile_id}: artifact={} sdk=<missing>", expected.as_str())),
+            None => diffs.push(format!(
+                "{profile_id}: artifact={} sdk=<missing>",
+                expected.as_str()
+            )),
         }
     }
     if diffs.is_empty() {
         Ok(())
     } else {
-        bail!("SDK profile_roles table out of sync with artifact:\n  {}", diffs.join("\n  "))
+        bail!(
+            "SDK profile_roles table out of sync with artifact:\n  {}",
+            diffs.join("\n  ")
+        )
     }
 }
 

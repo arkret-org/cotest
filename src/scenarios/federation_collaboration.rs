@@ -1,10 +1,11 @@
 use anyhow::Result;
-use contrix_core::{Operation, OperationId, SpaceId};
+use contrix_core::{Operation, OperationId, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    TestServerGroup, dev_login, encrypted_envelope, expect_json, expect_text, register_account,
+    TestServerGroup, dev_login, encrypted_envelope, expect_account_subscribe_delta, expect_json,
+    expect_text, register_account,
 };
 
 pub async fn cross_server_collaboration_flow_works() -> Result<()> {
@@ -66,11 +67,11 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    let space_id = created_space["realm_id"].as_str().unwrap().to_owned();
+    let realm_id = created_space["realm_id"].as_str().unwrap().to_owned();
 
     let alice_message = Operation::create(
         OperationId::new("cx:operation:federation-alice-message-01")?,
-        SpaceId::new(space_id.clone())?,
+        RealmId::new(realm_id.clone())?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-alice-01",
@@ -90,7 +91,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
             .json(&json!({
                 "origin": server_a.service_did(),
                 "destination": server_b.service_did(),
-                "realm_id": space_id,
+                "realm_id": realm_id,
                 "service_binding_ref": "cotest",
                 "operations": [alice_message]
             })),
@@ -104,7 +105,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
 
     let pulled_on_b = expect_json(
         server_b.http().get(server_b.url(&format!(
-            "/api/v1/federation/pull-operations?space_id={space_id}"
+            "/api/v1/federation/pull-operations?space_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -114,23 +115,22 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "cx:operation:federation-alice-message-01"
     );
 
-    let bob_sync = expect_json(
+    let bob_sync = expect_account_subscribe_delta(
         server_b
             .http()
-            .post(server_b.url("/api/v1/sync"))
-            .bearer_auth(&bob)
-            .json(&json!({})),
+            .get(server_b.url("/api/v1/account/subscribe?catchup=true"))
+            .bearer_auth(&bob),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        bob_sync["spaces"][&space_id]["timeline"]["events"][0]["content"]["body"],
+        bob_sync["spaces"][&realm_id]["timeline"]["events"][0]["content"]["body"],
         "hello bob from server a"
     );
 
     let bob_reply = Operation::create(
         OperationId::new("cx:operation:federation-bob-message-01")?,
-        SpaceId::new(space_id.clone())?,
+        RealmId::new(realm_id.clone())?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-bob-01",
@@ -252,7 +252,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
             .post(server_b.url("/api/v1/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
-                "realm_id": space_id,
+                "realm_id": realm_id,
                 "target_ref": "cx:event:federation-alice-01",
                 "reason": "spam",
                 "reporter": "did:web:bob-b.example"

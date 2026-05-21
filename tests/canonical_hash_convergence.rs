@@ -15,8 +15,8 @@
 //! first place it surfaces (instead of inscrutable cross-service signature
 //! failures in federation / replication tests).
 
-use contrix_core::canonical::canonical_sha256;
 use contrix_core::canonical::canonical_json_bytes;
+use contrix_core::canonical::canonical_sha256;
 use serde_json::{Value, json};
 
 /// A canonical-hash test vector: the input payload shape, the wire
@@ -49,8 +49,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "issued_at": "2026-05-20T00:00:00Z",
                 "expires_at": "2026-05-20T00:05:00Z",
             }),
-            expected_digest:
-                "sha256:2a79b446921d7e0e08270f40c29e5706b03652390d44122eedcf6a96c8cd9d73",
+            expected_digest: "sha256:2a79b446921d7e0e08270f40c29e5706b03652390d44122eedcf6a96c8cd9d73",
         },
         CanonicalVector {
             label: "soland event envelope payload",
@@ -69,8 +68,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 },
                 "schema_version": 1,
             }),
-            expected_digest:
-                "sha256:149f07ce9ee047712e9412d9fbfd6224155c4c723efbe5628545a3a9ee8114e3",
+            expected_digest: "sha256:149f07ce9ee047712e9412d9fbfd6224155c4c723efbe5628545a3a9ee8114e3",
         },
         CanonicalVector {
             label: "starid did:webvh update entry (proofless)",
@@ -90,8 +88,7 @@ fn vectors() -> Vec<CanonicalVector> {
                     "verificationMethod": {"key-1": "z6MkExample"},
                 },
             }),
-            expected_digest:
-                "sha256:0f144fa1df6408114a253823b0814b6059b1656737e6e957bca6c89fa215b59b",
+            expected_digest: "sha256:0f144fa1df6408114a253823b0814b6059b1656737e6e957bca6c89fa215b59b",
         },
     ]
 }

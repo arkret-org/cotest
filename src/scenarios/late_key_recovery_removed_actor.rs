@@ -58,9 +58,9 @@ mod tests {
 
     #[tokio::test]
     async fn late_recovery_reason_pin_matches_sdk() {
-        late_key_recovery_removed_actor_run()
-            .await
-            .expect("SDK constant for late_recovery_rejected_membership must agree with cotest pin");
+        late_key_recovery_removed_actor_run().await.expect(
+            "SDK constant for late_recovery_rejected_membership must agree with cotest pin",
+        );
     }
 
     #[test]

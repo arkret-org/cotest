@@ -98,15 +98,10 @@ fn check_capability_actions_present(required: &[&str]) -> Result<()> {
 
 fn check_error_codes_present(required: &[&str]) -> Result<()> {
     let registry = load_artifact_json("registry/error-code-registry.json")?;
-    let codes = collect_strings(
-        &registry,
-        &["codes", "error_codes", "errors", "entries"],
-    )?;
+    let codes = collect_strings(&registry, &["codes", "error_codes", "errors", "entries"])?;
     for code in required {
         if !codes.contains(*code) {
-            bail!(
-                "round-4 drift allowlist: error code `{code}` not found in canonical registry"
-            );
+            bail!("round-4 drift allowlist: error code `{code}` not found in canonical registry");
         }
     }
     Ok(())
@@ -230,7 +225,14 @@ fn collect_strings(registry: &Value, keys: &[&str]) -> Result<BTreeSet<String>> 
                     out.insert(s.to_owned());
                     continue;
                 }
-                for cand in ["id", "action", "name", "code", "error_code", "capability_action"] {
+                for cand in [
+                    "id",
+                    "action",
+                    "name",
+                    "code",
+                    "error_code",
+                    "capability_action",
+                ] {
                     if let Some(v) = entry.get(cand).and_then(Value::as_str) {
                         out.insert(v.to_owned());
                     }

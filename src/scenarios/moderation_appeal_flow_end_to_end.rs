@@ -105,7 +105,10 @@ mod tests {
             APPEAL_KIND_DECISION,
             APPEAL_KIND_CLOSE,
         ] {
-            assert!(k.starts_with("cx.moderation.appeal."), "kind {k} must be in appeal namespace");
+            assert!(
+                k.starts_with("cx.moderation.appeal."),
+                "kind {k} must be in appeal namespace"
+            );
         }
     }
 

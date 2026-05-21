@@ -48,11 +48,11 @@
         },
         "supported_operations": [
           "cx.server.describe",
-          "cx.sync.describe",
-          "cx.sync.account",
+          "cx.account.describe",
+          "cx.account.subscribe",
           "cx.events.subscribe",
           "cx.events.query",
-          "cx.sync.get_snapshot_head",
+          "cx.snapshot.head",
           "cx.authz.check"
         ],
         "supported_event_kinds": [
@@ -64,7 +64,7 @@
           "cx.capability.revoke"
         ],
         "supported_schemas": [
-          "cx.schema.client_sync_response.v1",
+          "cx.schema.account_subscribe_frame.v1",
           "cx.schema.snapshot.v1",
           "cx.schema.capability.v1",
           "cx.schema.grant_constraint.v1"
@@ -100,11 +100,11 @@
         },
         "supported_operations": [
           "cx.server.describe",
-          "cx.sync.describe",
-          "cx.sync.account",
+          "cx.account.describe",
+          "cx.account.subscribe",
           "cx.events.subscribe",
           "cx.events.query",
-          "cx.sync.get_snapshot_head",
+          "cx.snapshot.head",
           "cx.authz.check",
           "cx.admin.device.revoke",
           "cx.agent.task.submit",
@@ -120,7 +120,7 @@
           "cx.capability.revoke"
         ],
         "supported_schemas": [
-          "cx.schema.client_sync_response.v1",
+          "cx.schema.account_subscribe_frame.v1",
           "cx.schema.snapshot.v1",
           "cx.schema.capability.v1",
           "cx.schema.grant_constraint.v1"

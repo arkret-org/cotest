@@ -127,11 +127,13 @@ impl SecurityClosureFixture {
     pub fn load_from(path: &Path) -> Result<Self> {
         let raw = fs::read_to_string(path)
             .with_context(|| format!("read security-closure-vectors fixture {}", path.display()))?;
-        let value: Value = serde_json::from_str(&raw)
-            .with_context(|| format!("parse security-closure-vectors fixture {}", path.display()))?;
+        let value: Value = serde_json::from_str(&raw).with_context(|| {
+            format!("parse security-closure-vectors fixture {}", path.display())
+        })?;
         validate_profile(&value, SECURITY_CLOSURE_VECTORS_PROFILE)?;
-        let fixture: SecurityClosureFixture = serde_json::from_value(value)
-            .with_context(|| format!("decode security-closure-vectors fixture {}", path.display()))?;
+        let fixture: SecurityClosureFixture = serde_json::from_value(value).with_context(|| {
+            format!("decode security-closure-vectors fixture {}", path.display())
+        })?;
         if fixture.suite != "security_closure_vectors" {
             bail!(
                 "security-closure-vectors suite drifted: expected `security_closure_vectors`, got `{}`",
@@ -146,7 +148,9 @@ impl SecurityClosureFixture {
         self.security_closure_vectors
             .iter()
             .find(|v| v.vector_id == vector_id)
-            .ok_or_else(|| anyhow!("security-closure-vectors fixture missing vector_id `{vector_id}`"))
+            .ok_or_else(|| {
+                anyhow!("security-closure-vectors fixture missing vector_id `{vector_id}`")
+            })
     }
 
     /// Index every step by `(vector_id, step.name)` for quick lookup from
@@ -299,9 +303,7 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
     }
     for required in REQUIRED_SECURITY_CLOSURE_VECTOR_IDS {
         if !seen.contains(*required) {
-            bail!(
-                "security-closure-vectors fixture missing required vector_id `{required}`"
-            );
+            bail!("security-closure-vectors fixture missing required vector_id `{required}`");
         }
     }
     Ok(())

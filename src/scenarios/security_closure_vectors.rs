@@ -28,11 +28,9 @@ pub const VECTOR_IDS: &[&str] = REQUIRED_SECURITY_CLOSURE_VECTOR_IDS;
 /// step exposes the typed runner contract. Used as the default cotest-side
 /// gate for an implementer that does not yet expose a SUT runner.
 pub fn assert_vector_present(vector_id: &str) -> Result<()> {
-    let fixture = SecurityClosureFixture::load()
-        .context("loading security-closure-vectors.json")?;
-    let vector = fixture
-        .vector(vector_id)
-        .context("vector lookup")?;
+    let fixture =
+        SecurityClosureFixture::load().context("loading security-closure-vectors.json")?;
+    let vector = fixture.vector(vector_id).context("vector lookup")?;
     if vector.steps.is_empty() {
         return Err(anyhow!(
             "security_closure_vectors[{vector_id}] has zero steps"
@@ -75,8 +73,7 @@ pub const VECTOR_INVITE_OOB_CODE_ENTROPY: &str = "cx.vector.invite.oob_code_entr
 pub const VECTOR_INVITE_FAILURE_INDISTINGUISHABLE: &str =
     "cx.vector.invite.failure_indistinguishable.v1";
 pub const VECTOR_CONSENT_SCOPE_CASCADE: &str = "cx.vector.consent.scope_cascade.v1";
-pub const VECTOR_CONSENT_CACHE_INVALIDATION: &str =
-    "cx.vector.consent.cache_invalidation.v1";
+pub const VECTOR_CONSENT_CACHE_INVALIDATION: &str = "cx.vector.consent.cache_invalidation.v1";
 pub const VECTOR_SYNC_SOFT_FAIL_RECONCILE: &str = "cx.vector.sync.soft_fail_reconcile.v1";
 pub const VECTOR_LATTICE_LWW_OPEN_SET: &str = "cx.vector.lattice.lww_open_set.v1";
 pub const VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING: &str =

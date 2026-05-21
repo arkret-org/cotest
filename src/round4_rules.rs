@@ -169,8 +169,24 @@ fn scan_legacy_did(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round
         // Boundary check: ensure not part of a larger ident (e.g.
         // `xdid:`). Allow start-of-line, non-ident char, or a quote.
         let prev_ok = i == 0
-            || matches!(bytes[i - 1], b'"' | b'\'' | b'(' | b'[' | b' ' | b'\t' | b'`' | b','
-                | b'=' | b'>' | b'/' | b'#' | b'{' | b'\\' | b':' | b'+');
+            || matches!(
+                bytes[i - 1],
+                b'"' | b'\''
+                    | b'('
+                    | b'['
+                    | b' '
+                    | b'\t'
+                    | b'`'
+                    | b','
+                    | b'='
+                    | b'>'
+                    | b'/'
+                    | b'#'
+                    | b'{'
+                    | b'\\'
+                    | b':'
+                    | b'+'
+            );
         if !prev_ok {
             i += 1;
             continue;
@@ -250,9 +266,9 @@ fn scan_events_subscribe_string_payload(
     if migration_phrase {
         return;
     }
-    let mentions_string_type =
-        contains_type_token(line, "String") || contains_type_token(line, "string")
-            || contains_type_token(line, "&str");
+    let mentions_string_type = contains_type_token(line, "String")
+        || contains_type_token(line, "string")
+        || contains_type_token(line, "&str");
     if !mentions_string_type {
         return;
     }
@@ -355,7 +371,9 @@ fn scan_audit_policy_version_hash_call(
     let Some(col) = line.find(token) else { return };
     let rest = &line[col + token.len()..];
     // Find the opening `(` ignoring whitespace.
-    let Some(paren_idx_rel) = rest.find('(') else { return };
+    let Some(paren_idx_rel) = rest.find('(') else {
+        return;
+    };
     // If there is anything other than whitespace between `token` and `(`,
     // it's not a direct call (e.g. trailing `::<...>`) — be conservative
     // and skip.
@@ -438,11 +456,7 @@ fn count_top_level_args(group: &str) -> usize {
             '<' => depth_angle += 1,
             '>' => depth_angle -= 1,
             ',' => {
-                if depth_paren == 0
-                    && depth_brace == 0
-                    && depth_bracket == 0
-                    && depth_angle == 0
-                {
+                if depth_paren == 0 && depth_brace == 0 && depth_bracket == 0 && depth_angle == 0 {
                     count += 1;
                 }
             }
@@ -471,28 +485,38 @@ mod tests {
     fn flags_did_with_dot_in_method() {
         // ROUND4-ALLOW: scanner self-test asserts the rule fires on a legacy `.`-method DID.
         let f = scan(r#"let did = "did:web.alpha:foo";"#);
-        assert!(f.iter().any(|r| r.rule == Round4Rule::LegacyDidMethodSegment));
+        assert!(
+            f.iter()
+                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
+        );
     }
 
     #[test]
     fn flags_did_with_underscore_in_method() {
         // ROUND4-ALLOW: scanner self-test asserts the rule fires on a legacy `_`-method DID.
         let f = scan(r#"let did = "did:my_method:foo";"#);
-        assert!(f.iter().any(|r| r.rule == Round4Rule::LegacyDidMethodSegment));
+        assert!(
+            f.iter()
+                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
+        );
     }
 
     #[test]
     fn flags_did_with_dash_in_method() {
         // ROUND4-ALLOW: scanner self-test asserts the rule fires on a legacy `-`-method DID.
         let f = scan(r#"let did = "did:web-x:foo";"#);
-        assert!(f.iter().any(|r| r.rule == Round4Rule::LegacyDidMethodSegment));
+        assert!(
+            f.iter()
+                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
+        );
     }
 
     #[test]
     fn does_not_flag_legal_did_web() {
         let f = scan(r#"let did = "did:web:alice.example";"#);
         assert!(
-            !f.iter().any(|r| r.rule == Round4Rule::LegacyDidMethodSegment),
+            !f.iter()
+                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment),
             "legal did:web should not trip the linter: {f:?}"
         );
     }
@@ -500,7 +524,10 @@ mod tests {
     #[test]
     fn does_not_flag_did_webvh() {
         let f = scan(r#"let did = "did:webvh:alice.example";"#);
-        assert!(!f.iter().any(|r| r.rule == Round4Rule::LegacyDidMethodSegment));
+        assert!(
+            !f.iter()
+                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
+        );
     }
 
     #[test]
@@ -515,9 +542,7 @@ mod tests {
 
     #[test]
     fn does_not_flag_events_subscribe_with_typed_frame() {
-        let f = scan(
-            "fn handle_cx_events_subscribe(payload: EventsSubscribeFrame) {}",
-        );
+        let f = scan("fn handle_cx_events_subscribe(payload: EventsSubscribeFrame) {}");
         assert!(
             !f.iter()
                 .any(|r| r.rule == Round4Rule::EventsSubscribeStringPayload)
@@ -527,9 +552,7 @@ mod tests {
     #[test]
     fn flags_cross_signing_publish_payload_without_expected_previous() {
         // ROUND4-ALLOW: scanner self-test asserts the rule fires on a pre-round-4 CAS payload.
-        let f = scan(
-            r#"submit("cx.cross_signing.publish", payload: { principal_id: pid })"#,
-        );
+        let f = scan(r#"submit("cx.cross_signing.publish", payload: { principal_id: pid })"#);
         assert!(
             f.iter()
                 .any(|r| r.rule == Round4Rule::CrossSigningPublishMissingExpectedPreviousGeneration)

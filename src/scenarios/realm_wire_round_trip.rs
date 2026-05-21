@@ -10,7 +10,7 @@
 //! each renamed kind, canonical-encodes them via the SDK encoder, and
 //! asserts:
 //!
-//! 1. Round-trip parses back into the same `(kind, space_id, payload)`
+//! 1. Round-trip parses back into the same `(kind, realm_id, payload)`
 //!    triple (the wire bytes any other project — soland / yougen /
 //!    federation peer — would receive).
 //! 2. [`contrix_core::events::classify_event_kind`] recognises the new
@@ -30,20 +30,19 @@ use contrix_core::events::EventClass;
 use contrix_core::events::{
     REALM_CREATE, REALM_DELIVERY_BINDING_POLICY, REALM_LINK, SPACE_CREATE, classify_event_kind,
 };
-use contrix_core::{Did, Event, Hlc, SpaceId};
+use contrix_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
 /// Build a minimal SDK-typed [`Event`] for a Realm/Space reversal wire
-/// vector. `space_id` is the typed `cx:space:...` identifier (post
-/// reversal: the container identifier — security boundary IDs reuse
-/// the same `cx:space:` prefix today; the rename only affects event
-/// kinds and cell families).
-fn build_event(kind: &str, space_id: &SpaceId, payload: Value) -> Result<Event> {
+/// vector. `realm_id` is the typed `cx:realm:...` security-boundary
+/// identifier; `cx.space.*` event kinds now describe containers inside
+/// that Realm.
+fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {
     let actor_id = Did::new("did:web:alice.example".to_owned())
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
     let hlc = Hlc::new("01970e589d21-00000001-a13f9c2e".to_owned())
         .map_err(|err| anyhow!("invalid hlc: {err}"))?;
-    Event::new(kind.to_owned(), space_id.clone(), actor_id, 1, hlc, payload)
+    Event::new(kind.to_owned(), realm_id.clone(), actor_id, 1, hlc, payload)
         .map_err(|err| anyhow!("failed to build event: {err}"))
 }
 
@@ -88,7 +87,7 @@ fn positive_vectors() -> Vec<WireVector> {
             kind: REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
-                "target_realm_id": "cx:space:01904100-0000-7000-8000-668e2181b41d",
+                "target_realm_id": "cx:realm:01904100-0000-7000-8000-668e2181b41d",
             }),
             expected_class: EventClass::Realm,
         },
@@ -121,21 +120,25 @@ fn negative_vectors() -> Vec<&'static str> {
     ]
 }
 
-fn fixture_space_id() -> Result<SpaceId> {
-    SpaceId::new("cx:space:01904100-0000-7000-8000-000000000a01".to_owned())
-        .map_err(|err| anyhow!("invalid space id: {err}"))
+fn fixture_realm_id() -> Result<RealmId> {
+    RealmId::new("cx:realm:01904100-0000-7000-8000-000000000a01".to_owned())
+        .map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 
 /// Round-trip a positive vector through the SDK canonical encoder and
 /// JSON decoder. Returns the digest so the caller can pin a stable
 /// `sha256:` value if they want to lock the on-wire bytes.
-fn round_trip_positive(vector: &WireVector, space_id: &SpaceId) -> Result<String> {
-    let event = build_event(vector.kind, space_id, vector.payload.clone())?;
+fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String> {
+    let event = build_event(vector.kind, realm_id, vector.payload.clone())?;
     let envelope_value = serde_json::to_value(&event)?;
     let bytes = canonical_json_bytes(&envelope_value)
         .map_err(|err| anyhow!("canonical encode failed for {}: {err}", vector.label))?;
-    let parsed: Value = serde_json::from_slice(&bytes)
-        .map_err(|err| anyhow!("canonical bytes did not parse as JSON for {}: {err}", vector.label))?;
+    let parsed: Value = serde_json::from_slice(&bytes).map_err(|err| {
+        anyhow!(
+            "canonical bytes did not parse as JSON for {}: {err}",
+            vector.label
+        )
+    })?;
     let parsed_kind = parsed
         .get("kind")
         .and_then(Value::as_str)
@@ -147,14 +150,22 @@ fn round_trip_positive(vector: &WireVector, space_id: &SpaceId) -> Result<String
             vector.kind
         ));
     }
+    let parsed_realm_id = parsed
+        .get("realm_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("round-tripped {}: missing realm_id field", vector.label))?;
+    if parsed_realm_id != realm_id.as_str() {
+        return Err(anyhow!(
+            "round-tripped {}: realm_id drifted: got {parsed_realm_id:?}, want {:?}",
+            vector.label,
+            realm_id.as_str()
+        ));
+    }
     let parsed_payload = parsed
         .get("payload")
         .ok_or_else(|| anyhow!("round-tripped {}: missing payload field", vector.label))?;
     if parsed_payload != &vector.payload {
-        return Err(anyhow!(
-            "round-tripped {}: payload drifted",
-            vector.label,
-        ));
+        return Err(anyhow!("round-tripped {}: payload drifted", vector.label,));
     }
     let class = classify_event_kind(parsed_kind);
     if class != vector.expected_class {
@@ -176,9 +187,9 @@ fn round_trip_positive(vector: &WireVector, space_id: &SpaceId) -> Result<String
 /// container kinds), so any drift here would show up first as
 /// cross-project ingestion failures.
 pub fn run_positive_round_trip() -> Result<()> {
-    let space_id = fixture_space_id()?;
+    let realm_id = fixture_realm_id()?;
     for vector in positive_vectors() {
-        round_trip_positive(&vector, &space_id)?;
+        round_trip_positive(&vector, &realm_id)?;
     }
     Ok(())
 }

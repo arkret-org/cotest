@@ -47,9 +47,7 @@ use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::scenarios::_helpers::external_binary::{
-    SOLAND_SPEC, try_spawn_with_extra_env,
-};
+use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, try_spawn_with_extra_env};
 
 /// Soland production target MUST refuse the yougen dev-proof placeholder.
 pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
@@ -57,9 +55,10 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     // env entry takes precedence over `SOLAND_SPEC.extra_env` (which
     // hardcodes `=1` for the rest of the suite), so the same binary
     // boots in production posture for this scenario only.
-    let Some(proc) = try_spawn_with_extra_env(&SOLAND_SPEC, &[("SOLAND_DEVELOPMENT_MODE", "false")])
-        .await
-        .context("spawn soland binary for production-mode placeholder-proof rejection test")?
+    let Some(proc) =
+        try_spawn_with_extra_env(&SOLAND_SPEC, &[("SOLAND_DEVELOPMENT_MODE", "false")])
+            .await
+            .context("spawn soland binary for production-mode placeholder-proof rejection test")?
     else {
         // Silent skip: no SOLAND_BIN and no sibling-checkout binary —
         // matches the convention used by every other scenario in

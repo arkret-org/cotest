@@ -55,7 +55,8 @@ fn parse_args() -> Result<CliArgs, String> {
         match arg.as_str() {
             "--root" => {
                 root = Some(PathBuf::from(
-                    iter.next().ok_or_else(|| "--root requires a value".to_string())?,
+                    iter.next()
+                        .ok_or_else(|| "--root requires a value".to_string())?,
                 ));
             }
             "--format" => {
@@ -70,10 +71,10 @@ fn parse_args() -> Result<CliArgs, String> {
             }
             "--fail-on-violation" => fail_on_violation = true,
             "--registry-dir" => {
-                registry_dir = Some(PathBuf::from(
-                    iter.next()
-                        .ok_or_else(|| "--registry-dir requires a value".to_string())?,
-                ));
+                registry_dir =
+                    Some(PathBuf::from(iter.next().ok_or_else(|| {
+                        "--registry-dir requires a value".to_string()
+                    })?));
             }
             "-h" | "--help" => {
                 print_usage();

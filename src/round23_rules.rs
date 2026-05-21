@@ -137,12 +137,7 @@ fn is_allowed_path(path: &Path) -> bool {
 
 // ── T23: object-only kind as Event.kind ─────────────────────────────────────
 
-fn scan_object_only_kind(
-    path: &Path,
-    line_idx: usize,
-    line: &str,
-    out: &mut Vec<Round23Finding>,
-) {
+fn scan_object_only_kind(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round23Finding>) {
     for kind in OBJECT_ONLY_KINDS {
         // Heuristic: a literal `cx.event_batch_receipt` inside a context
         // that *looks like* an Event.kind assignment. We flag any time
@@ -173,12 +168,7 @@ fn scan_object_only_kind(
 
 // ── T02: ephemeral kind as durable Event ────────────────────────────────────
 
-fn scan_ephemeral_kind(
-    path: &Path,
-    line_idx: usize,
-    line: &str,
-    out: &mut Vec<Round23Finding>,
-) {
+fn scan_ephemeral_kind(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round23Finding>) {
     for kind in EPHEMERAL_ONLY_KINDS {
         if let Some(col) = find_literal_token(line, kind) {
             let lower = line.to_ascii_lowercase();
@@ -209,12 +199,7 @@ fn scan_ephemeral_kind(
 
 // ── T09: relaxed_window_max_ms ceiling ──────────────────────────────────────
 
-fn scan_relaxed_window(
-    path: &Path,
-    line_idx: usize,
-    line: &str,
-    out: &mut Vec<Round23Finding>,
-) {
+fn scan_relaxed_window(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round23Finding>) {
     // Match the field-name token then look for a numeric literal in the
     // remainder of the line. We accept `=`, `:`, and `=>` separators so we
     // cover both Rust struct init and JSON/YAML shapes.
@@ -266,12 +251,7 @@ fn scan_relaxed_window(
 
 // ── T03: cursor handle entropy floor ────────────────────────────────────────
 
-fn scan_cursor_handle(
-    path: &Path,
-    line_idx: usize,
-    line: &str,
-    out: &mut Vec<Round23Finding>,
-) {
+fn scan_cursor_handle(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round23Finding>) {
     // Heuristic: look for `"h":"..."` or `h = "..."` shaped literals. The
     // handle should be ≥22 chars of base64url-ish alphabet. We only flag
     // when the value looks deliberately structured as a handle (we don't
@@ -469,7 +449,10 @@ mod tests {
             "let json = r##\"{\"discussion_space_ref\":\"cx:realm:...\"}\"##;",
             &mut out,
         );
-        assert!(out.iter().any(|f| f.rule == Round23Rule::ForbiddenWireField));
+        assert!(
+            out.iter()
+                .any(|f| f.rule == Round23Rule::ForbiddenWireField)
+        );
     }
 
     #[test]

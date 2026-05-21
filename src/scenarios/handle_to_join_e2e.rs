@@ -44,18 +44,15 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use contrix_core::{
-    CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
-    DeliveryMode, Did, HandleHintBindingSource, HandleUri, MemberDeliveryBindingCandidate,
-    RecipientServiceType,
+    CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
+    Did, HandleHintBindingSource, HandleUri, MemberDeliveryBindingCandidate, RecipientServiceType,
 };
 use serde_json::{Value, json};
 
 use crate::scenarios::_helpers::external_binary::{
     COAUTH_SPEC, SOLAND_SPEC, TEABAY_SPEC, skip_reason,
 };
-use crate::scenarios::_helpers::four_service_bootstrap::{
-    FourServiceConfig, try_bootstrap,
-};
+use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 // ── Test fixture knobs ─────────────────────────────────────────────────────
 
@@ -97,14 +94,10 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     //    `CandidateError` variants T3.1 exposes; in production these are
     //    the same gates teabay (T3.4) and soland (T3.3) re-run on the
     //    wire.
-    negative_case_verified_false()
-        .context("T3.5 negative — verified=false on handle row")?;
-    negative_case_subject_mismatch()
-        .context("T3.5 negative — claim subject != caller did")?;
-    negative_case_expired()
-        .context("T3.5 negative — candidate expired")?;
-    negative_case_audience_mismatch()
-        .context("T3.5 negative — audience != target space")?;
+    negative_case_verified_false().context("T3.5 negative — verified=false on handle row")?;
+    negative_case_subject_mismatch().context("T3.5 negative — claim subject != caller did")?;
+    negative_case_expired().context("T3.5 negative — candidate expired")?;
+    negative_case_audience_mismatch().context("T3.5 negative — audience != target space")?;
     negative_case_service_not_allowed()
         .context("T3.5 negative — recipient_service_did not in Space allow-list")?;
     negative_case_acct_canonical_rejected()
@@ -179,7 +172,10 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
             "T3.5 happy path: outer.recipient_service_did != hint.recipient_service_did. \
              outer={}, inner={}",
             candidate.recipient_service_did.as_str(),
-            candidate.delivery_binding_hint.recipient_service_did.as_str()
+            candidate
+                .delivery_binding_hint
+                .recipient_service_did
+                .as_str()
         );
     }
 
@@ -233,14 +229,12 @@ fn negative_case_verified_false() -> Result<()> {
 fn negative_case_subject_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
     let mallory = Did::new("did:web:mallory.example".to_owned())?;
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned())
-        .with_expected_subject(mallory);
+    let ctx =
+        CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()).with_expected_subject(mallory);
 
     match candidate.validate(&ctx) {
         Err(CandidateError::SubjectMismatch { .. }) => Ok(()),
-        Err(other) => bail!(
-            "T3.5 subject_mismatch: expected `SubjectMismatch`, got {other:?}"
-        ),
+        Err(other) => bail!("T3.5 subject_mismatch: expected `SubjectMismatch`, got {other:?}"),
         Ok(()) => bail!(
             "T3.5 subject_mismatch: a candidate with subject_did != \
              expected_subject was accepted — handle reassignment guard \
@@ -272,15 +266,12 @@ fn negative_case_expired() -> Result<()> {
 /// than the one the caller is joining. Required by spec §9 + T3.4.
 fn negative_case_audience_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
-    let ctx = CandidateValidationContext::new(
-        "cx:realm:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned(),
-    );
+    let ctx =
+        CandidateValidationContext::new("cx:realm:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned());
 
     match candidate.validate(&ctx) {
         Err(CandidateError::AudienceMismatch { .. }) => Ok(()),
-        Err(other) => bail!(
-            "T3.5 audience_mismatch: expected `AudienceMismatch`, got {other:?}"
-        ),
+        Err(other) => bail!("T3.5 audience_mismatch: expected `AudienceMismatch`, got {other:?}"),
         Ok(()) => bail!(
             "T3.5 audience_mismatch: a candidate bound to a different Space \
              audience was accepted — directory caches MUST NOT replay \
@@ -330,8 +321,8 @@ fn negative_case_service_not_allowed() -> Result<()> {
 /// `handle_uri` field carries the forbidden `acct:` string.
 fn negative_case_acct_canonical_rejected() -> Result<()> {
     let candidate = sample_candidate()?;
-    let mut value = serde_json::to_value(&candidate)
-        .context("serialise sample candidate to JSON")?;
+    let mut value =
+        serde_json::to_value(&candidate).context("serialise sample candidate to JSON")?;
     value["handle_uri"] = json!("acct:alice@acme.example");
 
     let parsed: std::result::Result<MemberDeliveryBindingCandidate, _> =
@@ -367,8 +358,8 @@ fn negative_case_acct_canonical_rejected() -> Result<()> {
 /// string.
 fn negative_case_did_document_fallback_rejected() -> Result<()> {
     let candidate = sample_candidate()?;
-    let mut value = serde_json::to_value(&candidate)
-        .context("serialise sample candidate to JSON")?;
+    let mut value =
+        serde_json::to_value(&candidate).context("serialise sample candidate to JSON")?;
     value["delivery_binding_hint"]["binding_source"] = json!("did_document_default");
 
     let parsed: std::result::Result<MemberDeliveryBindingCandidate, _> =

@@ -3,7 +3,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, expect_api_error, expect_audit_action, expect_json, expect_status,
+    ContrixServer, expect_account_subscribe_delta, expect_api_error, expect_audit_action,
+    expect_json, expect_status,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -184,20 +185,17 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/api/v1/sync"))
-            .json(&json!({"set_presence": "online"})),
+            .get(server.url("/api/v1/account/subscribe?catchup=true&set_presence=online")),
         StatusCode::UNAUTHORIZED,
     )
     .await?;
 
-    let presence_sync = expect_json(
-        alice
-            .post("/api/v1/sync")
-            .json(&json!({"set_presence": "unavailable"})),
+    let presence_sync = expect_account_subscribe_delta(
+        alice.get("/api/v1/account/subscribe?catchup=true&set_presence=unavailable"),
         StatusCode::OK,
     )
     .await?;
-    assert!(presence_sync["next_batch"].is_string());
+    assert!(presence_sync["cursor"].is_string());
 
     let profile = expect_json(
         server

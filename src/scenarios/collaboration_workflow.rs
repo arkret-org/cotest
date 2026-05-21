@@ -5,7 +5,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, dev_login, expect_json, expect_status, register_account, send_message,
+    ContrixServer, dev_login, expect_account_subscribe_delta, expect_json, expect_status,
+    register_account, send_message,
 };
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
@@ -133,12 +134,11 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     .await?;
     assert!(sent["event_id"].as_str().unwrap().starts_with("cx:event:"));
 
-    let bob_sync = expect_json(
+    let bob_sync = expect_account_subscribe_delta(
         server
             .http()
-            .post(server.url("/api/v1/sync"))
-            .bearer_auth(&bob)
-            .json(&json!({})),
+            .get(server.url("/api/v1/account/subscribe?catchup=true"))
+            .bearer_auth(&bob),
         StatusCode::OK,
     )
     .await?;
@@ -150,7 +150,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let snapshot = expect_json(
         server
             .http()
-            .get(server.url(&format!("/api/v1/sync/snapshot-head?space_id={space_id}"))),
+            .get(server.url(&format!("/api/v1/snapshot/head?realm_id={space_id}"))),
         StatusCode::OK,
     )
     .await?;

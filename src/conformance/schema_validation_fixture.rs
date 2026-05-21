@@ -152,9 +152,8 @@ impl SchemaEnv {
                 continue;
             }
             let raw = fs::read_to_string(&path)?;
-            let value: Value = serde_json::from_str(&raw).map_err(|err| {
-                anyhow!("schema file {} invalid JSON: {err}", path.display())
-            })?;
+            let value: Value = serde_json::from_str(&raw)
+                .map_err(|err| anyhow!("schema file {} invalid JSON: {err}", path.display()))?;
             let id = value
                 .get("$id")
                 .and_then(Value::as_str)
@@ -222,10 +221,7 @@ impl SchemaEnv {
                 .schemas_by_file
                 .get(&key)
                 .ok_or_else(|| anyhow!("schema_ref points at unknown file `{schema_ref}`"))?;
-            let base_uri = parent
-                .get("$id")
-                .and_then(Value::as_str)
-                .map(str::to_owned);
+            let base_uri = parent.get("$id").and_then(Value::as_str).map(str::to_owned);
             let mut schema = if let Some(fragment) = fragment {
                 let pointer = format!("/{}", fragment.trim_start_matches('/'));
                 let value = parent.pointer(&pointer).ok_or_else(|| {
@@ -239,9 +235,8 @@ impl SchemaEnv {
             // Seed `$schema` and inherit `$defs` so a fragment compiles
             // standalone but can still resolve sibling defs.
             if let Value::Object(map) = &mut schema {
-                map.entry("$schema").or_insert(json!(
-                    "https://json-schema.org/draft/2020-12/schema"
-                ));
+                map.entry("$schema")
+                    .or_insert(json!("https://json-schema.org/draft/2020-12/schema"));
                 if let Some(defs) = parent.get("$defs") {
                     map.entry("$defs").or_insert_with(|| defs.clone());
                 }
@@ -252,16 +247,15 @@ impl SchemaEnv {
             // We only support OpenAPI refs that target
             // `#/components/schemas/<Name>` — the only form this fixture
             // uses today. If a new form lands, surface a clear error.
-            let openapi = self
-                .openapi
-                .as_ref()
-                .ok_or_else(|| anyhow!("openapi document not loaded; cannot resolve `{schema_ref}`"))?;
+            let openapi = self.openapi.as_ref().ok_or_else(|| {
+                anyhow!("openapi document not loaded; cannot resolve `{schema_ref}`")
+            })?;
             let (file_path, fragment) = split_fragment(rest);
             if file_path != "contrix-service-api.openapi.yaml" {
                 bail!("schema_ref points at unknown openapi file: {file_path}");
             }
-            let fragment = fragment
-                .ok_or_else(|| anyhow!("openapi schema_ref missing component fragment"))?;
+            let fragment =
+                fragment.ok_or_else(|| anyhow!("openapi schema_ref missing component fragment"))?;
             let pointer = format!("/{}", fragment.trim_start_matches('/'));
             let component = openapi
                 .pointer(&pointer)
@@ -274,9 +268,8 @@ impl SchemaEnv {
             ));
             let mut schema = inlined;
             if let Value::Object(map) = &mut schema {
-                map.entry("$schema").or_insert(json!(
-                    "https://json-schema.org/draft/2020-12/schema"
-                ));
+                map.entry("$schema")
+                    .or_insert(json!("https://json-schema.org/draft/2020-12/schema"));
             }
             return Ok((schema, base_uri));
         }
@@ -330,12 +323,11 @@ fn inline_openapi_refs_inner(
                         return Ok(value.clone());
                     }
                     let pointer = format!("/components/schemas/{component_name}");
-                    let resolved = openapi.pointer(&pointer).ok_or_else(|| {
-                        anyhow!("openapi $ref target missing: {reference}")
-                    })?;
+                    let resolved = openapi
+                        .pointer(&pointer)
+                        .ok_or_else(|| anyhow!("openapi $ref target missing: {reference}"))?;
                     seen.insert(component_name.to_string());
-                    let expanded =
-                        inline_openapi_refs_inner(resolved, openapi, seen, depth + 1)?;
+                    let expanded = inline_openapi_refs_inner(resolved, openapi, seen, depth + 1)?;
                     seen.remove(component_name);
                     return Ok(expanded);
                 }

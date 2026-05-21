@@ -1,9 +1,11 @@
 use anyhow::Result;
-use contrix_core::{Operation, OperationId, SpaceId};
+use contrix_core::{Operation, OperationId, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, dev_login, expect_api_error, expect_json};
+use crate::harness::{
+    ContrixServer, dev_login, expect_account_subscribe_delta, expect_api_error, expect_json,
+};
 
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     let server = ContrixServer::spawn("federation-invalid").await?;
@@ -83,7 +85,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let server = ContrixServer::spawn("federation-replay").await?;
     let operation = Operation::create(
         OperationId::new("cx:operation:federation-replay")?,
-        SpaceId::new("cx:realm:federation")?,
+        RealmId::new("cx:realm:federation")?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-replay",
@@ -163,7 +165,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let invalid_operation = Operation::create(
         OperationId::new("cx:operation:federation-invalid-envelope")?,
-        SpaceId::new("cx:realm:federation")?,
+        RealmId::new("cx:realm:federation")?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-invalid-envelope",
@@ -191,7 +193,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let redaction = Operation::create(
         OperationId::new("cx:operation:federation-redaction")?,
-        SpaceId::new("cx:realm:federation")?,
+        RealmId::new("cx:realm:federation")?,
         "cx.message.redact",
         json!({
             "event_id": "cx:event:federation-redaction",
@@ -232,10 +234,10 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<()> {
     let server = ContrixServer::spawn("federation-project").await?;
     let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
-    let space_id = "cx:realm:federation-project";
+    let realm_id = "cx:realm:federation-project";
     let operation = Operation::create(
         OperationId::new("cx:operation:federation-project-01")?,
-        SpaceId::new(space_id.to_owned())?,
+        RealmId::new(realm_id.to_owned())?,
         "cx.message.create",
         json!({
             "event_id": "cx:event:federation-project-01",
@@ -264,17 +266,16 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     .await?;
     assert_eq!(txn["accepted"][0], "cx:operation:federation-project-01");
 
-    let sync = expect_json(
+    let sync = expect_account_subscribe_delta(
         server
             .http()
-            .post(server.url("/api/v1/sync"))
-            .bearer_auth(&alice)
-            .json(&json!({})),
+            .get(server.url("/api/v1/account/subscribe?catchup=true"))
+            .bearer_auth(&alice),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        sync["spaces"][space_id]["timeline"]["events"][0]["content"]["body"],
+        sync["spaces"][realm_id]["timeline"]["events"][0]["content"]["body"],
         "searchable federated payload"
     );
 

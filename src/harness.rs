@@ -553,8 +553,43 @@ impl TestActorClient {
     }
 
     pub async fn sync(&self) -> Result<Value> {
-        expect_json(self.post("/api/v1/sync").json(&json!({})), StatusCode::OK).await
+        let response = expect_response(
+            self.get("/api/v1/account/subscribe?catchup=true")
+                .header("accept", "application/x-ndjson"),
+            StatusCode::OK,
+        )
+        .await?;
+        account_subscribe_delta_from_text(&response.text())
     }
+}
+
+pub async fn expect_account_subscribe_delta(
+    builder: reqwest::RequestBuilder,
+    status: StatusCode,
+) -> Result<Value> {
+    let response =
+        expect_response(builder.header("accept", "application/x-ndjson"), status).await?;
+    account_subscribe_delta_from_text(&response.text())
+}
+
+pub fn account_subscribe_delta_from_text(ndjson: &str) -> Result<Value> {
+    for line in ndjson
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        let frame: Value = serde_json::from_str(line)
+            .with_context(|| format!("invalid subscribe frame: {line}"))?;
+        if frame.get("kind").and_then(Value::as_str) == Some("delta") {
+            return frame
+                .get("payload")
+                .cloned()
+                .ok_or_else(|| anyhow!("account subscribe delta frame missing payload: {frame}"));
+        }
+    }
+    Err(anyhow!(
+        "account subscribe response did not include a delta frame"
+    ))
 }
 
 impl RecordedResponse {

@@ -16,6 +16,11 @@
 //!   (`unsupported(profile_id=...)`). The list is explicit so a profile is
 //!   never silently skipped from the rollup.
 //!
+//! - **Deprecated hard-reject profiles** — removed profile ids are validated
+//!   against the drift registry and must not reappear in implementation
+//!   profile catalogs. They are negative-test context only, not rollup
+//!   implementation entries.
+//!
 //! The resulting [`ProfileGateReport`] is consumed by
 //! `cotest/tests/conformance_fixtures.rs::profile_registry_gate_suite_...` and
 //! by the certification-report scenario so each new profile id appears in the
@@ -93,10 +98,6 @@ const NEW_VECTOR_PROFILES: &[&str] = &[
 /// event_kind through a live server, so they default to `unsupported` per
 /// spec's `default_unsupported_behavior` — never silently skipped.
 const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
-    "cx.profile.agent_workspace.v1",
-    "cx.profile.agent_workspace.lite.v1",
-    "cx.profile.agent_workspace.governed.v1",
-    "cx.profile.agent_workspace.strict.v1",
     "cx.profile.e2ee_relaxed.v1",
     "cx.profile.directory_service.v1",
     // Round C45 (2026-05-18 main; spec 5ed365c) — federation high-assurance
@@ -106,6 +107,30 @@ const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
     "cx.profile.federation.high_assurance.v1",
     "cx.profile.franking.sender_commitment.v1",
     "cx.profile.morph.schema_migration_transformations.v1",
+];
+
+/// Removed profile ids that must remain in the registry-drift negative-test
+/// context and must not be treated as current implementation profiles.
+const DEPRECATED_HARD_REJECT_PROFILES: &[&str] = &[
+    "cx.profile.agent_workspace.v1",
+    "cx.profile.agent_workspace.lite.v1",
+    "cx.profile.agent_workspace.governed.v1",
+    "cx.profile.agent_workspace.strict.v1",
+];
+
+/// Removed operation ids kept only as hard-reject drift sentinels.
+const REMOVED_AGENT_WORKSPACE_OPERATIONS: &[&str] = &[
+    "cx.agent_workspace.resolve_mirror_flow",
+    "cx.agent_workspace.list_pending_tasks",
+];
+
+/// Removed event kinds kept only as hard-reject drift sentinels.
+const REMOVED_AGENT_TASK_EVENT_KINDS: &[&str] = &[
+    "cx.agent_task.create",
+    "cx.agent_task.execution.transition",
+    "cx.agent_task.transparency.transition",
+    "cx.agent_task.source_authority.transition",
+    "cx.agent_task.cancel",
 ];
 
 /// Wired cotest suites. Each entry is `(suite_id, fixture_file)`. The fixture
@@ -244,6 +269,17 @@ pub fn build_profile_gate_report() -> Result<ProfileGateReport> {
             )),
         });
     }
+    validate_deprecated_profile_drift(&declared_impl_profiles)?;
+    validate_hard_reject_registry_entries(
+        "registry/removed-operation-ids.json",
+        "removed operation",
+        REMOVED_AGENT_WORKSPACE_OPERATIONS,
+    )?;
+    validate_hard_reject_registry_entries(
+        "registry/removed-event-kinds.json",
+        "removed event kind",
+        REMOVED_AGENT_TASK_EVENT_KINDS,
+    )?;
 
     let report = ProfileGateReport {
         schema: "cx.cotest.profile_gate_report.v1".to_owned(),
@@ -265,6 +301,9 @@ pub fn run_profile_registry_gate_suite() -> Result<()> {
             "entries": report.entries.len(),
             "vector_profiles": NEW_VECTOR_PROFILES.len(),
             "implementation_profiles": NEW_IMPLEMENTATION_PROFILES.len(),
+            "deprecated_hard_reject_profiles": DEPRECATED_HARD_REJECT_PROFILES.len(),
+            "removed_agent_workspace_operations": REMOVED_AGENT_WORKSPACE_OPERATIONS.len(),
+            "removed_agent_task_event_kinds": REMOVED_AGENT_TASK_EVENT_KINDS.len(),
         }),
         &json!({
             "schema": report.schema.clone(),
@@ -369,4 +408,68 @@ fn collect_declared_implementation_profiles(profiles: &Value) -> Result<BTreeSet
         }
     }
     Ok(declared)
+}
+
+fn validate_deprecated_profile_drift(declared_impl_profiles: &BTreeSet<String>) -> Result<()> {
+    validate_hard_reject_registry_entries(
+        "registry/deprecated-profile-ids.json",
+        "deprecated profile",
+        DEPRECATED_HARD_REJECT_PROFILES,
+    )?;
+
+    for profile_id in DEPRECATED_HARD_REJECT_PROFILES {
+        if declared_impl_profiles.contains(*profile_id) {
+            bail!(
+                "deprecated hard-reject profile {profile_id} still declared as an \
+                 implementation profile; keep it only in registry-drift negative context"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_hard_reject_registry_entries(
+    relative_path: &str,
+    entry_label: &str,
+    expected_ids: &[&str],
+) -> Result<()> {
+    let registry = load_artifact_json(relative_path)?;
+    let entries = registry
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{relative_path} missing entries[]"))?;
+
+    let mut hard_reject_ids = BTreeSet::new();
+    for entry in entries {
+        let id = required_str(entry, "id")?;
+        if !expected_ids.contains(&id) {
+            continue;
+        }
+
+        let rejection_level = required_str(entry, "rejection_level")?;
+        if rejection_level != "hard_reject" {
+            bail!("{entry_label} {id} must be hard_reject, got {rejection_level}");
+        }
+
+        let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
+        if !allowed_contexts
+            .iter()
+            .any(|context| *context == "negative_test")
+        {
+            bail!("{entry_label} {id} must allow cotest negative_test context");
+        }
+
+        hard_reject_ids.insert(id.to_owned());
+    }
+
+    for id in expected_ids {
+        if !hard_reject_ids.contains(*id) {
+            bail!(
+                "{entry_label} {id} missing as hard_reject negative-test entry from {relative_path}"
+            );
+        }
+    }
+
+    Ok(())
 }

@@ -9,8 +9,8 @@
 //! artifact, so a stale SDK build cannot silently mask a spec change.
 
 use cotest::profile_validator::{
-    ClaimKind, ProfileClaimFailure, ProfileRoleTable, ServiceRole,
-    assert_sdk_matches_artifact, validate_describe_profile_claims, validate_profile_claims,
+    ClaimKind, ProfileClaimFailure, ProfileRoleTable, ServiceRole, assert_sdk_matches_artifact,
+    validate_describe_profile_claims, validate_profile_claims,
 };
 use serde_json::json;
 
@@ -18,8 +18,14 @@ use serde_json::json;
 fn client_claiming_gateway_profile_is_rejected() {
     let table = ProfileRoleTable::load().expect("artifact loads");
     let claims = vec![
-        ("cx.profile.chat_mvp.v1".to_owned(), ClaimKind::CotestVerified),
-        ("cx.profile.push_gateway.v1".to_owned(), ClaimKind::SelfClaimed),
+        (
+            "cx.profile.chat_mvp.v1".to_owned(),
+            ClaimKind::CotestVerified,
+        ),
+        (
+            "cx.profile.push_gateway.v1".to_owned(),
+            ClaimKind::SelfClaimed,
+        ),
     ];
     let outcome = validate_profile_claims(&claims, ServiceRole::Client, &table);
     assert!(!outcome.is_compliant());
@@ -80,14 +86,28 @@ fn interop_profile_is_always_acceptable() {
 fn client_claiming_chat_and_kanban_mvp_passes() {
     let table = ProfileRoleTable::load().expect("artifact loads");
     let claims = vec![
-        ("cx.profile.chat_mvp.v1".to_owned(), ClaimKind::CotestVerified),
-        ("cx.profile.kanban_mvp.v1".to_owned(), ClaimKind::CotestVerified),
+        (
+            "cx.profile.chat_mvp.v1".to_owned(),
+            ClaimKind::CotestVerified,
+        ),
+        (
+            "cx.profile.kanban_mvp.v1".to_owned(),
+            ClaimKind::CotestVerified,
+        ),
     ];
     let outcome = validate_profile_claims(&claims, ServiceRole::Client, &table);
-    assert!(outcome.is_compliant(), "expected compliant outcome, got {:?}", outcome);
+    assert!(
+        outcome.is_compliant(),
+        "expected compliant outcome, got {:?}",
+        outcome
+    );
     assert_eq!(outcome.accepted.len(), 2);
     for (profile_id, role) in &outcome.accepted {
-        assert_eq!(*role, ServiceRole::Client, "{profile_id} should be client role");
+        assert_eq!(
+            *role,
+            ServiceRole::Client,
+            "{profile_id} should be client role"
+        );
     }
 }
 
@@ -100,12 +120,9 @@ fn describe_payload_validates_via_supported_profiles() {
             "cx.profile.mimi_interop.v1",
         ],
     });
-    let outcome = validate_describe_profile_claims(
-        &describe,
-        ServiceRole::Client,
-        ClaimKind::CotestVerified,
-    )
-    .expect("validator loads artifact");
+    let outcome =
+        validate_describe_profile_claims(&describe, ServiceRole::Client, ClaimKind::CotestVerified)
+            .expect("validator loads artifact");
     assert!(outcome.is_compliant());
     assert_eq!(outcome.accepted.len(), 3);
     assert!(outcome.has_interop_bridge());
@@ -119,12 +136,9 @@ fn describe_with_directory_role_rejects_principal_server_profile() {
             "cx.profile.principal_server.v1",
         ],
     });
-    let outcome = validate_describe_profile_claims(
-        &describe,
-        ServiceRole::Directory,
-        ClaimKind::SelfClaimed,
-    )
-    .expect("validator loads artifact");
+    let outcome =
+        validate_describe_profile_claims(&describe, ServiceRole::Directory, ClaimKind::SelfClaimed)
+            .expect("validator loads artifact");
     // directory_service is the canonical Directory role, principal_server is
     // Server — but our directory consumer allows Server-shaped profiles too
     // (identity registries straddle that boundary). This regression-locks
@@ -162,13 +176,18 @@ fn experimental_unknown_id_is_surfaced_separately() {
 
 #[test]
 fn sdk_role_table_matches_spec_artifact() {
-    assert_sdk_matches_artifact().expect("SDK profile_roles table must match the live spec artifact");
+    assert_sdk_matches_artifact()
+        .expect("SDK profile_roles table must match the live spec artifact");
 }
 
 #[test]
 fn role_table_has_every_documented_role() {
     let table = ProfileRoleTable::load().expect("artifact loads");
-    assert!(table.len() >= 80, "expected >=80 roles, got {}", table.len());
+    assert!(
+        table.len() >= 80,
+        "expected >=80 roles, got {}",
+        table.len()
+    );
     for role in [
         ServiceRole::Client,
         ServiceRole::Server,

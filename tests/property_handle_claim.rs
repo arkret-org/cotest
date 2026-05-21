@@ -33,8 +33,7 @@ fn arb_domain() -> impl Strategy<Value = String> {
 }
 
 fn arb_uri() -> impl Strategy<Value = String> {
-    (arb_localpart(), arb_domain())
-        .prop_map(|(l, d)| format!("contrix://{d}/users/{l}"))
+    (arb_localpart(), arb_domain()).prop_map(|(l, d)| format!("contrix://{d}/users/{l}"))
 }
 
 proptest! {

@@ -58,7 +58,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
             "cx.events.describe",
             "cx.events.submit",
             "cx.events.get",
-            "cx.events.batch_get",
+            "cx.events.resolve",
             "cx.events.query",
             "cx.events.frontier"
         ],

@@ -55,8 +55,12 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
         bail!(
             "ServiceDescribe required-field drift: \
              openapi_only={:?}, schema_only={:?}",
-            openapi_required.difference(&schema_required).collect::<Vec<_>>(),
-            schema_required.difference(&openapi_required).collect::<Vec<_>>(),
+            openapi_required
+                .difference(&schema_required)
+                .collect::<Vec<_>>(),
+            schema_required
+                .difference(&openapi_required)
+                .collect::<Vec<_>>(),
         );
     }
 
@@ -108,7 +112,9 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .get("paths")
         .ok_or_else(|| anyhow!("openapi paths section missing"))?;
     if paths.get("/contrix/v1/check").is_some() {
-        bail!("legacy /contrix/v1/check policy path must not be present; use /policy/check (round-4 lint parity)");
+        bail!(
+            "legacy /contrix/v1/check policy path must not be present; use /policy/check (round-4 lint parity)"
+        );
     }
     let post = paths
         .get("/policy/check")
@@ -176,7 +182,10 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
     let root = super::spec_artifacts_root();
     let fixtures_dir = root.join("fixtures");
     if !fixtures_dir.is_dir() {
-        bail!("artifacts/fixtures dir missing at {}", fixtures_dir.display());
+        bail!(
+            "artifacts/fixtures dir missing at {}",
+            fixtures_dir.display()
+        );
     }
     let mut declared: HashSet<String> = HashSet::new();
     let mut referenced: HashSet<String> = HashSet::new();

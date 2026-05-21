@@ -119,15 +119,15 @@ pub fn run_blind_payload_sanitizer_suite_counts() -> Result<(usize, usize)> {
             &actual,
         );
         let err = match outcome {
-            Ok(()) => bail!(
-                "negative vector `{}` was unexpectedly accepted",
-                case.name
-            ),
+            Ok(()) => bail!("negative vector `{}` was unexpectedly accepted", case.name),
             Err(err) => err,
         };
-        assert_negative_match(&case.name, &case.expected_reason_code, case
-            .expected_field_path
-            .as_deref(), &err)?;
+        assert_negative_match(
+            &case.name,
+            &case.expected_reason_code,
+            case.expected_field_path.as_deref(),
+            &err,
+        )?;
         negative_count += 1;
     }
 
@@ -185,6 +185,9 @@ mod tests {
         let (positive, negative) =
             run_blind_payload_sanitizer_suite_counts().expect("blind payload suite");
         assert!(positive >= 5, "expected ≥ 5 positive cases, got {positive}");
-        assert!(negative >= 20, "expected ≥ 20 negative cases, got {negative}");
+        assert!(
+            negative >= 20,
+            "expected ≥ 20 negative cases, got {negative}"
+        );
     }
 }

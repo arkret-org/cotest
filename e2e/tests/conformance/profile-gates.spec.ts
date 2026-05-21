@@ -13,11 +13,13 @@
 //   to emit canonical `unsupported_event_kind` / `unsupported_feature` codes, which
 //   soland's submit handler does not yet do — those phases stay pinned via test.fixme.
 //
-// coauth gap: `coauth/crates/backend/src/handlers/contrix.rs` ships
-//   `claimed_profiles=Vec::new()` + `verified_profiles=Vec::new()` per T6.3, and inline
-//   tests already pin the self_claimed invariant. The coauth-specific partition test
-//   here is fixme because coauth is optional in single-server topologies and the
-//   real verified-profile write path (G3.C3) is not wired yet.
+// coauth note: `coauth/crates/backend/src/handlers/contrix.rs` now self-claims
+//   `cx.profile.auth_server.v1` and intentionally does NOT claim
+//   `cx.profile.identity_registry.v1` / `cx.profile.principal_server.v1`. The
+//   coauth-specific partition test remains fixme because coauth is optional in
+//   single-server topologies and the verified-profile write path is deployment
+//   dependent, but the pinned expectation below reflects the current auth-server
+//   contract rather than the older empty-claims placeholder.
 //
 // The describe block is tagged @fully-implemented so that the 3 live tests (Phase A,
 // Phase D, Phase E) run under the default `joint-smoke` profile. The fixme tests
@@ -276,25 +278,27 @@ test.describe("conformance profile gates @fully-implemented", () => {
   );
 
   test.fixme(
-    "Phase A coauth — coauth claimed_profiles=[] AND verified_profiles=[] (no silent identity_registry claim)",
+    "Phase A coauth — coauth self-claims auth_server only, not identity_registry/principal_server",
     async ({ request }) => {
-      // spec: conformance-profiles.md §9 (identity_registry profile);
-      //       _codex_test_gaps.md G3.C3 (coauth MUST NOT silent-claim
-      //         cx.profile.identity_registry.v1; auth-server conformance profile is
-      //         a future story).
+      // spec: conformance-profiles.md §9a (auth_server profile);
+      //       auth_server additional_requirements:
+      //       - MUST NOT claim cx.profile.identity_registry.v1
+      //       - MUST NOT claim cx.profile.principal_server.v1
+      //       - verified_profiles is partitioned from self-claimed profiles.
       //
       // Steps:
       //   1) Skip if COTEST_COAUTH_BASE_URL not set (single-server topology).
       //   2) GET ${coauthBaseUrl()}/api/v1/server/describe.
-      //   3) Assert claimed_profiles is exactly [] (T6.3 invariant) and
-      //      verified_profiles is exactly [].
-      //   4) Assert claim_kind partition on any entries that may appear (none today).
+      //   3) Assert claimed_profiles contains cx.profile.auth_server.v1 with
+      //      claim_kind=self_claimed.
+      //   4) Assert claimed_profiles does NOT contain cx.profile.identity_registry.v1
+      //      or cx.profile.principal_server.v1.
+      //   5) Assert every verified_profiles entry, if any, carries
+      //      claim_kind=cotest_verified and does not overlap claimed_profiles.
       //
-      // Blocked on: the live coauth surface lands under joint-e2e but this scenario
-      //   wants to assert the partition AFTER G3.C3 introduces an auth_server-shaped
-      //   profile. Pin until coauth has a real auth-server profile to claim (so the
-      //   test can flip from "must be empty" to "must self-claim auth-server profile
-      //   X and nothing else").
+      // Blocked on: joint-e2e does not always boot coauth, and verified-profile
+      //   artifacts are environment-dependent. Keep fixme until the coauth service
+      //   is mandatory in this scenario's run profile.
       const baseUrl = coauthBaseUrl();
       test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
       void request;

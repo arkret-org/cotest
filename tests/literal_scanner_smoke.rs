@@ -98,7 +98,11 @@ pub fn legacy_kind() -> &'static str {
         !violations.is_empty(),
         "expected unallowed violation, got: {findings:#?}"
     );
-    assert!(violations.iter().any(|f| f.matched_token == "cx.flow.track.member"));
+    assert!(
+        violations
+            .iter()
+            .any(|f| f.matched_token == "cx.flow.track.member")
+    );
 
     let _ = fs::remove_dir_all(&base);
 }
@@ -126,8 +130,9 @@ pub fn legacy_policy() -> &'static str {
     let findings = scan_tree(&tree, &rules).expect("scan");
     let violations: Vec<_> = findings
         .iter()
-        .filter(|f| !f.allowed_context_match
-            && f.matched_token == "cx.space.delivery_binding_policy")
+        .filter(|f| {
+            !f.allowed_context_match && f.matched_token == "cx.space.delivery_binding_policy"
+        })
         .collect();
     assert!(
         !violations.is_empty(),

@@ -3,7 +3,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, expect_audit_action, expect_json, expect_response, expect_status,
+    ContrixServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
+    expect_response, expect_status,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
@@ -146,9 +147,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let waited_sync = expect_response(
         alice
-            .post("/api/v1/sync")
+            .get("/api/v1/account/subscribe?catchup=true")
             .header("x-contrix-wait-for", sent["sync_token"].as_str().unwrap())
-            .json(&json!({})),
+            .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )
     .await?;
@@ -159,7 +160,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             .and_then(|value| value.to_str().ok()),
         Some("true")
     );
-    let waited_sync = waited_sync.json()?;
+    let waited_sync = account_subscribe_delta_from_text(&waited_sync.text())?;
     assert_eq!(
         waited_sync["spaces"][&shared_space_id]["timeline"]["events"][0]["event_id"],
         sent["event_id"]
@@ -167,9 +168,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     expect_status(
         alice
-            .post("/api/v1/sync")
+            .get("/api/v1/account/subscribe?catchup=true")
             .header("x-contrix-wait-for", "not-a-sync-token")
-            .json(&json!({})),
+            .header("accept", "application/x-ndjson"),
         StatusCode::BAD_REQUEST,
     )
     .await?;

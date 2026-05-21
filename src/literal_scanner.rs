@@ -155,7 +155,11 @@ pub fn resolve_spec_dir() -> PathBuf {
 /// drift-detection JSON files.
 pub fn resolve_registry_dir() -> PathBuf {
     let spec_dir = resolve_spec_dir();
-    let nested = spec_dir.join("spec").join("v1").join("artifacts").join("registry");
+    let nested = spec_dir
+        .join("spec")
+        .join("v1")
+        .join("artifacts")
+        .join("registry");
     if nested.is_dir() {
         return nested;
     }
@@ -498,12 +502,8 @@ pub fn scan_file_contents(
                     if !emitted_sources.insert(r.artifact_source) {
                         continue;
                     }
-                    let (allowed, reason) = decide_allowlist(
-                        r,
-                        allowed_path,
-                        &magic,
-                        whole_file_allow,
-                    );
+                    let (allowed, reason) =
+                        decide_allowlist(r, allowed_path, &magic, whole_file_allow);
                     out.push(Finding {
                         path: path.to_path_buf(),
                         line: line_idx + 1,
@@ -539,9 +539,7 @@ fn decide_allowlist(
         // Honor only contexts the artifact entry actually permits. If the
         // entry's allowed_contexts is empty (older schema), fall back to
         // accepting any path-based allowlist.
-        if rule.allowed_contexts.is_empty()
-            || rule.allowed_contexts.iter().any(|c| c == reason)
-        {
+        if rule.allowed_contexts.is_empty() || rule.allowed_contexts.iter().any(|c| c == reason) {
             return (true, Some(format!("path_glob:{reason}")));
         }
     }

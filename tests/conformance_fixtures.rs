@@ -47,12 +47,13 @@ conformance_test!(
     /// conformance-profiles.json and emits a per-profile status entry for the
     /// 5 new vector profiles (discovery / event_kind_lattice_dispatch /
     /// event_kind_payload_coverage / operation_registry_coverage /
-    /// error_code_registry_coverage) plus the 6 new implementation profiles
-    /// (agent_workspace.{v1,lite,governed,strict} / e2ee_relaxed /
-    /// directory_service). Vector profiles whose required_cotest_suites
-    /// resolve in the suite registry report `certified`; missing suites
-    /// report `skipped(suite_not_implemented)`; implementation profiles
-    /// report `unsupported` per the spec's default_unsupported_behavior.
+    /// error_code_registry_coverage) plus the active implementation profile
+    /// manifest entries. Deprecated agent_workspace profiles stay in the
+    /// registry-drift hard_reject negative context only. Vector profiles whose
+    /// required_cotest_suites resolve in the suite registry report
+    /// `certified`; missing suites report `skipped(suite_not_implemented)`;
+    /// implementation profiles report `unsupported` per the spec's
+    /// default_unsupported_behavior.
     profile_registry_gate_suite_matches_artifact_contracts,
     "profile_registry_gate",
     cotest::conformance::run_profile_registry_gate_suite,
@@ -616,39 +617,6 @@ conformance_test!(
     snapshot_v2_tampered_merkle_suite_matches_reference_semantics,
     "snapshot_v2_tampered_merkle",
     cotest::conformance::run_snapshot_v2_tampered_merkle_suite,
-);
-
-// ── cx.profile.agent_workspace.v1 ──────────────────────────────────────
-// Spec: contrix-spec/spec/v1/zh/extensions/agent-workspace-profile.md
-// Fixtures: contrix-spec/spec/v1/artifacts/conformance/agent-workspace/
-// Tracked in contrix-spec/_todos.md AW-1..AW-4.
-
-conformance_test!(
-    /// agent_workspace: event-kinds / capability-actions / operations /
-    /// id-kinds / schema-registry all carry the new agent_workspace surface
-    /// with profile_gate=cx.profile.agent_workspace.v1.
-    agent_workspace_registry_surface,
-    "agent_workspace_registry_surface",
-    cotest::conformance::run_agent_workspace_registry_suite,
-);
-
-conformance_test!(
-    /// agent_workspace: 4 new schema files parse + appear in schema-registry
-    /// + capability-grant carries the attached_authority oneOf extension
-    /// (spec PR 1.2) with only anchored_event_ref + state_witness in v1.
-    agent_workspace_schema_surface,
-    "agent_workspace_schema_surface",
-    cotest::conformance::run_agent_workspace_schema_suite,
-);
-
-conformance_test!(
-    /// agent_workspace: 9 land FSM / reservation / recovery fixtures parse
-    /// + carry the documented invariants (head_eq:"__unset__" for singleton
-    /// path, head_in for §8 recovery, bottom_diagnostic for ⊥ collapse, no
-    /// unreachable Rev 7 transitions returning `accepted`).
-    agent_workspace_fsm_and_reservation_fixtures,
-    "agent_workspace_fsm_and_reservation_fixtures",
-    cotest::conformance::run_agent_workspace_fsm_fixture_suite,
 );
 
 conformance_test!(

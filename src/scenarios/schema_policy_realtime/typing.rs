@@ -42,11 +42,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     assert_eq!(typing["ok"], true);
     assert_eq!(typing["typing"], true);
 
-    let sync_with_typing = expect_json(
-        alice.post("/api/v1/sync").json(&json!({"profile": "chat"})),
-        StatusCode::OK,
-    )
-    .await?;
+    let sync_with_typing = alice.sync().await?;
     let ephemeral = sync_with_typing["spaces"][&space_id]["ephemeral"]
         .as_array()
         .unwrap();
@@ -72,11 +68,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     .await?;
     assert_eq!(stopped["typing"], false);
 
-    let sync_without_typing = expect_json(
-        alice.post("/api/v1/sync").json(&json!({"profile": "chat"})),
-        StatusCode::OK,
-    )
-    .await?;
+    let sync_without_typing = alice.sync().await?;
     assert!(
         sync_without_typing["spaces"][&space_id]["ephemeral"]
             .as_array()

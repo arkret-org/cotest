@@ -22,8 +22,7 @@
       "authz_policy",
       "moderation_reports",
       "device_and_keys",
-      "push",
-      "agent_workspace"
+      "push"
     ],
     "interop_bridge": [
       "applet",
@@ -46,7 +45,7 @@
         "client_can_call": [
           "cx.events.submit",
           "cx.events.frontier",
-          "cx.sync.account"
+          "cx.account.subscribe"
         ],
         "client_must_not_call": [
           "cx.blob.upload",
@@ -132,33 +131,6 @@
           "cx.mimi.report_abuse"
         ],
         "comment_c16": "moderation_reports is the post-C16 canonical surface name. Pre-C16 fixtures used `moderation`; this is now drift and would fail validator surface-name lookup."
-      }
-    },
-    {
-      "name": "extension_advertised_agent_workspace_requires_explicit_surface",
-      "advertised_profile": "cx.profile.contrix_v1.core",
-      "advertised_surfaces": [
-        "service_discovery",
-        "identity_registry",
-        "events_sync",
-        "agent_workspace"
-      ],
-      "expected": {
-        "core_present": true,
-        "extension_present": true,
-        "extension_surfaces": ["agent_workspace"],
-        "interop_bridge_present": false,
-        "client_can_call": [
-          "cx.agent_workspace.resolve_mirror_flow",
-          "cx.agent_workspace.list_pending_tasks"
-        ],
-        "client_must_not_call": [
-          "cx.blob.upload",
-          "cx.media.ice_config",
-          "cx.moderation.report",
-          "cx.applet.ping"
-        ],
-        "comment": "agent_workspace is an extension profile surface. Core v1 does not imply controller-only agent workspace operations; clients may call them only when the surface is explicitly advertised."
       }
     },
     {

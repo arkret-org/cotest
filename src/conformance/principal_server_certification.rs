@@ -12,11 +12,11 @@ const PRINCIPAL_SERVER_PROFILE: &str = "cx.profile.principal_server.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
     "cx.server.describe",
-    "cx.sync.describe",
-    "cx.sync.account",
+    "cx.account.describe",
+    "cx.account.subscribe",
     "cx.events.subscribe",
     "cx.events.query",
-    "cx.sync.get_snapshot_head",
+    "cx.snapshot.head",
     "cx.authz.check",
 ];
 
@@ -30,7 +30,7 @@ const REQUIRED_EVENT_KINDS: &[&str] = &[
 ];
 
 const REQUIRED_SCHEMAS: &[&str] = &[
-    "cx.schema.client_sync_response.v1",
+    "cx.schema.account_subscribe_frame.v1",
     "cx.schema.snapshot.v1",
     "cx.schema.capability.v1",
     "cx.schema.grant_constraint.v1",

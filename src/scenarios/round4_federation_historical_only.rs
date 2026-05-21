@@ -232,11 +232,9 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     });
     let body_x_bytes = canonical_json_bytes(&body_x)
         .map_err(|e| anyhow!("canonical_json_bytes(body_x) failed: {e}"))?;
-    let request_canonical_hash = Hash::new(format!(
-        "sha256:{:x}",
-        Sha256::digest(&body_x_bytes)
-    ))
-    .map_err(|e| anyhow!("typed request canonical hash failed: {e}"))?;
+    let request_canonical_hash =
+        Hash::new(format!("sha256:{:x}", Sha256::digest(&body_x_bytes)))
+            .map_err(|e| anyhow!("typed request canonical hash failed: {e}"))?;
 
     // Initial key state (before A revokes / rotates).
     let key_state_a = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -269,16 +267,10 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
 
     // Signing-transcript fragment assertion: SDK helper output is
     // byte-stable across calls.
-    let fragment_a = federation_trust_domain_transcript_fragment(
-        &source_td,
-        &dest_td,
-        &request_canonical_hash,
-    );
-    let fragment_b = federation_trust_domain_transcript_fragment(
-        &source_td,
-        &dest_td,
-        &request_canonical_hash,
-    );
+    let fragment_a =
+        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_hash);
+    let fragment_b =
+        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_hash);
     if fragment_a != fragment_b {
         return Err(anyhow!(
             "federation_trust_domain_transcript_fragment is not byte-stable across calls"
@@ -334,9 +326,11 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
 
     // 2) Replay with the SAME key state — strict cache hit; same body,
     //    no new side effects, no historical_only marker.
-    let same_state_replay = server_b.receive(&initial_key, dest_td.as_str(), || {
-        json!({"ok": true, "side_effect_should_not_fire": true})
-    })?;
+    let same_state_replay = server_b.receive(
+        &initial_key,
+        dest_td.as_str(),
+        || json!({"ok": true, "side_effect_should_not_fire": true}),
+    )?;
     if same_state_replay.get("historical_only").is_some() {
         return Err(anyhow!(
             "strict-key replay MUST NOT mark the response historical_only"
@@ -351,12 +345,12 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
 
     // 3) Server A revokes its service key (origin_key_state_hash flips
     //    from state-A to state-B) and replays the same idempotency key.
-    let historical_replay = server_b.receive(&post_rotation_key, dest_td.as_str(), || {
-        json!({"ok": true, "side_effect_should_not_fire": true})
-    })?;
-    if historical_replay
-        .get("reason_code")
-        .and_then(Value::as_str)
+    let historical_replay = server_b.receive(
+        &post_rotation_key,
+        dest_td.as_str(),
+        || json!({"ok": true, "side_effect_should_not_fire": true}),
+    )?;
+    if historical_replay.get("reason_code").and_then(Value::as_str)
         != Some(ERROR_CODE_HISTORICAL_ONLY)
     {
         return Err(anyhow!(
@@ -383,11 +377,16 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
 
     // 4) Cross-trust-domain replay (wrong destination) — MUST reject
     //    with cross_domain_replay_rejected.
-    let wrong_dest = server_b.receive(&post_rotation_key, "cx:trust_domain:wrong", || {
-        json!({"unreachable": true})
-    });
+    let wrong_dest = server_b.receive(
+        &post_rotation_key,
+        "cx:trust_domain:wrong",
+        || json!({"unreachable": true}),
+    );
     match wrong_dest {
-        Err(err) if err.to_string().contains(ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED) => {}
+        Err(err)
+            if err
+                .to_string()
+                .contains(ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED) => {}
         other => {
             return Err(anyhow!(
                 "wrong destination MUST be rejected with \
@@ -420,8 +419,7 @@ mod tests {
     fn federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values() {
         let source_td = TypedTrustDomainId::new("cx:trust_domain:a").unwrap();
         let dest_td = TypedTrustDomainId::new("cx:trust_domain:b").unwrap();
-        let request_canonical_hash =
-            Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
+        let request_canonical_hash = Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
         let fragment = federation_trust_domain_transcript_fragment(
             &source_td,
             &dest_td,

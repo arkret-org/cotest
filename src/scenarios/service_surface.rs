@@ -34,9 +34,8 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     crate::conformance::validate_server_profile_claims(&server_describe)?;
 
     for required in [
-        // C17 (spec 2026-05-08): cx.sync.client_sync → cx.sync.account
-        "cx.sync.account",
-        "cx.directory.search_spaces",
+        "cx.account.subscribe",
+        "cx.directory.search_realms",
         "cx.authz.check",
         "cx.push.register_device",
         "cx.policy.check",
@@ -68,7 +67,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     }
 
     let sync = expect_json(
-        server.http().get(server.url("/api/v1/sync/describe")),
+        server.http().get(server.url("/api/v1/account/describe")),
         StatusCode::OK,
     )
     .await?;
