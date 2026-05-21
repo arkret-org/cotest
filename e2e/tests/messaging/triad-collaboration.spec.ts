@@ -4,23 +4,45 @@
 //   - models/space-and-place.md §2-§3
 //   - models/flow-and-message.md §8, §8.4, §8.5
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
-  type JointUserPage,
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
+// Helper kept inline (per G2.T1 scope: do not extend helpers/users.ts).
+// Waits for yougen's SpaceAdmin Members section to mount the invite card.
+// gotoSpaceAdminSection already clicks the Members tab if hydration falls
+// back to Overview; this extra poll defeats the rare case where the tab
+// click lands before active_section signal settles. Bounded at 30s — the
+// SpaceAdminPanel mounts well under that on a healthy dev server; if it
+// hasn't rendered in 30s the panel itself is broken, not racing.
+async function waitForInviteCardReady(page: Page) {
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="invite-member"]') !== null,
+    null,
+    { timeout: 30_000 },
+  );
+  await expect(page.getByTestId("invite-member")).toBeVisible({ timeout: 30_000 });
+}
+
 test.describe("single-server triad collaboration", () => {
-  // soland gap: history_visibility=joined is stored on the space policy but
-  // not enforced server-side — a late joiner (carol) still receives the full
-  // timeline history via /sync, so Phase C's "carol must not see pre-join M1"
-  // check fails. Re-activate once soland honours history_visibility on read.
+  // soland gap (2026-05-21): history_visibility=joined is stored on the space
+  // policy (state.rs:316, projection.rs:1021-1028) but NOT enforced on the
+  // /sync read path — there is no `filter_history` / `visible_to_member`
+  // pass in soland/src/routing/events/*.rs. A late joiner (carol) still
+  // receives the full timeline history, so Phase C's "carol must not see
+  // pre-join M1/M2" assertion (lines 109-110) fails on the assertion, not
+  // on a yougen-side race. Re-activate this monolithic test once soland's
+  // event projection honours history_visibility=joined on read. Phase B
+  // (alice/bob mutual messaging + edit) and Phase D (redact tombstone) are
+  // already covered live via the E1 sub-cases below where they don't depend
+  // on the missing filter.
   test.fixme(
     "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone",
     async ({
@@ -145,9 +167,13 @@ test.describe("single-server triad collaboration", () => {
   );
 
   test.describe("E1 sub-cases", () => {
-    // yougen gap: same SpaceAdmin hydration race as the main triad test —
-    // inviteFromAdmin hits invite-member which doesn't render on fresh load.
-    test.fixme("E1.1 idempotent invite — re-issuing the same invite does not duplicate", async ({
+    // E1.1 — soland's POST /api/v1/spaces/{id}/invite is idempotent on
+    // (space_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
+    // space.rs:627-644): the second create returns the existing invite_id
+    // unchanged. yougen's invite-member button drives the same endpoint via
+    // submit_event_envelope, so re-issuing the same invite produces only one
+    // invite-row in space-admin.
+    test("E1.1 idempotent invite — re-issuing the same invite does not duplicate", async ({
       browser,
       request,
     }) => {
@@ -166,21 +192,38 @@ test.describe("single-server triad collaboration", () => {
           joinRule: "invite",
         });
 
-        await alicePage.inviteFromAdmin(spaceId, bob.did);
-        // Re-issue same invite — yougen / soland MUST treat as idempotent.
+        // First invite. inviteFromAdmin internally calls gotoSpaceAdminSection
+        // (Members) and asserts the invite-member card before clicking — that
+        // already defeats the SpaceAdminPanel hydration race that historically
+        // caused fresh-nav fails (see scenarios/spaces/admin-section-route.md).
+        // We add an explicit waitForInviteCardReady belt-and-suspenders only
+        // on the second issue, where the helper's gotoSpaceAdmin re-mounts.
         await alicePage.inviteFromAdmin(spaceId, bob.did);
 
-        // Only one invite row for bob should be visible.
+        // Re-issue same invite — soland MUST treat as idempotent (same
+        // invite_id returned for any pending (space, invitee) pair).
+        await waitForInviteCardReady(alicePage.page);
+        await alicePage.inviteFromAdmin(spaceId, bob.did);
+
+        // Only one invite row for bob should be visible. Allow up to 30s
+        // for the projection to settle — yougen polls /spaces/<id>/admin
+        // and the row count toggles to 1 once the second submit returns the
+        // pre-existing invite_id (no INSERT happens server-side).
         const rows = alicePage.page.getByTestId("invite-row").filter({ hasText: bob.did });
-        await expect(rows).toHaveCount(1);
+        await expect(rows).toHaveCount(1, { timeout: 30_000 });
       } finally {
         await alicePage.close();
       }
     });
 
-    // yougen gap: inviteFromAdmin hits invite-member which doesn't render
-    // on fresh /admin/members navigation (same race as the main triad test).
-    test.fixme("E1.2 history_visibility=shared exposes pre-join messages to late joiner", async ({
+    // E1.2 — pre-join message is sent BEFORE carol is invited. With
+    // history_visibility=shared (spec §3.4), late joiners must see the
+    // pre-join timeline. soland's default sync path currently exposes the
+    // full timeline regardless of visibility (see main test's soland gap
+    // comment), so this positive assertion passes today; once soland adds
+    // history_visibility filtering, this test will still be the canonical
+    // "shared visibility lets carol read history" coverage.
+    test("E1.2 history_visibility=shared exposes pre-join messages to late joiner", async ({
       browser,
       request,
     }, testInfo) => {
@@ -206,10 +249,16 @@ test.describe("single-server triad collaboration", () => {
         await alicePage.sendTimelineMessage(spaceId, preMessage);
         await stepShot(alicePage.page, testInfo, "shared-pre-join-msg");
 
+        // inviteFromAdmin handles the SpaceAdmin Members hydration race
+        // (gotoSpaceAdminSection clicks the tab + asserts invite-member
+        // visible within 30s). acceptInvite is API-first (GET /authz/invites
+        // + POST /spaces/<id>/invite/accept) so carol doesn't need the
+        // invite UI to surface — see helpers/users.ts:187-225.
         await alicePage.inviteFromAdmin(spaceId, carol.did);
         await carolPage.acceptInvite(spaceId);
         await carolPage.gotoTimelineSpace(spaceId);
-        // Spec §3.4: shared → new members see pre-join history meant to be shared.
+        // Spec §3.4: shared → new members see pre-join history meant to be
+        // shared. 30s timeout covers /sync hydration on carol's fresh page.
         await expect(carolPage.timelineEvent(preMessage)).toBeVisible({ timeout: 30_000 });
         await stepShot(carolPage.page, testInfo, "shared-carol-sees-pre-join");
       } finally {

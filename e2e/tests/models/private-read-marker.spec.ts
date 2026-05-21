@@ -55,6 +55,53 @@ test.describe("private read marker", () => {
     expect(afterBody.unread_count).toBe(0);
   });
 
+  test("notification read marker is actor-private: alice mark-all-read does not mutate bob state", async ({
+    request,
+  }) => {
+    // Live G2.T7 no-leak smoke on the implemented marker surface. The
+    // canonical cx.read.marker write path and cross-device to-device fanout
+    // remain fixme below.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s11-prm-alice-${stamp}`);
+    const bob = uniqueUser(`s11-prm-bob-${stamp}`);
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const aliceAuth = { authorization: `Bearer ${aliceToken}` };
+    const bobAuth = { authorization: `Bearer ${bobToken}` };
+
+    const bobBefore = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+      headers: bobAuth,
+    });
+    expect(bobBefore.status()).toBe(200);
+    expect((await bobBefore.json()).last_read_at == null).toBe(true);
+
+    const markAlice = await request.post(
+      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      { headers: aliceAuth, data: {} },
+    );
+    expect(markAlice.status()).toBe(200);
+    const markAliceBody = await markAlice.json();
+    expect(markAliceBody.actor).toBe(alice.did);
+
+    const aliceAfter = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+      headers: aliceAuth,
+    });
+    expect(aliceAfter.status()).toBe(200);
+    const aliceAfterBody = await aliceAfter.json();
+    expect(aliceAfterBody.last_read_at).toBe(markAliceBody.marked_at);
+
+    const bobAfter = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+      headers: bobAuth,
+    });
+    expect(bobAfter.status()).toBe(200);
+    const bobAfterBody = await bobAfter.json();
+    expect(bobAfterBody.last_read_at == null).toBe(true);
+    expect(bobAfterBody.unread_count).toBe(0);
+  });
+
   // Main flow: full multi-device read-marker lifecycle (Phases A-G in
   // scenarios/models/private-read-marker.md).
   test.fixme(

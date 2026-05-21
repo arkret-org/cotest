@@ -57,6 +57,84 @@ async function expectConsentCell(
 }
 
 test.describe("consent grant", () => {
+  test("consent settings surface exposes the local grant form controls", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    // Live G2.T5 UI smoke: the settings page exists and its local placeholder
+    // grant form is mounted. The canonical soland consent reducer remains
+    // covered by the lifecycle fixme cases below.
+    const alice = uniqueUser("g2t5-consent-ui-alice");
+    const bob = uniqueUser("g2t5-consent-ui-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    try {
+      await gotoConsentSettings(alicePage);
+      await expect(alicePage.page.getByTestId("consent-grant-empty")).toBeVisible({
+        timeout: 30_000,
+      });
+
+      await alicePage.page.getByTestId("consent-new-grant-button").click();
+      await alicePage.page.getByTestId("consent-new-grant-scope-input").fill("message");
+      await alicePage.page.getByTestId("consent-new-grant-grantee-input").fill(bob.did);
+      await alicePage.page.getByTestId("consent-new-grant-ttl-input").fill("30d");
+      await expect(alicePage.page.getByTestId("consent-new-grant-submit-button")).toBeEnabled();
+      await stepShot(alicePage.page, testInfo, "A-consent-local-grant-form-ready");
+
+      await alicePage.page.getByTestId("consent-new-grant-button").click();
+      await expect(alicePage.page.getByTestId("consent-new-grant-scope-input")).toHaveCount(0);
+      await expect(alicePage.page.getByTestId("consent-grant-empty")).toBeVisible();
+    } finally {
+      await alicePage.close();
+    }
+  });
+
+  test("consent API smoke: MIMI request/update returns holder-private receipts", async ({
+    request,
+  }) => {
+    // Live G2.T5 API smoke: soland has a consent-adjacent MIMI surface today.
+    // The general cx.consent.* cell reducer is still not implemented, so the
+    // full identity consent lifecycle remains fixme below.
+    const alice = uniqueUser("g2t5-consent-api-alice");
+    const bob = uniqueUser("g2t5-consent-api-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+
+    const open = await request.post(`${solandBaseUrl()}/api/v1/mimi/consent/request`, {
+      data: {
+        holder_did: alice.did,
+        grantee_did: bob.did,
+        scope: "message",
+        purpose: "G2.T5 consent API smoke",
+      },
+    });
+    expect(open.status()).toBe(200);
+    const openBody = await open.json();
+    expect(openBody.ok).toBe(true);
+    expect(openBody.state).toBe("requested");
+    expect(openBody.consent_id).toMatch(/^cx:mimi_consent:/);
+    expect(openBody.receipt?.operation_id).toBe("cx.mimi.request_consent");
+    expect(openBody.receipt?.extra?.privacy_state).toBe("holder_private");
+    expect(openBody.receipt?.extra?.consent_grants_space_capability).toBe(false);
+
+    const update = await request.post(`${solandBaseUrl()}/api/v1/mimi/consent/update`, {
+      data: {
+        consent_id: openBody.consent_id,
+        state: "accepted",
+        holder_did: alice.did,
+        grantee_did: bob.did,
+      },
+    });
+    expect(update.status()).toBe(200);
+    const updateBody = await update.json();
+    expect(updateBody.ok).toBe(true);
+    expect(updateBody.consent_id).toBe(openBody.consent_id);
+    expect(updateBody.state).toBe("accepted");
+    expect(updateBody.receipt?.operation_id).toBe("cx.mimi.update_consent");
+    expect(updateBody.receipt?.extra?.membership_still_required).toBe(true);
+  });
+
   test.fixme(
     "alice grants consent and bob can establish contact (full lifecycle)",
     async ({ browser, request }, testInfo) => {

@@ -12,7 +12,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("handle management", () => {
+test.describe("handle management @fully-implemented", () => {
   test("baseline: alice has the handle assigned at registration", async ({ request }) => {
     const alice = uniqueUser("s29-baseline");
     await ensureRegistered(request, alice);

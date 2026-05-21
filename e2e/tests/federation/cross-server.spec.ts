@@ -21,8 +21,16 @@
 //   ✗ cx.invite.create on a remote DID does NOT trigger federation push.
 
 import { expect, test } from "@playwright/test";
-import { hasDualSoland, solandBaseUrl } from "../../helpers/env";
+import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  acceptInviteApi,
+  authHeaders,
+  listInvitesApi,
+  makeOperation,
+  pushFederationOperations,
+  typedId,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -142,23 +150,82 @@ test.describe("cross-server federation", () => {
     }
   });
 
+  test(
+    "α→β federation push smoke delivers an invite-shaped operation to β pull + invite APIs",
+    async ({ request }) => {
+      // API-first smoke for G3.S0: the real β federation ingestion and pull
+      // surfaces accept an α-origin operation. The fully automatic yougen
+      // invite/accept round trip remains pinned in the richer fixme below.
+      const stamp = Date.now();
+      const alice = uniqueUser(`s2-outbound-alice-${stamp}`);
+      const bob = uniqueUser(`s2-outbound-bob-${stamp}`);
+      await ensureRegistered(request, alice, { server: "alpha" });
+      await ensureRegistered(request, bob, { server: "beta" });
+      await issueDevSession(request, alice, { server: "alpha" });
+      const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+      const alphaDescribe = await request.get(`${solandBaseUrl("alpha")}/api/v1/server/describe`);
+      expect(alphaDescribe.ok()).toBeTruthy();
+      const alphaDescribeBody = await alphaDescribe.json();
+      expect(alphaDescribeBody.experimental_features ?? []).toContain(
+        "federation.outbound_push.signed_intent",
+      );
+
+      const spaceId = typedId("space");
+      const inviteOperation = makeOperation({
+        spaceId,
+        objectType: "cx.member.state",
+        payload: {
+          actor_id: bob.did,
+          member: bob.did,
+          membership: "invite",
+          space_title: `S2 pushed invite ${stamp}`,
+          discoverability: "public",
+          history_visibility: "shared",
+        },
+      });
+
+      const push = await pushFederationOperations(request, [inviteOperation], {
+        origin: solandServiceDid("alpha"),
+        destination: solandServiceDid("beta"),
+        server: "beta",
+        spaceId,
+        serviceBindingRef: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
+      });
+      expect(push.accepted).toContain(inviteOperation.operation_id);
+      expect(push.rejected ?? []).toEqual([]);
+
+      const pull = await request.get(
+        `${solandBaseUrl("beta")}/api/v1/federation/pull-operations?space_id=${encodeURIComponent(spaceId)}&limit=10`,
+      );
+      expect(pull.ok()).toBeTruthy();
+      const pullBody = await pull.json();
+      expect((pullBody.operations ?? []).map((op: { operation_id: string }) => op.operation_id)).toContain(
+        inviteOperation.operation_id,
+      );
+
+      const invites = await listInvitesApi(request, bobToken, { server: "beta" });
+      const invite = invites.find((item) => item.space_id === spaceId && item.invitee === bob.did);
+      expect(invite).toBeTruthy();
+      await acceptInviteApi(request, bobToken, spaceId, invite!.invite_id, { server: "beta" });
+
+      const betaSpace = await request.get(
+        `${solandBaseUrl("beta")}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+        { headers: authHeaders(bobToken) },
+      );
+      expect(betaSpace.ok()).toBeTruthy();
+      expect((await betaSpace.json()).members ?? []).toContain(bob.did);
+    },
+  );
+
   test.fixme(
-    "α→β federation push delivers the invite event to bob@β automatically; bob's β-bound yougen sees the invite row and accepts",
+    "α invite UI event automatically fans out to β and β acceptance propagates back to α",
     async () => {
-      // spec: sync/federation.md §4.1 (push) + §5.1 (cross-domain invite)
-      // soland gap: outbound federation push is stubbed (federation.rs:548-572
-      // — only logs, no HTTP). cx.invite.create with remote DID does not
-      // trigger broadcast_move_to_peers automatically.
-      //
-      // Acceptance criteria once soland ships outbound push:
+      // Remaining full contract:
       //   1. alice@α inviteFromAdmin(spaceId, bob.did) emits cx.invite.create
-      //   2. soland-α resolves bob's server to β (via DID Document) and
-      //      POSTs /api/v1/federation/push-operations with the event envelope
-      //   3. soland-β returns 200 with accepted[invite.event_id]
-      //   4. bob's β-bound yougen sees the invite in space-admin invite list
-      //   5. bob clicks accept-invite-button; β submits cx.invite.accept
-      //   6. β pushes accept back to α; α records bob as joined member
-      //   7. alice's α-bound /space/${spaceId}/admin shows bob in members
+      //   2. soland-α resolves bob's server to β and dispatches the operation
+      //   3. bob's β-bound yougen sees the invite row and accepts
+      //   4. β pushes accept back to α; α records bob as joined member
     },
   );
 

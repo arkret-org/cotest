@@ -7,7 +7,16 @@
 //             (delivered by a parallel task; this spec assumes it's already running).
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import {
+  mockPolicyServerBaseUrl as configuredMockPolicyServerBaseUrl,
+  mockPolicyServerDid,
+  solandBaseUrl,
+} from "../../helpers/env";
+import {
+  authHeaders,
+  createSpaceApi,
+  expectJsonOk,
+} from "../../helpers/soland-api";
 import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
@@ -19,16 +28,93 @@ import {
 test.describe.configure({ mode: "serial" });
 
 function mockPolicyServerBaseUrl(): string {
-  const port = process.env.MOCK_POLICY_SERVER_PORT;
-  if (!port) {
-    throw new Error(
-      "MOCK_POLICY_SERVER_PORT not set; expected mock-policy-server.mjs to be running.",
-    );
+  const configured = configuredMockPolicyServerBaseUrl();
+  if (configured) {
+    return configured;
   }
-  return `http://127.0.0.1:${port}`;
+  const port = process.env.MOCK_POLICY_SERVER_PORT;
+  if (port) {
+    return `http://127.0.0.1:${port}`;
+  }
+  // The PUT/GET projection smoke does not call the upstream service; using
+  // loopback keeps the contract runnable in single-server profiles where the
+  // mock policy service is not provisioned.
+  return "http://127.0.0.1:9";
 }
 
 test.describe("policy server check", () => {
+  test("policy server config API projects cx.realm.policy_server and authz stays fail-closed without a grant", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s30-policy-config-alice-${stamp}`);
+    const bob = uniqueUser(`s30-policy-config-bob-${stamp}`);
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const aliceToken = await issueDevSession(request, alice);
+    const spaceId = await createSpaceApi(request, aliceToken, {
+      title: `S30 policy config ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "shared",
+      public: true,
+    });
+    const policyServerDid = mockPolicyServerDid() ?? "did:web:policy.example.com";
+    const policyServerUrl = `${mockPolicyServerBaseUrl()}/api/v1/policy/check`;
+
+    const put = await request.put(
+      `${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(spaceId)}/policy-server`,
+      {
+        headers: authHeaders(aliceToken),
+        data: {
+          policy_server_did: policyServerDid,
+          policy_server_url: policyServerUrl,
+          cache_ttl_seconds: 5,
+          timeout_ms: 1500,
+          on_timeout: "fail_closed",
+        },
+      },
+    );
+    const projected = await expectJsonOk<Record<string, unknown>>(
+      put,
+      "put realm policy server",
+    );
+    expect(projected.realm_id).toBe(spaceId);
+    expect(projected.policy_server_did).toBe(policyServerDid);
+    expect(projected.policy_server_url).toBe(policyServerUrl);
+    expect(projected.from_org_fallback).toBe(false);
+
+    const get = await request.get(
+      `${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(spaceId)}/policy-server`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const fetched = await expectJsonOk<Record<string, unknown>>(
+      get,
+      "get realm policy server",
+    );
+    expect(fetched.policy_server_did).toBe(policyServerDid);
+    expect(fetched.policy_server_url).toBe(policyServerUrl);
+
+    const denied = await request.post(`${solandBaseUrl()}/api/v1/authz/check`, {
+      data: {
+        actor: bob.did,
+        action: "cx.space.write_message",
+        resource: {
+          kind: "space",
+          id: spaceId,
+          space_id: spaceId,
+        },
+      },
+    });
+    const decision = await expectJsonOk<{ allowed: boolean; reason_code?: string }>(
+      denied,
+      "authz check without grant",
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason_code).toBeTruthy();
+  });
+
   test.fixme(
     "alice configures policy server; invite triggers /policy/check with allow→deny→obligation lifecycle",
     async ({ browser, request }, testInfo) => {

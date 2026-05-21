@@ -54,7 +54,7 @@ function plusSeconds(deltaSec: number): string {
   return new Date(Date.now() + deltaSec * 1000).toISOString();
 }
 
-test.describe("capability chain", () => {
+test.describe("capability chain @fully-implemented", () => {
   test("non-member writing to a space is rejected (missing_capability baseline)", async ({
     browser,
     request,

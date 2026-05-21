@@ -7,6 +7,7 @@
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import { authHeaders, createSpaceApi, wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -200,49 +201,59 @@ test.describe("realm links", () => {
     },
   );
 
-  test.fixme(
+  test(
     "E6.1 cycle detection: link graph A→B→C→A is rejected with link_cycle_detected (spec §5)",
     async ({ request }) => {
-      // soland gap: realm-link projection logic + cycle detection 未实现
-      //   When a cx.realm.link Move would close a cycle in the governed_by/
-      //   inherits_policy_from sub-graph, soland MUST reject with HTTP 4xx and
-      //   error_code = "link_cycle_detected". projection cannot tolerate cycles
-      //   because narrow-only merging would diverge.
       const stamp = Date.now();
       const alice = uniqueUser(`s-rl-cycle-${stamp}`);
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const auth = { authorization: `Bearer ${aliceToken}` };
+      const auth = authHeaders(aliceToken);
 
       const mk = async (label: string) => {
-        const res = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
-          headers: auth,
-          data: { title: `cycle-${label}-${stamp}` },
+        return await createSpaceApi(request, aliceToken, {
+          title: `realm-link-cycle-${label}-${stamp}`,
+          public: true,
+          discoverability: "public",
+          history_visibility: "shared",
         });
-        return (await res.json()).realm_id as string;
       };
       const A = await mk("A");
       const B = await mk("B");
       const C = await mk("C");
 
       const link = async (src: string, dst: string) =>
-        request.post(`${solandBaseUrl()}/api/v1/realms/${src}/events`, {
+        request.post(`${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(src)}/links`, {
           headers: auth,
           data: {
-            kind: "cx.realm.link",
-            payload: { target_realm_id: dst, link_kind: "governed_by", status: "active" },
+            target_realm_id: dst,
+            link_kind: "governed_by",
+            status: "active",
           },
         });
 
       const ab = await link(A, B);
-      expect(ab.status()).toBe(201);
+      expect(ab.ok()).toBeTruthy();
       const bc = await link(B, C);
-      expect(bc.status()).toBe(201);
+      expect(bc.ok()).toBeTruthy();
+
+      const outboundA = await request.get(
+        `${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(A)}/links?direction=outbound`,
+        { headers: auth },
+      );
+      expect(outboundA.ok()).toBeTruthy();
+      const outboundABody = await outboundA.json();
+      expect(outboundABody.links).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ realm_id: A, target_realm_id: B, link_kind: "governed_by", status: "active" }),
+        ]),
+      );
+
       // The Move that would close the cycle must be rejected.
       const ca = await link(C, A);
-      expect(ca.status()).toBeGreaterThanOrEqual(400);
+      expect(ca.status()).toBe(422);
       const caBody = await ca.json();
-      expect(caBody.error_code).toBe("link_cycle_detected");
+      expect(wireErrCode(caBody)).toBe("realm_link_cycle");
     },
   );
 

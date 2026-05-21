@@ -1,3 +1,27 @@
+<#
+.SYNOPSIS
+    Drives a joint-services Playwright run for the cotest harness.
+
+.DESCRIPTION
+    Supports two run profiles via -RunProfile:
+
+    joint-smoke (PR gate)
+      - Runs only describe blocks tagged @fully-implemented.
+      - Skips the ~248 placeholder fixme tests so the PR gate stays under
+        ~5 min on the joint harness.
+      - Enforces a pre-run hygiene gate: cotest/e2e/scripts/summarize-e2e-coverage.mjs
+        --check is invoked first and the run aborts (non-zero) on catalog drift
+        or orphaned specs/scenarios. The pre-check output is surfaced so
+        reviewers see exactly what drifted.
+      - An explicit -Grep argument fully overrides the smoke inclusion filter.
+
+    joint-full (nightly / on-demand)
+      - Unfiltered: runs every spec discovered by Playwright. The placeholder
+        fixme tests are expected; they exit as skipped via test.fixme().
+
+    Both profiles share the same service-startup, preflight, and reporting
+    code paths. Only the Playwright invocation step branches on the profile.
+#>
 [CmdletBinding()]
 param(
     [string]$OutputRoot,
@@ -1220,13 +1244,54 @@ try {
     foreach ($project in $playwrightProjects) {
         $playwrightArgs += @("--project", $project)
     }
-    # H-SHIM-2: joint-smoke profile auto-filters to tests tagged
-    # @fully-implemented so CI does not block on fixme placeholders during
-    # incremental rollout. An explicit -Grep overrides this.
+    # G4.T1: joint-smoke is the PR gate. It runs only describe blocks tagged
+    # @fully-implemented. The remaining ~248 fixme placeholders are excluded
+    # so the gate stays fast (< 5 min on joint). An explicit -Grep overrides
+    # this entirely.
     $effectiveGrep = $Grep
     if (-not $effectiveGrep -and $RunProfile -eq "joint-smoke") {
         $effectiveGrep = "@fully-implemented"
     }
+
+    if ($RunProfile -eq "joint-smoke") {
+        Write-Host ""
+        Write-Host "=== joint-smoke profile: PR gate ==="
+        Write-Host "- includes: @fully-implemented"
+        Write-Host "- excludes: 248 fixme + remaining mixed specs"
+        Write-Host "- prereq: coverage --check"
+        Write-Host ("- grep: {0}" -f $effectiveGrep)
+        Write-Host ""
+
+        # G4.T1: pre-run hygiene gate. Fail fast if the spec/scenario catalog
+        # has drifted or any spec/scenario is orphaned. Surface the script's
+        # stdout so reviewers can see exactly what drifted.
+        $coverageScript = Join-Path $repoRoot "e2e\scripts\summarize-e2e-coverage.mjs"
+        if (-not (Test-Path -LiteralPath $coverageScript)) {
+            throw "joint-smoke pre-check failed: $coverageScript not found"
+        }
+        $nodeCommandInfo = Get-Command node.exe -ErrorAction SilentlyContinue
+        if (-not $nodeCommandInfo) {
+            $nodeCommandInfo = Get-Command node -ErrorAction Stop
+        }
+        $nodeCommand = $nodeCommandInfo.Source
+        Write-Host "--- summarize-e2e-coverage.mjs --check ---"
+        $coverageLogPath = Join-Path $jointDir "smoke-precheck.log"
+        Push-Location $e2eRoot
+        try {
+            $coverageOutput = & $nodeCommand $coverageScript "--check" 2>&1
+            $coverageExit = $LASTEXITCODE
+        }
+        finally {
+            Pop-Location
+        }
+        $coverageOutput | ForEach-Object { Write-Host $_ }
+        $coverageOutput | Set-Content -Path $coverageLogPath -Encoding UTF8
+        Write-Host "--- end pre-check ---"
+        if ($coverageExit -ne 0) {
+            throw "joint-smoke pre-check failed (exit $coverageExit): orphans or catalog drift detected. See $coverageLogPath"
+        }
+    }
+
     if ($effectiveGrep) {
         $playwrightArgs += @("--grep", $effectiveGrep)
     }

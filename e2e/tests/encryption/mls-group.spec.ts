@@ -9,6 +9,7 @@
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import { authHeaders, b64url, createSpaceApi, typedId, wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -71,19 +72,141 @@ test.describe("MLS group encryption", () => {
     }
   });
 
-  test.fixme(
-    "alice creates space with encryption_profile=mls_rfc9420 at create time; cx.mls.genesis written",
-    async () => {
-      // spec: encryption-and-audit.md §2.2.1, models/space-and-place.md §2.2
-      // soland gap: encryption_profile field on cx.space.create + cx.mls.genesis event.
+  test(
+    "alice creates space with encryption_profile=mls_rfc9420 at create time; world_readable policy is rejected",
+    async ({ request }) => {
+      // Smoke for the create-time encryption profile path. Full cx.mls.genesis
+      // materialization remains pinned below in the richer lifecycle cases.
+      const stamp = Date.now();
+      const alice = uniqueUser("s11-create-alice");
+      await ensureRegistered(request, alice);
+      const aliceToken = await issueDevSession(request, alice);
+
+      const spaceId = await createSpaceApi(request, aliceToken, {
+        title: `S11 MLS create-time ${stamp}`,
+        discoverability: "listed",
+        history_visibility: "joined",
+        encryption_profile: "mls_rfc9420",
+      });
+
+      const exportResp = await request.get(
+        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/export`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(exportResp.ok()).toBeTruthy();
+      expect(JSON.stringify(await exportResp.json())).toContain('"encryption_profile":"mls_rfc9420"');
+
+      const incompatible = await request.put(
+        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/policy`,
+        {
+          headers: authHeaders(aliceToken),
+          data: { join_rule: "public", history_visibility: "world_readable" },
+        },
+      );
+      expect([400, 422]).toContain(incompatible.status());
+      expect(wireErrCode(await incompatible.json())).toBe("incompatible_history_with_encryption");
     },
   );
 
-  test.fixme(
-    "alice claims bob's KeyPackage, sends MLS Welcome via durable Event; bob's client derives epoch 1 secrets",
-    async () => {
-      // spec: encryption-and-audit.md §2.2, §2.2.1, §2.6, device-lifecycle.md §9
-      // soland gap: /api/v1/keys/keypackages/{upload,claim}, cx.mls.{commit,welcome}.
+  test(
+    "alice claims bob's KeyPackage; Welcome queue endpoint and commit epoch smoke stay live",
+    async ({ request }) => {
+      // API-first smoke for the G3.S1 subset: KeyPackage publish/claim CAS,
+      // Welcome pending queue surface, and monotonic commit epoch. Full client
+      // derivation of epoch secrets remains a later yougen+MLS concern.
+      const stamp = Date.now();
+      const alice = uniqueUser("s11-claim-alice");
+      const bob = uniqueUser("s11-claim-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+
+      const keypackageId = typedId("mls_keypackage");
+      const groupId = typedId("mls_group");
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      const publish = await request.post(`${solandBaseUrl()}/api/v1/mls/keypackages`, {
+        headers: authHeaders(bobToken),
+        data: {
+          keypackage_id: keypackageId,
+          actor_did: bob.did,
+          device_id: bob.deviceId,
+          lifetime: {
+            not_before: nowSeconds - 60,
+            not_after: nowSeconds + 3600,
+          },
+          key_package_bytes_b64: b64url(`opaque-keypackage-${stamp}`),
+        },
+      });
+      expect(publish.ok()).toBeTruthy();
+      const publishBody = await publish.json();
+      expect(publishBody.keypackage_id).toBe(keypackageId);
+      expect(publishBody.actor_did).toBe(bob.did);
+      expect(publishBody.device_id).toBe(bob.deviceId);
+      expect(publishBody.claimed).toBe(false);
+
+      const pendingBefore = await request.get(`${solandBaseUrl()}/api/v1/mls/welcomes/pending`, {
+        headers: authHeaders(bobToken),
+      });
+      expect(pendingBefore.ok()).toBeTruthy();
+      expect((await pendingBefore.json()).welcomes).toEqual([]);
+
+      const claim = await request.post(
+        `${solandBaseUrl()}/api/v1/mls/keypackages/${encodeURIComponent(keypackageId)}/claim`,
+        {
+          headers: authHeaders(aliceToken),
+          data: { group_id: groupId },
+        },
+      );
+      expect(claim.ok()).toBeTruthy();
+      const claimBody = await claim.json();
+      expect(claimBody.keypackage_id).toBe(keypackageId);
+      expect(claimBody.group_id).toBe(groupId);
+      expect(claimBody.claimed_at).toBeTruthy();
+
+      const claimAgain = await request.post(
+        `${solandBaseUrl()}/api/v1/mls/keypackages/${encodeURIComponent(keypackageId)}/claim`,
+        {
+          headers: authHeaders(aliceToken),
+          data: { group_id: typedId("mls_group") },
+        },
+      );
+      expect(claimAgain.status()).toBe(409);
+      expect(wireErrCode(await claimAgain.json())).toBe("mls_keypackage_already_claimed");
+
+      const commit = await request.post(`${solandBaseUrl()}/api/v1/mls/commits`, {
+        headers: authHeaders(aliceToken),
+        data: {
+          group_id: groupId,
+          expected_prev_epoch: 0,
+          leader_actor_did: alice.did,
+          commit_bytes_b64: b64url(`opaque-commit-${stamp}`),
+        },
+      });
+      expect(commit.ok()).toBeTruthy();
+      const commitBody = await commit.json();
+      expect(commitBody.previous_epoch).toBe(0);
+      expect(commitBody.epoch).toBe(1);
+
+      const staleCommit = await request.post(`${solandBaseUrl()}/api/v1/mls/commits`, {
+        headers: authHeaders(aliceToken),
+        data: {
+          group_id: groupId,
+          expected_prev_epoch: 0,
+          leader_actor_did: alice.did,
+          commit_bytes_b64: b64url(`opaque-stale-commit-${stamp}`),
+        },
+      });
+      expect([409, 412]).toContain(staleCommit.status());
+      expect(wireErrCode(await staleCommit.json())).toBe("mls_epoch_skew");
+
+      const pendingAfter = await request.get(`${solandBaseUrl()}/api/v1/mls/welcomes/pending`, {
+        headers: authHeaders(bobToken),
+      });
+      expect(pendingAfter.ok()).toBeTruthy();
+      expect(Array.isArray((await pendingAfter.json()).welcomes)).toBe(true);
     },
   );
 

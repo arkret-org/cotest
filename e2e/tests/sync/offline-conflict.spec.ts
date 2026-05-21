@@ -2,11 +2,69 @@
 // Contract: e2e/scenarios/sync/offline-conflict.md
 // Spec: sync/client-sync.md §2, sync/operations-sync.md §2-§2.1, authz/event-auth-state-resolution.md §2, §8.1
 
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import {
+  allowPlaintextMessagesViaApi,
+  createSharedSpaceViaApi,
+  listSpaceEventsViaApi,
+  sendPlaintextMessageViaApi,
+} from "../../helpers/api";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
 test.describe("offline sync + conflict repair", () => {
+  test("minimal reconnect smoke: bob misses alice writes while away, then events query catches up", async ({
+    request,
+  }) => {
+    // Live slice for G2.T3: the true offline outbox send path is still
+    // fixme below, but the existing sync surface can prove reconnect
+    // backfill for messages written while the peer was disconnected.
+    const stamp = Date.now();
+    const alice = uniqueUser("g2t3-offline-alice");
+    const bob = uniqueUser("g2t3-offline-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const m1 = `G2.T3 reconnect m1 ${stamp}`;
+    const m2 = `G2.T3 reconnect m2 ${stamp}`;
+
+    const spaceId = await createSharedSpaceViaApi(
+      request,
+      alice,
+      aliceToken,
+      bob,
+      bobToken,
+      {
+        title: `G2.T3 Offline Backfill ${stamp}`,
+        discoverability: "listed",
+        historyVisibility: "shared",
+      },
+    );
+    await allowPlaintextMessagesViaApi(request, aliceToken, spaceId);
+
+    const before = JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId));
+    expect(before).not.toContain(m1);
+    expect(before).not.toContain(m2);
+
+    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m1);
+    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m2);
+
+    await expect
+      .poll(async () => JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId)), {
+        timeout: 30_000,
+      })
+      .toContain(m1);
+    const after = JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId));
+    expect(after).toContain(m2);
+  });
+
   test.fixme(
     "bob composes a message while offline; on reconnect the message persists and is visible to alice",
     async () => {

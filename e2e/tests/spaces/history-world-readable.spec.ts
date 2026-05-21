@@ -16,7 +16,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("world_readable history", () => {
+test.describe("world_readable history @fully-implemented", () => {
   test("alice creates space with history_visibility=world_readable; outsider (registered, non-member) reads timeline via API", async ({
     browser,
     request,
