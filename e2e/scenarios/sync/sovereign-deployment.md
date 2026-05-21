@@ -74,7 +74,7 @@
 15. **bob_external** 同步,timeline 包含 `M1`
 16. **bob_external** 回复 `M1` 发 `M2 = "external reply ${stamp}"`,并上传一份文件 `F1`(走 enclave 节点的 blob endpoint)
 17. **alice_internal** 同步,timeline 包含 `M2`、`F1` 可下载;文件 blob URL 指向 `soland_enclave`(不是 main)
-18. 断言:`POST <soland_enclave>/api/v1/sync` 返回的 frontier 在 alice/bob 两侧一致
+18. 断言:`GET <soland_enclave>/api/v1/account/subscribe?catchup=true` 返回的 frontier/cursor 在 alice/bob 两侧一致
 
 ### Phase E — Enclave 边界验证
 

@@ -14,7 +14,7 @@
 // 与 `POST /api/v1/agents/sessions(/:id/status)` 端点未上线;
 // claimed_profiles 也尚未声明 `cx.profile.agent_runtime.v1`。
 //
-// yougen gap: /agent-workspace 的 "create new task" modal 当前未对接 soland
+// yougen gap: /agents 的 create-session/publish affordances 当前未对接 soland
 // capability grant API;publish modal 的 attribution 分支需要 source authority
 // FSM 状态配合才出现。
 //
@@ -145,8 +145,8 @@ test.describe("agent protocol interop", () => {
       // §8 (启动前 capability 检查), §12 (`policy_denied` failure code).
       //
       // Pseudo:
-      //   // 1. alice opens /agent-workspace (AgentWorkspaceDashboard),
-      //   //    triggers "new agent task" modal, fills constraint:
+      //   // 1. alice opens /agents, starts a new protocol session,
+      //   //    and fills constraint:
       //   //       allowed_protocols = ["a2a"]
       //   //       allowed_endpoints = [exact mock base URL]
       //   //       max_duration_seconds = 3600
@@ -192,7 +192,7 @@ test.describe("agent protocol interop", () => {
       //   //             allowed_artifact_types: ["text","json"],
       //   //             max_duration_seconds: 3600 }
       //
-      //   // 2. Assert 200 + GET /api/v1/sync (since_cursor=0) finds
+      //   // 2. Assert 200 + GET /api/v1/account/subscribe?catchup=true finds
       //   //    `cx.agent.protocol_session.start` immediately.
       //
       //   // 3. soland's agent_bridge.rs handshakes with mock-agent-runtime
@@ -248,8 +248,8 @@ test.describe("agent protocol interop", () => {
       //   //    agent-audit-verify-badge text === "audit valid"
       //   //    (verifies via contrix_sdk::agent_binding).
       //
-      //   // 4. alice clicks /agent-workspace task detail (testid
-      //   //    agent-task-detail) → agent-task-detail-publish → publish
+      //   // 4. alice clicks /agents session detail (testid
+      //   //    agent-session-detail) → agent-session-publish → publish
       //   //    modal opens (testid publish-modal-backdrop) → choose
       //   //    publish-modal-signer-self-with-attribution → confirm.
       //
@@ -272,7 +272,7 @@ test.describe("agent protocol interop", () => {
       // coordination / authorization / audit layer).
       //
       // Pseudo:
-      //   // 1. GET /api/v1/sync since_cursor=0; filter to this
+      //   // 1. GET /api/v1/account/subscribe?catchup=true; filter to this
       //   //    session_id's events; assert ordering matches
       //   //    start → status (negotiating) → status (accepted) →
       //   //    status (working) → result (completed). No status

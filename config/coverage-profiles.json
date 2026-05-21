@@ -52,7 +52,7 @@
       "requirements": [
         { "name": "events.describe", "status": "partial", "sources": ["service_surface"], "tests": ["server_exposes_core_service_surface"] },
         { "name": "events.submit", "status": "partial", "sources": ["protocol_payloads"], "tests": ["events_keys_device_blob_push_and_moderation_surfaces_work"] },
-        { "name": "events.get / batch_get / list", "status": "partial", "sources": ["events_backfill"], "tests": ["backfill_pages_recover_messages_missing_from_limited_client_page"] },
+        { "name": "events.get / resolve / list", "status": "partial", "sources": ["events_backfill"], "tests": ["backfill_pages_recover_messages_missing_from_limited_client_page"] },
         { "name": "events.frontier", "status": "pending", "sources": [], "tests": [] },
         { "name": "duplicate same bytes idempotent", "status": "implemented", "sources": [], "tests": [] },
         { "name": "duplicate different bytes conflict", "status": "implemented", "sources": ["conformance_event_envelope"], "tests": ["event_envelope_fixture_suite_matches_reference_semantics"] },

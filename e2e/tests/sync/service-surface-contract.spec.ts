@@ -203,7 +203,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §7.1 (list pagination response: { items, next_cursor, has_more }).
       //
       // 1) Seed ≥5 list-visible items as alice (via POST /api/v1/events or seed helper).
-      // 2) GET /api/v1/sync/operations?limit=2 (or whichever list endpoint reaches
+      // 2) GET /api/v1/events?limit=2 (or whichever list endpoint reaches
       //    §7.1 shape first) → page1.
       //    Assert: items.length <= 2, next_cursor matches /^cx:cursor:[A-Za-z0-9_-]+$/,
       //            has_more === true.

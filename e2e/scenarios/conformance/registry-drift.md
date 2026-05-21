@@ -11,7 +11,7 @@
 - `contrix-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `cx.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
 - `contrix-spec/spec/v1/artifacts/registry/removed-event-kinds.json` — 32 个被移除的 `cx.*` event.kind,`hard_reject` rejection level
 - `contrix-spec/spec/v1/artifacts/registry/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
-- `contrix-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json` — 6 个被废弃的 profile id (chat_only_client / kanban_only_client / agent_workspace.*)
+- `contrix-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json` — 被废弃的 profile id
 - `contrix-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json` — 5 个上下文绑定的禁用 wire 字段名 (`branch` / `room_kind` / `discussion_space_ref` / `space_frontier` / 含 `kind=room` 的 flow payload)
 - `contrix-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — 6 个 prose / identifier 级别的禁用术语 (`Room` / `Place` / `flow_branch` / ...)
 - `contrix-spec/spec/v1/artifacts/registry/operation-registry.json` — canonical operation 注册表 (82 个 operation_id × 14 个 surface_groups),HTTP / gRPC / MQ 绑定的唯一真源
@@ -45,7 +45,7 @@
 ### Phase A — Removed event kinds hard-reject
 
 1. **harness** load `artifacts/registry/removed-event-kinds.json`,filter `entries[*].rejection_level === "hard_reject"`
-2. 对每个 `entry.id` (e.g. `cx.field.position.move`, `cx.realm.lifecycle.set`, `cx.space.policy`, `cx.agent_task.create`),构造一个最小合法 EventEnvelope:
+2. 对每个 `entry.id` (e.g. `cx.field.position.move`, `cx.realm.lifecycle.set`, `cx.space.policy`),构造一个最小合法 EventEnvelope:
    ```json
    { "kind": "<removed_id>", "actor_did": "<alice>", "realm_id": "<test_realm>", "payload": {} }
    ```
@@ -59,7 +59,7 @@
 
 ### Phase B — Removed operation IDs hard-reject
 
-6. **harness** load `artifacts/registry/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `cx.flow.track.member.add`, `cx.agent_workspace.resolve_mirror_flow`, `cx.realm.lifecycle.set.apply`)
+6. **harness** load `artifacts/registry/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `cx.flow.track.member.add`, `cx.realm.lifecycle.set.apply`)
 7. 对每个 `entry.id`,尝试通过 soland 的 generic operation endpoint 调用:
    - 若 soland 暴露 `POST /api/v1/operations/{operation_id}` → POST with `{}` body + bearer
    - 否则 fallback 到 `POST /api/v1/server/operation/invoke` with `{ operation_id, input: {} }` body
@@ -71,7 +71,7 @@
 
 ### Phase C — Deprecated profile IDs absent from describe (LIVE)
 
-10. **harness** load `artifacts/registry/deprecated-profile-ids.json` → set of `entries[*].id` (`chat_only_client`, `kanban_only_client`, `cx.profile.agent_workspace.v1`, `.lite.v1`, `.governed.v1`, `.strict.v1`)
+10. **harness** load `artifacts/registry/deprecated-profile-ids.json` → set of `entries[*].id`
 11. `GET /api/v1/server/describe` → parse JSON
 12. Collect *all* profile id strings advertised by the server,across **every** profile-bearing array:
     - `describe.claimed_profiles[]`

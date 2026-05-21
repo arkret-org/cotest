@@ -84,7 +84,7 @@
 
 ### Phase E — 三方 anchor frontier 一致
 
-19. 三方各调一次 `POST /api/v1/sync`(或读 `sync-cursor` testid),分别记录 anchor frontier
+19. 三方各调一次 `GET /api/v1/account/subscribe?catchup=true`(或读 `sync-cursor` testid),分别记录 anchor frontier
 20. 断言:三个 frontier 集合一致(忽略 carol 那侧因 history_visibility 被裁掉的部分,只比较 carol 可见的 `M3` 之后的 anchor 集合)
 
 ## Observable assertions (合并清单)

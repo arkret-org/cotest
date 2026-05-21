@@ -298,7 +298,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       // Acceptance criteria (once a register-and-submit helper lands):
       //   1. For each entry with rejection_level === "hard_reject":
       //        e.g. cx.field.position.move, cx.realm.lifecycle.set,
-      //             cx.space.policy, cx.agent_task.create, cx.message.send
+      //             cx.space.policy, cx.message.send
       //      POST /api/v1/events with body { kind: <removed_id>, payload: {} }
       //      and a valid bearer token.
       //   2. Expect HTTP 4xx (typically 400 or 422), and
@@ -319,9 +319,8 @@ test.describe("conformance registry drift @fully-implemented", () => {
     "Phase B — calling a removed operation_id returns 410 / 4xx, never 2xx",
     async ({ request }) => {
       // spec: schema-registry.md §1 + removed-operation-ids.json entries
-      //       with rejection_level === "hard_reject" (11 entries today, e.g.
-      //       cx.flow.track.member.add, cx.agent_workspace.resolve_mirror_flow,
-      //       cx.realm.lifecycle.set.apply).
+      //       with rejection_level === "hard_reject" (for example
+      //       cx.flow.track.member.add, cx.realm.lifecycle.set.apply).
       //
       // Acceptance criteria (once an operation-invoke helper lands):
       //   1. For each removed operation_id, attempt to invoke via:

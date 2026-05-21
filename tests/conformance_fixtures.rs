@@ -48,8 +48,8 @@ conformance_test!(
     /// 5 new vector profiles (discovery / event_kind_lattice_dispatch /
     /// event_kind_payload_coverage / operation_registry_coverage /
     /// error_code_registry_coverage) plus the active implementation profile
-    /// manifest entries. Deprecated agent_workspace profiles stay in the
-    /// registry-drift hard_reject negative context only. Vector profiles whose
+    /// manifest entries. Deprecated profiles stay in the registry-drift
+    /// hard_reject negative context only. Vector profiles whose
     /// required_cotest_suites resolve in the suite registry report
     /// `certified`; missing suites report `skipped(suite_not_implemented)`;
     /// implementation profiles report `unsupported` per the spec's

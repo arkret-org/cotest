@@ -6,7 +6,7 @@
 
 过程中 contrix 始终持有身份 / capability / 任务登记 / 审计,外部协议只承担实时执行通道。
 
-不验证:agent workspace 的 mirror Space FSM 细节 (见 `extensions/agent-workspace-profile` — 后续 scenario)、applet bot / ghost actor 链路 (见 `extensions/applet-bridge`)、MIMI federation handoff (见 `extensions/mimi-federation`)、capability chain 的 delegation 细节 (见 `authz/capability-chain`)、policy server obligation executor (见 `authz/policy-server-check`)、纯 MCP tool 调用 (见 §10,与 v1 agent-to-agent upgrade 无关)。
+不验证:applet bot / ghost actor 链路 (见 `extensions/applet-bridge`)、MIMI federation handoff (见 `extensions/mimi-federation`)、capability chain 的 delegation 细节 (见 `authz/capability-chain`)、policy server obligation executor (见 `authz/policy-server-check`)、纯 MCP tool 调用 (见 §10,与 v1 agent-to-agent upgrade 无关)。
 
 ## Spec 锚点
 
@@ -26,7 +26,7 @@
 
 - 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`,负责 agent endpoint registry、capability 校验、session reducer、audit binding 签发 (Ed25519,见 `soland/src/routing/events/agent_bridge.rs::REFERENCE_AGENT_AUDIT_ED25519_SEED`)
 - 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session 与 capability grant signing key
-- 1 × yougen — 渲染 `/agents` (AgentsPanel) 与 `/agent-workspace` (AgentWorkspaceDashboard);提供 capability approval UI 与 audit-binding badge
+- 1 × yougen — 渲染 `/agents` (AgentsPanel);提供 capability approval UI 与 audit-binding badge
 - 1 × mock-agent-runtime (gap) — 外部 A2A/ACP 端,负责接收 session start、回写 status 与 result,以及一份外部 transcript 摘要。**当前 cotest harness 没有 `mock-agent-runtime.mjs`**;短期方案是复用 `mock-applet-registry` 作为 HTTP echo stand-in (见 `helpers/env.ts::mockAppletRegistryBaseUrl`),把它当作 "支持 a2a 协议的远端" 来跑;长期方案是新增独立 mock,详见 Implementation notes。
 
 (soland / coauth / yougen 都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 §5 / §6 的 normative endpoint validation 与外部 mock 都是 gap,见 Implementation notes。)
@@ -62,7 +62,7 @@
 
 ### Phase B — Capability approval (§4 / §7 capability constraint / §8 启动前检查)
 
-6. **alice** 在 yougen `/agent-workspace` 触发 "新增 agent task" — 在弹出的 modal 里选择 `remote_agent.did`、勾选 `requires_human_approval = true`、把 `allowed_protocols` 限定为 `["a2a"]`、`max_duration_seconds = 3600`、`max_artifact_bytes = 10485760`、`egress_policy = "metadata_only"`、`audit_mode = "summary_and_artifacts"`;
+6. **alice** 在 yougen `/agents` 触发一个 protocol session draft — 选择 `remote_agent.did`、勾选 `requires_human_approval = true`、把 `allowed_protocols` 限定为 `["a2a"]`、`max_duration_seconds = 3600`、`max_artifact_bytes = 10485760`、`egress_policy = "metadata_only"`、`audit_mode = "summary_and_artifacts"`;
 7. **alice** 在 `publish-modal-confirm` 之前必须看到一个明确的 human-approval gate (spec §4 要求 explicit + authorizable);**alice** 点 confirm 提交 capability grant `cg`;
 8. 断言 soland 写入一条 `cx.capability.grant.create` 事件,`payload.actions` 包含 `cx.agent.protocol_session.start`,`payload.constraint.allowed_endpoints` 是单值列表精确指向 mock-agent-runtime base URL (spec §7 的 wildcard `https://*.trusted.example` 在测试里要收敛成精确值);
 9. **harness** 再用 `local_agent` token 调 `POST /api/v1/agents/sessions` 不带 `capability_grant_ref` → 断言 HTTP 4xx 且 `error.code === "policy_denied"` (spec §12),证明启动前 capability 检查生效。
@@ -70,7 +70,7 @@
 ### Phase C — Invocation handoff with transcript (§5.2 / §5.3 / §6 步骤 5-7 / §9 audit modes)
 
 10. **local_agent** (harness HTTP) 调 `POST /api/v1/agents/sessions` body `{ session_id, counterparty_agent: remote_agent.did, protocol: "a2a", endpoint_ref, capability_grant: cg, allowed_artifact_types: ["text","json"], max_duration_seconds: 3600, audit_mode: "summary_and_artifacts" }`;
-11. 断言响应 200,且 soland 在 `/api/v1/sync` 里能立即 backfill 到 `cx.agent.protocol_session.start` 事件 (kind 严格相等);
+11. 断言响应 200,且 soland 在 `GET /api/v1/account/subscribe?catchup=true` 或 `GET /api/v1/events` 里能立即观察到 `cx.agent.protocol_session.start` 事件 (kind 严格相等);
 12. **soland** (`routing/events/agent_bridge.rs`) 触发外部协议握手:向 mock-agent-runtime `POST /v1/a2a/tasks` 投递 task,带 RFC 9421 HTTP Message Signature + Content-Digest (gap,见 Implementation notes);
 13. **mock-agent-runtime** 在 N×500ms 节奏内向 soland `POST /api/v1/agents/sessions/${session_id}/status` 至少回写三条 `status` 事件,枚举至少包含 `negotiating → accepted → working` (spec §5.3 标准状态集合);
 14. **alice** 在 yougen `/agents` 的 `agent-session-list` 看到 `agent-session-row` 出现,`status` 字段在 3s 内从 `negotiating` 推进到 `working`;
@@ -81,12 +81,12 @@
 16. **mock-agent-runtime** 模拟终态,向 soland 回写 `cx.agent.protocol_session.result` 事件 body:`{ session_id, status: "completed", result_objects: [{ object_type: "flow", object_ref: "cx:flow:<uuid>", track: "synthesis", role: "primary_result" }], artifacts: [{ artifact_type: "text", object_ref: "cx:morph:<uuid>", hash: "sha256:..." }], external_transcript_hash: "sha256:...", completed_at: "<iso>" }`;
 17. soland 用 `REFERENCE_AGENT_AUDIT_ED25519_SEED` 给 `audit_binding` 块签 Ed25519,canonical subject 形如 `{session_id, agent_did, result.echo, actor}`,断言响应里 `audit_binding.binding_kind === "ed25519_v1"` 且 `audit_binding.key_id === "soland.reference.agent_echo.ed25519_v1"`;
 18. **alice** 在 yougen `/agents` 的 `agent-incoming-results` 看到一条 `agent-incoming-result-row`,`agent-audit-verify-badge` 文本严格等于 `audit valid` (绿色徽章);
-19. **alice** 在 `/agent-workspace` 的对应 task detail 页 (testid `agent-task-detail`) 点 `agent-task-detail-publish`,弹 publish modal;选择 `publish-modal-signer-self-with-attribution` (保留 remote_agent 署名),点 `publish-modal-confirm`;
+19. **alice** 在 `/agents` 的对应 protocol session detail 区确认 result artifact;保留 remote_agent attribution,点 `publish-modal-confirm`;
 20. 断言 source space 里出现一条新 Flow,其 `fields.workflow_type` 包含 `synthesis`,且 `relation` 指向 `cx:morph:<uuid>` artifact;Flow 创建事件的 `actor_id` 是 `alice.did`,但 `attribution` 字段保留 `remote_agent.did` (spec §5.4 关于 publish 的语义)。
 
 ### Phase E — Audit chain verification (§5 + §9 + agent_binding SDK)
 
-21. **harness** 调 `GET /api/v1/sync` 拉一组 `since_cursor = 0` 的事件,按 `event_kind` 过滤出本次 session_id 的全部记录,断言顺序严格为 `start → status (negotiating) → status (accepted) → status (working) → result (completed)` (不允许 status 在 start 之前出现,不允许 result 之后再有 status);
+21. **harness** 调 `GET /api/v1/events?after=<cursor>` 拉一组事件,按 `event_kind` 过滤出本次 session_id 的全部记录,断言顺序严格为 `start → status (negotiating) → status (accepted) → status (working) → result (completed)` (不允许 status 在 start 之前出现,不允许 result 之后再有 status);
 22. 对每个事件,断言其 `prev_event_id` 与上一条的 `event_id` 一致 (audit chain hash 链);
 23. 对 `result` 事件,用 `contrix_sdk::agent_binding::verify_audit_binding_by_kind` 跑一次 in-process 校验 — 通过则证明 SDK 与 soland 签发端一致 (与 `yougen/src/views/agents.rs::verify_agent_audit_binding` 完全等价);
 24. **alice** 在 `/agents` 顶部的 `agent-incoming-poll-tick` 出现 `tick N`,且 `agent-incoming-status` 显示 `1 result event(s) (1 new since last poll)` 至少一次,证明 yougen 的 4s 轮询拉到了刚回写的 result 事件;
@@ -106,7 +106,7 @@
 - **E1.2 transcript hash mismatch**:mock-agent-runtime 在 result 里故意写一个错误的 `external_transcript_hash` (不匹配它实际投递的 transcript);harness 用本地重算的 hash 与 result 字段比对,断言报告 mismatch;reducer 在严格 audit 模式下应拒绝 publish (返回 4xx + `error.code="artifact_rejected"`,spec §12)。
 - **E1.3 endpoint binding drift**:mock-agent-runtime 在 Phase A 之后偷偷换 `serviceEndpoint` 到另一个 host;在 Phase C 步骤 10 调 `POST /api/v1/agents/sessions` 时,soland 必须重新校验 DID Document service binding (spec §6 步骤 4 normative MUST),发现 mismatch 后返回 `policy_denied`。
 - **E1.4 audit gap repaired**:故意 drop 一条 status 事件 (模拟网络),手动 POST 一条带正确 `prev_event_id` 的补偿事件,断言 reducer 接受并把 audit chain 修补回完整链;再跑一次 Phase E 步骤 21-22,顺序与 prev_event_id 链都仍然连贯。
-- **E1.5 cancel mid-flight**:alice 在 Phase C `working` 状态时点 `agent-task-detail-cancel`;soland 发出 `cx.agent.protocol_session.cancel` (capability `cx.agent.protocol_session.cancel`,spec §7),mock-agent-runtime 回写 `status="cancelled"` + 一个空 result `{ status: "cancelled", error: {...} }`;yougen 徽章是 `audit valid` (cancellation 仍签 audit_binding,只是 result 不含 artifacts);Phase D publish 路径必须 disabled (testid `agent-task-detail-publish` 不应可点)。
+- **E1.5 cancel mid-flight**:alice 在 Phase C `working` 状态时点 session cancel;soland 发出 `cx.agent.protocol_session.cancel` (capability `cx.agent.protocol_session.cancel`,spec §7),mock-agent-runtime 回写 `status="cancelled"` + 一个空 result `{ status: "cancelled", error: {...} }`;yougen 徽章是 `audit valid` (cancellation 仍签 audit_binding,只是 result 不含 artifacts);Phase D publish 路径必须 disabled。
 
 后两条 (E1.4, E1.5) 建议拆成独立的小 spec (`extensions/agent-protocol-interop.audit-gap`、`extensions/agent-protocol-interop.cancel`),保持主 scenario 紧凑。
 
@@ -118,8 +118,8 @@
   - `claimed_profiles` 数组应该包含 `cx.profile.agent_runtime.v1`,但 `routing/system/describe.rs` 还没把它写进去 — 这条覆盖 Phase A 步骤 5 的 supported_protocols 列表来源。
   - audit_binding 签名 / 校验 SDK 已有 (`contrix_sdk::agent_binding`),但 fail-closed 路径 (E1.1) 故意 absent,需要 e2e 显式钉住。
 - **yougen 缺口**:
-  - `/agent-workspace` 的 task creation modal (步骤 6-7) 当前只支持本地填表,**没有**与 soland capability grant API 的真实绑定 — 详见 `views/agent_workspace.rs::PublishModal`,publish 路径已搭好骨架但 "create new task" 路径尚未对接 soland。
-  - `agent-task-detail-publish` 已有 testid,但 publish modal 的 "保留 remote_agent attribution" 选项 (testid `publish-modal-signer-self-with-attribution`) 当前仅在 source authority FSM 处于特定状态时显示;e2e 要确认这个分支真的能进入。
+  - `/agents` 的 protocol session draft 仍需与 soland capability grant API 做真实绑定。
+  - publish modal 的 "保留 remote_agent attribution" 选项 (testid `publish-modal-signer-self-with-attribution`) 需要从 protocol session result 状态进入。
   - `/agents` 顶部的 `agent-incoming-poll-tick` 与 `agent-incoming-status` 已存在 (4s 轮询 + diff 提示),Phase E 步骤 24 可直接断言。
 - **mock-agent-runtime 缺口**:**当前没有 `cotest/scripts/mock-agent-runtime.mjs`**。短期方案:在测试代码里复用 `mockAppletRegistryBaseUrl()` 作为 HTTP echo target,只跑 Phase A 的 endpoint registry + DID document lookup 路径,Phase C-E 全 fixme;长期方案:新增 `cotest/scripts/mock-agent-runtime.mjs`,实现 `/.well-known/agent-card.json` + `/info` + `/v1/a2a/tasks` + `/v1/acp/tasks` 四个端点,以及对 soland status webhook 的回调能力,然后在 `helpers/env.ts` 添加 `mockAgentRuntimeBaseUrl()` 与 `mockAgentRuntimeDid()`。
 - **fixture loader**:Phase D 的 result event canonical bytes 应该可以挂到 `contrix-spec/spec/v1/artifacts/fixtures/cx.agent.protocol_session.result.*.json`,但目前 fixture 目录还没有 agent 相关条目 (本 scenario 落地后可同步追加)。

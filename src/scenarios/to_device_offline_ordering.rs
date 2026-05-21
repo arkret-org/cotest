@@ -12,7 +12,7 @@
 //!   2. Alice sends message 1 to dev_bob_a (POST /api/v1/device_messages
 //!      with `Idempotency-Key: msg-1`).
 //!   3. Bob's device polls (GET /api/v1/device_messages) — receives msg 1.
-//!      We retain the returned `next_batch` cursor.
+//!      We retain the returned `next_cursor` cursor.
 //!   4. "Disconnect": bob does NOT poll between steps 4 and 7.
 //!   5. Alice sends message 2 (Idempotency-Key: msg-2).
 //!   6. Alice sends message 3 (Idempotency-Key: msg-3).
@@ -76,7 +76,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     }
     assert_message_ciphertext(&events1[0], "ciphertext-msg-1")?;
     let pos_1 = position_of(&events1[0])?;
-    // Cursor captured here would be `first_poll["next_batch"]`, but we
+    // Cursor captured here would be `first_poll["next_cursor"]`, but we
     // intentionally do NOT pass it back on the reconnect poll — that is
     // what the spec calls "no premature ack on disconnect", protecting
     // against silent drops if the device crashes before persisting.
@@ -102,7 +102,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     .await?;
 
     // ── Step 7: bob reconnects, polls WITHOUT acking the step-3 cursor.
-    // Soland's GET /api/v1/device_messages without `?ack=` defaults to
+    // Soland's GET /api/v1/device_messages without `?from=` defaults to
     // ack_position=0, returning all queued events. msg 1 may still be in
     // the queue (un-acked); msg 2 and 3 are definitely there.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
@@ -155,11 +155,11 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     }
 
     // ── Step 8: ack the latest cursor → next poll empty.
-    let next_batch = reconnect["next_batch"]
+    let next_cursor = reconnect["next_cursor"]
         .as_str()
-        .ok_or_else(|| anyhow!("reconnect poll missing next_batch: {reconnect}"))?
+        .ok_or_else(|| anyhow!("reconnect poll missing next_cursor: {reconnect}"))?
         .to_owned();
-    let drained = poll_to_device(&server, &bob_token, Some(&next_batch)).await?;
+    let drained = poll_to_device(&server, &bob_token, Some(&next_cursor)).await?;
     let drained_events = drained["events"].as_array().cloned().unwrap_or_default();
     if !drained_events.is_empty() {
         bail!("expected empty event list after ack of latest cursor, got {drained_events:?}");
@@ -176,7 +176,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         "ciphertext-msg-2-redux", // intentionally different ciphertext
     )
     .await?;
-    let after_replay = poll_to_device(&server, &bob_token, Some(&next_batch)).await?;
+    let after_replay = poll_to_device(&server, &bob_token, Some(&next_cursor)).await?;
     let replay_events = after_replay["events"]
         .as_array()
         .cloned()
@@ -223,14 +223,14 @@ async fn send_to_device(
 async fn poll_to_device(
     server: &ContrixServer,
     recipient_token: &str,
-    ack: Option<&str>,
+    from: Option<&str>,
 ) -> Result<Value> {
     let mut req = server
         .http()
         .get(server.url("/api/v1/device_messages"))
         .bearer_auth(recipient_token);
-    if let Some(cursor) = ack {
-        req = req.query(&[("ack", cursor)]);
+    if let Some(cursor) = from {
+        req = req.query(&[("from", cursor)]);
     }
     expect_json(req, StatusCode::OK).await
 }

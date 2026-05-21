@@ -29,7 +29,7 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — `solandBaseUrl()`;暴露 `/api/v1/server/describe` 与 `/api/v1/sync/*` / `/api/v1/events/*` namespace
+- 1 × soland (principal server) — `solandBaseUrl()`;暴露 `/api/v1/server/describe`、`/api/v1/account/*`、`/api/v1/snapshot/*` 与 `/api/v1/events/*` namespace
 - 1 × coauth (auth server) — `coauthBaseUrl()`;同样暴露 canonical `/api/v1/server/describe`,但 `service_type=auth_server`,不 claim `principal_server` profile
 - 1 × harness — Playwright `request` fixture,纯 HTTP;无 browser context
 
@@ -95,13 +95,13 @@
 
 ### Phase C — Opaque pagination cursor(§7 / §7.1)
 
-12. `harness` 通过 alice token 在 soland 上播种 ≥5 条可被 list 的 sync operation / event(用 `POST /api/v1/events` 写最小事件,或调一个已存在的 list endpoint 比如 `/api/v1/authz/invites`、`/api/v1/sync/operations`)
-13. `GET ${solandBaseUrl()}/api/v1/sync/operations?limit=2`(或等价 list endpoint;`limit` 故意小于总数以强制分页)
+12. `harness` 通过 alice token 在 soland 上播种 ≥5 条可被 list 的 event(用 `POST /api/v1/events` 写最小事件,或调一个已存在的 list endpoint 比如 `/api/v1/authz/invites`)
+13. `GET ${solandBaseUrl()}/api/v1/events?limit=2`(或等价 list endpoint;`limit` 故意小于总数以强制分页)
 14. 断言响应形状(api-conventions §7.1):
     - `items` 是数组,长度 ≤ 2
     - `next_cursor` 是字符串,匹配 `^cx:cursor:[A-Za-z0-9_-]+$`(opaque base64url,见 §7)
     - `has_more === true`(因为播种了 ≥5 条)
-15. 用 `next_cursor` 取第二页:`GET .../sync/operations?limit=2&cursor=${next_cursor_1}`
+15. 用 `next_cursor` 取第二页:`GET .../events?limit=2&after=${next_cursor_1}`
 16. 用第二页的 `next_cursor` 取第三页
 17. 断言:
     - 三页 `items` 的 ID 集合两两不相交(no overlap)
