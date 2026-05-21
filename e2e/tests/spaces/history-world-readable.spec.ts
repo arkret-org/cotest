@@ -4,9 +4,11 @@
 //        §3.1.3 (mls_rfc9420 + world_readable incompatible)
 // E2E-WORLD-READ-1 — soland/_todos.md.
 
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { request as playwrightRequest } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -35,17 +37,18 @@ test.describe("world_readable history @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const realmId = await alicePage.createSpace({
         title: `worldread ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "world_readable",
+        encryptionProfile: "none",
       });
 
       // outsider is registered but NOT a member; with world_readable the
       // events query MUST succeed for them.
       const events = await request.get(
-        `${solandBaseUrl()}/api/v1/events?space_id=${encodeURIComponent(spaceId)}`,
+        `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(realmId)}`,
         { headers: { authorization: `Bearer ${outsiderToken}` } },
       );
       expect(events.status()).toBe(200);
@@ -73,18 +76,19 @@ test.describe("world_readable history @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const realmId = await alicePage.createSpace({
         title: `worldread anon ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "world_readable",
+        encryptionProfile: "none",
       });
 
       // Use a clean request context with no auth header to be sure.
       const anonRequest = await playwrightRequest.newContext({});
       try {
         const anonResp = await anonRequest.get(
-          `${solandBaseUrl()}/api/v1/events?space_id=${encodeURIComponent(spaceId)}`,
+          `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(realmId)}`,
         );
         expect(anonResp.status()).toBe(200);
       } finally {
@@ -111,17 +115,18 @@ test.describe("world_readable history @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const realmId = await alicePage.createSpace({
         title: `S1.3 World ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "world_readable",
+        encryptionProfile: "none",
       });
 
       // outsider attempts to write a message via API — must be denied even with
       // world_readable history (capability is not granted to non-members).
       const write = await request.post(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/messages`,
+        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(realmId)}/messages`,
         {
           headers: { authorization: `Bearer ${outsiderToken}` },
           data: { content: { text: "S1.3 outsider tries to write" } },
@@ -136,24 +141,105 @@ test.describe("world_readable history @fully-implemented", () => {
   test("E1.3.1 trying to set encryption_profile=mls_rfc9420 AND history_visibility=world_readable is rejected with incompatible_history_with_encryption", async ({
     request,
   }) => {
-    // spec: space-and-place.md §3.1.3 — MLS-encrypted Spaces cannot be
+    // spec: realm-and-space.md §2.3 — encrypted Realms cannot be
     // world_readable (non-members lack the group key).
-    const stamp = Date.now();
     const alice = uniqueUser("incompat-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const create = await request.post(`${solandBaseUrl()}/api/v1/spaces`, {
+    const event = encryptedWorldReadableRealmCreateEvent(alice.did);
+    const create = await request.post(`${solandBaseUrl()}/api/v1/events`, {
       headers: { authorization: `Bearer ${aliceToken}` },
-      data: {
-        title: `incompat ${stamp}`,
-        history_visibility: "world_readable",
-        encryption_profile: "mls_rfc9420",
-      },
+      data: event,
     });
     expect([400, 422]).toContain(create.status());
     const body = await create.json();
-    const code = body?.error?.errcode ?? body?.errcode;
-    expect(code).toBe("incompatible_history_with_encryption");
+    expect(wireErrCode(body)).toBe("incompatible_history_with_encryption");
   });
 });
+
+function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string, unknown> {
+  const realmId = `cx:realm:${uuidV7()}`;
+  const createdAt = canonicalTimestamp();
+  const payload = {
+    object: {
+      id: realmId,
+      schema: "cx.schema.realm.v1",
+      title: `incompat ${Date.now()}`,
+      created_by_principal: actorDid,
+      trust_domain: "cx:trust_domain:soland.local",
+      schema_refs: ["cx.schema.realm.v1"],
+      default_discoverability: "listed",
+      default_join_rule: "invite",
+      history_visibility: "world_readable",
+      encryption_profile: "mls_rfc9420",
+      security_class: "standard",
+      federation_policy: "restricted",
+      anchor_profile: "single_did",
+      hash_profile: "sha256",
+      anchorer: {
+        type: "single_did",
+        did: actorDid,
+      },
+      created_at: createdAt,
+    },
+  };
+  return {
+    event_id: `cx:event:${uuidV7()}`,
+    kind: "cx.realm.create",
+    realm_id: realmId,
+    actor_id: actorDid,
+    actor_seq: 1,
+    created_at: createdAt,
+    prev_refs: [],
+    refs: [],
+    requirements: {
+      schema: ["cx.schema.realm.v1"],
+      features: [],
+      critical_extensions: [],
+    },
+    payload,
+    proofs: [
+      {
+        type: "dev-proof",
+        verification_method: `${actorDid}#device`,
+        payload_hash: `sha256:${sha256CanonicalJson(payload)}`,
+      },
+    ],
+  };
+}
+
+function sha256CanonicalJson(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+function canonicalTimestamp(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+function uuidV7(): string {
+  const time = Date.now().toString(16).padStart(12, "0").slice(-12);
+  const random = randomBytes(9).toString("hex");
+  const variant = (8 + (randomBytes(1)[0] & 0x03)).toString(16);
+  return [
+    time.slice(0, 8),
+    time.slice(8, 12),
+    `7${random.slice(0, 3)}`,
+    `${variant}${random.slice(3, 6)}`,
+    random.slice(6, 18),
+  ].join("-");
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}

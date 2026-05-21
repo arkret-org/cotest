@@ -166,8 +166,10 @@ function Invoke-JointE2ePreflight {
         [string]$TeabayDatabaseUrl,
         [string]$SolandBaseUrl,
         [string]$SolandCommand,
+        [bool]$WillStartDefaultSoland = $false,
         [string]$YougenBaseUrl,
         [string]$YougenCommand,
+        [bool]$WillStartDefaultYougen = $false,
         [string]$JsonPath,
         [string]$MarkdownPath
     )
@@ -239,7 +241,7 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if (-not $SolandBaseUrl -and -not $SolandCommand) {
+    if ($WillStartDefaultSoland -or (-not $SolandBaseUrl -and -not $SolandCommand)) {
         $cargo = Find-CommandPath @("cargo.exe", "cargo")
         if ($cargo) {
             $version = (& $cargo --version 2>&1) -join "`n"
@@ -249,7 +251,7 @@ function Invoke-JointE2ePreflight {
         }
     }
 
-    if (-not $YougenBaseUrl -and -not $YougenCommand) {
+    if ($WillStartDefaultYougen -or (-not $YougenBaseUrl -and -not $YougenCommand)) {
         $dx = Find-CommandPath @("dx.exe", "dx")
         if ($dx) {
             $version = (& $dx --version 2>&1) -join "`n"
@@ -521,7 +523,7 @@ function New-CoauthJointConfig {
         throw "coauth config patch failed"
     }
 
-    return $configPath
+    return (Resolve-Path $configPath).Path
 }
 
 function Invoke-CoauthMigrations {
@@ -592,6 +594,8 @@ function Start-ManagedCommand {
 
     $stdout = Join-Path $LogDirectory "$Name.stdout.log"
     $stderr = Join-Path $LogDirectory "$Name.stderr.log"
+    $commandLog = Join-Path $LogDirectory "$Name.command.txt"
+    $Command | Set-Content -Path $commandLog -Encoding UTF8
     $process = Start-Process `
         -FilePath "powershell" `
         -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $Command) `
@@ -606,6 +610,7 @@ function Start-ManagedCommand {
         Process = $process
         Stdout = $stdout
         Stderr = $stderr
+        CommandLog = $commandLog
     }
 }
 
@@ -652,12 +657,15 @@ $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
 if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
+$OutputRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputRoot)
 if (-not $SutManifest) {
     $SutManifest = Join-Path $workspaceRoot "soland\Cargo.toml"
 }
+$SutManifest = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($SutManifest)
 if (-not $YougenRoot) {
     $YougenRoot = Join-Path $workspaceRoot "yougen"
 }
+$YougenRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($YougenRoot)
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runDir = Join-Path $OutputRoot "runs\$timestamp"
@@ -803,8 +811,10 @@ try {
             -TeabayDatabaseUrl $TeabayDatabaseUrl `
             -SolandBaseUrl $SolandBaseUrl `
             -SolandCommand $SolandCommand `
+            -WillStartDefaultSoland (-not $SolandCommand -and $null -ne $solandPort) `
             -YougenBaseUrl $YougenBaseUrl `
             -YougenCommand $YougenCommand `
+            -WillStartDefaultYougen (-not $YougenCommand -and $null -ne $yougenPort) `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
     }
@@ -895,7 +905,7 @@ try {
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
-        $CoauthCommand = "& {0} server --config {1} --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        $CoauthCommand = "& {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
@@ -1463,7 +1473,7 @@ function Get-StaticSpecStats {
         $rel = [System.IO.Path]::GetRelativePath($TestsRoot, $file.FullName) -replace '\\', '/'
         $source = $null
         try { $source = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop } catch { $source = "" }
-        $fixmeTitles = Get-FixmeTitlesForSpec -Path $file.FullName
+        $fixmeTitles = @(Get-FixmeTitlesForSpec -Path $file.FullName)
         # Count `test(` and `test.skip(` (but not `test.fixme`, `test.describe`,
         # `test.beforeAll`, etc.) as "live" definitions.
         $liveMatches = [regex]::Matches($source, '(?m)(^|[^.\w])test\s*\(\s*[''"]')

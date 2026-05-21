@@ -40,6 +40,7 @@ export type CreateSpaceOpts = {
   discoverability?: string;
   joinRule?: string;
   historyVisibility?: string;
+  encryptionProfile?: string;
   seedMembers?: string[];
 };
 
@@ -150,6 +151,9 @@ export class JointUserPage {
     if (opts.historyVisibility !== undefined) {
       await flow.getByTestId("space-policy-history-visibility-input").selectOption(opts.historyVisibility);
     }
+    if (opts.encryptionProfile !== undefined) {
+      await flow.getByTestId("realm-encryption-profile-input").selectOption(opts.encryptionProfile);
+    }
     await flow.getByTestId("new-space-next-button").first().click();
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
@@ -157,10 +161,10 @@ export class JointUserPage {
     }
     await flow.getByTestId("create-space-button").click();
 
-    await expect(flow).toContainText(/created cx:space:/, { timeout: 30_000 });
+    await expect(flow).toContainText(/created cx:realm:/, { timeout: 30_000 });
     const text = await flow.innerText();
-    const match = text.match(/created (cx:space:[^\s]+)/);
-    expect(match, `created space id in: ${text}`).not.toBeNull();
+    const match = text.match(/created (cx:realm:[^\s]+)/);
+    expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];
   }
 
