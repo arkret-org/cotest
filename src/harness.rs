@@ -837,6 +837,7 @@ pub async fn submit_event(
 
 pub fn event_envelope(actor: &str, space_id: &str, kind: &str, payload: Value) -> Value {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    let hlc_logical = seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
     let event_id = format!("cx:event:{suffix}");
     let mut event = json!({
@@ -846,7 +847,7 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, payload: Value) -
         "actor_seq": seq,
         "space_id": space_id,
         "created_at": "2026-05-02T00:00:00Z",
-        "hlc": format!("01970e589d21-{seq:08x}-a13f9c2e"),
+        "hlc": format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"),
         "payload": payload,
         "prev_refs": [],
         "refs": [],

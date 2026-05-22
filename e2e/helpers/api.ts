@@ -130,11 +130,23 @@ export async function acceptInviteViaApi(
   );
   expect(invite, `pending invite for ${actorDid} in ${spaceId}`).toBeTruthy();
 
-  const accept = await request.post(`${base}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite/accept`, {
-    headers: authHeaders(token),
-    data: { invite_id: invite!.invite_id },
-  });
-  expect(accept.status()).toBe(200);
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId: spaceId,
+      kind: "cx.member.state",
+      payload: {
+        actor_id: actorDid,
+        membership: "join",
+        reason: "invite_accept",
+        invite_id: invite!.invite_id,
+        delivery_status: "unroutable",
+      },
+    }),
+    { server: opts.server, context: `accept invite ${invite!.invite_id}` },
+  );
 }
 
 export async function createSharedSpaceViaApi(

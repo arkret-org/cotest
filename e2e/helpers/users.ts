@@ -10,6 +10,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
+import { signedEventEnvelope } from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -193,11 +194,10 @@ export class JointUserPage {
     return match![0];
   }
 
-  // Accept a pending invite for this user. Yougen's space-admin invite
-  // list is session-local (only invites created in the current session
-  // appear), so a fresh-context invitee can't see seed-members invites
-  // via the UI. We list invites + accept via soland HTTP API instead
-  // (`GET /api/v1/authz/invites`, `POST /api/v1/spaces/{id}/invite/accept`).
+  // Accept a pending invite for this user. Yougen's space-admin invite list
+  // is session-local, so a fresh-context invitee can't see seed-member invites
+  // via the UI. The old REST mutation endpoint was removed; acceptance now
+  // flows through the canonical event path as a null -> join member state.
   async acceptInvite(spaceId: string) {
     const serverUrl = this.session.serverUrl;
     const token = this.session.sessionToken;
@@ -233,17 +233,26 @@ export class JointUserPage {
     if (!token) {
       throw new Error("acceptInviteById: no session_token captured on session");
     }
-    const acceptResp = await this.page.request.post(
-      `${serverUrl}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite/accept`,
-      {
-        headers: { authorization: `Bearer ${token}` },
-        data: { invite_id: inviteId },
+    const envelope = signedEventEnvelope({
+      actorDid: this.user.did,
+      realmId: spaceId,
+      kind: "cx.member.state",
+      payload: {
+        actor_id: this.user.did,
+        membership: "join",
+        reason: "invite_accept",
+        invite_id: inviteId,
+        delivery_status: "unroutable",
       },
-    );
-    if (!acceptResp.ok()) {
+    });
+    const acceptResp = await this.page.request.post(`${serverUrl}/api/v1/events`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: envelope,
+    });
+    if (![200, 201].includes(acceptResp.status())) {
       const text = await acceptResp.text();
       throw new Error(
-        `acceptInviteById: POST .../invite/accept returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
+        `acceptInviteById: cx.member.state{join} returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
       );
     }
   }

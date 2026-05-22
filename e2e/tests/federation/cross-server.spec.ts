@@ -207,7 +207,7 @@ test.describe("cross-server federation", () => {
       const invites = await listInvitesApi(request, bobToken, { server: "beta" });
       const invite = invites.find((item) => item.space_id === spaceId && item.invitee === bob.did);
       expect(invite).toBeTruthy();
-      await acceptInviteApi(request, bobToken, spaceId, invite!.invite_id, { server: "beta" });
+      await acceptInviteApi(request, bobToken, bob.did, spaceId, invite!.invite_id, { server: "beta" });
 
       const betaSpace = await request.get(
         `${solandBaseUrl("beta")}/api/v1/spaces/${encodeURIComponent(spaceId)}`,

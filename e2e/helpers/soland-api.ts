@@ -111,19 +111,28 @@ export async function addSpaceMemberApi(
 export async function acceptInviteApi(
   request: APIRequestContext,
   token: string,
+  actorDid: string,
   spaceId: string,
   inviteId: string,
   opts: { server?: SolandKey } = {},
 ) {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite/accept`,
-    {
-      headers: authHeaders(token),
-      data: { invite_id: inviteId },
-    },
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId: spaceId,
+      kind: "cx.member.state",
+      payload: {
+        actor_id: actorDid,
+        membership: "join",
+        reason: "invite_accept",
+        invite_id: inviteId,
+        delivery_status: "unroutable",
+      },
+    }),
+    { server: opts.server, context: `accept invite ${inviteId}` },
   );
-  expect(response.ok(), `accept invite ${inviteId}`).toBeTruthy();
-  return await response.json();
 }
 
 export async function listInvitesApi(

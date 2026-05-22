@@ -40,7 +40,7 @@ use serde_json::{Value, json};
 fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {
     let actor_id = Did::new("did:web:alice.example".to_owned())
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
-    let hlc = Hlc::new("01970e589d21-00000001-a13f9c2e".to_owned())
+    let hlc = Hlc::new("01970e589d21-0001-a13f9c2e".to_owned())
         .map_err(|err| anyhow!("invalid hlc: {err}"))?;
     Event::new(kind.to_owned(), realm_id.clone(), actor_id, 1, hlc, payload)
         .map_err(|err| anyhow!("failed to build event: {err}"))

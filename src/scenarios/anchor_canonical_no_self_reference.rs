@@ -55,7 +55,7 @@ fn signature() -> MoveSignature {
 
 fn build_anchor() -> Result<Anchor> {
     let hlc =
-        Hlc::new("0189c4d2af00-00000000-aabbccdd".to_owned()).map_err(|e| anyhow!("hlc: {e}"))?;
+        Hlc::new("0189c4d2af00-0000-aabbccdd".to_owned()).map_err(|e| anyhow!("hlc: {e}"))?;
     let _anchorer = Did::new("did:web:anchorer.example".to_owned())
         .map_err(|e| anyhow!("anchorer did: {e}"))?;
     let mut a = Anchor {

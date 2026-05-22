@@ -82,7 +82,7 @@ fn signed_message_event(
         "actor_seq": actor_seq,
         "realm_id": space_id,
         "created_at": "2026-05-02T00:00:00Z",
-        "hlc": format!("01970e589d21-{actor_seq:08x}-a13f9c2e"),
+        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
         "refs": [],
         "payload": payload,
