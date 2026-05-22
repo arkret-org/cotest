@@ -1,4 +1,0 @@
-- [Spec is the canonical source, not the current frontend](feedback_spec_is_canonical.md) — when e2e tests and yougen disagree, the protocol (`../contrix-spec`) decides; don't add routes to make stale tests pass
-- [E2E must model multi-user/multi-server scenarios](feedback_e2e_scenario_driven.md) — design business flows first, no thin per-page smoke tests
-- [E2E coverage must span full protocol surface](feedback_full_surface_coverage.md) — inventory spec breadth (encryption, key backup, kanban, calls, recovery, webvh rotation, etc.) before stopping at 4 headline scenarios
-- [No sequential SN prefix in scenario/test naming](feedback_no_sequential_prefix.md) — organize by spec domain (identity/, encryption/, messaging/...); filenames describe content; cross-refs use paths
