@@ -10,14 +10,8 @@ import {
   createSharedSpaceViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
-import {
-  addSpaceMemberApi,
-  createSpaceApi,
-  makeOperation,
-  pushFederationOperations,
-  sendMessageApi,
-} from "../../helpers/soland-api";
+import { solandBaseUrl } from "../../helpers/env";
+import { signedEventEnvelope, submitSignedEventApi } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -63,18 +57,20 @@ test.describe("moderation appeal", () => {
       issueDevSession(request, appellant),
       issueDevSession(request, reviewer),
     ]);
-    const realmId = await createSpaceApi(request, reviewerToken, {
-      title: `appeal ui ${stamp}`,
-      public: true,
-      discoverability: "public",
-      history_visibility: "world_readable",
-    });
-    await addSpaceMemberApi(request, reviewerToken, realmId, appellant.did);
-    const decisionNotice = await sendMessageApi(
+    const realmId = await createSharedSpaceViaApi(
+      request,
+      reviewer,
+      reviewerToken,
+      appellant,
+      appellantToken,
+      { title: `appeal ui ${stamp}`, historyVisibility: "world_readable" },
+    );
+    const decisionNotice = await sendPlaintextMessageViaApi(
       request,
       reviewerToken,
       realmId,
       `Moderation decision: account restricted pending appeal ${stamp}`,
+      { actorDid: reviewer.did },
     );
     const targetRef = decisionNotice.event_id.replace(/^cx:event:/, "cx:message:");
     const decision = await issueDecision(request, reviewerToken, realmId, targetRef);
@@ -329,28 +325,29 @@ async function issueDecision(
 
 async function banMemberViaApi(
   request: APIRequestContext,
-  _token: string,
+  token: string,
   realmId: string,
   actorDid: string,
   memberDid: string,
   decisionRef: string,
 ) {
-  const banOperation = makeOperation({
-    spaceId: realmId,
-    objectType: "cx.member.state",
-    payload: {
-      actor_id: actorDid,
-      member: memberDid,
-      membership: "ban",
-      reason: "moderation_decision",
-      decision_ref: decisionRef,
-    },
-  });
-  const pushed = await pushFederationOperations(request, [banOperation], {
-    origin: solandServiceDid(),
-    spaceId: realmId,
-  });
-  expect(pushed.accepted).toContain(banOperation.operation_id);
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "cx.member.state",
+      payload: {
+        actor_id: memberDid,
+        member: memberDid,
+        membership: "ban",
+        reason: "moderation_decision",
+        decision_ref: decisionRef,
+      },
+    }),
+    { context: `ban ${memberDid} from ${realmId}` },
+  );
 }
 
 function appealPayload(fixture: AppealFixture) {
