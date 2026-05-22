@@ -5,7 +5,19 @@
 //   - models/flow-and-message.md §8, §8.4, §8.5
 
 import { expect, test, type Page } from "@playwright/test";
+import {
+  createSpaceViaApi,
+  createSharedSpaceViaApi,
+  listSpaceEventsViaApi,
+  sendPlaintextMessageViaApi,
+} from "../../helpers/api";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  canonicalTimestamp,
+  flowIdFromRealmId,
+  signedEventEnvelope,
+  submitSignedEventApi,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -32,6 +44,154 @@ async function waitForInviteCardReady(page: Page) {
 }
 
 test.describe("single-server triad collaboration", () => {
+  test("API create → revise → redact updates projection visibility", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("triad-api-alice");
+    const bob = uniqueUser("triad-api-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+      title: `triad audit ${stamp}`,
+      historyVisibility: "shared",
+    });
+    const created = await sendPlaintextMessageViaApi(
+      request,
+      aliceToken,
+      spaceId,
+      `triad create ${stamp}`,
+      { actorDid: alice.did },
+    );
+
+    const revisedBody = `triad revised ${stamp}`;
+    const messageRef = created.event_id.replace(/^cx:event:/, "cx:message:");
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: spaceId,
+        kind: "cx.message.revise",
+        payload: {
+          target_event_id: created.event_id,
+          target_ref: messageRef,
+          content: { kind: "cx.content.text", body: revisedBody },
+        },
+      }),
+      { context: "revise message" },
+    );
+
+    const beforeRedact = await listSpaceEventsViaApi(request, bobToken, spaceId);
+    expect(beforeRedact.map((event) => event.event_kind)).toEqual(
+      expect.arrayContaining(["cx.message.create", "cx.message.revise"]),
+    );
+    expect(beforeRedact.find((event) => event.event_kind === "cx.message.revise")?.payload)
+      .toMatchObject({ target_event_id: created.event_id, target_ref: messageRef });
+
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: spaceId,
+        kind: "cx.message.redact",
+        payload: {
+          target_event_id: created.event_id,
+          target_ref: messageRef,
+          reason: "author_redaction",
+        },
+      }),
+      { context: "redact message" },
+    );
+
+    const events = await listSpaceEventsViaApi(request, bobToken, spaceId);
+    expect(events.map((event) => event.event_kind)).toContain("cx.message.revise");
+    expect(events.map((event) => event.event_kind)).not.toContain("cx.message.create");
+    expect(events.map((event) => event.event_kind)).not.toContain("cx.message.redact");
+    expect(events.find((event) => event.event_kind === "cx.message.revise")?.payload)
+      .toMatchObject({ target_event_id: created.event_id, target_ref: messageRef });
+  });
+
+  test("API late-join triad member sees only post-join messages in joined history", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("triad-joined-alice");
+    const bob = uniqueUser("triad-joined-bob");
+    const carol = uniqueUser("triad-joined-carol");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+      ensureRegistered(request, carol),
+    ]);
+    const [aliceToken, bobToken, carolToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+      issueDevSession(request, carol),
+    ]);
+    const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+      title: `triad joined ${stamp}`,
+      historyVisibility: "joined",
+    });
+    const baseMs = Date.now() + 1_000;
+    const pre = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: spaceId,
+      kind: "cx.message.create",
+      createdAt: canonicalTimestamp(new Date(baseMs)),
+      payload: {
+        flow_id: flowIdFromRealmId(spaceId),
+        track: "discussion",
+        content: { kind: "cx.content.text", body: `triad pre ${stamp}` },
+        encrypted: false,
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, pre, {
+      context: "pre-join triad message",
+    });
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: spaceId,
+        kind: "cx.member.state",
+        createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
+        payload: {
+          actor_id: carol.did,
+          member: carol.did,
+          membership: "join",
+          delivery_status: "unroutable",
+        },
+      }),
+      { context: "join carol" },
+    );
+    const post = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: spaceId,
+      kind: "cx.message.create",
+      createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
+      payload: {
+        flow_id: flowIdFromRealmId(spaceId),
+        track: "discussion",
+        content: { kind: "cx.content.text", body: `triad post ${stamp}` },
+        encrypted: false,
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, post, {
+      context: "post-join triad message",
+    });
+
+    const carolEvents = await listSpaceEventsViaApi(request, carolToken, spaceId);
+    const ids = carolEvents.map((event) => event.event_id);
+    expect(ids).not.toContain(pre.event_id);
+    expect(ids).toContain(post.event_id);
+  });
+
   // soland gap (2026-05-21): history_visibility=joined is stored on the space
   // policy (state.rs:316, projection.rs:1021-1028) but NOT enforced on the
   // /sync read path — there is no `filter_history` / `visible_to_member`
@@ -227,9 +387,8 @@ test.describe("single-server triad collaboration", () => {
     // history_visibility filtering, this test will still be the canonical
     // "shared visibility lets carol read history" coverage.
     test("E1.2 history_visibility=shared exposes pre-join messages to late joiner", async ({
-      browser,
       request,
-    }, testInfo) => {
+    }) => {
       const stamp = Date.now();
       const alice = uniqueUser("s1e12-alice");
       const carol = uniqueUser("s1e12-carol");
@@ -237,36 +396,40 @@ test.describe("single-server triad collaboration", () => {
       await ensureRegistered(request, carol);
       const aliceToken = await issueDevSession(request, alice);
       const carolToken = await issueDevSession(request, carol);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
 
       const preMessage = `pre-join shared message ${stamp}`;
+      const spaceId = await createSpaceViaApi(request, aliceToken, {
+        title: `S1.2 Shared History ${stamp}`,
+        historyVisibility: "shared",
+        ownerDid: alice.did,
+      });
+      const pre = await sendPlaintextMessageViaApi(
+        request,
+        aliceToken,
+        spaceId,
+        preMessage,
+        { actorDid: alice.did },
+      );
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.member.state",
+          payload: {
+            actor_id: carol.did,
+            member: carol.did,
+            membership: "join",
+            delivery_status: "unroutable",
+          },
+        }),
+        { context: "join carol shared history" },
+      );
 
-      try {
-        const spaceId = await alicePage.createSpace({
-          title: `S1.2 Shared History ${stamp}`,
-          discoverability: "listed",
-          joinRule: "invite",
-          historyVisibility: "shared",
-        });
-        await alicePage.sendTimelineMessage(spaceId, preMessage);
-        await stepShot(alicePage.page, testInfo, "shared-pre-join-msg");
-
-        // inviteFromAdmin handles the SpaceAdmin Members hydration race
-        // (gotoSpaceAdminSection clicks the tab + asserts invite-member
-        // visible within 30s). acceptInvite is API-first (GET /authz/invites
-        // + POST /spaces/<id>/invite/accept) so carol doesn't need the
-        // invite UI to surface — see helpers/users.ts:187-225.
-        await alicePage.inviteFromAdmin(spaceId, carol.did);
-        await carolPage.acceptInvite(spaceId);
-        await carolPage.gotoTimelineSpace(spaceId);
-        // Spec §3.4: shared → new members see pre-join history meant to be
-        // shared. 30s timeout covers /sync hydration on carol's fresh page.
-        await expect(carolPage.timelineEvent(preMessage)).toBeVisible({ timeout: 30_000 });
-        await stepShot(carolPage.page, testInfo, "shared-carol-sees-pre-join");
-      } finally {
-        await Promise.allSettled([carolPage.close(), alicePage.close()]);
-      }
+      const carolEvents = await listSpaceEventsViaApi(request, carolToken, spaceId);
+      expect(carolEvents.map((event) => event.event_id)).toContain(pre.event_id);
+      expect(JSON.stringify(carolEvents)).toContain(preMessage);
     });
   });
 });

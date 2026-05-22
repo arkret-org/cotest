@@ -1,10 +1,10 @@
 # fixme debt
 
-Generated: 2026-05-22T10:24:28.300Z
+Generated: 2026-05-22T12:37:04.642Z
 
 | metric | count |
 |---|---:|
-| total fixme | 235 |
+| total fixme | 224 |
 | missing metadata | 0 |
 | expired expected_live_by | 0 |
 
@@ -320,43 +320,27 @@ Generated: 2026-05-22T10:24:28.300Z
 
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
-| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:124 | E14.D mentions route notifications only to the mentioned actor | e2e/scenarios/messaging/chat-advanced.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:189 | E14.E poll create + vote + close (vote replacement per actor) | e2e/scenarios/messaging/chat-advanced.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:267 | E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000 | e2e/scenarios/messaging/chat-advanced.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:309 | E14.G presence state propagates online/offline within 1s after page open/close | e2e/scenarios/messaging/chat-advanced.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:352 | E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext | e2e/scenarios/messaging/chat-advanced.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:47 | reactions converge (OR-Set) and replies render with reply indicator | e2e/scenarios/messaging/chat-advanced.md | - |
-
-## soland#messaging-discussion-upgrade-gap
-
-| expected_live_by | status | file:line | title | user_promise | missing |
-|---|---|---|---|---|---|
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:13 | alice creates Flow F1 in S_parent; alice and bob exchange messages on F1's inline discussion track | e2e/scenarios/messaging/discussion-upgrade.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:24 | alice promotes F1's discussion to a new child space S_discussion; F1.discussion_space_ref = S_discussion.id; parent/child edges confirmed | e2e/scenarios/messaging/discussion-upgrade.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:35 | after promotion, new messages on F1 route to S_discussion, not S_parent; F1 comments view stitches pre+post messages from both spaces | e2e/scenarios/messaging/discussion-upgrade.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:45 | carol invited to S_discussion (not S_parent); carol sees only post-promotion messages; pre-promotion stays in S_parent and is invisible to carol | e2e/scenarios/messaging/discussion-upgrade.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:55 | S_discussion can be E2EE while S_parent stays plaintext; parent's MLS key cannot decrypt child (spec §9) | e2e/scenarios/messaging/discussion-upgrade.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:65 | E21.1 setting discussion_space_ref to a non-existent space rejects cx.flow.update with orphan_discussion_space_ref | e2e/scenarios/messaging/discussion-upgrade.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/discussion-upgrade.spec.ts:73 | E21.F read-receipts policy override: S_discussion.disclosure=required overrides S_parent.disclosure=optional | e2e/scenarios/messaging/discussion-upgrade.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:223 | reactions converge (OR-Set) and replies render with reply indicator | e2e/scenarios/messaging/chat-advanced.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:300 | E14.D mentions route notifications only to the mentioned actor | e2e/scenarios/messaging/chat-advanced.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:365 | E14.E poll create + vote + close (vote replacement per actor) | e2e/scenarios/messaging/chat-advanced.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:443 | E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000 | e2e/scenarios/messaging/chat-advanced.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:485 | E14.G presence state propagates online/offline within 1s after page open/close | e2e/scenarios/messaging/chat-advanced.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/chat-advanced.spec.ts:528 | E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext | e2e/scenarios/messaging/chat-advanced.md | - |
 
 ## soland#messaging-read-receipts-gap
 
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:102 | alice re-enables preference; new reads emit a single fresh cx.receipt.read; reads during the disabled window stay invisible | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:112 | space disclosure=required locks the client toggle; even with preference=false, client sends receipts | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:122 | space disclosure=disabled: client does not send; Sync Service silently drops any inbound cx.receipt.read for the space | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:132 | actor-private read marker (cx.read.marker) syncs across alice's devices but does NOT broadcast to bob | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:142 | E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:152 | E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:81 | alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:92 | alice toggles preference=false; subsequent reads do NOT emit cx.receipt.read; bob's view stops updating | e2e/scenarios/messaging/read-receipts.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:214 | space disclosure=disabled: client does not send; Sync Service silently drops any inbound cx.receipt.read for the space | e2e/scenarios/messaging/read-receipts.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:224 | actor-private read marker (cx.read.marker) syncs across alice's devices but does NOT broadcast to bob | e2e/scenarios/messaging/read-receipts.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:234 | E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted | e2e/scenarios/messaging/read-receipts.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:244 | E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt | e2e/scenarios/messaging/read-receipts.md | - |
 
 ## soland#messaging-triad-collaboration-gap
 
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
-| 2026Q3 | tracked | e2e/tests/messaging/triad-collaboration.spec.ts:46 | alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone | e2e/scenarios/messaging/triad-collaboration.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/triad-collaboration.spec.ts:206 | alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone | e2e/scenarios/messaging/triad-collaboration.md | - |
 
 ## soland#models-core-object-invariants-gap
 

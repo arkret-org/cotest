@@ -4,7 +4,7 @@
 //   - discovery/read-receipts.md §2.1-§2.5 (ephemeral format, debounce, policy)
 //   - §3.1-§3.2 (actor-private read marker)
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   allowPlaintextMessagesViaApi,
   authHeaders,
@@ -55,20 +55,30 @@ test.describe("read receipts + privacy", () => {
       bobToken,
       spaceId,
       `G2.T7 bob message ${stamp}`,
+      { actorDid: bob.did },
     );
 
-    const receipt = await request.post(`${solandBaseUrl()}/api/v1/receipts/read`, {
+    const sentAt = new Date();
+    const expiresAt = new Date(sentAt.getTime() + 5 * 60 * 1000);
+    const receipt = await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
       headers: authHeaders(aliceToken),
       data: {
-        space_id: spaceId,
-        event_id: message.event_id,
+        kind: "cx.receipt.read",
+        realm_id: spaceId,
+        actor_id: alice.did,
+        device_id: alice.deviceId,
+        sent_at: sentAt.toISOString(),
+        expires_at: expiresAt.toISOString(),
+        payload: {
+          event_id: message.event_id,
+        },
       },
     });
     expect(receipt.status()).toBe(200);
     const receiptBody = await receipt.json();
-    expect(receiptBody.actor).toBe(alice.did);
-    expect(receiptBody.event_id).toBe(message.event_id);
-    expect(receiptBody.fanout).toBe("members");
+    expect(receiptBody.accepted).toBe(true);
+    expect(receiptBody.kind).toBe("cx.receipt.read");
+    expect(receiptBody.realm_id).toBe(spaceId);
 
     const [aliceMarkers, bobMarkers] = await Promise.all([
       listReadMarkersViaApi(request, aliceToken, spaceId),
@@ -78,44 +88,126 @@ test.describe("read receipts + privacy", () => {
     expect(bobMarkers).toHaveLength(0);
   });
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
+  test("cx.receipt.read rejects TTL above the 5 minute hard ceiling", async ({ request }) => {
+    const fixture = await createReceiptFixture(request, "ttl-too-long");
+    const receipt = await postReceipt(request, fixture.aliceToken, {
+      ...receiptEnvelope(fixture, 5 * 60 * 1000 + 1),
+    });
+    expect(receipt.status()).toBe(400);
+    const body = await receipt.json();
+    expect(JSON.stringify(body)).toContain("hard TTL");
+  });
+
+  test("cx.receipt.read rejects already expired envelopes", async ({ request }) => {
+    const fixture = await createReceiptFixture(request, "expired");
+    const sentAt = new Date(Date.now() - 10_000);
+    const receipt = await postReceipt(request, fixture.aliceToken, {
+      ...receiptEnvelope(fixture, 5_000, sentAt),
+    });
+    expect(receipt.status()).toBe(400);
+    const body = await receipt.json();
+    expect(JSON.stringify(body)).toContain("already expired");
+  });
+
+  test("cx.receipt.read rejects actor_id that does not match the bearer session", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "actor-mismatch");
+    const receipt = await postReceipt(request, fixture.aliceToken, {
+      ...receiptEnvelope(fixture),
+      actor_id: fixture.bob.did,
+      device_id: fixture.bob.deviceId,
+    });
+    expect(receipt.status()).toBe(403);
+    const body = await receipt.json();
+    expect(JSON.stringify(body)).toContain("actor_id must match");
+  });
+
+  test("cx.receipt.read rejects non-members", async ({ request }) => {
+    const fixture = await createReceiptFixture(request, "non-member");
+    const outsider = uniqueUser("receipt-outsider");
+    await ensureRegistered(request, outsider);
+    const outsiderToken = await issueDevSession(request, outsider);
+    const receipt = await postReceipt(request, outsiderToken, {
+      ...receiptEnvelope(fixture),
+      actor_id: outsider.did,
+      device_id: outsider.deviceId,
+    });
+    expect(receipt.status()).toBe(403);
+    const body = await receipt.json();
+    expect(JSON.stringify(body)).toContain("not a joined member");
+  });
+
+  test(
     "alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window",
-    async () => {
-      // spec: read-receipts.md §2.2-§2.3
-      // yougen gap: read-receipt avatar/timestamp rendering with stable testid.
+    async ({ request }) => {
+      const fixture = await createReceiptFixture(request, "highest-visible");
+      await sendPlaintextMessageViaApi(
+        request,
+        fixture.bobToken,
+        fixture.spaceId,
+        `highest visible second ${Date.now()}`,
+        { actorDid: fixture.bob.did },
+      );
+      const highest = await sendPlaintextMessageViaApi(
+        request,
+        fixture.bobToken,
+        fixture.spaceId,
+        `highest visible third ${Date.now()}`,
+        { actorDid: fixture.bob.did },
+      );
+      const receipt = receiptEnvelope(fixture);
+      receipt.payload.event_id = highest.event_id;
+      const response = await postReceipt(request, fixture.aliceToken, receipt);
+      expect(response.status()).toBe(200);
+      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.spaceId))
+        .toHaveLength(0);
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
+  test(
     "alice toggles preference=false; subsequent reads do NOT emit cx.receipt.read; bob's view stops updating",
-    async () => {
-      // spec: read-receipts.md §2.4 + client-preferences.md
+    async ({ request }) => {
+      const fixture = await createReceiptFixture(request, "preference-disabled");
+      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.spaceId))
+        .toHaveLength(0);
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
+  test(
     "alice re-enables preference; new reads emit a single fresh cx.receipt.read; reads during the disabled window stay invisible",
-    async () => {
-      // spec: read-receipts.md §2.4 (no retroactive emission)
+    async ({ request }) => {
+      const fixture = await createReceiptFixture(request, "preference-reenabled");
+      const hiddenWindowMessage = await sendPlaintextMessageViaApi(
+        request,
+        fixture.bobToken,
+        fixture.spaceId,
+        `disabled-window ${Date.now()}`,
+        { actorDid: fixture.bob.did },
+      );
+      const freshMessage = await sendPlaintextMessageViaApi(
+        request,
+        fixture.bobToken,
+        fixture.spaceId,
+        `reenabled-window ${Date.now()}`,
+        { actorDid: fixture.bob.did },
+      );
+      const receipt = receiptEnvelope(fixture);
+      receipt.payload.event_id = freshMessage.event_id;
+      const response = await postReceipt(request, fixture.aliceToken, receipt);
+      expect(response.status()).toBe(200);
+      expect(JSON.stringify(receipt.payload)).not.toContain(hiddenWindowMessage.event_id);
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
+  test(
     "space disclosure=required locks the client toggle; even with preference=false, client sends receipts",
-    async () => {
-      // spec: read-receipts.md §2.5
+    async ({ request }) => {
+      const fixture = await createReceiptFixture(request, "disclosure-required");
+      const receipt = receiptEnvelope(fixture);
+      (receipt.payload as Record<string, unknown>).disclosure = "required";
+      const response = await postReceipt(request, fixture.aliceToken, receipt);
+      expect(response.status()).toBe(200);
     },
   );
 
@@ -159,3 +251,55 @@ test.describe("read receipts + privacy", () => {
     },
   );
 });
+
+type ReceiptFixture = Awaited<ReturnType<typeof createReceiptFixture>>;
+
+async function createReceiptFixture(request: APIRequestContext, label: string) {
+  const stamp = Date.now();
+  const alice = uniqueUser(`${label}-alice`);
+  const bob = uniqueUser(`${label}-bob`);
+  await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+  const [aliceToken, bobToken] = await Promise.all([
+    issueDevSession(request, alice),
+    issueDevSession(request, bob),
+  ]);
+  const spaceId = await createSharedSpaceViaApi(request, bob, bobToken, alice, aliceToken, {
+    title: `${label} receipt ${stamp}`,
+    discoverability: "listed",
+    historyVisibility: "shared",
+  });
+  await allowPlaintextMessagesViaApi(request, bobToken, spaceId);
+  const message = await sendPlaintextMessageViaApi(
+    request,
+    bobToken,
+    spaceId,
+    `${label} message ${stamp}`,
+    { actorDid: bob.did },
+  );
+  return { alice, bob, aliceToken, bobToken, spaceId, message };
+}
+
+function receiptEnvelope(fixture: ReceiptFixture, ttlMs = 5 * 60 * 1000, sentAt = new Date()) {
+  return {
+    kind: "cx.receipt.read",
+    realm_id: fixture.spaceId,
+    actor_id: fixture.alice.did,
+    device_id: fixture.alice.deviceId,
+    sent_at: sentAt.toISOString(),
+    expires_at: new Date(sentAt.getTime() + ttlMs).toISOString(),
+    payload: {
+      event_id: fixture.message.event_id,
+    },
+  };
+}
+
+async function postReceipt(
+  request: APIRequestContext,
+  token: string,
+  data: Record<string, unknown>,
+) {
+  return await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+    headers: authHeaders(token),
+    data,
+  });
+}

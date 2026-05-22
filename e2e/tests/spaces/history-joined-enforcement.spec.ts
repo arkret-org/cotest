@@ -1,0 +1,414 @@
+// history_visibility=joined hides pre-join history on read paths.
+// Contract: e2e/scenarios/spaces/history-joined-enforcement.md
+// @blocking-on: soland#history-visibility-read-path
+
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import {
+  authHeaders,
+  canonicalTimestamp,
+  flowIdFromRealmId,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+} from "../../helpers/soland-api";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+  type JointUser,
+} from "../../helpers/users";
+
+test.describe.configure({ mode: "serial" });
+
+test.describe("history_visibility=joined read enforcement @fully-implemented", () => {
+  test("late member events query hides five pre-join messages and includes post-join messages", async ({
+    request,
+  }) => {
+    const fixture = await createHistoryFixture(request, {
+      historyVisibility: "joined",
+      preCount: 5,
+      postCount: 2,
+      label: "joined-query-hide",
+    });
+
+    const bobBodies = await listMessageBodies(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
+    expect(bobBodies).toEqual(fixture.postBodies);
+    expect(bobBodies).not.toEqual(expect.arrayContaining(fixture.preBodies));
+  });
+
+  test("late member events query keeps post-join message order stable", async ({
+    request,
+  }) => {
+    const fixture = await createHistoryFixture(request, {
+      historyVisibility: "joined",
+      preCount: 2,
+      postCount: 4,
+      label: "joined-query-order",
+    });
+
+    await expect
+      .poll(
+        async () =>
+          await listMessageBodies(request, fixture.bobToken, fixture.realmId),
+        {
+          timeout: 10_000,
+        },
+      )
+      .toEqual(fixture.postBodies);
+  });
+
+  test("owner events query still sees the full joined-history timeline", async ({
+    request,
+  }) => {
+    const fixture = await createHistoryFixture(request, {
+      historyVisibility: "joined",
+      preCount: 5,
+      postCount: 2,
+      label: "joined-owner-full",
+    });
+
+    const aliceBodies = await listMessageBodies(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    expect(aliceBodies).toEqual([...fixture.preBodies, ...fixture.postBodies]);
+  });
+
+  test("shared visibility control allows a late member to read pre-join messages", async ({
+    request,
+  }) => {
+    const fixture = await createHistoryFixture(request, {
+      historyVisibility: "shared",
+      preCount: 3,
+      postCount: 2,
+      label: "shared-control",
+    });
+
+    const bobBodies = await listMessageBodies(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
+    expect(bobBodies).toEqual([...fixture.preBodies, ...fixture.postBodies]);
+  });
+
+  test("streaming read paths also filter pre-join history for joined realms", async ({
+    request,
+  }) => {
+    const fixture = await createHistoryFixture(request, {
+      historyVisibility: "joined",
+      preCount: 4,
+      postCount: 1,
+      label: "joined-streams",
+    });
+
+    const accountBodies = await accountSubscribeBodies(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
+    expect(accountBodies).toEqual(fixture.postBodies);
+
+    const eventStreamBodies = await eventsSubscribeBodies(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
+    expect(eventStreamBodies).toEqual(fixture.postBodies);
+  });
+});
+
+type HistoryFixture = {
+  realmId: string;
+  alice: JointUser;
+  bob: JointUser;
+  aliceToken: string;
+  bobToken: string;
+  preBodies: string[];
+  postBodies: string[];
+};
+
+async function createHistoryFixture(
+  request: APIRequestContext,
+  opts: {
+    historyVisibility: "joined" | "shared";
+    preCount: number;
+    postCount: number;
+    label: string;
+  },
+): Promise<HistoryFixture> {
+  const alice = uniqueUser(`${opts.label}-alice`);
+  const bob = uniqueUser(`${opts.label}-bob`);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+  ]);
+  const [aliceToken, bobToken] = await Promise.all([
+    issueDevSession(request, alice),
+    issueDevSession(request, bob),
+  ]);
+
+  const realmId = typedId("realm");
+  const baseMs = Date.now();
+  await createRealm(
+    request,
+    aliceToken,
+    alice,
+    realmId,
+    opts.historyVisibility,
+    createdAt(baseMs - 90_000),
+  );
+
+  const preBodies: string[] = [];
+  for (let i = 0; i < opts.preCount; i += 1) {
+    const body = `${opts.label} pre ${i + 1}`;
+    preBodies.push(body);
+    await createMessage(
+      request,
+      aliceToken,
+      alice,
+      realmId,
+      body,
+      createdAt(baseMs - 60_000 + i * 1_000),
+    );
+  }
+
+  await joinMember(request, aliceToken, alice, bob, realmId, createdAt(baseMs));
+
+  const postBodies: string[] = [];
+  for (let i = 0; i < opts.postCount; i += 1) {
+    const body = `${opts.label} post ${i + 1}`;
+    postBodies.push(body);
+    await createMessage(
+      request,
+      aliceToken,
+      alice,
+      realmId,
+      body,
+      createdAt(baseMs + 60_000 + i * 1_000),
+    );
+  }
+
+  return { realmId, alice, bob, aliceToken, bobToken, preBodies, postBodies };
+}
+
+async function createRealm(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  realmId: string,
+  historyVisibility: "joined" | "shared",
+  createdAtValue: string,
+) {
+  const plaintextVisibleServices = Array.from(
+    new Set([solandServiceDid(), "did:web:soland.local"]),
+  );
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: actor.did,
+      realmId,
+      kind: "cx.realm.create",
+      createdAt: createdAtValue,
+      payload: {
+        plaintext_visible_services: plaintextVisibleServices,
+        object: {
+          id: realmId,
+          schema: "cx.schema.realm.v1",
+          title: `history ${historyVisibility} ${Date.now()}`,
+          summary: "cotest joined-history enforcement fixture",
+          created_by_principal: actor.did,
+          trust_domain: "cx:trust_domain:soland.local",
+          schema_refs: ["cx.schema.realm.v1"],
+          default_discoverability: "public",
+          default_join_rule: "invite",
+          history_visibility: historyVisibility,
+          encryption_profile: "none",
+          plaintext_visible_services: plaintextVisibleServices,
+          security_class: "standard",
+          federation_policy: "restricted",
+          anchor_profile: "single_did",
+          hash_profile: "sha256",
+          anchorer: {
+            type: "single_did",
+            did: actor.did,
+          },
+          created_at: createdAtValue,
+        },
+      },
+    }),
+    { context: `create ${historyVisibility} realm` },
+  );
+}
+
+async function createMessage(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  realmId: string,
+  body: string,
+  createdAtValue: string,
+) {
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: actor.did,
+      realmId,
+      kind: "cx.message.create",
+      createdAt: createdAtValue,
+      payload: {
+        flow_id: flowIdFromRealmId(realmId),
+        track: "discussion",
+        content: {
+          kind: "cx.content.text",
+          body,
+        },
+        encrypted: false,
+      },
+    }),
+    { context: `create message ${body}` },
+  );
+}
+
+async function joinMember(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  member: JointUser,
+  realmId: string,
+  createdAtValue: string,
+) {
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: actor.did,
+      realmId,
+      kind: "cx.member.state",
+      createdAt: createdAtValue,
+      payload: {
+        actor_id: member.did,
+        member: member.did,
+        membership: "join",
+        delivery_status: "unroutable",
+      },
+    }),
+    { context: `join ${member.did}` },
+  );
+}
+
+async function listMessageBodies(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<string[]> {
+  const response = await request.get(
+    `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(realmId)}&limit=100`,
+    { headers: authHeaders(token) },
+  );
+  const text = await response.text();
+  expect(response.status(), `query ${realmId}: ${text}`).toBe(200);
+  const body = JSON.parse(text) as { events?: Array<Record<string, unknown>> };
+  return (body.events ?? [])
+    .filter(isMessageEvent)
+    .map(messageBody)
+    .filter(isString);
+}
+
+async function accountSubscribeBodies(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<string[]> {
+  const response = await request.get(
+    `${solandBaseUrl()}/api/v1/account/subscribe?catchup=true&filter=${encodeURIComponent(
+      JSON.stringify({ spaces: [realmId] }),
+    )}`,
+    { headers: authHeaders(token) },
+  );
+  const text = await response.text();
+  expect(response.status(), `account subscribe ${realmId}: ${text}`).toBe(200);
+  const frames = parseNdjson(text);
+  const delta = frames.find((frame) => frame.kind === "delta") as
+    | {
+        realms?: {
+          join?: Record<
+            string,
+            { timeline?: { events?: Array<Record<string, unknown>> } }
+          >;
+        };
+      }
+    | undefined;
+  const events = delta?.realms?.join?.[realmId]?.timeline?.events ?? [];
+  return events.map(messageBody).filter(isString);
+}
+
+async function eventsSubscribeBodies(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<string[]> {
+  const response = await request.get(
+    `${solandBaseUrl()}/api/v1/events/subscribe?realms=${encodeURIComponent(
+      realmId,
+    )}&limit=100&max_duration_ms=100&heartbeat_ms=100`,
+    { headers: authHeaders(token) },
+  );
+  const text = await response.text();
+  expect(response.status(), `events subscribe ${realmId}: ${text}`).toBe(200);
+  return parseNdjson(text)
+    .filter((frame) => frame.kind === "event")
+    .map((frame) => messageBody(frame.payload))
+    .filter(isString);
+}
+
+function isMessageEvent(event: Record<string, unknown>): boolean {
+  return (
+    event.event_kind === "cx.message.create" ||
+    event.kind === "cx.message.create"
+  );
+}
+
+function messageBody(event: unknown): string | undefined {
+  if (!event || typeof event !== "object") {
+    return undefined;
+  }
+  const record = event as Record<string, unknown>;
+  const payload =
+    record.payload && typeof record.payload === "object"
+      ? (record.payload as Record<string, unknown>)
+      : record;
+  const content =
+    payload.content && typeof payload.content === "object"
+      ? (payload.content as Record<string, unknown>)
+      : undefined;
+  return isString(payload.body)
+    ? payload.body
+    : isString(content?.body)
+      ? content.body
+      : undefined;
+}
+
+function parseNdjson(text: string): Array<Record<string, unknown>> {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+function createdAt(ms: number): string {
+  return canonicalTimestamp(new Date(ms));
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string";
+}

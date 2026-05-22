@@ -53,8 +53,8 @@ test.describe("offline sync + conflict repair", () => {
     expect(before).not.toContain(m1);
     expect(before).not.toContain(m2);
 
-    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m1);
-    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m2);
+    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m1, { actorDid: alice.did });
+    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m2, { actorDid: alice.did });
 
     await expect
       .poll(async () => JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId)), {

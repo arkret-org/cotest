@@ -1,14 +1,29 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { expect, type APIRequestContext, type APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 
 export type OperationKind =
   | "event"
+  | "flow"
   | "mls_group"
   | "mls_keypackage"
   | "mls_welcome"
   | "operation"
+  | "realm"
   | "space";
+
+export type SignedEventEnvelopeArgs = {
+  actorDid: string;
+  realmId: string;
+  kind: string;
+  payload: Record<string, unknown>;
+  actorSeq?: number;
+  createdAt?: string;
+  eventId?: string;
+  operationId?: string;
+  schemaId?: string;
+  proofVerificationMethod?: string;
+};
 
 export function authHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
@@ -158,6 +173,72 @@ export async function querySpaceEventsApi(
   return await expectJsonOk<Record<string, unknown>>(response, `query events for ${spaceId}`);
 }
 
+export function signedEventEnvelope(
+  args: SignedEventEnvelopeArgs,
+): Record<string, unknown> {
+  const createdAt = args.createdAt ?? canonicalTimestamp();
+  const payload = stripUndefined(args.payload) as Record<string, unknown>;
+  return {
+    event_id: args.eventId ?? typedId("event"),
+    kind: args.kind,
+    schema_id: args.schemaId ?? "cx.schema.event.v1",
+    realm_id: args.realmId,
+    actor_id: args.actorDid,
+    actor_seq: args.actorSeq ?? nextActorSeq(),
+    created_at: createdAt,
+    prev_refs: [],
+    refs: [],
+    requirements: {
+      schema: ["cx.schema.event.v1"],
+      features: [],
+      critical_extensions: [],
+    },
+    payload,
+    unsigned: {
+      local_operation_idempotency_alias:
+        args.operationId ?? typedId("operation"),
+    },
+    proofs: [
+      {
+        type: "dev-proof",
+        verification_method:
+          args.proofVerificationMethod ?? `${args.actorDid}#device`,
+        payload_hash: `sha256:${sha256CanonicalJson(payload)}`,
+      },
+    ],
+  };
+}
+
+export async function submitSignedEventApi(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  opts: { server?: SolandKey; context?: string } = {},
+) {
+  const response = await request.post(
+    `${solandBaseUrl(opts.server)}/api/v1/events`,
+    {
+      headers: authHeaders(token),
+      data: envelope,
+    },
+  );
+  const text = await response.text();
+  expect(
+    [200, 201],
+    `${opts.context ?? `submit ${String(envelope.kind)}`} returned ${response.status()}: ${text}`,
+  ).toContain(response.status());
+  return JSON.parse(text) as Record<string, unknown>;
+}
+
+export function flowIdFromRealmId(realmId: string): string {
+  const suffix = realmId.replace(/^cx:(realm|space):/, "");
+  return `cx:flow:${suffix}`;
+}
+
+export function canonicalTimestamp(date: Date = new Date()): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export function makeOperation(args: {
   operationId?: string;
   spaceId: string;
@@ -210,6 +291,47 @@ export async function pushFederationOperations(
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+let actorSeqCounter = 1;
+
+function nextActorSeq(): number {
+  const seq = actorSeqCounter;
+  actorSeqCounter += 1;
+  return seq;
+}
+
+function sha256CanonicalJson(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function stripUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => (item === undefined ? null : stripUndefined(item)));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, stripUndefined(item)]),
+    );
+  }
+  return value;
 }
 
 function uuidV7(): string {

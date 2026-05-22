@@ -6,8 +6,20 @@
 //   - discovery/profiles-presence.md §3
 //   - discovery/push-notifications.md §4.3.1, §4.5
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  authHeaders,
+  createSharedSpaceViaApi,
+  listSpaceEventsViaApi,
+  sendPlaintextMessageViaApi,
+} from "../../helpers/api";
+import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  flowIdFromRealmId,
+  signedEventEnvelope,
+  submitSignedEventApi,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -39,6 +51,170 @@ async function sendChat(page: JointUserPage, spaceId: string, body: string) {
 }
 
 test.describe("chat advanced", () => {
+  test("API reactions add/remove round-trip as projection events", async ({ request }) => {
+    const fixture = await createChatApiFixture(request, "reaction-api");
+    const message = await sendPlaintextMessageViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.spaceId,
+      `reaction target ${Date.now()}`,
+      { actorDid: fixture.alice.did },
+    );
+    const messageRef = message.event_id.replace(/^cx:event:/, "cx:message:");
+
+    await submitSignedEventApi(
+      request,
+      fixture.bobToken,
+      signedEventEnvelope({
+        actorDid: fixture.bob.did,
+        realmId: fixture.spaceId,
+        kind: "cx.reaction.add",
+        payload: {
+          target_ref: messageRef,
+          actor: fixture.bob.did,
+          key: "+1",
+        },
+      }),
+      { context: "add reaction" },
+    );
+    await submitSignedEventApi(
+      request,
+      fixture.bobToken,
+      signedEventEnvelope({
+        actorDid: fixture.bob.did,
+        realmId: fixture.spaceId,
+        kind: "cx.reaction.remove",
+        payload: {
+          target_ref: messageRef,
+          actor: fixture.bob.did,
+          key: "+1",
+        },
+      }),
+      { context: "remove reaction" },
+    );
+
+    const events = await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
+    expect(events.map((event) => event.event_kind)).toEqual(
+      expect.arrayContaining(["cx.reaction.add", "cx.reaction.remove"]),
+    );
+    expect(events.find((event) => event.event_kind === "cx.reaction.add")?.payload).toMatchObject({
+      target_ref: messageRef,
+      actor: fixture.bob.did,
+      key: "+1",
+    });
+  });
+
+  test("API reply messages preserve reply_to and discussion track ordering", async ({ request }) => {
+    const fixture = await createChatApiFixture(request, "reply-api");
+    const root = await sendPlaintextMessageViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.spaceId,
+      `root ${Date.now()}`,
+      { actorDid: fixture.alice.did },
+    );
+    const rootMessageRef = root.event_id.replace(/^cx:event:/, "cx:message:");
+    const replyBody = `reply ${Date.now()}`;
+    const reply = signedEventEnvelope({
+      actorDid: fixture.bob.did,
+      realmId: fixture.spaceId,
+      kind: "cx.message.create",
+      payload: {
+        flow_id: flowIdFromRealmId(fixture.spaceId),
+        track: "discussion",
+        thread_id: "discussion",
+        reply_to: rootMessageRef,
+        content: { kind: "cx.content.text", body: replyBody },
+        encrypted: false,
+      },
+    });
+    await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
+
+    const events = await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
+    const messageEvents = events.filter((event) => event.event_kind === "cx.message.create");
+    expect(messageEvents.map((event) => event.event_id)).toEqual([
+      root.event_id,
+      reply.event_id,
+    ]);
+    expect(messageEvents.at(-1)?.payload).toMatchObject({
+      reply_to: rootMessageRef,
+      thread_id: "discussion",
+    });
+  });
+
+  test("API mention payload persists mention routing metadata", async ({ request }) => {
+    const fixture = await createChatApiFixture(request, "mention-api");
+    const body = `@${fixture.bob.handle.replace(/^@/, "")} review ${Date.now()}`;
+    await submitSignedEventApi(
+      request,
+      fixture.aliceToken,
+      signedEventEnvelope({
+        actorDid: fixture.alice.did,
+        realmId: fixture.spaceId,
+        kind: "cx.message.create",
+        payload: {
+          flow_id: flowIdFromRealmId(fixture.spaceId),
+          track: "discussion",
+          content: {
+            kind: "cx.content.text",
+            body,
+            mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
+          },
+          mention_routing_hint: {
+            mentioned: [fixture.bob.did],
+          },
+          encrypted: false,
+        },
+      }),
+      { context: "mention message" },
+    );
+
+    const events = await listSpaceEventsViaApi(request, fixture.bobToken, fixture.spaceId);
+    const mention = events.find(
+      (event) =>
+        event.event_kind === "cx.message.create" &&
+        JSON.stringify(event.payload).includes(fixture.bob.did),
+    );
+    expect(mention?.payload).toMatchObject({
+      content: {
+        mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
+      },
+      mention_routing_hint: { mentioned: [fixture.bob.did] },
+    });
+  });
+
+  test("API typing ephemeral is visible in account subscribe and respects TTL", async ({
+    request,
+  }) => {
+    const fixture = await createChatApiFixture(request, "typing-api");
+    const sentAt = new Date();
+    const typing = await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+      headers: authHeaders(fixture.aliceToken),
+      data: {
+        kind: "cx.typing",
+        realm_id: fixture.spaceId,
+        actor_id: fixture.alice.did,
+        device_id: fixture.alice.deviceId,
+        sent_at: sentAt.toISOString(),
+        expires_at: new Date(sentAt.getTime() + 5_000).toISOString(),
+        payload: {
+          typing: true,
+          scope_id: "discussion",
+        },
+      },
+    });
+    expect(typing.status()).toBe(200);
+
+    const subscribe = await request.get(`${solandBaseUrl()}/api/v1/account/subscribe`, {
+      headers: authHeaders(fixture.bobToken),
+    });
+    expect(subscribe.status()).toBe(200);
+    const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
+    const ephemeral = frame.realms.join[fixture.spaceId].ephemeral;
+    expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
+    expect(JSON.stringify(ephemeral)).toContain("discussion");
+  });
+
   // yougen gap: ChatPanel's channel list (`channel-item`) doesn't hydrate
   // from sync.spaces flows on first /chat/<id> mount in a fresh browser
   // context; the panel renders but no channels appear. Since the send
@@ -398,3 +574,19 @@ test.describe("chat advanced", () => {
     },
   );
 });
+
+async function createChatApiFixture(request: APIRequestContext, label: string) {
+  const stamp = Date.now();
+  const alice = uniqueUser(`${label}-alice`);
+  const bob = uniqueUser(`${label}-bob`);
+  await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+  const [aliceToken, bobToken] = await Promise.all([
+    issueDevSession(request, alice),
+    issueDevSession(request, bob),
+  ]);
+  const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+    title: `${label} ${stamp}`,
+    historyVisibility: "shared",
+  });
+  return { alice, bob, aliceToken, bobToken, spaceId };
+}

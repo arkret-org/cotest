@@ -126,6 +126,7 @@ impl ContrixServer {
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
             .env("SOLAND_SERVICE_DID", &service_did)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
+            .env("SOLAND_SEED_DEMO_DATA", "1")
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
@@ -194,6 +195,7 @@ impl ContrixServer {
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
             .env("SOLAND_SERVICE_DID", &service_did)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
+            .env("SOLAND_SEED_DEMO_DATA", "1")
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
@@ -266,6 +268,8 @@ impl ContrixServer {
             .arg(format!("SOLAND_SERVICE_DID={service_did}"))
             .arg("--env")
             .arg("SOLAND_DEVELOPMENT_MODE=1")
+            .arg("--env")
+            .arg("SOLAND_SEED_DEMO_DATA=1")
             .arg("--env")
             .arg("SOLAND_BLOB_ROOT=/tmp/soland-blobs");
         for &(key, value) in extra_env {
@@ -665,7 +669,10 @@ pub async fn expect_api_error(
 ) -> Result<Value> {
     let response = expect_response(builder, status).await?;
     let body = response.json()?;
-    if body["ok"] != false || body["error"]["errcode"] != errcode {
+    let actual_errcode = body["error"]["errcode"]
+        .as_str()
+        .or_else(|| body["error"]["code"].as_str());
+    if body["ok"] != false || actual_errcode != Some(errcode) {
         return Err(anyhow!(
             "expected error {errcode} at HTTP {status}, got body {body}:\n{}",
             response.context()

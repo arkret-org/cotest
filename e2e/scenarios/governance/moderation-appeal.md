@@ -1,0 +1,40 @@
+# Moderation appeal
+
+## 目标
+
+验证 moderation decision 被用户申诉后的完整状态机和关键负向约束:提交申诉、管理员接手复审、作出 verdict、关闭申诉;同一个 moderator 不能复审自己作出的 decision;重复 active appeal 必须拒绝;overturn 必须配套 decision lift。
+
+## Spec 锚点
+
+- `contrix-spec/spec/v1/zh/governance/content-moderation.md` — moderation appeal 和职责分离
+- `contrix-spec/spec/v1/zh/models/governance-objects.md` — moderation decision / appeal event family
+- `contrix-spec/spec/v1/zh/sync/operations-sync.md` — durable event / state transition 语义
+
+## 拓扑
+
+- 1 × soland principal server
+- actors:
+  - appellant:被 moderation decision 影响并提交 appeal
+  - moderator:签发原始 moderation decision
+  - reviewer:接手 appeal review / decision / close
+
+## Steps
+
+1. appellant / moderator / reviewer 注册并获取 dev session。
+2. appellant 创建 Realm,写入一条 target message。
+3. moderator 调用 `POST /api/admin/v1/moderation/decision` 签发 `cx.moderation.decision`。
+4. appellant 调用 `POST /api/v1/moderation/appeal` 提交 `cx.moderation.appeal.submit`。
+5. reviewer 依次调用:
+   - `POST /api/admin/v1/moderation/appeals/{appeal_id}/review`
+   - `POST /api/admin/v1/moderation/appeals/{appeal_id}/decision`
+   - `POST /api/admin/v1/moderation/appeals/{appeal_id}/close`
+6. `GET /api/admin/v1/moderation/appeals/{appeal_id}` 返回四段 history,状态依次为 `submitted → under_review → decided → closed`。
+
+## Negative paths
+
+- 原 moderator 复审自己的 decision 必须失败。
+- active appeal 重复提交必须返回 conflict。
+- `decision` 在 `review` 前调用必须失败。
+- `close` 在 `decision` 前调用必须失败。
+- `verdict=overturn` 未带 paired lift 必须失败。
+- 带 decision lift 后 `verdict=overturn` 可进入 decided。
