@@ -41,6 +41,11 @@
       "body_template": "realm_create_event_3"
     },
     {
+      "id": "directory_describe",
+      "method": "GET",
+      "path": "/api/v1/directory/describe"
+    },
+    {
       "id": "directory_search_realms",
       "method": "POST",
       "path": "/api/v1/directory/search-realms",

@@ -193,11 +193,16 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
         Some("typing_ephemeral") => {
             let sent_at = Utc::now();
             let expires_at = sent_at + Duration::seconds(30);
+            // EphemeralEnvelope's `device_id` is typed as `DeviceId` in the SDK
+            // and must match the `cx:device:<ULID>` shape. `dev_alice_mock_parity`
+            // is a dev-login identifier accepted by `/auth/dev-login`, but it
+            // would make this envelope fail salvo's deserializer with
+            // `bad_request`. Drop the optional field so the typing surface is
+            // what's actually under test.
             Some(json!({
                 "kind": "cx.typing",
                 "realm_id": ctx.realm_id,
                 "actor_id": ctx.alice_did,
-                "device_id": "dev_alice_mock_parity",
                 "sent_at": sent_at.to_rfc3339_opts(SecondsFormat::Secs, true),
                 "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
                 "payload": {
@@ -427,6 +432,27 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
         "devices_pairing_challenge" => json!({
             "device_id": normalize_value(snapshot.body.get("device_id").cloned().unwrap_or(Value::Null)),
         }),
+        "directory_search_realms" => {
+            // The harness creates a non-deterministic number of realms before
+            // this case runs, and the per-item `name`/`description` text is
+            // free-form. Collapse to "results is an array, items expose the
+            // expected key set" — that's what callers (yougen UI) bind to.
+            let first_keys: Vec<String> = snapshot
+                .body
+                .get("results")
+                .and_then(Value::as_array)
+                .and_then(|results| results.first())
+                .and_then(Value::as_object)
+                .map(|item| item.keys().cloned().collect())
+                .unwrap_or_default();
+            let mut keys = first_keys;
+            keys.sort();
+            json!({
+                "results_is_array": snapshot.body.get("results").is_some_and(Value::is_array),
+                "result_item_keys": keys,
+                "next_cursor_present": snapshot.body.get("next_cursor").is_some(),
+            })
+        }
         other if matches!(other, "events_submit" | "realm_create" | "space_create") => {
             if snapshot.status == 200 || snapshot.status == 201 {
                 json!({

@@ -1,13 +1,4 @@
 {
-  "comment": "Known baseline differences for T-P0-04 yougen mock parity. Keep this list at two or fewer entries.",
-  "allowed": [
-    {
-      "id": "directory_search_realms",
-      "reason": "yougen still calls /api/v1/directory/search-realms while current soland exposes the equivalent search-spaces surface."
-    },
-    {
-      "id": "ephemeral",
-      "reason": "yougen mock accepts the generic /api/v1/ephemeral envelope while current soland still rejects this baseline cx.typing envelope with bad_request; read receipts use /api/v1/receipts/read today."
-    }
-  ]
+  "comment": "Known baseline differences for T-P0-04 yougen mock parity. The harness (tests/yougen_mock_parity.rs) rejects more than 5 entries; treat 0 as the target ceiling and require a tracking note before growing.",
+  "allowed": []
 }
