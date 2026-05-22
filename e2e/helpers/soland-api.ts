@@ -355,12 +355,17 @@ export function makeOperation(args: {
     operation_id: args.operationId ?? typedId("operation"),
     type: "operation",
     operation_type: args.operationType ?? "create",
+    realm_id: realmIdForOperation(args.spaceId),
     space_id: args.spaceId,
     object_id: undefined,
     object_type: args.objectType,
     payload: args.payload,
     created_at: new Date().toISOString(),
   };
+}
+
+function realmIdForOperation(spaceId: string): string {
+  return spaceId.replace(/^cx:space:/, "cx:realm:");
 }
 
 export async function pushFederationOperations(

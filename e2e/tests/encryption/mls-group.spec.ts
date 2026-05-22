@@ -9,7 +9,16 @@
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
-import { authHeaders, b64url, createSpaceApi, typedId, wireErrCode } from "../../helpers/soland-api";
+import {
+  authHeaders,
+  b64url,
+  canonicalTimestamp,
+  createSpaceApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -96,13 +105,40 @@ test.describe("MLS group encryption", () => {
       expect(exportResp.ok()).toBeTruthy();
       expect(JSON.stringify(await exportResp.json())).toContain('"encryption_profile":"mls_rfc9420"');
 
-      const incompatible = await request.put(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/policy`,
-        {
-          headers: authHeaders(aliceToken),
-          data: { join_rule: "public", history_visibility: "world_readable" },
-        },
-      );
+      const incompatibleRealmId = typedId("realm");
+      const incompatibleCreatedAt = canonicalTimestamp();
+      const incompatible = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: incompatibleRealmId,
+          kind: "cx.realm.create",
+          createdAt: incompatibleCreatedAt,
+          payload: {
+            object: {
+              id: incompatibleRealmId,
+              schema: "cx.schema.realm.v1",
+              title: `S11 MLS incompatible ${stamp}`,
+              created_by_principal: alice.did,
+              trust_domain: "cx:trust_domain:soland.local",
+              schema_refs: ["cx.schema.realm.v1"],
+              default_discoverability: "listed",
+              default_join_rule: "invite",
+              history_visibility: "world_readable",
+              encryption_profile: "mls_rfc9420",
+              security_class: "standard",
+              federation_policy: "restricted",
+              anchor_profile: "single_did",
+              hash_profile: "sha256",
+              anchorer: {
+                type: "single_did",
+                did: alice.did,
+              },
+              created_at: incompatibleCreatedAt,
+            },
+          },
+        }),
+      });
       expect([400, 422]).toContain(incompatible.status());
       expect(wireErrCode(await incompatible.json())).toBe("incompatible_history_with_encryption");
     },
@@ -127,7 +163,7 @@ test.describe("MLS group encryption", () => {
       const groupId = typedId("mls_group");
       const nowSeconds = Math.floor(Date.now() / 1000);
 
-      const publish = await request.post(`${solandBaseUrl()}/api/v1/mls/keypackages`, {
+      const publish = await request.post(`${solandBaseUrl()}/api/v1/keys/keypackages/upload`, {
         headers: authHeaders(bobToken),
         data: {
           keypackage_id: keypackageId,
@@ -147,62 +183,78 @@ test.describe("MLS group encryption", () => {
       expect(publishBody.device_id).toBe(bob.deviceId);
       expect(publishBody.claimed).toBe(false);
 
-      const pendingBefore = await request.get(`${solandBaseUrl()}/api/v1/mls/welcomes/pending`, {
+      const pendingBefore = await request.get(`${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`, {
         headers: authHeaders(bobToken),
       });
       expect(pendingBefore.ok()).toBeTruthy();
       expect((await pendingBefore.json()).welcomes).toEqual([]);
 
-      const claim = await request.post(
-        `${solandBaseUrl()}/api/v1/mls/keypackages/${encodeURIComponent(keypackageId)}/claim`,
-        {
-          headers: authHeaders(aliceToken),
-          data: { group_id: groupId },
-        },
-      );
+      const claim = await request.post(`${solandBaseUrl()}/api/v1/keys/keypackages/claim`, {
+        headers: authHeaders(aliceToken),
+        data: { keypackage_id: keypackageId, group_id: groupId },
+      });
       expect(claim.ok()).toBeTruthy();
       const claimBody = await claim.json();
       expect(claimBody.keypackage_id).toBe(keypackageId);
       expect(claimBody.group_id).toBe(groupId);
       expect(claimBody.claimed_at).toBeTruthy();
 
-      const claimAgain = await request.post(
-        `${solandBaseUrl()}/api/v1/mls/keypackages/${encodeURIComponent(keypackageId)}/claim`,
-        {
-          headers: authHeaders(aliceToken),
-          data: { group_id: typedId("mls_group") },
-        },
-      );
+      const claimAgain = await request.post(`${solandBaseUrl()}/api/v1/keys/keypackages/claim`, {
+        headers: authHeaders(aliceToken),
+        data: { keypackage_id: keypackageId, group_id: typedId("mls_group") },
+      });
       expect(claimAgain.status()).toBe(409);
       expect(wireErrCode(await claimAgain.json())).toBe("mls_keypackage_already_claimed");
 
-      const commit = await request.post(`${solandBaseUrl()}/api/v1/mls/commits`, {
-        headers: authHeaders(aliceToken),
-        data: {
-          group_id: groupId,
-          expected_prev_epoch: 0,
-          leader_actor_did: alice.did,
-          commit_bytes_b64: b64url(`opaque-commit-${stamp}`),
+      const realmId = await createSpaceApi(request, aliceToken, {
+        title: `MLS commit ${stamp}`,
+        ownerDid: alice.did,
+      });
+      const frontierEventRef = typedId("event");
+      const commitPayload = (label: string, nextEpoch = 1) => ({
+        group_id: groupId,
+        expected_prev_epoch: 0,
+        leader_actor_did: alice.did,
+        commit_bytes_b64: b64url(label),
+        mls_group_id: groupId,
+        base_epoch: 0,
+        base_epoch_ref: frontierEventRef,
+        proposal_refs: [],
+        next_epoch: nextEpoch,
+        commit_hash: `sha256:${"1".repeat(64)}`,
+        governance_binding: {
+          realm_id: realmId,
+          mls_group_id: groupId,
+          previous_epoch: 0,
+          next_epoch: nextEpoch,
+          membership_frontier: [frontierEventRef],
+          policy_root: `sha256:${"2".repeat(64)}`,
         },
       });
-      expect(commit.ok()).toBeTruthy();
-      const commitBody = await commit.json();
-      expect(commitBody.previous_epoch).toBe(0);
-      expect(commitBody.epoch).toBe(1);
+      const commitEnvelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.mls.commit",
+        payload: commitPayload(`opaque-commit-${stamp}`),
+      });
+      const commitBody = await submitSignedEventApi(request, aliceToken, commitEnvelope, {
+        context: "submit MLS commit",
+      });
+      expect(commitBody.event_id).toMatch(/^cx:event:/);
 
-      const staleCommit = await request.post(`${solandBaseUrl()}/api/v1/mls/commits`, {
+      const staleCommit = await request.post(`${solandBaseUrl()}/api/v1/events`, {
         headers: authHeaders(aliceToken),
-        data: {
-          group_id: groupId,
-          expected_prev_epoch: 0,
-          leader_actor_did: alice.did,
-          commit_bytes_b64: b64url(`opaque-stale-commit-${stamp}`),
-        },
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "cx.mls.commit",
+          payload: commitPayload(`opaque-stale-commit-${stamp}`),
+        }),
       });
-      expect([409, 412]).toContain(staleCommit.status());
+      expect([409, 412, 422]).toContain(staleCommit.status());
       expect(wireErrCode(await staleCommit.json())).toBe("mls_epoch_skew");
 
-      const pendingAfter = await request.get(`${solandBaseUrl()}/api/v1/mls/welcomes/pending`, {
+      const pendingAfter = await request.get(`${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`, {
         headers: authHeaders(bobToken),
       });
       expect(pendingAfter.ok()).toBeTruthy();

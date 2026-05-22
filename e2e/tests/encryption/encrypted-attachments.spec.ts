@@ -34,7 +34,7 @@ test.describe("encrypted attachments", () => {
 
     const probeBlobRef = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     const getResp = await request.get(
-      `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(probeBlobRef)}`,
+      `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(probeBlobRef)}&purpose=download`,
       {},
     );
     // Spec §5: non-existent and unauthorized must look the same — opaque 403/404.

@@ -52,14 +52,14 @@ test.describe("core object invariants", () => {
           joinRule: "invite",
           historyVisibility: "joined",
         });
-        expect(spaceId).toMatch(/^cx:space:/);
+        expect(spaceId).toMatch(/^cx:realm:/);
         await stepShot(alicePage.page, testInfo, "A-alice-space-created");
 
         // ── Step 3: read back the Space via the soland API and verify the
         // spec §3 common-field equivalents on the SpaceLifecycleResponse
         // serializer. Current wire shape (soland/src/wire.rs
         // SpaceLifecycleResponse): { ok, space_id, owner, members, deleted }.
-        //   - space_id  ↔ spec `id`              (typed cx:space: prefix)
+        //   - space_id  ↔ spec `id`              (typed cx:realm: prefix)
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
@@ -75,9 +75,9 @@ test.describe("core object invariants", () => {
           members?: string[];
           deleted?: boolean;
         };
-        // Common-field 1: `id` (typed cx:space: prefix).
+        // Common-field 1: `id` (typed cx:realm: prefix).
         expect(spaceBody.space_id).toBe(spaceId);
-        expect(spaceBody.space_id).toMatch(/^cx:space:/);
+        expect(spaceBody.space_id).toMatch(/^cx:realm:/);
         // Common-field 2: actor reference (`created_by` equivalent → `owner`).
         expect(spaceBody.owner).toBe(alice.did);
         // Membership invariant: owner must always appear in members.
@@ -93,7 +93,7 @@ test.describe("core object invariants", () => {
         // projection_event_json) is { event_id, space_id, event_kind,
         // sender, payload, created_at, ... }.
         const eventsRes = await request.get(
-          `${solandBaseUrl()}/api/v1/events?spaces=${encodeURIComponent(spaceId)}&limit=20`,
+          `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(spaceId)}&limit=20`,
           { headers: aliceAuth },
         );
         expect(eventsRes.status()).toBe(200);
@@ -111,10 +111,10 @@ test.describe("core object invariants", () => {
 
         // Find the Space lifecycle / create event — soland writes lifecycle
         // ops via record_space_lifecycle_operation, so the kind is in the
-        // cx.space.* family. We accept any cx.space.* event_kind to stay
+        // cx.realm.* family. We accept any cx.realm.* event_kind to stay
         // resilient to soland's exact lifecycle op naming.
         const lifecycleEvent =
-          events.find((event) => event.event_kind?.startsWith("cx.space.")) ?? events[0];
+          events.find((event) => event.event_kind?.startsWith("cx.realm.")) ?? events[0];
         expect(lifecycleEvent).toBeTruthy();
         // Common-field (Event Envelope §2.2): event_id.
         expect(lifecycleEvent.event_id).toMatch(/^cx:event:/);
@@ -127,7 +127,7 @@ test.describe("core object invariants", () => {
         // Common-field: kind (§2.2 — Event Envelope `kind`).
         expect(typeof lifecycleEvent.event_kind).toBe("string");
         expect(lifecycleEvent.event_kind?.length ?? 0).toBeGreaterThan(0);
-        // Space scoping: event must reference the Space we just created.
+        // Realm scoping: event must reference the Realm we just created.
         expect(lifecycleEvent.space_id).toBe(spaceId);
 
         await stepShot(alicePage.page, testInfo, "A-alice-common-fields-verified");

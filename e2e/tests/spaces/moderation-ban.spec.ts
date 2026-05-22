@@ -57,11 +57,9 @@ test.describe("moderation and ban", () => {
       discoverability: "public",
       history_visibility: "shared",
     });
-    await Promise.all([
-      addSpaceMemberApi(request, aliceToken, spaceId, bob.did),
-      addSpaceMemberApi(request, aliceToken, spaceId, mallory.did),
-      addSpaceMemberApi(request, aliceToken, spaceId, carol.did),
-    ]);
+    await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+    await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
+    await addSpaceMemberApi(request, aliceToken, spaceId, carol.did);
 
     const abusive = `S5 abusive content ${stamp}`;
     const postBan = `S5 after ban ${stamp}`;

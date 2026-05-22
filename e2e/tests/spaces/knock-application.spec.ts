@@ -44,22 +44,9 @@ test.describe("knock + application + cooldown", () => {
         title: `S6 Knock ${stamp}`,
         summary: "knock + application coverage",
         discoverability: "listed",
-        joinRule: "invite", // wizard defaults; we PUT to knock below
+        joinRule: "knock",
         historyVisibility: "joined",
       });
-
-      // Switch space to knock — spec §3.4: the knock row in the cross table.
-      // soland's PUT /api/v1/spaces/{id}/policy accepts {"join_rule":"knock"}.
-      // soland's SetSpacePolicyRequest requires both join_rule and
-      // history_visibility (space.rs:283).
-      const policyResp = await request.put(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/policy`,
-        {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: { join_rule: "knock", history_visibility: "joined" },
-        },
-      );
-      expect(policyResp.ok()).toBeTruthy();
 
       // bob submits cx.member.state{membership="knock"} — soland accepts via
       // POST /api/v1/moves. Constructing a signed Move here would duplicate
