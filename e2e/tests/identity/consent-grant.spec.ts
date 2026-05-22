@@ -136,6 +136,9 @@ test.describe("consent grant", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-consent-grant-gap
+    // @user-promise: e2e/scenarios/identity/consent-grant.md
+    // @expected-live-by: 2026Q3
     "alice grants consent and bob can establish contact (full lifecycle)",
     async ({ browser, request }, testInfo) => {
       // spec: identity/consent-model.md §2-§4.
@@ -202,6 +205,9 @@ test.describe("consent grant", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-consent-grant-gap
+    // @user-promise: e2e/scenarios/identity/consent-grant.md
+    // @expected-live-by: 2026Q3
     "E1.1 time-windowed consent expires after valid_until elapses",
     async ({ browser, request }, testInfo) => {
       /* spec: identity/consent-model.md §2. soland gap: cx.consent.* reducer 未实现 */
@@ -246,6 +252,9 @@ test.describe("consent grant", () => {
   );
 
   test.fixme("E1.2 revoke then re-grant lifecycle", async ({ browser, request }, testInfo) => {
+    // @blocking-on: soland#identity-consent-grant-gap
+    // @user-promise: e2e/scenarios/identity/consent-grant.md
+    // @expected-live-by: 2026Q3
     /* spec: identity/consent-model.md §3. soland gap: cx.consent.* reducer 未实现 */
     const alice = uniqueUser("consent-regrant-alice");
     const bob = uniqueUser("consent-regrant-bob");
@@ -298,6 +307,9 @@ test.describe("consent grant", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-consent-grant-gap
+    // @user-promise: e2e/scenarios/identity/consent-grant.md
+    // @expected-live-by: 2026Q3
     "E1.3 scope-granularity: invite-scope consent does not allow call",
     async ({ browser, request }, testInfo) => {
       /* spec: identity/consent-model.md §2. soland gap: cx.consent.* reducer 未实现 */
@@ -339,6 +351,9 @@ test.describe("consent grant", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-consent-grant-gap
+    // @user-promise: e2e/scenarios/identity/consent-grant.md
+    // @expected-live-by: 2026Q3
     "E1.4 pairwise DID consent isolates contact channels",
     async ({ browser, request }, testInfo) => {
       /* spec: identity/consent-model.md §4. soland gap: cx.consent.* reducer 未实现 */

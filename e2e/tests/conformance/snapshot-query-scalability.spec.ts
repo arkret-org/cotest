@@ -78,6 +78,9 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("conformance snapshot/query/scalability vectors @fully-implemented", () => {
   test.fixme(
+    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
+    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
+    // @expected-live-by: 2026Q3
     "Phase A — snapshot manifest integrity (digest, chunk count, chunk hashes)",
     async () => {
       // spec: snapshot-schema.md §2 manifest, §3 chunk descriptor, §4 state_hash.
@@ -95,6 +98,9 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
+    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
+    // @expected-live-by: 2026Q3
     "Phase B — snapshot signature binding verifies against recorded signer DID",
     async () => {
       // spec: snapshot-schema.md §5 (signature transcript coverage, allowed
@@ -117,6 +123,9 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
+    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
+    // @expected-live-by: 2026Q3
     "Phase C — query filters / sort / pagination return expected_rows in order",
     async () => {
       // spec: query-schema.md §2 object, §3 filter ops, §6 sort, §8 response.
@@ -138,6 +147,9 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
+    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
+    // @expected-live-by: 2026Q3
     "Phase D — query schema fail-closed on unknown ops / conflicting sort / unauthorized fields",
     async () => {
       // spec: query-schema.md §3 op enum, §6 sort direction enum, §9 security
@@ -160,6 +172,9 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
+    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
+    // @expected-live-by: 2026Q3
     "Phase E — scalability constraints fail-closed (page_size / batch / depth / envelope)",
     async () => {
       // spec: scalability-constraints.md §2 wire limits, §5 Space/Relation/View

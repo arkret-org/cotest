@@ -66,6 +66,9 @@ test.describe("offline sync + conflict repair", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#sync-offline-conflict-gap
+    // @user-promise: e2e/scenarios/sync/offline-conflict.md
+    // @expected-live-by: 2026Q3
     "bob composes a message while offline; on reconnect the message persists and is visible to alice",
     async () => {
       // spec: sync/client-sync.md §2 (outbox + reconnect flush)
@@ -77,6 +80,9 @@ test.describe("offline sync + conflict repair", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-offline-conflict-gap
+    // @user-promise: e2e/scenarios/sync/offline-conflict.md
+    // @expected-live-by: 2026Q3
     "during offline window alice writes; on bob's reconnect both writes are visible with deterministic ordering",
     async () => {
       // spec: sync/operations-sync.md §2
@@ -84,6 +90,9 @@ test.describe("offline sync + conflict repair", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-offline-conflict-gap
+    // @user-promise: e2e/scenarios/sync/offline-conflict.md
+    // @expected-live-by: 2026Q3
     "concurrent writes to the same cas-register cell trigger bottom_expose; bottom-cells-banner shows the conflict",
     async () => {
       // spec: sync/operations-sync.md §2.1 + authz/event-auth-state-resolution.md §2
@@ -91,6 +100,9 @@ test.describe("offline sync + conflict repair", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-offline-conflict-gap
+    // @user-promise: e2e/scenarios/sync/offline-conflict.md
+    // @expected-live-by: 2026Q3
     "bob clicks prefer-safer-side-button to repair; reducer accepts repair Move with state_witness + inclusion_proof; banner clears",
     async () => {
       // spec: authz/event-auth-state-resolution.md §8.1
@@ -98,6 +110,9 @@ test.describe("offline sync + conflict repair", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-offline-conflict-gap
+    // @user-promise: e2e/scenarios/sync/offline-conflict.md
+    // @expected-live-by: 2026Q3
     "long offline → on reconnect, pull-operations backfills missing events; bob's timeline catches up to head",
     async () => {
       // spec: sync/federation.md §4.2 (single-server uses same pull endpoint)

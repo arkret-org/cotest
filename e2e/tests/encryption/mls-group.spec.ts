@@ -211,6 +211,9 @@ test.describe("MLS group encryption", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-mls-group-gap
+    // @user-promise: e2e/scenarios/encryption/mls-group.md
+    // @expected-live-by: 2026Q3
     "alice and bob exchange E2EE messages; client decrypts plaintext, raw event payload is ciphertext only (no plaintext leak)",
     async () => {
       // spec: encryption-and-audit.md §2.3.1-§2.3.3 application data envelope
@@ -219,6 +222,9 @@ test.describe("MLS group encryption", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-mls-group-gap
+    // @user-promise: e2e/scenarios/encryption/mls-group.md
+    // @expected-live-by: 2026Q3
     "carol added in epoch 1 → cx.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)",
     async () => {
       // spec: encryption-and-audit.md §2.4.1, models/space-and-place.md §3.4
@@ -226,6 +232,9 @@ test.describe("MLS group encryption", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-mls-group-gap
+    // @user-promise: e2e/scenarios/encryption/mls-group.md
+    // @expected-live-by: 2026Q3
     "alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms",
     async () => {
       // spec: encryption-and-audit.md §2.4.1, §2.5
@@ -233,6 +242,9 @@ test.describe("MLS group encryption", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-mls-group-gap
+    // @user-promise: e2e/scenarios/encryption/mls-group.md
+    // @expected-live-by: 2026Q3
     "E11.1 concurrent MLS commits produce ⊥ in covered_frontier_cell; subsequent messages marked decryption_pending until later commit resolves",
     async () => {
       // spec: encryption-and-audit.md §2.5.2
@@ -240,6 +252,9 @@ test.describe("MLS group encryption", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-mls-group-gap
+    // @user-promise: e2e/scenarios/encryption/mls-group.md
+    // @expected-live-by: 2026Q3
     "E11.2 governance_binding.space_policy_hash mismatch causes federation push to reject with governance_binding_mismatch",
     async () => {
       // spec: encryption-and-audit.md §2.5.1

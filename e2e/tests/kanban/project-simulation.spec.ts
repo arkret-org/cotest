@@ -59,6 +59,9 @@ test.describe("project simulation", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#kanban-project-simulation-gap
+    // @user-promise: e2e/scenarios/kanban/project-simulation.md
+    // @expected-live-by: 2026Q3
     "alice assigns Card 1 to bob via cx.relation.create assigned_to; bob's notifications surface the assignment",
     async () => {
       // spec: relation.md §3.2 assigned_to
@@ -67,6 +70,9 @@ test.describe("project simulation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-project-simulation-gap
+    // @user-promise: e2e/scenarios/kanban/project-simulation.md
+    // @expected-live-by: 2026Q3
     "status FSM: Card transitions todo → in_progress → done via cx.flow.update; invalid transition (todo → done direct) rejected by FSM cell",
     async () => {
       // spec: flow-and-message.md §3 + space-and-place.md §3.8 FSM analogy.
@@ -74,6 +80,9 @@ test.describe("project simulation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-project-simulation-gap
+    // @user-promise: e2e/scenarios/kanban/project-simulation.md
+    // @expected-live-by: 2026Q3
     "due_date past today renders as overdue badge on the card UI",
     async () => {
       // spec: flow-and-message.md §3 (fields are opaque to reducer; UI semantics).
@@ -81,6 +90,9 @@ test.describe("project simulation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-project-simulation-gap
+    // @user-promise: e2e/scenarios/kanban/project-simulation.md
+    // @expected-live-by: 2026Q3
     "E16.G concurrent assignment from two devices: relation profile on_conflict=deterministic_winner picks one; Card has exactly one active assignee",
     async () => {
       // spec: relation.md §6
@@ -88,6 +100,9 @@ test.describe("project simulation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-project-simulation-gap
+    // @user-promise: e2e/scenarios/kanban/project-simulation.md
+    // @expected-live-by: 2026Q3
     "E16.1 unassign emits cx.relation.tombstone; assignment no longer shows in card UI",
     async () => {
       // spec: relation.md §3.2 tombstoned state
@@ -95,6 +110,9 @@ test.describe("project simulation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-project-simulation-gap
+    // @user-promise: e2e/scenarios/kanban/project-simulation.md
+    // @expected-live-by: 2026Q3
     "alice archives the entire board; archived board's cards become read-only; archive list view shows the board",
     async () => {
       // spec: space-and-place.md §4.4 lifecycle/cascade

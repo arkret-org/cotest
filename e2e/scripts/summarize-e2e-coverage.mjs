@@ -34,7 +34,7 @@ const TESTS_DIR = join(E2E_ROOT, 'tests');
 const CATALOG_PATH = join(SCENARIOS_DIR, 'catalog.md');
 
 // Top-level scenario files we don't treat as individual scenarios.
-const SCENARIO_NON_DOC_FILES = new Set(['catalog.md', 'README.md']);
+const SCENARIO_NON_DOC_FILES = new Set(['catalog.md', 'README.md', 'user-journeys.md']);
 
 // Known-stale phrases the catalog used to contain. If any are still present,
 // the catalog has drifted from the file tree.
@@ -295,6 +295,26 @@ function buildReport() {
     skip: specStats.reduce((a, s) => a + s.skip, 0),
     domains: perDomain.length,
   };
+  totals.verified_count = totals.live;
+  totals.promised_count = totals.live + totals.fixme;
+  totals.verified_ratio = totals.promised_count === 0
+    ? 1
+    : totals.verified_count / totals.promised_count;
+
+  for (const d of perDomain) {
+    d.verified_count = d.live;
+    d.promised_count = d.live + d.fixme;
+    d.verified_ratio = d.promised_count === 0
+      ? 1
+      : d.verified_count / d.promised_count;
+  }
+  for (const s of specStats) {
+    s.verified_count = s.live;
+    s.promised_count = s.live + s.fixme;
+    s.verified_ratio = s.promised_count === 0
+      ? 1
+      : s.verified_count / s.promised_count;
+  }
 
   // Catalog drift.
   const catalogDrift = checkCatalogDrift();
@@ -325,7 +345,11 @@ function checkCatalogDrift() {
 // ---------------------------------------------------------------------------
 
 function totalsLine(t) {
-  return `${t.scenarios} scenarios / ${t.specs} specs / ${t.live} live / ${t.fixme} fixme / ${t.skip} skip (${t.domains} domains)`;
+  return `${t.scenarios} scenarios / ${t.specs} specs / ${t.verified_count} verified / ${t.promised_count} promised / ${t.fixme} fixme / ${t.skip} skip (${t.domains} domains)`;
+}
+
+function percent(n) {
+  return `${(n * 100).toFixed(1)}%`;
 }
 
 function pad(s, n) {
@@ -345,6 +369,8 @@ function renderMarkdown(report, { quiet, domain }) {
   const lines = [];
   lines.push(`# cotest e2e coverage`);
   lines.push('');
+  lines.push(`Promised: ${totals.promised_count} · Verified: ${totals.verified_count} (${percent(totals.verified_ratio)})`);
+  lines.push('');
   lines.push(`Totals: ${totalsLine(totals)}`);
   if (quiet) return lines.join('\n');
 
@@ -357,6 +383,9 @@ function renderMarkdown(report, { quiet, domain }) {
   lines.push(`| spec files | ${totals.specs} |`);
   lines.push(`| live tests | ${totals.live} |`);
   lines.push(`| test.fixme | ${totals.fixme} |`);
+  lines.push(`| promised tests | ${totals.promised_count} |`);
+  lines.push(`| verified tests | ${totals.verified_count} |`);
+  lines.push(`| verified ratio | ${percent(totals.verified_ratio)} |`);
   lines.push(`| test.skip (conditional) | ${totals.skip} |`);
   lines.push(`| domains | ${totals.domains} |`);
 
@@ -367,15 +396,15 @@ function renderMarkdown(report, { quiet, domain }) {
   lines.push('');
   lines.push('## Per-domain rollup');
   lines.push('');
-  lines.push('| domain | scenarios | specs | live | fixme | skip |');
-  lines.push('|---|---:|---:|---:|---:|---:|');
+  lines.push('| domain | scenarios | specs | verified | promised | ratio | fixme | skip |');
+  lines.push('|---|---:|---:|---:|---:|---:|---:|---:|');
   for (const d of domainRows) {
     lines.push(
-      `| ${d.domain} | ${d.scenarios} | ${d.specs} | ${d.live} | ${d.fixme} | ${d.skip} |`,
+      `| ${d.domain} | ${d.scenarios} | ${d.specs} | ${d.verified_count} | ${d.promised_count} | ${percent(d.verified_ratio)} | ${d.fixme} | ${d.skip} |`,
     );
   }
   if (domain && domainRows.length === 0) {
-    lines.push(`| _(no domain named \`${domain}\`)_ |  |  |  |  |  |`);
+    lines.push(`| _(no domain named \`${domain}\`)_ |  |  |  |  |  |  |  |`);
   }
 
   // Per-spec
@@ -385,12 +414,12 @@ function renderMarkdown(report, { quiet, domain }) {
   lines.push('');
   lines.push('## Per-spec');
   lines.push('');
-  lines.push('| spec | live | fixme | skip | status | scenario? | tags |');
-  lines.push('|---|---:|---:|---:|---|---|---|');
+  lines.push('| spec | verified | promised | ratio | fixme | skip | status | scenario? | tags |');
+  lines.push('|---|---:|---:|---:|---:|---:|---|---|---|');
   for (const s of specRows) {
     const tags = s.tags.length ? s.tags.join(' ') : '';
     lines.push(
-      `| ${s.key} | ${s.live} | ${s.fixme} | ${s.skip} | ${s.status} | ${s.hasScenario ? 'yes' : 'NO'} | ${tags} |`,
+      `| ${s.key} | ${s.verified_count} | ${s.promised_count} | ${percent(s.verified_ratio)} | ${s.fixme} | ${s.skip} | ${s.status} | ${s.hasScenario ? 'yes' : 'NO'} | ${tags} |`,
     );
   }
 

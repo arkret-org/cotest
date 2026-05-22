@@ -126,6 +126,9 @@ test.describe("workflow: kanban week-in-review", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#workflows-kanban-week-gap
+    // @user-promise: e2e/scenarios/workflows/kanban-week.md
+    // @expected-live-by: 2026Q3
     "E-kanbanweek.1 restored card lands at the end of its original column, preserving rank",
     async () => {
       // yougen behavior: card-restore-button currently puts the card back in
@@ -134,6 +137,9 @@ test.describe("workflow: kanban week-in-review", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-kanban-week-gap
+    // @user-promise: e2e/scenarios/workflows/kanban-week.md
+    // @expected-live-by: 2026Q3
     "E-kanbanweek.2 archive an entire list (column-level archive button)",
     async () => {
       // list-archive-button exists in yougen but its UX semantics + cascade

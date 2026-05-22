@@ -34,6 +34,9 @@ test.describe("personal blocklist", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#governance-personal-blocklist-gap
+    // @user-promise: e2e/scenarios/governance/personal-blocklist.md
+    // @expected-live-by: 2026Q3
     "alice blocks bob; bob's messages filtered from alice's timeline; unblock restores visibility; federation propagates block",
     async ({ browser, request }, testInfo) => {
       // Main flow — Phases A–G of personal-blocklist.md.
@@ -140,6 +143,9 @@ test.describe("personal blocklist", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#governance-personal-blocklist-gap
+    // @user-promise: e2e/scenarios/governance/personal-blocklist.md
+    // @expected-live-by: 2026Q3
     "E11.1 quarantine vs block: server-side quarantine hides a message for everyone; personal block only hides for the blocker — the two operate independently",
     async () => {
       // spec: content-moderation.md §4 (block) vs the quarantine flow
@@ -152,6 +158,9 @@ test.describe("personal blocklist", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#governance-personal-blocklist-gap
+    // @user-promise: e2e/scenarios/governance/personal-blocklist.md
+    // @expected-live-by: 2026Q3
     "E11.2 mute vs block: muted user's messages still render in timeline but produce no push; blocked user's messages render not at all",
     async () => {
       // spec: content-moderation.md §5
@@ -162,6 +171,9 @@ test.describe("personal blocklist", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#governance-personal-blocklist-gap
+    // @user-promise: e2e/scenarios/governance/personal-blocklist.md
+    // @expected-live-by: 2026Q3
     "E11.3 blocked user's view: bob still sees his own messages persisted normally and is never told he was blocked by alice (anti social-graph leak)",
     async () => {
       // spec: content-moderation.md §4 — block MUST NOT be observable

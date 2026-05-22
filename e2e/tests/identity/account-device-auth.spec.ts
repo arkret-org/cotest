@@ -30,6 +30,9 @@ test.describe("account auth + device flow", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-account-device-auth-gap
+    // @user-promise: e2e/scenarios/identity/account-device-auth.md
+    // @expected-live-by: 2026Q3
     "alice registers via OIDC bridge (mock IdP); coauth issues short-term cx.session.grant + refresh_token",
     async () => {
       // spec: account-lifecycle.md §2.1, key-management.md §6
@@ -38,6 +41,9 @@ test.describe("account auth + device flow", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-device-auth-gap
+    // @user-promise: e2e/scenarios/identity/account-device-auth.md
+    // @expected-live-by: 2026Q3
     "device-2 pairs via QR + cross-signing; coauth issues device-specific session_grant",
     async () => {
       // spec: device-lifecycle.md §2.1, §10
@@ -45,6 +51,9 @@ test.describe("account auth + device flow", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-device-auth-gap
+    // @user-promise: e2e/scenarios/identity/account-device-auth.md
+    // @expected-live-by: 2026Q3
     "expired access token triggers /api/v1/auth/refresh; new session_grant issued without re-OIDC",
     async () => {
       // spec: key-management.md §6 refresh path.
@@ -52,6 +61,9 @@ test.describe("account auth + device flow", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-device-auth-gap
+    // @user-promise: e2e/scenarios/identity/account-device-auth.md
+    // @expected-live-by: 2026Q3
     "soft logout revokes access token but keeps refresh; refresh later restores access",
     async () => {
       // spec: account-lifecycle.md §3 (soft_logged_out)

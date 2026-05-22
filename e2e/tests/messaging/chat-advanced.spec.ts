@@ -45,6 +45,9 @@ test.describe("chat advanced", () => {
   // button no-ops without a selected_channel (chat.rs:2186-2189), every
   // chat-advanced step blocks until yougen ships the initial chat sync.
   test.fixme(
+    // @blocking-on: soland#messaging-chat-advanced-gap
+    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+    // @expected-live-by: 2026Q3
     "reactions converge (OR-Set) and replies render with reply indicator",
     async ({
     browser,
@@ -119,6 +122,9 @@ test.describe("chat advanced", () => {
   );
 
   test.fixme("E14.D mentions route notifications only to the mentioned actor", async ({
+    // @blocking-on: soland#messaging-chat-advanced-gap
+    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+    // @expected-live-by: 2026Q3
     browser,
     request,
   }, testInfo) => {
@@ -181,6 +187,9 @@ test.describe("chat advanced", () => {
   });
 
   test.fixme("E14.E poll create + vote + close (vote replacement per actor)", async ({
+    // @blocking-on: soland#messaging-chat-advanced-gap
+    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+    // @expected-live-by: 2026Q3
     browser,
     request,
   }, testInfo) => {
@@ -256,6 +265,9 @@ test.describe("chat advanced", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#messaging-chat-advanced-gap
+    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+    // @expected-live-by: 2026Q3
     "E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000",
     async ({ browser, request }, testInfo) => {
       // spec: profiles-presence.md §3.5
@@ -295,6 +307,9 @@ test.describe("chat advanced", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-chat-advanced-gap
+    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+    // @expected-live-by: 2026Q3
     "E14.G presence state propagates online/offline within 1s after page open/close",
     async ({ browser, request }, testInfo) => {
       // spec: profiles-presence.md §3.2-§3.4
@@ -335,6 +350,9 @@ test.describe("chat advanced", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-chat-advanced-gap
+    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+    // @expected-live-by: 2026Q3
     "E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext",
     async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash

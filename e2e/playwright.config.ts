@@ -4,7 +4,10 @@ import { defineConfig, devices } from "@playwright/test";
 const runDir =
   process.env.COTEST_JOINT_RUN_DIR ??
   path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local");
-const baseURL = process.env.COTEST_YOUGEN_BASE_URL ?? "http://127.0.0.1:4527";
+const baseURL =
+  process.env.YOUGEN_BASE_URL ??
+  process.env.COTEST_YOUGEN_BASE_URL ??
+  "http://127.0.0.1:4527";
 
 export default defineConfig({
   testDir: "./tests",
@@ -34,6 +37,11 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "joint-yougen",
+      testDir: "./tests/joint",
+      use: { ...devices["Desktop Chrome"], baseURL },
     },
   ],
 });

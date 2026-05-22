@@ -27,6 +27,9 @@ function mockAppletRegistryBaseUrl(): string | undefined {
 
 test.describe("applet bridge", () => {
   test.fixme(
+    // @blocking-on: soland#extensions-applet-bridge-gap
+    // @user-promise: e2e/scenarios/extensions/applet-bridge.md
+    // @expected-live-by: 2026Q3
     "applet registers, bot joins space, ghost actor relays external messages with accountability chain",
     async ({ browser, request }) => {
       // soland gap: applet manifest verifier + bot/ghost DID provisioning + portal realm routing 未实现
@@ -144,6 +147,9 @@ test.describe("applet bridge", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-applet-bridge-gap
+    // @user-promise: e2e/scenarios/extensions/applet-bridge.md
+    // @expected-live-by: 2026Q3
     "E4.1 namespace conflict: second applet claiming same namespace is rejected with 409 applet_namespace_conflict",
     async () => {
       // soland gap: applet manifest verifier + bot/ghost DID provisioning + portal realm routing 未实现
@@ -156,6 +162,9 @@ test.describe("applet bridge", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-applet-bridge-gap
+    // @user-promise: e2e/scenarios/extensions/applet-bridge.md
+    // @expected-live-by: 2026Q3
     "E4.2 capability revoke: after applet revoke, bot_actor's own message writes are also rejected (not just ghost path)",
     async () => {
       // soland gap: applet manifest verifier + bot/ghost DID provisioning + portal realm routing 未实现
@@ -169,6 +178,9 @@ test.describe("applet bridge", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-applet-bridge-gap
+    // @user-promise: e2e/scenarios/extensions/applet-bridge.md
+    // @expected-live-by: 2026Q3
     "E4.3 idempotency: re-registering same manifest_id with same Idempotency-Key returns the original {applet_id, bot_actor_did}; different key + same manifest_id is 409 applet_already_registered",
     async () => {
       // soland gap: applet manifest verifier + bot/ghost DID provisioning + portal realm routing 未实现

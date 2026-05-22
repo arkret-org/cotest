@@ -1128,7 +1128,8 @@ try {
             Pop-Location
         }
     }
-    if (-not $SkipBrowserInstall -and ($playwrightProjects -contains "chromium")) {
+    $needsBundledChromium = ($playwrightProjects -contains "chromium") -or ($playwrightProjects -contains "joint-yougen")
+    if (-not $SkipBrowserInstall -and $needsBundledChromium) {
         Push-Location $e2eRoot
         try {
             $npxInstallCommandInfo = Get-Command npx.cmd -ErrorAction SilentlyContinue
@@ -1447,7 +1448,7 @@ function Get-FixmeTitlesForSpec {
     # The (?s) flag lets `.` match newlines so titles broken across source
     # lines are captured as one. Non-greedy + escape-aware: backslash-escaped
     # quotes inside the title are tolerated.
-    $pattern = '(?s)test\.fixme\s*\(\s*(?:"((?:[^"\\]|\\.)*)"|''((?:[^''\\]|\\.)*)'')'
+    $pattern = '(?s)test\.fixme\s*\(\s*(?:(?://[^\r\n]*(?:\r?\n|\n|\r)\s*)*)(?:"((?:[^"\\]|\\.)*)"|''((?:[^''\\]|\\.)*)'')'
     foreach ($m in [regex]::Matches($source, $pattern)) {
         $raw = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         # Unescape \" and \' so the title matches what Playwright emits in junit.

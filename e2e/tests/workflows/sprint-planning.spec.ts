@@ -106,6 +106,9 @@ test.describe("workflow: sprint planning", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#workflows-sprint-planning-gap
+    // @user-promise: e2e/scenarios/workflows/sprint-planning.md
+    // @expected-live-by: 2026Q3
     "E-sprint.kanban mei builds a Backlog + Todo + Doing + Done kanban and promotes 3 stories",
     async () => {
       // Multi-card kanban (5+ cards in one column) currently keeps cards in
@@ -115,6 +118,9 @@ test.describe("workflow: sprint planning", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-sprint-planning-gap
+    // @user-promise: e2e/scenarios/workflows/sprint-planning.md
+    // @expected-live-by: 2026Q3
     "E-sprint.crossuser bob + carol see the same kanban as mei after she edits the board",
     async () => {
       // yougen gap: kanban state is local per-context, not synced via /sync.
@@ -122,6 +128,9 @@ test.describe("workflow: sprint planning", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-sprint-planning-gap
+    // @user-promise: e2e/scenarios/workflows/sprint-planning.md
+    // @expected-live-by: 2026Q3
     "E-sprint.archiveboard mei archives the entire sprint board at end of week",
     async () => {
       // yougen gap: bulk board archive button; needs cascade behavior per spec.

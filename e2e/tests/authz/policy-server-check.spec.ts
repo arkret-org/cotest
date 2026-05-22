@@ -116,6 +116,9 @@ test.describe("policy server check", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#authz-policy-server-check-gap
+    // @user-promise: e2e/scenarios/authz/policy-server-check.md
+    // @expected-live-by: 2026Q3
     "alice configures policy server; invite triggers /policy/check with allow→deny→obligation lifecycle",
     async ({ browser, request }, testInfo) => {
       // Mirrors scenarios/authz/policy-server-check.md Phases A→E.
@@ -222,6 +225,9 @@ test.describe("policy server check", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#authz-policy-server-check-gap
+    // @user-promise: e2e/scenarios/authz/policy-server-check.md
+    // @expected-live-by: 2026Q3
     "E3.1 policy server timeout → soland fail-closed (deny with reason policy_timeout)",
     async ({ browser, request }) => {
       // spec: authz/policy-server.md §4 — fail_mode=closed default behavior.
@@ -267,6 +273,9 @@ test.describe("policy server check", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#authz-policy-server-check-gap
+    // @user-promise: e2e/scenarios/authz/policy-server-check.md
+    // @expected-live-by: 2026Q3
     "E3.2 multi-source priority: org policy_server overrides realm policy_server (more-specific wins)",
     async ({ browser, request }) => {
       // spec: authz/policy-server.md §3.2 — org override realm.
@@ -321,6 +330,9 @@ test.describe("policy server check", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#authz-policy-server-check-gap
+    // @user-promise: e2e/scenarios/authz/policy-server-check.md
+    // @expected-live-by: 2026Q3
     "E3.3 cache_ttl idempotency: repeated identical action within ttl triggers only one upstream /policy/check",
     async ({ browser, request }) => {
       // spec: authz/policy-server.md §3 — cache_ttl_ms governs upstream call rate.

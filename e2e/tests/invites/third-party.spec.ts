@@ -36,6 +36,9 @@ test.describe("third-party invite", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#invites-third-party-gap
+    // @user-promise: e2e/scenarios/invites/third-party.md
+    // @expected-live-by: 2026Q3
     "alice issues cx.invite.third_party with token_commitment; plaintext email never leaves client",
     async () => {
       // spec: third-party-invites.md §3.1
@@ -43,6 +46,9 @@ test.describe("third-party invite", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#invites-third-party-gap
+    // @user-promise: e2e/scenarios/invites/third-party.md
+    // @expected-live-by: 2026Q3
     "mock verification service receives invite token via email; bob registers DID; verification service signs binding_proof",
     async () => {
       // soland gap + harness gap: mock email service.
@@ -50,6 +56,9 @@ test.describe("third-party invite", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#invites-third-party-gap
+    // @user-promise: e2e/scenarios/invites/third-party.md
+    // @expected-live-by: 2026Q3
     "bob submits cx.invite.claim with binding_proof + subject_proof; reducer accepts and converts to cx.invite.create + accept",
     async () => {
       // spec: third-party-invites.md §4
@@ -57,16 +66,25 @@ test.describe("third-party invite", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#invites-third-party-gap
+    // @user-promise: e2e/scenarios/invites/third-party.md
+    // @expected-live-by: 2026Q3
     "E3.1 expired token: reducer rejects claim with invite_expired",
     async () => {},
   );
 
   test.fixme(
+    // @blocking-on: soland#invites-third-party-gap
+    // @user-promise: e2e/scenarios/invites/third-party.md
+    // @expected-live-by: 2026Q3
     "E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected with binding_mismatch",
     async () => {},
   );
 
   test.fixme(
+    // @blocking-on: soland#invites-third-party-gap
+    // @user-promise: e2e/scenarios/invites/third-party.md
+    // @expected-live-by: 2026Q3
     "E3.3 double-claim: second claim of same token rejected (token consumed)",
     async () => {},
   );

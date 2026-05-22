@@ -47,6 +47,9 @@ test.describe("key backup + restore", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "alice sets up passphrase-protected backup via /settings/recovery; Argon2id KDF + XChaCha20-Poly1305 envelope uploaded",
     async () => {
       // spec: key-management.md §7.1-§7.2
@@ -56,6 +59,9 @@ test.describe("key backup + restore", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "device-2 restores from backup with correct passphrase; commitment match → ciphertext decrypted locally; no server oracle",
     async () => {
       // spec: key-management.md §7.2-§7.3
@@ -65,6 +71,9 @@ test.describe("key backup + restore", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "device-2 replays cx.mls.commit chain using backup's mls_history_backup_key; pre-loss E2EE messages decrypt",
     async () => {
       // spec: encryption-and-audit.md §2.4 + key-management.md §7.3 step 6
@@ -73,6 +82,9 @@ test.describe("key backup + restore", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "E13.1 wrong passphrase: client rejects at key_commitment stage; no GET issued to server (avoids oracle)",
     async () => {
       // spec: key-management.md §7.2
@@ -80,6 +92,9 @@ test.describe("key backup + restore", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "E13.2 tampered ciphertext: digest mismatch → client refuses to decrypt",
     async () => {
       // spec: key-management.md §7.2 line 328
@@ -87,6 +102,9 @@ test.describe("key backup + restore", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "E13.4 mixed_secret_storage=true is allowed in personal_node profile but rejected in high_assurance",
     async () => {
       // spec: key-management.md §7.1
@@ -94,6 +112,9 @@ test.describe("key backup + restore", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-key-backup-gap
+    // @user-promise: e2e/scenarios/encryption/key-backup.md
+    // @expected-live-by: 2026Q3
     "E13.7 DELETE backup requires ownership proof (SSK signature); session-token-only DELETE rejected",
     async () => {
       // spec: key-management.md §7.4 + §12

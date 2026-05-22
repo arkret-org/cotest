@@ -54,7 +54,11 @@ type VerifiedProfileEntry = {
   claim_kind?: string;
   cotest_run_id?: string;
   artifact_hash?: string;
+  artifact_ref?: string;
+  cotest_issuer_did?: string;
+  signature?: string;
   timestamp?: string;
+  valid_until?: string;
 };
 
 type DescribeResponse = {
@@ -84,7 +88,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     //
     // claimed_profiles[].claim_kind MUST be "self_claimed" for every entry.
     // verified_profiles entries, if present, MUST carry cotest_run_id / artifact_hash /
-    //   timestamp (VerifiedProfileDescriptor schema).
+    //   artifact_ref / cotest_issuer_did / signature / timestamp.
     // The two profile_id sets MUST be disjoint — a profile cannot be simultaneously
     // self-claimed and cotest-verified.
     const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
@@ -111,6 +115,9 @@ test.describe("conformance profile gates @fully-implemented", () => {
       expect(entry.profile_id, "verified entry profile_id present").toBeTruthy();
       expect(entry.cotest_run_id, "verified entry cotest_run_id present").toBeTruthy();
       expect(entry.artifact_hash, "verified entry artifact_hash present").toBeTruthy();
+      expect(entry.artifact_ref, "verified entry artifact_ref present").toBeTruthy();
+      expect(entry.cotest_issuer_did, "verified entry cotest_issuer_did present").toBeTruthy();
+      expect(entry.signature, "verified entry signature present").toBeTruthy();
       expect(entry.timestamp, "verified entry timestamp present").toBeTruthy();
     }
 
@@ -216,6 +223,9 @@ test.describe("conformance profile gates @fully-implemented", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#conformance-profile-gates-gap
+    // @user-promise: e2e/scenarios/conformance/profile-gates.md
+    // @expected-live-by: 2026Q3
     "Phase B — unsupported standard event kind submit MUST fail closed (no silent accept-and-drop)",
     async () => {
       // spec: conformance-profiles.md §2.1 (write receiver receiving an active standard
@@ -247,6 +257,9 @@ test.describe("conformance profile gates @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-profile-gates-gap
+    // @user-promise: e2e/scenarios/conformance/profile-gates.md
+    // @expected-live-by: 2026Q3
     "Phase C — event requiring an undeclared critical extension MUST fail closed",
     async () => {
       // spec: conformance-profiles.md §2.1 (requirements.critical_extensions[]
@@ -278,6 +291,9 @@ test.describe("conformance profile gates @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-profile-gates-gap
+    // @user-promise: e2e/scenarios/conformance/profile-gates.md
+    // @expected-live-by: 2026Q3
     "Phase A coauth — coauth self-claims auth_server only, not identity_registry/principal_server",
     async ({ request }) => {
       // spec: conformance-profiles.md §9a (auth_server profile);

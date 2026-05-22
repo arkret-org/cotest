@@ -95,6 +95,9 @@ test.describe("agent protocol interop", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#extensions-agent-protocol-interop-gap
+    // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
+    // @expected-live-by: 2026Q3
     "Phase A — agent endpoint discovery via cx.agent.endpoint + DID Document service binding",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5.1 (cx.agent.endpoint
@@ -136,6 +139,9 @@ test.describe("agent protocol interop", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-agent-protocol-interop-gap
+    // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
+    // @expected-live-by: 2026Q3
     "Phase B — capability approval with allowed_endpoints / requires_human_approval gate",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §4 (upgrade MUST be
@@ -176,6 +182,9 @@ test.describe("agent protocol interop", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-agent-protocol-interop-gap
+    // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
+    // @expected-live-by: 2026Q3
     "Phase C — invocation handoff with throttled status transcript",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5.2 (cx.agent.protocol_session.start
@@ -217,6 +226,9 @@ test.describe("agent protocol interop", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-agent-protocol-interop-gap
+    // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
+    // @expected-live-by: 2026Q3
     "Phase D — publish-to-source flow lands Flow + Morph with attribution",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5.4 (result_objects /
@@ -265,6 +277,9 @@ test.describe("agent protocol interop", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-agent-protocol-interop-gap
+    // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
+    // @expected-live-by: 2026Q3
     "Phase E — audit chain start → status* → result is contiguous and verifiable",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5 (full event

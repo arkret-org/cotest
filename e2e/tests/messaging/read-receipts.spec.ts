@@ -79,6 +79,9 @@ test.describe("read receipts + privacy", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window",
     async () => {
       // spec: read-receipts.md §2.2-§2.3
@@ -87,6 +90,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "alice toggles preference=false; subsequent reads do NOT emit cx.receipt.read; bob's view stops updating",
     async () => {
       // spec: read-receipts.md §2.4 + client-preferences.md
@@ -94,6 +100,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "alice re-enables preference; new reads emit a single fresh cx.receipt.read; reads during the disabled window stay invisible",
     async () => {
       // spec: read-receipts.md §2.4 (no retroactive emission)
@@ -101,6 +110,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "space disclosure=required locks the client toggle; even with preference=false, client sends receipts",
     async () => {
       // spec: read-receipts.md §2.5
@@ -108,6 +120,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "space disclosure=disabled: client does not send; Sync Service silently drops any inbound cx.receipt.read for the space",
     async () => {
       // spec: read-receipts.md §2.5
@@ -115,6 +130,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "actor-private read marker (cx.read.marker) syncs across alice's devices but does NOT broadcast to bob",
     async () => {
       // spec: read-receipts.md §3.1-§3.2
@@ -122,6 +140,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted",
     async () => {
       // spec: read-receipts.md §2.3
@@ -129,6 +150,9 @@ test.describe("read receipts + privacy", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#messaging-read-receipts-gap
+    // @user-promise: e2e/scenarios/messaging/read-receipts.md
+    // @expected-live-by: 2026Q3
     "E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt",
     async () => {
       // spec: read-receipts.md §3.2

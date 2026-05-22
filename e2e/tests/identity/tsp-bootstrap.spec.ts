@@ -11,6 +11,9 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("tsp bootstrap", () => {
   test.fixme(
+    // @blocking-on: soland#identity-tsp-bootstrap-gap
+    // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
+    // @expected-live-by: 2026Q3
     "alice and bob_extern bootstrap TSP relationship; alice sends Contrix invite via TSP; bob_extern verifies + ACKs",
     async () => {
       // Main flow covers tsp-bootstrap.md Phase A-E:
@@ -50,6 +53,9 @@ test.describe("tsp bootstrap", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-tsp-bootstrap-gap
+    // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
+    // @expected-live-by: 2026Q3
     "E2.1 TSP endpoint unreachable → client falls back to HTTPS JWE; invite still delivers; audit logs transport.fallback{from:tsp,to:https-jwe}",
     async () => {
       // spec: tsp-integration.md status header (v1 core default = HTTPS JWE /
@@ -63,6 +69,9 @@ test.describe("tsp bootstrap", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-tsp-bootstrap-gap
+    // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
+    // @expected-live-by: 2026Q3
     "E2.2 VID resolver degraded (no witness) → TSP relationship's trust_level downgrades to 'degraded_no_witness'; signature still validates but trust drops",
     async () => {
       // spec: tsp-integration.md §8 (record support system + trust
@@ -79,6 +88,9 @@ test.describe("tsp bootstrap", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-tsp-bootstrap-gap
+    // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
+    // @expected-live-by: 2026Q3
     "E2.3 metadata privacy via nested message: an intermediary relay sees pairwise VID + payload_hash only — no vid_local, no inner operation, no plaintext payload",
     async () => {
       // spec: tsp-integration.md §4 (metadata_privacy.nested_messages),

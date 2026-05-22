@@ -181,6 +181,9 @@ test.describe("GDPR / audit / retention", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#governance-gdpr-audit-retention-gap
+    // @user-promise: e2e/scenarios/governance/gdpr-audit-retention.md
+    // @expected-live-by: 2026Q3
     "retention_policy.ttl: events older than the TTL are tombstoned (not physically deleted if anchored)",
     async () => {
       // spec: space-and-place.md §2.2
@@ -188,6 +191,9 @@ test.describe("GDPR / audit / retention", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#governance-gdpr-audit-retention-gap
+    // @user-promise: e2e/scenarios/governance/gdpr-audit-retention.md
+    // @expected-live-by: 2026Q3
     "E27.3 cross-server erasure fan-out: alice's DID erased on α; β tombstones her events too within reconciliation window",
     async ({ request }) => {
       // spec: identity/account-lifecycle.md §8 + federation reconciliation:

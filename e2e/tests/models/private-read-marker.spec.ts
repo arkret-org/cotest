@@ -105,6 +105,9 @@ test.describe("private read marker", () => {
   // Main flow: full multi-device read-marker lifecycle (Phases A-G in
   // scenarios/models/private-read-marker.md).
   test.fixme(
+    // @blocking-on: soland#models-private-read-marker-gap
+    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @expected-live-by: 2026Q3
     "alice's read marker syncs across devices via to-device; mark-all-read advances marker on all devices within sync window",
     async () => {
       // scenario: scenarios/models/private-read-marker.md Phases A-G
@@ -123,6 +126,9 @@ test.describe("private read marker", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-private-read-marker-gap
+    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @expected-live-by: 2026Q3
     "E10.1 multi-device read marker eventual consistency: device-2 may lag but converges to device-1's last write within bounded sync window (spec §3)",
     async () => {
       // soland gap: read marker to-device channel + cross-device sync 未实现
@@ -131,6 +137,9 @@ test.describe("private read marker", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-private-read-marker-gap
+    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @expected-live-by: 2026Q3
     "E10.2 E2EE space notification redaction: server-side GET /api/v1/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
     async () => {
       // spec: discovery/push-notifications.md §4 + private-objects.md §3
@@ -140,6 +149,9 @@ test.describe("private read marker", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-private-read-marker-gap
+    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @expected-live-by: 2026Q3
     "E10.3 discussion realm read marker is isolated from parent space marker (account_data key m.read_marker:<realm_id> is per-realm)",
     async () => {
       // spec: models/private-objects.md §3 + models/realm-links.md

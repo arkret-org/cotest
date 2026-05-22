@@ -106,6 +106,9 @@ test.describe("kanban end-to-end", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#kanban-end-to-end-gap
+    // @user-promise: e2e/scenarios/kanban/end-to-end.md
+    // @expected-live-by: 2026Q3
     "concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_register_conflict",
     async () => {
       // spec: space-and-place.md §4.6 cx.flow.move cas-register basis
@@ -113,6 +116,9 @@ test.describe("kanban end-to-end", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-end-to-end-gap
+    // @user-promise: e2e/scenarios/kanban/end-to-end.md
+    // @expected-live-by: 2026Q3
     "cross-space contains relation rejected with reason=cross_space_structural_relation",
     async () => {
       // spec: models/relation.md §3.2 — structural relations MUST stay
@@ -126,6 +132,9 @@ test.describe("kanban end-to-end", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#kanban-end-to-end-gap
+    // @user-promise: e2e/scenarios/kanban/end-to-end.md
+    // @expected-live-by: 2026Q3
     "commenting on an archived flow is rejected by reducer (no writes on archived Flow)",
     async () => {
       // spec: space-and-place.md §4.6 archived state write constraints
@@ -133,6 +142,9 @@ test.describe("kanban end-to-end", () => {
   );
 
   test.fixme("reordering lists (drag column) updates board's child_order cell", async ({
+    // @blocking-on: soland#kanban-end-to-end-gap
+    // @user-promise: e2e/scenarios/kanban/end-to-end.md
+    // @expected-live-by: 2026Q3
     browser,
     request,
   }, testInfo) => {

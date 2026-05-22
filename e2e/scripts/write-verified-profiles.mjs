@@ -35,7 +35,8 @@
 
 import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { basename, resolve, join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, sign } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 // ---------------------------------------------------------------------------
 // Profile-suite allow-list.
@@ -106,7 +107,11 @@ function printUsage() {
       '        "service_role": "principal_server",',
       '        "test_count": 3,',
       '        "spec_file": "cotest/e2e/tests/conformance/profile-gates.spec.ts",',
-      '        "artifact_hash": "sha256:<hex>"',
+      '        "artifact_hash": "sha256:<hex>",',
+      '        "artifact_ref": "file:///.../verified-profiles.json",',
+      '        "cotest_issuer_did": "did:...",',
+      '        "signature": "eddsa-jcs-b64url:<signature>",',
+      '        "valid_until": "<RFC3339 optional>"',
       '      }',
       '    ]',
       '  }',
@@ -116,7 +121,11 @@ function printUsage() {
       '  - A suite promotes only if it has >=1 passing test AND zero failures',
       '    in that suite for this run (any failed/skipped/errored test in the',
       '    suite blocks promotion of every profile id it claims).',
-      '  - artifact_hash = sha256(canonical JSON of {run_id, profile_id, test_count}).',
+      '  - artifact_hash = sha256(canonical JSON of run_id/profile/service/test evidence).',
+      '  - Non-empty verified[] requires COTEST_VERIFIED_PROFILES_ISSUER_DID and',
+      '    either COTEST_VERIFIED_PROFILES_SIGNING_KEY_PEM or',
+      '    COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH. The key must be an Ed25519',
+      '    private key accepted by Node crypto.',
       '',
       'ENV CONSUMERS:',
       '  - soland reads SOLAND_VERIFIED_PROFILES_ARTIFACT=<path-to-this-json>',
@@ -219,6 +228,63 @@ function sha256Hex(s) {
   return createHash('sha256').update(s).digest('hex');
 }
 
+function loadSigningConfig() {
+  const issuerDid = process.env.COTEST_VERIFIED_PROFILES_ISSUER_DID;
+  if (!issuerDid || !issuerDid.startsWith('did:')) {
+    die(
+      1,
+      'verified profile promotion requires COTEST_VERIFIED_PROFILES_ISSUER_DID=did:...',
+    );
+  }
+
+  let pem = process.env.COTEST_VERIFIED_PROFILES_SIGNING_KEY_PEM;
+  const keyPath = process.env.COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH;
+  if (!pem && keyPath) {
+    try {
+      pem = readFileSync(keyPath, 'utf8');
+    } catch (e) {
+      die(1, `failed to read COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH: ${e.message}`);
+    }
+  }
+  if (!pem) {
+    die(
+      1,
+      'verified profile promotion requires COTEST_VERIFIED_PROFILES_SIGNING_KEY_PEM or COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH',
+    );
+  }
+
+  try {
+    return {
+      issuerDid,
+      privateKey: createPrivateKey(pem),
+      validUntil: process.env.COTEST_VERIFIED_PROFILES_VALID_UNTIL || undefined,
+    };
+  } catch (e) {
+    die(1, `failed to parse cotest verified-profile signing key: ${e.message}`);
+  }
+}
+
+function signedProfileStatement(entry) {
+  const statement = {
+    profile_id: entry.profile_id,
+    cotest_run_id: entry.cotest_run_id,
+    artifact_hash: entry.artifact_hash,
+    artifact_ref: entry.artifact_ref,
+    cotest_issuer_did: entry.cotest_issuer_did,
+    timestamp: entry.timestamp,
+  };
+  if (entry.valid_until) {
+    statement.valid_until = entry.valid_until;
+  }
+  return statement;
+}
+
+function signProfileEntry(privateKey, entry) {
+  const statement = canonicalJson(signedProfileStatement(entry));
+  const signature = sign(null, Buffer.from(statement, 'utf8'), privateKey);
+  return `eddsa-jcs-b64url:${signature.toString('base64url')}`;
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
@@ -268,6 +334,10 @@ function main(argv) {
   }
 
   const runId = basename(artifactsDir);
+  const generatedAt = new Date().toISOString();
+  const outPath = join(artifactsDir, 'verified-profiles.json');
+  const artifactRef = pathToFileURL(outPath).href;
+  let signingConfig;
   const verified = [];
   for (const [specFile, profiles] of Object.entries(PROFILE_SUITE_MAP)) {
     if (profiles.length === 0) continue;
@@ -284,29 +354,39 @@ function main(argv) {
       continue;
     }
     for (const { profile_id, service_role } of profiles) {
+      signingConfig ??= loadSigningConfig();
       const hashInput = canonicalJson({
         profile_id,
         run_id: runId,
+        service_role,
+        spec_file: specFile,
         test_count: agg.passed,
       });
-      verified.push({
+      const entry = {
         profile_id,
         service_role,
         test_count: agg.passed,
         spec_file: specFile,
         artifact_hash: `sha256:${sha256Hex(hashInput)}`,
-      });
+        artifact_ref: artifactRef,
+        cotest_issuer_did: signingConfig.issuerDid,
+        timestamp: generatedAt,
+      };
+      if (signingConfig.validUntil) {
+        entry.valid_until = signingConfig.validUntil;
+      }
+      entry.signature = signProfileEntry(signingConfig.privateKey, entry);
+      verified.push(entry);
     }
   }
 
   const payload = {
     version: '1',
-    generated_at: new Date().toISOString(),
+    generated_at: generatedAt,
     run_id: runId,
     verified,
   };
 
-  const outPath = join(artifactsDir, 'verified-profiles.json');
   writeFileSync(outPath, JSON.stringify(payload, null, 2) + '\n');
   process.stdout.write(
     `wrote ${outPath} (${verified.length} verified profile entr${

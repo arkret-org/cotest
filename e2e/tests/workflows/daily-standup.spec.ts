@@ -107,6 +107,9 @@ test.describe("workflow: async daily standup", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#workflows-daily-standup-gap
+    // @user-promise: e2e/scenarios/workflows/daily-standup.md
+    // @expected-live-by: 2026Q3
     "E-standup.offline pat is offline mid-post; reconnect flushes the outbox",
     async () => {
       // yougen gap: outbox UX + offline persistence (sync/offline-conflict).
@@ -114,6 +117,9 @@ test.describe("workflow: async daily standup", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-daily-standup-gap
+    // @user-promise: e2e/scenarios/workflows/daily-standup.md
+    // @expected-live-by: 2026Q3
     "E-standup.redact lin redacts their own standup after spotting a wrong template",
     async () => {
       // Same redact pattern as triad — pulled out here for the standup story.

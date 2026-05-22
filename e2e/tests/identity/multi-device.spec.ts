@@ -55,6 +55,9 @@ test.describe("multi-device pairing + revocation", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
     "Device 1 scans Device 2's QR; signs cx.device.authorized with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
     async () => {
       // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding
@@ -64,6 +67,9 @@ test.describe("multi-device pairing + revocation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
     "both devices show up in alice's device list via cx.device.list_update projection within 30s of pairing",
     async () => {
       // spec: device-lifecycle.md §6
@@ -71,6 +77,9 @@ test.describe("multi-device pairing + revocation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
     "alice messages from Device 1 appear in Device 2's timeline; both have distinct device_id but same actor_id",
     async () => {
       // spec: device-lifecycle.md §2.1 step 5
@@ -78,6 +87,9 @@ test.describe("multi-device pairing + revocation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
     "Device 1 revokes Device 2 via cx.device.revoked; Device 2's subsequent /api/v1/events POST returns device_revoked",
     async () => {
       // spec: device-lifecycle.md §2.2 + key-management.md §5.2
@@ -85,6 +97,9 @@ test.describe("multi-device pairing + revocation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
     "after revoke in an E2EE space, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages",
     async () => {
       // spec: device-lifecycle.md §9 + encryption-and-audit.md §2.2
@@ -112,6 +127,9 @@ test.describe("multi-device pairing + revocation", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
     "E10.E to-device message queued for Device 2 before revocation is dropped after revocation (spec §7 line 341 grace drop)",
     async () => {
       // spec: device-lifecycle.md §7

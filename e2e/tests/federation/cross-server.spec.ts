@@ -219,6 +219,9 @@ test.describe("cross-server federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#federation-cross-server-gap
+    // @user-promise: e2e/scenarios/federation/cross-server.md
+    // @expected-live-by: 2026Q3
     "α invite UI event automatically fans out to β and β acceptance propagates back to α",
     async () => {
       // Remaining full contract:
@@ -230,6 +233,9 @@ test.describe("cross-server federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#federation-cross-server-gap
+    // @user-promise: e2e/scenarios/federation/cross-server.md
+    // @expected-live-by: 2026Q3
     "two-way timeline messaging: alice@α and bob@β exchange messages and both servers converge on identical effective state",
     async () => {
       // spec: §4.1 push + §4.5 frontier exchange
@@ -244,6 +250,9 @@ test.describe("cross-server federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#federation-cross-server-gap
+    // @user-promise: e2e/scenarios/federation/cross-server.md
+    // @expected-live-by: 2026Q3
     "Pull / backfill: after a network partition, β fetches missing α events via GET /api/v1/federation/pull-operations",
     async () => {
       // spec: §4.2 pull / backfill
@@ -253,6 +262,9 @@ test.describe("cross-server federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#federation-cross-server-gap
+    // @user-promise: e2e/scenarios/federation/cross-server.md
+    // @expected-live-by: 2026Q3
     "Idempotent push: replaying the same (origin, destination, event_id) returns accepted (no duplicate write); reducer_profile_hash mismatch returns rejected with reason_code=reducer_profile_mismatch",
     async () => {
       // spec: §4.1 reducer_profile_hash gate + §4.1.1 idempotency
@@ -262,6 +274,9 @@ test.describe("cross-server federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#federation-cross-server-gap
+    // @user-promise: e2e/scenarios/federation/cross-server.md
+    // @expected-live-by: 2026Q3
     "Capability revoke fanout: after alice revokes β's service delegation, α MUST stop pushing future events to β (§4.4)",
     async () => {
       // spec: §4.4 capability revoke fanout
@@ -270,6 +285,9 @@ test.describe("cross-server federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#federation-cross-server-gap
+    // @user-promise: e2e/scenarios/federation/cross-server.md
+    // @expected-live-by: 2026Q3
     "RFC 9421 signature failure: tampered Signature header makes β reject the entire batch with 4xx",
     async () => {
       // spec: §3.2 RFC 9421 request signature

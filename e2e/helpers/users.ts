@@ -134,13 +134,15 @@ export class JointUserPage {
 
   async createSpace(opts: CreateSpaceOpts): Promise<string> {
     await this.gotoSetup();
-    const flow = this.page.getByTestId("space-lifecycle-flow").first();
+    const flow = this.page.getByTestId("space-lifecycle-flow").last();
 
     await flow.getByTestId("space-title-input").fill(opts.title);
     if (opts.summary !== undefined) {
       await flow.getByTestId("space-summary-input").fill(opts.summary);
     }
-    await flow.getByTestId("new-space-next-button").first().click();
+    const basicsNext = flow.getByTestId("new-space-next-button").first();
+    await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
+    await basicsNext.click();
 
     if (opts.discoverability !== undefined) {
       await flow.getByTestId("space-discoverability-input").selectOption(opts.discoverability);
@@ -154,12 +156,16 @@ export class JointUserPage {
     if (opts.encryptionProfile !== undefined) {
       await flow.getByTestId("realm-encryption-profile-input").selectOption(opts.encryptionProfile);
     }
-    await flow.getByTestId("new-space-next-button").first().click();
+    const policyNext = flow.getByTestId("new-space-next-button").first();
+    await expect(policyNext).toBeEnabled({ timeout: 30_000 });
+    await policyNext.click();
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
       await flow.getByTestId("seed-members-input").fill(opts.seedMembers.join("\n"));
     }
-    await flow.getByTestId("create-space-button").click();
+    const createButton = flow.getByTestId("create-space-button");
+    await expect(createButton).toBeEnabled({ timeout: 30_000 });
+    await createButton.click();
 
     await expect(flow).toContainText(/created cx:realm:/, { timeout: 30_000 });
     const text = await flow.innerText();
@@ -171,7 +177,7 @@ export class JointUserPage {
   // Drive the space admin invite-member form to invite `targetDid` into spaceId.
   // The invite-member card lives under the Members section in yougen, not the
   // Overview landing.
-  async inviteFromAdmin(spaceId: string, targetDid: string) {
+  async inviteFromAdmin(spaceId: string, targetDid: string): Promise<string> {
     await this.gotoSpaceAdminSection(spaceId, "members");
     const invite = this.page.getByTestId("invite-member");
     await expect(invite).toBeVisible({ timeout: 30_000 });
@@ -181,6 +187,10 @@ export class JointUserPage {
       new RegExp(`invited ${escapeRegex(targetDid)}`),
       { timeout: 30_000 },
     );
+    const text = await this.page.getByTestId("space-admin-panel").innerText();
+    const match = text.match(/cx:invite:[a-zA-Z0-9:-]+/);
+    expect(match, `invite id after inviting ${targetDid}: ${text}`).not.toBeNull();
+    return match![0];
   }
 
   // Accept a pending invite for this user. Yougen's space-admin invite
@@ -214,16 +224,26 @@ export class JointUserPage {
           `(visible invites: ${JSON.stringify(body.invites ?? [])})`,
       );
     }
+    await this.acceptInviteById(spaceId, invite.invite_id);
+  }
+
+  async acceptInviteById(spaceId: string, inviteId: string) {
+    const serverUrl = this.session.serverUrl;
+    const token = this.session.sessionToken;
+    if (!token) {
+      throw new Error("acceptInviteById: no session_token captured on session");
+    }
     const acceptResp = await this.page.request.post(
       `${serverUrl}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite/accept`,
       {
         headers: { authorization: `Bearer ${token}` },
-        data: { invite_id: invite.invite_id },
+        data: { invite_id: inviteId },
       },
     );
     if (!acceptResp.ok()) {
+      const text = await acceptResp.text();
       throw new Error(
-        `acceptInvite: POST .../invite/accept returned ${acceptResp.status()} for invite ${invite.invite_id}`,
+        `acceptInviteById: POST .../invite/accept returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
       );
     }
   }

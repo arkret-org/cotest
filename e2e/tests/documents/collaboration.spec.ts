@@ -38,6 +38,9 @@ test.describe("document collaboration", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "alice creates a Document Morph (morph_type=document); bob joins same space and sees initial body",
     async () => {
       // spec: morph.md §2 + content-types.md §2
@@ -47,6 +50,9 @@ test.describe("document collaboration", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "alice and bob edit concurrently; both edits visible after lattice merge (mv-register or cas-register depending on lattice)",
     async () => {
       // spec: authz/event-auth-state-resolution.md §2 + §3.2 multi-cell Moves
@@ -54,6 +60,9 @@ test.describe("document collaboration", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "alice's cursor position propagates to bob's view via cx.presence ephemeral signal within 1s",
     async () => {
       // spec: profiles-presence.md §3 (presence + cursor as ephemeral)
@@ -61,6 +70,9 @@ test.describe("document collaboration", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "bob anchors a comment to text range offset 100..110; alice's view shows the comment marker at that range",
     async () => {
       // spec: flow-and-message.md §4.3 (discussion track) + relation.md §3.2 (replies_to)
@@ -68,6 +80,9 @@ test.describe("document collaboration", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "document versions: each anchor finality boundary produces a labeled version; /document/:id/versions lists them",
     async () => {
       // spec: authz/event-auth-state-resolution.md §4 anchor finality.
@@ -75,6 +90,9 @@ test.describe("document collaboration", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "restore an earlier version: cx.morph.update with state_witness + inclusion_proof referring to past anchor accepted; current state reverts",
     async () => {
       // spec: authz/event-auth-state-resolution.md §8.1
@@ -82,6 +100,9 @@ test.describe("document collaboration", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#documents-collaboration-gap
+    // @user-promise: e2e/scenarios/documents/collaboration.md
+    // @expected-live-by: 2026Q3
     "E17.2 comment anchored to a range that was later removed becomes orphaned (state=locked); UI surfaces orphan badge",
     async () => {
       // spec: relation.md §3.2 + flow-and-message.md §4.3

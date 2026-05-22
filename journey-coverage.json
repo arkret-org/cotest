@@ -1,0 +1,400 @@
+{
+  "generated_at": "2026-05-22T10:24:28.243Z",
+  "journeys": [
+    {
+      "id": "UJ-A",
+      "title": "First login and multi-device recovery",
+      "verified": 20,
+      "promised": 79,
+      "blocking": 59,
+      "specs": [
+        {
+          "key": "encryption/key-backup",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 8,
+          "blocking": 7
+        },
+        {
+          "key": "encryption/mls-group",
+          "mapping": "domain-fallback",
+          "verified": 3,
+          "promised": 8,
+          "blocking": 5
+        },
+        {
+          "key": "identity/account-device-auth",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 6,
+          "blocking": 4
+        },
+        {
+          "key": "identity/account-states",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 7,
+          "blocking": 6
+        },
+        {
+          "key": "identity/consent-grant",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 7,
+          "blocking": 5
+        },
+        {
+          "key": "identity/handle",
+          "mapping": "domain-fallback",
+          "verified": 7,
+          "promised": 7,
+          "blocking": 0
+        },
+        {
+          "key": "identity/multi-device",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 8,
+          "blocking": 6
+        },
+        {
+          "key": "identity/onboarding",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 8,
+          "blocking": 7
+        },
+        {
+          "key": "identity/recovery",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 8,
+          "blocking": 7
+        },
+        {
+          "key": "identity/tsp-bootstrap",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 4,
+          "blocking": 4
+        },
+        {
+          "key": "identity/webvh-rotation",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 8,
+          "blocking": 8
+        }
+      ],
+      "verified_ratio": 0.25316455696202533
+    },
+    {
+      "id": "UJ-B",
+      "title": "Workspace creation, invites, and archive visibility",
+      "verified": 9,
+      "promised": 27,
+      "blocking": 18,
+      "specs": [
+        {
+          "key": "invites/third-party",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 7,
+          "blocking": 6
+        },
+        {
+          "key": "spaces/admin-section-route",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 1,
+          "blocking": 0
+        },
+        {
+          "key": "spaces/history-world-readable",
+          "mapping": "domain-fallback",
+          "verified": 4,
+          "promised": 4,
+          "blocking": 0
+        },
+        {
+          "key": "spaces/knock-application",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 8,
+          "blocking": 7
+        },
+        {
+          "key": "spaces/knock-auto-resolve",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 5,
+          "blocking": 5
+        },
+        {
+          "key": "spaces/moderation-ban",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 2,
+          "blocking": 0
+        }
+      ],
+      "verified_ratio": 0.3333333333333333
+    },
+    {
+      "id": "UJ-C",
+      "title": "Daily messaging, edits, reactions, receipts, and mentions",
+      "verified": 5,
+      "promised": 31,
+      "blocking": 26,
+      "specs": [
+        {
+          "key": "discovery/notifications",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 6,
+          "blocking": 4
+        },
+        {
+          "key": "messaging/chat-advanced",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 6,
+          "blocking": 6
+        },
+        {
+          "key": "messaging/discussion-upgrade",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 7,
+          "blocking": 7
+        },
+        {
+          "key": "messaging/read-receipts",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 9,
+          "blocking": 8
+        },
+        {
+          "key": "messaging/triad-collaboration",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 3,
+          "blocking": 1
+        }
+      ],
+      "verified_ratio": 0.16129032258064516
+    },
+    {
+      "id": "UJ-D",
+      "title": "Encrypted realm lifecycle and cross-device decrypt",
+      "verified": 6,
+      "promised": 29,
+      "blocking": 23,
+      "specs": [
+        {
+          "key": "encryption/audited-e2ee",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 6,
+          "blocking": 5
+        },
+        {
+          "key": "encryption/encrypted-attachments",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 7,
+          "blocking": 6
+        },
+        {
+          "key": "encryption/key-backup",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 8,
+          "blocking": 7
+        },
+        {
+          "key": "encryption/mls-group",
+          "mapping": "domain-fallback",
+          "verified": 3,
+          "promised": 8,
+          "blocking": 5
+        }
+      ],
+      "verified_ratio": 0.20689655172413793
+    },
+    {
+      "id": "UJ-E",
+      "title": "Federation and cross-domain collaboration",
+      "verified": 4,
+      "promised": 14,
+      "blocking": 10,
+      "specs": [
+        {
+          "key": "extensions/mimi-federation",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 4,
+          "blocking": 4
+        },
+        {
+          "key": "federation/cross-server",
+          "mapping": "domain-fallback",
+          "verified": 4,
+          "promised": 10,
+          "blocking": 6
+        }
+      ],
+      "verified_ratio": 0.2857142857142857
+    },
+    {
+      "id": "UJ-F",
+      "title": "Kanban collaboration and concurrent work",
+      "verified": 7,
+      "promised": 39,
+      "blocking": 32,
+      "specs": [
+        {
+          "key": "kanban/end-to-end",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 5,
+          "blocking": 4
+        },
+        {
+          "key": "kanban/project-simulation",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 7,
+          "blocking": 6
+        },
+        {
+          "key": "messaging/discussion-upgrade",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 7,
+          "blocking": 7
+        },
+        {
+          "key": "workflows/daily-standup",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 3,
+          "blocking": 2
+        },
+        {
+          "key": "workflows/incident-response",
+          "mapping": "domain-fallback",
+          "verified": 0,
+          "promised": 4,
+          "blocking": 4
+        },
+        {
+          "key": "workflows/kanban-week",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 3,
+          "blocking": 2
+        },
+        {
+          "key": "workflows/sprint-planning",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 4,
+          "blocking": 3
+        },
+        {
+          "key": "workflows/support-escalation",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 3,
+          "blocking": 2
+        },
+        {
+          "key": "workflows/team-onboarding",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 3,
+          "blocking": 2
+        }
+      ],
+      "verified_ratio": 0.1794871794871795
+    },
+    {
+      "id": "UJ-G",
+      "title": "Privacy rights, governance, appeal, and GDPR",
+      "verified": 11,
+      "promised": 28,
+      "blocking": 17,
+      "specs": [
+        {
+          "key": "governance/gdpr-audit-retention",
+          "mapping": "domain-fallback",
+          "verified": 5,
+          "promised": 7,
+          "blocking": 2
+        },
+        {
+          "key": "governance/organization-policy",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 7,
+          "blocking": 6
+        },
+        {
+          "key": "governance/personal-blocklist",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 5,
+          "blocking": 4
+        },
+        {
+          "key": "identity/consent-grant",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 7,
+          "blocking": 5
+        },
+        {
+          "key": "spaces/moderation-ban",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 2,
+          "blocking": 0
+        }
+      ],
+      "verified_ratio": 0.39285714285714285
+    },
+    {
+      "id": "UJ-H",
+      "title": "Calls, push, and cross-platform sync",
+      "verified": 5,
+      "promised": 21,
+      "blocking": 16,
+      "specs": [
+        {
+          "key": "calls/webrtc",
+          "mapping": "domain-fallback",
+          "verified": 1,
+          "promised": 9,
+          "blocking": 8
+        },
+        {
+          "key": "discovery/notifications",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 6,
+          "blocking": 4
+        },
+        {
+          "key": "sync/transport-negotiation",
+          "mapping": "domain-fallback",
+          "verified": 2,
+          "promised": 6,
+          "blocking": 4
+        }
+      ],
+      "verified_ratio": 0.23809523809523808
+    }
+  ]
+}

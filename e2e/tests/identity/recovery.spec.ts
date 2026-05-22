@@ -29,6 +29,9 @@ test.describe("account recovery", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "alice (device-1) configures passphrase-protected backup; envelope uses Argon2id KDF + XChaCha20-Poly1305; key_commitment uploaded",
     async () => {
       // spec: key-management.md §7.1-§7.2
@@ -37,6 +40,9 @@ test.describe("account recovery", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "device-2 restores account using passphrase; SSK/USK recovered; new device authorized via cx.device.authorized with recovery proof",
     async () => {
       // spec: key-management.md §7.3-§7.4, §5.0.1
@@ -44,6 +50,9 @@ test.describe("account recovery", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline",
     async () => {
       // spec: key-management.md §7.3 step 6, encryption-and-audit.md §2.4
@@ -51,6 +60,9 @@ test.describe("account recovery", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "E8.4 threshold recovery (3-of-5 shares): client reconstructs recovery key from shares; envelope decrypted; device authorized",
     async () => {
       // spec: key-management.md §8
@@ -58,6 +70,9 @@ test.describe("account recovery", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "E8.5 trusted recovery service: third-party signs recovery attestation; client gates backup decrypt on attestation validity",
     async () => {
       // spec: key-management.md §3.3 + §8
@@ -65,6 +80,9 @@ test.describe("account recovery", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "E8.6 mixed_secret_storage=true rejected in high_assurance profile but accepted in personal_node",
     async () => {
       // spec: key-management.md §7.1
@@ -72,6 +90,9 @@ test.describe("account recovery", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-recovery-gap
+    // @user-promise: e2e/scenarios/identity/recovery.md
+    // @expected-live-by: 2026Q3
     "E8.7 after device-1 revoked, restore still succeeds; historical access honors current membership (not pre-revoke)",
     async () => {
       // spec: key-management.md §12 line 724

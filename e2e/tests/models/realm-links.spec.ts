@@ -19,6 +19,9 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("realm links", () => {
   test.fixme(
+    // @blocking-on: soland#models-realm-links-gap
+    // @user-promise: e2e/scenarios/models/realm-links.md
+    // @expected-live-by: 2026Q3
     "alice declares governed_by link from team realm to governance realm; bob's violations get filtered via inherited policy; link rejection restores independence",
     async ({ browser, request }, testInfo) => {
       // soland gap: realm-link projection logic + inherited policy merge 未实现
@@ -258,6 +261,9 @@ test.describe("realm links", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-realm-links-gap
+    // @user-promise: e2e/scenarios/models/realm-links.md
+    // @expected-live-by: 2026Q3
     "E6.2 multi-target narrowing: T governed_by G1 + G2 takes narrow (intersection) of inherited rules (spec §6.2 narrow-only)",
     async ({ request }) => {
       // soland gap: realm-link projection logic + multi-source narrow-only merge 未实现
@@ -328,6 +334,9 @@ test.describe("realm links", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-realm-links-gap
+    // @user-promise: e2e/scenarios/models/realm-links.md
+    // @expected-live-by: 2026Q3
     "E6.3 capability non-propagation: alice has realm.admin in G; the governed_by link does NOT grant her admin in T (spec §5)",
     async ({ request }) => {
       // soland gap: realm-link projection logic + capability isolation enforcement 未实现

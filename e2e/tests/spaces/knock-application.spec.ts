@@ -98,6 +98,9 @@ test.describe("knock + application + cooldown", () => {
   //   - once soland lands the missing surfaces, removing `test.fixme` activates them.
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.A bob submits structured member.application after knocking; alice (with cx.space.join.review) sees the answers and accepts",
     async () => {
       // spec: models/space-and-place.md §3.6.2-§3.6.3
@@ -107,6 +110,9 @@ test.describe("knock + application + cooldown", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.B alice's cx.invite.create.refs[role=\"join_authorised_by\"] is required to point at a fresh review accept; reducer rejects re-used or stale refs",
     async () => {
       // spec: models/space-and-place.md §3.6.5
@@ -115,6 +121,9 @@ test.describe("knock + application + cooldown", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.C mallory is rejected by alice and CANNOT re-knock until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator",
     async () => {
       // spec: models/space-and-place.md §3.6, §3.3.1 cooldown gate
@@ -123,6 +132,9 @@ test.describe("knock + application + cooldown", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.D max_open_applications_per_actor=1 — bob's second open application is rejected before review",
     async () => {
       // spec: models/space-and-place.md §3.3 + §3.11 reuse limits.
@@ -131,6 +143,9 @@ test.describe("knock + application + cooldown", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.E application_ttl expiry — application accepted past TTL is rejected even if reviewer signs accept",
     async () => {
       // spec: §3.3 application_ttl (default 168h, min 1h).
@@ -139,6 +154,9 @@ test.describe("knock + application + cooldown", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.F reviewer loses cx.space.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted",
     async () => {
       // spec: §3.6.5 #3 — reducer re-checks reviewer capability when invite is written.
@@ -147,6 +165,9 @@ test.describe("knock + application + cooldown", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#spaces-knock-application-gap
+    // @user-promise: e2e/scenarios/spaces/knock-application.md
+    // @expected-live-by: 2026Q3
     "E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes cx.audit.accessed",
     async () => {
       // spec: §3.2 #2, §3.6.2 encryption_envelope.

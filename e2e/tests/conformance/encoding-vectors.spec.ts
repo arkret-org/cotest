@@ -603,6 +603,9 @@ test.describe("conformance encoding vectors", () => {
   // a richer fixture lands.
   // -------------------------------------------------------------------------
   test.fixme(
+    // @blocking-on: soland#conformance-encoding-vectors-gap
+    // @user-promise: e2e/scenarios/conformance/encoding-vectors.md
+    // @expected-live-by: 2026Q3
     "§3.4 hard erasure receipt + §3.5 snapshot pruning verification stub",
     async () => {
       // Missing fixture: contrix-spec/spec/v1/artifacts/fixtures/redaction-fixture.json

@@ -42,6 +42,9 @@ test.describe("encrypted attachments", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#encryption-encrypted-attachments-gap
+    // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
+    // @expected-live-by: 2026Q3
     "alice uploads XChaCha20-encrypted attachment; metadata media_type is application/octet-stream (no plaintext leak)",
     async () => {
       // spec: media-and-blob.md §3 + §5.1
@@ -49,6 +52,9 @@ test.describe("encrypted attachments", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-encrypted-attachments-gap
+    // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
+    // @expected-live-by: 2026Q3
     "bob (member) downloads blob; client verifies sha256(ciphertext) === ciphertext_digest before decrypt",
     async () => {
       // spec: media-and-blob.md §5
@@ -56,6 +62,9 @@ test.describe("encrypted attachments", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-encrypted-attachments-gap
+    // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
+    // @expected-live-by: 2026Q3
     "mallory (non-member) GET on the same blob_ref returns opaque 403/404 indistinguishable from non-existent",
     async () => {
       // spec: media-and-blob.md §5
@@ -63,6 +72,9 @@ test.describe("encrypted attachments", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-encrypted-attachments-gap
+    // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
+    // @expected-live-by: 2026Q3
     "blob service stores only ciphertext + blob_ref + size; no plaintext filename or media type in service logs",
     async () => {
       // spec: media-and-blob.md §3 + §5.1
@@ -70,6 +82,9 @@ test.describe("encrypted attachments", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-encrypted-attachments-gap
+    // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
+    // @expected-live-by: 2026Q3
     "E12.2 thumbnail generation: client encrypts thumbnail and uploads as separate blob; server cannot derive thumbnails in E2EE",
     async () => {
       // spec: media-and-blob.md §5.3
@@ -77,6 +92,9 @@ test.describe("encrypted attachments", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#encryption-encrypted-attachments-gap
+    // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
+    // @expected-live-by: 2026Q3
     "E12.4 audited E2EE: cx.moderation.frank receipt visible to audit agent without revealing plaintext",
     async () => {
       // spec: audited-e2ee.md §4

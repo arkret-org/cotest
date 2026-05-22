@@ -243,6 +243,9 @@ test.describe("morph schema migration @fully-implemented", () => {
   // -------------------------------------------------------------------------
 
   test.fixme(
+    // @blocking-on: soland#models-morph-schema-migration-gap
+    // @user-promise: e2e/scenarios/models/morph-schema-migration.md
+    // @expected-live-by: 2026Q3
     "Phase A — cx.morph.schema_migrate with unsupported transformation_rules is hard-rejected",
     async ({ request }) => {
       // spec: morph.md §4.1 S3 (breaking / transformation 类需 Realm 显式启用
@@ -275,6 +278,9 @@ test.describe("morph schema migration @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-morph-schema-migration-gap
+    // @user-promise: e2e/scenarios/models/morph-schema-migration.md
+    // @expected-live-by: 2026Q3
     "Phase B — additive schema_refs[] migration accepted and v1 history stays bound to v1 schema",
     async ({ request }) => {
       // spec: morph.md §4.1 S1 (per-event requirements.schema[] version
@@ -309,6 +315,9 @@ test.describe("morph schema migration @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-morph-schema-migration-gap
+    // @user-promise: e2e/scenarios/models/morph-schema-migration.md
+    // @expected-live-by: 2026Q3
     "Phase C — breaking / transformation migration requires opt-in profile + capability and emits schema_migration_breaking audit",
     async ({ request }) => {
       // spec: morph.md §4.1 S3 (breaking / transformation arms — Realm MUST
@@ -346,6 +355,9 @@ test.describe("morph schema migration @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#models-morph-schema-migration-gap
+    // @user-promise: e2e/scenarios/models/morph-schema-migration.md
+    // @expected-live-by: 2026Q3
     "Phase D — deterministic transform vectors produce byte-equal output (gated on fixture availability)",
     async ({ request }) => {
       // spec: morph.md §4.1 S3 + profile additional_requirements

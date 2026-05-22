@@ -20,6 +20,9 @@ test.describe("mimi federation", () => {
   // 所有 case 暂以 fixme 形式锚定 spec 形状,等 facade 实装后再补主体。
 
   test.fixme(
+    // @blocking-on: soland#extensions-mimi-federation-gap
+    // @user-promise: e2e/scenarios/extensions/mimi-federation.md
+    // @expected-live-by: 2026Q3
     "alice opens MIMI-enabled Realm; bob_mimi joins via facade; bidirectional messaging with identity bridging",
     async () => {
       // Phase A — alice 通过 /setup 创建 Realm,设
@@ -51,6 +54,9 @@ test.describe("mimi federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-mimi-federation-gap
+    // @user-promise: e2e/scenarios/extensions/mimi-federation.md
+    // @expected-live-by: 2026Q3
     "E5.1 MIMI endpoint 不可达 → federation fallback: 消息本地保留 + outbound 状态标记 deferred,facade 恢复后重试",
     async () => {
       // facade mock 主动返回 5xx / timeout;
@@ -61,6 +67,9 @@ test.describe("mimi federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-mimi-federation-gap
+    // @user-promise: e2e/scenarios/extensions/mimi-federation.md
+    // @expected-live-by: 2026Q3
     "E5.2 E2EE 在 MIMI 中的转换:transcript binding 或 explicit downgrade 标记,绝不静默泄露明文",
     async () => {
       // Contrix E2EE Flow 经 facade 进入 MIMI 时:
@@ -72,6 +81,9 @@ test.describe("mimi federation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#extensions-mimi-federation-gap
+    // @user-promise: e2e/scenarios/extensions/mimi-federation.md
+    // @expected-live-by: 2026Q3
     "E5.3 content type 差异:MIMI 特有 content kind → quarantine + cx.morph.unknown_content_kind",
     async () => {
       // facade 把 bob_mimi 发的 m.location.share.live 翻译进来;

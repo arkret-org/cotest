@@ -96,6 +96,9 @@ test.describe("workflow: team onboarding", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#workflows-team-onboarding-gap
+    // @user-promise: e2e/scenarios/workflows/team-onboarding.md
+    // @expected-live-by: 2026Q3
     "E-onboarding.1 mei pins the welcome message so yuki keeps seeing it at the top",
     async () => {
       // yougen gap: pinned-message UI; spec models/flow-and-message.md §8.6.
@@ -103,6 +106,9 @@ test.describe("workflow: team onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-team-onboarding-gap
+    // @user-promise: e2e/scenarios/workflows/team-onboarding.md
+    // @expected-live-by: 2026Q3
     "E-onboarding.2 mei edits welcome twice; write-status reflects revision count",
     async () => {
       // yougen gap: write-status reports `revised` but not a numeric counter.

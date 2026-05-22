@@ -14,6 +14,9 @@ test.describe("sovereign deployment", () => {
   // 下列 fixme 锁定 spec 契约,待 soland 双节点能力 + yougen enclave UI 就绪后填实现。
 
   test.fixme(
+    // @blocking-on: soland#sync-sovereign-deployment-gap
+    // @user-promise: e2e/scenarios/sync/sovereign-deployment.md
+    // @expected-live-by: 2026Q3
     "alice_internal and bob_external collaborate in enclave realm; bob cannot escape; exit triggers audit log",
     async () => {
       // Phase A: soland_main 启动并配置严格 DID resolver policy
@@ -49,6 +52,9 @@ test.describe("sovereign deployment", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-sovereign-deployment-gap
+    // @user-promise: e2e/scenarios/sync/sovereign-deployment.md
+    // @expected-live-by: 2026Q3
     "E7.1 escape attempt rejected: bob cannot reach main domain via directory / direct API / enclave proxy",
     async () => {
       // soland gap: directory cross-realm 裁剪 + federation proxy 防 escape
@@ -67,6 +73,9 @@ test.describe("sovereign deployment", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-sovereign-deployment-gap
+    // @user-promise: e2e/scenarios/sync/sovereign-deployment.md
+    // @expected-live-by: 2026Q3
     "E7.2 network outage: soland_main <-> soland_enclave 失联时 enclave 走 store-and-forward,而非客户端 offline outbox",
     async () => {
       // soland gap: enclave 节点的 federation store-and-forward 队列、main
@@ -88,6 +97,9 @@ test.describe("sovereign deployment", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-sovereign-deployment-gap
+    // @user-promise: e2e/scenarios/sync/sovereign-deployment.md
+    // @expected-live-by: 2026Q3
     "E7.3 enclave DID resolver policy: bob 的 DID 必须通过 enclave 的 trust chain 验证(不是 main 的)",
     async () => {
       // soland gap: per-node DID resolver trust roots、per-realm DID resolver

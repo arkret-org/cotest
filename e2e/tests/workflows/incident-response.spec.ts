@@ -20,6 +20,9 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("workflow: incident response", () => {
   test.fixme(
+    // @blocking-on: soland#workflows-incident-response-gap
+    // @user-promise: e2e/scenarios/workflows/incident-response.md
+    // @expected-live-by: 2026Q3
     "on-call opens SEV-2 war room; backend diagnoses; comms publishes sanitized updates; on-call edits final timeline",
     async ({ browser, request }, testInfo) => {
       // Current gaps: incident-specific status fields, priority notification
@@ -108,6 +111,9 @@ test.describe("workflow: incident response", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-incident-response-gap
+    // @user-promise: e2e/scenarios/workflows/incident-response.md
+    // @expected-live-by: 2026Q3
     "E-incident.status status FSM rejects Resolved before Mitigated and records each transition in audit",
     async ({ browser, request }) => {
       // spec: space-and-place.md §4 FSM-style status cells.
@@ -150,6 +156,9 @@ test.describe("workflow: incident response", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-incident-response-gap
+    // @user-promise: e2e/scenarios/workflows/incident-response.md
+    // @expected-live-by: 2026Q3
     "E-incident.priority SEV-1 priority bypasses DnD for on-call but not for observers",
     async ({ browser, request }) => {
       // spec: push-notifications.md priority + DnD override policy.
@@ -208,6 +217,9 @@ test.describe("workflow: incident response", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#workflows-incident-response-gap
+    // @user-promise: e2e/scenarios/workflows/incident-response.md
+    // @expected-live-by: 2026Q3
     "E-incident.postmortem links a document morph to the incident and preserves versioned final report",
     async ({ browser, request }) => {
       // spec: morph.md document morph + relation.md structural link.

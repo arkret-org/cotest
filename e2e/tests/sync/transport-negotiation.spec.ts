@@ -87,6 +87,9 @@ test.describe("transport negotiation", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @user-promise: e2e/scenarios/sync/transport-negotiation.md
+    // @expected-live-by: 2026Q3
     "soland_a and soland_b negotiate HTTP → WebSocket → TSP with proper RFC 9421 signing throughout; fallback to HTTP on WebSocket failure",
     async ({ browser, request }, testInfo) => {
       // soland gap: WebSocket transport + TSP binding negotiation 未实现;
@@ -181,6 +184,9 @@ test.describe("transport negotiation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @user-promise: e2e/scenarios/sync/transport-negotiation.md
+    // @expected-live-by: 2026Q3
     "E8.1 signature expiry + key rotation: soland_a signs with an expired key; soland_b returns 401 with key_rotation_hint; α re-signs with current key and succeeds",
     async ({ request }) => {
       // spec: service-http-binding.md §3 (auth materials), federation.md §3.2
@@ -200,6 +206,9 @@ test.describe("transport negotiation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @user-promise: e2e/scenarios/sync/transport-negotiation.md
+    // @expected-live-by: 2026Q3
     "E8.2 multi-hop relay: α → relay → β; β verifies BOTH the relay's outer RFC 9421 signature AND the inner EventEnvelope actor signature; either failure rejects the batch",
     async ({ request }) => {
       // spec: federation.md §3.2 + capabilities.md (service delegation)
@@ -224,6 +233,9 @@ test.describe("transport negotiation", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @user-promise: e2e/scenarios/sync/transport-negotiation.md
+    // @expected-live-by: 2026Q3
     "E8.3 binding negotiation timeout: α requests WebSocket upgrade; β does not respond within 30s; α cancels and falls back to HTTP/JSON",
     async ({ request }) => {
       // spec: transport-bindings.md §3 (binding requirements — background /

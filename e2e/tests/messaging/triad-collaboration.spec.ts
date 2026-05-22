@@ -44,6 +44,9 @@ test.describe("single-server triad collaboration", () => {
   // already covered live via the E1 sub-cases below where they don't depend
   // on the missing filter.
   test.fixme(
+    // @blocking-on: soland#messaging-triad-collaboration-gap
+    // @user-promise: e2e/scenarios/messaging/triad-collaboration.md
+    // @expected-live-by: 2026Q3
     "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone",
     async ({
     browser,

@@ -39,6 +39,9 @@ test.describe("calls", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "alice initiates 1:1 call to bob; Call Morph state transitions ringing → connecting → active via cx.call.signal frames",
     async () => {
       // spec: webrtc-signaling.md §3 + §4
@@ -48,6 +51,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "alice mutes mic: cx.call.signal{kind=mute_state, muted=true} routes to bob; bob's UI shows muted indicator",
     async () => {
       // spec: webrtc-signaling.md §7 + §8
@@ -55,6 +61,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "alice shares screen: getDisplayMedia track added; cx.call.signal{kind=media_state, screen_share=true} routes",
     async () => {
       // spec: webrtc-signaling.md §5 call.screen_share capability
@@ -62,6 +71,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "hangup terminates peer connections; Call Morph state=ended; duration persisted",
     async () => {
       // spec: webrtc-signaling.md §4
@@ -69,6 +81,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "group call mode=sfu: alice+bob+carol join; recording_policy=allow lets carol start recording (writes recording_blob_ref)",
     async () => {
       // spec: webrtc-signaling.md §3 + §5 call.record capability
@@ -76,6 +91,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "E18.E recording_policy=none rejects carol's recording attempt with failed_precondition reason=recording_policy_violation",
     async () => {
       // spec: webrtc-signaling.md §5
@@ -83,6 +101,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "E18.F mid-call TURN credential refresh: long calls renew credentials before expiry; call does not drop",
     async () => {
       // spec: webrtc-signaling.md §6.3
@@ -90,6 +111,9 @@ test.describe("calls", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#calls-webrtc-gap
+    // @user-promise: e2e/scenarios/calls/webrtc.md
+    // @expected-live-by: 2026Q3
     "E18.7 pairwise pseudonym in TURN credentials: username does not contain alice.did plaintext (spec §6 pseudonymization)",
     async () => {
       // spec: webrtc-signaling.md §6 (pairwise pseudonym)

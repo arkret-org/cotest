@@ -55,6 +55,9 @@ test.describe("notifications", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#discovery-notifications-gap
+    // @user-promise: e2e/scenarios/discovery/notifications.md
+    // @expected-live-by: 2026Q3
     "muting a space stops push notifications for new messages but mention still notifies (spec §3 mention override)",
     async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §3 + §4.3.1.
@@ -114,6 +117,9 @@ test.describe("notifications", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#discovery-notifications-gap
+    // @user-promise: e2e/scenarios/discovery/notifications.md
+    // @expected-live-by: 2026Q3
     "Do-not-disturb window suppresses all notifications during configured hours; resumes after window ends",
     async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §3.2 do-not-disturb preference.
@@ -225,6 +231,9 @@ test.describe("notifications", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#discovery-notifications-gap
+    // @user-promise: e2e/scenarios/discovery/notifications.md
+    // @expected-live-by: 2026Q3
     "E2EE space with evaluation_locus=client: server sends blind wake; client decrypts and evaluates 'contains_keyword' rule locally",
     async () => {
       // spec: push-notifications.md §4.5
@@ -232,6 +241,9 @@ test.describe("notifications", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#discovery-notifications-gap
+    // @user-promise: e2e/scenarios/discovery/notifications.md
+    // @expected-live-by: 2026Q3
     "cross-device read state: marking read on device-2 clears unread on device-1 within sync window",
     async ({ browser, request }, testInfo) => {
       // spec: client-preferences.md read marker is per-account, synced to all devices.

@@ -290,6 +290,9 @@ test.describe("conformance registry drift @fully-implemented", () => {
   // -------------------------------------------------------------------------
 
   test.fixme(
+    // @blocking-on: soland#conformance-registry-drift-gap
+    // @user-promise: e2e/scenarios/conformance/registry-drift.md
+    // @expected-live-by: 2026Q3
     "Phase A — POST event with removed kind is hard-rejected with schema_violation",
     async ({ request }) => {
       // spec: schema-registry.md §6 (未知 critical fail-closed) + entries[*]
@@ -316,6 +319,9 @@ test.describe("conformance registry drift @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-registry-drift-gap
+    // @user-promise: e2e/scenarios/conformance/registry-drift.md
+    // @expected-live-by: 2026Q3
     "Phase B — calling a removed operation_id returns 410 / 4xx, never 2xx",
     async ({ request }) => {
       // spec: schema-registry.md §1 + removed-operation-ids.json entries
@@ -339,6 +345,9 @@ test.describe("conformance registry drift @fully-implemented", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#conformance-registry-drift-gap
+    // @user-promise: e2e/scenarios/conformance/registry-drift.md
+    // @expected-live-by: 2026Q3
     "Phase F — server-managed audit / log surfaces don't leak forbidden model terms",
     async ({ request }) => {
       // spec: schema-registry.md §3 (extension naming) + forbidden-model-terms.json

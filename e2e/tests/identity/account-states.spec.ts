@@ -31,6 +31,9 @@ test.describe("account states", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-account-states-gap
+    // @user-promise: e2e/scenarios/identity/account-states.md
+    // @expected-live-by: 2026Q3
     "soft logout revokes access token; refresh token still works to get new access",
     async () => {
       // spec: account-lifecycle.md §3
@@ -38,11 +41,17 @@ test.describe("account states", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-states-gap
+    // @user-promise: e2e/scenarios/identity/account-states.md
+    // @expected-live-by: 2026Q3
     "admin lock: POST /admin/accounts/<did>/lock → all sessions invalidated; /account/me returns 401",
     async () => {},
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-states-gap
+    // @user-promise: e2e/scenarios/identity/account-states.md
+    // @expected-live-by: 2026Q3
     "governance suspend: new token requests rejected; old in-flight tokens valid until expiry",
     async () => {
       // spec: account-lifecycle.md §3 suspend semantics
@@ -50,16 +59,25 @@ test.describe("account states", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-states-gap
+    // @user-promise: e2e/scenarios/identity/account-states.md
+    // @expected-live-by: 2026Q3
     "user-initiated deactivate: all tokens revoked; account state=deactivated; messages remain visible (deactivated ≠ erasure)",
     async () => {},
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-states-gap
+    // @user-promise: e2e/scenarios/identity/account-states.md
+    // @expected-live-by: 2026Q3
     "audit: each state transition writes cx.account.state_change with from/to/actor/reason/timestamp",
     async () => {},
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-account-states-gap
+    // @user-promise: e2e/scenarios/identity/account-states.md
+    // @expected-live-by: 2026Q3
     "E28.2 cross-server suspension: alice suspended on α; β learns of suspension via sync within reconciliation window",
     async () => {},
   );

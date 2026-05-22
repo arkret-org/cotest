@@ -136,6 +136,9 @@ test.describe("discovery", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#discovery-directory-gap
+    // @user-promise: e2e/scenarios/discovery/directory.md
+    // @expected-live-by: 2026Q3
     "presence: bob closes tab → alice's directory shows presence-offline; bob reopens → presence-online within 5s",
     async () => {
       // spec: profiles-presence.md §3

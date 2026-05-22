@@ -147,6 +147,9 @@ test.describe("core object invariants", () => {
   // and returns { error_code: "failed_precondition", reason: "..." } on
   // head_eq mismatch (spec models/event-and-patch.md §4.2.4 / §4.2.5).
   test.fixme(
+    // @blocking-on: soland#models-core-object-invariants-gap
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md
+    // @expected-live-by: 2026Q3
     "Phase B — stale precondition head_eq is rejected with failed_precondition and effects[] are NOT applied",
     async ({ request }) => {
       const stamp = Date.now();
@@ -216,6 +219,9 @@ test.describe("core object invariants", () => {
   // `space_already_terminal`) are not stably exposed on the wire. Once they
   // are, drop the fixme.
   test.fixme(
+    // @blocking-on: soland#models-core-object-invariants-gap
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md
+    // @expected-live-by: 2026Q3
     "Phase C — cx.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
     async ({ request }) => {
       const stamp = Date.now();
@@ -269,6 +275,9 @@ test.describe("core object invariants", () => {
   // (realm_id, relation_kind, from_ref, to_ref), and cross-Realm contains
   // refusal are not stably wired today.
   test.fixme(
+    // @blocking-on: soland#models-core-object-invariants-gap
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md
+    // @expected-live-by: 2026Q3
     "Phase D — has_default_view enforces many_to_one; duplicate Relation create is idempotent; cross-Realm contains rejected",
     async ({ request }) => {
       const stamp = Date.now();
@@ -392,6 +401,9 @@ test.describe("core object invariants", () => {
   // (returning a CollectionProjectionResponse even when no user-defined
   // View has been registered), drop the fixme.
   test.fixme(
+    // @blocking-on: soland#models-core-object-invariants-gap
+    // @user-promise: e2e/scenarios/models/core-object-invariants.md
+    // @expected-live-by: 2026Q3
     "Phase E — Board projection on a fresh Space with no registered View returns the derived default (NOT 404); unknown renderer fails closed",
     async ({ request }) => {
       const stamp = Date.now();

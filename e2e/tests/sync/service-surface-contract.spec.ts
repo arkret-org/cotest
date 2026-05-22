@@ -153,12 +153,16 @@ test.describe("describes coauth surface @fully-implemented", () => {
 
 test.describe("service surface contract — error envelope, pagination, idempotency, fail-closed", () => {
   test.fixme(
+    // @blocking-on: soland#sync-service-surface-contract-gap
+    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
+    // @expected-live-by: 2026Q3
     "Phase A.E1: claim_kind partition does not leak between claimed_profiles and verified_profiles",
     async () => {
       // spec: service-surface.md §3.0 (claim levels), §17 (line-level interop required).
       //
       // For each entry in verified_profiles: claim_kind === "cotest_verified" AND
-      //   entry has non-empty cotest_run_id + artifact_hash + timestamp.
+      //   entry has non-empty cotest_run_id + artifact_hash + artifact_ref +
+      //   cotest_issuer_did + signature + timestamp.
       // For each entry in claimed_profiles: claim_kind === "self_claimed" AND
       //   the same profile_id MUST NOT also appear in verified_profiles unless
       //   the verified entry was produced by an out-of-band cotest run (then
@@ -172,6 +176,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-service-surface-contract-gap
+    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
+    // @expected-live-by: 2026Q3
     "Phase B: unknown path returns 404 unrecognized_endpoint with standard error envelope",
     async () => {
       // spec: api-conventions.md §5 (standard error envelope —
@@ -196,6 +203,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-service-surface-contract-gap
+    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
+    // @expected-live-by: 2026Q3
     "Phase C: list endpoint pagination cursor is opaque, gap-free, and non-overlapping across pages",
     async () => {
       // spec: api-conventions.md §7 (cursor opaque; wire form `cx:cursor:<base64url>`;
@@ -223,6 +233,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-service-surface-contract-gap
+    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
+    // @expected-live-by: 2026Q3
     "Phase D: Idempotency-Key replay returns the cached first response; same key + different body returns duplicate_conflict",
     async ({ request }) => {
       // spec: api-conventions.md §6 (idempotency —
@@ -256,6 +269,9 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test.fixme(
+    // @blocking-on: soland#sync-service-surface-contract-gap
+    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
+    // @expected-live-by: 2026Q3
     "Phase E: event requiring an undeclared feature is rejected with unsupported_feature (fail-closed)",
     async () => {
       // spec: api-conventions.md §5.1 (unsupported_feature is reserved for

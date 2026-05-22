@@ -39,6 +39,9 @@ test.describe("account onboarding", () => {
   });
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "alice registers via passkey/WebAuthn; coauth binds principal DID and issues short-term cx.session.grant",
     async () => {
       // spec: account-lifecycle.md §2.1, device-lifecycle.md §3.2
@@ -48,6 +51,9 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "alice's did:webvh entry 0 is published; SCID derived; DID Document resolves and exposes ContrixPrincipalServer service endpoint",
     async () => {
       // spec: identity-did.md §2.1, §3.4
@@ -56,6 +62,9 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "principal control space is created (purpose=principal_control); first device registered via cx.device.authorized; cross-signing PSK/SSK/USK published",
     async () => {
       // spec: key-management.md §5.0.1 (4-step bootstrap)
@@ -64,6 +73,9 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "bob registers via OIDC bridge (mock IdP); coauth verifies ID token and binds a fresh DID",
     async () => {
       // spec: account-lifecycle.md §2.1 (OIDC binding)
@@ -72,6 +84,9 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "carol registers via email-only (3PID precursor); verification token consumed; DID issued",
     async () => {
       // spec: account-lifecycle.md §2.1 + sync/third-party-invites.md §3
@@ -80,6 +95,9 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "E7.1 re-registering the same WebAuthn credential is rejected with account_already_registered",
     async () => {
       // spec: account-lifecycle.md §2.1
@@ -87,6 +105,9 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
+    // @blocking-on: soland#identity-onboarding-gap
+    // @user-promise: e2e/scenarios/identity/onboarding.md
+    // @expected-live-by: 2026Q3
     "E7.5 handle conflict (\"@alice-s7\" already claimed) rejects with handle_already_claimed",
     async () => {
       // spec: identity/identity-handles.md
