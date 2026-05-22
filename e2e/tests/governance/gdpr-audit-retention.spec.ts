@@ -4,6 +4,7 @@
 
 import { expect, test } from "@playwright/test";
 import { hasDualSoland, solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -87,7 +88,7 @@ test.describe("GDPR / audit / retention", () => {
     });
     expect(me.status()).toBe(401);
     const meBody = await me.json();
-    expect(meBody?.error?.errcode).toBe("account_erased");
+    expect(wireErrCode(meBody)).toBe("account_erased");
   });
 
   test("after erasure, directory search no longer finds alice; her account row shows the [user erased] placeholder", async ({

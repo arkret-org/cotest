@@ -46,9 +46,11 @@ export function wireErrCode(body: unknown): string | undefined {
     ? (record.error as Record<string, unknown>)
     : undefined;
   return stringValue(record.errcode)
+    ?? stringValue(record.code)
     ?? stringValue(record.error_code)
     ?? stringValue(record.reason)
     ?? stringValue(nested?.errcode)
+    ?? stringValue(nested?.code)
     ?? stringValue(nested?.error_code)
     ?? stringValue(nested?.reason);
 }
@@ -77,17 +79,74 @@ export async function createSpaceApi(
     invitees?: string[];
     plaintext_visible_services?: string[];
     public?: boolean;
+    ownerDid?: string;
   },
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/api/v1/spaces`, {
-    headers: authHeaders(token),
-    data,
-  });
-  expect(response.status(), `create space ${data.title}`).toBe(201);
-  const body = await response.json();
-  expect(body.space_id).toMatch(/^cx:space:/);
-  return body.space_id as string;
+  const ownerDid = data.ownerDid ?? await currentActorDidApi(request, token, opts);
+  const realmId = typedId("realm");
+  const createdAt = canonicalTimestamp();
+  const plaintextVisibleServices =
+    data.plaintext_visible_services ??
+    Array.from(new Set([solandServiceDid(opts.server), "did:web:soland.local"]));
+
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: ownerDid,
+      realmId,
+      kind: "cx.realm.create",
+      createdAt,
+      payload: {
+        plaintext_visible_services: plaintextVisibleServices,
+        object: {
+          id: realmId,
+          schema: "cx.schema.realm.v1",
+          title: data.title,
+          summary: data.summary,
+          created_by_principal: ownerDid,
+          trust_domain: "cx:trust_domain:soland.local",
+          schema_refs: ["cx.schema.realm.v1"],
+          default_discoverability: data.discoverability ?? (data.public ? "public" : "listed"),
+          default_join_rule: "invite",
+          history_visibility: data.history_visibility ?? "shared",
+          encryption_profile: data.encryption_profile ?? "none",
+          plaintext_visible_services: plaintextVisibleServices,
+          security_class: "standard",
+          federation_policy: "restricted",
+          anchor_profile: "single_did",
+          hash_profile: "sha256",
+          anchorer: {
+            type: "single_did",
+            did: ownerDid,
+          },
+          created_at: createdAt,
+        },
+      },
+    }),
+    { server: opts.server, context: `create realm ${data.title}` },
+  );
+
+  for (const invitee of data.invitees ?? []) {
+    await submitSignedEventApi(
+      request,
+      token,
+      signedEventEnvelope({
+        actorDid: ownerDid,
+        realmId,
+        kind: "cx.member.state",
+        payload: {
+          actor_id: invitee,
+          member: invitee,
+          membership: "invite",
+        },
+      }),
+      { server: opts.server, context: `invite ${invitee}` },
+    );
+  }
+
+  return realmId;
 }
 
 export async function addSpaceMemberApi(
@@ -97,15 +156,23 @@ export async function addSpaceMemberApi(
   memberDid: string,
   opts: { server?: SolandKey } = {},
 ) {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/api/v1/spaces/${encodeURIComponent(spaceId)}/members`,
-    {
-      headers: authHeaders(token),
-      data: { member: memberDid },
-    },
+  const actorDid = await currentActorDidApi(request, token, opts);
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId: spaceId,
+      kind: "cx.member.state",
+      payload: {
+        actor_id: memberDid,
+        member: memberDid,
+        membership: "join",
+        delivery_status: "unroutable",
+      },
+    }),
+    { server: opts.server, context: `add member ${memberDid}` },
   );
-  expect(response.ok(), `add member ${memberDid} to ${spaceId}`).toBeTruthy();
-  return await response.json();
 }
 
 export async function acceptInviteApi(
@@ -157,16 +224,30 @@ export async function sendMessageApi(
   body: string,
   opts: { server?: SolandKey; encrypted?: boolean } = {},
 ) {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/api/v1/messages/send`, {
-    headers: authHeaders(token),
-    data: {
-      space_id: spaceId,
-      content: { body },
+  const actorDid = await currentActorDidApi(request, token, opts);
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId: spaceId,
+    kind: "cx.message.create",
+    payload: {
+      flow_id: flowIdFromRealmId(spaceId),
+      track: "discussion",
+      content: {
+        kind: "cx.content.text",
+        body,
+      },
       encrypted: opts.encrypted ?? false,
     },
   });
-  expect(response.ok(), `send message to ${spaceId}: ${body}`).toBeTruthy();
-  return await response.json();
+  await submitSignedEventApi(request, token, envelope, {
+    server: opts.server,
+    context: `send message to ${spaceId}`,
+  });
+  return {
+    event_id: String(envelope.event_id),
+    space_id: spaceId,
+    sender: actorDid,
+  };
 }
 
 export async function querySpaceEventsApi(
@@ -175,11 +256,25 @@ export async function querySpaceEventsApi(
   spaceId: string,
   opts: { server?: SolandKey; limit?: number } = {},
 ) {
+  const queryParam = spaceId.startsWith("cx:realm:") ? "realms" : "space_id";
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/events?space_id=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
+    `${solandBaseUrl(opts.server)}/api/v1/events?${queryParam}=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<Record<string, unknown>>(response, `query events for ${spaceId}`);
+}
+
+export async function currentActorDidApi(
+  request: APIRequestContext,
+  token: string,
+  opts: { server?: SolandKey } = {},
+): Promise<string> {
+  const response = await request.get(`${solandBaseUrl(opts.server)}/api/v1/account/me`, {
+    headers: authHeaders(token),
+  });
+  const body = await expectJsonOk<{ did?: string }>(response, "read current actor");
+  expect(body.did, "current actor DID").toBeTruthy();
+  return body.did!;
 }
 
 export function signedEventEnvelope(

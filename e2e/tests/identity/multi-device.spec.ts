@@ -7,6 +7,7 @@
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -123,7 +124,7 @@ test.describe("multi-device pairing + revocation", () => {
     );
     expect(selfRevoke.status()).toBe(400);
     const body = await selfRevoke.json();
-    expect(body?.error?.errcode).toBe("cannot_self_revoke");
+    expect(wireErrCode(body)).toBe("cannot_self_revoke");
   });
 
   test.fixme(

@@ -6,6 +6,7 @@
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -328,9 +329,7 @@ test.describe("capability chain @fully-implemented", () => {
       });
       expect(childResp.status()).toBe(412);
       const body = await childResp.json();
-      // AppError wire shape: `{ok: false, error: {errcode, error, request_id, ...}}`.
-      const code = body?.error?.errcode ?? body?.errcode;
-      expect(code).toBe("capability_not_held");
+      expect(wireErrCode(body)).toBe("capability_not_held");
     } finally {
       await alicePage.close();
     }
@@ -383,8 +382,7 @@ test.describe("capability chain @fully-implemented", () => {
       });
       expect(childResp.status()).toBe(412);
       const body = await childResp.json();
-      const code = body?.error?.errcode ?? body?.errcode;
-      expect(code).toBe("capability_over_expire");
+      expect(wireErrCode(body)).toBe("capability_over_expire");
     } finally {
       await alicePage.close();
     }

@@ -4,6 +4,7 @@
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -79,8 +80,7 @@ test.describe("handle management @fully-implemented", () => {
     });
     expect(claim.status()).toBe(409);
     const body = await claim.json();
-    const code = body?.error?.errcode ?? body?.errcode;
-    expect(code).toBe("handle_already_claimed");
+    expect(wireErrCode(body)).toBe("handle_already_claimed");
   });
 
   test("handle transfer: alice transfers handle to bob; bob's profile.handle becomes the transferred handle; alice's clears to a synthetic placeholder", async ({
@@ -151,7 +151,7 @@ test.describe("handle management @fully-implemented", () => {
     });
     expect(immediate.status()).toBe(409);
     const immediateBody = await immediate.json();
-    expect(immediateBody?.error?.errcode).toBe("handle_in_grace_period");
+    expect(wireErrCode(immediateBody)).toBe("handle_in_grace_period");
 
     // After the grace window (5s) mallory's claim succeeds.
     await new Promise((resolve) => setTimeout(resolve, 6000));
@@ -178,7 +178,7 @@ test.describe("handle management @fully-implemented", () => {
     });
     expect(tooShort.status()).toBe(400);
     const tooShortBody = await tooShort.json();
-    expect(tooShortBody?.error?.errcode).toBe("handle_invalid_format");
+    expect(wireErrCode(tooShortBody)).toBe("handle_invalid_format");
 
     // Disallowed character (`!`) fails the alnum + -_. allowlist.
     const badChar = await request.post(`${solandBaseUrl()}/api/v1/account/handle`, {
@@ -187,7 +187,7 @@ test.describe("handle management @fully-implemented", () => {
     });
     expect(badChar.status()).toBe(400);
     const badCharBody = await badChar.json();
-    expect(badCharBody?.error?.errcode).toBe("handle_invalid_format");
+    expect(wireErrCode(badCharBody)).toBe("handle_invalid_format");
   });
 
   test("E29.2 transfer to non-existent DID is rejected with target_did_unknown", async ({
@@ -207,6 +207,6 @@ test.describe("handle management @fully-implemented", () => {
     );
     expect(transfer.status()).toBe(404);
     const body = await transfer.json();
-    expect(body?.error?.errcode).toBe("target_did_unknown");
+    expect(wireErrCode(body)).toBe("target_did_unknown");
   });
 });

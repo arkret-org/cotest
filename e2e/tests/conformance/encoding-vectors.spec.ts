@@ -19,6 +19,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 
 // ---------------------------------------------------------------------------
 // Fixture loader — resolves relative to this spec file so cwd doesn't matter.
@@ -197,7 +198,7 @@ test.describe("conformance encoding vectors", () => {
       "invalid_canonical_json",
       "invalid_encoding",
     ]);
-    expect(acceptedCodes.has(body.error?.errcode)).toBe(true);
+    expect(acceptedCodes.has(wireErrCode(body))).toBe(true);
     // Reject paths MUST NOT leak partial canonical bytes / digest.
     expect(body.canonical_json).toBeUndefined();
     expect(body.digest).toBeUndefined();
@@ -232,7 +233,7 @@ test.describe("conformance encoding vectors", () => {
       "invalid_canonical_json",
       "invalid_encoding",
     ]);
-    expect(acceptedCodes.has(body.error?.errcode)).toBe(true);
+    expect(acceptedCodes.has(wireErrCode(body))).toBe(true);
     expect(body.canonical_json).toBeUndefined();
     expect(body.digest).toBeUndefined();
   });
@@ -407,7 +408,7 @@ test.describe("conformance encoding vectors", () => {
     expect(resp.status()).toBeGreaterThanOrEqual(400);
     expect(resp.status()).toBeLessThan(500);
     const body = await resp.json();
-    expect(body.error?.errcode).toBe("hlc_logical_overflow");
+    expect(wireErrCode(body)).toBe("hlc_logical_overflow");
     expect(body.ordered).toBeUndefined();
   });
 
