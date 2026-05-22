@@ -239,7 +239,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
-                "app_id": "clientx"
+                "app_id": "yougen"
             })),
         StatusCode::OK,
     )

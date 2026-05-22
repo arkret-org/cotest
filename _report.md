@@ -143,8 +143,8 @@
    - `SOLAND_OAUTH_INTROSPECTION_BEARER` 或 `SOLAND_SESSION_GRANT_INTROSPECTION_BEARER`。
 4. 启动 yougen web:
    - `dx serve --platform web --addr 127.0.0.1 --port <port> --open false --hot-reload false --watch false`
-   - 注入 `CLIENTX_SERVER_URL=<soland public URL>`。
-   - 如支持，注入 `CLIENTX_COAUTH_URL=<coauth public URL>`。
+   - 注入 `YOUGEN_SERVER_URL=<soland public URL>`。
+   - 如支持，注入 `YOUGEN_COAUTH_URL=<coauth public URL>`。
 5. 等待三个服务 `/health` 或等价 ready endpoint。
 6. 运行 Playwright live specs。
 7. 收集:

@@ -27,7 +27,7 @@ async fn register_device(server: &ContrixServer, token: &str) -> Result<()> {
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
-                "app_id": "clientx"
+                "app_id": "yougen"
             })),
         StatusCode::OK,
     )

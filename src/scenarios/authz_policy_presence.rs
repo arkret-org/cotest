@@ -213,7 +213,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             "push_gateway": "https://push.example",
             "push_key": "opaque",
             "platform": "desktop",
-            "app_id": "clientx"
+            "app_id": "yougen"
         })),
         StatusCode::OK,
     )
@@ -227,7 +227,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .json(&json!({
                 "device_id": alice.device_id.as_str(),
                 "push_key": "opaque",
-                "app_id": "clientx"
+                "app_id": "yougen"
             })),
         StatusCode::OK,
     )
