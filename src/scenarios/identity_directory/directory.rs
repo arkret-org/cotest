@@ -75,7 +75,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let anonymous_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-spaces"))
+            .post(server.url("/api/v1/directory/search-realms"))
             .json(&json!({"query": "Visibility Matrix", "limit": 20})),
         StatusCode::OK,
     )
@@ -104,7 +104,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         let resolved = expect_json(
             server
                 .http()
-                .post(server.url("/api/v1/directory/resolve-space"))
+                .post(server.url("/api/v1/directory/resolve-realm"))
                 .json(&json!({"realm_id": resolvable_space_id.as_str()})),
             StatusCode::OK,
         )
@@ -118,7 +118,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({"realm_id": invite_only_space_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
@@ -127,7 +127,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({"realm_id": secret_space_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
@@ -145,7 +145,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let invite_only_resolved = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({
                 "realm_id": invite_only_space_id.clone(),
                 "invite_token": invite_token
@@ -161,7 +161,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let secret_resolved = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({
                 "realm_id": secret_space_id.clone(),
                 "signed_link": "cotest-signed-link"

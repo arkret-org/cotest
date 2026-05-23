@@ -1,6 +1,6 @@
-//! TB-2 — `cx.directory.resolve_space` three-lookup fixture for teabay.
+//! TB-2 — `cx.directory.resolve_realm` three-lookup fixture for teabay.
 //!
-//! Per spec §9, `resolve_space` accepts any of `space_id`, `alias`,
+//! Per spec §9, `resolve_realm` accepts any of `realm_id`, `alias`,
 //! `invite_token`, or `signed_link` as the lookup key. **Per the current
 //! teabay implementation** (`crates/server/src/query/space.rs::resolve_space`,
 //! `load_space_row`), all four lookup parameters converge to a single
@@ -44,9 +44,9 @@ pub async fn teabay_resolve_space_three_lookups_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
-    let url = proc.url("/api/v1/directory/resolve-space");
+    let url = proc.url("/api/v1/directory/resolve-realm");
 
-    // --- by space_id ------------------------------------------------------
+    // --- by realm_id ------------------------------------------------------
     let probe = json!({ "realm_id": "cotest-tb2-space-id" });
     let by_space_id = client.post(&url).json(&probe).send().await?;
     assert_resolved_or_blinded_not_found(by_space_id, "realm_id").await?;
@@ -75,7 +75,7 @@ pub async fn teabay_resolve_space_three_lookups_run() -> Result<()> {
     if missing_status.as_u16() != 400 {
         let body = missing.text().await.unwrap_or_default();
         bail!(
-            "resolve-space with empty body should 400 with missing_param, got {missing_status}: \
+            "resolve-realm with empty body should 400 with missing_param, got {missing_status}: \
              {body}"
         );
     }
@@ -118,5 +118,5 @@ async fn assert_resolved_or_blinded_not_found(
         }
         return Ok(());
     }
-    bail!("resolve-space by {lookup_field} returned unexpected status {status}. body: {text}")
+    bail!("resolve-realm by {lookup_field} returned unexpected status {status}. body: {text}")
 }

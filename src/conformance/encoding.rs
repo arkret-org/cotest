@@ -59,7 +59,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
             "event_id": "cx:event:01970e58-0003-7000-8000-000000000010",
             "kind": "cx.message.create",
             "realm_id": "cx:realm:01970e58-0003-7000-8000-000000000011",
-            "content": {"body": "covered"},
+            "content": {"kind": "cx.content.text", "body": "covered"},
             "proofs": [{"alg": "none"}],
             "unsigned": {"hint": "not covered"}
         });

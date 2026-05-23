@@ -57,18 +57,21 @@ fn vectors() -> Vec<CanonicalVector> {
             // stripping `proofs` / `unsigned` from the on-wire envelope.
             payload: json!({
                 "actor_id": "did:web:alice.example",
-                "event_id": "cx:event:01970e589d21-00000001-a13f9c2e",
+                "event_id": "cx:event:01970e589d21-0001-a13f9c2e",
                 "realm_id": "cx:realm:01904100-0000-7000-8000-668e2181b41d",
-                "kind": "cx.message.create.v1",
-                "hlc": "01970e589d21-00000001-a13f9c2e",
+                "kind": "cx.message.create",
+                "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
-                    "body": "hello",
+                    "content": {
+                        "kind": "cx.content.text",
+                        "body": "hello"
+                    },
                     "flow_id": "cx:flow:01904100-0000-7000-8000-6c663fa0205f",
-                    "track": "main",
+                    "track": "discussion",
                 },
                 "schema_version": 1,
             }),
-            expected_digest: "sha256:149f07ce9ee047712e9412d9fbfd6224155c4c723efbe5628545a3a9ee8114e3",
+            expected_digest: "sha256:457191964259bebeb272aa36ba6a78603696836a68e79c416326860685286c78",
         },
         CanonicalVector {
             label: "starid did:webvh update entry (proofless)",

@@ -835,11 +835,12 @@ pub async fn submit_event(
     .await
 }
 
-pub fn event_envelope(actor: &str, space_id: &str, kind: &str, payload: Value) -> Value {
+pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Value) -> Value {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let hlc_logical = seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
     let event_id = format!("cx:event:{suffix}");
+    normalize_message_payload(kind, space_id, &mut payload);
     let mut event = json!({
         "event_id": event_id,
         "kind": kind,
@@ -865,6 +866,47 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, payload: Value) -
     });
     refresh_event_proof(&mut event);
     event
+}
+
+fn normalize_message_payload(kind: &str, space_id: &str, payload: &mut Value) {
+    if kind != "cx.message.create" {
+        return;
+    }
+    let flow_id = space_id
+        .strip_prefix("cx:realm:")
+        .or_else(|| space_id.strip_prefix("cx:space:"))
+        .map(|suffix| format!("cx:flow:{suffix}"))
+        .unwrap_or_else(|| "cx:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
+    let Some(object) = payload.as_object_mut() else {
+        return;
+    };
+    object
+        .entry("flow_id".to_owned())
+        .or_insert_with(|| Value::String(flow_id));
+    object
+        .entry("track".to_owned())
+        .or_insert_with(|| Value::String("discussion".to_owned()));
+    let body = object.remove("body");
+    if !object.contains_key("content")
+        && let Some(body) = body
+    {
+        object.insert(
+            "content".to_owned(),
+            json!({
+                "kind": "cx.content.text",
+                "body": body,
+            }),
+        );
+    }
+    if let Some(content) = object.get_mut("content").and_then(Value::as_object_mut)
+        && content.get("kind").is_none()
+        && content.get("body").is_some()
+    {
+        content.insert(
+            "kind".to_owned(),
+            Value::String("cx.content.text".to_owned()),
+        );
+    }
 }
 
 fn canonical_event_digest(event: &Value) -> String {

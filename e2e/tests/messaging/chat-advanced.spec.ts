@@ -210,7 +210,9 @@ test.describe("chat advanced", () => {
     });
     expect(subscribe.status()).toBe(200);
     const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
-    const ephemeral = frame.realms.join[fixture.spaceId].ephemeral;
+    const realmId = fixture.spaceId.replace(/^cx:space:/, "cx:realm:");
+    const realmFrame = frame.realms[realmId] ?? frame.realms[fixture.spaceId];
+    const ephemeral = realmFrame.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
     expect(JSON.stringify(ephemeral)).toContain("discussion");
   });

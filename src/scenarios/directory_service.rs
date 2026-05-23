@@ -73,7 +73,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     let openapi = get_json(&http, directory.url("/.well-known/contrix/openapi.json")).await?;
     for path in [
         "/api/v1/directory/describe",
-        "/api/v1/directory/search-spaces",
+        "/api/v1/directory/search-realms",
         "/api/v1/directory/resolve-handle",
         "/api/v1/directory/private-contact-discovery",
         "/api/admin/v1/resources",

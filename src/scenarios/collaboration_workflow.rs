@@ -100,7 +100,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({"realm_id": space_id})),
         StatusCode::NOT_FOUND,
     )

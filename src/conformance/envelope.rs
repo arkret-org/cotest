@@ -590,15 +590,15 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
             if content.get("flow_id").and_then(Value::as_str).is_none() {
                 return Some("message create content missing flow_id".to_owned());
             }
-            // Check for body/blocks/encrypted_payload/blob_refs at top level or nested in content
-            let has_body = ["body", "blocks", "encrypted_payload", "blob_refs"]
+            // Check for v1 message body/encryption fields at the payload level.
+            let has_body = ["content", "encrypted_payload", "blob_refs"]
                 .iter()
                 .any(|field| content.get(*field).is_some());
             let has_nested_body = content
                 .get("content")
                 .and_then(|c| {
                     Some(
-                        ["body", "blocks", "encrypted_payload", "blob_refs"]
+                        ["kind", "body", "parts"]
                             .iter()
                             .any(|field| c.get(*field).is_some()),
                     )
@@ -606,8 +606,7 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
                 .unwrap_or(false);
             if !has_body && !has_nested_body {
                 return Some(
-                    "message create content missing body/blocks/encrypted_payload/blob_refs"
-                        .to_owned(),
+                    "message create content missing content/encrypted_payload/blob_refs".to_owned(),
                 );
             }
             None

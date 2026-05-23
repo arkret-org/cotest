@@ -1,6 +1,6 @@
-//! TB-2 — teabay resolve-space three-lookup fixture (entrypoint).
+//! TB-2 — teabay resolve-realm three-lookup fixture (entrypoint).
 //!
-//! Verifies the resolve-space surface accepts `space_id` / `alias` /
+//! Verifies the resolve-realm surface accepts `realm_id` / `alias` /
 //! `invite_token` parameter shapes. See
 //! `cotest::scenarios::teabay_resolve_space` for the actual probe logic and
 //! the codex-confirmed observation that all three currently converge to a

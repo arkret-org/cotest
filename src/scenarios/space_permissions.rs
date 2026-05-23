@@ -100,7 +100,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     let anonymous_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-spaces"))
+            .post(server.url("/api/v1/directory/search-realms"))
             .json(&json!({"query": "Private Space"})),
         StatusCode::OK,
     )

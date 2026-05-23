@@ -132,7 +132,7 @@ fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
     }
     if required_str(event, "kind")? == "cx.message.create" {
         let payload = required_field(event, "payload")?;
-        let has_body = ["body", "blocks", "encrypted_payload", "blob_refs"]
+        let has_body = ["content", "encrypted_payload", "blob_refs"]
             .iter()
             .any(|field| payload.get(*field).is_some());
         if payload.get("flow_id").and_then(Value::as_str).is_none() || !has_body {

@@ -54,7 +54,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({"invite_token": "cx:invite-token:invalid"})),
         StatusCode::NOT_FOUND,
     )
@@ -63,7 +63,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let invite_resolve = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({"invite_token": invite_token})),
         StatusCode::OK,
     )
@@ -82,7 +82,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let listed_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-spaces"))
+            .post(server.url("/api/v1/directory/search-realms"))
             .json(&json!({"query": "Listed Directory Space"})),
         StatusCode::OK,
     )
@@ -101,7 +101,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let unlisted_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-spaces"))
+            .post(server.url("/api/v1/directory/search-realms"))
             .json(&json!({"query": "Unlisted Directory Space"})),
         StatusCode::OK,
     )
@@ -111,7 +111,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let unlisted_resolve = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-space"))
+            .post(server.url("/api/v1/directory/resolve-realm"))
             .json(&json!({"realm_id": unlisted_space_id})),
         StatusCode::OK,
     )
