@@ -45,6 +45,15 @@ test.describe("kanban end-to-end", () => {
       // every cx.flow.* event would 403 with capability_denied).
       await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.getByTestId("new-board-toggle").click();
+      await alicePage.page
+        .getByTestId("new-board-title-input")
+        .fill(`Sprint 23 ${stamp}`);
+      await alicePage.page.getByTestId("create-board-space-button").click();
+      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(
+        /No lists yet/,
+        { timeout: 30_000 },
+      );
       await stepShot(alicePage.page, testInfo, "A-kanban-open");
 
       // Add three columns (lists).

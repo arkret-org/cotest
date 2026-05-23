@@ -51,6 +51,14 @@ test.describe("workflow: kanban week-in-review", () => {
       });
       await patPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
       await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await patPage.page.getByTestId("new-board-toggle").click();
+      await patPage.page
+        .getByTestId("new-board-title-input")
+        .fill(`Week 21 board ${stamp}`);
+      await patPage.page.getByTestId("create-board-space-button").click();
+      await expect(patPage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+        timeout: 30_000,
+      });
 
       for (const columnName of [todayList, doingList, doneList]) {
         await patPage.page.getByTestId("new-column-input").fill(columnName);

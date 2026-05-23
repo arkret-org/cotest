@@ -1523,7 +1523,10 @@ if (Test-Path $junitPath) {
         # dir. On Windows it uses backslashes (e.g. `identity\multi-device.spec.ts`).
         $suiteList = @($junit.testsuites.testsuite)
         foreach ($suite in $suiteList) {
-            $suiteName = if ($suite.name) { $suite.name } else { "<unnamed>" }
+            $suiteName = $suite.GetAttribute("name")
+            if (-not $suiteName) {
+                $suiteName = "<unnamed>"
+            }
             # Normalize backslashes to forward slashes so the key matches the
             # canonical `<domain>/<name>.spec.ts` form used by the static walk.
             $normalizedSuite = $suiteName -replace '\\', '/'
@@ -1552,14 +1555,19 @@ if (Test-Path $junitPath) {
             if ($staticStats.ContainsKey($scenarioKey)) {
                 foreach ($t in $staticStats[$scenarioKey].fixmeTitles) { $fixmeSet[$t] = $true }
             }
-            foreach ($case in @($suite.testcase)) {
-                $caseName = if ($case.name) { $case.name } else { "<unnamed test>" }
+            foreach ($case in @($suite.SelectNodes("testcase"))) {
+                $caseName = $case.GetAttribute("name")
+                if (-not $caseName) {
+                    $caseName = "<unnamed test>"
+                }
                 $normalizedCaseName = ($caseName -replace '\s+', ' ').Trim()
                 # NB: PowerShell evaluates an empty XmlElement (e.g. <skipped/>
                 # with no text content) as $false in a boolean test, so we use
                 # $null -ne <element> to detect presence instead.
-                $hasFailure = ($null -ne $case.failure)
-                $hasSkipped = ($null -ne $case.skipped)
+                $failureNode = $case.SelectSingleNode("failure")
+                $skippedNode = $case.SelectSingleNode("skipped")
+                $hasFailure = ($null -ne $failureNode)
+                $hasSkipped = ($null -ne $skippedNode)
                 $status = "passed"
                 if ($hasFailure) {
                     $status = "failed"; $totals.failed += 1; $bucket.failed += 1
@@ -1572,9 +1580,10 @@ if (Test-Path $junitPath) {
                     # then fall back to intersecting the case name with the
                     # per-spec fixme title set harvested from source.
                     $isFixme = $false
-                    if ($null -ne $case.properties -and $null -ne $case.properties.property) {
-                        foreach ($prop in @($case.properties.property)) {
-                            if ($prop.name -eq "fixme") { $isFixme = $true; break }
+                    $propertyNodes = $case.SelectNodes("properties/property")
+                    if ($null -ne $propertyNodes) {
+                        foreach ($prop in @($propertyNodes)) {
+                            if ($prop.GetAttribute("name") -eq "fixme") { $isFixme = $true; break }
                         }
                     }
                     if (-not $isFixme) {
@@ -1596,7 +1605,8 @@ if (Test-Path $junitPath) {
                     }
                 }
                 else { $totals.passed += 1; $bucket.passed += 1 }
-                $time = if ($case.time) { [math]::Round([double]$case.time, 2) } else { 0 }
+                $caseTime = $case.GetAttribute("time")
+                $time = if ($caseTime) { [math]::Round([double]$caseTime, 2) } else { 0 }
                 $bucket.cases.Add([pscustomobject]@{
                     name   = $caseName
                     status = $status

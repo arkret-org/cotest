@@ -204,13 +204,17 @@ test.describe("cross-server federation", () => {
         inviteOperation.operation_id,
       );
 
+      const projectedRealmId = spaceId.replace(/^cx:space:/, "cx:realm:");
       const invites = await listInvitesApi(request, bobToken, { server: "beta" });
-      const invite = invites.find((item) => item.space_id === spaceId && item.invitee === bob.did);
+      const invite = invites.find(
+        (item) =>
+          [spaceId, projectedRealmId].includes(item.space_id) && item.invitee === bob.did,
+      );
       expect(invite).toBeTruthy();
-      await acceptInviteApi(request, bobToken, bob.did, spaceId, invite!.invite_id, { server: "beta" });
+      await acceptInviteApi(request, bobToken, bob.did, invite!.space_id, invite!.invite_id, { server: "beta" });
 
       const betaSpace = await request.get(
-        `${solandBaseUrl("beta")}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+        `${solandBaseUrl("beta")}/api/v1/spaces/${encodeURIComponent(invite!.space_id)}`,
         { headers: authHeaders(bobToken) },
       );
       expect(betaSpace.ok()).toBeTruthy();
