@@ -12,7 +12,11 @@ pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
         server
             .http()
             .delete(server.url(&format!("/api/v1/keys/backups/{BACKUP_ID}")))
-            .bearer_auth(token),
+            .bearer_auth(token)
+            .header(
+                "x-contrix-key-backup-delete-proof",
+                format!("dev-ssk-delete:v1:did:web:alice.example:{BACKUP_ID}"),
+            ),
         StatusCode::OK,
     )
     .await?;

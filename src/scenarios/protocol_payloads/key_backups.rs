@@ -34,7 +34,15 @@ async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
                 "created_at": "2026-04-26T00:00:00Z",
                 "encryption": {
                     "recipient_method": "passphrase_kdf",
-                    "kdf": {"name": "argon2id", "salt": "salt"},
+                    "kdf": {
+                        "name": "argon2id",
+                        "salt": "salt",
+                        "params": {
+                            "memory_kib": 65536,
+                            "iterations": 3,
+                            "parallelism": 1
+                        }
+                    },
                     "aead": {"name": "xchacha20_poly1305", "nonce": "nonce"}
                 },
                 "contents": [
@@ -50,8 +58,8 @@ async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(backup_put["status"], "accepted");
-    assert_eq!(backup_put["backup_id"], BACKUP_ID);
+    assert_eq!(backup_put["state"], "accepted");
+    assert_eq!(backup_put["backup"]["backup_id"], BACKUP_ID);
     Ok(())
 }
 
