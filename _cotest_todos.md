@@ -24,7 +24,8 @@
 - [x] §3 Wire `coverage-profiles.json` enforcement: fail local gate if any journey drops below its baseline.
 
 ### Joint yougen ↔ live soland integration (per `_test_todos_claude.md` Phase 6)
-- [ ] §4 Promote `run-joint-e2e.ps1` from manual-only to a local `run-cotest.ps1` profile that starts soland+coauth, builds yougen, then runs Playwright.
+- [x] §4 Promote `run-joint-e2e.ps1` from manual-only to a local `run-cotest.ps1` profile that starts soland+coauth, builds yougen, then runs Playwright.
+  - 2026-05-25 local close: `run-cotest.ps1 -Profile joint` now delegates to `run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -PlaywrightProject joint-yougen`, so the promoted local profile starts soland, coauth/PostgreSQL, builds/serves yougen, and runs the joint Playwright smoke.
 - [x] §5 Replace mock-only `tests/yougen_mock_parity.rs` references with assertions that the live yougen build also passes the same scenarios.
 
 ### Journey burn-down (target ≥ 70% on each per master plan Q6)

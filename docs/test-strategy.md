@@ -131,9 +131,13 @@ The joint E2E runner currently targets the first live-product slice:
 
 - start or attach `soland`
 - start or attach `yougen` web
-- optionally start or attach `coauth`; `-StartCoauth` generates a fresh coauth
-  YAML config, starts ephemeral Docker PostgreSQL, runs migrations, and wires
-  soland's OAuth/session-grant introspection URLs and static service bearers
+- start or attach `coauth`; `scripts/run-cotest.ps1 -Profile joint` enables
+  `-StartCoauth` by default so the local promoted profile always exercises the
+  soland + coauth + yougen topology. Direct `run-joint-e2e.ps1` runs may still
+  omit coauth for targeted soland-only debugging. `-StartCoauth` generates a
+  fresh coauth YAML config, starts ephemeral Docker PostgreSQL, runs migrations,
+  and wires soland's OAuth/session-grant introspection URLs and static service
+  bearers
 - run Playwright tests with multiple isolated browser contexts
 - save step screenshots, traces, videos, HAR, console/network JSONL, JUnit,
   HTML report, and service logs under
@@ -204,6 +208,7 @@ The coauth/soland test mapping is fixed by the runner:
 Recommended local run:
 
 ```powershell
+.\scripts\run-cotest.ps1 -Profile joint
 .\scripts\run-joint-e2e.ps1 -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall

@@ -1670,7 +1670,7 @@ if ($Profile -eq "joint") {
         -OutputName "joint" `
         -RunProfile "joint-smoke" `
         -PlaywrightProject "joint-yougen" `
-        -StartCoauth $false
+        -StartCoauth $true
 
     $summary = [pscustomobject]@{
         generated_at           = (Get-Date).ToString("o")
