@@ -859,7 +859,7 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Valu
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{actor}#cotest"),
-            "payload_hash": "",
+            "payload_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
         }],
@@ -920,7 +920,7 @@ fn canonical_event_digest(event: &Value) -> String {
 
 fn refresh_event_proof(event: &mut Value) {
     let digest = canonical_event_digest(event);
-    event["proofs"][0]["payload_hash"] = Value::String(digest);
+    event["proofs"][0]["payload_digest"] = Value::String(digest);
 }
 
 fn sha256_json(value: &Value) -> String {

@@ -2370,7 +2370,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
 ///
 /// Validates `tests/fixtures/production_signing_fixture.json` against the
 /// SDK `Ed25519MoveSigner` semantics (deterministic seed ⇒ deterministic
-/// JWS, ephemeral seed ⇒ non-deterministic, key-binding, payload_hash
+/// JWS, ephemeral seed ⇒ non-deterministic, key-binding, payload_digest
 /// invariant) + the soland `service_admin_signer` derivation.
 ///
 /// Validator pins:
@@ -2378,7 +2378,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
 ///   service_did_derived};
 /// * canonical_body_sha256 is `sha256:<64-hex>` shape;
 /// * deterministic vectors declare outcome=deterministic_signature OR
-///   verify_ok / payload_hash_matches / different_signatures;
+///   verify_ok / payload_digest_matches / different_signatures;
 /// * ephemeral vector declares outcome=non_deterministic_signature;
 /// * negative vectors cover wrong-verifying-key + tampered-canonical-body.
 pub fn run_production_signing_fixture_suite() -> Result<()> {
@@ -2391,7 +2391,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
         "non_deterministic_signature",
         "different_signatures",
         "verify_ok",
-        "payload_hash_matches",
+        "payload_digest_matches",
     ];
 
     let vectors = fixture
@@ -2475,9 +2475,9 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
                 }
                 covered_round_trip_verify = true;
             }
-            "signature_payload_hash_matches_sha256_of_canonical_body" => {
-                if outcome != "payload_hash_matches" {
-                    bail!("vector {name} must declare outcome=payload_hash_matches");
+            "signature_payload_digest_matches_sha256_of_canonical_body" => {
+                if outcome != "payload_digest_matches" {
+                    bail!("vector {name} must declare outcome=payload_digest_matches");
                 }
             }
             "ephemeral_seed_is_non_deterministic_across_runs" => {
@@ -2529,7 +2529,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
         let reason = required_str(expected, "reason_code")?;
         match (drift_kind, reason) {
             ("wrong_verifying_key", "signature_verification_failed") => neg_wrong_key = true,
-            ("tampered_canonical_body", "payload_hash_mismatch") => neg_tampered = true,
+            ("tampered_canonical_body", "payload_digest_mismatch") => neg_tampered = true,
             (k, r) => {
                 bail!("negative vector {name}: drift.kind={k} not paired with reason_code={r}")
             }

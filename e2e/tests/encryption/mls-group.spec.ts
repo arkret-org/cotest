@@ -129,7 +129,7 @@ test.describe("MLS group encryption", () => {
               security_class: "standard",
               federation_policy: "restricted",
               anchor_profile: "single_did",
-              hash_profile: "sha256",
+              digest_algorithm: "sha256",
               anchorer: {
                 type: "single_did",
                 did: alice.did,
@@ -221,7 +221,7 @@ test.describe("MLS group encryption", () => {
         base_epoch_ref: frontierEventRef,
         proposal_refs: [],
         next_epoch: nextEpoch,
-        commit_hash: `sha256:${"1".repeat(64)}`,
+        commit_digest: `sha256:${"1".repeat(64)}`,
         governance_binding: {
           realm_id: realmId,
           mls_group_id: groupId,

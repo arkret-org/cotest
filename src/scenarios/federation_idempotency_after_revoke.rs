@@ -7,7 +7,7 @@
 //!   * `Source-Service-DID`
 //!   * `verification_method`
 //!   * `service_binding_ref`
-//!   * `origin_key_state_hash`
+//!   * `origin_key_state_digest`
 //!
 //! When the source service rotates / revokes its key, subsequent
 //! replays of an old request MUST:

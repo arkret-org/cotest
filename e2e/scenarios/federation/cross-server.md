@@ -79,7 +79,7 @@
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `space_id = spaceId`
-   - `service_binding_ref` 含 `space_policy_hash` / `membership_frontier` / `reducer_profile_hash`
+   - `service_binding_ref` 含 `space_policy_hash` / `membership_frontier` / `reducer_profile_digest`
    - `events: [<完整签名的 cx.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
 7. β 校验:
@@ -87,7 +87,7 @@
    - content-digest 覆盖 body
    - service_binding_ref 与 β 本地的 space policy snapshot 一致
    - 每个 Event 的 actor 签名 + 因果链
-   - `reducer_profile_hash` 与 β 本地匹配(不匹配整批返回 `reducer_profile_mismatch`)
+   - `reducer_profile_digest` 与 β 本地匹配(不匹配整批返回 `reducer_profile_mismatch`)
 8. β 返回 `{accepted: [invite_event_id], rejected: [], quarantine: []}`
 9. 断言(测试侧从 α 视角拿响应,或者从测试 harness 直接读 β 的 sync state):invite event 在 β 上可见
 

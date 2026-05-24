@@ -107,7 +107,7 @@
     - `application_ref = <bob 的 application event_id>`
     - `decision = "accept"`
     - `reason_code = "ok"`
-    - `reviewer_capability_proof = { grant_id, frontier_hash }`
+    - `reviewer_capability_proof = { grant_id, frontier_digest }`
 11. 断言:reducer 接受 review Move,event 进入 anchored 状态
 
 ### Phase D — invite 链 + bob join (§3.6.5)

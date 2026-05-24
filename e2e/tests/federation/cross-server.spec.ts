@@ -14,7 +14,7 @@
 //   ✓ Idempotent by operation_id
 //   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs
 //   ✗ RFC 9421 HTTP Message Signature NOT verified — peer impersonation possible
-//   ✗ service_binding_ref.reducer_profile_hash NOT validated
+//   ✗ service_binding_ref.reducer_profile_digest NOT validated
 //   ✗ Outbound push is STUBBED (logs only, no real HTTP); soland-α won't push
 //     bob's invite to soland-β automatically. The push() must be exercised by
 //     the test or by future soland work.
@@ -269,10 +269,10 @@ test.describe("cross-server federation", () => {
     // @blocking-on: soland#federation-cross-server-gap
     // @user-promise: e2e/scenarios/federation/cross-server.md
     // @expected-live-by: 2026Q3
-    "Idempotent push: replaying the same (origin, destination, event_id) returns accepted (no duplicate write); reducer_profile_hash mismatch returns rejected with reason_code=reducer_profile_mismatch",
+    "Idempotent push: replaying the same (origin, destination, event_id) returns accepted (no duplicate write); reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch",
     async () => {
-      // spec: §4.1 reducer_profile_hash gate + §4.1.1 idempotency
-      // soland gap: reducer_profile_hash NOT validated; idempotency only on
+      // spec: §4.1 reducer_profile_digest gate + §4.1.1 idempotency
+      // soland gap: reducer_profile_digest NOT validated; idempotency only on
       // (origin, operation_id), not full tuple.
     },
   );

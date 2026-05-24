@@ -36,7 +36,7 @@ test.describe("cx.call.signal renegotiation", () => {
       );
       expect(ice.status(), "signed ICE config").toBe(200);
       const iceBody = await ice.json();
-      expect(iceBody.signature?.payload_hash).toMatch(/^sha256:/);
+      expect(iceBody.signature?.payload_digest).toMatch(/^sha256:/);
       expect(Array.isArray(iceBody.ice_servers)).toBe(true);
 
       await postCallSignal(request, token, sessionId, "device_change", 1, {

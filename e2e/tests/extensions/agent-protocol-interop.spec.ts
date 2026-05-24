@@ -232,7 +232,7 @@ test.describe("agent protocol interop", () => {
     "Phase D — publish-to-source flow lands Flow + Morph with attribution",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5.4 (result_objects /
-      // artifacts / external_transcript_hash; v1 object types: flow /
+      // artifacts / external_transcript_digest; v1 object types: flow /
       // message / morph / blob), §6 step 8-9.
       //
       // Pseudo:
@@ -246,7 +246,7 @@ test.describe("agent protocol interop", () => {
       //   //      artifacts: [{ artifact_type: "text",
       //   //                    object_ref: "cx:morph:<uuid>",
       //   //                    hash: "sha256:<hex>" }],
-      //   //      external_transcript_hash: "sha256:<hex>",
+      //   //      external_transcript_digest: "sha256:<hex>",
       //   //      completed_at: "<iso>"
       //   //    }
       //

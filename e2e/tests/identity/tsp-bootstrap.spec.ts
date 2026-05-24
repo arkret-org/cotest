@@ -35,7 +35,7 @@ test.describe("tsp bootstrap", () => {
       //       `tsp_authenticity = "ok"` AND `contrix_signature = "ok"`
       //       (spec §5: both SHOULD be verified, and independently).
       //       soland audit log gets `tsp.message.send` with
-      //       relationship_id / payload_hash / payload_type /
+      //       relationship_id / payload_digest / payload_type /
       //       verification_result (spec §8).
       //   E — reverse channel: mock sends bob_extern's
       //       `cx.member.state{join}` via the same relationship; alice's
@@ -91,7 +91,7 @@ test.describe("tsp bootstrap", () => {
     // @blocking-on: soland#identity-tsp-bootstrap-gap
     // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
     // @expected-live-by: 2026Q3
-    "E2.3 metadata privacy via nested message: an intermediary relay sees pairwise VID + payload_hash only — no vid_local, no inner operation, no plaintext payload",
+    "E2.3 metadata privacy via nested message: an intermediary relay sees pairwise VID + payload_digest only — no vid_local, no inner operation, no plaintext payload",
     async () => {
       // spec: tsp-integration.md §4 (metadata_privacy.nested_messages),
       // §5 (nested mode hides inner VID; intermediary MUST NOT be treated

@@ -5,7 +5,7 @@
   "encoder": {
     "signer": "Ed25519MoveSigner",
     "alg": "EdDSA",
-    "wire_form": "MoveSignature{alg: EdDSA, jws: <header>..<sig>, payload_hash: sha256:<hex>}",
+    "wire_form": "MoveSignature{alg: EdDSA, jws: <header>..<sig>, payload_digest: sha256:<hex>}",
     "seed_source_kinds": ["configured", "ephemeral", "service_did_derived"]
   },
   "vectors": [
@@ -73,15 +73,15 @@
       }
     },
     {
-      "name": "signature_payload_hash_matches_sha256_of_canonical_body",
+      "name": "signature_payload_digest_matches_sha256_of_canonical_body",
       "seed_source": "configured",
       "seed_kind": "fixed_32_byte",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
       "canonical_body_sha256": "sha256:0606060606060606060606060606060606060606060606060606060606060606",
       "expected": {
-        "outcome": "payload_hash_matches",
-        "rationale": "MoveSignature.payload_hash = sha256:<hex of canonical body>. The receiver re-derives the canonical body bytes and recomputes sha256; must equal the declared payload_hash before verifying the JWS sig segment. Wire-form invariant for detached JWS (RFC 7515 §3.2)."
+        "outcome": "payload_digest_matches",
+        "rationale": "MoveSignature.payload_digest = sha256:<hex of canonical body>. The receiver re-derives the canonical body bytes and recomputes sha256; must equal the declared payload_digest before verifying the JWS sig segment. Wire-form invariant for detached JWS (RFC 7515 §3.2)."
       }
     }
   ],
@@ -114,8 +114,8 @@
       },
       "expected": {
         "outcome": "reject",
-        "reason_code": "payload_hash_mismatch",
-        "rationale": "After signing, an attacker mutates the canonical body bytes. payload_hash declared in MoveSignature no longer matches sha256(tampered_body). verify_ed25519_move_signature MUST reject before invoking the JWS-segment ed25519 verify."
+        "reason_code": "payload_digest_mismatch",
+        "rationale": "After signing, an attacker mutates the canonical body bytes. payload_digest declared in MoveSignature no longer matches sha256(tampered_body). verify_ed25519_move_signature MUST reject before invoking the JWS-segment ed25519 verify."
       }
     }
   ]

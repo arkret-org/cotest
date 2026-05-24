@@ -1,7 +1,7 @@
 // Conformance — Snapshot / Query / Scalability Vectors
 // Contract: e2e/scenarios/conformance/snapshot-query-scalability.md
 // Spec:
-//   - conformance/snapshot-schema.md (§2 manifest, §3 chunk, §4 state_hash,
+//   - conformance/snapshot-schema.md (§2 manifest, §3 chunk, §4 state_digest,
 //     §5 signature binding, §6 event_set_commitment)
 //   - conformance/query-schema.md (§2 query object, §3 filter, §6 sort,
 //     §8 response, §9 security)
@@ -83,14 +83,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // @expected-live-by: 2026Q3
     "Phase A — snapshot manifest integrity (digest, chunk count, chunk hashes)",
     async () => {
-      // spec: snapshot-schema.md §2 manifest, §3 chunk descriptor, §4 state_hash.
+      // spec: snapshot-schema.md §2 manifest, §3 chunk descriptor, §4 state_digest.
       //
       // POST /api/v1/conformance/snapshot { vector_id, manifest, chunks } →
       //   - response.manifest_digest === vector.expected_manifest_digest
       //   - response.chunk_hashes.length === vector.expected_chunk_count
       //   - response.chunk_hashes byte-equals vector.expected_chunk_hashes
       //     (order preserved — chunks[] is canonical-ordered by §3)
-      //   - optional response.state_hash === vector.expected_state_hash
+      //   - optional response.state_digest === vector.expected_state_digest
       //     (§4 Merkle root over reducer-output leaves)
       // Tamper test: flip one byte in a chunk payload → HTTP 4xx with
       //   error.code === "snapshot_chunk_digest_mismatch" (no silent accept).
@@ -111,7 +111,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       //   - response.signature_valid === true
       //   - response.signer_did === vector.expected_signer_did
       //   - response.signed_transcript_fields[] === spec §5 list (snapshot_ref,
-      //     realm_id, reducer_profile, schema_profile_refs, state_hash, frontier,
+      //     realm_id, reducer_profile, schema_profile_refs, state_digest, frontier,
       //     event_set_commitment, chunks descriptor, verification_hints,
       //     created_by, created_at)
       //   - re-posting same Ed25519 manifest produces identical signature bytes

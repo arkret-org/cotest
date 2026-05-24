@@ -84,7 +84,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     .await?;
     assert_eq!(
         resolved_after_submit["key_log_head"],
-        submitted["head_event_hash"]
+        submitted["head_event_digest"]
     );
     assert_eq!(resolved_after_submit["seq"], 1);
     assert_eq!(
@@ -111,8 +111,8 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     .await?;
     assert_eq!(receipts["threshold_met"], true);
     assert_eq!(
-        receipts["receipts"][0]["head_event_hash"],
-        submitted["head_event_hash"]
+        receipts["receipts"][0]["head_event_digest"],
+        submitted["head_event_digest"]
     );
 
     Ok(())

@@ -136,7 +136,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "cx:realm:federation"
     );
     assert!(
-        bootstrap["snapshot_bootstrap"]["state_hash"]
+        bootstrap["snapshot_bootstrap"]["state_digest"]
             .as_str()
             .unwrap()
             .starts_with("sha256:")

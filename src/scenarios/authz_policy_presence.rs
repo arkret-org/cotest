@@ -59,7 +59,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(effective_grants["state_hash"].is_string());
+    assert!(effective_grants["state_digest"].is_string());
     assert!(!effective_grants["grants"].as_array().unwrap().is_empty());
 
     let allowed_after_grant = expect_json(
@@ -241,7 +241,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .json(&json!({
                 "request_id": "req-allow",
                 "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-                "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "cx.message.create",
                 "actor": "did:web:alice.example",
                 "source": {"service": "soland"}
@@ -259,7 +259,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .json(&json!({
                 "request_id": "req-review",
                 "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-                "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "space.delete",
                 "actor": "did:web:alice.example",
                 "source": {"service": "soland"}
@@ -277,7 +277,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .json(&json!({
                 "request_id": "req-invalid",
                 "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-                "request_canonical_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "cx.message.create",
                 "actor": "alice",
                 "source": {"service": "soland"}

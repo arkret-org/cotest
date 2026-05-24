@@ -23,12 +23,12 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
     {
         bail!("sync artifact collection projection discriminator drifted");
     }
-    let state_hash = projection
-        .pointer("/frontier/state_hash")
+    let state_digest = projection
+        .pointer("/frontier/state_digest")
         .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("sync artifact collection projection missing state_hash"))?;
-    if !looks_like_sha256_digest(state_hash) {
-        bail!("sync artifact collection projection state_hash was invalid");
+        .ok_or_else(|| anyhow!("sync artifact collection projection missing state_digest"))?;
+    if !looks_like_sha256_digest(state_digest) {
+        bail!("sync artifact collection projection state_digest was invalid");
     }
     let groups = value_array(
         required_field(projection, "groups")?,
@@ -81,9 +81,9 @@ fn validate_room_timeline(value: &Value) -> Result<()> {
 
 fn validate_snapshot_frontier_recovery(value: &Value) -> Result<()> {
     let snapshot = required_field(value, "snapshot_frontier_recovery")?;
-    let state_hash = value_field_str(snapshot, "state_hash")?;
-    if !looks_like_sha256_digest(state_hash) {
-        bail!("sync artifact snapshot state_hash was invalid");
+    let state_digest = value_field_str(snapshot, "state_digest")?;
+    if !looks_like_sha256_digest(state_digest) {
+        bail!("sync artifact snapshot state_digest was invalid");
     }
     let root = snapshot
         .pointer("/event_set_commitment/root")

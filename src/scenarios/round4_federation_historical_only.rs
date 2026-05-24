@@ -11,15 +11,15 @@
 //! 1. **Server A** constructs a `federation_transaction` request:
 //!    - `Source-Trust-Domain = cx:trust_domain:a`
 //!    - `Destination-Trust-Domain = cx:trust_domain:b`
-//!    - `Request-Canonical-Hash = sha256:<hash>`
+//!    - `Request-Canonical-Digest = sha256:<hash>`
 //!    - request body `X`, carrying `idempotency_key=idem-c3-001`
 //! 2. **Server B** receives the request, runs the cache key composition
-//!    (`source_did + dest_did + request_canonical_hash + idempotency_key
-//!     + origin_key_state_hash`), and caches the response under both the
-//!    *strict key* (with `origin_key_state_hash`) and the
+//!    (`source_did + dest_did + request_canonical_digest + idempotency_key
+//!     + origin_key_state_digest`), and caches the response under both the
+//!    *strict key* (with `origin_key_state_digest`) and the
 //!    *canonical-replay key* (without it).
 //! 3. **Server A** revokes its service key — simulated by flipping the
-//!    `origin_key_state_hash` from `state-A` to `state-B`.
+//!    `origin_key_state_digest` from `state-A` to `state-B`.
 //! 4. **Server A** replays the same idempotency key. The strict-key
 //!    lookup misses (key state advanced) but the canonical-replay key
 //!    hits → the receiver returns the cached body marked with
@@ -28,7 +28,7 @@
 //!
 //! Assertions (non-`#[ignore]`, wire-shape gates):
 //!
-//! - cache key composition includes `origin_key_state_hash` (strict key
+//! - cache key composition includes `origin_key_state_digest` (strict key
 //!   diverges across key-state rotation while the canonical-replay key
 //!   stays stable).
 //! - the signing-transcript fragment built via
@@ -53,7 +53,7 @@ use std::collections::BTreeMap;
 use anyhow::{Result, anyhow};
 use contrix_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_HISTORICAL_ONLY,
-    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_HASH, HEADER_SOURCE_TRUST_DOMAIN,
+    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
     Hash, TypedTrustDomainId, canonical::canonical_json_bytes,
     federation_trust_domain_transcript_fragment,
 };
@@ -83,28 +83,28 @@ pub const HISTORICAL_ONLY_REASON: &str = "historical_only";
 pub struct FederationCacheKey {
     pub source_did: String,
     pub dest_did: String,
-    pub request_canonical_hash: String,
+    pub request_canonical_digest: String,
     pub idempotency_key: String,
-    pub origin_key_state_hash: String,
+    pub origin_key_state_digest: String,
 }
 
 impl FederationCacheKey {
     /// Strict cache key — equal to a cached entry only when ALL fields
-    /// match, including `origin_key_state_hash`. Used to gate "fresh
+    /// match, including `origin_key_state_digest`. Used to gate "fresh
     /// idempotent replay against the same key state".
     pub fn strict(&self) -> String {
         let canonical = canonical_json_bytes(&json!({
             "source_did": self.source_did,
             "dest_did": self.dest_did,
-            "request_canonical_hash": self.request_canonical_hash,
+            "request_canonical_digest": self.request_canonical_digest,
             "idempotency_key": self.idempotency_key,
-            "origin_key_state_hash": self.origin_key_state_hash,
+            "origin_key_state_digest": self.origin_key_state_digest,
         }))
         .unwrap_or_default();
         format!("sha256:{:x}", Sha256::digest(&canonical))
     }
 
-    /// Canonical-replay cache key — drops `origin_key_state_hash`. Used
+    /// Canonical-replay cache key — drops `origin_key_state_digest`. Used
     /// to detect a post-key-rotation replay; if the strict key misses
     /// but the canonical-replay key hits, the receiver MUST return the
     /// cached body marked `reason_code=historical_only` and MUST NOT
@@ -113,7 +113,7 @@ impl FederationCacheKey {
         let canonical = canonical_json_bytes(&json!({
             "source_did": self.source_did,
             "dest_did": self.dest_did,
-            "request_canonical_hash": self.request_canonical_hash,
+            "request_canonical_digest": self.request_canonical_digest,
             "idempotency_key": self.idempotency_key,
         }))
         .unwrap_or_default();
@@ -153,7 +153,7 @@ impl SimulatedFederationReceiver {
     /// Outcomes:
     /// - strict-key cache hit → return cached body unchanged (no new
     ///   side effects),
-    /// - canonical-replay-key cache hit (different `origin_key_state_hash`)
+    /// - canonical-replay-key cache hit (different `origin_key_state_digest`)
     ///   → return cached body marked `reason_code=historical_only`,
     ///   `historical_only=true` (no new side effects),
     /// - cache miss → mint a fresh response, populate both cache slots,
@@ -232,7 +232,7 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     });
     let body_x_bytes = canonical_json_bytes(&body_x)
         .map_err(|e| anyhow!("canonical_json_bytes(body_x) failed: {e}"))?;
-    let request_canonical_hash =
+    let request_canonical_digest =
         Hash::new(format!("sha256:{:x}", Sha256::digest(&body_x_bytes)))
             .map_err(|e| anyhow!("typed request canonical hash failed: {e}"))?;
 
@@ -243,34 +243,34 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     let initial_key = FederationCacheKey {
         source_did: source_did.clone(),
         dest_did: dest_did.clone(),
-        request_canonical_hash: request_canonical_hash.as_str().to_owned(),
+        request_canonical_digest: request_canonical_digest.as_str().to_owned(),
         idempotency_key: "idem-c3-001".to_owned(),
-        origin_key_state_hash: key_state_a.to_owned(),
+        origin_key_state_digest: key_state_a.to_owned(),
     };
     let post_rotation_key = FederationCacheKey {
-        origin_key_state_hash: key_state_b.to_owned(),
+        origin_key_state_digest: key_state_b.to_owned(),
         ..initial_key.clone()
     };
 
     // Cache-key composition assertion: strict keys differ once
-    // `origin_key_state_hash` flips; canonical-replay keys stay equal.
+    // `origin_key_state_digest` flips; canonical-replay keys stay equal.
     if initial_key.strict() == post_rotation_key.strict() {
         return Err(anyhow!(
-            "strict cache key MUST diverge across origin_key_state_hash rotation"
+            "strict cache key MUST diverge across origin_key_state_digest rotation"
         ));
     }
     if initial_key.canonical_replay() != post_rotation_key.canonical_replay() {
         return Err(anyhow!(
-            "canonical-replay cache key MUST stay stable across origin_key_state_hash rotation"
+            "canonical-replay cache key MUST stay stable across origin_key_state_digest rotation"
         ));
     }
 
     // Signing-transcript fragment assertion: SDK helper output is
     // byte-stable across calls.
     let fragment_a =
-        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_hash);
+        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_digest);
     let fragment_b =
-        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_hash);
+        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_digest);
     if fragment_a != fragment_b {
         return Err(anyhow!(
             "federation_trust_domain_transcript_fragment is not byte-stable across calls"
@@ -280,7 +280,7 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     for required in [
         HEADER_SOURCE_TRUST_DOMAIN.to_ascii_lowercase(),
         HEADER_DESTINATION_TRUST_DOMAIN.to_ascii_lowercase(),
-        HEADER_REQUEST_CANONICAL_HASH.to_ascii_lowercase(),
+        HEADER_REQUEST_CANONICAL_DIGEST.to_ascii_lowercase(),
     ] {
         if !fragment_a.contains(&required) {
             return Err(anyhow!(
@@ -291,7 +291,7 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     for required_value in [
         source_td.as_str(),
         dest_td.as_str(),
-        request_canonical_hash.as_str(),
+        request_canonical_digest.as_str(),
     ] {
         if !fragment_a.contains(required_value) {
             return Err(anyhow!(
@@ -309,7 +309,7 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
             "ok": true,
             "operation": "cx.events.submit",
             "accepted": 1,
-            "request_canonical_hash": request_canonical_hash.as_str(),
+            "request_canonical_digest": request_canonical_digest.as_str(),
         })
     })?;
     if first.get("historical_only").is_some() {
@@ -343,7 +343,7 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
         ));
     }
 
-    // 3) Server A revokes its service key (origin_key_state_hash flips
+    // 3) Server A revokes its service key (origin_key_state_digest flips
     //    from state-A to state-B) and replays the same idempotency key.
     let historical_replay = server_b.receive(
         &post_rotation_key,
@@ -419,11 +419,11 @@ mod tests {
     fn federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values() {
         let source_td = TypedTrustDomainId::new("cx:trust_domain:a").unwrap();
         let dest_td = TypedTrustDomainId::new("cx:trust_domain:b").unwrap();
-        let request_canonical_hash = Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
+        let request_canonical_digest = Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
         let fragment = federation_trust_domain_transcript_fragment(
             &source_td,
             &dest_td,
-            &request_canonical_hash,
+            &request_canonical_digest,
         );
         // The three header names MUST appear in lowercase (RFC 9421 §2.2).
         assert!(
@@ -435,8 +435,8 @@ mod tests {
             "fragment missing lowercase destination-trust-domain header name: {fragment}"
         );
         assert!(
-            fragment.contains(&HEADER_REQUEST_CANONICAL_HASH.to_ascii_lowercase()),
-            "fragment missing lowercase request-canonical-hash header name: {fragment}"
+            fragment.contains(&HEADER_REQUEST_CANONICAL_DIGEST.to_ascii_lowercase()),
+            "fragment missing lowercase request-canonical-digest header name: {fragment}"
         );
         // The carried values MUST appear verbatim.
         assert!(
@@ -448,14 +448,14 @@ mod tests {
             "fragment missing destination trust domain value: {fragment}"
         );
         assert!(
-            fragment.contains(request_canonical_hash.as_str()),
+            fragment.contains(request_canonical_digest.as_str()),
             "fragment missing request canonical hash value: {fragment}"
         );
         // Byte-stable: a second call returns the same bytes.
         let fragment_again = federation_trust_domain_transcript_fragment(
             &source_td,
             &dest_td,
-            &request_canonical_hash,
+            &request_canonical_digest,
         );
         assert_eq!(fragment, fragment_again);
     }
@@ -468,29 +468,29 @@ mod tests {
     }
 
     /// Non-ignored — cache key composition pin. Strict key diverges
-    /// across `origin_key_state_hash` rotation, canonical-replay key
+    /// across `origin_key_state_digest` rotation, canonical-replay key
     /// stays stable.
     #[test]
-    fn cache_key_composition_includes_origin_key_state_hash() {
+    fn cache_key_composition_includes_origin_key_state_digest() {
         let mut key = FederationCacheKey {
             source_did: "did:web:a.example".to_owned(),
             dest_did: "did:web:b.example".to_owned(),
-            request_canonical_hash: format!("sha256:{}", "a".repeat(64)),
+            request_canonical_digest: format!("sha256:{}", "a".repeat(64)),
             idempotency_key: "idem-001".to_owned(),
-            origin_key_state_hash: format!("sha256:{}", "b".repeat(64)),
+            origin_key_state_digest: format!("sha256:{}", "b".repeat(64)),
         };
         let strict_a = key.strict();
         let replay_a = key.canonical_replay();
-        key.origin_key_state_hash = format!("sha256:{}", "c".repeat(64));
+        key.origin_key_state_digest = format!("sha256:{}", "c".repeat(64));
         let strict_b = key.strict();
         let replay_b = key.canonical_replay();
         assert_ne!(
             strict_a, strict_b,
-            "strict key must include origin_key_state_hash"
+            "strict key must include origin_key_state_digest"
         );
         assert_eq!(
             replay_a, replay_b,
-            "canonical-replay key must omit origin_key_state_hash"
+            "canonical-replay key must omit origin_key_state_digest"
         );
     }
 
@@ -513,10 +513,10 @@ mod tests {
         //    `cx:trust_domain:a` and `cx:trust_domain:b` respectively.
         // 2. soland-A signs and POSTs a federation_transaction request
         //    to teabay-B carrying Source-/Destination-Trust-Domain
-        //    headers + Request-Canonical-Hash + Idempotency-Key.
+        //    headers + Request-Canonical-Digest + Idempotency-Key.
         // 3. Confirm teabay-B caches the response (200 accepted),
         //    side effects fire (directory row inserted, etc.).
-        // 4. Rotate soland-A's service key (origin_key_state_hash flips).
+        // 4. Rotate soland-A's service key (origin_key_state_digest flips).
         // 5. Replay the same request bytes.
         // 6. Assert teabay-B returns the cached body with
         //    `reason_code=historical_only` AND no new directory rows /

@@ -68,7 +68,7 @@ async function submitMessageEvent(
       {
         type: "dev-proof",
         verification_method: `${actorDid}#device`,
-        payload_hash: `sha256:${sha256CanonicalJson(payload)}`,
+        payload_digest: `sha256:${sha256CanonicalJson(payload)}`,
       },
     ],
   };

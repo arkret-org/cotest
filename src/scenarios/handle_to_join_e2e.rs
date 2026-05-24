@@ -498,7 +498,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:principal.acme.example#key-1",
-            "payload_hash":
+            "payload_digest":
                 "sha256:00000000000000000000000000000000000000000000000000000000000000aa",
             "created_at": "2026-05-19T00:00:00Z",
             "audience": TARGET_SPACE_ID,

@@ -77,19 +77,19 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
 
 fn validate_bad_signature(case: &Value) -> Result<SecurityDecision> {
     let event = required_field(required_field(case, "input")?, "event")?;
-    let computed = canonical_event_hash(event)?;
+    let computed = canonical_event_digest(event)?;
     for proof in event
         .get("proofs")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
     {
-        let Some(payload_hash) = proof.get("payload_hash").and_then(Value::as_str) else {
+        let Some(payload_digest) = proof.get("payload_digest").and_then(Value::as_str) else {
             return Ok(SecurityDecision::reject("invalid_signature"));
         };
-        if !looks_like_sha256_digest(payload_hash)
-            || payload_hash == zero_sha256()
-            || payload_hash != computed
+        if !looks_like_sha256_digest(payload_digest)
+            || payload_digest == zero_sha256()
+            || payload_digest != computed
         {
             return Ok(SecurityDecision::reject("invalid_signature"));
         }
@@ -104,8 +104,8 @@ fn validate_bad_canonical_bytes(case: &Value) -> Result<SecurityDecision> {
     if required_str(stored, "event_id")? != required_str(incoming, "event_id")? {
         return Ok(SecurityDecision::accept());
     }
-    let stored_hash = canonical_event_hash(stored)?;
-    let incoming_hash = canonical_event_hash(incoming)?;
+    let stored_hash = canonical_event_digest(stored)?;
+    let incoming_hash = canonical_event_digest(incoming)?;
     if stored_hash != incoming_hash {
         return Ok(SecurityDecision::quarantine("duplicate_conflict"));
     }
@@ -205,7 +205,7 @@ fn validate_query_auth_leakage(case: &Value) -> Result<SecurityDecision> {
     Ok(SecurityDecision::accept())
 }
 
-fn canonical_event_hash(event: &Value) -> Result<String> {
+fn canonical_event_digest(event: &Value) -> Result<String> {
     let object = event
         .as_object()
         .ok_or_else(|| anyhow!("event must be an object"))?;

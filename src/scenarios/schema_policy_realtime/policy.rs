@@ -66,7 +66,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "cx:request:policy-deny",
-                "request_canonical_hash": REQUEST_HASH,
+                "request_canonical_digest": REQUEST_HASH,
                 "action": "cx.message.create",
                 "actor": bob.actor,
                 "realm_id": space_id,
@@ -102,7 +102,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .post(server.url("/contrix/v1/check"))
             .json(&json!({
                 "request_id": "cx:request:policy-allow",
-                "request_canonical_hash": REQUEST_HASH,
+                "request_canonical_digest": REQUEST_HASH,
                 "action": "cx.message.create",
                 "actor": bob.actor,
                 "realm_id": space_id,

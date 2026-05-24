@@ -47,7 +47,7 @@ fn signature() -> MoveSignature {
     MoveSignature {
         alg: "EdDSA".to_owned(),
         verification_method: "did:web:anchorer.example#k1".to_owned(),
-        payload_hash: Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap(),
+        payload_digest: Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap(),
         created_at: chrono::Utc.with_ymd_and_hms(2026, 5, 8, 0, 0, 0).unwrap(),
         jws: "AAAA.BBBB.CCCC".to_owned(),
     }

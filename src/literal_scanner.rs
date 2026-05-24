@@ -286,7 +286,7 @@ pub fn scan_tree_round23(root: &Path) -> Result<Vec<crate::round23_rules::Round2
 
 /// Walk `root` and scan for round-4 structural drift rules (see
 /// [`crate::round4_rules`]). DID method-segment tightening, EventsSubscribe
-/// type, cross_signing.publish CAS, audit_policy_version_hash arity.
+/// type, cross_signing.publish CAS, audit_policy_version_digest arity.
 pub fn scan_tree_round4(root: &Path) -> Result<Vec<crate::round4_rules::Round4Finding>> {
     let mut out = Vec::new();
     walk(root, &mut |file_path| {

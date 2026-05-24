@@ -77,7 +77,7 @@ export async function createSpaceViaApi(
           security_class: "standard",
           federation_policy: "restricted",
           anchor_profile: "single_did",
-          hash_profile: "sha256",
+          digest_algorithm: "sha256",
           anchorer: {
             type: "single_did",
             did: opts.ownerDid!,

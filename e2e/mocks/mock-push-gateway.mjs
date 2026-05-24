@@ -159,7 +159,7 @@ function signDeliveryReceipt({ pusher_id, payload }) {
     iss: issuer,
     jti: `rcpt-${randomUUID()}`,
     pusher_id,
-    payload_hash: `sha256:${sha256Hex(JSON.stringify(payload ?? {}))}`,
+    payload_digest: `sha256:${sha256Hex(JSON.stringify(payload ?? {}))}`,
     delivered_at: now,
     expires_at: now + 600,
   };
@@ -384,7 +384,7 @@ const server = createServer(async (req, res) => {
       event_id: delivered.event_id,
       blind_wake: delivered.blind_wake,
       priority: delivered.priority,
-      payload_hash: claims.payload_hash,
+      payload_digest: claims.payload_digest,
     });
     res.end(
       JSON.stringify({

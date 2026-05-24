@@ -167,7 +167,7 @@ Generated: 2026-05-22T13:20:46.927Z
 | 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:221 | α invite UI event automatically fans out to β and β acceptance propagates back to α | e2e/scenarios/federation/cross-server.md | - |
 | 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:235 | two-way timeline messaging: alice@α and bob@β exchange messages and both servers converge on identical effective state | e2e/scenarios/federation/cross-server.md | - |
 | 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:252 | Pull / backfill: after a network partition, β fetches missing α events via GET /api/v1/federation/pull-operations | e2e/scenarios/federation/cross-server.md | - |
-| 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:264 | Idempotent push: replaying the same (origin, destination, event_id) returns accepted (no duplicate write); reducer_profile_hash mismatch returns rejected with reason_code=reducer_profile_mismatch | e2e/scenarios/federation/cross-server.md | - |
+| 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:264 | Idempotent push: replaying the same (origin, destination, event_id) returns accepted (no duplicate write); reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch | e2e/scenarios/federation/cross-server.md | - |
 | 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:276 | Capability revoke fanout: after alice revokes β's service delegation, α MUST stop pushing future events to β (§4.4) | e2e/scenarios/federation/cross-server.md | - |
 | 2026Q3 | tracked | e2e/tests/federation/cross-server.spec.ts:287 | RFC 9421 signature failure: tampered Signature header makes β reject the entire batch with 4xx | e2e/scenarios/federation/cross-server.md | - |
 
@@ -270,7 +270,7 @@ Generated: 2026-05-22T13:20:46.927Z
 | 2026Q3 | tracked | e2e/tests/identity/tsp-bootstrap.spec.ts:13 | alice and bob_extern bootstrap TSP relationship; alice sends Contrix invite via TSP; bob_extern verifies + ACKs | e2e/scenarios/identity/tsp-bootstrap.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/tsp-bootstrap.spec.ts:55 | E2.1 TSP endpoint unreachable → client falls back to HTTPS JWE; invite still delivers; audit logs transport.fallback{from:tsp,to:https-jwe} | e2e/scenarios/identity/tsp-bootstrap.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/tsp-bootstrap.spec.ts:71 | E2.2 VID resolver degraded (no witness) → TSP relationship's trust_level downgrades to 'degraded_no_witness'; signature still validates but trust drops | e2e/scenarios/identity/tsp-bootstrap.md | - |
-| 2026Q3 | tracked | e2e/tests/identity/tsp-bootstrap.spec.ts:90 | E2.3 metadata privacy via nested message: an intermediary relay sees pairwise VID + payload_hash only — no vid_local, no inner operation, no plaintext payload | e2e/scenarios/identity/tsp-bootstrap.md | - |
+| 2026Q3 | tracked | e2e/tests/identity/tsp-bootstrap.spec.ts:90 | E2.3 metadata privacy via nested message: an intermediary relay sees pairwise VID + payload_digest only — no vid_local, no inner operation, no plaintext payload | e2e/scenarios/identity/tsp-bootstrap.md | - |
 
 ## soland#identity-webvh-rotation-gap
 

@@ -73,7 +73,7 @@
     - `actor = alice.did`,带 Contrix event signature(alice 当前 update key)
 13. 客户端把该 operation 作为 TSP application payload 包进 TSP envelope:
     - `content_type = "application/contrix+json"`
-    - `payload_hash = sha256(...)`
+    - `payload_digest = sha256(...)`
     - 外层用 Phase B 的 relationship key 签名 + 加密
     - **使用 nested mode**:外层 envelope 的 sender VID 用 alice 的 pairwise DID,真实 `vid_local` 隐藏在内层(spec §4 `metadata_privacy.nested_messages`、§5 nested 规则)
 14. 客户端 POST 到 bob_extern 的 TSP endpoint(mock)
@@ -85,7 +85,7 @@
 17. mock 验证内层 Contrix event signature(alice 的 webvh key,通过 §4 resolver 拉 DID Doc)→ pass
 18. 断言:mock 把验证结果回成 TSP ACK,`verification.contrix_signature = "ok"`、`verification.tsp_authenticity = "ok"`(spec §5:两者 SHOULD 都验证,且独立)
 19. 断言:alice 侧 yougen `/settings/connections` 该 relationship 的 outbox 标记最后一条 `cx.invite.create` 为 `delivered + acked`
-20. 断言:soland audit log 出现 `tsp.message.send` 记录,包含 `relationship_id`、`payload_hash`、`payload_type: "cx.invite.create"`、`verification_result: "ok"`(spec §8)
+20. 断言:soland audit log 出现 `tsp.message.send` 记录,包含 `relationship_id`、`payload_digest`、`payload_type: "cx.invite.create"`、`verification_result: "ok"`(spec §8)
 
 ### Phase E — 反向通道:bob_extern → alice 的 `cx.member.state{join}`
 
@@ -101,13 +101,13 @@
 - Phase B 步骤 9-10:relationship 建立后客户端有可见记录,soland audit 有 `tsp.relationship.bootstrap` 条目
 - Phase C 步骤 15:nested mode 下外层 relay 看不到内层 payload 明文(metadata privacy)
 - Phase D 步骤 18:**TSP authenticity 与 Contrix event signature 各自独立验证**(spec §5 关键)
-- Phase D-E 步骤 20、24:audit log 字段齐全(`relationship_id` / `payload_hash` / `payload_type` / `verification_result`),满足 spec §8 要求
+- Phase D-E 步骤 20、24:audit log 字段齐全(`relationship_id` / `payload_digest` / `payload_type` / `verification_result`),满足 spec §8 要求
 
 ## Edge cases / sub-tests
 
 - **E2.1 TSP endpoint unreachable → fallback 到直接 HTTPS**:测试 harness 把 mock TSP endpoint 端口下掉(`process.kill(MOCK_TSP_ENDPOINT_PID)` 或 `route.block`);alice 再次尝试发 `cx.invite.create`;客户端应当**降级**到 Contrix v1 core 默认的 HTTPS JWE transport(spec 顶部 status 行:v1 core 默认走 HTTPS JWE / MLS DM),soland 通过 alice 的常规 `/api/v1/spaces/{id}/invite` 路径接收。断言:invite 仍然送达 bob_extern(或在 soland 端进入 outbound queue 等待 bob_extern 上线),并且 audit log 出现一条 `transport.fallback{from: "tsp", to: "https-jwe", reason: "endpoint_unreachable"}` 记录
 - **E2.2 VID resolver degraded(no witness)→ TSP relationship 降级**:把 alice 的 webvh witness service 下掉(沿用 webvh-rotation 的 `degraded_no_witness` 机制),让 bob_extern 解析 alice VID 时进入 degraded 状态;bob_extern 仍然能用 alice 的 update key 验证 signature,但 trust level 下降。断言:Phase B 第 9 步的 `trust_level` 字段从 `"verified"` 变成 `"degraded"`,UI 显示 ⚠ 标记;Phase D 第 18 步的 ACK 中 `verification.tsp_authenticity = "ok"`,但 `verification.vid_trust = "degraded_no_witness"`(spec §8:记录 support system 与 trust assessment result)
-- **E2.3 metadata privacy (nested message)**:同 Phase C 的 nested mode,但显式引入一个 routing intermediary(mock 增加一个 `relay` 角色);intermediary 收到外层 envelope 后,只能看见 pairwise VID 与 `payload_hash`,看不到 `vid_local`(真实 alice DID)、看不到内层 `operation` 字段、也看不到 `payload` 明文。断言:`GET mock://relay-view?relationship_id=...` 返回的相关字段都被打码或缺失;唯有 bob_extern 这一终点能解出内层(spec §5:nested 隐藏内层 VID;intermediary 不应被视为可信授权方)
+- **E2.3 metadata privacy (nested message)**:同 Phase C 的 nested mode,但显式引入一个 routing intermediary(mock 增加一个 `relay` 角色);intermediary 收到外层 envelope 后,只能看见 pairwise VID 与 `payload_digest`,看不到 `vid_local`(真实 alice DID)、看不到内层 `operation` 字段、也看不到 `payload` 明文。断言:`GET mock://relay-view?relationship_id=...` 返回的相关字段都被打码或缺失;唯有 bob_extern 这一终点能解出内层(spec §5:nested 隐藏内层 VID;intermediary 不应被视为可信授权方)
 
 ## Implementation notes
 

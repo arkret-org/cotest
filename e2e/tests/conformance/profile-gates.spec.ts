@@ -53,7 +53,7 @@ type VerifiedProfileEntry = {
   profile_id?: string;
   claim_kind?: string;
   cotest_run_id?: string;
-  artifact_hash?: string;
+  artifact_digest?: string;
   artifact_ref?: string;
   cotest_issuer_did?: string;
   signature?: string;
@@ -87,7 +87,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     //       service-surface.md §3.0 (claim_kind enum; partition invariant).
     //
     // claimed_profiles[].claim_kind MUST be "self_claimed" for every entry.
-    // verified_profiles entries, if present, MUST carry cotest_run_id / artifact_hash /
+    // verified_profiles entries, if present, MUST carry cotest_run_id / artifact_digest /
     //   artifact_ref / cotest_issuer_did / signature / timestamp.
     // The two profile_id sets MUST be disjoint — a profile cannot be simultaneously
     // self-claimed and cotest-verified.
@@ -114,7 +114,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     for (const entry of verified) {
       expect(entry.profile_id, "verified entry profile_id present").toBeTruthy();
       expect(entry.cotest_run_id, "verified entry cotest_run_id present").toBeTruthy();
-      expect(entry.artifact_hash, "verified entry artifact_hash present").toBeTruthy();
+      expect(entry.artifact_digest, "verified entry artifact_digest present").toBeTruthy();
       expect(entry.artifact_ref, "verified entry artifact_ref present").toBeTruthy();
       expect(entry.cotest_issuer_did, "verified entry cotest_issuer_did present").toBeTruthy();
       expect(entry.signature, "verified entry signature present").toBeTruthy();

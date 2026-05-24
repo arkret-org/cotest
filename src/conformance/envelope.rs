@@ -107,11 +107,11 @@ fn validate_crypto_signature_event_vector(
     if canonical != expected_canonical {
         bail!("crypto vector {name} canonical event payload drifted");
     }
-    let payload_hash = sha256_prefixed(canonical.as_bytes());
-    let expected_payload_hash = required_str(vector, "payload_hash")?;
-    if payload_hash != expected_payload_hash {
+    let payload_digest = sha256_prefixed(canonical.as_bytes());
+    let expected_payload_digest = required_str(vector, "payload_digest")?;
+    if payload_digest != expected_payload_digest {
         bail!(
-            "crypto vector {name} payload hash drifted: expected {expected_payload_hash}, got {payload_hash}"
+            "crypto vector {name} payload hash drifted: expected {expected_payload_digest}, got {payload_digest}"
         );
     }
 
@@ -527,23 +527,23 @@ fn validate_event_envelope(
         return Ok(EventEnvelopeDecision::reject("schema_violation", error));
     }
 
-    // Per spec encoding.md §3.2: proof.payload_hash ≡
+    // Per spec encoding.md §3.2: proof.payload_digest ≡
     // canonical_hash(envelope_without_proofs_unsigned). Two acceptable
     // proof shapes coexist post-2026-05-08:
-    //   1. Direct: proof.payload_hash == canonical event payload hash.
+    //   1. Direct: proof.payload_digest == canonical event payload hash.
     //   2. Binding-object: proof signs a separate `binding_object`
-    //      (`{actor_id, created_at, domain, payload_hash, verification_method}`)
-    //      and proof.payload_hash is the hash of that binding payload. The
+    //      (`{actor_id, created_at, domain, payload_digest, verification_method}`)
+    //      and proof.payload_digest is the hash of that binding payload. The
     //      proof carries `domain` to signal the binding-object shape.
     //
     // Direct-shape proofs MUST match the canonical event hash exactly.
-    // Binding-object proofs are accepted as long as `payload_hash` is a
+    // Binding-object proofs are accepted as long as `payload_digest` is a
     // well-formed sha256 digest AND the JWS signature isn't a sentinel
     // "all-zero" marker (a tamper indicator used by negative fixtures).
     // Real JWS signature verification (Ed25519 signing-key check) happens
     // at proof-verify time and is out of scope for the envelope-shape
     // validator.
-    let computed_canonical = canonical_event_payload_hash(event)?;
+    let computed_canonical = canonical_event_payload_digest(event)?;
     let zero_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     for proof in event
         .get("proofs")
@@ -551,17 +551,17 @@ fn validate_event_envelope(
         .into_iter()
         .flatten()
     {
-        let proof_hash = proof.get("payload_hash").and_then(Value::as_str);
+        let proof_hash = proof.get("payload_digest").and_then(Value::as_str);
         let Some(proof_hash) = proof_hash else {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_hash missing",
+                "proof.payload_digest missing",
             ));
         };
         if !looks_like_sha256_digest(proof_hash) {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_hash must be sha256:<hex>",
+                "proof.payload_digest must be sha256:<hex>",
             ));
         }
         // Sentinel zero-hash always rejects — used by negative fixtures to
@@ -569,14 +569,14 @@ fn validate_event_envelope(
         if proof_hash == zero_digest {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_hash is the zero sentinel — tampered envelope",
+                "proof.payload_digest is the zero sentinel — tampered envelope",
             ));
         }
         let is_binding_object = proof.get("domain").is_some();
         if !is_binding_object && proof_hash != computed_canonical.as_str() {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_hash does not match canonical Event bytes without proofs",
+                "proof.payload_digest does not match canonical Event bytes without proofs",
             ));
         }
     }
@@ -703,7 +703,7 @@ pub(crate) fn canonical_event_payload(event: &Value) -> Result<String> {
     super::canonical_json(&event_without_proofs(event)?)
 }
 
-pub(crate) fn canonical_event_payload_hash(event: &Value) -> Result<String> {
+pub(crate) fn canonical_event_payload_digest(event: &Value) -> Result<String> {
     Ok(super::sha256_prefixed(
         canonical_event_payload(event)?.as_bytes(),
     ))
@@ -828,14 +828,14 @@ fn sample_envelope_event(
         }],
         "payload": content,
         // Synthetic placeholder proof — uses the binding-object shape
-        // (`domain` set), well-formed but non-sentinel `payload_hash`. The
+        // (`domain` set), well-formed but non-sentinel `payload_digest`. The
         // envelope-shape validator only checks shape; real Ed25519 verify
         // happens elsewhere.
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:alice.example#k1",
-            "payload_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "created_at": created_at,
             "domain": "contrix-event-v1",
             "jws": "eyJhbGciOiJFZERTQSJ9..synthetic_placeholder_signature_bytes"

@@ -35,7 +35,7 @@ Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) adds:
 - **Round R4 literal-scanner rules** — bad DID method segments,
   string-payload `cx.events.subscribe` usage, `cx.cross_signing.publish`
   without `expected_previous_generation`, and
-  `compute_audit_policy_version_hash` calls with fewer than 4 arguments.
+  `compute_audit_policy_version_digest` calls with fewer than 4 arguments.
 - **Drift-validator allowlists extended** for the new capability action
   `cx.morph.create`, the three new error codes
   (`delivery_binding_stale` / `_handed_over` / `historical_only`), the

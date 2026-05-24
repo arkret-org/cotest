@@ -63,7 +63,7 @@ type CryptoSigVector = {
     publicKeyJwk: { crv: string; x: string; kty: string };
   };
   canonical_event_payload: string;
-  payload_hash: string;
+  payload_digest: string;
   event_without_proofs: Record<string, unknown>;
 };
 
@@ -313,7 +313,7 @@ test.describe("conformance encoding vectors", () => {
     expect(resp1.status()).toBe(200);
     const result1 = await resp1.json();
     expect(result1.canonical_bytes).toBe(sigVector.canonical_event_payload);
-    expect(result1.digest).toBe(sigVector.payload_hash);
+    expect(result1.digest).toBe(sigVector.payload_digest);
     expect(result1.algorithm).toBe("ed25519");
     expect(typeof result1.signature).toBe("string");
     expect(typeof result1.public_key).toBe("string");

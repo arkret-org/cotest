@@ -161,7 +161,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // spec: service-surface.md §3.0 (claim levels), §17 (line-level interop required).
       //
       // For each entry in verified_profiles: claim_kind === "cotest_verified" AND
-      //   entry has non-empty cotest_run_id + artifact_hash + artifact_ref +
+      //   entry has non-empty cotest_run_id + artifact_digest + artifact_ref +
       //   cotest_issuer_did + signature + timestamp.
       // For each entry in claimed_profiles: claim_kind === "self_claimed" AND
       //   the same profile_id MUST NOT also appear in verified_profiles unless

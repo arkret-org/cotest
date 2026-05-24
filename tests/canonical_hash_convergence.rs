@@ -1,7 +1,7 @@
 //! T5.3 (Round 22, 2026-05-20) — canonical-JSON convergence vectors.
 //!
 //! Every Contrix service (coauth / soland / starid / yougen / floria) now
-//! routes canonical-JSON encoding and `payload_hash` computation through
+//! routes canonical-JSON encoding and `payload_digest` computation through
 //! the SDK's `contrix_core::canonical` module and the
 //! `contrix_signatures::EventProofBuilder` facade. This test pins a
 //! handful of fixture payloads representing the three shapes that
@@ -163,11 +163,11 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
             "EventProofBuilder.canonical_bytes drifted from canonical_json_bytes for {}",
             vector.label,
         );
-        let builder_hash = builder.payload_hash(&vector.payload).unwrap();
+        let builder_hash = builder.payload_digest(&vector.payload).unwrap();
         assert_eq!(
             builder_hash.as_str(),
             vector.expected_digest,
-            "EventProofBuilder.payload_hash drifted from pinned vector for {}",
+            "EventProofBuilder.payload_digest drifted from pinned vector for {}",
             vector.label,
         );
     }

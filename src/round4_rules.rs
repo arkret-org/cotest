@@ -23,7 +23,7 @@
 //!    requires it (round-4 7fae9ba).
 //!
 //! 4. **`AuditPolicyVersionHashFewerThanFourArguments`** — calls to
-//!    `compute_audit_policy_version_hash(...)` whose argument list has  ROUND4-ALLOW: docstring describes the rule, the `(...)` is a placeholder not a real call.
+//!    `compute_audit_policy_version_digest(...)` whose argument list has  ROUND4-ALLOW: docstring describes the rule, the `(...)` is a placeholder not a real call.
 //!    fewer than 4 arguments. Spec tightened the function signature to
 //!    `(realm_id, trust_domain, audit_disclosure, audit_assurance)`.
 
@@ -55,7 +55,7 @@ impl Round4Rule {
                 "cross_signing_publish_missing_expected_previous_generation"
             }
             Round4Rule::AuditPolicyVersionHashFewerThanFourArguments => {
-                "audit_policy_version_hash_fewer_than_four_arguments"
+                "audit_policy_version_digest_fewer_than_four_arguments"
             }
         }
     }
@@ -89,7 +89,7 @@ pub fn scan_round4(path: &Path, contents: &str, out: &mut Vec<Round4Finding>) {
         scan_legacy_did(path, line_idx, line, &mut new_findings);
         scan_events_subscribe_string_payload(path, line_idx, line, &mut new_findings);
         scan_cross_signing_publish_payload(path, line_idx, line, &mut new_findings);
-        scan_audit_policy_version_hash_call(path, line_idx, line, &mut new_findings);
+        scan_audit_policy_version_digest_call(path, line_idx, line, &mut new_findings);
     }
     // Suppress findings whose line — or any of the prior `LOOKBACK`
     // non-blank lines — contains the `ROUND4-ALLOW` marker. Walking back
@@ -359,15 +359,15 @@ fn scan_cross_signing_publish_payload(
     });
 }
 
-// ── Rule 4: compute_audit_policy_version_hash arity < 4 ─────────────────────
+// ── Rule 4: compute_audit_policy_version_digest arity < 4 ─────────────────────
 
-fn scan_audit_policy_version_hash_call(
+fn scan_audit_policy_version_digest_call(
     path: &Path,
     line_idx: usize,
     line: &str,
     out: &mut Vec<Round4Finding>,
 ) {
-    let token = "compute_audit_policy_version_hash";
+    let token = "compute_audit_policy_version_digest";
     let Some(col) = line.find(token) else { return };
     let rest = &line[col + token.len()..];
     // Find the opening `(` ignoring whitespace.
@@ -571,9 +571,9 @@ mod tests {
     }
 
     #[test]
-    fn flags_compute_audit_policy_version_hash_two_args() {
+    fn flags_compute_audit_policy_version_digest_two_args() {
         // ROUND4-ALLOW: scanner self-test asserts the rule fires on a pre-round-4 two-arg call.
-        let f = scan("compute_audit_policy_version_hash(disclosure, assurance)");
+        let f = scan("compute_audit_policy_version_digest(disclosure, assurance)");
         assert!(
             f.iter()
                 .any(|r| r.rule == Round4Rule::AuditPolicyVersionHashFewerThanFourArguments)
@@ -581,9 +581,9 @@ mod tests {
     }
 
     #[test]
-    fn does_not_flag_compute_audit_policy_version_hash_four_args() {
+    fn does_not_flag_compute_audit_policy_version_digest_four_args() {
         let f = scan(
-            "compute_audit_policy_version_hash(realm_id, trust_domain, disclosure, assurance)",
+            "compute_audit_policy_version_digest(realm_id, trust_domain, disclosure, assurance)",
         );
         assert!(
             !f.iter()
@@ -593,9 +593,9 @@ mod tests {
     }
 
     #[test]
-    fn handles_compute_audit_policy_version_hash_nested_args() {
+    fn handles_compute_audit_policy_version_digest_nested_args() {
         let f = scan(
-            "compute_audit_policy_version_hash(realm.id(), domain.clone(), disclosure, assurance)",
+            "compute_audit_policy_version_digest(realm.id(), domain.clone(), disclosure, assurance)",
         );
         assert!(
             !f.iter()

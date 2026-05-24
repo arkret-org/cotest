@@ -9,9 +9,9 @@
 ## Spec 锚点
 
 - `contrix-spec/spec/v1/zh/conformance/snapshot-schema.md`
-  - §2 — Snapshot manifest 字段集(snapshot_ref / realm_id / reducer_profile / frontier / event_set_commitment / state_hash / chunks[] / verification_hints / signature)
+  - §2 — Snapshot manifest 字段集(snapshot_ref / realm_id / reducer_profile / frontier / event_set_commitment / state_digest / chunks[] / verification_hints / signature)
   - §3 — Chunk descriptor 与 chunk payload canonical shape;`items` 按 `(kind, id)` byte order 排序
-  - §4 — `state_hash` = canonical reducer 输出之上的 Merkle root;leaf = `sha256(kind || ":" || id || ":" || sha256(canonical_json(object)))`
+  - §4 — `state_digest` = canonical reducer 输出之上的 Merkle root;leaf = `sha256(kind || ":" || id || ":" || sha256(canonical_json(object)))`
   - §5 — Snapshot signature 必须覆盖 manifest payload(去掉 `signature` 自身)的 canonical 编码;签名 DID 必须属于 Realm owner / admin / trusted issuer / witness quorum / policy-approved issuer
   - §6 — Event-set commitment 与 inclusion challenge 的能力边界(本 scenario 只断言 manifest digest 与 chunk hash,inclusion challenge 主流程在 `conformance/snapshot-inclusion-challenge` 单独覆盖)
 - `contrix-spec/spec/v1/zh/conformance/query-schema.md`
@@ -71,7 +71,7 @@
      "expected_manifest_digest": "sha256:...",
      "expected_chunk_count": 4,
      "expected_chunk_hashes": ["sha256:...", "sha256:...", "sha256:...", "sha256:..."],
-     "expected_state_hash": "sha256:..."
+     "expected_state_digest": "sha256:..."
    }
    ```
 2. `POST /api/v1/conformance/snapshot` with `{ vector_id, manifest, chunks }`
@@ -79,7 +79,7 @@
    - `response.manifest_digest === expected_manifest_digest`(`sha256:<lowercase_hex>`)
    - `response.chunk_hashes.length === expected_chunk_count`
    - `response.chunk_hashes` 与 `expected_chunk_hashes` 顺序一致、字节相等
-   - 若 vector 提供 `expected_state_hash`,断言 `response.state_hash === expected_state_hash`(覆盖 §4 reducer-output Merkle root)
+   - 若 vector 提供 `expected_state_digest`,断言 `response.state_digest === expected_state_digest`(覆盖 §4 reducer-output Merkle root)
 4. 故意篡改一条 chunk payload(改一个 byte)再 POST → 端点 MUST 返回 4xx 与 `error.code === "snapshot_chunk_digest_mismatch"`,不静默接受
 
 ### Phase B — Snapshot signature binding (snapshot-schema §5)
@@ -89,7 +89,7 @@
 7. 断言:
    - `response.signature_valid === true`
    - `response.signer_did === vector.expected_signer_did`(spec §5 列出的 5 类签名者之一:Realm owner / creator / admin / trusted snapshot issuer / witness quorum)
-   - 签名 transcript 覆盖范围(snapshot_ref / realm_id / reducer_profile / schema_profile_refs / state_hash / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
+   - 签名 transcript 覆盖范围(snapshot_ref / realm_id / reducer_profile / schema_profile_refs / state_digest / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
 8. 同一 manifest 再 POST 一次:`response.signature` 字段(若回显)对 Ed25519 vector MUST 完全相等(deterministic);ECDSA vector 若存在则 `r/s` 可不同但 `signature_valid` 仍为 true
 9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx 与 `error.code === "snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
 
@@ -166,7 +166,7 @@
 
 ## Observable assertions (合并清单)
 
-- Phase A:`manifest_digest` 字符串相等、`chunk_hashes` 顺序与字节相等、可选 `state_hash` 相等;篡改 chunk 后 4xx + `snapshot_chunk_digest_mismatch`
+- Phase A:`manifest_digest` 字符串相等、`chunk_hashes` 顺序与字节相等、可选 `state_digest` 相等;篡改 chunk 后 4xx + `snapshot_chunk_digest_mismatch`
 - Phase B:`signature_valid === true`、`signer_did` 在 §5 五类合法签名者之一、Ed25519 deterministic 再签结果稳定、revoked signer 4xx + `snapshot_issuer_revoked`
 - Phase C:filter / sort 后行顺序与 `expected_rows_page_*` 顺序相等;`has_more` 与 expected 相同;`next_cursor` 非空且 opaque;同一 cursor 重发结果 byte-equal
 - Phase D:unknown filter op / conflicting sort / unauthorized projection 一律 4xx + `query_schema_violation`,响应不含 `items`

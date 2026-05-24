@@ -39,7 +39,7 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   contains `.` / `-` / `_` / `:`; any `cx.events.subscribe` string-payload
   use (must be `EventsSubscribeFrame`); any `cx.cross_signing.publish`
   payload missing `expected_previous_generation`; any
-  `compute_audit_policy_version_hash` call with fewer than 4 arguments.
+  `compute_audit_policy_version_digest` call with fewer than 4 arguments.
 
 ### Added
 

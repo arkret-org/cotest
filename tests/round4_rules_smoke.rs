@@ -56,13 +56,13 @@ fn scan_tree_round4_flags_legacy_did_with_dot_in_method() {
 }
 
 #[test]
-fn scan_tree_round4_flags_compute_audit_policy_version_hash_two_args() {
+fn scan_tree_round4_flags_compute_audit_policy_version_digest_two_args() {
     let base = tmpdir("audit");
     let tree = base.join("downstream");
     // Construct the synthetic fixture text at runtime so the source line
     // of *this* test file doesn't itself contain a flag-able two-arg
-    // `compute_audit_policy_version_hash` call expression.
-    let fn_name = "compute_audit_policy_version_hash";
+    // `compute_audit_policy_version_digest` call expression.
+    let fn_name = "compute_audit_policy_version_digest";
     let fixture = format!("fn x() {{ {fn_name}(disclosure, assurance); }}");
     write(&tree.join("src").join("audit.rs"), &fixture);
     let findings = scan_tree_round4(&tree).expect("scan");
@@ -70,7 +70,7 @@ fn scan_tree_round4_flags_compute_audit_policy_version_hash_two_args() {
         findings
             .iter()
             .any(|f| f.rule == Round4Rule::AuditPolicyVersionHashFewerThanFourArguments),
-        "expected audit_policy_version_hash arity finding: {findings:?}",
+        "expected audit_policy_version_digest arity finding: {findings:?}",
     );
     let _ = fs::remove_dir_all(&base);
 }

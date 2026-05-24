@@ -265,7 +265,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             "security_class": "standard",
             "federation_policy": "open",
             "anchor_profile": "single_did",
-            "hash_profile": "sha256",
+            "digest_algorithm": "sha256",
             "anchorer": {
                 "type": "single_did",
                 "did": ctx.alice_did
@@ -314,7 +314,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "proofs": [{
             "type": "dev-proof",
             "verification_method": format!("{}#device", ctx.alice_did),
-            "payload_hash": format!("sha256:{}", sha256_canonical_json(&payload))
+            "payload_digest": format!("sha256:{}", sha256_canonical_json(&payload))
         }]
     })
 }

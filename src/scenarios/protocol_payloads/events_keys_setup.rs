@@ -90,7 +90,7 @@ fn signed_message_event(
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{actor_id}#cotest"),
-            "payload_hash": "",
+            "payload_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
         }],
@@ -110,7 +110,7 @@ fn canonical_event_digest(event: &Value) -> Result<String> {
 
 fn refresh_event_proof(event: &mut Value) -> Result<()> {
     let digest = canonical_event_digest(event)?;
-    event["proofs"][0]["payload_hash"] = Value::String(digest);
+    event["proofs"][0]["payload_digest"] = Value::String(digest);
     Ok(())
 }
 

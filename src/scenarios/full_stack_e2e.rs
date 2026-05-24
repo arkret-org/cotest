@@ -249,7 +249,7 @@ fn step_5_yougen_mock_send_message() -> Result<Value> {
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{BOB_DID}#yougen"),
-            "payload_hash":
+            "payload_digest":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "created_at": Utc::now().to_rfc3339(),
             "jws": "y0u.gen.mock"
@@ -585,7 +585,7 @@ async fn live_stack_probe() -> Result<()> {
                 "kind": "detached_jws",
                 "alg": "EdDSA",
                 "verification_method": format!("{ALICE_DID}#yougen"),
-                "payload_hash":
+                "payload_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": Utc::now().to_rfc3339(),
                 "jws": "a..b",
@@ -653,7 +653,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:principal.acme.example#key-1",
-            "payload_hash":
+            "payload_digest":
                 "sha256:00000000000000000000000000000000000000000000000000000000000000bb",
             "created_at": "2026-05-19T00:00:00Z",
             "audience": TARGET_SPACE_ID,

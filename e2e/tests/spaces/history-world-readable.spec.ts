@@ -176,7 +176,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       security_class: "standard",
       federation_policy: "restricted",
       anchor_profile: "single_did",
-      hash_profile: "sha256",
+      digest_algorithm: "sha256",
       anchorer: {
         type: "single_did",
         did: actorDid,
@@ -203,7 +203,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       {
         type: "dev-proof",
         verification_method: `${actorDid}#device`,
-        payload_hash: `sha256:${sha256CanonicalJson(payload)}`,
+        payload_digest: `sha256:${sha256CanonicalJson(payload)}`,
       },
     ],
   };

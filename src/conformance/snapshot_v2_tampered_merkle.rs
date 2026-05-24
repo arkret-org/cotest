@@ -8,11 +8,11 @@
 //! Spec authority:
 //!   * `contrix-spec/spec/v1/zh/conformance/snapshot-schema.md`
 //!     §3 (chunk descriptor.sha256 covers chunk payload canonical JSON
-//!     bytes), §4 (state_hash MUST be the canonical Merkle root over
+//!     bytes), §4 (state_digest MUST be the canonical Merkle root over
 //!     reducer output leaves), §5 (signature covers manifest payload),
 //!     §6 (event_set_commitment.root + merkle_branch inclusion proofs).
 //!
-//! The signed manifest pins state_hash, event_set_commitment.root, and
+//! The signed manifest pins state_digest, event_set_commitment.root, and
 //! each chunk.sha256 — recomputing a local Merkle branch from a mutated
 //! chunk does not recover the signed root, so the snapshot MUST be
 //! rejected. Spec note: snapshot-schema.md does not currently use the
@@ -159,16 +159,16 @@ pub fn run_snapshot_v2_tampered_merkle_suite() -> Result<()> {
                     );
                 }
                 let signed_state = vector
-                    .pointer("/manifest_signed_state_hash")
+                    .pointer("/manifest_signed_state_digest")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing manifest_signed_state_hash"))?;
+                    .ok_or_else(|| anyhow!("vector {name} missing manifest_signed_state_digest"))?;
                 let local_state = vector
-                    .pointer("/local_recomputed_state_hash")
+                    .pointer("/local_recomputed_state_digest")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing local_recomputed_state_hash"))?;
+                    .ok_or_else(|| anyhow!("vector {name} missing local_recomputed_state_digest"))?;
                 if signed_state == local_state {
                     bail!(
-                        "vector {name} dropped chunk MUST yield a different recomputed state_hash"
+                        "vector {name} dropped chunk MUST yield a different recomputed state_digest"
                     );
                 }
                 saw_chunk_count = true;

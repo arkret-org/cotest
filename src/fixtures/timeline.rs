@@ -90,7 +90,7 @@ impl TimelineEntry {
         let payload_digest = body
             .get("proofs")
             .and_then(|p| p.get(0))
-            .and_then(|p| p.get("payload_hash"))
+            .and_then(|p| p.get("payload_digest"))
             .and_then(Value::as_str)
             .unwrap_or("-")
             .to_owned();
@@ -254,7 +254,7 @@ pub fn install_failure_dump_hook() {
 mod tests {
     use super::*;
 
-    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/api/v1/events","headers":{},"body":{"event_id":"cx:event:01999999-0000-7000-8000-000000000001","kind":"cx.message.create","actor_id":"did:web:alice.example","space_id":"cx:space:abc","prev_refs":["cx:event:prev-1"],"proofs":[{"kind":"detached_jws","payload_hash":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"cx:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
+    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/api/v1/events","headers":{},"body":{"event_id":"cx:event:01999999-0000-7000-8000-000000000001","kind":"cx.message.create","actor_id":"did:web:alice.example","space_id":"cx:space:abc","prev_refs":["cx:event:prev-1"],"proofs":[{"kind":"detached_jws","payload_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"cx:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
     const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/api/v1/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
 
     #[test]

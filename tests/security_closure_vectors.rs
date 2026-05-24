@@ -60,7 +60,7 @@ fn fixture_carries_every_required_vector_id() {
 // ── Per-vector SUT runners (ignored until implementer wire support lands) ──
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.federation.idempotency_after_key_revoke.v1): implementer-side wire support pending (soland + teabay federation idempotency cache + Source-Trust-Domain / Destination-Trust-Domain / Request-Canonical-Hash signing transcript)"]
+#[ignore = "TODO(round4-vector-cx.vector.federation.idempotency_after_key_revoke.v1): implementer-side wire support pending (soland + teabay federation idempotency cache + Source-Trust-Domain / Destination-Trust-Domain / Request-Canonical-Digest signing transcript)"]
 fn vector_federation_idempotency_after_key_revoke() {
     assert_vector_present(VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE)
         .expect("fixture wire shape must parse even when SUT support is pending");
@@ -344,7 +344,7 @@ fn round4_c3_vector_loads_from_security_closure_fixture() {
 fn round4_c3_multi_server_in_memory_driver_round_trips() {
     // Non-ignored: runs entirely against the cotest in-memory simulated
     // federation receiver. Asserts cache-key composition includes
-    // `origin_key_state_hash`, the transcript fragment carries the three
+    // `origin_key_state_digest`, the transcript fragment carries the three
     // lowercase header names + values, post-rotation replay sets
     // `reason_code=historical_only`, and side-effects fire exactly once.
     run_round4_federation_historical_only()

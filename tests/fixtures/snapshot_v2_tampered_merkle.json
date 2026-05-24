@@ -1,7 +1,7 @@
 {
   "profile": "cx.profile.snapshot_v2_tampered_merkle_vectors.v1",
   "version": "2026-05-18",
-  "comment": "CT-3 — verifies that a server (or client) MUST reject a snapshot whose chunk content has been mutated, even when a local Merkle branch is recomputed to be self-consistent against the mutated chunk. Spec authority: contrix-spec/spec/v1/zh/conformance/snapshot-schema.md §3 (chunk descriptor.sha256 covers chunk payload canonical JSON bytes), §4 (state_hash MUST be the canonical Merkle root over reducer output leaves), §5 (signature covers manifest payload), §6 (event_set_commitment.root + merkle_branch inclusion proofs). The signed manifest pins state_hash, event_set_commitment.root and each chunk.sha256 — recomputing a local Merkle branch from a mutated chunk does not recover the signed root, so the snapshot MUST be rejected. Spec note: snapshot-schema.md does not currently use the field name 'audit_path'; the normative inclusion-proof field is `merkle_branch` (§6). The errcode is `digest_mismatch` per error-code-registry.json (canonical entry for content/digest verification failure).",
+  "comment": "CT-3 — verifies that a server (or client) MUST reject a snapshot whose chunk content has been mutated, even when a local Merkle branch is recomputed to be self-consistent against the mutated chunk. Spec authority: contrix-spec/spec/v1/zh/conformance/snapshot-schema.md §3 (chunk descriptor.sha256 covers chunk payload canonical JSON bytes), §4 (state_digest MUST be the canonical Merkle root over reducer output leaves), §5 (signature covers manifest payload), §6 (event_set_commitment.root + merkle_branch inclusion proofs). The signed manifest pins state_digest, event_set_commitment.root and each chunk.sha256 — recomputing a local Merkle branch from a mutated chunk does not recover the signed root, so the snapshot MUST be rejected. Spec note: snapshot-schema.md does not currently use the field name 'audit_path'; the normative inclusion-proof field is `merkle_branch` (§6). The errcode is `digest_mismatch` per error-code-registry.json (canonical entry for content/digest verification failure).",
   "encoder": {
     "verification_rule": "reject_if_local_recompute_does_not_match_signed_root",
     "errcode_field": "expected.errcode"
@@ -52,21 +52,21 @@
     },
     {
       "name": "chunk_count_mismatch",
-      "description": "Drop the last chunk from the snapshot's chunks[] array but keep the manifest's declared chunk count (e.g. event_set_commitment.covered_event_count or implied length from the signed manifest). The snapshot MUST be rejected. Per §4 (state_hash leaves are 1-to-1 with chunks[i].items[].object) and §5 (signature covers manifest payload), dropping a chunk falsifies state_hash recomputation and breaks the signed manifest's chunk coverage commitment.",
+      "description": "Drop the last chunk from the snapshot's chunks[] array but keep the manifest's declared chunk count (e.g. event_set_commitment.covered_event_count or implied length from the signed manifest). The snapshot MUST be rejected. Per §4 (state_digest leaves are 1-to-1 with chunks[i].items[].object) and §5 (signature covers manifest payload), dropping a chunk falsifies state_digest recomputation and breaks the signed manifest's chunk coverage commitment.",
       "snapshot_ref": "cx:snapshot:0196419a-8000-7000-8000-000000000000",
       "tamper": {
         "kind": "drop_last_chunk",
         "chunks_present": 2,
         "manifest_signed_chunk_count": 3
       },
-      "manifest_signed_state_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "manifest_signed_state_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "manifest_signed_event_set_commitment_root": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "local_recomputed_state_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "local_recomputed_state_digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "expected": {
         "outcome": "reject",
         "errcode": "digest_mismatch",
-        "errcode_scope": "state_hash_or_event_set_commitment_root",
-        "rationale": "Dropping a chunk reduces the leaf set used to recompute state_hash; the recomputed root cannot equal the signed state_hash. Even if the manifest tried to elide the count, the event_set_commitment.root would also fail recomputation."
+        "errcode_scope": "state_digest_or_event_set_commitment_root",
+        "rationale": "Dropping a chunk reduces the leaf set used to recompute state_digest; the recomputed root cannot equal the signed state_digest. Even if the manifest tried to elide the count, the event_set_commitment.root would also fail recomputation."
       }
     }
   ]

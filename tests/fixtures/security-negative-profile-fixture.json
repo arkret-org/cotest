@@ -24,7 +24,7 @@
           "proofs": [
             {
               "verification_method": "did:web:alice.example#device",
-              "payload_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
               "jws": "eyJhbGciOiJFZERTQSJ9..bad"
             }
           ]
