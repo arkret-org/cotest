@@ -30,7 +30,8 @@
         "repo_submit_read_expand_idempotency_and_cas_edges",
         "event_envelope_fixture_suite_matches_reference_semantics",
         "encoding_fixture_suite_matches_reference_semantics",
-        "privacy_security_fixture_suite_matches_reference_semantics"
+        "privacy_security_fixture_suite_matches_reference_semantics",
+        "push_rule_core_consistency_vectors_match_all_implementations"
       ],
       "excluded_quarantine_labels": [
         "flaky"
@@ -78,6 +79,7 @@
         "discovery_profile_fixture_suite_matches_reference_semantics",
         "sync_fixture_suite_matches_reference_semantics",
         "privacy_security_fixture_suite_matches_reference_semantics",
+        "push_rule_core_consistency_vectors_match_all_implementations",
         "yougen_client_profile_manifest_suite_matches_reference_semantics",
         "coauth_account_lifecycle_fixture_suite_matches_reference_semantics",
         "live_describe_profile_gate_suite_matches_reference_semantics",
