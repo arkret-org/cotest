@@ -45,6 +45,7 @@ pub fn run_artifact_registry_suite() -> Result<()> {
     validate_profile_requirements(
         &root,
         &conformance_profiles,
+        &profiles,
         &core_profiles,
         &event_kinds,
         &operation_ids,
@@ -713,6 +714,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
 fn validate_profile_requirements(
     root: &std::path::Path,
     registry: &Value,
+    profiles: &BTreeSet<String>,
     core_profiles: &BTreeSet<String>,
     event_kinds: &BTreeSet<String>,
     operation_ids: &BTreeSet<String>,
@@ -793,7 +795,7 @@ fn validate_profile_requirements(
         }
 
         for inherited in string_array_field(requirement, "inherits")? {
-            if !core_profiles.contains(inherited) {
+            if !profiles.contains(inherited) {
                 bail!("{profile} inherits unknown profile {inherited}");
             }
         }
@@ -826,7 +828,7 @@ fn validate_profile_requirements(
             }
         }
         for extension in string_array_field(requirement, "optional_extensions")? {
-            if extension.starts_with("cx.profile.") && !core_profiles.contains(extension) {
+            if extension.starts_with("cx.profile.") && !profiles.contains(extension) {
                 bail!("{profile} references unknown optional profile {extension}");
             }
         }

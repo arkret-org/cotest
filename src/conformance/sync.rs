@@ -10,7 +10,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     let value = load_fixture_value("sync-fixture.json")?;
     validate_profile(&value, "cx.profile.sync_vectors.v1")?;
     validate_collection_projection(&value)?;
-    validate_room_timeline(&value)?;
+    validate_flow_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;
     validate_e2ee_pending(&value)?;
     Ok(())
@@ -57,23 +57,23 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_room_timeline(value: &Value) -> Result<()> {
-    let timeline = required_field(value, "room_timeline")?;
+fn validate_flow_discussion_timeline(value: &Value) -> Result<()> {
+    let timeline = required_field(value, "flow_discussion_timeline")?;
     if !value_field_str(timeline, "flow_id")?.starts_with("cx:flow:") {
-        bail!("sync artifact room timeline flow id was invalid");
+        bail!("sync artifact flow discussion timeline flow id was invalid");
     }
     if !value_field_str(timeline, "next_cursor")?.starts_with("cx:cursor:") {
-        bail!("sync artifact room timeline cursor was invalid");
+        bail!("sync artifact flow discussion timeline cursor was invalid");
     }
     for entry in value_array(
         required_field(timeline, "entries")?,
-        "room_timeline.entries",
+        "flow_discussion_timeline.entries",
     )? {
         if !value_field_str(entry, "event_id")?.starts_with("cx:event:") {
-            bail!("sync artifact room timeline event id was invalid");
+            bail!("sync artifact flow discussion timeline event id was invalid");
         }
         if !value_field_str(entry, "message_id")?.starts_with("cx:message:") {
-            bail!("sync artifact room timeline message id was invalid");
+            bail!("sync artifact flow discussion timeline message id was invalid");
         }
     }
     Ok(())

@@ -101,11 +101,11 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
             }
             "cas_register_conflict_returns_bottom" => {
                 let lat = vector
-                    .pointer("/lattice/type")
+                    .pointer("/cell_lattice/lattice")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing lattice.type"))?;
+                    .ok_or_else(|| anyhow!("vector {name} missing cell_lattice.lattice"))?;
                 if lat != "cas_register" {
-                    bail!("vector {name} lattice.type must be cas-register");
+                    bail!("vector {name} cell_lattice.lattice must be cas_register");
                 }
                 let bot_status = vector
                     .pointer("/expected/query/status")
@@ -165,19 +165,19 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     &json!({"verify_move": verify}),
                 );
             }
-            "anchorer_cell_bottom_pauses_space_until_recovery" => {
-                let space_state = vector
-                    .pointer("/expected/space_state")
+            "anchorer_cell_bottom_pauses_realm_until_recovery" => {
+                let realm_state = vector
+                    .pointer("/expected/realm_state")
                     .and_then(Value::as_str);
-                if space_state != Some("anchorer_paused") {
-                    bail!("vector {name} expected.space_state must be 'anchorer_paused'");
+                if realm_state != Some("anchorer_paused") {
+                    bail!("vector {name} expected.realm_state must be 'anchorer_paused'");
                 }
                 seen_anchorer_recovery = true;
                 record_vector_event(
-                    "state_resolution.anchorer_cell_bottom_pauses_space_until_recovery",
+                    "state_resolution.anchorer_cell_bottom_pauses_realm_until_recovery",
                     &json!({"vector": vector.clone()}),
-                    &json!({"space_state": "anchorer_paused"}),
-                    &json!({"space_state": space_state}),
+                    &json!({"realm_state": "anchorer_paused"}),
+                    &json!({"realm_state": realm_state}),
                 );
             }
             "signed_compaction_anchor_equals_effective_view" => {

@@ -120,8 +120,8 @@ fn validate_crypto_signature_event_vector(
     if canonical_binding != required_str(vector, "canonical_binding_payload")? {
         bail!("crypto vector {name} canonical binding payload drifted");
     }
-    if sha256_prefixed(canonical_binding.as_bytes()) != required_str(vector, "binding_hash")? {
-        bail!("crypto vector {name} binding hash drifted");
+    if sha256_prefixed(canonical_binding.as_bytes()) != required_str(vector, "binding_digest")? {
+        bail!("crypto vector {name} binding digest drifted");
     }
 
     let event_with_proof = required_field(vector, "event_with_proof")?;
@@ -159,17 +159,19 @@ fn validate_event_envelope_negative_case(
             .get("event_id")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("negative vector {name} incoming_event missing event_id"))?;
-        let stored_hash = stored
-            .get("canonical_hash")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("negative vector {name} stored_event missing canonical_hash"))?;
-        let incoming_hash = incoming
-            .get("canonical_hash")
+        let stored_digest = stored
+            .get("canonical_digest")
             .and_then(Value::as_str)
             .ok_or_else(|| {
-                anyhow!("negative vector {name} incoming_event missing canonical_hash")
+                anyhow!("negative vector {name} stored_event missing canonical_digest")
             })?;
-        let decision = if stored_id == incoming_id && stored_hash != incoming_hash {
+        let incoming_digest = incoming
+            .get("canonical_digest")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!("negative vector {name} incoming_event missing canonical_digest")
+            })?;
+        let decision = if stored_id == incoming_id && stored_digest != incoming_digest {
             EventEnvelopeDecision::quarantine(
                 "duplicate_conflict",
                 "same event_id different canonical bytes",
@@ -223,7 +225,10 @@ fn validate_synthetic_event_envelope_negatives(
         "2026-05-02T00:00:00Z",
         json!({
             "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
-            "body": "hello",
+            "content": {
+                "kind": "cx.content.text",
+                "body": "hello"
+            },
             "noncritical_future_field": {"preserve": true}
         }),
     );
@@ -245,14 +250,26 @@ fn validate_synthetic_event_envelope_negatives(
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
-        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "a"}),
+        json!({
+            "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
+            "content": {
+                "kind": "cx.content.text",
+                "body": "a"
+            }
+        }),
     );
     let duplicate_b = sample_envelope_event(
         "cx.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
-        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "b"}),
+        json!({
+            "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
+            "content": {
+                "kind": "cx.content.text",
+                "body": "b"
+            }
+        }),
     );
     if value_field_str(&duplicate_a, "event_id")? != value_field_str(&duplicate_b, "event_id")? {
         bail!("synthetic duplicate fixture did not use the same event_id");
@@ -268,7 +285,13 @@ fn validate_synthetic_event_envelope_negatives(
         3,
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00Z",
-        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "future"}),
+        json!({
+            "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
+            "content": {
+                "kind": "cx.content.text",
+                "body": "future"
+            }
+        }),
     );
     let future_decision = validate_event_envelope(&future, event_kinds, &future_context)?;
     assert_event_decision(
@@ -288,7 +311,13 @@ fn validate_synthetic_event_envelope_negatives(
         4,
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02Z",
-        json!({"flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000", "body": "backdated"}),
+        json!({
+            "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
+            "content": {
+                "kind": "cx.content.text",
+                "body": "backdated"
+            }
+        }),
     );
     let backdated_decision = validate_event_envelope(&backdated, event_kinds, &revoked_context)?;
     assert_event_decision(
