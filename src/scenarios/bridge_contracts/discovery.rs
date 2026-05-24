@@ -21,7 +21,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     assert_eq!(integration["service_kind"], "principal_server");
     assert_eq!(
         integration["dependencies"][0]["required_contract"],
-        "contrix.rest.auth_bridge.v1"
+        "oauth2.token_introspection.rfc7662"
     );
     assert_eq!(
         integration["surfaces"][0]["path"],
@@ -39,7 +39,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     }));
     assert_eq!(
         integration["examples"]["compose_flow"]["step_2"]["path"],
-        "/api/v1/auth/session-grant/exchange"
+        "protected route"
     );
     assert_eq!(
         integration["examples"]["compose_flow"]["step_3"]["path"],
