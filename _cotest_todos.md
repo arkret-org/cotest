@@ -16,16 +16,16 @@
 ## Phase 4 tasks
 
 ### Local gate wiring (highest priority — no remote CI in this plan)
-- [ ] §1 Add/verify local runner entries for:
+- [x] §1 Add/verify local runner entries for:
   - `fast-smoke` profile for quick local feedback (~17 tests, against soland only).
   - `release-gate` profile for local milestone decisions (compose/process mode, all required services).
   - `full-nightly` profile as a local scheduled command recipe, not a remote cron.
 - [ ] §2 Add a matrix job for **dual-soland federation**: spin up two soland instances on different ports, run federation scenarios.
-- [ ] §3 Wire `coverage-profiles.json` enforcement: fail CI if any journey drops below its baseline.
+- [x] §3 Wire `coverage-profiles.json` enforcement: fail local gate if any journey drops below its baseline.
 
 ### Joint yougen ↔ live soland integration (per `_test_todos_claude.md` Phase 6)
 - [ ] §4 Promote `run-joint-e2e.ps1` from manual-only to a local `run-cotest.ps1` profile that starts soland+coauth, builds yougen, then runs Playwright.
-- [ ] §5 Replace mock-only `tests/yougen_mock_parity.rs` references with assertions that the live yougen build also passes the same scenarios.
+- [x] §5 Replace mock-only `tests/yougen_mock_parity.rs` references with assertions that the live yougen build also passes the same scenarios.
 
 ### Journey burn-down (target ≥ 70% on each per master plan Q6)
 Order by user-impact and current coverage:
@@ -46,7 +46,7 @@ Order by user-impact and current coverage:
 - [ ] §18 The 17 scenarios marked `#[ignore = "TODO(round23-T**)"]` — unignore as upstream servers land features.
 
 ### Mock-parity discipline
-- [ ] §19 Keep `mock-parity-allowlist.json` empty. Enforce in CI: any addition requires a referenced issue.
+- [x] §19 Keep `mock-parity-allowlist.json` empty. Enforce in the local release gate: any addition requires a referenced issue.
 
 ### Engineering hygiene
 - [ ] §20 Add `cargo deny check` to CI.
@@ -54,9 +54,16 @@ Order by user-impact and current coverage:
 - [ ] §22 Add `cargo audit`.
 
 ### Docs
-- [ ] §23 Update `docs/test-strategy.md` with the new CI matrix.
-- [ ] §24 Generate a local `coverage-dashboard.md` from `journey-coverage.json`; do not publish it publicly.
-- [ ] §25 Document the cotest release-gate as a hard requirement in `_todos_all.md` §4 (already done — verify the cross-link).
+- [x] §23 Update `docs/test-strategy.md` with the new local runner/profile matrix.
+- [x] §24 Generate a local `coverage-dashboard.md` from `journey-coverage.json`; do not publish it publicly.
+- [x] §25 Document the cotest release-gate as a hard requirement in `_todos_all.md` §4 (verified cross-link).
+
+## Local milestone notes
+
+- 2026-05-25: protocol-only local `release-gate` passed against soland with
+  28 passed / 0 failed. Evidence:
+  `docs/release-evidence-0.9.0.md` and
+  `artifacts/runs/20260525-055932/summary.md`.
 
 ## Exit gate (phase 4)
 

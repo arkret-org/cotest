@@ -94,6 +94,8 @@ Recommended scripted entrypoints:
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime process
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-cotest.ps1 -Runtime process -Profile release-gate
+.\scripts\run-cotest.ps1 -Runtime process -Profile full-nightly
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage
 ```
 
@@ -105,11 +107,19 @@ the primary result view for a completed run.
 artifacts.
 
 CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
-small PR feedback set, while `full-nightly` runs all tests. Coverage is grouped
-by conformance profiles such as `cx.profile.core_event_store.v1`,
-`cx.profile.chat_mvp.v1`, and `cx.profile.principal_server_events_api.v1`. The
-runner emits `ci-profile.*`, `coverage-gate.*`, and `secret-scan.*` artifacts
-and can fail on coverage regressions with `-FailOnCoverageRegression`.
+small local feedback set, `release-gate` is the local milestone gate, and
+`full-nightly` runs all tests. Coverage is grouped by conformance profiles such
+as `cx.profile.core_event_store.v1`, `cx.profile.chat_mvp.v1`, and
+`cx.profile.principal_server_events_api.v1`. The runner emits `ci-profile.*`,
+`coverage-gate.*`, `release-gate.*`, `spec-sync-gate.*`, and
+`secret-scan.*` artifacts and can fail on coverage regressions with
+`-FailOnCoverageRegression`.
+
+The latest recorded local protocol release gate is
+`artifacts/runs/20260525-055932`: 28 passed, 0 failed, coverage gate passed,
+secret scan passed, and `mock-parity-allowlist.json` remained empty. The
+human-readable evidence is tracked in `docs/release-evidence-0.9.0.md`; the
+journey coverage dashboard is tracked in `docs/coverage-dashboard.md`.
 
 ## Joint UI E2E
 
