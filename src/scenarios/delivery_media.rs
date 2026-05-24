@@ -37,7 +37,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "device_id": "dev_other",
-                "one_time_keys": {},
+                "one_time_keys": [],
                 "fallback_keys": {},
                 "device_signature": {"alg": "EdDSA", "signature": "wrong-device"}
             })),
@@ -53,7 +53,11 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "device_id": "dev_alice",
-                "one_time_keys": {"signed_curve25519:otk1": {"key_id": "otk1", "key": "single-use"}},
+                "one_time_keys": [{
+                    "algorithm": "signed_curve25519",
+                    "key_id": "otk1",
+                    "key": "single-use"
+                }],
                 "fallback_keys": {},
                 "device_signature": {"alg": "EdDSA", "signature": "alice-device"}
             })),
@@ -324,7 +328,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "bad_request",
     )
     .await?;
     expect_api_error(
