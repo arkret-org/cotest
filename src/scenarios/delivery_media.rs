@@ -1,12 +1,17 @@
 use anyhow::Result;
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::harness::{
-    ContrixServer, dev_login, encrypted_envelope, expect_api_error,
+    ContrixServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
     register_account,
 };
+
+const BLOB_REALM_ID: &str = "cx:realm:0196419b-0000-7000-8000-00000000d101";
+const BLOB_REALM_CREATE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-00000000d100";
+const BLOB_REALM_MEMBER_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-00000000d102";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = ContrixServer::spawn("delivery-keys").await?;
@@ -129,7 +134,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "bad_request",
     )
     .await?;
 
@@ -196,7 +201,10 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let drained = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/device_messages"))
+            .get(server.url(&format!(
+                "/api/v1/device_messages?from={}",
+                delivered["next_cursor"].as_str().unwrap()
+            )))
             .bearer_auth(&token),
         StatusCode::OK,
     )
@@ -217,8 +225,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let carol = server
         .register_client("did:web:carol-blob.example", "@carol-blob", "dev_carol")
         .await?;
-    let space_id = alice.create_space("Blob Access Space").await?;
-    alice.add_member(&space_id, &bob).await?;
+    let space_id = create_blob_access_realm(&alice, &bob).await?;
 
     expect_api_error(
         server
@@ -240,7 +247,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             )
             .body("blob-bytes"),
         StatusCode::CONFLICT,
-        "hash_mismatch",
+        "digest_mismatch",
     )
     .await?;
 
@@ -308,6 +315,165 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     .await?;
 
     Ok(())
+}
+
+async fn create_blob_access_realm(
+    alice: &TestActorClient,
+    bob: &TestActorClient,
+) -> Result<String> {
+    let realm_create = signed_realm_create_event(
+        BLOB_REALM_CREATE_EVENT_ID,
+        1,
+        BLOB_REALM_ID,
+        &alice.actor,
+        "Blob Access Space",
+        alice.service_did(),
+    )?;
+    let create = expect_json(
+        alice.post("/api/v1/events").json(&realm_create),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(create["status"], "accepted");
+
+    let bob_member = signed_membership_event(
+        BLOB_REALM_MEMBER_EVENT_ID,
+        2,
+        BLOB_REALM_ID,
+        &alice.actor,
+        &bob.actor,
+        "join",
+    )?;
+    let member = expect_json(
+        alice.post("/api/v1/events").json(&bob_member),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(member["status"], "accepted");
+
+    Ok(BLOB_REALM_ID.to_owned())
+}
+
+fn signed_realm_create_event(
+    event_id: &str,
+    actor_seq: u64,
+    realm_id: &str,
+    actor_id: &str,
+    title: &str,
+    service_did: &str,
+) -> Result<Value> {
+    let payload = json!({
+        "object": {
+            "id": realm_id,
+            "schema": "cx.schema.realm.v1",
+            "title": title,
+            "summary": title,
+            "trust_domain": "cx:trust_domain:delivery-media.cotest.local",
+            "created_by_principal": actor_id,
+            "schema_refs": ["cx.schema.realm.v1"],
+            "default_discoverability": "public",
+            "default_join_rule": "public",
+            "history_visibility": "world_readable",
+            "encryption_profile": "none",
+            "security_class": "standard",
+            "federation_policy": "open",
+            "anchor_profile": "single_did",
+            "digest_algorithm": "sha256",
+            "plaintext_visible_services": [service_did],
+            "anchorer": {
+                "type": "single_did",
+                "did": actor_id,
+                "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
+                "controller_organization": "did:web:delivery-media.cotest.local",
+                "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
+            },
+            "created_at": "2026-05-02T00:00:00Z"
+        }
+    });
+    signed_event(
+        event_id,
+        actor_seq,
+        realm_id,
+        actor_id,
+        "cx.realm.create",
+        payload,
+    )
+}
+
+fn signed_membership_event(
+    event_id: &str,
+    actor_seq: u64,
+    realm_id: &str,
+    actor_id: &str,
+    member_actor: &str,
+    membership: &str,
+) -> Result<Value> {
+    let payload = json!({
+        "actor_id": member_actor,
+        "membership": membership,
+        "delivery_status": "unroutable"
+    });
+    signed_event(
+        event_id,
+        actor_seq,
+        realm_id,
+        actor_id,
+        "cx.member.state",
+        payload,
+    )
+}
+
+fn signed_event(
+    event_id: &str,
+    actor_seq: u64,
+    realm_id: &str,
+    actor_id: &str,
+    kind: &str,
+    payload: Value,
+) -> Result<Value> {
+    let mut event = json!({
+        "event_id": event_id,
+        "kind": kind,
+        "schema_id": "cx.schema.event.v1",
+        "actor_id": actor_id,
+        "actor_seq": actor_seq,
+        "realm_id": realm_id,
+        "created_at": "2026-05-02T00:00:00Z",
+        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
+        "prev_refs": [],
+        "refs": [],
+        "payload": payload,
+        "proofs": [{
+            "kind": "detached_jws",
+            "alg": "EdDSA",
+            "verification_method": format!("{actor_id}#cotest"),
+            "payload_digest": "",
+            "created_at": "2026-05-02T00:00:00Z",
+            "jws": "a..b",
+        }],
+    });
+    refresh_event_proof(&mut event)?;
+    Ok(event)
+}
+
+fn canonical_event_digest(event: &Value) -> Result<String> {
+    let mut canonical = event.clone();
+    if let Value::Object(object) = &mut canonical {
+        object.remove("proofs");
+        object.remove("unsigned");
+    }
+    sha256_json(&canonical)
+}
+
+fn refresh_event_proof(event: &mut Value) -> Result<()> {
+    let digest = canonical_event_digest(event)?;
+    event["proofs"][0]["payload_digest"] = Value::String(digest);
+    Ok(())
+}
+
+fn sha256_json(value: &Value) -> Result<String> {
+    let bytes = serde_json::to_vec(value)?;
+    Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
