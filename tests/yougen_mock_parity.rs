@@ -268,7 +268,10 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             "digest_algorithm": "sha256",
             "anchorer": {
                 "type": "single_did",
-                "did": ctx.alice_did
+                "did": ctx.alice_did,
+                "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
+                "controller_organization": "did:web:mock-parity.cotest.local",
+                "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
             },
             "created_at": "2026-05-22T10:00:00Z"
         }
