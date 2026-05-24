@@ -22,7 +22,8 @@
       "authz_policy",
       "moderation_reports",
       "device_and_keys",
-      "push"
+      "push",
+      "projection_lifecycle"
     ],
     "interop_bridge": [
       "applet",
