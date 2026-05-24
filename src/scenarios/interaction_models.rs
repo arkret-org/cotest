@@ -96,22 +96,32 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let marker = expect_json(
         dave.post("/api/v1/read-cursors").json(&json!({
             "realm_id": space_id,
-            "event_id": sent["event_id"],
-            "scope_id": "cx:thread:interaction"
+            "read_scope": {
+                "kind": "thread",
+                "ref": "cx:thread:interaction"
+            },
+            "position": {
+                "event_id": sent["event_id"],
+                "hlc": "019041000000-0001-1dae0001"
+            }
         })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(marker["event_id"], sent["event_id"]);
-    assert_eq!(marker["scope_id"], "cx:thread:interaction");
+    assert_eq!(marker["position"]["event_id"], sent["event_id"]);
+    assert_eq!(marker["read_scope"]["kind"], "thread");
+    assert_eq!(marker["read_scope"]["ref"], "cx:thread:interaction");
 
     let markers = expect_json(
-        dave.get(&format!("/api/v1/read-cursors?space_id={space_id}")),
+        dave.get(&format!("/api/v1/read-cursors?realm_id={space_id}")),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(markers["markers"].as_array().unwrap().len(), 1);
-    assert_eq!(markers["markers"][0]["event_id"], sent["event_id"]);
+    assert_eq!(
+        markers["markers"][0]["position"]["event_id"],
+        sent["event_id"]
+    );
 
     let revised = alice
         .submit_event(

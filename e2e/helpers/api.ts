@@ -33,11 +33,19 @@ export type ApiMessage = {
 };
 
 export type ReadMarker = {
-  space_id: string;
-  actor: string;
-  scope_id: string;
-  event_id: string;
-  read_at: string;
+  realm_id: string;
+  actor_id: string;
+  device_id: string;
+  read_scope: {
+    kind: string;
+    ref?: string;
+    track?: string;
+  };
+  position: {
+    event_id: string;
+    hlc: string;
+  };
+  updated_at: string;
 };
 
 export async function createSpaceViaApi(
@@ -251,7 +259,7 @@ export async function listReadMarkersViaApi(
   opts: { server?: SolandKey } = {},
 ): Promise<ReadMarker[]> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/read-cursors?space_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl(opts.server)}/api/v1/read-cursors?realm_id=${encodeURIComponent(spaceId)}`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);
