@@ -4,7 +4,7 @@
   "comment": "Conflict-repair Move vectors per spec authz/event-auth-state-resolution.md §5.7 (head_in precondition + recovery_capability). When a cas-register cell sits at Bottom (Conflict), a recovery-authorised Move with `head_in [head_a, head_b]` writes a NEW value that supersedes both heads. The lattice itself doesn't peek at payload semantics — at the lattice layer, the post-recovery view is a single anchored op, which resolves to Value. Self-authorising 'winner' payloads MUST NOT be unilaterally selected by the cas-register; authorisation is enforced at verify_move (above the lattice). Manual repair is a higher-authority operator action that takes a snapshot, picks one of the conflicting values, and writes a fresh signed Move that carries `repair_of [move_id_a, move_id_b]`.",
   "encoder": {
     "head_in_form": "head_in: [<MoveId of head_a>, <MoveId of head_b>]",
-    "repair_lattice": "cas-register",
+    "repair_lattice": "cas_register",
     "recovery_capability_form": "cap:<26-char ULID-style suffix>"
   },
   "vectors": [

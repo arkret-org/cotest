@@ -2,7 +2,7 @@
 
 ## 目标
 
-E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking 收据(`cx.moderation.frank`),证明"该 ciphertext 在某时间点存在 + 来自某 sender";audit agent 可以在用户明确 audit_disclosure_policy 下,通过 attested ceremony 解密 + 写入 `cx.audit.accessed`。
+E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking 收据(`cx.moderation.franking_proof`),证明"该 ciphertext 在某时间点存在 + 来自某 sender";audit agent 可以在用户明确 audit_disclosure_policy 下,通过 attested ceremony 解密 + 写入 `cx.audit.accessed`。
 
 ## Spec 锚点
 
@@ -37,8 +37,8 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 3. bob 发加密消息 `M1` 到 space `S_audit`
 4. soland Sync Service:
    - 接受 ciphertext + plaintext metadata
-   - 同时生成 `cx.moderation.frank`,payload `{ ciphertext_digest, sender_did, receiving_service_did, timestamp }`,服务端 service DID 签
-5. 断言:`GET /api/v1/audit/events?space_id=<S_audit>&kind=cx.moderation.frank` 返回该 franking 记录
+   - 同时生成 `cx.moderation.franking_proof`,payload `{ ciphertext_digest, sender_did, receiving_service_did, timestamp }`,服务端 service DID 签
+5. 断言:`GET /api/v1/audit/events?space_id=<S_audit>&kind=cx.moderation.franking_proof` 返回该 franking 记录
 6. 断言:franking record **不含** 明文消息内容,只含 ciphertext_digest
 
 ### Phase C — reporter 举报
@@ -71,7 +71,7 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.moderation.frank` 自动生成、`audit_disclosure_policy` 字段、`/audit/events` endpoint、`cx.audit.{accessed,rejected_access}` event kinds
+- **soland 缺口**:`cx.moderation.franking_proof` 自动生成、`audit_disclosure_policy` 字段、`/audit/events` endpoint、`cx.audit.{accessed,rejected_access}` event kinds
 - **harness 缺口**:audit-agent mock service(注册 DID + 接收 audit request callback + 模拟解密)
 - **yougen 缺口**:audit log viewer in space admin
 

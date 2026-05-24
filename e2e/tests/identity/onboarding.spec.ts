@@ -65,7 +65,7 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "principal control space is created (purpose=principal_control); first device registered via cx.device.authorized; cross-signing PSK/SSK/USK published",
+    "principal control space is created (purpose=principal_control); first device registered via cx.device.authorize; cross-signing PSK/SSK/USK published",
     async () => {
       // spec: key-management.md §5.0.1 (4-step bootstrap)
       // soland gap: cx.profile.principal_control_space.v1 profile; cx.cross_signing.publish.v1.

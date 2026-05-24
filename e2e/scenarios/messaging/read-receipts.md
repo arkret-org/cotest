@@ -79,9 +79,9 @@
 ### Phase G — Read marker 多设备同步(actor-private)
 
 33. alice 在 device-1 读到 `M30`(假设 disclosure 回到 optional)
-34. yougen 在 device-1 写 actor-private encrypted account data:`cx.read.marker = M30.event_id`
+34. yougen 在 device-1 写 actor-private encrypted account data:`cx.read_cursor.advance = M30.event_id`
 35. alice 在 device-2 拉 sync → 读 marker → 自动滚动到 `M30`
-36. 断言:device-2 timeline 上 `M30` 标"上次读到这里"(`last-read-marker` testid)
+36. 断言:device-2 timeline 上 `M30` 标"上次读到这里"(`last-read-cursor` testid)
 37. (read marker 不广播给 bob;它是 actor-private)
 
 ## Observable assertions(合并)
@@ -103,7 +103,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.receipt.read` ephemeral 路由、policy enforcement(`required` 强制 / `disabled` reject)、`cx.read.marker` actor-private account data — 实现度未知
+- **soland 缺口**:`cx.receipt.read` ephemeral 路由、policy enforcement(`required` 强制 / `disabled` reject)、`cx.read_cursor.advance` actor-private account data — 实现度未知
 - **yougen 缺口**:`/settings/privacy` 的 send-read-receipts toggle、space disclosure policy 编辑入口、receipt 头像渲染(`read-receipt-<actor>` testid)— 这些当前可能不全
 - **测试侧**:用 `Promise.race` 等 receipt 出现 vs 超时 5s 来断言"不出现"
 

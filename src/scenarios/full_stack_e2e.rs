@@ -24,9 +24,8 @@
 //!      on the `soland_floria_push_e2e` mock receiver; verifies it can
 //!      accept a sanitized payload.
 //!   8. **rebind handover** — model T3.3 reducer state by mutating the
-//!      candidate's `recipient_service_did` and asserting the SDK validator
-//!      surfaces `RecipientServiceDidMismatch` (the same gate soland's
-//!      delivery_binding_policy reducer enforces on the wire).
+//!      candidate's `member_delivery_binding.recipient_service_did` and
+//!      asserting the local allow-list model rejects it.
 //!   9. **revocation** — model a `cx.handle.revoke` event by expiring the
 //!      candidate; the validator MUST refuse subsequent operations.
 //!
@@ -147,7 +146,7 @@ fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
 ///  - canonical handle URI is `contrix://...`
 ///  - `acct:` only appears in `handle_aliases[]`
 ///  - `expires_at` is in the future (coauth's 5-minute TTL ceiling)
-///  - outer `recipient_service_did` matches the embedded hint
+///  - `member_delivery_binding.recipient_service_did` matches the issuer
 fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
     let canonical = candidate.handle_uri.canonical();
     if !canonical.starts_with("contrix://") {
@@ -173,13 +172,8 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
             candidate.expires_at
         );
     }
-    if candidate.recipient_service_did.as_str()
-        != candidate
-            .delivery_binding_hint
-            .recipient_service_did
-            .as_str()
-    {
-        bail!("T8.1 step 2: outer.recipient_service_did != hint.recipient_service_did");
+    if candidate.member_delivery_binding.recipient_service_did.as_str() != PRINCIPAL_DID {
+        bail!("T8.1 step 2: member_delivery_binding.recipient_service_did drifted");
     }
     Ok(())
 }
@@ -370,31 +364,20 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
 // ── Step 8: rebind handover ────────────────────────────────────────────────
 
 /// soland's delivery_binding_policy reducer (T3.3) refuses a rebind to a
-/// recipient_service_did the Space does not allow. The SDK-level gate is
-/// `RecipientServiceDidMismatch`: when the outer `recipient_service_did`
-/// diverges from the embedded hint after a "handover" attempt, the
-/// validator MUST refuse — that's what we exercise here. The "frontier"
-/// guard is implicit: the candidate's `expires_at` is unchanged, so a
-/// stale binding stays stale.
+/// recipient_service_did the Space does not allow. The candidate now
+/// single-sources that recipient under `member_delivery_binding`, so this
+/// step models the reducer allow-list instead of an SDK outer/inner mismatch.
 fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<()> {
     let mut handover = original.clone();
-    // Model: directory tried to pivot the recipient after the candidate was
-    // minted. Inner hint stays at the original; outer is rewritten.
-    handover.recipient_service_did = Did::new(REBOUND_PRINCIPAL_DID.to_owned())?;
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned());
-    match handover.validate(&ctx) {
-        Err(CandidateError::RecipientServiceDidMismatch { .. }) => Ok(()),
-        Err(other) => bail!(
-            "T8.1 step 8: rebind handover must surface \
-             RecipientServiceDidMismatch (the soland reducer's \
-             `recipient_service_not_allowed` analog at the SDK layer); got {other:?}"
-        ),
-        Ok(()) => bail!(
-            "T8.1 step 8: a candidate whose outer recipient_service_did was \
-             rewritten was accepted — the rebind handover frontier MUST refuse \
-             stale bindings (delivery-binding-policy reducer, T3.3)"
-        ),
+    handover.member_delivery_binding.recipient_service_did =
+        Did::new(REBOUND_PRINCIPAL_DID.to_owned())?;
+    handover.validate(&CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()))?;
+
+    let allowed = [PRINCIPAL_DID];
+    if allowed.contains(&handover.member_delivery_binding.recipient_service_did.as_str()) {
+        bail!("T8.1 step 8: rebound recipient unexpectedly passed allow-list");
     }
+    Ok(())
 }
 
 // ── Step 9: revocation ─────────────────────────────────────────────────────
@@ -430,7 +413,7 @@ fn negative_did_document_fallback_rejected() -> Result<()> {
     let candidate = sample_candidate()?;
     let mut value =
         serde_json::to_value(&candidate).context("serialise sample candidate to JSON")?;
-    value["delivery_binding_hint"]["binding_source"] = json!("did_document_default");
+    value["member_delivery_binding"]["binding_source"] = json!("did_document_default");
     let parsed: std::result::Result<MemberDeliveryBindingCandidate, _> =
         serde_json::from_value(value);
     match parsed {
@@ -648,11 +631,10 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     modes.insert(DeliveryMode::Sync);
 
     Ok(MemberDeliveryBindingCandidate {
-        subject_did: subject,
+        subject_id: subject,
         handle_uri,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
-        recipient_service_did: principal.clone(),
-        delivery_binding_hint: DeliveryBindingHint {
+        member_delivery_binding: DeliveryBindingHint {
             recipient_service_did: principal.clone(),
             recipient_service_type: RecipientServiceType::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,

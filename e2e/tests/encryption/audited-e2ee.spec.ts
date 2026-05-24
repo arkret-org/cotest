@@ -31,7 +31,7 @@ test.describe("audited E2EE", () => {
     // @blocking-on: soland#encryption-audited-e2ee-gap
     // @user-promise: e2e/scenarios/encryption/audited-e2ee.md
     // @expected-live-by: 2026Q3
-    "alice configures audit_disclosure_policy on E2EE space; cx.moderation.frank generated for each encrypted message (ciphertext_digest only, no plaintext)",
+    "alice configures audit_disclosure_policy on E2EE space; cx.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
     async () => {
       // spec: audited-e2ee.md §4, encryption-and-audit.md §3
     },
@@ -62,7 +62,7 @@ test.describe("audited E2EE", () => {
     // @blocking-on: soland#encryption-audited-e2ee-gap
     // @user-promise: e2e/scenarios/encryption/audited-e2ee.md
     // @expected-live-by: 2026Q3
-    "E25.1 tampered cx.moderation.frank ciphertext_digest causes downstream verification to fail",
+    "E25.1 tampered cx.moderation.franking_proof ciphertext_digest causes downstream verification to fail",
     async () => {},
   );
 

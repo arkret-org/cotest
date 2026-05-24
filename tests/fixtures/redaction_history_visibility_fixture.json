@@ -6,7 +6,7 @@
   "encoder": {
     "tombstone_kind": "cx.message.redact",
     "history_visibility_cell": "cx:cell:cx.component.realm.history_visibility.v1:<space_id>",
-    "history_visibility_lattice": "cas-register",
+    "history_visibility_lattice": "cas_register",
     "history_visibility_values": ["world_readable", "shared", "joined", "invited"]
   },
   "vectors": [

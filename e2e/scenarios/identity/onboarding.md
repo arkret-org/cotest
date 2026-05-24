@@ -13,7 +13,7 @@
 - `identity/identity-did.md` §2 — DID 主体 + 控制密钥
 - `identity/identity-did.md` §3.4 — `did:webvh` genesis entry
 - `identity/key-management.md` §5.0 — Inception key + control stream genesis
-- `identity/key-management.md` §5.0.1 — 4 步 bootstrap (inception key → did:webvh entry 0 → principal control space → cx.device.authorized)
+- `identity/key-management.md` §5.0.1 — 4 步 bootstrap (inception key → did:webvh entry 0 → principal control space → cx.device.authorize)
 - `identity/key-management.md` §5.1 — Cross-signing 三对密钥(PSK / SSK / USK)
 - `identity/key-management.md` §6 — Session grant
 - `crypto-media/device-lifecycle.md` §3 — 注册路径选项
@@ -49,7 +49,7 @@
    - 生成 inception key
    - 写入 `did:webvh` entry 0 (SCID + updateKeys)
    - 创建 principal control space (`purpose="principal_control"`)
-   - 写入 `cx.device.authorized` 把第一台设备授权
+   - 写入 `cx.device.authorize` 把第一台设备授权
    - 发布 `cx.cross_signing.publish.v1` (PSK / SSK / USK)
    - coauth 颁发首个 `cx.session.grant` (短期)
 5. yougen 收到 `{ did, session_token, control_space_id }`,写入 localStorage
@@ -106,7 +106,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.profile.principal_control_space.v1` profile、`cx.cross_signing.publish.v1` event、`cx.device.authorized` bootstrap binding — 都是 MUST 但当前 soland 未实现。**整条 scenario 是 fixme territory**,等 control stream 落地。
+- **soland 缺口**:`cx.profile.principal_control_space.v1` profile、`cx.cross_signing.publish.v1` event、`cx.device.authorize` bootstrap binding — 都是 MUST 但当前 soland 未实现。**整条 scenario 是 fixme territory**,等 control stream 落地。
 - **yougen 缺口**:`/onboarding` 真路径不走 dev-login,需要补 passkey / OIDC button、verification 流程。
 - **coauth 缺口**:OIDC bridge handler 完整度需要审。
 - **harness 缺口**:mock IdP service、mock email service — `scripts/run-joint-e2e.ps1` 需要 `-StartMockIdp` / `-StartMockEmail` 开关。

@@ -36,20 +36,22 @@ fn vectors() -> Vec<CanonicalVector> {
             // `crates/backend/src/handlers/contrix.rs`. RFC 3339 UTC strings
             // for timestamps; integer-only numbers; all-string scalar fields.
             payload: json!({
-                "type": "handle_claim",
-                "subject_did": "did:web:alice.example",
-                "handle_uri": "matrix:u/alice:contrix.example",
-                "handle_aliases": ["matrix:u/alice:contrix.example"],
+                "type": "cx.handle.claim",
+                "subject_id": "did:web:alice.example",
+                "handle_uri": "contrix://contrix.example/users/alice",
+                "handle_aliases": ["acct:alice@contrix.example"],
                 "issuer_service_did": "did:web:coauth.example",
                 "audience": "https://soland.example/api/v1",
-                "delivery_binding_hint": {
-                    "kind": "principal_server",
-                    "audience": "https://soland.example/api/v1",
+                "member_delivery_binding": {
+                    "recipient_service_did": "did:web:soland.example",
+                    "recipient_service_type": "principal_server",
+                    "binding_source": "organization_policy",
+                    "delivery_modes": ["events"],
                 },
                 "issued_at": "2026-05-20T00:00:00Z",
                 "expires_at": "2026-05-20T00:05:00Z",
             }),
-            expected_digest: "sha256:2a79b446921d7e0e08270f40c29e5706b03652390d44122eedcf6a96c8cd9d73",
+            expected_digest: "sha256:0e37e1aedcf71597c07997f929b1a33cab278158812f94508d5bfcb53de6f50b",
         },
         CanonicalVector {
             label: "soland event envelope payload",

@@ -94,7 +94,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(removed_reaction["status"], "accepted");
 
     let marker = expect_json(
-        dave.post("/api/v1/read-markers").json(&json!({
+        dave.post("/api/v1/read-cursors").json(&json!({
             "realm_id": space_id,
             "event_id": sent["event_id"],
             "scope_id": "cx:thread:interaction"
@@ -106,7 +106,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(marker["scope_id"], "cx:thread:interaction");
 
     let markers = expect_json(
-        dave.get(&format!("/api/v1/read-markers?space_id={space_id}")),
+        dave.get(&format!("/api/v1/read-cursors?space_id={space_id}")),
         StatusCode::OK,
     )
     .await?;

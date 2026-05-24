@@ -309,12 +309,12 @@ fn validate_event_kind_registry(
             }
             let lattice = required_str(entry, "lattice")?;
             const ALLOWED_LATTICES: &[&str] = &[
-                "or-set",
-                "mv-register",
-                "cas-register",
+                "or_set",
+                "mv_register",
+                "cas_register",
                 "fsm",
                 "counter",
-                "ordered-log",
+                "ordered_log",
             ];
             if !ALLOWED_LATTICES.contains(&lattice) {
                 bail!("reducer-input kind {event_kind} lattice {lattice} not in core set");
@@ -383,12 +383,12 @@ fn validate_event_kind_registry(
     let required_kinds: &[(&str, &str, &str)] = &[
         (
             "cx.consent.grant",
-            "or-set",
+            "or_set",
             "cx.component.consent.grant.v1",
         ),
         (
             "cx.consent.revoke",
-            "or-set",
+            "or_set",
             "cx.component.consent.grant.v1",
         ),
     ];

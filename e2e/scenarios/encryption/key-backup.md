@@ -77,7 +77,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
     - 计算 commitment,与 backup 的 `key_commitment` 比对
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
     - commitment match → 用 derived_key 解 ciphertext → 拿回 SSK / USK / mls_history_backup_key
-15. 客户端签 `cx.device.authorized` (包含 recovery proof,引用 USK 或 control signature)
+15. 客户端签 `cx.device.authorize` (包含 recovery proof,引用 USK 或 control signature)
 16. 提交到 soland;recovery policy 校验通过 → device-B 接入
 17. 断言:device-B `/settings/devices` 显示 alice 的 device 列表(可能含 device-A,看是否 revoke;此时未 revoke,所以 A 还在)
 

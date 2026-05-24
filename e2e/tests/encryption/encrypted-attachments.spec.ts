@@ -95,7 +95,7 @@ test.describe("encrypted attachments", () => {
     // @blocking-on: soland#encryption-encrypted-attachments-gap
     // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
     // @expected-live-by: 2026Q3
-    "E12.4 audited E2EE: cx.moderation.frank receipt visible to audit agent without revealing plaintext",
+    "E12.4 audited E2EE: cx.moderation.franking_proof receipt visible to audit agent without revealing plaintext",
     async () => {
       // spec: audited-e2ee.md §4
     },

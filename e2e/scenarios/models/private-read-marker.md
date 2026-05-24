@@ -56,7 +56,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
    alice-device-2(参考 `identity/multi-device` Phase A,真实 QR 配对 + cross-signing 还未上线,
    这里复用 dev-login 双 token 作为代理)
 2. alice (device-1) 通过 `/setup` 多步向导建空间 `S`:
-   - title = `"models/private-read-marker S ${stamp}"`
+   - title = `"models/private-read-cursor S ${stamp}"`
    - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
    - seed_members = `[bob.did]`
 3. 断言:`space-lifecycle-flow` 含 `created cx:space:...`,记录 `spaceId`
@@ -72,7 +72,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 7. alice (device-1) 进 `/timeline/${spaceId}`,等到 `timeline-event` 至少含 M1/M2/M3
 8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 yougen 触发 read-position 上报
-9. 客户端通过 `POST /api/v1/account/data/m.read_marker`(account data API,private object 写路径)
+9. 客户端通过 `POST /api/v1/account/data/m.read_cursor`(account data API,private object 写路径)
    推 marker,payload 含 `last_read_at = <ts(M2)>` + `last_read_anchor = M2.event_id`
    - 备用路径:直接 `POST /api/v1/notifications/mark-all-read` 把游标推到 M2(参考 spec §3 的
      "marker write" 等价接口)
@@ -129,12 +129,12 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 - **E10.3 discussion realm 的 read marker 独立于 parent space**:在 space `S` 下开 discussion realm
   `D`(`POST /api/v1/spaces/${spaceId}/discussions`,realm linkage 见 `models/realm-links.md`);
   alice 在 `D` 里把 marker 推到一条 `D.M1`,但 `S` 的 marker 保持在 M2;断言两个 marker 在
-  account data 里以**不同 key**存储(`m.read_marker:${realm_id}`),互不污染
+  account data 里以**不同 key**存储(`m.read_cursor:${realm_id}`),互不污染
 
 ## Implementation notes
 
 - **soland gap(关键)**:read marker 的 **to-device propagation** 当前未实现 — `POST
-  /api/v1/account/data/m.read_marker` 与 `POST /api/v1/notifications/mark-all-read` 在 alice 当前
+  /api/v1/account/data/m.read_cursor` 与 `POST /api/v1/notifications/mark-all-read` 在 alice 当前
   device 上写 account_data OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
   Phase G 的 cross-device 断言会 fail。主流程标 `test.fixme`,内联注释说明 gap
 - **soland 现状**:`POST /api/v1/notifications/mark-all-read` 已 live(参考 `discovery/notifications`

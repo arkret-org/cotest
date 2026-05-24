@@ -251,7 +251,7 @@ export async function listReadMarkersViaApi(
   opts: { server?: SolandKey } = {},
 ): Promise<ReadMarker[]> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/read-markers?space_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl(opts.server)}/api/v1/read-cursors?space_id=${encodeURIComponent(spaceId)}`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);

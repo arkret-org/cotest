@@ -28,7 +28,7 @@
     },
     {
       "name": "device_authorized_alice",
-      "kind": "cx.device.authorized",
+      "kind": "cx.device.authorize",
       "components_array": ["did:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",

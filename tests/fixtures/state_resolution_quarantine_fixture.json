@@ -11,7 +11,7 @@
     {
       "name": "cas_register_concurrent_fork_join_rule_quarantine_all_heads",
       "cell_family": "cx.component.realm.join_rule.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
         { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "actor": "did:web:alice.example", "value": "invite", "head_in": ["cx:anchor:sha256:abc123"] },
@@ -28,7 +28,7 @@
     {
       "name": "cas_register_concurrent_fork_history_visibility_quarantine_all_heads",
       "cell_family": "cx.component.realm.history_visibility.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
         { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114210", "actor": "did:web:alice.example", "value": "shared", "head_in": ["cx:anchor:sha256:def456"] },
@@ -50,7 +50,7 @@
     {
       "name": "cas_register_admin_escalation_anchorer_endorse_one_head_unquarantines",
       "cell_family": "cx.component.realm.policy.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
         { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220", "actor": "did:web:alice.example", "value": "policy_a", "head_in": ["cx:anchor:sha256:ghi789"] },
@@ -76,7 +76,7 @@
     {
       "name": "cas_register_three_way_fork_quarantine_then_partial_repair",
       "cell_family": "cx.component.realm.upgrade.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
         { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "cx.profile.chat_mvp.v1", "head_in": ["cx:anchor:sha256:jkl000"] },
@@ -118,7 +118,7 @@
     {
       "name": "or_set_concurrent_grant_does_not_quarantine_merges_union",
       "cell_family": "cx.component.consent.grant.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "expose",
       "ops": [
         { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114250", "actor": "did:web:alice.example", "value": { "peer": "did:web:bob.example", "scope": "messaging" }, "head_in": ["cx:anchor:sha256:pqr000"] },

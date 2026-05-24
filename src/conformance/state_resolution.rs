@@ -104,7 +104,7 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     .pointer("/lattice/type")
                     .and_then(Value::as_str)
                     .ok_or_else(|| anyhow!("vector {name} missing lattice.type"))?;
-                if lat != "cas-register" {
+                if lat != "cas_register" {
                     bail!("vector {name} lattice.type must be cas-register");
                 }
                 let bot_status = vector
@@ -124,7 +124,7 @@ pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
                     "state_resolution.cas_register_conflict_returns_bottom",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "lattice_type": "cas-register",
+                        "lattice_type": "cas_register",
                         "query_status": "bottom",
                         "dependent_move_result": "fail_bottom",
                     }),

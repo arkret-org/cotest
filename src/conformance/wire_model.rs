@@ -364,8 +364,8 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
         "cx.flow.track.member",
         "cx.flow.track.history_visibility",
         "cx.flow.track.policy_components",
-        "cx.device.authorized",
-        "cx.device.revoked",
+        "cx.device.authorize",
+        "cx.device.revoke",
     ];
     let mut covered: std::collections::BTreeSet<&str> = Default::default();
 
@@ -2575,12 +2575,12 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     )?;
 
     const CORE_LATTICES: &[&str] = &[
-        "or-set",
-        "mv-register",
-        "cas-register",
+        "or_set",
+        "mv_register",
+        "cas_register",
         "fsm",
         "counter",
-        "ordered-log",
+        "ordered_log",
     ];
     const VALID_BOTTOM_MODES: &[&str] = &["reject", "expose"];
 
@@ -2650,11 +2650,11 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         .get("expected_cell_family_lattice_bindings")
         .ok_or_else(|| anyhow!("fixture missing expected_cell_family_lattice_bindings"))?;
     let expected_pairs: &[(&str, &str)] = &[
-        ("or_set_families", "or-set"),
-        ("cas_register_families", "cas-register"),
+        ("or_set_families", "or_set"),
+        ("cas_register_families", "cas_register"),
         ("fsm_families", "fsm"),
-        ("ordered_log_families", "ordered-log"),
-        ("mv_register_families", "mv-register"),
+        ("ordered_log_families", "ordered_log"),
+        ("mv_register_families", "mv_register"),
     ];
     let mut all_expected_families: BTreeSet<String> = BTreeSet::new();
     for (group, expected_lattice) in expected_pairs {
@@ -3518,7 +3518,7 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))?;
 
         match (lattice, bottom, outcome) {
-            ("cas-register", "reject", "all_heads_quarantined")
+            ("cas_register", "reject", "all_heads_quarantined")
             | ("fsm", "reject", "all_heads_quarantined") => {
                 let picks = v
                     .pointer("/expected/reducer_picks_winner")
@@ -3554,7 +3554,7 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
                 }
                 covered_quarantine += 1;
             }
-            ("cas-register", "reject", "repair_admits_winner") => {
+            ("cas_register", "reject", "repair_admits_winner") => {
                 let escalation = v
                     .get("admin_escalation")
                     .ok_or_else(|| anyhow!("vector {name} missing admin_escalation"))?;
@@ -3563,7 +3563,7 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
                 covered_admin_escalation = true;
                 covered_quarantine += 1;
             }
-            ("or-set", "expose", "or_set_union") => {
+            ("or_set", "expose", "or_set_union") => {
                 let admin = v
                     .pointer("/expected/admin_escalation_required")
                     .and_then(Value::as_bool)

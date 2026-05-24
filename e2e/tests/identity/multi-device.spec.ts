@@ -59,10 +59,10 @@ test.describe("multi-device pairing + revocation", () => {
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
-    "Device 1 scans Device 2's QR; signs cx.device.authorized with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
+    "Device 1 scans Device 2's QR; signs cx.device.authorize with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
     async () => {
       // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding
-      // soland gap: cx.device.authorized cross_signing_binding payload; device list materialization.
+      // soland gap: cx.device.authorize cross_signing_binding payload; device list materialization.
       // yougen gap: /settings/devices "Add device" + QR-scan flow.
     },
   );
@@ -91,7 +91,7 @@ test.describe("multi-device pairing + revocation", () => {
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
-    "Device 1 revokes Device 2 via cx.device.revoked; Device 2's subsequent /api/v1/events POST returns device_revoked",
+    "Device 1 revokes Device 2 via cx.device.revoke; Device 2's subsequent /api/v1/events POST returns device_revoked",
     async () => {
       // spec: device-lifecycle.md §2.2 + key-management.md §5.2
     },

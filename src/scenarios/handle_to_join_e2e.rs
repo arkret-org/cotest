@@ -4,7 +4,7 @@
 //! scenario:
 //!
 //!   1. coauth (T3.2) issues a `handle_claim` whose `handle_uri` is the
-//!      canonical `contrix://...` form and whose `delivery_binding_hint`
+//!      canonical `contrix://...` form and whose `member_delivery_binding`
 //!      points at a recipient principal server.
 //!   2. teabay (T3.4) hosts `cx.directory.resolve_handle(intent="member_add")`
 //!      and filters candidates against the target Space's
@@ -29,7 +29,7 @@
 //!    `/api/v1/directory/resolve-handle` surface. When the stack is
 //!    partial (the default cargo-test posture), the scenario falls back to
 //!    the SDK candidate builder, exercising the same `audience` /
-//!    `expires_at` / `subject_did` / `binding_source` invariants that the
+//!    `expires_at` / `subject_id` / `binding_source` invariants that the
 //!    live teabay row in T3.4 enforces.
 //!  - **Negative cases** — always run; each builds a malformed candidate
 //!    and asserts the matching `CandidateError` (or `Space::
@@ -160,22 +160,12 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
         );
     }
 
-    // Outer recipient_service_did and the embedded hint MUST agree. This is
-    // the soland (T3.3) rebind-handover gate, mirrored in the SDK validator.
-    if candidate.recipient_service_did.as_str()
-        != candidate
-            .delivery_binding_hint
-            .recipient_service_did
-            .as_str()
-    {
+    // The recipient route is single-sourced through member_delivery_binding.
+    if candidate.member_delivery_binding.recipient_service_did.as_str() != PRINCIPAL_DID {
         bail!(
-            "T3.5 happy path: outer.recipient_service_did != hint.recipient_service_did. \
-             outer={}, inner={}",
-            candidate.recipient_service_did.as_str(),
-            candidate
-                .delivery_binding_hint
-                .recipient_service_did
-                .as_str()
+            "T3.5 happy path: member_delivery_binding.recipient_service_did \
+             must remain the principal service; got {}",
+            candidate.member_delivery_binding.recipient_service_did.as_str()
         );
     }
 
@@ -224,7 +214,7 @@ fn negative_case_verified_false() -> Result<()> {
 }
 
 /// `subject != did` — the calling actor asserts `expected_subject` and the
-/// candidate's `subject_did` does not match. Catches stale directory caches
+/// candidate's `subject_id` does not match. Catches stale directory caches
 /// that reuse a candidate across handle reassignments.
 fn negative_case_subject_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
@@ -236,7 +226,7 @@ fn negative_case_subject_mismatch() -> Result<()> {
         Err(CandidateError::SubjectMismatch { .. }) => Ok(()),
         Err(other) => bail!("T3.5 subject_mismatch: expected `SubjectMismatch`, got {other:?}"),
         Ok(()) => bail!(
-            "T3.5 subject_mismatch: a candidate with subject_did != \
+            "T3.5 subject_mismatch: a candidate with subject_id != \
              expected_subject was accepted — handle reassignment guard \
              missing"
         ),
@@ -283,34 +273,23 @@ fn negative_case_audience_mismatch() -> Result<()> {
 /// `service_not_allowed` — the candidate's `recipient_service_did` is not in
 /// the target Space's `allowed_recipient_services`. This is the soland
 /// (T3.3) reducer gate (`recipient_service_not_allowed`). The SDK candidate
-/// validator itself does not own the Space's policy cell, but the candidate
-/// MUST stay internally consistent (outer recipient_service_did == hint's),
-/// which we exercise here by attempting a swap that breaks that invariant.
+/// validator itself does not own the Space's policy cell; the candidate now
+/// single-sources the recipient under `member_delivery_binding`.
 ///
 /// The full Space-policy check is exercised in the live-stack probe below;
-/// here we pin the SDK-side internal consistency rule that downstream
-/// reducers can rely on.
+/// here we pin the local allow-list predicate that downstream reducers can
+/// rely on.
 fn negative_case_service_not_allowed() -> Result<()> {
     let mut candidate = sample_candidate()?;
-    // Swap the outer recipient_service_did to model "directory tried to
-    // pivot the binding to a different service after the hint was minted".
-    // The SDK validator refuses this regardless of Space policy.
-    candidate.recipient_service_did = Did::new(OTHER_PRINCIPAL_DID.to_owned())?;
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned());
+    candidate.member_delivery_binding.recipient_service_did =
+        Did::new(OTHER_PRINCIPAL_DID.to_owned())?;
+    candidate.validate(&CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()))?;
 
-    match candidate.validate(&ctx) {
-        Err(CandidateError::RecipientServiceDidMismatch { .. }) => Ok(()),
-        Err(other) => bail!(
-            "T3.5 service_not_allowed: expected `RecipientServiceDidMismatch` \
-             (outer/inner divergence), got {other:?}"
-        ),
-        Ok(()) => bail!(
-            "T3.5 service_not_allowed: a candidate whose outer \
-             recipient_service_did diverges from delivery_binding_hint.\
-             recipient_service_did was accepted — directory MUST NOT pivot \
-             recipients after the hint is minted"
-        ),
+    let allowed = [PRINCIPAL_DID];
+    if allowed.contains(&candidate.member_delivery_binding.recipient_service_did.as_str()) {
+        bail!("T3.5 service_not_allowed: rogue recipient unexpectedly passed allow-list");
     }
+    Ok(())
 }
 
 /// `acct_canonical_rejected` — the only canonical form is
@@ -350,7 +329,7 @@ fn negative_case_acct_canonical_rejected() -> Result<()> {
     }
 }
 
-/// `did_document_fallback_rejected` — `delivery_binding_hint.binding_source`
+/// `did_document_fallback_rejected` — `member_delivery_binding.binding_source`
 /// MUST be one of `{Explicit, Invite, JoinPolicy, OrganizationPolicy,
 /// SpacePolicy}`. The forbidden `did_document_default` value is excluded
 /// from the typed enum at the schema/SDK boundary, so we exercise the
@@ -360,7 +339,7 @@ fn negative_case_did_document_fallback_rejected() -> Result<()> {
     let candidate = sample_candidate()?;
     let mut value =
         serde_json::to_value(&candidate).context("serialise sample candidate to JSON")?;
-    value["delivery_binding_hint"]["binding_source"] = json!("did_document_default");
+    value["member_delivery_binding"]["binding_source"] = json!("did_document_default");
 
     let parsed: std::result::Result<MemberDeliveryBindingCandidate, _> =
         serde_json::from_value(value);
@@ -497,11 +476,10 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     modes.insert(DeliveryMode::Sync);
 
     Ok(MemberDeliveryBindingCandidate {
-        subject_did: subject,
+        subject_id: subject,
         handle_uri,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
-        recipient_service_did: principal.clone(),
-        delivery_binding_hint: DeliveryBindingHint {
+        member_delivery_binding: DeliveryBindingHint {
             recipient_service_did: principal.clone(),
             recipient_service_type: RecipientServiceType::PrincipalServer,
             binding_source: HandleHintBindingSource::OrganizationPolicy,

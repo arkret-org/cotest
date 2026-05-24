@@ -61,7 +61,7 @@
 | [kanban/project-simulation.spec.ts](../tests/kanban/project-simulation.spec.ts) | 1 | 6 |
 | [models/core-object-invariants.spec.ts](../tests/models/core-object-invariants.spec.ts) | 1 | 4 |
 | [models/morph-schema-migration.spec.ts](../tests/models/morph-schema-migration.spec.ts) | 2 | 4 |
-| [models/private-read-marker.spec.ts](../tests/models/private-read-marker.spec.ts) | 1 | 4 |
+| [models/private-read-cursor.spec.ts](../tests/models/private-read-cursor.spec.ts) | 1 | 4 |
 | [spaces/knock-application.spec.ts](../tests/spaces/knock-application.spec.ts) | 1 | 7 |
 | [sync/service-surface-contract.spec.ts](../tests/sync/service-surface-contract.spec.ts) | 2 | 5 |
 | [sync/transport-negotiation.spec.ts](../tests/sync/transport-negotiation.spec.ts) | 2 | 4 |
@@ -214,7 +214,7 @@
 |---|---|---:|---:|
 | [core-object-invariants](models/core-object-invariants.md) | [models/core-object-invariants.spec.ts](../tests/models/core-object-invariants.spec.ts) | 1 | 4 |
 | [morph-schema-migration](models/morph-schema-migration.md) | [models/morph-schema-migration.spec.ts](../tests/models/morph-schema-migration.spec.ts) | 2 | 4 |
-| [private-read-marker](models/private-read-marker.md) | [models/private-read-marker.spec.ts](../tests/models/private-read-marker.spec.ts) | 1 | 4 |
+| [private-read-cursor](models/private-read-cursor.md) | [models/private-read-cursor.spec.ts](../tests/models/private-read-cursor.spec.ts) | 1 | 4 |
 | [realm-links](models/realm-links.md) | [models/realm-links.spec.ts](../tests/models/realm-links.spec.ts) | 0 | 4 |
 
 ### extensions / 扩展与桥接

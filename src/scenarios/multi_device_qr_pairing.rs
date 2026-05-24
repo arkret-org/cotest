@@ -6,10 +6,10 @@
 //!       * new device generates local Ed25519 device key + displays QR
 //!         containing public key + challenge nonce.
 //!       * primary device scans QR, verifies pairing challenge, and
-//!         issues a `cx.device.authorized` event that binds the new
+//!         issues a `cx.device.authorize` event that binds the new
 //!         device's `verify_key` to the principal via the SSK
 //!         (`cross_signing_binding`).
-//!   - §5.2 "Device Trust Chain" — every `cx.device.authorized` event
+//!   - §5.2 "Device Trust Chain" — every `cx.device.authorize` event
 //!     MUST carry a `cross_signing_binding` field signed by the SSK over
 //!     the canonical `(principal_id, device_id, device_public_key,
 //!     ssk_generation)` tuple. Devices without a valid binding MUST be
@@ -19,7 +19,7 @@
 //!     principal control stream. Clients MUST expose the device list
 //!     delta via sync.
 //!   - §9 / `key-management.md` §5.2 "设备吊销" — revocation:
-//!       * publish `cx.device.revoked` (or call `POST /api/v1/devices/
+//!       * publish `cx.device.revoke` (or call `POST /api/v1/devices/
 //!         {device_id}/revoke` which mints the event).
 //!       * for every MLS group the revoked device participated in,
 //!         issue an MLS `Remove` proposal + commit so the device's
@@ -45,7 +45,7 @@
 //!       a. `cx.cross_signing.publish` (if needed) — binds PSK → SSK.
 //!       b. `cx.device.cross_signing_binding` — the SSK signature over
 //!          device-B's `verify_key`, packaged per §5.1 canonical input.
-//!       c. `cx.device.authorized` for device-B with the
+//!       c. `cx.device.authorize` for device-B with the
 //!          `cross_signing_binding` field carrying the §5.2 signature.
 //!
 //!     Today soland accepts these via `POST /api/v1/devices/authorize-

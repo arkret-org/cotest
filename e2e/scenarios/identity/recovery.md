@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(passphrase / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的备份设置、跨设备使用 backup envelope 解密、新设备的 `cx.device.authorized` 写入、E2EE 历史消息解密。
+验证用户在丢失主设备后,通过预设的恢复手段(passphrase / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的备份设置、跨设备使用 backup envelope 解密、新设备的 `cx.device.authorize` 写入、E2EE 历史消息解密。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
@@ -60,7 +60,7 @@
     - 生成新 device key(本地)
     - Argon2id 派生 → 计算 key_commitment → 拉 backup envelope → 比对 commitment(快速失败如果 passphrase 错)
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
-13. 客户端签 `cx.device.authorized` (包含 recovery proof,引用 recovery key 或 control signature)
+13. 客户端签 `cx.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
 14. 提交到 soland;soland 校验 recovery policy → 接受
 15. 断言:device-2 上 `GET /api/v1/account/me` 返回 alice.did,设备列表新增 device-2
 

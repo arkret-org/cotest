@@ -3,7 +3,7 @@
 //!
 //! Alice owns device-A; pairs device-B via QR (synthesized API call);
 //! `cx.cross_signing.publish` + `cx.device.cross_signing_binding` +
-//! `cx.device.authorized` are submitted; both devices appear in the
+//! `cx.device.authorize` are submitted; both devices appear in the
 //! device list. Alice from device-A revokes device-B; the test asserts
 //! device-A still works, device-B's bearer is 401, a
 //! `cx.device.list_update` event lists device-B in `left[]`, and the

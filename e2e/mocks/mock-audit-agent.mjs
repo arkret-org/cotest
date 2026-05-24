@@ -11,7 +11,7 @@
 //     Returns { did, public_jwk, key_package? }. Soland reads this to
 //     bind audit_disclosure_policy.audit_agent_did.
 //   POST /api/v1/audit-agent/events  { kind, event }
-//     Forward `cx.moderation.frank` / `cx.audit.report` events to the
+//     Forward `cx.moderation.franking_proof` / `cx.audit.report` events to the
 //     mock. Auto-acknowledges by recording a generated `cx.audit.accessed`
 //     envelope, fetchable via /inspect.
 //   POST /api/v1/audit-agent/invite { space_id, invite, mls_key_package? }

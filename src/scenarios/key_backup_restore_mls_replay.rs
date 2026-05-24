@@ -23,7 +23,7 @@
 //!       2. user enters passphrase / collects recovery shares.
 //!       3. client decrypts backup envelope.
 //!       4. client verifies key commitment.
-//!       5. client publishes `recover` or `cx.device.authorized`.
+//!       5. client publishes `recover` or `cx.device.authorize`.
 //!       6. for E2EE spaces: pull MLS state, replay historical
 //!          `cx.mls.commit` events with the recovered
 //!          `mls_history_backup_key` to decrypt pre-loss epoch content.
@@ -63,7 +63,7 @@
 //!     issued from a sibling device (per CT-9
 //!     `cannot_self_revoke` invariant). Today we'd need a second
 //!     authorized device to drive the revoke; the scaffold uses an
-//!     alternative `cx.device.revoked` direct-event submission as a
+//!     alternative `cx.device.revoke` direct-event submission as a
 //!     stand-in.
 //! 5.  Onboard new device-B:
 //!       * generate a fresh `cx:device:<uuidv7>` and Ed25519 keypair.

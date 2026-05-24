@@ -6,14 +6,14 @@
   "encoder": {
     "registry_ref": "registry/event-kind-registry.json",
     "min_active_kind_coverage": 20,
-    "core_lattices": ["or-set", "mv-register", "cas-register", "fsm", "counter", "ordered-log"]
+    "core_lattices": ["or_set", "mv_register", "cas_register", "fsm", "counter", "ordered_log"]
   },
   "positive_vectors": [
     {
       "name": "realm_create_ordered_log",
       "event_kind": "cx.realm.create",
       "cell_family": "cx.component.realm.create.v1",
-      "lattice": "ordered-log",
+      "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "name": "string", "kind": "collaboration" }
     },
@@ -21,7 +21,7 @@
       "name": "space_upgrade_cas_register",
       "event_kind": "cx.realm.upgrade",
       "cell_family": "cx.component.realm.upgrade.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "target_reducer_profile": "cx.profile.chat_mvp.v1" }
     },
@@ -29,7 +29,7 @@
       "name": "space_policy_cas_register",
       "event_kind": "cx.realm.policy",
       "cell_family": "cx.component.realm.policy.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "policy_ref": "cx:policy:01h7..." }
     },
@@ -37,7 +37,7 @@
       "name": "space_join_rule_cas_register",
       "event_kind": "cx.realm.join_rule",
       "cell_family": "cx.component.realm.join_rule.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "rule": "invite" }
     },
@@ -45,7 +45,7 @@
       "name": "space_history_visibility_cas_register",
       "event_kind": "cx.realm.history_visibility",
       "cell_family": "cx.component.realm.history_visibility.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "scope": "shared" }
     },
@@ -53,7 +53,7 @@
       "name": "realm_archive_cas_register",
       "event_kind": "cx.realm.archive",
       "cell_family": "cx.component.realm.archive.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "archived": true }
     },
@@ -61,7 +61,7 @@
       "name": "space_parent_cas_register",
       "event_kind": "cx.space.parent",
       "cell_family": "cx.component.space.parent.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "space_id": "cx:space:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "parent_space_id": "cx:space:7fd5ae82-44e2-7a8a-9a4b-885799114210" }
     },
@@ -69,7 +69,7 @@
       "name": "space_organization_cas_register",
       "event_kind": "cx.realm.organization",
       "cell_family": "cx.component.realm.organization.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "organization_ref": "did:web:org.example" }
     },
@@ -77,7 +77,7 @@
       "name": "space_inheritance_policy_cas_register",
       "event_kind": "cx.realm.inheritance_policy",
       "cell_family": "cx.component.realm.inheritance_policy.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "parent_space_id": "cx:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "inherit_policy": false }
     },
@@ -85,7 +85,7 @@
       "name": "consent_grant_or_set",
       "event_kind": "cx.consent.grant",
       "cell_family": "cx.component.consent.grant.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "consent_id": "cx:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "peer": "did:web:bob.example", "scope": "messaging" }
     },
@@ -93,7 +93,7 @@
       "name": "consent_revoke_or_set",
       "event_kind": "cx.consent.revoke",
       "cell_family": "cx.component.consent.grant.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "consent_id": "cx:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "revokes_op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-8857991142f0" }
     },
@@ -101,7 +101,7 @@
       "name": "capability_grant_or_set",
       "event_kind": "cx.capability.grant",
       "cell_family": "cx.component.capability.grant.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "grant_id": "cx:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "actions": ["cx.message.create"] }
     },
@@ -109,15 +109,15 @@
       "name": "capability_revoke_or_set",
       "event_kind": "cx.capability.revoke",
       "cell_family": "cx.component.capability.grant.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "revokes_grant_id": "cx:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }
     },
     {
       "name": "device_authorized_or_set",
-      "event_kind": "cx.device.authorized",
+      "event_kind": "cx.device.authorize",
       "cell_family": "cx.component.device.authorized.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "device_id": "dev_alice_01", "principal_id": "did:web:alice.example" }
     },
@@ -133,7 +133,7 @@
       "name": "view_create_mv_register",
       "event_kind": "cx.view.create",
       "cell_family": "cx.component.view.create.v1",
-      "lattice": "mv-register",
+      "lattice": "mv_register",
       "bottom": "expose",
       "payload_shape": { "view_id": "cx:view:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "kind": "kanban" }
     },
@@ -141,7 +141,7 @@
       "name": "view_update_mv_register",
       "event_kind": "cx.view.update",
       "cell_family": "cx.component.view.update.v1",
-      "lattice": "mv-register",
+      "lattice": "mv_register",
       "bottom": "expose",
       "payload_shape": { "view_id": "cx:view:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "patch": { "title": "Updated" } }
     },
@@ -149,7 +149,7 @@
       "name": "profile_create_mv_register",
       "event_kind": "cx.profile.create",
       "cell_family": "cx.component.profile.create.v1",
-      "lattice": "mv-register",
+      "lattice": "mv_register",
       "bottom": "expose",
       "payload_shape": { "profile_id": "cx:profile:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "display_name": "Alice" }
     },
@@ -157,7 +157,7 @@
       "name": "policy_rule_ordered_log",
       "event_kind": "cx.policy.rule",
       "cell_family": "cx.component.policy.rule.v1",
-      "lattice": "ordered-log",
+      "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "rule_id": "rule_001", "expression": "actor.role == 'admin'" }
     },
@@ -165,7 +165,7 @@
       "name": "flow_move_cas_register",
       "event_kind": "cx.flow.move",
       "cell_family": "cx.component.flow.position.v1",
-      "lattice": "cas-register",
+      "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "rank": "K1", "space_id": "cx:space:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }
     },
@@ -173,7 +173,7 @@
       "name": "account_status_ordered_log",
       "event_kind": "cx.account.status",
       "cell_family": "cx.component.account.status.v1",
-      "lattice": "ordered-log",
+      "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "status": "active" }
     },
@@ -181,7 +181,7 @@
       "name": "session_grant_or_set",
       "event_kind": "cx.session.grant",
       "cell_family": "cx.component.session.grant.v1",
-      "lattice": "or-set",
+      "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "session_id": "cx:session:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "device_id": "dev_alice_01" }
     }
@@ -203,7 +203,7 @@
     {
       "name": "wrong_lattice_for_family",
       "event_kind": "cx.realm.create",
-      "claimed_lattice": "or-set",
+      "claimed_lattice": "or_set",
       "drift": { "kind": "lattice_mismatch" },
       "expected": { "outcome": "reject", "reason_code": "lattice_drift" }
     }

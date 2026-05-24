@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(403);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `cx.moderation.frank` 收据(可证存在但不可解密)。
+在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(403);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `cx.moderation.franking_proof` 收据(可证存在但不可解密)。
 
 不验证:MLS 群组生命周期本身(encryption/mls-group 前置)、密钥备份(encryption/key-backup)、calls 中的媒体(calls/webrtc)。
 
@@ -15,7 +15,7 @@
 - `crypto-media/media-and-blob.md` §6 — Asset Privacy Policy(`download_mode=provider_proxy` 默认)
 - `crypto-media/encryption-and-audit.md` §2.3.1 — `key_ref` for MLS profile
 - `crypto-media/audited-e2ee.md` §3 — Audit agent 进入(需要 explicit policy)
-- `crypto-media/audited-e2ee.md` §4 — `cx.moderation.frank` / `cx.audit.accessed`
+- `crypto-media/audited-e2ee.md` §4 — `cx.moderation.franking_proof` / `cx.audit.accessed`
 
 ## 拓扑
 
@@ -91,7 +91,7 @@
 
 24. 重新建一个 audit-enabled space `S_audit`(`audit_disclosure_policy` 含 audit-agent 的 DID)
 25. alice 在 `S_audit` 发加密附件 — 同 Phase A
-26. audit-agent 拉 `GET /api/v1/audit/events?space_id=<S_audit>` → 应当看到 `cx.moderation.frank` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
+26. audit-agent 拉 `GET /api/v1/audit/events?space_id=<S_audit>` → 应当看到 `cx.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
 27. audit-agent **不能** 直接拿到 plaintext attachment;若要审,需要触发 `cx.audit.accessed`(spec §4),记录到 audit trail
 
 ## Observable assertions(合并)
@@ -114,7 +114,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:Blob Service 的 authz(成员校验)、Content-Type / Disposition 规则、opaque 403、`cx.moderation.frank` 写入(audited 模式)— 全部 MUST 但实现度未知
+- **soland 缺口**:Blob Service 的 authz(成员校验)、Content-Type / Disposition 规则、opaque 403、`cx.moderation.franking_proof` 写入(audited 模式)— 全部 MUST 但实现度未知
 - **yougen 缺口**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI
 - **测试侧**:Phase E 需要 service log access — 测试可以在 jointDir/services/soland.stderr.log 里 grep,但更可靠的是 soland 暴露 admin endpoint
 

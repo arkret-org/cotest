@@ -85,7 +85,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
                 "push_gateway": "https://floria.example/api/v1/push/notify",
                 "push_key": "webpush:opaque-token",
                 "platform": "web",
-                "request_id": "cx:req:push-session-grant",
+                "request_id": "cx:request:push-session-grant",
                 "proof": {"kind": "push-register-proof-placeholder"}
             })),
         StatusCode::OK,

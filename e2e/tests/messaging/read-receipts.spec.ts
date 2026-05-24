@@ -25,8 +25,8 @@ test.describe("read receipts + privacy", () => {
   test("receipt endpoint accepts alice's read without creating a peer-visible durable marker", async ({
     request,
   }) => {
-    // Live G2.T7 smoke: the ephemeral receipt API and durable read-marker API
-    // are separate surfaces. Durable cx.read.marker writes, UI receipt rendering,
+    // Live G2.T7 smoke: the ephemeral receipt API and durable read-cursor API
+    // are separate surfaces. Durable cx.read_cursor.advance writes, UI receipt rendering,
     // and policy toggles stay fixme.
     const stamp = Date.now();
     const alice = uniqueUser("g2t7-receipt-alice");
@@ -225,7 +225,7 @@ test.describe("read receipts + privacy", () => {
     // @blocking-on: soland#messaging-read-receipts-gap
     // @user-promise: e2e/scenarios/messaging/read-receipts.md
     // @expected-live-by: 2026Q3
-    "actor-private read marker (cx.read.marker) syncs across alice's devices but does NOT broadcast to bob",
+    "actor-private read marker (cx.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob",
     async () => {
       // spec: read-receipts.md §3.1-§3.2
     },

@@ -1,5 +1,5 @@
 // Private read marker (account-data marker + to-device cross-device sync)
-// Contract: e2e/scenarios/models/private-read-marker.md
+// Contract: e2e/scenarios/models/private-read-cursor.md
 // Spec refs:
 //   - models/private-objects.md §2-§3 (private objects; read marker schema + to-device propagation)
 //   - discovery/read-receipts.md       (no per-message receipts; marker is canonical)
@@ -59,7 +59,7 @@ test.describe("private read marker", () => {
     request,
   }) => {
     // Live G2.T7 no-leak smoke on the implemented marker surface. The
-    // canonical cx.read.marker write path and cross-device to-device fanout
+    // canonical cx.read_cursor.advance write path and cross-device to-device fanout
     // remain fixme below.
     const stamp = Date.now();
     const alice = uniqueUser(`s11-prm-alice-${stamp}`);
@@ -102,15 +102,15 @@ test.describe("private read marker", () => {
     expect(bobAfterBody.unread_count).toBe(0);
   });
 
-  // Main flow: full multi-device read-marker lifecycle (Phases A-G in
-  // scenarios/models/private-read-marker.md).
+  // Main flow: full multi-device read-cursor lifecycle (Phases A-G in
+  // scenarios/models/private-read-cursor.md).
   test.fixme(
-    // @blocking-on: soland#models-private-read-marker-gap
-    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @blocking-on: soland#models-private-read-cursor-gap
+    // @user-promise: e2e/scenarios/models/private-read-cursor.md
     // @expected-live-by: 2026Q3
     "alice's read marker syncs across devices via to-device; mark-all-read advances marker on all devices within sync window",
     async () => {
-      // scenario: scenarios/models/private-read-marker.md Phases A-G
+      // scenario: scenarios/models/private-read-cursor.md Phases A-G
       // - A baseline: alice (two devices) + bob + shared space S
       // - B bob sends M1/M2/M3
       // - C alice-device-1 records marker at M2 via account-data write
@@ -126,8 +126,8 @@ test.describe("private read marker", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#models-private-read-marker-gap
-    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @blocking-on: soland#models-private-read-cursor-gap
+    // @user-promise: e2e/scenarios/models/private-read-cursor.md
     // @expected-live-by: 2026Q3
     "E10.1 multi-device read marker eventual consistency: device-2 may lag but converges to device-1's last write within bounded sync window (spec §3)",
     async () => {
@@ -137,8 +137,8 @@ test.describe("private read marker", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#models-private-read-marker-gap
-    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @blocking-on: soland#models-private-read-cursor-gap
+    // @user-promise: e2e/scenarios/models/private-read-cursor.md
     // @expected-live-by: 2026Q3
     "E10.2 E2EE space notification redaction: server-side GET /api/v1/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
     async () => {
@@ -149,10 +149,10 @@ test.describe("private read marker", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#models-private-read-marker-gap
-    // @user-promise: e2e/scenarios/models/private-read-marker.md
+    // @blocking-on: soland#models-private-read-cursor-gap
+    // @user-promise: e2e/scenarios/models/private-read-cursor.md
     // @expected-live-by: 2026Q3
-    "E10.3 discussion realm read marker is isolated from parent space marker (account_data key m.read_marker:<realm_id> is per-realm)",
+    "E10.3 discussion realm read marker is isolated from parent space marker (account_data key m.read_cursor:<realm_id> is per-realm)",
     async () => {
       // spec: models/private-objects.md §3 + models/realm-links.md
       // soland gap: discussion realm CRUD + per-realm account_data namespacing not yet live.

@@ -43,7 +43,7 @@ test.describe("account recovery", () => {
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
-    "device-2 restores account using passphrase; SSK/USK recovered; new device authorized via cx.device.authorized with recovery proof",
+    "device-2 restores account using passphrase; SSK/USK recovered; new device authorized via cx.device.authorize with recovery proof",
     async () => {
       // spec: key-management.md §7.3-§7.4, §5.0.1
     },

@@ -9,7 +9,7 @@
 //!     survives parse → canonical without re-shape.
 //!  2. **alias canonicalisation.** `acct:` interop form maps to the
 //!     same canonical `contrix://` regardless of localpart casing.
-//!  3. **audience mismatch is fatal.** When `recipient_service_did`
+//!  3. **audience mismatch is fatal.** When `member_delivery_binding`
 //!     is set, the claim MUST also carry `audience` + `handle_uri` +
 //!     `expires_at` or `validate()` rejects.
 //!  4. **expiry boundary.** `binding_state=verified` MUST require
@@ -17,9 +17,14 @@
 //!  5. **issuer is opaque.** Random issuer strings (no schema effect)
 //!     never change validation outcome on their own.
 
+use std::collections::BTreeSet;
+
 use chrono::{Duration, Utc};
 use contrix_core::Did;
-use contrix_core::model::{HandleBindingState, HandleClaim, HandleUri};
+use contrix_core::model::{
+    DeliveryBindingHint, DeliveryMode, HandleBindingState, HandleClaim, HandleHintBindingSource,
+    HandleUri, RecipientServiceType,
+};
 use proptest::prelude::*;
 
 const PROPTEST_CASES: u32 = 64;
@@ -57,7 +62,7 @@ proptest! {
         prop_assert_eq!(lower.canonical(), mixed.canonical());
     }
 
-    /// `audience` MUST be present when `recipient_service_did` is set,
+    /// `audience` MUST be present when `member_delivery_binding` is set,
     /// or `validate()` rejects.
     #[test]
     fn audience_mismatch_rejected(
@@ -66,7 +71,7 @@ proptest! {
     ) {
         let mut claim = HandleClaim::default();
         claim.handle_uri = Some(HandleUri::parse(&uri).unwrap());
-        claim.recipient_service_did = Some(Did::new("did:web:rs.example".to_owned()).unwrap());
+        claim.member_delivery_binding = Some(member_delivery_binding());
         claim.expires_at = Some(Utc::now() + Duration::minutes(5));
         claim.audience = audience.clone().map(|a| format!("did:web:{a}.example"));
         let outcome = claim.validate();
@@ -115,5 +120,18 @@ proptest! {
         claim.issuer = Some(issuer);
         // No binding_state, no recipient — should validate trivially.
         prop_assert!(claim.validate().is_ok());
+    }
+}
+
+fn member_delivery_binding() -> DeliveryBindingHint {
+    let mut modes = BTreeSet::new();
+    modes.insert(DeliveryMode::Events);
+    DeliveryBindingHint {
+        recipient_service_did: Did::new("did:web:rs.example".to_owned()).unwrap(),
+        recipient_service_type: RecipientServiceType::PrincipalServer,
+        binding_source: HandleHintBindingSource::OrganizationPolicy,
+        delivery_modes: modes,
+        service_acceptance_ref: None,
+        policy_ref: None,
     }
 }

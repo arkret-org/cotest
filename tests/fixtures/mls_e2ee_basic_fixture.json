@@ -8,8 +8,8 @@
     "epoch_cell": "cx:cell:cx.component.mls.epoch.v1:<space_id>",
     "group_state_cell": "cx:cell:cx.component.mls.group_state.v1:<space_id>",
     "covered_frontier_cell": "cx:cell:cx.component.mls.covered_frontier.v1:<space_id>",
-    "epoch_lattice": "cas-register",
-    "covered_frontier_lattice": "or-set",
+    "epoch_lattice": "cas_register",
+    "covered_frontier_lattice": "or_set",
     "aad_digest": "SHA-256 over canonical (move_id || epoch_id || tree_hash || covered_frontier_root)"
   },
   "vectors": [

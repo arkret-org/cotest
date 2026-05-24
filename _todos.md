@@ -85,7 +85,7 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 |---|---|---|---|
 | **H-MOCK-IDP-1** | mock OIDC IdP | `tests/identity/onboarding.spec.ts` "bob registers via OIDC bridge" 与 `account-device-auth.spec.ts` 都需要 | `e2e/mocks/mock-idp.mjs` 起 HTTP server,实现 `/discovery`、`/authorize`、`/token` 三端点 + 测试用静态 ID Token;`run-joint-e2e.ps1 -StartMockIdp` 已有占位,但 mock-idp.mjs 仅是骨架 — 补齐到能让 coauth 真正完成 OIDC token exchange |
 | **H-MOCK-EMAIL-1** | mock email verification service | `onboarding.spec.ts` "carol registers via email-only" + `invites/third-party.spec.ts` "mock verification service receives invite token" | `e2e/mocks/mock-email.mjs` 起 HTTP server,记录所有"发出"的邮件 + token 内嵌的 verification link;暴露 `/inbox/{email}` 给测试取最近的 token;coauth / soland 把 SMTP 调用替换为 HTTP POST 到 mock |
-| **H-MOCK-AUDIT-AGENT-1** | mock audit-agent | `encryption/audited-e2ee.spec.ts` "report triggers audit_disclosure_policy.trigger; audit-agent is invited" | mock audit-agent 服务持有自己的 DID + signing key + KeyPackage(if E2EE);被邀请进 space 后能 acknowledge invite,生成 `cx.audit.accessed` 事件;`/inspect` 端点给测试看它收到的 `cx.moderation.frank` 列表 |
+| **H-MOCK-AUDIT-AGENT-1** | mock audit-agent | `encryption/audited-e2ee.spec.ts` "report triggers audit_disclosure_policy.trigger; audit-agent is invited" | mock audit-agent 服务持有自己的 DID + signing key + KeyPackage(if E2EE);被邀请进 space 后能 acknowledge invite,生成 `cx.audit.accessed` 事件;`/inspect` 端点给测试看它收到的 `cx.moderation.franking_proof` 列表 |
 | **H-MOCK-WITNESS-1** | mock did:webvh witness | `identity/webvh-rotation.spec.ts` 多个用例 + onboarding 的 did:webvh genesis | 现有 `e2e/mocks/mock-witness.mjs` 是骨架,需要扩到能:接受 entry rotation co-sign 请求、按测试场景模拟 offline(>24h timestamp)、提供 `/inspect` 看签发历史 |
 
 #### Per-mock 实现状态 (CT-15, 2026-05-19 更新)
@@ -141,7 +141,7 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] 创建 `e2e/mocks/mock-audit-agent.mjs` 文件 (2026-05-19)
 - [x] audit-agent 自身的 DID + Ed25519 signing key 自动生成 — 默认 `did:web:audit-agent.joint-e2e.local#<rand>`,可通过 `MOCK_AUDIT_AGENT_DID` 固定 (2026-05-19)
 - [x] KeyPackage 发布 — `GET /api/v1/audit-agent/identity` 返 `key_package` 占位 blob (E2EE invite 时由 soland 转发到组) (2026-05-19)
-- [x] `/api/v1/audit-agent/events` + `/api/v1/audit-agent/inbox` 端点 — 接收并列出 `cx.moderation.frank` / `cx.audit.report` 事件 (2026-05-19)
+- [x] `/api/v1/audit-agent/events` + `/api/v1/audit-agent/inbox` 端点 — 接收并列出 `cx.moderation.franking_proof` / `cx.audit.report` 事件 (2026-05-19)
 - [x] 自动 acknowledge invite — `POST /api/v1/audit-agent/invite` 收到 invite 后生成并记录一条 `cx.audit.accessed` envelope (2026-05-19)
 - [x] 自动生成 audit binding signed proof — Ed25519 签名嵌入 `cx.audit.accessed.binding_proof`,可通过 `/jwks` 验证 (2026-05-19)
 - [x] `/inspect` 端点 — dump inbox / invites / accessed 三个 log,以及 agent_did 和 public_jwk (2026-05-19)

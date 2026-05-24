@@ -93,10 +93,10 @@ Generated: 2026-05-22T13:20:46.927Z
 
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
-| 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:30 | alice configures audit_disclosure_policy on E2EE space; cx.moderation.frank generated for each encrypted message (ciphertext_digest only, no plaintext) | e2e/scenarios/encryption/audited-e2ee.md | - |
+| 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:30 | alice configures audit_disclosure_policy on E2EE space; cx.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext) | e2e/scenarios/encryption/audited-e2ee.md | - |
 | 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:40 | report on a message triggers audit_disclosure_policy.trigger; audit-agent is invited to access via attested ceremony | e2e/scenarios/encryption/audited-e2ee.md | - |
 | 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:51 | audit-agent's access writes cx.audit.accessed entry; alice in space-admin/audit sees the access record | e2e/scenarios/encryption/audited-e2ee.md | - |
-| 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:61 | E25.1 tampered cx.moderation.frank ciphertext_digest causes downstream verification to fail | e2e/scenarios/encryption/audited-e2ee.md | - |
+| 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:61 | E25.1 tampered cx.moderation.franking_proof ciphertext_digest causes downstream verification to fail | e2e/scenarios/encryption/audited-e2ee.md | - |
 | 2026Q3 | tracked | e2e/tests/encryption/audited-e2ee.spec.ts:69 | E25.3 alice revokes audit_disclosure_policy; subsequent audit-agent requests are rejected (still leaving historical accessed records intact) | e2e/scenarios/encryption/audited-e2ee.md | - |
 
 ## soland#encryption-encrypted-attachments-gap
@@ -108,7 +108,7 @@ Generated: 2026-05-22T13:20:46.927Z
 | 2026Q3 | tracked | e2e/tests/encryption/encrypted-attachments.spec.ts:64 | mallory (non-member) GET on the same blob_ref returns opaque 403/404 indistinguishable from non-existent | e2e/scenarios/encryption/encrypted-attachments.md | - |
 | 2026Q3 | tracked | e2e/tests/encryption/encrypted-attachments.spec.ts:74 | blob service stores only ciphertext + blob_ref + size; no plaintext filename or media type in service logs | e2e/scenarios/encryption/encrypted-attachments.md | - |
 | 2026Q3 | tracked | e2e/tests/encryption/encrypted-attachments.spec.ts:84 | E12.2 thumbnail generation: client encrypts thumbnail and uploads as separate blob; server cannot derive thumbnails in E2EE | e2e/scenarios/encryption/encrypted-attachments.md | - |
-| 2026Q3 | tracked | e2e/tests/encryption/encrypted-attachments.spec.ts:94 | E12.4 audited E2EE: cx.moderation.frank receipt visible to audit agent without revealing plaintext | e2e/scenarios/encryption/encrypted-attachments.md | - |
+| 2026Q3 | tracked | e2e/tests/encryption/encrypted-attachments.spec.ts:94 | E12.4 audited E2EE: cx.moderation.franking_proof receipt visible to audit agent without revealing plaintext | e2e/scenarios/encryption/encrypted-attachments.md | - |
 
 ## soland#encryption-key-backup-gap
 
@@ -233,10 +233,10 @@ Generated: 2026-05-22T13:20:46.927Z
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
 | 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:129 | E10.E to-device message queued for Device 2 before revocation is dropped after revocation (spec §7 line 341 grace drop) | e2e/scenarios/identity/multi-device.md | - |
-| 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:57 | Device 1 scans Device 2's QR; signs cx.device.authorized with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome | e2e/scenarios/identity/multi-device.md | - |
+| 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:57 | Device 1 scans Device 2's QR; signs cx.device.authorize with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome | e2e/scenarios/identity/multi-device.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:69 | both devices show up in alice's device list via cx.device.list_update projection within 30s of pairing | e2e/scenarios/identity/multi-device.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:79 | alice messages from Device 1 appear in Device 2's timeline; both have distinct device_id but same actor_id | e2e/scenarios/identity/multi-device.md | - |
-| 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:89 | Device 1 revokes Device 2 via cx.device.revoked; Device 2's subsequent /api/v1/events POST returns device_revoked | e2e/scenarios/identity/multi-device.md | - |
+| 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:89 | Device 1 revokes Device 2 via cx.device.revoke; Device 2's subsequent /api/v1/events POST returns device_revoked | e2e/scenarios/identity/multi-device.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/multi-device.spec.ts:99 | after revoke in an E2EE space, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages | e2e/scenarios/identity/multi-device.md | - |
 
 ## soland#identity-onboarding-gap
@@ -246,7 +246,7 @@ Generated: 2026-05-22T13:20:46.927Z
 | 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:107 | E7.5 handle conflict (\"@alice-s7\" already claimed) rejects with handle_already_claimed | e2e/scenarios/identity/onboarding.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:41 | alice registers via passkey/WebAuthn; coauth binds principal DID and issues short-term cx.session.grant | e2e/scenarios/identity/onboarding.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:53 | alice's did:webvh entry 0 is published; SCID derived; DID Document resolves and exposes ContrixPrincipalServer service endpoint | e2e/scenarios/identity/onboarding.md | - |
-| 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:64 | principal control space is created (purpose=principal_control); first device registered via cx.device.authorized; cross-signing PSK/SSK/USK published | e2e/scenarios/identity/onboarding.md | - |
+| 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:64 | principal control space is created (purpose=principal_control); first device registered via cx.device.authorize; cross-signing PSK/SSK/USK published | e2e/scenarios/identity/onboarding.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:75 | bob registers via OIDC bridge (mock IdP); coauth verifies ID token and binds a fresh DID | e2e/scenarios/identity/onboarding.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:86 | carol registers via email-only (3PID precursor); verification token consumed; DID issued | e2e/scenarios/identity/onboarding.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/onboarding.spec.ts:97 | E7.1 re-registering the same WebAuthn credential is rejected with account_already_registered | e2e/scenarios/identity/onboarding.md | - |
@@ -256,7 +256,7 @@ Generated: 2026-05-22T13:20:46.927Z
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
 | 2026Q3 | tracked | e2e/tests/identity/recovery.spec.ts:31 | alice (device-1) configures passphrase-protected backup; envelope uses Argon2id KDF + XChaCha20-Poly1305; key_commitment uploaded | e2e/scenarios/identity/recovery.md | - |
-| 2026Q3 | tracked | e2e/tests/identity/recovery.spec.ts:42 | device-2 restores account using passphrase; SSK/USK recovered; new device authorized via cx.device.authorized with recovery proof | e2e/scenarios/identity/recovery.md | - |
+| 2026Q3 | tracked | e2e/tests/identity/recovery.spec.ts:42 | device-2 restores account using passphrase; SSK/USK recovered; new device authorized via cx.device.authorize with recovery proof | e2e/scenarios/identity/recovery.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/recovery.spec.ts:52 | after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline | e2e/scenarios/identity/recovery.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/recovery.spec.ts:62 | E8.4 threshold recovery (3-of-5 shares): client reconstructs recovery key from shares; envelope decrypted; device authorized | e2e/scenarios/identity/recovery.md | - |
 | 2026Q3 | tracked | e2e/tests/identity/recovery.spec.ts:72 | E8.5 trusted recovery service: third-party signs recovery attestation; client gates backup decrypt on attestation validity | e2e/scenarios/identity/recovery.md | - |
@@ -332,7 +332,7 @@ Generated: 2026-05-22T13:20:46.927Z
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
 | 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:214 | space disclosure=disabled: client does not send; Sync Service silently drops any inbound cx.receipt.read for the space | e2e/scenarios/messaging/read-receipts.md | - |
-| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:224 | actor-private read marker (cx.read.marker) syncs across alice's devices but does NOT broadcast to bob | e2e/scenarios/messaging/read-receipts.md | - |
+| 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:224 | actor-private read marker (cx.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob | e2e/scenarios/messaging/read-receipts.md | - |
 | 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:234 | E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted | e2e/scenarios/messaging/read-receipts.md | - |
 | 2026Q3 | tracked | e2e/tests/messaging/read-receipts.spec.ts:244 | E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt | e2e/scenarios/messaging/read-receipts.md | - |
 
@@ -360,14 +360,14 @@ Generated: 2026-05-22T13:20:46.927Z
 | 2026Q3 | tracked | e2e/tests/models/morph-schema-migration.spec.ts:317 | Phase C — breaking / transformation migration requires opt-in profile + capability and emits schema_migration_breaking audit | e2e/scenarios/models/morph-schema-migration.md | - |
 | 2026Q3 | tracked | e2e/tests/models/morph-schema-migration.spec.ts:357 | Phase D — deterministic transform vectors produce byte-equal output (gated on fixture availability) | e2e/scenarios/models/morph-schema-migration.md | - |
 
-## soland#models-private-read-marker-gap
+## soland#models-private-read-cursor-gap
 
 | expected_live_by | status | file:line | title | user_promise | missing |
 |---|---|---|---|---|---|
-| 2026Q3 | tracked | e2e/tests/models/private-read-marker.spec.ts:107 | alice's read marker syncs across devices via to-device; mark-all-read advances marker on all devices within sync window | e2e/scenarios/models/private-read-marker.md | - |
-| 2026Q3 | tracked | e2e/tests/models/private-read-marker.spec.ts:128 | E10.1 multi-device read marker eventual consistency: device-2 may lag but converges to device-1's last write within bounded sync window (spec §3) | e2e/scenarios/models/private-read-marker.md | - |
-| 2026Q3 | tracked | e2e/tests/models/private-read-marker.spec.ts:139 | E10.2 E2EE space notification redaction: server-side GET /api/v1/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally | e2e/scenarios/models/private-read-marker.md | - |
-| 2026Q3 | tracked | e2e/tests/models/private-read-marker.spec.ts:151 | E10.3 discussion realm read marker is isolated from parent space marker (account_data key m.read_marker:<realm_id> is per-realm) | e2e/scenarios/models/private-read-marker.md | - |
+| 2026Q3 | tracked | e2e/tests/models/private-read-cursor.spec.ts:107 | alice's read marker syncs across devices via to-device; mark-all-read advances marker on all devices within sync window | e2e/scenarios/models/private-read-cursor.md | - |
+| 2026Q3 | tracked | e2e/tests/models/private-read-cursor.spec.ts:128 | E10.1 multi-device read marker eventual consistency: device-2 may lag but converges to device-1's last write within bounded sync window (spec §3) | e2e/scenarios/models/private-read-cursor.md | - |
+| 2026Q3 | tracked | e2e/tests/models/private-read-cursor.spec.ts:139 | E10.2 E2EE space notification redaction: server-side GET /api/v1/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally | e2e/scenarios/models/private-read-cursor.md | - |
+| 2026Q3 | tracked | e2e/tests/models/private-read-cursor.spec.ts:151 | E10.3 discussion realm read marker is isolated from parent space marker (account_data key m.read_cursor:<realm_id> is per-realm) | e2e/scenarios/models/private-read-cursor.md | - |
 
 ## soland#models-realm-links-gap
 

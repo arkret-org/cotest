@@ -15,7 +15,7 @@
 - `crypto-media/device-lifecycle.md` §6 — device list sync (`cx.device.list_update`)
 - `crypto-media/device-lifecycle.md` §7 — to-device message 队列 + 过期
 - `crypto-media/device-lifecycle.md` §9 — MLS KeyPackage 上传 + 撤销时的 MLS Remove
-- `identity/key-management.md` §5.0-§5.2 — `cx.device.authorized` / `cx.device.revoked`
+- `identity/key-management.md` §5.0-§5.2 — `cx.device.authorize` / `cx.device.revoke`
 
 ## 拓扑
 
@@ -37,9 +37,9 @@
 2. 开新 browser context = device-2,visits `/onboarding`
 3. device-2 选"Add to existing account",生成本地 device key,展示 QR(含 device-2 pubkey + 一次性 challenge)
 4. device-1 进 `/settings/devices` 选 "Add device" → scan QR(测试 harness 用 `page.evaluate` 模拟相机读取,直接把 QR payload 注入 device-1)
-5. device-1 验证 challenge → 用 SSK 签 `cx.device.authorized`,payload 含 device-2 pubkey + cross_signing_binding(spec §5.2)
+5. device-1 验证 challenge → 用 SSK 签 `cx.device.authorize`,payload 含 device-2 pubkey + cross_signing_binding(spec §5.2)
 6. device-1 把该事件 POST 到 soland 的 events API,落到 alice 的 principal control space
-7. device-2 拉 control space,看到 `cx.device.authorized` 含自己的 pubkey,接受
+7. device-2 拉 control space,看到 `cx.device.authorize` 含自己的 pubkey,接受
 8. device-2 拉 MLS welcome(若 alice 在 E2EE space)→ 加入现有 MLS group
 9. 断言:device-1 和 device-2 都进 `/settings/devices`,都看到对方在列表(`cx.device.list_update` 已同步)
 
@@ -54,10 +54,10 @@
 ### Phase C — Device 1 撤销 Device 2
 
 15. alice (device-1) 进 `/settings/devices`,点 device-2 旁的"Revoke"
-16. UI 二次确认 → device-1 用 SSK 签 `cx.device.revoked`,payload `{ revoked_device: device-2.id, revocation_time, reason: "user_initiated" }`
+16. UI 二次确认 → device-1 用 SSK 签 `cx.device.revoke`,payload `{ revoked_device: device-2.id, revocation_time, reason: "user_initiated" }`
 17. 提交到 soland events API
 18. soland reducer:
-    - 接受 `cx.device.revoked`
+    - 接受 `cx.device.revoke`
     - 把 device-2 从 alice 的 active device set 移除
     - 若在 E2EE space:触发 MLS Remove(剔除 device-2 的 leaf node)+ 新 commit + 新 epoch
 19. 断言:device-1 的 `/settings/devices` 看不到 device-2 了
@@ -102,7 +102,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.device.authorized` 含 `cross_signing_binding`、`cx.device.revoked`、`cx.device.list_update` 投影、to-device 队列、MLS Remove 与 revoke 联动 — partial(`cx.member.state` 有,但 device-specific 链不完整)。多数 phase fixme-able。
+- **soland 缺口**:`cx.device.authorize` 含 `cross_signing_binding`、`cx.device.revoke`、`cx.device.list_update` 投影、to-device 队列、MLS Remove 与 revoke 联动 — partial(`cx.member.state` 有,但 device-specific 链不完整)。多数 phase fixme-able。
 - **yougen 缺口**:`/settings/devices` 的 device 列表 + revoke 按钮;QR scan UI(本测试用 evaluate 注入,UI 缺口对测试不致命)
 - **harness**:模拟相机扫码用 `page.evaluate` 注入 QR payload 到 device-1 的 add-device input
 

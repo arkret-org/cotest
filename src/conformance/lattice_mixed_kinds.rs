@@ -116,7 +116,7 @@ fn check_cas_or_set_coexist(vector: &Value) -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} cell_state missing lattice"))?;
         surface_lattices.insert(lat);
     }
-    if !surface_lattices.contains("cas-register") || !surface_lattices.contains("or-set") {
+    if !surface_lattices.contains("cas_register") || !surface_lattices.contains("or_set") {
         bail!("vector {name} cell_states must include cas-register + or-set lattices");
     }
     Ok(())
@@ -128,7 +128,7 @@ fn check_mv_concurrent(vector: &Value) -> Result<()> {
         .pointer("/lattice/type")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("vector {name} missing lattice.type"))?;
-    if lattice_type != "mv-register" {
+    if lattice_type != "mv_register" {
         bail!("vector {name} lattice.type must be 'mv-register'");
     }
     let bottom = vector
@@ -220,7 +220,7 @@ fn check_all_three(vector: &Value) -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} state_surface cell missing lattice"))?;
         lattices.insert(lat);
     }
-    for required in ["cas-register", "or-set", "mv-register"] {
+    for required in ["cas_register", "or_set", "mv_register"] {
         if !lattices.contains(required) {
             bail!(
                 "vector {name} state_surface must include all three lattice kinds; missing {required}"
