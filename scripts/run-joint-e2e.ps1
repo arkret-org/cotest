@@ -1199,7 +1199,7 @@ try {
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
     if (-not $SolandCommand -and $solandPort) {
         $generatedSolandCommand = $true
-        $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
+        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceDid" } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
         $SolandCommand = Build-SolandCommand `
             -BaseUrl $SolandBaseUrl `
@@ -1229,7 +1229,7 @@ try {
             -MetricsPort $solandBetaMetricsPort `
             -LogFile $solandBetaTraceFile `
             -CorsAllowOrigin $yougenBetaBaseUrl `
-            -FederationPeers $SolandBaseUrl
+            -FederationPeers "$SolandBaseUrl|$SolandServiceDid"
         $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }

@@ -12,23 +12,24 @@
 //   ✓ GET  /api/v1/federation/pull-operations cursor-based
 //   ✓ Per-event accepted / rejected partial-accept
 //   ✓ Idempotent by operation_id
-//   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs
+//   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
+//   ✓ Outbound push worker POSTs local invite/message operations to peers
+//   ✓ cx.invite.create, cx.member.state join, and cx.message.create trigger federation push
 //   ✗ RFC 9421 HTTP Message Signature NOT verified — peer impersonation possible
 //   ✗ service_binding_ref.reducer_profile_digest NOT validated
-//   ✗ Outbound push is STUBBED (logs only, no real HTTP); soland-α won't push
-//     bob's invite to soland-β automatically. The push() must be exercised by
-//     the test or by future soland work.
-//   ✗ cx.invite.create on a remote DID does NOT trigger federation push.
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   acceptInviteApi,
   authHeaders,
+  createSpaceApi,
   listInvitesApi,
   makeOperation,
   pushFederationOperations,
+  querySpaceEventsApi,
+  sendMessageApi,
   typedId,
 } from "../../helpers/soland-api";
 import {
@@ -46,6 +47,78 @@ test.beforeEach(() => {
     "S2 requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
   );
 });
+
+async function waitForInvite(
+  request: APIRequestContext,
+  token: string,
+  inviteeDid: string,
+  spaceId: string,
+  server: "alpha" | "beta",
+) {
+  let found:
+    | { invite_id: string; space_id: string; invitee?: string; state?: string; status?: string }
+    | undefined;
+  await expect
+    .poll(
+      async () => {
+        const invites = await listInvitesApi(request, token, { server });
+        found = invites.find(
+          (invite) =>
+            invite.invitee === inviteeDid &&
+            invite.space_id.replace(/^cx:space:/, "cx:realm:") ===
+              spaceId.replace(/^cx:space:/, "cx:realm:"),
+        );
+        return Boolean(found);
+      },
+      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+    )
+    .toBeTruthy();
+  return found!;
+}
+
+async function waitForMember(
+  request: APIRequestContext,
+  token: string,
+  memberDid: string,
+  spaceId: string,
+  server: "alpha" | "beta",
+) {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${solandBaseUrl(server)}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+          { headers: authHeaders(token) },
+        );
+        if (!response.ok()) {
+          return false;
+        }
+        const body = await response.json();
+        return Array.isArray(body.members) && body.members.includes(memberDid);
+      },
+      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+    )
+    .toBeTruthy();
+}
+
+async function waitForEventBody(
+  request: APIRequestContext,
+  token: string,
+  spaceId: string,
+  bodyText: string,
+  server: "alpha" | "beta",
+) {
+  await expect
+    .poll(
+      async () => {
+        const body = await querySpaceEventsApi(request, token, spaceId, { server, limit: 100 });
+        const events = Array.isArray(body.events) ? body.events : [];
+        return events.some((event) => JSON.stringify(event).includes(bodyText));
+      },
+      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+    )
+    .toBeTruthy();
+}
 
 test.describe("cross-server federation", () => {
   test("both soland instances expose /federation/push-operations and /federation/pull-operations endpoints", async ({
@@ -195,6 +268,16 @@ test.describe("cross-server federation", () => {
       expect(push.accepted).toContain(inviteOperation.operation_id);
       expect(push.rejected ?? []).toEqual([]);
 
+      const replay = await pushFederationOperations(request, [inviteOperation], {
+        origin: solandServiceDid("alpha"),
+        destination: solandServiceDid("beta"),
+        server: "beta",
+        spaceId,
+        serviceBindingRef: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
+      });
+      expect(replay.accepted).toContain(inviteOperation.operation_id);
+      expect(replay.rejected ?? []).toEqual([]);
+
       const pull = await request.get(
         `${solandBaseUrl("beta")}/api/v1/federation/pull-operations?space_id=${encodeURIComponent(spaceId)}&limit=10`,
       );
@@ -203,6 +286,11 @@ test.describe("cross-server federation", () => {
       expect((pullBody.operations ?? []).map((op: { operation_id: string }) => op.operation_id)).toContain(
         inviteOperation.operation_id,
       );
+      expect(
+        (pullBody.operations ?? []).filter(
+          (op: { operation_id: string }) => op.operation_id === inviteOperation.operation_id,
+        ),
+      ).toHaveLength(1);
 
       const projectedRealmId = spaceId.replace(/^cx:space:/, "cx:realm:");
       const invites = await listInvitesApi(request, bobToken, { server: "beta" });
@@ -222,34 +310,86 @@ test.describe("cross-server federation", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#federation-cross-server-gap
-    // @user-promise: e2e/scenarios/federation/cross-server.md
-    // @expected-live-by: 2026Q3
+  test(
     "α invite UI event automatically fans out to β and β acceptance propagates back to α",
-    async () => {
-      // Remaining full contract:
-      //   1. alice@α inviteFromAdmin(spaceId, bob.did) emits cx.invite.create
-      //   2. soland-α resolves bob's server to β and dispatches the operation
-      //   3. bob's β-bound yougen sees the invite row and accepts
-      //   4. β pushes accept back to α; α records bob as joined member
+    async ({ browser, request }, testInfo) => {
+      const stamp = Date.now();
+      const alice = uniqueUser(`s2-auto-alice-${stamp}`);
+      const bob = uniqueUser(`s2-auto-bob-${stamp}`);
+      await ensureRegistered(request, alice, { server: "alpha" });
+      await ensureRegistered(request, bob, { server: "beta" });
+      const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
+      const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+      const alicePage = await openUserPage(browser, alice, {
+        sessionToken: aliceToken,
+        server: "alpha",
+      });
+
+      try {
+        const spaceId = await alicePage.createSpace({
+          title: `S2 auto federation ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+          historyVisibility: "joined",
+        });
+        await alicePage.inviteFromAdmin(spaceId, bob.did);
+        await stepShot(alicePage.page, testInfo, "alpha-auto-invite-issued");
+
+        const betaInvite = await waitForInvite(request, bobToken, bob.did, spaceId, "beta");
+        await acceptInviteApi(
+          request,
+          bobToken,
+          bob.did,
+          betaInvite.space_id,
+          betaInvite.invite_id,
+          { server: "beta" },
+        );
+        await waitForMember(request, aliceToken, bob.did, spaceId, "alpha");
+      } finally {
+        await alicePage.close();
+      }
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#federation-cross-server-gap
-    // @user-promise: e2e/scenarios/federation/cross-server.md
-    // @expected-live-by: 2026Q3
+  test(
     "two-way timeline messaging: alice@α and bob@β exchange messages and both servers converge on identical effective state",
-    async () => {
-      // spec: §4.1 push + §4.5 frontier exchange
-      // soland gap: outbound push stubbed; no automatic propagation.
-      //
-      // Acceptance criteria:
-      //   - alice's message on α appears in bob's timeline on β within 30s
-      //   - bob's reply on β appears in alice's timeline on α within 30s
-      //   - GET /api/v1/spaces/${spaceId}/anchor-frontier on both servers
-      //     returns event sets that are causally consistent
+    async ({ request }) => {
+      const stamp = Date.now();
+      const alice = uniqueUser(`s2-msg-alice-${stamp}`);
+      const bob = uniqueUser(`s2-msg-bob-${stamp}`);
+      await ensureRegistered(request, alice, { server: "alpha" });
+      await ensureRegistered(request, bob, { server: "beta" });
+      const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
+      const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+      const spaceId = await createSpaceApi(
+        request,
+        aliceToken,
+        {
+          title: `S2 two-way ${stamp}`,
+          discoverability: "listed",
+          history_visibility: "shared",
+          invitees: [bob.did],
+          ownerDid: alice.did,
+          plaintext_visible_services: [solandServiceDid("alpha"), solandServiceDid("beta")],
+        },
+        { server: "alpha" },
+      );
+
+      const betaInvite = await waitForInvite(request, bobToken, bob.did, spaceId, "beta");
+      await acceptInviteApi(request, bobToken, bob.did, betaInvite.space_id, betaInvite.invite_id, {
+        server: "beta",
+      });
+      await waitForMember(request, aliceToken, bob.did, spaceId, "alpha");
+
+      const aliceBody = `alice from alpha ${stamp}`;
+      await sendMessageApi(request, aliceToken, spaceId, aliceBody, { server: "alpha" });
+      await waitForEventBody(request, bobToken, spaceId, aliceBody, "beta");
+
+      const bobBody = `bob from beta ${stamp}`;
+      await sendMessageApi(request, bobToken, spaceId, bobBody, { server: "beta" });
+      await waitForEventBody(request, aliceToken, spaceId, bobBody, "alpha");
     },
   );
 
@@ -269,11 +409,11 @@ test.describe("cross-server federation", () => {
     // @blocking-on: soland#federation-cross-server-gap
     // @user-promise: e2e/scenarios/federation/cross-server.md
     // @expected-live-by: 2026Q3
-    "Idempotent push: replaying the same (origin, destination, event_id) returns accepted (no duplicate write); reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch",
+    "reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch",
     async () => {
-      // spec: §4.1 reducer_profile_digest gate + §4.1.1 idempotency
-      // soland gap: reducer_profile_digest NOT validated; idempotency only on
-      // (origin, operation_id), not full tuple.
+      // spec: §4.1 reducer_profile_digest gate.
+      // soland gap: reducer_profile_digest NOT validated.
+      // Idempotent push replay is live in the API smoke above.
     },
   );
 

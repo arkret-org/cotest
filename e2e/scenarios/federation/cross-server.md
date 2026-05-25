@@ -167,11 +167,9 @@
 
 ## 风险 / 前置依赖
 
-- **soland 必须能跑两实例并相互联邦** — 这是 spec §4.1 的核心,但需要先确认 soland 实现到位
-- **soland 必须实现 `/api/v1/federation/push-operations` 和 `/api/v1/federation/pull-operations`** — 当前未知;在 scenario 写完后跑前需要先 grep soland 看
-- **yougen 是否有 "接受 invite" UI** — 步骤 10 假设 yougen 能列出 incoming invites 让 bob 接受;如果没有,要么 yougen 补、要么测试通过直接 API 触发 `cx.invite.accept`(不走 UI)
-
-如果 soland 现阶段没实现联邦推送,这条 scenario 应该按"写 spec 文档 + 留 TODO,等 soland 补齐再实测"对待,**不要硬写一份永远 fail 的测试**。
+- **已落地**:双 soland 拓扑、`push-operations` / `pull-operations` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay。
+- **仍待后续 GAP**:网络分区后的 pull/backfill frontier convergence、RFC 9421 HTTP Message Signature 验证、`reducer_profile_digest` 强校验、服务委托 revoke fanout。
+- **yougen invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `cx.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
 
 ## 总耗时预估
 
