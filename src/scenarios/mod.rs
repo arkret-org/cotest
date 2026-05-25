@@ -5,6 +5,7 @@ pub mod authz_policy_presence;
 pub mod bridge_contracts;
 pub mod certification_report;
 pub mod chaos_kill_midwrite;
+pub mod circle;
 pub mod collaboration_workflow;
 pub mod consent_revoke_scope_any_cascade;
 pub mod cross_signing_reset_cross_domain;

@@ -20,6 +20,12 @@ All notable changes to **cotest** are documented here.
   `ConfidentialDiscussionEndpointsNotFlow`. Wired into the harness via
   `literal_scanner::scan_tree_circle`. Supports the `CIRCLE-ALLOW` marker
   comment for self-tests and migration notes.
+- **Added (P2F.3)** — seven Rust scenarios under `src/scenarios/circle/`:
+  `create_circle`, `member_strict_subset`, `flow_scope_visibility`,
+  `effective_scope_mismatch`, `confidential_discussion_relation`,
+  `cap_action_grant`, `error_code_paths`. Each is driven from
+  `tests/circle_scenarios.rs`; scenarios are pure SDK-level and need no
+  live server.
 - Notes: version number unchanged; this round is not released.
 
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)

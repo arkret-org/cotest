@@ -1,0 +1,90 @@
+//! P2F.3 — Circle-scoped Flow envelopes stamp `EffectiveScope::Circle`.
+//!
+//! Pins the serde shape of [`contrix_core::EffectiveScope`] for both
+//! variants (`Realm` and `Circle`) and asserts that the Circle variant
+//! retains both `realm_id` and `circle_id` across a JSON round-trip — the
+//! envelope-vs-payload visibility binding required by CXP-0007.
+
+use anyhow::{Result, anyhow};
+use contrix_core::{CircleId, EffectiveScope, RealmId};
+use serde_json::json;
+
+fn realm_id() -> Result<RealmId> {
+    RealmId::new("cx:realm:0196419b-0000-7000-8000-000000000301".to_owned())
+        .map_err(|e| anyhow!("realm id: {e}"))
+}
+
+fn circle_id() -> Result<CircleId> {
+    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000302".to_owned())
+        .map_err(|e| anyhow!("circle id: {e}"))
+}
+
+pub async fn flow_scope_visibility_run() -> Result<()> {
+    // Realm-only scope: shape `{ "kind": "realm", "realm_id": "..." }`.
+    let realm = EffectiveScope::Realm {
+        realm_id: realm_id()?,
+    };
+    let realm_json = serde_json::to_value(&realm).map_err(|e| anyhow!("serialise realm: {e}"))?;
+    let kind = realm_json.get("kind").and_then(|v| v.as_str());
+    if kind != Some("realm") {
+        return Err(anyhow!(
+            "EffectiveScope::Realm MUST serialise with kind=\"realm\"; got {kind:?}"
+        ));
+    }
+    if realm_json.get("circle_id").is_some() {
+        return Err(anyhow!(
+            "EffectiveScope::Realm MUST NOT carry circle_id; got {realm_json:?}"
+        ));
+    }
+
+    // Circle scope: shape `{ "kind": "circle", "realm_id": "...", "circle_id": "..." }`.
+    let circle = EffectiveScope::Circle {
+        realm_id: realm_id()?,
+        circle_id: circle_id()?,
+    };
+    let circle_json =
+        serde_json::to_value(&circle).map_err(|e| anyhow!("serialise circle: {e}"))?;
+    let kind = circle_json.get("kind").and_then(|v| v.as_str());
+    if kind != Some("circle") {
+        return Err(anyhow!(
+            "EffectiveScope::Circle MUST serialise with kind=\"circle\"; got {kind:?}"
+        ));
+    }
+    let circle_id_field = circle_json.get("circle_id").and_then(|v| v.as_str());
+    if circle_id_field != Some(circle_id()?.as_str()) {
+        return Err(anyhow!(
+            "EffectiveScope::Circle MUST carry circle_id; got {circle_id_field:?}"
+        ));
+    }
+
+    // Round-trip from a hand-rolled JSON payload to assert the wire form
+    // is the contract (and not just the Rust struct).
+    let wire = json!({
+        "kind": "circle",
+        "realm_id": realm_id()?.as_str(),
+        "circle_id": circle_id()?.as_str(),
+    });
+    let parsed: EffectiveScope =
+        serde_json::from_value(wire).map_err(|e| anyhow!("parse circle wire: {e}"))?;
+    if parsed.circle_id().map(|c| c.as_str()) != Some(circle_id()?.as_str()) {
+        return Err(anyhow!(
+            "round-tripped EffectiveScope::Circle dropped circle_id"
+        ));
+    }
+    if parsed.realm_id().as_str() != realm_id()?.as_str() {
+        return Err(anyhow!(
+            "round-tripped EffectiveScope::Circle dropped realm_id"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn effective_scope_circle_round_trip() {
+        flow_scope_visibility_run().await.unwrap();
+    }
+}
