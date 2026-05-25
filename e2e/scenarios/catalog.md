@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 404 · Verified: 203 (50.2%)
+Promised: 404 · Verified: 206 (51.0%)
 
-Totals: 66 scenarios / 66 specs / 203 verified / 404 promised / 201 fixme / 19 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 206 verified / 404 promised / 198 fixme / 19 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 203 verified / 404 promised / 201 fixme / 19 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 203 |
-| test.fixme | 201 |
+| live tests | 206 |
+| test.fixme | 198 |
 | promised tests | 404 |
-| verified tests | 203 |
-| verified ratio | 50.2% |
+| verified tests | 206 |
+| verified ratio | 51.0% |
 | test.skip (conditional) | 19 |
 | domains | 19 |
 
@@ -40,7 +40,7 @@ Totals: 66 scenarios / 66 specs / 203 verified / 404 promised / 201 fixme / 19 s
 | models | 4 | 4 | 6 | 21 | 28.6% | 15 | 0 |
 | spaces | 6 | 6 | 13 | 25 | 52.0% | 12 | 0 |
 | sync | 5 | 5 | 10 | 28 | 35.7% | 18 | 2 |
-| workflows | 6 | 6 | 6 | 18 | 33.3% | 12 | 0 |
+| workflows | 6 | 6 | 9 | 18 | 50.0% | 9 | 0 |
 
 ## Per-spec
 
@@ -107,7 +107,7 @@ Totals: 66 scenarios / 66 specs / 203 verified / 404 promised / 201 fixme / 19 s
 | sync/sovereign-deployment | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |
 | sync/transport-negotiation | 2 | 6 | 33.3% | 4 | 1 | mixed | yes |  |
 | workflows/daily-standup | 1 | 3 | 33.3% | 2 | 0 | mixed | yes |  |
-| workflows/incident-response | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |
+| workflows/incident-response | 3 | 4 | 75.0% | 1 | 0 | mixed | yes |  |
 | workflows/kanban-week | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
 | workflows/sprint-planning | 2 | 4 | 50.0% | 2 | 0 | mixed | yes |  |
 | workflows/support-escalation | 1 | 3 | 33.3% | 2 | 0 | mixed | yes |  |

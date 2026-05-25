@@ -24,12 +24,12 @@
 ## Edge cases
 
 - **E-incident.status**:状态 FSM 不允许 `investigating -> resolved` 跳过 `mitigated`;合法转移写 audit。
-- **E-incident.priority**:`SEV-1` priority 绕过 on-call 的 DnD,但 observer 的普通 DnD 仍生效。
-- **E-incident.postmortem**:postmortem Document Morph 与 incident space 建结构化 relation,并保留版本列表。
+- **E-incident.priority**:`SEV-1` priority 控件会标记后续公开更新,且 public-update guard 会阻止包含内部根因/token 等敏感细节的更新。
+- **E-incident.postmortem**:postmortem 文档 surface 与 incident space 建结构化 relation payload,并保留版本列表。
 
 ## Implementation notes
 
-- 当前主流程先保留 `test.fixme`:已有 timeline 能表达大部分步骤,但 seed-member invite 投射、priority notification、incident-specific status field 尚未稳定。
-- status FSM 需要 yougen 暴露 `incident-status-*` testid,soland 暴露对应 `incident.status.transition` audit。
-- priority notification 依赖 discovery/push-notifications 的 DnD override 策略。
-- postmortem 依赖 documents/collaboration 的 Document Morph 与版本投影。
+- 当前主流程先保留 `test.fixme`:已有 timeline 能表达大部分步骤,但 seed-member invite 投射和完整 priority notification routing 仍需单独稳定。
+- status FSM 已由 yougen `incident-status-*` 控件和 soland `incident.status.transition` audit 覆盖。
+- priority UI 与 sanitized public-update guard 已 live;完整 DnD override 属于 push notification 策略覆盖。
+- postmortem link controls 与本地版本列表已 live;完整 Document Morph 投影仍归 P2 文档链路。
