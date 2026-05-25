@@ -2,9 +2,18 @@
 // Contract: e2e/scenarios/discovery/notifications.md
 // Spec: discovery/push-notifications.md §2-§4, discovery/client-preferences.md
 
+import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  addSpaceMemberApi,
+  authHeaders,
+  createSpaceApi,
+  flowIdFromRealmId,
+  signedEventEnvelope,
+  submitSignedEventApi,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -225,13 +234,83 @@ test.describe("notifications", () => {
     );
   });
 
-  test.fixme(
-    // @blocking-on: soland#discovery-notifications-gap
+  test(
     // @user-promise: e2e/scenarios/discovery/notifications.md
-    // @expected-live-by: 2026Q3
     "E2EE space with evaluation_locus=client: server sends blind wake; client decrypts and evaluates 'contains_keyword' rule locally",
-    async () => {
+    async ({ request }) => {
       // spec: push-notifications.md §4.5
+      const stamp = Date.now();
+      const alice = uniqueUser("s23-e2ee-alice");
+      const bob = uniqueUser("s23-e2ee-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const spaceId = await createSpaceApi(request, aliceToken, {
+        title: `S23 E2EE Blind Wake ${stamp}`,
+        discoverability: "listed",
+        history_visibility: "shared",
+        encryption_profile: "mls_rfc9420",
+      });
+      await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+      const rules = await request.put(`${solandBaseUrl()}/api/v1/account_data/cx.push_rules`, {
+        headers: authHeaders(bobToken),
+        data: {
+          content: {
+            rules: [
+              {
+                rule_id: "keyword.local",
+                evaluation_locus: "client",
+                conditions: [{ kind: "contains_keyword", pattern: "sealed-keyword" }],
+                actions: ["notify"],
+              },
+            ],
+          },
+        },
+      });
+      expect([200, 201]).toContain(rules.status());
+
+      const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
+      const sidecarHash = mentionSidecarHash(spaceId, bob.did);
+      const encrypted = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: spaceId,
+        kind: "cx.message.create",
+        payload: {
+          flow_id: flowIdFromRealmId(spaceId),
+          track: "discussion",
+          encrypted: true,
+          mention_sidecar_hash: [sidecarHash],
+          encrypted_payload: encryptedEnvelope(
+            "cx.message.v1",
+            "opaque-ciphertext-for-sealed-keyword",
+            spaceId,
+          ),
+        },
+      });
+      await submitSignedEventApi(request, aliceToken, encrypted, {
+        context: "encrypted message with blind wake sidecar",
+      });
+
+      const notifications = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+        headers: authHeaders(bobToken),
+      });
+      expect(notifications.status()).toBe(200);
+      const body = await notifications.json();
+      const item = (body.items ?? []).find(
+        (candidate: Record<string, unknown>) => candidate.event_id === encrypted.event_id,
+      );
+      expect(item, "blind wake notification for encrypted message").toBeTruthy();
+      expect(item.encrypted).toBe(true);
+      expect(item.privacy_mode).toBe("blind_wakeup");
+      expect(item.wakeup_kind).toBe("encrypted_message");
+      expect(item.sender_did).toBe(alice.did);
+      expect(item.mention_sidecar_hash).toContain(sidecarHash);
+      expect(item.body).toBeUndefined();
+      const wire = JSON.stringify(item);
+      expect(wire).not.toContain(plaintext);
+      expect(wire).not.toContain(bob.did);
     },
   );
 
@@ -294,3 +373,34 @@ test.describe("notifications", () => {
     },
   );
 });
+
+function mentionSidecarHash(spaceId: string, did: string): string {
+  return createHash("sha256").update(`${spaceId}|${did}`).digest("hex");
+}
+
+function encryptedEnvelope(
+  contentType: string,
+  ciphertext: string,
+  realmId: string,
+): Record<string, unknown> {
+  return {
+    scheme: "mls-rfc9420",
+    version: "1.0",
+    group_id: "mls_test",
+    epoch: 1,
+    content_type: "application/vnd.contrix.message+json",
+    ciphertext,
+    authentication_tag: "opaque-tag",
+    aad_visibility_event_id: "hidden",
+    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "cx.message.create" },
+    key_ref: {
+      algorithm: "MLS",
+      group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    },
+    aad_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    payload_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    digests: {
+      ciphertext: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  };
+}

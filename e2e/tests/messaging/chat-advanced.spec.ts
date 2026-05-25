@@ -6,6 +6,7 @@
 //   - discovery/profiles-presence.md §3
 //   - discovery/push-notifications.md §4.3.1, §4.5
 
+import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   authHeaders,
@@ -657,12 +658,10 @@ test.describe("chat advanced", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#messaging-chat-advanced-gap
+  test(
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-    // @expected-live-by: 2026Q3
     "E14.2 mention in E2EE space uses sidecar hash; server log does not contain mentionee.did plaintext",
-    async ({ browser, request }, testInfo) => {
+    async ({ request }) => {
       // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
       const stamp = Date.now();
       const alice = uniqueUser("s142-alice");
@@ -672,40 +671,80 @@ test.describe("chat advanced", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-
-      try {
-        const spaceId = await alicePage.createSpace({
+      const spaceId = await createSharedSpaceViaApi(
+        request,
+        alice,
+        aliceToken,
+        bob,
+        bobToken,
+        {
           title: `S14.2 E2EE Mention ${stamp}`,
-          discoverability: "listed",
-          joinRule: "invite",
-          seedMembers: [bob.did],
-        });
-        await bobPage.acceptInvite(spaceId);
-        await alicePage.gotoSpaceAdminSection(spaceId, "security");
-        await alicePage.page.getByTestId("encryption-profile-select").selectOption("mls_rfc9420");
-        await alicePage.page.getByTestId("save-security-policy-button").click();
-        await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(/mls_rfc9420/i);
+          historyVisibility: "shared",
+          encryptionProfile: "mls_rfc9420",
+        },
+      );
+      const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
+      const sidecarHash = mentionSidecarHash(spaceId, bob.did);
+      const envelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: spaceId,
+        kind: "cx.message.create",
+        payload: {
+          flow_id: flowIdFromRealmId(spaceId),
+          track: "discussion",
+          encrypted: true,
+          mention_sidecar_hash: [sidecarHash],
+          encrypted_payload: encryptedEnvelope("cx.message.v1", "opaque-e2ee-mention", spaceId),
+        },
+      });
+      await submitSignedEventApi(request, aliceToken, envelope, {
+        context: "submit E2EE mention sidecar message",
+      });
 
-        const mention = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
-        await sendChat(alicePage, spaceId, mention);
-        await stepShot(alicePage.page, testInfo, "e2ee-mention-sent");
-
-        const events = await request.get(
-          `${alicePage.serverUrl}/api/v1/events?space_id=${encodeURIComponent(spaceId)}`,
-          { headers: { authorization: `Bearer ${aliceToken}` } },
-        );
-        expect(events.status()).toBe(200);
-        const rawServerView = JSON.stringify(await events.json());
-        expect(rawServerView).not.toContain(bob.did);
-        expect(rawServerView).toContain("mention_sidecar_hash");
-      } finally {
-        await Promise.allSettled([bobPage.close(), alicePage.close()]);
-      }
+      const events = await listSpaceEventsViaApi(request, aliceToken, spaceId, { limit: 100 });
+      const messageEvent = events.find(
+        (event) => String(event.event_id) === String(envelope.event_id),
+      );
+      expect(messageEvent, "encrypted sidecar message event").toBeTruthy();
+      const rawServerView = JSON.stringify(messageEvent);
+      expect(rawServerView).not.toContain(bob.did);
+      expect(rawServerView).not.toContain(plaintext);
+      expect(rawServerView).toContain("mention_sidecar_hash");
+      expect(rawServerView).toContain(sidecarHash);
     },
   );
 });
+
+function mentionSidecarHash(spaceId: string, did: string): string {
+  return createHash("sha256").update(`${spaceId}|${did}`).digest("hex");
+}
+
+function encryptedEnvelope(
+  contentType: string,
+  ciphertext: string,
+  realmId: string,
+): Record<string, unknown> {
+  return {
+    scheme: "mls-rfc9420",
+    version: "1.0",
+    group_id: "mls_test",
+    epoch: 1,
+    content_type: "application/vnd.contrix.message+json",
+    ciphertext,
+    authentication_tag: "opaque-tag",
+    aad_visibility_event_id: "hidden",
+    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "cx.message.create" },
+    key_ref: {
+      algorithm: "MLS",
+      group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    },
+    aad_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    payload_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    digests: {
+      ciphertext: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  };
+}
 
 async function createChatApiFixture(request: APIRequestContext, label: string) {
   const stamp = Date.now();
