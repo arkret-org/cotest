@@ -15,6 +15,8 @@
 //   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
 //   ✓ Outbound push worker POSTs local invite/message operations to peers
 //   ✓ cx.invite.create, cx.member.state join, and cx.message.create trigger federation push
+//   ✓ backfill-operations pulls peer pages and ingests missing local operations
+//   ✓ operation-frontier exposes deterministic operation-id coverage
 //   ✗ RFC 9421 HTTP Message Signature NOT verified — peer impersonation possible
 //   ✗ service_binding_ref.reducer_profile_digest NOT validated
 
@@ -24,9 +26,11 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   acceptInviteApi,
   authHeaders,
+  backfillFederationOperations,
   createSpaceApi,
   listInvitesApi,
   makeOperation,
+  operationFrontierApi,
   pushFederationOperations,
   querySpaceEventsApi,
   sendMessageApi,
@@ -393,15 +397,85 @@ test.describe("cross-server federation", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#federation-cross-server-gap
-    // @user-promise: e2e/scenarios/federation/cross-server.md
-    // @expected-live-by: 2026Q3
+  test(
     "Pull / backfill: after a network partition, β fetches missing α events via GET /api/v1/federation/pull-operations",
-    async () => {
-      // spec: §4.2 pull / backfill
-      // soland gap: pull endpoint exists but α never persists "outgoing push
-      // failure" state, so β doesn't know what cursor to ask for.
+    async ({ request }) => {
+      const stamp = Date.now();
+      const alice = uniqueUser(`s2-backfill-alice-${stamp}`);
+      const bob = uniqueUser(`s2-backfill-bob-${stamp}`);
+      await ensureRegistered(request, alice, { server: "alpha" });
+      await ensureRegistered(request, bob, { server: "beta" });
+      const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
+      const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+      const spaceId = await createSpaceApi(
+        request,
+        aliceToken,
+        {
+          title: `S2 backfill ${stamp}`,
+          discoverability: "listed",
+          history_visibility: "shared",
+          invitees: [bob.did],
+          ownerDid: alice.did,
+          plaintext_visible_services: [solandServiceDid("alpha"), solandServiceDid("beta")],
+        },
+        { server: "alpha" },
+      );
+      const betaInvite = await waitForInvite(request, bobToken, bob.did, spaceId, "beta");
+      await acceptInviteApi(request, bobToken, bob.did, betaInvite.space_id, betaInvite.invite_id, {
+        server: "beta",
+      });
+      await waitForMember(request, aliceToken, bob.did, spaceId, "alpha");
+
+      const missingBody = `pulled after partition ${stamp}`;
+      const missingOperation = makeOperation({
+        spaceId,
+        objectType: "cx.message.create",
+        payload: {
+          event_id: typedId("event"),
+          sender: alice.did,
+          flow_id: typedId("flow"),
+          track: "discussion",
+          content: {
+            kind: "cx.content.text",
+            body: missingBody,
+          },
+        },
+      });
+
+      await pushFederationOperations(request, [missingOperation], {
+        origin: solandServiceDid("alpha"),
+        destination: solandServiceDid("alpha"),
+        server: "alpha",
+        spaceId,
+        serviceBindingRef: `${solandServiceDid("alpha")}#cotest-partition-source`,
+      });
+      await waitForEventBody(request, aliceToken, spaceId, missingBody, "alpha");
+
+      const betaBeforeEvents = await querySpaceEventsApi(request, bobToken, spaceId, {
+        server: "beta",
+        limit: 100,
+      });
+      expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
+      const alphaFrontier = await operationFrontierApi(request, spaceId, { server: "alpha" });
+      const betaFrontierBefore = await operationFrontierApi(request, spaceId, { server: "beta" });
+      expect(betaFrontierBefore.frontier_digest).not.toBe(alphaFrontier.frontier_digest);
+
+      const backfill = await backfillFederationOperations(request, {
+        server: "beta",
+        peerUrl: solandBaseUrl("alpha"),
+        peerDid: solandServiceDid("alpha"),
+        spaceId,
+        limit: 100,
+      });
+      expect(backfill.rejected ?? []).toEqual([]);
+      expect(backfill.accepted ?? []).toContain(String(missingOperation.operation_id));
+      await waitForEventBody(request, bobToken, spaceId, missingBody, "beta");
+
+      const betaFrontierAfter = await operationFrontierApi(request, spaceId, { server: "beta" });
+      for (const operationId of alphaFrontier.operation_ids) {
+        expect(betaFrontierAfter.operation_ids).toContain(operationId);
+      }
     },
   );
 

@@ -409,6 +409,59 @@ export async function pushFederationOperations(
   }>(response, "push federation operations");
 }
 
+export async function backfillFederationOperations(
+  request: APIRequestContext,
+  opts: {
+    server?: SolandKey;
+    peerUrl?: string;
+    peerDid?: string;
+    spaceId: string;
+    afterCursor?: string;
+    limit?: number;
+    maxPages?: number;
+  },
+) {
+  const response = await request.post(
+    `${solandBaseUrl(opts.server)}/api/v1/federation/backfill-operations`,
+    {
+      data: {
+        peer_url: opts.peerUrl,
+        peer_did: opts.peerDid,
+        space_id: opts.spaceId,
+        after_cursor: opts.afterCursor,
+        limit: opts.limit,
+        max_pages: opts.maxPages,
+      },
+    },
+  );
+  return await expectJsonOk<{
+    pulled: number;
+    accepted?: string[];
+    rejected?: Array<Record<string, unknown>>;
+    next_cursor?: string;
+    has_more?: boolean;
+    frontier_before?: Record<string, unknown>;
+    frontier_after?: Record<string, unknown>;
+  }>(response, "backfill federation operations");
+}
+
+export async function operationFrontierApi(
+  request: APIRequestContext,
+  spaceId: string,
+  opts: { server?: SolandKey } = {},
+) {
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/api/v1/federation/operation-frontier?space_id=${encodeURIComponent(spaceId)}`,
+  );
+  return await expectJsonOk<{
+    space_id: string;
+    operation_count: number;
+    operation_ids: string[];
+    latest_operation_id?: string;
+    frontier_digest: string;
+  }>(response, "federation operation frontier");
+}
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
