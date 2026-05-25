@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 398 · Verified: 208 (52.3%)
+Promised: 395 · Verified: 210 (53.2%)
 
-Totals: 66 scenarios / 66 specs / 208 verified / 398 promised / 190 fixme / 19 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 210 verified / 395 promised / 185 fixme / 19 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 208 verified / 398 promised / 190 fixme / 19 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 208 |
-| test.fixme | 190 |
-| promised tests | 398 |
-| verified tests | 208 |
-| verified ratio | 52.3% |
+| live tests | 210 |
+| test.fixme | 185 |
+| promised tests | 395 |
+| verified tests | 210 |
+| verified ratio | 53.2% |
 | test.skip (conditional) | 19 |
 | domains | 19 |
 
@@ -27,7 +27,7 @@ Totals: 66 scenarios / 66 specs / 208 verified / 398 promised / 190 fixme / 19 s
 | conformance | 4 | 4 | 21 | 33 | 63.6% | 12 | 3 |
 | discovery | 2 | 2 | 10 | 11 | 90.9% | 1 | 0 |
 | documents | 1 | 1 | 2 | 2 | 100.0% | 0 | 0 |
-| encryption | 5 | 5 | 14 | 36 | 38.9% | 22 | 0 |
+| encryption | 5 | 5 | 16 | 33 | 48.5% | 17 | 0 |
 | extensions | 3 | 3 | 1 | 14 | 7.1% | 13 | 0 |
 | federation | 2 | 2 | 10 | 16 | 62.5% | 6 | 1 |
 | governance | 4 | 4 | 16 | 28 | 57.1% | 12 | 1 |
@@ -60,7 +60,7 @@ Totals: 66 scenarios / 66 specs / 208 verified / 398 promised / 190 fixme / 19 s
 | discovery/notifications | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
 | documents/collaboration | 2 | 2 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/audited-e2ee | 1 | 6 | 16.7% | 5 | 0 | mixed | yes |  |
-| encryption/encrypted-attachments | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
+| encryption/encrypted-attachments | 3 | 4 | 75.0% | 1 | 0 | mixed | yes |  |
 | encryption/key-backup | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |
 | encryption/key-backup-restore | 7 | 7 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/mls-group | 4 | 8 | 50.0% | 4 | 0 | mixed | yes |  |

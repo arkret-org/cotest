@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(403);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `cx.moderation.franking_proof` 收据(可证存在但不可解密)。
+在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `cx.moderation.franking_proof` 收据(可证存在但不可解密)。
 
 不验证:MLS 群组生命周期本身(encryption/mls-group 前置)、密钥备份(encryption/key-backup)、calls 中的媒体(calls/webrtc)。
 
@@ -114,9 +114,10 @@
 
 ## Implementation notes
 
-- **soland 缺口**:Blob Service 的 authz(成员校验)、Content-Type / Disposition 规则、opaque 403、`cx.moderation.franking_proof` 写入(audited 模式)— 全部 MUST 但实现度未知
-- **yougen 缺口**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI
-- **测试侧**:Phase E 需要 service log access — 测试可以在 jointDir/services/soland.stderr.log 里 grep,但更可靠的是 soland 暴露 admin endpoint
+- **2026-05-25 P2-044 local close**:soland `POST /api/v1/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
+- **2026-05-25 P2-044 local close**:yougen 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`ContrixApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
+- **仍待 audited-e2ee**:`cx.moderation.franking_proof`、audit-agent invite、`cx.audit.accessed` 与 tamper verification 归入 `encryption/audited-e2ee` / GAP-P2-045。
+- **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。
 
 ## 总耗时预估
 
