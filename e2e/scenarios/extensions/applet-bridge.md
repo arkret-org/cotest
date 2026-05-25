@@ -17,7 +17,7 @@
 
 - 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
-- 1 × mock-applet-registry — 由并行任务产出的 mock,监听 `http://127.0.0.1:${MOCK_APPLET_REGISTRY_PORT}`;由它代表"applet developer"完成 manifest 签名与 ghost actor 颁发的对外 surface
+- 1 × mock-applet-registry — 由 cotest runner 的 `-StartMockAppletRegistry` / `-StartMocks` 启动,通过 `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 注入;由它代表"applet developer"完成 manifest 签名与外部 webhook 转发
 - 共享同一 coauth;principal actor 与 bot/ghost actor 的 token 都来自这个 coauth(ghost token 通过 applet manifest 中 `signing_key` 派生,见 spec §5)
 
 ## Actors
@@ -36,7 +36,7 @@
 - alice 通过 `POST /api/v1/account/register` 注册过(`ensureRegistered`)
 - alice 持有有效 dev session token(`POST /api/v1/auth/dev-login`)
 - alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_token
-- `process.env.MOCK_APPLET_REGISTRY_PORT` 存在;mock-applet-registry 已经 ready(健康检查 `GET /healthz` 返回 200)
+- `process.env.COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 存在;mock-applet-registry 已经 ready(健康检查 `GET /healthz` 返回 200)
 - mock-applet-registry 内置 `applet_service` 的签名密钥;测试只需要调它的 HTTP API,不直接持有密钥
 
 ## Steps
@@ -49,7 +49,7 @@
    - `display_name = "Demo Bridge Applet"`
    - `capabilities = ["realm:portal", "message:write", "actor:provision-ghost"]`
    - `signing_key` 由 mock 内置
-2. mock-applet-registry `POST ${MOCK_APPLET_REGISTRY_PORT}/sign-manifest` 返回 `{ manifest, signature, signing_did }`
+2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-manifest` 返回 `{ manifest, signature, signing_did }`
 3. 测试以 alice 的 admin token 调 soland `POST /api/v1/extensions/applets/register`,body = `{ manifest, signature }`
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_did, portal_realm_id }`
    - 记录 `applet_id`、`bot_actor_did`、`portal_realm_id`
@@ -66,14 +66,14 @@
 6. 断言:`space-lifecycle-flow` 显示 `created cx:space:...`,记录 `spaceId`
 7. **alice** 在 `/space/${spaceId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_did`
    - 断言:`space-admin-panel` 状态文本含 `invited ${bot_actor_did}`
-8. **applet_service** 替 bot 接受 invite:`POST ${MOCK_APPLET_REGISTRY_PORT}/bot/${applet_id}/accept-invite`,body = `{ space_id: spaceId }`
+8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ space_id: spaceId }`
    - mock 内部会用 bot 的 session token 调 soland `POST /api/v1/spaces/${spaceId}/invite/accept`
    - 断言:返回 `{ status: "joined" }`
 9. **alice** 同步 `/space/${spaceId}/admin/members`,断言 members 列表包含 `bot_actor_did`
 
 ### Phase C — 外部事件 → ghost actor 转译
 
-10. mock-applet-registry 模拟外部事件:测试调 `POST ${MOCK_APPLET_REGISTRY_PORT}/external-event`,body 形如
+10. mock-applet-registry 模拟外部事件:测试调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`,body 形如
     ```json
     {
       "applet_id": "<applet_id>",
@@ -98,7 +98,7 @@
 
 ### Phase D — 链路追溯 UI
 
-16. **alice** 在该消息卡片点 `accountability-trace-button`(yougen UI;若未实现,这一步降级为 fixme + 直接断言 §15 的 HTTP 返回)
+16. **alice** 在该消息卡片点 `accountability-trace-button`(yougen UI;若未实现,这一步降级为直接断言 §15 的 HTTP 返回)
     - 断言:面板显示两级链路 — 第一级 bot `bot_actor_did`,第二级 registry `applet_service.did`
 
 ### Phase E — Revoke + 后续 ghost 消息被拒
@@ -106,7 +106,7 @@
 17. **alice** 在 `/space/${spaceId}/admin/access` 或 `/settings/applets`(以 yougen 实际路由为准)对 `applet_id` 执行 revoke:
     - 调 soland `POST /api/v1/extensions/applets/${applet_id}/revoke`,带 alice token
     - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
-18. 再调 `POST ${MOCK_APPLET_REGISTRY_PORT}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
+18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
     - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
     - **断言**:alice timeline 不出现 `"after revoke ${stamp}"`
 19. 已存在的 bot/ghost 记录保留(historic accountability 不能事后被抹去) — 断言:
@@ -129,23 +129,23 @@
 ## Edge cases / sub-tests
 
 - **E4.1 namespace 冲突**:Phase A 之后,mock 再用一个不同的 `manifest_id` 但相同 `namespace = "bridge.demo"` 注册;soland 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
-- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图直接 `POST /api/v1/spaces/${spaceId}/messages` 也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
+- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图直接 `POST /api/v1/extensions/applets/${applet_id}/bot/messages` 也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
 - **E4.3 idempotency**:同一 `manifest_id` 用相同 `Idempotency-Key` 重复 register 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_did }`;不同 `Idempotency-Key` 但相同 `manifest_id` 返回 `409 applet_already_registered`
 
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建空间或共用 Phase A,以避免 namespace 状态干扰。
 
 ## Implementation notes
 
-- soland 当前 **没有** `/api/v1/extensions/applets/*` 路由(spec 里也是草案);整个主测试以 `test.fixme` 起步,等待 `// soland gap: applet manifest verifier + bot/ghost DID provisioning + portal realm routing 未实现` 这个 gap 关闭
-- mock-applet-registry 由并行任务产出;它需要至少这几个 endpoint:
+- soland 已提供 `/api/v1/extensions/applets/*` runnable surface:manifest register、ghost provisioning、bot direct message、revoke,以及 `GET /api/v1/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
+- mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-manifest` → `{ manifest, signature, signing_did }`
   - `POST /bot/:applet_id/accept-invite` → `{ status }`
   - `POST /external-event` → `{ ghost_actor_did, message_id }` 或错误
-- `MOCK_APPLET_REGISTRY_PORT` 由 cotest harness 在启动 mock 时注入(同 `COTEST_MOCK_WITNESS_BASE_URL` 的模式);测试中直接读 `process.env.MOCK_APPLET_REGISTRY_PORT`
-- Yougen UI 侧:`ghost-actor-badge`、`accountability-trace-button`、`/settings/applets` 当前都不存在 — 主测试用 HTTP 断言为主,UI 断言挂 fixme
-- Portal realm 是 spec §5 引入的"消息归属于 applet 而非 space"的概念;在 timeline 渲染时仍以 space_id 投影,但底层存储路径不同 — 这部分依赖 soland 的 realm 路由,属于上面提到的 soland gap
+- `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 由 cotest harness 在启动 mock 时注入;mock 自身仍用 `MOCK_APPLET_REGISTRY_PORT` 绑定本地监听端口
+- Yougen UI 侧:`ghost-actor-badge`、`accountability-trace-button`、`/settings/applets` 当前都不存在 — 主测试用 timeline 可见性 + HTTP accountability 断言为主
+- Portal realm 是 spec §5 引入的"消息归属于 applet 而非 space"的概念;当前 soland route 返回 `portal_realm_id` 并在 projection payload / content portal metadata 中保留,同时按 `space_id` 投影到用户 timeline
 
 ## 总耗时预估
 
-主流程跑通约 30-45s(单 browser context + 多次 HTTP 直调 mock-applet-registry / soland);E4.1/E4.2/E4.3 各 +5-10s。fixme 阶段实际只跑 §15-§18 的 HTTP 骨架,会更快。
+主流程跑通约 1-5s(单 browser context + 多次 HTTP 直调 mock-applet-registry / soland);E4.1/E4.2/E4.3 各通常小于 1s。

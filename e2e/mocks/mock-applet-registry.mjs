@@ -51,8 +51,10 @@
 //     joint-e2e to assert "applet registered → bot actor minted → ghost
 //     actor created with accountability pointing back at the registry".
 
+import fs from "node:fs";
+import path from "node:path";
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, sign } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
 
@@ -65,7 +67,7 @@ const registryDid =
   process.env.MOCK_APPLET_REGISTRY_DID ??
   `did:web:applet-registry.joint-e2e.local#${randomUUID().slice(0, 8)}`;
 
-const { publicKey, jwks } = createEd25519KeyPair("mock-applet-registry-key-1");
+const { publicKey, privateKey, jwks } = createEd25519KeyPair("mock-applet-registry-key-1");
 const publicJwk = publicKey.export({ format: "jwk" });
 
 // In-memory state. `applets` keyed by applet_id; `ghostActors` keyed by
@@ -85,9 +87,10 @@ const revokedLog = new InspectLog("revoked");
 function deriveAppletId(manifest) {
   // Prefer manifest-supplied applet_id so harness specs can pin a known
   // value; otherwise synthesize from namespace + name + a short uuid.
+  if (manifest?.id) return String(manifest.id);
   if (manifest?.applet_id) return String(manifest.applet_id);
-  const ns = manifest?.namespace ?? "anon";
-  const name = manifest?.name ?? "applet";
+  const ns = manifest?.metadata?.namespace ?? manifest?.namespace ?? "anon";
+  const name = manifest?.metadata?.display_name ?? manifest?.name ?? "applet";
   return `${ns}.${name}.${randomUUID().slice(0, 8)}`
     .toLowerCase()
     .replace(/[^a-z0-9.\-]/g, "-");
@@ -113,6 +116,82 @@ async function readJson(req) {
   }
 }
 
+function currentAppletSchemaHash() {
+  let cursor = process.cwd();
+  for (;;) {
+    const candidate = path.join(
+      cursor,
+      "contrix-spec",
+      "spec",
+      "v1",
+      "artifacts",
+      "schemas",
+      "applet.schema.json",
+    );
+    if (fs.existsSync(candidate)) {
+      return createHash("sha256").update(fs.readFileSync(candidate)).digest("hex");
+    }
+    const parent = path.dirname(cursor);
+    if (parent === cursor) return "";
+    cursor = parent;
+  }
+}
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  return `{${Object.keys(value)
+    .filter((key) => value[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+    .join(",")}}`;
+}
+
+function signedManifest(body) {
+  const capabilities =
+    body.requested_capabilities ??
+    body.capabilities ?? ["realm:portal", "message:write", "actor:provision-ghost"];
+  const metadata = {
+    ...(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+    namespace: body.namespace ?? body.metadata?.namespace ?? "bridge.demo",
+    display_name: body.display_name ?? body.metadata?.display_name ?? "Demo Bridge Applet",
+  };
+  const manifest = {
+    id:
+      body.manifest_id ??
+      body.id ??
+      `applet:bridge:${metadata.namespace}-${randomUUID().slice(0, 8)}`,
+    version: body.version ?? "1.0.0",
+    signer_did: body.signer_did ?? registryDid,
+    signature: "",
+    signer_public_key: publicJwk.x,
+    requested_capabilities: capabilities,
+    schema_hash: body.schema_hash ?? currentAppletSchemaHash(),
+    metadata,
+  };
+  const signingBody = {
+    id: manifest.id,
+    metadata: manifest.metadata,
+    requested_capabilities: manifest.requested_capabilities,
+    schema_hash: manifest.schema_hash,
+    signer_did: manifest.signer_did,
+    signer_public_key: manifest.signer_public_key,
+    version: manifest.version,
+  };
+  manifest.signature = sign(null, Buffer.from(canonicalJson(signingBody), "utf8"), privateKey)
+    .toString("base64url");
+  return {
+    manifest,
+    signature: manifest.signature,
+    manifest_signature: manifest.signature,
+    signing_did: manifest.signer_did,
+  };
+}
+
 function matchAppletPath(pathname) {
   // /api/v1/applets/:applet_id[/(ghost-actor|ghost-actors|revoke)]
   const m = pathname.match(
@@ -120,6 +199,12 @@ function matchAppletPath(pathname) {
   );
   if (!m) return null;
   return { appletId: decodeURIComponent(m[1]), suffix: m[2] ?? null };
+}
+
+function matchBotPath(pathname) {
+  const m = pathname.match(/^\/bot\/([^/]+)\/accept-invite$/);
+  if (!m) return null;
+  return { appletId: decodeURIComponent(m[1]) };
 }
 
 const server = createServer(async (req, res) => {
@@ -141,8 +226,24 @@ const server = createServer(async (req, res) => {
     if (handled) return;
   }
 
+  if (url.pathname === "/healthz") {
+    res.end(JSON.stringify({ ok: true, service: "mock-applet-registry" }));
+    return;
+  }
+
   if (url.pathname === "/jwks") {
     res.end(JSON.stringify(jwks));
+    return;
+  }
+
+  if (url.pathname === "/sign-manifest" && req.method === "POST") {
+    const body = await readJson(req);
+    if (!body) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "invalid_json" }));
+      return;
+    }
+    res.end(JSON.stringify(signedManifest(body)));
     return;
   }
 
@@ -199,9 +300,11 @@ const server = createServer(async (req, res) => {
       manifest_signature: body.manifest_signature,
       bot_actor_did: botActorDid,
       namespace: body.manifest.namespace ?? null,
-      capabilities: Array.isArray(body.manifest.capabilities)
-        ? body.manifest.capabilities
-        : [],
+      capabilities: Array.isArray(body.manifest.requested_capabilities)
+        ? body.manifest.requested_capabilities
+        : Array.isArray(body.manifest.capabilities)
+          ? body.manifest.capabilities
+          : [],
       registered_at: new Date().toISOString(),
       status: "registered",
       issued_by: registryDid,
@@ -298,6 +401,69 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ applet_id: appletId, status: "revoked" }));
       return;
     }
+  }
+
+  const botMatch = matchBotPath(url.pathname);
+  if (botMatch && req.method === "POST") {
+    const record = applets.get(botMatch.appletId);
+    const body = await readJson(req);
+    if (record) {
+      record.joined_spaces ??= [];
+    }
+    if (record && body?.space_id && !record.joined_spaces.includes(body.space_id)) {
+      record.joined_spaces.push(body.space_id);
+    }
+    res.end(
+      JSON.stringify({
+        applet_id: botMatch.appletId,
+        bot_actor_did: record?.bot_actor_did ?? null,
+        space_id: body?.space_id ?? null,
+        status: "joined",
+      }),
+    );
+    return;
+  }
+
+  if (url.pathname === "/external-event" && req.method === "POST") {
+    const body = await readJson(req);
+    if (!body || !body.applet_id) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "missing_applet_id" }));
+      return;
+    }
+    const solandBase =
+      body.soland_base_url ??
+      process.env.SOLAND_BASE_URL ??
+      process.env.COTEST_SOLAND_BASE_URL;
+    const authorization =
+      req.headers.authorization ??
+      body.authorization ??
+      (body.access_token ? `Bearer ${body.access_token}` : undefined);
+    if (!solandBase || !authorization) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "missing_soland_base_url_or_authorization" }));
+      return;
+    }
+    const upstream = await fetch(
+      `${String(solandBase).replace(/\/$/, "")}/api/v1/extensions/applets/${encodeURIComponent(
+        body.applet_id,
+      )}/ghosts`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization,
+        },
+        body: JSON.stringify({
+          space_id: body.space_id,
+          external_user: body.external_user,
+          payload: body.payload,
+        }),
+      },
+    );
+    res.statusCode = upstream.status;
+    res.end(await upstream.text());
+    return;
   }
 
   res.statusCode = 404;
