@@ -45,7 +45,7 @@
 
 ### Phase D — Space-level override
 
-10. alice 觉得 mallory 特殊情况要放行;在 `S_acme` 层提交 `cx.space.moderation_policy { allow_override: [{ target: mallory.did, action: "allow_join" }] }`
+10. alice 觉得 mallory 特殊情况要放行;在 `S_acme` 层提交 `cx.realm.moderation_policy { allow_override: [{ target: mallory.did, action: "allow_join" }] }`
 11. 但 spec 可能要求 override organization policy 必须有 `cx.organization.override_approval` 由 acme-org 签 → 验证这个 gating
 12. (sub-test:无 approval)reducer 拒 alice 的 override;reason `requires_organization_approval`
 13. (sub-test:有 approval)acme-org 签 approval → reducer 接受;mallory 现在能 join
@@ -68,8 +68,10 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.organization.moderation_policy`、organization registry、effective-policy projection、policy inheritance — 几乎全 ✗
-- **harness 缺口**:测试侧需要能注册 organization DID(不是普通 actor)
+- **soland 已落地**:`/api/v1/organizations` 提供本地 organization registry/policy surface;`cx.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/api/v1/spaces/{id}/effective-policy` 返回 organization layers、fanout space list、Space override。
+- **join gate 已落地**:`cx.member.state{membership="join"}` 会读取 inherited organization policy,命中 `deny_join` target 时返回 `organization_policy_denied`。
+- **override approval 已落地**:Space 级 `allow_join` override 若覆盖组织 `deny_join`,必须携带 `organization_approval`;否则返回 `requires_organization_approval`。
+- **remaining yougen UI 缺口**:Organization directory tab 的 verified badge、member count、policy inheritance hints 由 GAP-P2-065 覆盖。
 
 ## 总耗时预估
 

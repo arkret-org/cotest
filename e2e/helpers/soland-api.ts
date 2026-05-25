@@ -101,6 +101,7 @@ export async function createSpaceApi(
     plaintext_visible_services?: string[];
     public?: boolean;
     ownerDid?: string;
+    owning_organizations?: string[];
     audit_disclosure_policy?: Record<string, unknown>;
     retention_policy?: Record<string, unknown>;
   },
@@ -140,6 +141,9 @@ export async function createSpaceApi(
           history_visibility: data.history_visibility ?? "shared",
           encryption_profile: data.encryption_profile ?? "none",
           plaintext_visible_services: plaintextVisibleServices,
+          ...(data.owning_organizations
+            ? { owning_organizations: data.owning_organizations }
+            : {}),
           ...(data.audit_disclosure_policy
             ? { audit_disclosure_policy: data.audit_disclosure_policy }
             : {}),
