@@ -372,13 +372,10 @@ test.describe("consent grant", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#identity-consent-grant-gap
-    // @user-promise: e2e/scenarios/identity/consent-grant.md
-    // @expected-live-by: 2026Q3
+  test(
     "E1.1 time-windowed consent expires after valid_until elapses",
     async ({ browser, request }, testInfo) => {
-      /* spec: identity/consent-model.md §2. soland gap: cx.consent.* reducer 未实现 */
+      // spec: identity/consent-model.md §2 time window.
       const alice = uniqueUser("consent-window-alice");
       const bob = uniqueUser("consent-window-bob");
       await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
@@ -419,11 +416,8 @@ test.describe("consent grant", () => {
     },
   );
 
-  test.fixme("E1.2 revoke then re-grant lifecycle", async ({ browser, request }, testInfo) => {
-    // @blocking-on: soland#identity-consent-grant-gap
-    // @user-promise: e2e/scenarios/identity/consent-grant.md
-    // @expected-live-by: 2026Q3
-    /* spec: identity/consent-model.md §3. soland gap: cx.consent.* reducer 未实现 */
+  test("E1.2 revoke then re-grant lifecycle", async ({ browser, request }, testInfo) => {
+    // spec: identity/consent-model.md §3 add-after-remove lifecycle.
     const alice = uniqueUser("consent-regrant-alice");
     const bob = uniqueUser("consent-regrant-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
@@ -474,13 +468,10 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#identity-consent-grant-gap
-    // @user-promise: e2e/scenarios/identity/consent-grant.md
-    // @expected-live-by: 2026Q3
+  test(
     "E1.3 scope-granularity: invite-scope consent does not allow call",
     async ({ browser, request }, testInfo) => {
-      /* spec: identity/consent-model.md §2. soland gap: cx.consent.* reducer 未实现 */
+      // spec: identity/consent-model.md §2 scope granularity.
       const alice = uniqueUser("consent-scope-alice");
       const bob = uniqueUser("consent-scope-bob");
       await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
@@ -518,13 +509,10 @@ test.describe("consent grant", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#identity-consent-grant-gap
-    // @user-promise: e2e/scenarios/identity/consent-grant.md
-    // @expected-live-by: 2026Q3
+  test(
     "E1.4 pairwise DID consent isolates contact channels",
     async ({ browser, request }, testInfo) => {
-      /* spec: identity/consent-model.md §4. soland gap: cx.consent.* reducer 未实现 */
+      // spec: identity/consent-model.md §4 pairwise DID isolation.
       const alice = uniqueUser("consent-pairwise-alice");
       const bob = uniqueUser("consent-pairwise-bob");
       const bobPairwise = {
