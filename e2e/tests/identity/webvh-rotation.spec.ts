@@ -9,7 +9,7 @@ import { test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 test.describe("WebVH DID key rotation", () => {
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -20,7 +20,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -30,7 +30,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -40,7 +40,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -50,7 +50,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -60,7 +60,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -70,7 +70,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3
@@ -80,7 +80,7 @@ test.describe("WebVH DID key rotation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-webvh-rotation-gap
     // @user-promise: e2e/scenarios/identity/webvh-rotation.md
     // @expected-live-by: 2026Q3

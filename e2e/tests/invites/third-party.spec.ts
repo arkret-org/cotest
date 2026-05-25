@@ -35,7 +35,7 @@ test.describe("third-party invite", () => {
     expect(authProbe.status()).toBeLessThan(500);
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
@@ -45,7 +45,7 @@ test.describe("third-party invite", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
@@ -55,7 +55,7 @@ test.describe("third-party invite", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
@@ -65,7 +65,7 @@ test.describe("third-party invite", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
@@ -73,7 +73,7 @@ test.describe("third-party invite", () => {
     async () => {},
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
@@ -81,7 +81,7 @@ test.describe("third-party invite", () => {
     async () => {},
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3

@@ -46,7 +46,7 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
@@ -58,7 +58,7 @@ test.describe("key backup + restore", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
@@ -70,7 +70,7 @@ test.describe("key backup + restore", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
@@ -81,7 +81,7 @@ test.describe("key backup + restore", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
@@ -91,7 +91,7 @@ test.describe("key backup + restore", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
@@ -101,7 +101,7 @@ test.describe("key backup + restore", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
@@ -111,7 +111,7 @@ test.describe("key backup + restore", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3

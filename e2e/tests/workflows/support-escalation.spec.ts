@@ -128,7 +128,7 @@ test.describe("workflow: support escalation", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-support-escalation-gap
     // @user-promise: e2e/scenarios/workflows/support-escalation.md
     // @expected-live-by: 2026Q3
@@ -140,7 +140,7 @@ test.describe("workflow: support escalation", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-support-escalation-gap
     // @user-promise: e2e/scenarios/workflows/support-escalation.md
     // @expected-live-by: 2026Q3

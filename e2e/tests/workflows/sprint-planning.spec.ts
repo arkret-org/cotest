@@ -106,7 +106,7 @@ test.describe("workflow: sprint planning", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-sprint-planning-gap
     // @user-promise: e2e/scenarios/workflows/sprint-planning.md
     // @expected-live-by: 2026Q3
@@ -232,7 +232,7 @@ test.describe("workflow: sprint planning", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-sprint-planning-gap
     // @user-promise: e2e/scenarios/workflows/sprint-planning.md
     // @expected-live-by: 2026Q3

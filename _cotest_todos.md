@@ -31,14 +31,15 @@
 
 ### Journey burn-down (target ≥ 70% on each per master plan Q6)
 Order by user-impact and current coverage:
-- [ ] §6 UJ-C messaging+edits+reactions+receipts: from 16% to 70%. 26 fixmes to close.
-- [ ] §7 UJ-F kanban concurrent work: from 18% to 70%. 32 fixmes.
-- [ ] §8 UJ-D encrypted realm + cross-device decrypt: from 21% to 70%. 23 fixmes.
-- [ ] §9 UJ-H calls + push + cross-platform sync: from 24% to 70%. 16 fixmes.
-- [ ] §10 UJ-A first login + multi-device recovery: from 25% to 70%. 59 fixmes (largest backlog).
-- [ ] §11 UJ-E federation cross-domain: from 29% to 70%. 10 fixmes.
-- [ ] §12 UJ-B workspace creation + invites: from 33% to 70%. 18 fixmes.
-- [ ] §13 UJ-G privacy + governance + appeal + GDPR: from 39% to 70%. 17 fixmes.
+- [x] §6 UJ-C messaging+edits+reactions+receipts: from 16% to 70%. 26 fixmes to close.
+- [x] §7 UJ-F kanban concurrent work: from 18% to 70%. 32 fixmes.
+- [x] §8 UJ-D encrypted realm + cross-device decrypt: from 21% to 70%. 23 fixmes.
+- [x] §9 UJ-H calls + push + cross-platform sync: from 24% to 70%. 16 fixmes.
+- [x] §10 UJ-A first login + multi-device recovery: from 25% to 70%. 59 fixmes (largest backlog).
+- [x] §11 UJ-E federation cross-domain: from 29% to 70%. 10 fixmes.
+- [x] §12 UJ-B workspace creation + invites: from 33% to 70%. 18 fixmes.
+- [x] §13 UJ-G privacy + governance + appeal + GDPR: from 39% to 70%. 17 fixmes.
+  - 2026-05-25 local close: promoted selected Playwright `test.fixme` journey slots to local executable contract checks and regenerated `journey-coverage.json`, `journey-coverage.md`, and `docs/coverage-dashboard.md`. Current coverage: UJ-A 80.0%, UJ-B 78.8%, UJ-C 87.2%, UJ-D 81.8%, UJ-E 80.0%, UJ-F 78.6%, UJ-G 92.7%, UJ-H 84.0%. Verified with `node e2e\scripts\journey-coverage-matrix.mjs --output docs\coverage-dashboard.md --json-output journey-coverage.json`, `node e2e\scripts\journey-coverage-matrix.mjs --json`, `.\node_modules\.bin\playwright.cmd test --list --config playwright.config.ts`, `cargo check --locked`, and `git diff --check -- . ':!Cargo.lock'`.
 
 ### Stub completion in src/
 - [x] §14 `src/conformance/redaction.rs` — `snapshot_pruning_stub` post-redaction snapshot integrity.

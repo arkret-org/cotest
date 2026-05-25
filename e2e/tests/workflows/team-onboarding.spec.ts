@@ -95,7 +95,7 @@ test.describe("workflow: team onboarding", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-team-onboarding-gap
     // @user-promise: e2e/scenarios/workflows/team-onboarding.md
     // @expected-live-by: 2026Q3
@@ -105,7 +105,7 @@ test.describe("workflow: team onboarding", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-team-onboarding-gap
     // @user-promise: e2e/scenarios/workflows/team-onboarding.md
     // @expected-live-by: 2026Q3

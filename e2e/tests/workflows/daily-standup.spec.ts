@@ -106,7 +106,7 @@ test.describe("workflow: async daily standup", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-daily-standup-gap
     // @user-promise: e2e/scenarios/workflows/daily-standup.md
     // @expected-live-by: 2026Q3
@@ -116,7 +116,7 @@ test.describe("workflow: async daily standup", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#workflows-daily-standup-gap
     // @user-promise: e2e/scenarios/workflows/daily-standup.md
     // @expected-live-by: 2026Q3

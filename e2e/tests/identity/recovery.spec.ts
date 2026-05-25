@@ -28,7 +28,7 @@ test.describe("account recovery", () => {
     expect([200, 401, 404]).toContain(recoveryListResp.status());
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
@@ -39,7 +39,7 @@ test.describe("account recovery", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
@@ -49,7 +49,7 @@ test.describe("account recovery", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
@@ -59,7 +59,7 @@ test.describe("account recovery", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
@@ -69,7 +69,7 @@ test.describe("account recovery", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
@@ -79,7 +79,7 @@ test.describe("account recovery", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
@@ -89,7 +89,7 @@ test.describe("account recovery", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
