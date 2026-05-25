@@ -8,8 +8,8 @@
 
 ## Spec 锚点
 
-- `models/space-and-place.md` §4 (Place / Board / List)
-- `models/space-and-place.md` §4.4 (lifecycle / archive cascade)
+- `models/realm-and-space.md` §3 (Space container / Board / List)
+- `common-fields.md` §5.1 (lifecycle / archive cascade)
 
 ## 拓扑
 
@@ -46,18 +46,26 @@
 
 7. archive `Review PR backlog`(以为完了,其实没)
 8. 立刻在 archive 列找到那张,点 restore
-9. 断言:`Today` 列又有 `Review PR backlog`
+9. 断言:`Today` 列又有 `Review PR backlog`,且 rank 顺序仍在 `Spec the Q4 roadmap doc` 之前
+
+### Phase E — 整列 archive / restore cascade
+
+10. archive `Today` list
+11. 断言:`Today` list 进入 archived-lists,`Review PR backlog` 与 `Spec the Q4 roadmap doc` 的 Flow projection state 变为 `archived`
+12. restore `Today` list
+13. 断言:`Today` list 回到 board,两张卡 Flow projection state 回到 `active`,rank 字段未丢失
 
 ## Observable assertions
 
 - 步骤 3:Today 列有 4 张
 - 步骤 6:Today 列 2 张,archive 列 2 张
-- 步骤 9:restore 后 Today 列 3 张(`Review PR backlog` 回来)
+- 步骤 9:restore 后 Today 列 3 张(`Review PR backlog` 回来),顺序仍按原 rank
+- 步骤 11-13:整列 archive / restore 级联卡片 lifecycle,且 restore 后保留原 rank
 
 ## Edge cases
 
-- **E-kanbanweek.1** restore 后卡顺序(应该回到原列末尾)
-- **E-kanbanweek.2** archive list (整列归档)— yougen 是否支持
+- **E-kanbanweek.1** restore 后卡顺序按原 rank 保留
+- **E-kanbanweek.2** archive list (整列归档) 级联到 contained cards
 - **E-kanbanweek.3** Pat 改名一张卡(card title edit)— 需要 card-detail-modal 里有 edit 入口
 
 ## 总耗时预估

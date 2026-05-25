@@ -1,15 +1,16 @@
 // Kanban week-in-review workflow — single user runs a day on the board
 // Contract: e2e/scenarios/workflows/kanban-week.md
 // Spec refs:
-//   - models/space-and-place.md §4 (Place / Board / List)
-//   - models/space-and-place.md §4.4 (lifecycle / archive cascade)
+//   - models/realm-and-space.md §3 (Space containers / Board / List)
+//   - common-fields.md §5.1 (lifecycle / archive cascade)
 //
 // Realistic story: PM Pat plans their day on the kanban: four tasks in
 // Today, archives two as done, then restores one that was archived by
 // mistake. Single-user to stay on the proven kanban CRUD surface; cross-
 // user kanban sync lives in workflows/sprint-planning fixme'd cases.
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
@@ -82,6 +83,22 @@ test.describe("workflow: kanban week-in-review", () => {
           timeout: 30_000,
         });
       }
+      const prFlowId = await today
+        .getByTestId("kanban-card")
+        .filter({ hasText: prTask })
+        .first()
+        .getByTestId("card-archive-button")
+        .getAttribute("data-flow-id");
+      const specFlowId = await today
+        .getByTestId("kanban-card")
+        .filter({ hasText: specTask })
+        .first()
+        .getByTestId("card-archive-button")
+        .getAttribute("data-flow-id");
+      const prFlowIdValue = prFlowId ?? "";
+      const specFlowIdValue = specFlowId ?? "";
+      expect(prFlowIdValue).toMatch(/^cx:flow:/);
+      expect(specFlowIdValue).toMatch(/^cx:flow:/);
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
       // Phase C — archive two finished tasks.
@@ -127,31 +144,84 @@ test.describe("workflow: kanban week-in-review", () => {
       await expect(
         patPage.page.getByTestId("kanban-card").filter({ hasText: prTask }),
       ).toBeVisible({ timeout: 30_000 });
+      const restoredTitles = await today.getByTestId("kanban-card").allTextContents();
+      const restoredPrIndex = restoredTitles.findIndex((title) => title.includes(prTask));
+      const restoredSpecIndex = restoredTitles.findIndex((title) => title.includes(specTask));
+      expect(restoredPrIndex).toBeGreaterThanOrEqual(0);
+      expect(restoredSpecIndex).toBeGreaterThanOrEqual(0);
+      expect(restoredPrIndex).toBeLessThan(restoredSpecIndex);
       await stepShot(patPage.page, testInfo, "D-restored");
+
+      // Phase E — archive an entire list and verify soland cascades the card
+      // lifecycle while preserving the original card rank for restore.
+      const todayListId = await today
+        .getByTestId("list-archive-button")
+        .getAttribute("data-space-container-id");
+      expect(todayListId ?? "").toMatch(/^cx:space:/);
+      await expect
+        .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue))
+        .toBe("active");
+      await expect
+        .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue))
+        .toBe("active");
+
+      await today.getByTestId("list-archive-button").click();
+      const archivedLists = patPage.page.getByTestId("kanban-archived-lists");
+      await archivedLists.locator("summary").click();
+      await expect(
+        patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue), {
+          timeout: 30_000,
+        })
+        .toBe("archived");
+      await expect
+        .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue), {
+          timeout: 30_000,
+        })
+        .toBe("archived");
+
+      await archivedLists
+        .getByTestId("kanban-archived-list-row")
+        .filter({ hasText: todayList })
+        .first()
+        .getByTestId("list-restore-button")
+        .click();
+      await expect(
+        patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect
+        .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue), {
+          timeout: 30_000,
+        })
+        .toBe("active");
+      await expect
+        .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue), {
+          timeout: 30_000,
+        })
+        .toBe("active");
+      await stepShot(patPage.page, testInfo, "E-list-restored");
     } finally {
       await patPage.close();
     }
   });
-
-  test.fixme(
-    // @blocking-on: soland#workflows-kanban-week-gap
-    // @user-promise: e2e/scenarios/workflows/kanban-week.md
-    // @expected-live-by: 2026Q3
-    "E-kanbanweek.1 restored card lands at the end of its original column, preserving rank",
-    async () => {
-      // yougen behavior: card-restore-button currently puts the card back in
-      // its column but rank ordering after restore needs verification.
-    },
-  );
-
-  test.fixme(
-    // @blocking-on: soland#workflows-kanban-week-gap
-    // @user-promise: e2e/scenarios/workflows/kanban-week.md
-    // @expected-live-by: 2026Q3
-    "E-kanbanweek.2 archive an entire list (column-level archive button)",
-    async () => {
-      // list-archive-button exists in yougen but its UX semantics + cascade
-      // to contained cards isn't covered by an existing test.
-    },
-  );
 });
+
+async function flowState(
+  request: APIRequestContext,
+  spaceId: string,
+  token: string,
+  flowId: string,
+): Promise<string | undefined> {
+  const resp = await request.get(
+    `${solandBaseUrl()}/api/v1/projection/flows?realm_id=${encodeURIComponent(spaceId)}&include_terminal=true`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  if (resp.status() !== 200) {
+    return undefined;
+  }
+  const body = await resp.json();
+  const flows = Array.isArray(body.flows) ? body.flows : Array.isArray(body.items) ? body.items : [];
+  return flows.find((flow: { flow_id?: string }) => flow.flow_id === flowId)?.state;
+}
