@@ -290,3 +290,10 @@ The scanner is intentionally a tool — it is **not** wired into CI to fail
 the build yet. The plan is to land the tool now (this milestone) and wire
 it into per-downstream pipelines incrementally as each repo cleans up its
 backlog of legacy literals.
+
+---
+
+<!-- circle-rollout milestone pointer -->
+> **Active milestone tracking** (local-only, gitignored): see
+> `_cotest_todos.md` in the parent `contrix-dev/` directory for the
+> circle-rollout (CXP-0007) work item list and per-stage checkpoints.
