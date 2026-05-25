@@ -9,7 +9,18 @@
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
 //   §7 E2EE boundary: MLS-via-IETF profile transcript binding or explicit downgrade
 
-import { test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { solandBaseUrl } from "../../helpers/env";
+import {
+  createSpaceApi,
+  querySpaceEventsApi,
+  wireErrCode,
+} from "../../helpers/soland-api";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -66,31 +77,191 @@ test.describe("mimi federation", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#extensions-mimi-federation-gap
-    // @user-promise: e2e/scenarios/extensions/mimi-federation.md
-    // @expected-live-by: 2026Q3
-    "E5.2 E2EE 在 MIMI 中的转换:transcript binding 或 explicit downgrade 标记,绝不静默泄露明文",
-    async () => {
-      // Contrix E2EE Flow 经 facade 进入 MIMI 时:
-      //   要么有 MLS-via-IETF profile 的 transcript binding 桥(两套 group key);
-      //   要么消息挂明确的 cx.morph.e2ee_downgrade = "mimi_bridge" 并在 UI 提示;
-      //   任何情况下都不能把明文以未标记的方式发送给 MIMI 网络。
-      // spec: extensions/mimi-interop.md §7
-    },
-  );
+  test("E5.2 E2EE 在 MIMI 中的转换:transcript binding 或 explicit downgrade 标记,绝不静默泄露明文", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const { token, spaceId, roomId } = await createBoundMimiRoom(request, stamp, "e2ee");
 
-  test.fixme(
-    // @blocking-on: soland#extensions-mimi-federation-gap
-    // @user-promise: e2e/scenarios/extensions/mimi-federation.md
-    // @expected-live-by: 2026Q3
-    "E5.3 content type 差异:MIMI 特有 content kind → quarantine + cx.morph.unknown_content_kind",
-    async () => {
-      // facade 把 bob_mimi 发的 m.location.share.live 翻译进来;
-      // soland 无法映射到 Contrix content kind;
-      // 消息进入 quarantine 状态,挂 cx.morph.unknown_content_kind = "<mimi.type>";
-      // timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃、也不是渲染原始 payload。
-      // spec: extensions/mimi-interop.md §4
-    },
-  );
+    const unmarked = await request.post(mimiMessagesUrl(roomId), {
+      data: {
+        source_format: "application/mimi-content",
+        e2ee: true,
+        content: {
+          kind: "cx.content.text",
+          body: `silent plaintext leak ${stamp}`,
+        },
+        sender_did: "did:web:mimi.example",
+        mimi_message_id: `mimi:e2ee:unmarked:${stamp}`,
+        protocol_draft: "draft-ietf-mimi-protocol-06",
+        content_draft: "draft-ietf-mimi-content-08",
+      },
+    });
+    expect(unmarked.status()).toBe(400);
+    expect(wireErrCode(await unmarked.json())).toBe("mimi_e2ee_boundary_unmarked");
+
+    const downgradeText = `explicit downgrade ${stamp}`;
+    const downgrade = await request.post(mimiMessagesUrl(roomId), {
+      data: {
+        source_format: "application/mimi-content",
+        e2ee: true,
+        e2ee_downgrade: "mimi_bridge",
+        content: {
+          kind: "cx.content.text",
+          body: downgradeText,
+        },
+        sender_did: "did:web:mimi.example",
+        mimi_message_id: `mimi:e2ee:downgrade:${stamp}`,
+        protocol_draft: "draft-ietf-mimi-protocol-06",
+        content_draft: "draft-ietf-mimi-content-08",
+      },
+    });
+    expect(downgrade.status()).toBe(200);
+    const downgradeBody = (await downgrade.json()) as Record<string, unknown>;
+    expect(downgradeBody.status).toBe("mapped");
+    expect(nested(downgradeBody, "receipt", "extra", "mimi_policy", "e2ee_boundary")).toBe(
+      "explicit_downgrade",
+    );
+
+    const transcriptText = `transcript bound ${stamp}`;
+    const transcript = await request.post(mimiMessagesUrl(roomId), {
+      data: {
+        source_format: "application/mimi-content",
+        encrypted: true,
+        transcript_binding: {
+          profile: "mls-via-ietf-mimi",
+          transcript_hash: `sha256:transcript-${stamp}`,
+        },
+        content: {
+          kind: "cx.content.text",
+          body: transcriptText,
+        },
+        sender_did: "did:web:mimi.example",
+        mimi_message_id: `mimi:e2ee:transcript:${stamp}`,
+        protocol_draft: "draft-ietf-mimi-protocol-06",
+        content_draft: "draft-ietf-mimi-content-08",
+      },
+    });
+    expect(transcript.status()).toBe(200);
+    const transcriptBody = (await transcript.json()) as Record<string, unknown>;
+    expect(nested(transcriptBody, "receipt", "extra", "mimi_policy", "e2ee_boundary")).toBe(
+      "transcript_bound",
+    );
+
+    const events = await querySpaceEventsApi(request, token, spaceId);
+    const downgradeEvent = eventById(events, String(downgradeBody.contrix_event_id));
+    expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
+    expect(nested(downgradeEvent, "payload", "content", "cx.morph.e2ee_downgrade")).toBe(
+      "mimi_bridge",
+    );
+    expect(nested(downgradeEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
+      "explicit_downgrade",
+    );
+
+    const transcriptEvent = eventById(events, String(transcriptBody.contrix_event_id));
+    expect(nested(transcriptEvent, "payload", "content", "body")).toBe(transcriptText);
+    expect(
+      nested(transcriptEvent, "payload", "content", "transcript_binding", "transcript_hash"),
+    ).toBe(`sha256:transcript-${stamp}`);
+    expect(nested(transcriptEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
+      "transcript_bound",
+    );
+  });
+
+  test("E5.3 content type 差异:MIMI 特有 content kind → quarantine + cx.morph.unknown_content_kind", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const { token, spaceId, roomId } = await createBoundMimiRoom(request, stamp, "content");
+    const rawLocation = `geo:31.2304,121.4737;u=${stamp % 100}`;
+
+    const quarantine = await request.post(mimiMessagesUrl(roomId), {
+      data: {
+        source_format: "application/mimi-content",
+        content_kind: "m.location.share.live",
+        content: {
+          kind: "m.location.share.live",
+          geo_uri: rawLocation,
+          body: `live location ${stamp}`,
+        },
+        sender_did: "did:web:mimi.example",
+        mimi_message_id: `mimi:content:unknown:${stamp}`,
+        protocol_draft: "draft-ietf-mimi-protocol-06",
+        content_draft: "draft-ietf-mimi-content-08",
+      },
+    });
+    expect(quarantine.status()).toBe(200);
+    const body = (await quarantine.json()) as Record<string, unknown>;
+    expect(body.status).toBe("quarantined");
+    expect(nested(body, "receipt", "extra", "quarantine", "unknown_content_kind")).toBe(
+      "m.location.share.live",
+    );
+
+    const events = await querySpaceEventsApi(request, token, spaceId);
+    const event = eventById(events, String(body.contrix_event_id));
+    expect(nested(event, "payload", "content", "kind")).toBe("cx.content.unsupported");
+    expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
+    expect(nested(event, "payload", "content", "cx.morph.unknown_content_kind")).toBe(
+      "m.location.share.live",
+    );
+    expect(JSON.stringify(event)).not.toContain(rawLocation);
+  });
 });
+
+async function createBoundMimiRoom(
+  request: APIRequestContext,
+  stamp: number,
+  suffix: string,
+): Promise<{ token: string; spaceId: string; roomId: string }> {
+  const alice = uniqueUser(`mimi-${suffix}-${stamp}`);
+  await ensureRegistered(request, alice);
+  const token = await issueDevSession(request, alice);
+  const spaceId = await createSpaceApi(request, token, {
+    title: `mimi ${suffix} ${stamp}`,
+    discoverability: "listed",
+    history_visibility: "joined",
+    encryption_profile: "mls_rfc9420",
+  });
+  const roomId = `MIMI-${suffix}-${stamp}`;
+  const update = await request.put(`${solandBaseUrl()}/api/v1/mimi/flows/${roomId}/update`, {
+    data: {
+      room_binding: {
+        profile: "cx.profile.mimi_interop.v1",
+        mimi_room_uri: `mimi://soland.local/rooms/${roomId}`,
+        binding_scope: {
+          space_id: spaceId,
+          flow_id: null,
+        },
+        content_profile: "application/mimi-content",
+      },
+      protocol_draft: "draft-ietf-mimi-protocol-06",
+    },
+  });
+  expect(update.status()).toBe(200);
+  return { token, spaceId, roomId };
+}
+
+function mimiMessagesUrl(roomId: string): string {
+  return `${solandBaseUrl()}/api/v1/mimi/flows/${encodeURIComponent(roomId)}/messages`;
+}
+
+function eventById(eventsBody: Record<string, unknown>, eventId: string): Record<string, unknown> {
+  const events = Array.isArray(eventsBody.events) ? eventsBody.events : [];
+  const event = events.find(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      (item as Record<string, unknown>).event_id === eventId,
+  );
+  expect(event, `event ${eventId}`).toBeTruthy();
+  return event as Record<string, unknown>;
+}
+
+function nested(value: unknown, ...path: string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (!current || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}

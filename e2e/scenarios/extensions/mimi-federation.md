@@ -116,10 +116,10 @@
 
 - MIMI Provider Facade 是 **extension profile**,v1 core 不要求实现。业务 spec 在 facade mock 缺席时应跳过或保持 fixme,而不是 fail
 - pairwise DID 的生成规则参见 `contrix-spec/spec/v1/zh/extensions/mimi-interop.md` §6;关键点是同一个 MIMI 身份在不同 Realm 得到不同 DID(unlinkability)
-- soland gap (撰写此 scenario 时):MIMI Provider Facade 绑定、room binding API、`federation_profile = "mimi_interop"` Realm 字段、identity bridging 到 pairwise DID 的服务端集成仍未实现;cotest 侧 mock/helper 已覆盖 bob_mimi join、fallback/deferred、content-kind quarantine。
+- soland gap (当前):MIMI Provider Facade 绑定、`federation_profile = "mimi_interop"` Realm 字段、identity bridging 到 pairwise DID、outbound retry 仍未形成完整业务链路。已落地的服务端面包括 room binding、MIMI ingress 到 canonical timeline、E2EE boundary policy(未标记 E2EE 明文拒绝;transcript binding / explicit downgrade 可过)、unknown content kind quarantine。
 - `helpers/mimi-facade.ts` 提供 `createMimiFacadeClient()`;harness 自检 [`harness/mocks-selftest`](../harness/mocks-selftest.md) 负责锁住 facade mock 契约。
 - 与 `messaging/triad-collaboration` 的差别:这里的 "晚到成员" 不是 history_visibility 测试,而是跨 federation boundary 的 identity bridging 测试;消息双向不是 Contrix-Contrix 而是 Contrix-MIMI
 
 ## 总耗时预估
 
-facade mock 已实装;当前业务链路仍全部 fixme,实际执行 < 1s。soland/yougen 侧 federation profile 落地后,单次业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。
+facade mock 已实装;E5.2/E5.3 已是 live soland API 覆盖,主业务流与 E5.1 outbound fallback 仍为 fixme。当前 live 边界测试预计 < 10s;soland/yougen 侧 federation profile 落地后,单次完整业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。
