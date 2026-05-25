@@ -29,7 +29,7 @@ e2e/
   - **2** 条 harness/probe 专属:[`harness/mocks-selftest`](harness/mocks-selftest.md)、[`spaces/admin-section-route`](spaces/admin-section-route.md)
   - `workflows/incident-response`、dual-soland federation、history visibility、MIMI facade harness 等新增 coverage 均已登记到 catalog
 - **66 个 playwright spec 文件**
-- **217 live test / 178 fixme / 20 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
+- **218 live test / 177 fixme / 20 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
 - **9 个 mock service**:OIDC IdP / Email 3PID / WebVH witness / Audit agent / Policy server / Push gateway / Applet registry / TSP endpoint / MIMI facade
 - 数字由 [`scripts/summarize-e2e-coverage.mjs`](../scripts/summarize-e2e-coverage.mjs) 从文件树重算;`--check` 在出现 orphan 或 catalog drift 时返回非零,可挂 CI
 
@@ -44,7 +44,7 @@ e2e/
 | documents | 1 | 1 | 2 | 2 | 0 | 0 |
 | encryption | 5 | 5 | 20 | 33 | 13 | 1 |
 | extensions | 3 | 3 | 1 | 14 | 13 | 0 |
-| federation | 2 | 2 | 13 | 16 | 3 | 1 |
+| federation | 2 | 2 | 14 | 16 | 2 | 1 |
 | governance | 4 | 4 | 16 | 28 | 12 | 1 |
 | harness | 1 | 1 | 10 | 10 | 0 | 10 |
 | identity | 9 | 9 | 31 | 69 | 38 | 2 |
@@ -56,7 +56,7 @@ e2e/
 | spaces | 6 | 6 | 13 | 25 | 12 | 0 |
 | sync | 5 | 5 | 10 | 28 | 18 | 2 |
 | workflows | 6 | 6 | 9 | 18 | 9 | 0 |
-| **合计** | **66** | **66** | **217** | **395** | **178** | **20** |
+| **合计** | **66** | **66** | **218** | **395** | **177** | **20** |
 
 ## 设计原则
 

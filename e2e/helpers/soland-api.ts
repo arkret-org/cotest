@@ -1,5 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
-import { expect, type APIRequestContext, type APIResponse } from "@playwright/test";
+import { createHash, createPrivateKey, randomBytes, sign } from "node:crypto";
+import {
+  expect,
+  type APIRequestContext,
+  type APIResponse,
+} from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 
 export type OperationKind =
@@ -42,17 +46,20 @@ export function wireErrCode(body: unknown): string | undefined {
     return undefined;
   }
   const record = body as Record<string, unknown>;
-  const nested = record.error && typeof record.error === "object"
-    ? (record.error as Record<string, unknown>)
-    : undefined;
-  return stringValue(record.errcode)
-    ?? stringValue(record.code)
-    ?? stringValue(record.error_code)
-    ?? stringValue(record.reason)
-    ?? stringValue(nested?.errcode)
-    ?? stringValue(nested?.code)
-    ?? stringValue(nested?.error_code)
-    ?? stringValue(nested?.reason);
+  const nested =
+    record.error && typeof record.error === "object"
+      ? (record.error as Record<string, unknown>)
+      : undefined;
+  return (
+    stringValue(record.errcode) ??
+    stringValue(record.code) ??
+    stringValue(record.error_code) ??
+    stringValue(record.reason) ??
+    stringValue(nested?.errcode) ??
+    stringValue(nested?.code) ??
+    stringValue(nested?.error_code) ??
+    stringValue(nested?.reason)
+  );
 }
 
 export function singleDidAnchorer(did: string): Record<string, unknown> {
@@ -61,7 +68,9 @@ export function singleDidAnchorer(did: string): Record<string, unknown> {
     did,
     recovery_members: ["did:web:recovery.soland.local"],
     controller_organization: "did:web:organization.primary.soland.local",
-    recovery_controller_organizations: ["did:web:organization.recovery.soland.local"],
+    recovery_controller_organizations: [
+      "did:web:organization.recovery.soland.local",
+    ],
   };
 }
 
@@ -94,12 +103,15 @@ export async function createSpaceApi(
   },
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const ownerDid = data.ownerDid ?? await currentActorDidApi(request, token, opts);
+  const ownerDid =
+    data.ownerDid ?? (await currentActorDidApi(request, token, opts));
   const realmId = typedId("realm");
   const createdAt = canonicalTimestamp();
   const plaintextVisibleServices =
     data.plaintext_visible_services ??
-    Array.from(new Set([solandServiceDid(opts.server), "did:web:soland.local"]));
+    Array.from(
+      new Set([solandServiceDid(opts.server), "did:web:soland.local"]),
+    );
 
   await submitSignedEventApi(
     request,
@@ -119,7 +131,8 @@ export async function createSpaceApi(
           created_by_principal: ownerDid,
           trust_domain: "cx:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
-          default_discoverability: data.discoverability ?? (data.public ? "public" : "listed"),
+          default_discoverability:
+            data.discoverability ?? (data.public ? "public" : "listed"),
           default_join_rule: "invite",
           history_visibility: data.history_visibility ?? "shared",
           encryption_profile: data.encryption_profile ?? "none",
@@ -217,14 +230,24 @@ export async function listInvitesApi(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
-): Promise<Array<{ invite_id: string; space_id: string; invitee?: string; state?: string; status?: string }>> {
-  const response = await request.get(`${solandBaseUrl(opts.server)}/api/v1/authz/invites`, {
-    headers: authHeaders(token),
-  });
-  const body = await expectJsonOk<{ invites?: Array<{ invite_id: string; space_id: string; invitee?: string }> }>(
-    response,
-    "list invites",
+): Promise<
+  Array<{
+    invite_id: string;
+    space_id: string;
+    invitee?: string;
+    state?: string;
+    status?: string;
+  }>
+> {
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/api/v1/authz/invites`,
+    {
+      headers: authHeaders(token),
+    },
   );
+  const body = await expectJsonOk<{
+    invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
+  }>(response, "list invites");
   return body.invites ?? [];
 }
 
@@ -272,7 +295,10 @@ export async function querySpaceEventsApi(
     `${solandBaseUrl(opts.server)}/api/v1/events?${queryParam}=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
     { headers: authHeaders(token) },
   );
-  return await expectJsonOk<Record<string, unknown>>(response, `query events for ${spaceId}`);
+  return await expectJsonOk<Record<string, unknown>>(
+    response,
+    `query events for ${spaceId}`,
+  );
 }
 
 export async function currentActorDidApi(
@@ -280,10 +306,16 @@ export async function currentActorDidApi(
   token: string,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.get(`${solandBaseUrl(opts.server)}/api/v1/account/me`, {
-    headers: authHeaders(token),
-  });
-  const body = await expectJsonOk<{ did?: string }>(response, "read current actor");
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/api/v1/account/me`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+  const body = await expectJsonOk<{ did?: string }>(
+    response,
+    "read current actor",
+  );
   expect(body.did, "current actor DID").toBeTruthy();
   return body.did!;
 }
@@ -390,23 +422,58 @@ export async function pushFederationOperations(
     serviceBindingRef?: string;
   },
 ) {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/api/v1/federation/push-operations`,
-    {
-      data: {
-        origin: opts.origin,
-        destination: opts.destination ?? solandServiceDid(opts.server),
-        space_id: opts.spaceId,
-        service_binding_ref: opts.serviceBindingRef ?? `${opts.origin}#cotest-federation-smoke`,
-        operations,
-      },
-    },
-  );
+  const response = await rawPushFederationOperations(request, operations, opts);
   return await expectJsonOk<{
     accepted?: string[];
     rejected?: Array<Record<string, unknown>>;
     quarantine?: unknown[];
   }>(response, "push federation operations");
+}
+
+export async function rawPushFederationOperations(
+  request: APIRequestContext,
+  operations: Array<Record<string, unknown>>,
+  opts: {
+    origin: string;
+    destination?: string;
+    spaceId: string;
+    server?: SolandKey;
+    serviceBindingRef?: string;
+    tamperSignature?: boolean;
+    relaySourceDid?: string;
+  },
+) {
+  const destination = opts.destination ?? solandServiceDid(opts.server);
+  const url = `${solandBaseUrl(opts.server)}/api/v1/federation/push-operations`;
+  const body = stripUndefined({
+    origin: opts.origin,
+    destination,
+    space_id: opts.spaceId,
+    service_binding_ref:
+      opts.serviceBindingRef ?? `${opts.origin}#cotest-federation-smoke`,
+    operations: operations.map(federationOperationWireBody),
+  });
+  const sourceDid = opts.relaySourceDid ?? opts.origin;
+  const headers = signedFederationPushHeaders(
+    sourceDid,
+    destination,
+    url,
+    body,
+  );
+  if (opts.tamperSignature) {
+    headers.signature = `sig1=:${Buffer.alloc(64).toString("base64")}:`;
+  }
+  return await request.post(url, {
+    data: canonicalJson(body),
+    headers,
+  });
+}
+
+function federationOperationWireBody(
+  operation: Record<string, unknown>,
+): Record<string, unknown> {
+  const { space_id: _spaceId, ...wireOperation } = operation;
+  return stripUndefined(wireOperation) as Record<string, unknown>;
 }
 
 export async function backfillFederationOperations(
@@ -462,6 +529,75 @@ export async function operationFrontierApi(
   }>(response, "federation operation frontier");
 }
 
+function signedFederationPushHeaders(
+  sourceDid: string,
+  destinationDid: string,
+  targetUri: string,
+  body: unknown,
+): Record<string, string> {
+  const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
+  const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
+  const requestDigest = `sha256:${createHash("sha256").update(bodyBytes).digest("hex")}`;
+  const sourceTrustDomain = trustDomainFromServiceDid(sourceDid);
+  const destinationTrustDomain = trustDomainFromServiceDid(destinationDid);
+  const created = Math.floor(Date.now() / 1000);
+  const expires = created + 300;
+  const keyid = `${sourceDid}#federation-fanout-key`;
+  const signatureParams =
+    `("@method" "@target-uri" "@authority" "content-digest" "source-service-did" ` +
+    `"destination-service-did" "source-trust-domain" "destination-trust-domain" ` +
+    `"request-canonical-digest");created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
+  const signatureBase = [
+    `"@method": POST`,
+    `"@target-uri": ${targetUri}`,
+    `"@authority": ${new URL(targetUri).host}`,
+    `"content-digest": ${contentDigest}`,
+    `"source-service-did": ${sourceDid}`,
+    `"destination-service-did": ${destinationDid}`,
+    `"source-trust-domain": ${sourceTrustDomain}`,
+    `"destination-trust-domain": ${destinationTrustDomain}`,
+    `"request-canonical-digest": ${requestDigest}`,
+    `"@signature-params": ${signatureParams}`,
+  ].join("\n");
+  const signature = sign(
+    null,
+    Buffer.from(signatureBase, "utf8"),
+    developmentServicePrivateKey(sourceDid),
+  );
+  return {
+    "content-type": "application/json",
+    "content-digest": contentDigest,
+    "request-canonical-digest": requestDigest,
+    "source-service-did": sourceDid,
+    "destination-service-did": destinationDid,
+    "source-trust-domain": sourceTrustDomain,
+    "destination-trust-domain": destinationTrustDomain,
+    "signature-input": `sig1=${signatureParams}`,
+    signature: `sig1=:${signature.toString("base64")}:`,
+  };
+}
+
+function developmentServicePrivateKey(serviceDid: string) {
+  const seed = createHash("sha256")
+    .update("soland:anchorer-ephemeral:")
+    .update(serviceDid)
+    .digest();
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  return createPrivateKey({
+    key: Buffer.concat([pkcs8Prefix, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+}
+
+function trustDomainFromServiceDid(serviceDid: string): string {
+  const scope = serviceDid
+    .replace(/^did:(web|key|webvh):/, "")
+    .toLowerCase()
+    .replace(/:/g, ".");
+  return `cx:trust_domain:${scope || "local"}`;
+}
+
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -495,7 +631,9 @@ function canonicalJson(value: unknown): string {
 
 function stripUndefined(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value.map((item) => (item === undefined ? null : stripUndefined(item)));
+    return value.map((item) =>
+      item === undefined ? null : stripUndefined(item),
+    );
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(

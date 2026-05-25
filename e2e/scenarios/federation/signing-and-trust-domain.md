@@ -9,10 +9,11 @@
 - body digest 篡改、缺失 trust_domain、trust_domain mismatch 都会使接收端验签失败。
 - 同 peer + idempotency key 重放不产生第二条 outbox row。
 - service key rotation/revoke 后，旧 signed request 不再能用新 service public key 验过。
+- 入站 `push-operations` 对 tampered `Signature` 返回 4xx，并在错误信息里给出 key rotation refresh hint（由 `federation/cross-server` live case 覆盖）。
 
 ## 不验证
 
-- 入站 federation handler 的完整 401/403 错误 body 字段。当前 scenario 用 soland integration test 直接验证接收端必须执行的签名判断规则，避免在入站 verifier 尚未独立拆出时继续保留 fixme。
+- 入站 federation handler 的完整错误 envelope 字段矩阵；当前 live case 断言 4xx 与 key rotation hint，详细矩阵留给 API conformance。
 - UI 层跨服务器邀请完整往返；该流程继续由 `federation/cross-server` 覆盖。
 
 ## Live 用例

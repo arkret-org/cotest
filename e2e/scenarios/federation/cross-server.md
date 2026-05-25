@@ -167,8 +167,8 @@
 
 ## 风险 / 前置依赖
 
-- **已落地**:双 soland 拓扑、`push-operations` / `pull-operations` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage。
-- **仍待后续 GAP**:RFC 9421 HTTP Message Signature 验证、`reducer_profile_digest` 强校验、服务委托 revoke fanout。
+- **已落地**:双 soland 拓扑、`push-operations` / `pull-operations` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
+- **仍待后续 GAP**:`reducer_profile_digest` 强校验、服务委托 revoke fanout。
 - **yougen invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `cx.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
 
 ## 总耗时预估
