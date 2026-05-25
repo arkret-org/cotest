@@ -14,6 +14,7 @@ import {
 import {
   ensureRegistered,
   issueDevSession,
+  openUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -178,13 +179,50 @@ test.describe("organization policy inheritance", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#governance-organization-policy-gap
-    // @user-promise: e2e/scenarios/governance/organization-policy.md
-    // @expected-live-by: 2026Q3
+  test(
     "tab-organizations search returns acme-org with member count and verified badge",
-    async () => {
+    async ({ browser, request }) => {
       // spec: discovery-directory.md §2
+      const label = `s30-dir-${Date.now()}`;
+      const { alice, aliceToken, orgDid } = await setupAcmeOrg(request, label);
+      const spaceId = await createSpaceApi(request, aliceToken, {
+        title: `S30 org directory ${Date.now()}`,
+        public: true,
+        owning_organizations: [orgDid],
+      });
+
+      const apiSearch = await request.post(`${solandBaseUrl()}/api/v1/directory/search-organizations`, {
+        headers: authHeaders(aliceToken),
+        data: { query: orgDid },
+      });
+      expect(apiSearch.ok()).toBeTruthy();
+      const searchBody = await apiSearch.json();
+      const apiRow = searchBody.results?.find(
+        (row: { organization_id?: string; organization_did?: string }) =>
+          row.organization_id === orgDid || row.organization_did === orgDid,
+      );
+      expect(apiRow, "search-organizations should return the runtime Acme organization").toBeTruthy();
+      expect(apiRow.verified_badge ?? apiRow.verified).toBe(true);
+      expect(apiRow.member_count).toBe(2);
+      expect(apiRow.spaces).toEqual(expect.arrayContaining([spaceId]));
+      expect(apiRow.space_count).toBeGreaterThanOrEqual(1);
+
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      try {
+        await alicePage.gotoDirectory();
+        await alicePage.page.getByTestId("tab-organizations").click();
+        await alicePage.page.getByTestId("directory-search-input").fill(orgDid);
+        await alicePage.page.getByTestId("directory-search-button").click();
+
+        const row = alicePage.page.getByTestId("org-result").filter({ hasText: `Acme ${label}` }).first();
+        await expect(row).toBeVisible({ timeout: 30_000 });
+        await expect(row.getByTestId("organization-verified-badge")).toBeVisible();
+        await expect(row.getByTestId("organization-member-count")).toContainText("2 member");
+        await expect(row.getByTestId("organization-policy-hint")).toContainText("Policy inheritance: active");
+        await expect(row.getByTestId("organization-policy-hint")).toContainText("1 realm");
+      } finally {
+        await alicePage.close();
+      }
     },
   );
 

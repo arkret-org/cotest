@@ -71,7 +71,7 @@
 - **soland 已落地**:`/api/v1/organizations` 提供本地 organization registry/policy surface;`cx.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/api/v1/spaces/{id}/effective-policy` 返回 organization layers、fanout space list、Space override。
 - **join gate 已落地**:`cx.member.state{membership="join"}` 会读取 inherited organization policy,命中 `deny_join` target 时返回 `organization_policy_denied`。
 - **override approval 已落地**:Space 级 `allow_join` override 若覆盖组织 `deny_join`,必须携带 `organization_approval`;否则返回 `requires_organization_approval`。
-- **remaining yougen UI 缺口**:Organization directory tab 的 verified badge、member count、policy inheritance hints 由 GAP-P2-065 覆盖。
+- **yougen directory 已落地**:Organization directory tab 会显示 verified badge、member count,并根据 linked Realm 数量提示 organization policy inheritance 状态。
 
 ## 总耗时预估
 
