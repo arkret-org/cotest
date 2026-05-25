@@ -62,6 +62,50 @@ async function readJson(req) {
   }
 }
 
+function normalizeRecipient(raw) {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return null;
+  const match = value.match(/<([^<>@\s]+@[^<>@\s]+)>/);
+  return (match?.[1] ?? value).trim();
+}
+
+function extractTokenCandidate(body) {
+  if (typeof body.token === "string" && body.token.trim()) return body.token.trim();
+  for (const key of ["token", "verification_token", "code", "verification_code"]) {
+    const value = body.tags?.[key] ?? body.headers?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+
+  const haystack = [body.body, body.body_html, body.text_body, body.html_body, body.subject]
+    .filter((value) => typeof value === "string")
+    .join("\n");
+  const invite = haystack.match(/invite:\/\/([A-Za-z0-9._~:-]+)/);
+  if (invite) return invite[1];
+  const urlToken = haystack.match(/[?&](?:token|code)=([A-Za-z0-9._~:-]+)/);
+  if (urlToken) return urlToken[1];
+  const shortCode = haystack.match(/\b[0-9]{6,12}\b/);
+  if (shortCode) return shortCode[0];
+
+  return `mock-${randomUUID()}`;
+}
+
+function normalizeSendPayload(body) {
+  const to = normalizeRecipient(body.to ?? body.recipient);
+  const token = extractTokenCandidate(body);
+  return {
+    to,
+    token,
+    subject: body.subject ?? "Contrix invite",
+    body: body.body ?? body.text_body ?? `You've been invited. Open: invite://${token}`,
+    body_html:
+      body.body_html ??
+      body.html_body ??
+      `<p>You've been invited.</p><p><a href="invite://${token}">Accept invite</a></p>`,
+    ttl_seconds: body.ttl_seconds,
+    source_payload: body,
+  };
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   res.setHeader("content-type", "application/json");
@@ -93,35 +137,45 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/api/v1/verification/send" && req.method === "POST") {
     const body = await readJson(req);
-    if (!body || !body.to || !body.token) {
+    if (!body) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "invalid_json" }));
+      return;
+    }
+    const payload = normalizeSendPayload(body);
+    if (!payload.to || !payload.token) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "missing_to_or_token" }));
       return;
     }
-    const ttl = Number.isFinite(body.ttl_seconds) ? body.ttl_seconds : defaultTtlSeconds;
+    const ttl = Number.isFinite(payload.ttl_seconds) ? payload.ttl_seconds : defaultTtlSeconds;
     const expiresAtMs = Date.now() + ttl * 1000;
     const message_id = `msg-${randomUUID()}`;
     const message = {
       message_id,
-      token: body.token,
-      subject: body.subject ?? "Contrix invite",
-      body: body.body ?? `You've been invited. Open: invite://${body.token}`,
-      body_html:
-        body.body_html ??
-        `<p>You've been invited.</p><p><a href="invite://${body.token}">Accept invite</a></p>`,
+      token: payload.token,
+      subject: payload.subject,
+      body: payload.body,
+      body_html: payload.body_html,
       received_at: new Date().toISOString(),
       expires_at: new Date(expiresAtMs).toISOString(),
     };
-    const list = inbox.get(body.to) ?? [];
+    const list = inbox.get(payload.to) ?? [];
     list.push(message);
-    inbox.set(body.to, list);
-    tokens.set(body.token, {
-      to: body.to,
+    inbox.set(payload.to, list);
+    tokens.set(payload.token, {
+      to: payload.to,
       consumed: false,
       expires_at: message.expires_at,
       body_html: message.body_html,
     });
-    sendLog.record({ to: body.to, token: body.token, message_id, expires_at: message.expires_at });
+    sendLog.record({
+      to: payload.to,
+      token: payload.token,
+      message_id,
+      expires_at: message.expires_at,
+      source_payload: payload.source_payload,
+    });
     res.statusCode = 200;
     res.end(JSON.stringify({ message_id, expires_at: message.expires_at }));
     return;

@@ -93,6 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--oauth-introspection-bearer", required=True)
     parser.add_argument("--session-grant-introspection-bearer", required=True)
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
+    parser.add_argument("--mock-email-base-url")
     return parser.parse_args()
 
 
@@ -126,6 +127,20 @@ def main() -> int:
         "  registration_email_delivery_bypass_allowed: true\n"
     )
     src = replace_top_level_section(src, "account", account)
+
+    if args.mock_email_base_url:
+        mock_email_send = trailing_slash(args.mock_email_base_url) + "api/v1/verification/send"
+        email = (
+            "email:\n"
+            "  from: \"Coauth Joint E2E <noreply@joint-e2e.local>\"\n"
+            "  reply_to: \"Coauth Joint E2E <noreply@joint-e2e.local>\"\n"
+            "  provider:\n"
+            "    type: http_webhook\n"
+            f"    url: {yaml_string(mock_email_send)}\n"
+            "    headers:\n"
+            "      X-Cotest-Mock: mock-email\n"
+        )
+        src = replace_top_level_section(src, "email", email)
 
     contrix = (
         "contrix:\n"

@@ -522,7 +522,8 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$CoauthServiceDid,
         [Parameter(Mandatory = $true)][string]$OAuthIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
-        [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer
+        [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
+        [string]$MockEmailBaseUrl
     )
 
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
@@ -550,6 +551,9 @@ function New-CoauthJointConfig {
         "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
     )
+    if ($MockEmailBaseUrl) {
+        $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
+    }
     if ((Split-Path -Leaf $python) -ieq "py.exe") {
         $patchArgs = @("-3") + $patchArgs
     }
@@ -1022,7 +1026,8 @@ try {
             -CoauthServiceDid $CoauthServiceDid `
             -OAuthIntrospectionBearer $CoauthOAuthIntrospectionBearer `
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
-            -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer
+            -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
+            -MockEmailBaseUrl $mockEmailBaseUrl
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         $CoauthCommand = "& {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"

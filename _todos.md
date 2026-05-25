@@ -116,7 +116,8 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] `/api/v1/verification/claim` — token+did → 签 `binding_proof` JWT (RS256,`purpose=third_party_invite_binding`,`token_commitment` 用 sha256:hex 编码)
 - [x] token 双重消费检测 (`409 token_already_consumed`)
 - [x] `/inspect` 端点 — 全局 dump (sent 日志 + claims 日志 + 所有 token 状态) (2026-05-19)
-- [ ] coauth/soland 把 SMTP 调用替换为 HTTP POST 到本 mock (服务端侧改动,**不在 harness 范围**;需要 `../coauth/_todos.md` 配套 task) — **跨项目, 不在 cotest 内**
+- [x] coauth/soland 把 SMTP 调用替换为 HTTP POST 到本 mock (服务端侧改动,**不在 harness 范围**;需要 `../coauth/_todos.md` 配套 task) — **跨项目, 不在 cotest 内**
+  - 2026-05-25 local close: coauth already exposes `email.http_webhook`; joint config generation now points that provider at `mock-email.mjs` when `-StartCoauth -StartMockEmail` are enabled, and the mock accepts both native token payloads and Coauth's outbound-email webhook payload. Soland has no SMTP delivery path for these scenarios.
 - [x] HTML / multipart body 渲染断言 — `send` 接收 `body_html`,inbox 存储并通过 `/inspect` 暴露 (2026-05-19)
 - [x] 过期 token 验证 — inbox token 现在带 `expires_at` (`MOCK_EMAIL_TOKEN_TTL_SECONDS` 控制 TTL,默认 15 分钟),过期返 `410 token_expired` (2026-05-19)
 
@@ -146,7 +147,8 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] 自动生成 audit binding signed proof — Ed25519 签名嵌入 `cx.audit.accessed.binding_proof`,可通过 `/jwks` 验证 (2026-05-19)
 - [x] `/inspect` 端点 — dump inbox / invites / accessed 三个 log,以及 agent_did 和 public_jwk (2026-05-19)
 - [x] `run-joint-e2e.ps1` 增加 `-StartMockAuditAgent` 开关(`-StartMocks` 自动开启);新增 `-MockAuditAgentDid` 参数允许固定 DID;summary.json/.md 输出 `mock_audit_agent_base_url` (2026-05-19)
-- [ ] coauth/soland 配置侧把 `cx.audit_disclosure_policy.audit_agent_did` 指向 mock 自动生成的 DID — **跨项目,服务端 todo**;cotest 已经通过 `COTEST_MOCK_AUDIT_AGENT_BASE_URL` / `COTEST_MOCK_AUDIT_AGENT_DID` 把 mock 信息 export 给 spec,服务端配置生成需在 `../soland/_todos.md` / `../coauth/_todos.md` 跟进
+- [x] coauth/soland 配置侧把 `cx.audit_disclosure_policy.audit_agent_did` 指向 mock 自动生成的 DID — **跨项目,服务端 todo**;cotest 已经通过 `COTEST_MOCK_AUDIT_AGENT_BASE_URL` / `COTEST_MOCK_AUDIT_AGENT_DID` 把 mock 信息 export 给 spec,服务端配置生成需在 `../soland/_todos.md` / `../coauth/_todos.md` 跟进
+  - 2026-05-25 local close: audited-E2EE specs now resolve the live mock identity from `COTEST_MOCK_AUDIT_AGENT_BASE_URL` and place its DID plus `agent_url` directly in the realm `audit_disclosure_policy`; Soland reads that policy and calls the mock audit-agent `/identity`, `/invite`, and `/events` HTTP endpoints.
 
 #### 实际文件布局 (2026-05-19 落地)
 

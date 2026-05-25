@@ -273,6 +273,13 @@ Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
 `mockWitnessBaseUrl()`, `mockAuditAgentBaseUrl()`, and the matching helpers
 for policy, push, applet, TSP, and MIMI).
 
+When `-StartCoauth -StartMockEmail` are both enabled, the generated Coauth
+config uses the `email.http_webhook` provider with the mock email
+`/api/v1/verification/send` endpoint. This keeps joint runs local-only and
+prevents SMTP/sendmail providers from being exercised by email verification
+paths. The mock endpoint accepts both its native token payload and Coauth's
+generic outbound email webhook payload.
+
 Witness quorum specs can pass extra witness DIDs with
 `-MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`.
 The runner starts one mock witness process per DID and exports both the primary
