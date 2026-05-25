@@ -1,7 +1,7 @@
 // Kanban end-to-end
 // Contract: e2e/scenarios/kanban/end-to-end.md
 // Spec refs:
-//   - models/space-and-place.md §4 (Place), §4.5-§4.6 (cas-register basis), §4.7 (Board/List)
+//   - models/realm-and-space.md §3 (Space containers), §3.5 (parent/rank basis)
 //   - models/flow-and-message.md §2-§3 (Flow), §4.3 (discussion track)
 //   - models/relation.md §3.2 (contains)
 
@@ -120,7 +120,7 @@ test.describe("kanban end-to-end", () => {
     // @expected-live-by: 2026Q3
     "concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_register_conflict",
     async () => {
-      // spec: space-and-place.md §4.6 cx.flow.move cas-register basis
+      // spec: realm-and-space.md / operations-sync.md flow position basis
     },
   );
 
@@ -146,7 +146,7 @@ test.describe("kanban end-to-end", () => {
     // @expected-live-by: 2026Q3
     "commenting on an archived flow is rejected by reducer (no writes on archived Flow)",
     async () => {
-      // spec: space-and-place.md §4.6 archived state write constraints
+      // spec: common-fields.md lifecycle archived-state write constraints
     },
   );
 
@@ -211,16 +211,11 @@ test.describe("kanban end-to-end", () => {
     }
   });
 
-  test.fixme("reordering lists (drag column) updates board's child_order cell", async ({
-    // @blocking-on: soland#kanban-end-to-end-gap
-    // @user-promise: e2e/scenarios/kanban/end-to-end.md
-    // @expected-live-by: 2026Q3
+  test("reordering lists (drag column) updates board's child_order cell", async ({
     browser,
     request,
   }, testInfo) => {
-    // spec: space-and-place.md §4.5 cas-register basis
-    // P1-030 covers yougen's stable column drag handles. This remaining
-    // fixture is blocked on the soland child_order projection in P1-031.
+    // spec: realm-and-space.md Space-container rank projection basis
     const stamp = Date.now();
     const alice = uniqueUser("kanban-order-alice");
     await ensureRegistered(request, alice);
@@ -239,6 +234,16 @@ test.describe("kanban end-to-end", () => {
       });
       await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.getByTestId("new-board-toggle").click();
+      await alicePage.page.getByTestId("new-board-title-input").fill(`Order Board ${stamp}`);
+      await alicePage.page.getByTestId("create-board-space-button").click();
+      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+        timeout: 30_000,
+      });
+      const boardId = await alicePage.page
+        .getByTestId("board-space-select")
+        .evaluate((node) => (node as HTMLSelectElement).value);
+      expect(boardId).toMatch(/^cx:space:/);
 
       for (const columnName of [first, second, third]) {
         await alicePage.page.getByTestId("new-column-input").fill(columnName);
@@ -265,14 +270,31 @@ test.describe("kanban end-to-end", () => {
       expect(thirdIndex).toBeLessThan(firstIndex);
       expect(firstIndex).toBeLessThan(secondIndex);
 
-      const cellResp = await request.get(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/cells/cx.component.child_order.v1`,
-        { headers: { authorization: `Bearer ${aliceToken}` } },
-      );
-      expect(cellResp.status()).toBe(200);
-      const cellText = JSON.stringify(await cellResp.json());
-      expect(cellText.indexOf(third)).toBeLessThan(cellText.indexOf(first));
-      expect(cellText.indexOf(first)).toBeLessThan(cellText.indexOf(second));
+      await expect
+        .poll(
+          async () => {
+            const cellResp = await request.get(
+              `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(boardId)}/cells/cx.component.child_order.v1`,
+              { headers: { authorization: `Bearer ${aliceToken}` } },
+            );
+            if (cellResp.status() !== 200) {
+              return false;
+            }
+            const cellText = JSON.stringify(await cellResp.json());
+            const thirdServerIndex = cellText.indexOf(third);
+            const firstServerIndex = cellText.indexOf(first);
+            const secondServerIndex = cellText.indexOf(second);
+            return (
+              thirdServerIndex >= 0 &&
+              firstServerIndex >= 0 &&
+              secondServerIndex >= 0 &&
+              thirdServerIndex < firstServerIndex &&
+              firstServerIndex < secondServerIndex
+            );
+          },
+          { timeout: 30_000 },
+        )
+        .toBe(true);
     } finally {
       await alicePage.close();
     }

@@ -2,20 +2,19 @@
 
 ## 目标
 
-验证 kanban 完整 CRUD 与跨 list 拖拽:alice 在 space 内建 Board (Place);加 List (Place children);加 Card (Flow);跨 List 拖动 Card(`cx.flow.move` cas-register);archive Card;在 Card 内发 comment(discussion track)。
+验证 kanban 完整 CRUD 与跨 list 拖拽:alice 在 Realm 内建 Board (Space container);加 List (child Space container);加 Card (Flow);跨 List 拖动 Card(`cx.flow.move` cas-register);archive Card;在 Card 内发 comment(discussion track)。
 
 不验证:多用户协作(见 kanban/project-simulation)、跨 board 移动(后续)、文档编辑(documents/collaboration)。
 
 ## Spec 锚点
 
-- `models/space-and-place.md` §4 — Place 概念(Board / List 等结构容器)
-- `models/space-and-place.md` §4.2 — Place schema
-- `models/space-and-place.md` §4.5 — `cx.place.parent` cas-register basis
-- `models/space-and-place.md` §4.6 — `cx.flow.move` / `cx.flow.reorder` cas-register basis(防止并发移动)
-- `models/space-and-place.md` §4.7 — Board / List 示例
+- `models/realm-and-space.md` §3 — Space container 概念(Board / List 等结构容器)
+- `models/realm-and-space.md` §3.5 — `cx.space.parent` cas-register basis
+- `models/realm-and-space.md` §3.6 — `cx.flow.move` / `cx.flow.reorder` cas-register basis(防止并发移动)
+- `models/realm-and-space.md` §3.7 — Board / List 示例
 - `models/flow-and-message.md` §2-§3 — Flow 概念 + schema(state、fields)
 - `models/flow-and-message.md` §4.3 — Discussion track(per-Flow 评论)
-- `models/relation.md` §3.2 — `contains` 关系(Place 含 Flow,cardinality)
+- `models/relation.md` §3.2 — `contains` 关系(Space container 含 Flow,cardinality)
 
 ## 拓扑
 
@@ -39,14 +38,14 @@
 
 2. alice 进 `/kanban`(或 space-scoped `/spaces/${spaceId}/kanban`,看 yougen 实现)
 3. 点 "New Board" → 填名字 `"Sprint 23"`
-4. yougen 提交 `cx.place.create`:`{ space_id, kind: "board", title }`
+4. yougen 提交 `cx.space.create`:`{ space_id, kind: "board", title }`
 5. 断言:`/kanban` 页面渲染 board 卡片(`board-card` testid),title 是 `"Sprint 23"`,记录 `boardId`
 
 ### Phase C — 加三个 List
 
 6. alice 进 board,点 "Add list" 三次,分别命名 `Todo`、`In Progress`、`Done`
-7. 每次 yougen 提交 `cx.place.create`:`{ kind: "list", parent_place: boardId, title }`
-8. 内部:更新 `cx:cell:cx.component.place.child_order.v1:<boardId>` (ordered-log) 记录三个 list 的顺序
+7. 每次 yougen 提交 `cx.space.create`:`{ kind: "list", parent_ref: boardId, title }`
+8. 内部:通过 `GET /api/v1/spaces/{boardId}/cells/cx.component.child_order.v1` 暴露 list 顺序
 9. 断言:board 视图渲染三列(`list-column` testid × 3),按创建顺序排列
 
 ### Phase D — 在 Todo 加两个 Card
@@ -85,7 +84,7 @@
 ### Phase H — Reorder list
 
 27. alice 在 board 视图把 `Done` 列拖到 `Todo` 之前
-28. yougen 提交 `cx.place.reorder`(或 `cx.flow.move` 等价),更新 `boardId` 的 `child_order` cell
+28. yougen 提交 `cx.space.update` rank patch,更新 `boardId` 的 `child_order` cell
 29. 断言:刷新后列序变 `Done / Todo / In Progress`
 
 ## Observable assertions(合并)
@@ -109,8 +108,8 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.place.create/reorder/archive`、`cx.flow.move` cas-register、`cx:cell:cx.component.place.child_order.v1` ordered-log、archive cascade — 大概率 partial 实现
-- **yougen**:`/kanban` 视图已稳定 `kanban-column`、`column-drag-handle`、`column-drop-target-before`、`kanban-column-title` 与本地列重排；server `child_order` 持久化仍由 P1-031 覆盖。
+- **soland**:`cx.space.create/update/archive` Space-container 投影已支持 Board/List rank;P1-031 暴露 `cx.component.child_order.v1` 读取面。
+- **yougen**:`/kanban` 视图已稳定 `kanban-column`、`column-drag-handle`、`column-drop-target-before`、`kanban-column-title`;列拖拽后提交 `cx.space.update` rank patch 让 server `child_order` 与 UI 顺序一致。
 - **harness**:Playwright 的 drag-and-drop 用 `locator.dragTo(target)`;但 dioxus 的拖拽可能需要 mouse event sequence(`mouse.down`/`mouse.move`/`mouse.up`)
 
 ## 总耗时预估

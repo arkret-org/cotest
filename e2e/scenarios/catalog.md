@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 397 · Verified: 173 (43.6%)
+Promised: 406 · Verified: 201 (49.5%)
 
-Totals: 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 201 verified / 406 promised / 205 fixme / 19 skip (19 domains)
 
 ## Totals
 
@@ -10,12 +10,12 @@ Totals: 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 173 |
-| test.fixme | 224 |
-| promised tests | 397 |
-| verified tests | 173 |
-| verified ratio | 43.6% |
-| test.skip (conditional) | 17 |
+| live tests | 201 |
+| test.fixme | 205 |
+| promised tests | 406 |
+| verified tests | 201 |
+| verified ratio | 49.5% |
+| test.skip (conditional) | 19 |
 | domains | 19 |
 
 ## Per-domain rollup
@@ -25,18 +25,18 @@ Totals: 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 s
 | authz | 2 | 2 | 8 | 12 | 66.7% | 4 | 0 |
 | calls | 4 | 4 | 5 | 13 | 38.5% | 8 | 0 |
 | conformance | 4 | 4 | 21 | 33 | 63.6% | 12 | 3 |
-| discovery | 2 | 2 | 6 | 11 | 54.5% | 5 | 0 |
+| discovery | 2 | 2 | 10 | 11 | 90.9% | 1 | 0 |
 | documents | 1 | 1 | 1 | 8 | 12.5% | 7 | 0 |
 | encryption | 5 | 5 | 13 | 36 | 36.1% | 23 | 0 |
 | extensions | 3 | 3 | 1 | 14 | 7.1% | 13 | 0 |
 | federation | 2 | 2 | 10 | 16 | 62.5% | 6 | 1 |
 | governance | 4 | 4 | 16 | 28 | 57.1% | 12 | 1 |
 | harness | 1 | 1 | 10 | 10 | 100.0% | 0 | 10 |
-| identity | 9 | 9 | 16 | 63 | 25.4% | 47 | 0 |
+| identity | 9 | 9 | 31 | 69 | 44.9% | 38 | 2 |
 | invites | 1 | 1 | 1 | 7 | 14.3% | 6 | 0 |
 | joint | 1 | 1 | 1 | 1 | 100.0% | 0 | 0 |
-| kanban | 2 | 2 | 2 | 12 | 16.7% | 10 | 0 |
-| messaging | 4 | 4 | 28 | 39 | 71.8% | 11 | 0 |
+| kanban | 2 | 2 | 4 | 13 | 30.8% | 9 | 0 |
+| messaging | 4 | 4 | 35 | 41 | 85.4% | 6 | 0 |
 | models | 4 | 4 | 6 | 21 | 28.6% | 15 | 0 |
 | spaces | 6 | 6 | 13 | 25 | 52.0% | 12 | 0 |
 | sync | 5 | 5 | 10 | 28 | 35.7% | 18 | 2 |
@@ -57,7 +57,7 @@ Totals: 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 s
 | conformance/registry-drift | 3 | 6 | 50.0% | 3 | 1 | mixed | yes | @fully-implemented |
 | conformance/snapshot-query-scalability | 2 | 7 | 28.6% | 5 | 1 | mixed | yes | @fully-implemented |
 | discovery/directory | 4 | 5 | 80.0% | 1 | 0 | mixed | yes |  |
-| discovery/notifications | 2 | 6 | 33.3% | 4 | 0 | mixed | yes |  |
+| discovery/notifications | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
 | documents/collaboration | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |
 | encryption/audited-e2ee | 1 | 6 | 16.7% | 5 | 0 | mixed | yes |  |
 | encryption/encrypted-attachments | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
@@ -75,19 +75,19 @@ Totals: 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 s
 | governance/personal-blocklist | 1 | 5 | 20.0% | 4 | 0 | mixed | yes |  |
 | harness/mocks-selftest | 10 | 10 | 100.0% | 0 | 10 | live-only | yes | @fully-implemented |
 | identity/account-device-auth | 2 | 6 | 33.3% | 4 | 0 | mixed | yes |  |
-| identity/account-states | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
-| identity/consent-grant | 2 | 7 | 28.6% | 5 | 0 | mixed | yes |  |
+| identity/account-states | 7 | 8 | 87.5% | 1 | 0 | mixed | yes |  |
+| identity/consent-grant | 9 | 10 | 90.0% | 1 | 0 | mixed | yes |  |
 | identity/handle | 7 | 7 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | identity/multi-device | 2 | 8 | 25.0% | 6 | 0 | mixed | yes |  |
-| identity/onboarding | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |
+| identity/onboarding | 3 | 10 | 30.0% | 7 | 2 | mixed | yes |  |
 | identity/recovery | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |
 | identity/tsp-bootstrap | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |
 | identity/webvh-rotation | 0 | 8 | 0.0% | 8 | 0 | fixme-only | yes |  |
 | invites/third-party | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
 | joint/joint-yougen-smoke | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
-| kanban/end-to-end | 1 | 5 | 20.0% | 4 | 0 | mixed | yes |  |
+| kanban/end-to-end | 3 | 6 | 50.0% | 3 | 0 | mixed | yes |  |
 | kanban/project-simulation | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
-| messaging/chat-advanced | 4 | 10 | 40.0% | 6 | 0 | mixed | yes |  |
+| messaging/chat-advanced | 11 | 12 | 91.7% | 1 | 0 | mixed | yes |  |
 | messaging/discussion-upgrade | 11 | 11 | 100.0% | 0 | 0 | live-only | yes |  |
 | messaging/read-receipts | 9 | 13 | 69.2% | 4 | 0 | mixed | yes |  |
 | messaging/triad-collaboration | 4 | 5 | 80.0% | 1 | 0 | mixed | yes |  |
@@ -120,8 +120,4 @@ Totals: 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 s
 
 ## Catalog drift
 
-- `scenarios/catalog.md` still contains known-stale phrases:
-  - legacy phrase 1
-  - legacy phrase 2
-  - legacy phrase 3
-  - legacy phrase 4
+- no known-stale phrases detected in `scenarios/catalog.md`.

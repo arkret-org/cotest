@@ -81,8 +81,9 @@
 ## P1 - Kanban / workflow / incident response
 
 - [x] GAP-P1-030 `[yougen]` 稳定 column drag/drop handles:`column-drag-handle`、`column-drop-target-before`、`kanban-column-title`。
-  - 2026-05-25 local close: `yougen` now renders stable column drag handles, before-column drop targets, and column-title testids; column drag/drop reorders visible columns locally while leaving server `child_order` persistence to P1-031. Evidence: `cargo check --locked --features experimental-agents` in `yougen`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-030-kanban-column-handles -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "column drag handles" -SkipNpmInstall -SkipBrowserInstall` passed with 1 test.
-- [ ] GAP-P1-031 `[soland]` 暴露并维护 `cx.component.child_order.v1`,drag reorder 后与 UI 顺序一致。
+  - 2026-05-25 local close: `yougen` now renders stable column drag handles, before-column drop targets, and column-title testids; column drag/drop reorders visible columns locally. Evidence: `cargo check --locked --features experimental-agents` in `yougen`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-030-kanban-column-handles -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "column drag handles" -SkipNpmInstall -SkipBrowserInstall` passed with 1 test.
+- [x] GAP-P1-031 `[soland]` 暴露并维护 `cx.component.child_order.v1`,drag reorder 后与 UI 顺序一致。
+  - 2026-05-25 local close: `soland` exposes `GET /api/v1/spaces/{boardId}/cells/cx.component.child_order.v1` from the Space-container projection, sorted by active child rank; `yougen` submits `cx.space.update` rank patches after column drag/drop; cotest promotes the child_order fixture to a live test against a real Board Space. Evidence: `cargo check --locked` in `soland`; `cargo check --locked --features experimental-agents` in `yougen`; `cargo test --lib --locked space_container_child_order_tracks_rank_updates -- --nocapture` in `soland`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-031-child-order -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "reordering lists" -SkipNpmInstall -SkipBrowserInstall` passed with 1 test.
 - [ ] GAP-P1-032 `[soland]` 实现 card/list/board archive cascade 与 restore rank 保留。
 - [ ] GAP-P1-033 `[soland/yougen]` 实现 kanban cross-user sync,Mei/Bob/Carol 看到同一 board。
 - [ ] GAP-P1-034 `[soland]` 实现 flow status FSM:拒绝 `todo -> done` / `investigating -> resolved` 等非法跳转。
@@ -131,7 +132,7 @@
 ## P3 - cotest maintenance
 
 - [x] GAP-P3-080 `[cotest]` 把新增 `workflows/incident-response` 登记到 scenario catalog,同时修正 catalog/README 的 scenario/test 计数。
-  - 2026-05-25 local close: refreshed `e2e/scenarios/catalog.md` from `summarize-e2e-coverage.mjs` and updated `e2e/scenarios/README.md` to 66 scenarios / 66 specs / 173 verified / 397 promised / 224 fixme / 17 skip across 19 domains.
+  - 2026-05-25 local refresh: refreshed `e2e/scenarios/catalog.md` from `summarize-e2e-coverage.mjs` and updated `e2e/scenarios/README.md` to 66 scenarios / 66 specs / 201 verified / 406 promised / 205 fixme / 19 skip across 19 domains.
 - [x] GAP-P3-081 `[cotest]` 为 `test.fixme` 增加静态检查:每条必须含 spec ref、owner gap、可执行主体或明确 blocked reason。
   - 2026-05-25 local close: `e2e/scripts/fixme-debt-report.mjs --strict` now validates owner-gap shape, scenario doc existence, and executable body or `@blocked-reason`; `scripts/run-hygiene.ps1` runs it by default.
 - [x] GAP-P3-082 `[cotest]` 增加 fixme promotion checklist:删除 `.fixme` 前必须有对应 soland/yougen feature id、一次单 spec 通过、一条回归截图或 HAR。
