@@ -61,7 +61,7 @@
 
 - 步骤 7:Backlog 有 2 张,Todo 有 3 张,archived 列有 3 张
 - 步骤 10:Mei 视图能看到 Bob、Carol 的 reply(reply-indicator)
-- 步骤 11:Bob 视图的 kanban-column 数量一致
+- 步骤 11:Bob/Carol fresh `/kanban/:spaceId` mount 都通过 server projection hydrate 同一个 board id、4 个 column 与 Backlog 中的 story cards
 
 ## Edge cases
 

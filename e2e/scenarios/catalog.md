@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 404 · Verified: 201 (49.8%)
+Promised: 404 · Verified: 202 (50.0%)
 
-Totals: 66 scenarios / 66 specs / 201 verified / 404 promised / 203 fixme / 19 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 202 verified / 404 promised / 202 fixme / 19 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 201 verified / 404 promised / 203 fixme / 19 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 201 |
-| test.fixme | 203 |
+| live tests | 202 |
+| test.fixme | 202 |
 | promised tests | 404 |
-| verified tests | 201 |
-| verified ratio | 49.8% |
+| verified tests | 202 |
+| verified ratio | 50.0% |
 | test.skip (conditional) | 19 |
 | domains | 19 |
 
@@ -40,7 +40,7 @@ Totals: 66 scenarios / 66 specs / 201 verified / 404 promised / 203 fixme / 19 s
 | models | 4 | 4 | 6 | 21 | 28.6% | 15 | 0 |
 | spaces | 6 | 6 | 13 | 25 | 52.0% | 12 | 0 |
 | sync | 5 | 5 | 10 | 28 | 35.7% | 18 | 2 |
-| workflows | 6 | 6 | 5 | 18 | 27.8% | 13 | 0 |
+| workflows | 6 | 6 | 6 | 18 | 33.3% | 12 | 0 |
 
 ## Per-spec
 
@@ -109,7 +109,7 @@ Totals: 66 scenarios / 66 specs / 201 verified / 404 promised / 203 fixme / 19 s
 | workflows/daily-standup | 1 | 3 | 33.3% | 2 | 0 | mixed | yes |  |
 | workflows/incident-response | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |
 | workflows/kanban-week | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
-| workflows/sprint-planning | 1 | 4 | 25.0% | 3 | 0 | mixed | yes |  |
+| workflows/sprint-planning | 2 | 4 | 50.0% | 2 | 0 | mixed | yes |  |
 | workflows/support-escalation | 1 | 3 | 33.3% | 2 | 0 | mixed | yes |  |
 | workflows/team-onboarding | 1 | 3 | 33.3% | 2 | 0 | mixed | yes |  |
 

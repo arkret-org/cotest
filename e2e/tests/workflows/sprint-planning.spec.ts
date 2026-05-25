@@ -5,11 +5,12 @@
 //   - models/flow-and-message.md §8 (reply chain)
 //
 // Realistic story: Tech-lead Mei kicks off a sprint, two engineers reply
-// claiming user stories. The kanban side of sprint planning (multi-card +
-// promote Backlog→Todo) needs cross-user kanban sync and a non-draft state
-// — both fixme'd until soland + yougen close those gaps.
+// claiming user stories. The kanban cross-user hydration path is live;
+// multi-card promote Backlog→Todo remains fixme'd until the move UI is
+// stable enough for the full scenario.
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   ensureRegistered,
@@ -117,15 +118,119 @@ test.describe("workflow: sprint planning", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#workflows-sprint-planning-gap
-    // @user-promise: e2e/scenarios/workflows/sprint-planning.md
-    // @expected-live-by: 2026Q3
-    "E-sprint.crossuser bob + carol see the same kanban as mei after she edits the board",
-    async () => {
-      // yougen gap: kanban state is local per-context, not synced via /sync.
-    },
-  );
+  test("E-sprint.crossuser bob + carol see the same kanban as mei after she edits the board", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    const stamp = Date.now();
+    const mei = uniqueUser("wf-sprint-kanban-mei");
+    const bob = uniqueUser("wf-sprint-kanban-bob");
+    const carol = uniqueUser("wf-sprint-kanban-carol");
+    await Promise.all([
+      ensureRegistered(request, mei),
+      ensureRegistered(request, bob),
+      ensureRegistered(request, carol),
+    ]);
+    const [meiToken, bobToken, carolToken] = await Promise.all([
+      issueDevSession(request, mei),
+      issueDevSession(request, bob),
+      issueDevSession(request, carol),
+    ]);
+    const meiPage = await openUserPage(browser, mei, { sessionToken: meiToken });
+    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+
+    const backlog = `Backlog-${stamp}`;
+    const todo = `Todo-${stamp}`;
+    const doing = `Doing-${stamp}`;
+    const done = `Done-${stamp}`;
+    const stories = [
+      `Story A: User auth flow ${stamp}`,
+      `Story B: Payment gateway integration ${stamp}`,
+      `Story C: Analytics dashboard ${stamp}`,
+    ];
+
+    try {
+      const spaceId = await meiPage.createSpace({
+        title: `Sprint board ${stamp}`,
+        summary: "Cross-user kanban hydration",
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [bob.did, carol.did],
+      });
+      await Promise.all([bobPage.acceptInvite(spaceId), carolPage.acceptInvite(spaceId)]);
+
+      await meiPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await meiPage.page.getByTestId("new-board-toggle").click();
+      await meiPage.page.getByTestId("new-board-title-input").fill(`Sprint Board ${stamp}`);
+      await meiPage.page.getByTestId("create-board-space-button").click();
+      await expect(meiPage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+        timeout: 30_000,
+      });
+      const boardId = await meiPage.page
+        .getByTestId("board-space-select")
+        .evaluate((node) => (node as HTMLSelectElement).value);
+      expect(boardId).toMatch(/^cx:space:/);
+
+      for (const columnName of [backlog, todo, doing, done]) {
+        await meiPage.page.getByTestId("new-column-input").fill(columnName);
+        await meiPage.page.getByTestId("add-column-button").click();
+        await expect(
+          meiPage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+
+      const backlogColumn = meiPage.page.getByTestId("kanban-column").filter({ hasText: backlog });
+      for (const story of stories) {
+        await backlogColumn.getByTestId("add-card-button").click();
+        await backlogColumn.getByTestId("new-card-title-input").fill(story);
+        await backlogColumn.getByTestId("save-card-button").click();
+        await expect(
+          backlogColumn.getByTestId("kanban-card").filter({ hasText: story }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+      await expect
+        .poll(async () => flowTitlesForBoard(request, spaceId, meiToken, boardId), {
+          timeout: 30_000,
+        })
+        .toEqual(expect.arrayContaining(stories));
+      await stepShot(meiPage.page, testInfo, "D-mei-board-ready");
+
+      for (const [actor, token] of [
+        [bobPage, bobToken],
+        [carolPage, carolToken],
+      ] as const) {
+        await actor.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+        await expect(actor.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+        await expect(actor.page.getByTestId("board-space-select")).toHaveValue(boardId, {
+          timeout: 30_000,
+        });
+        for (const columnName of [backlog, todo, doing, done]) {
+          await expect(
+            actor.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+          ).toBeVisible({ timeout: 30_000 });
+        }
+        const hydratedBacklog = actor.page
+          .getByTestId("kanban-column")
+          .filter({ hasText: backlog });
+        for (const story of stories) {
+          await expect(
+            hydratedBacklog.getByTestId("kanban-card").filter({ hasText: story }),
+          ).toBeVisible({ timeout: 30_000 });
+        }
+        await expect
+          .poll(async () => flowTitlesForBoard(request, spaceId, token, boardId), {
+            timeout: 30_000,
+          })
+          .toEqual(expect.arrayContaining(stories));
+      }
+      await stepShot(bobPage.page, testInfo, "D-bob-board-hydrated");
+      await stepShot(carolPage.page, testInfo, "D-carol-board-hydrated");
+    } finally {
+      await Promise.allSettled([carolPage.close(), bobPage.close(), meiPage.close()]);
+    }
+  });
 
   test.fixme(
     // @blocking-on: soland#workflows-sprint-planning-gap
@@ -137,3 +242,29 @@ test.describe("workflow: sprint planning", () => {
     },
   );
 });
+
+async function flowTitlesForBoard(
+  request: APIRequestContext,
+  spaceId: string,
+  token: string,
+  boardId: string,
+): Promise<string[]> {
+  const resp = await request.get(
+    `${solandBaseUrl()}/api/v1/projection/flows?realm_id=${encodeURIComponent(spaceId)}`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  if (resp.status() !== 200) {
+    return [];
+  }
+  const body = await resp.json();
+  const flows = Array.isArray(body.flows)
+    ? body.flows
+    : Array.isArray(body.items)
+      ? body.items
+      : [];
+  return flows
+    .filter((flow: { board_space_id?: string }) => flow.board_space_id === boardId)
+    .map((flow: { title?: string }) => flow.title)
+    .filter((title: unknown): title is string => typeof title === "string")
+    .sort();
+}
