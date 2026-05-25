@@ -65,7 +65,8 @@
 
 - [x] GAP-P1-020 `[soland]` 实现 `cx.consent.grant` / `cx.consent.revoke` reducer 与 consent cell projection。
   - 2026-05-25 local close: `soland` now projects accepted `cx.consent.grant` / `cx.consent.revoke` events into holder-private consent cells, preserves canonical `cx:cell:cx.component.consent.grant.v1:<consent_id>` ids, accepts schema `observed_dots`, and keeps contact status in sync. Evidence: `cargo test --locked --test consent_cells -- --nocapture`, `cargo check --locked`, and `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-020-consent-events -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "cx.consent.grant event projects consent cell" -SkipNpmInstall -SkipBrowserInstall` passed.
-- [ ] GAP-P1-021 `[soland]` contact request gate 接入 consent state:无 grant 进入 pending,有 grant 直接 accepted,revoke 对后续请求立即生效。
+- [x] GAP-P1-021 `[soland]` contact request gate 接入 consent state:无 grant 进入 pending,有 grant 直接 accepted,revoke 对后续请求立即生效。
+  - 2026-05-25 local close: contact requests now read the consent cell projection for scoped grant state, create pending cells when no active grant exists, accept immediately after a matching grant, and return to pending after revoke. Evidence: `cargo test --locked --test consent_cells -- --nocapture` covers REST grant/revoke/regrant plus event projection, and `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-020-consent-events -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "cx.consent.grant event projects consent cell" -SkipNpmInstall -SkipBrowserInstall` passed.
 - [ ] GAP-P1-022 `[yougen]` 实现 `/contacts/new` consent-aware 流程:testids `contact-request-panel`、`contact-scope-select`、`contact-request-status`。
 - [ ] GAP-P1-023 `[yougen]` 实现 `/settings/consent`:pending/granted rows、detail、grant/revoke buttons、valid_until 输入。
 - [ ] GAP-P1-024 `[soland]` 支持 consent time window、scope 粒度、pairwise DID key,覆盖 E1.1-E1.4。
