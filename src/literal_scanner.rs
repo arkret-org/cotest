@@ -304,6 +304,27 @@ pub fn scan_tree_round4(root: &Path) -> Result<Vec<crate::round4_rules::Round4Fi
     Ok(out)
 }
 
+/// Walk `root` and scan for circle-rollout (CXP-0007) structural drift
+/// rules (see [`crate::circle_rules`]). Detects the hard-removed
+/// `discussion_realm_ref` field and any unknown `cx.circle.*` literal that
+/// is not on the 7-event-kind / 6-capability-action allowlist.
+pub fn scan_tree_circle(root: &Path) -> Result<Vec<crate::circle_rules::CircleFinding>> {
+    let mut out = Vec::new();
+    walk(root, &mut |file_path| {
+        let file_kind = FileKind::from_path(file_path);
+        if matches!(file_kind, FileKind::Other) {
+            return Ok(());
+        }
+        let raw = match fs::read_to_string(file_path) {
+            Ok(s) => s,
+            Err(_) => return Ok(()),
+        };
+        crate::circle_rules::scan_circle(file_path, &raw, &mut out);
+        Ok(())
+    })?;
+    Ok(out)
+}
+
 fn walk<F>(root: &Path, visit: &mut F) -> Result<()>
 where
     F: FnMut(&Path) -> Result<()>,

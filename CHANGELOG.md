@@ -13,6 +13,13 @@ All notable changes to **cotest** are documented here.
   `src/conformance/wire_model.rs` and `src/round23_rules.rs`. The
   discussion-upgrade flow now promotes to a Circle via `scope_circle_id`
   (per CXP-0007); the legacy field is hard-rejected.
+- **Added (P2F.2)** — `src/circle_rules.rs` literal-scanner module with
+  four rules: `DiscussionRealmRef` (hard-reject), `UnknownCircleEventKind`
+  (allowlist of 7 event kinds + 6 capability actions),
+  `EffectiveScopeCircleMissingId`, and
+  `ConfidentialDiscussionEndpointsNotFlow`. Wired into the harness via
+  `literal_scanner::scan_tree_circle`. Supports the `CIRCLE-ALLOW` marker
+  comment for self-tests and migration notes.
 - Notes: version number unchanged; this round is not released.
 
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
