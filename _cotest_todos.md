@@ -20,7 +20,8 @@
   - `fast-smoke` profile for quick local feedback (~17 tests, against soland only).
   - `release-gate` profile for local milestone decisions (compose/process mode, all required services).
   - `full-nightly` profile as a local scheduled command recipe, not a remote cron.
-- [ ] §2 Add a matrix job for **dual-soland federation**: spin up two soland instances on different ports, run federation scenarios.
+- [x] §2 Add a matrix job for **dual-soland federation**: spin up two soland instances on different ports, run federation scenarios.
+  - 2026-05-25 local close: `run-cotest.ps1 -Profile dual-soland` delegates to `run-joint-e2e.ps1 -DualSoland -RunProfile joint-full -Grep "cross-server.federation"` and uses Playwright's bundled `chromium` project for the federation matrix.
 - [x] §3 Wire `coverage-profiles.json` enforcement: fail local gate if any journey drops below its baseline.
 
 ### Joint yougen ↔ live soland integration (per `_test_todos_claude.md` Phase 6)
@@ -65,6 +66,9 @@ Order by user-impact and current coverage:
   28 passed / 0 failed. Evidence:
   `docs/release-evidence-0.9.0.md` and
   `artifacts/runs/20260525-055932/summary.md`.
+- 2026-05-25: local `dual-soland` federation matrix passed with 4 live tests
+  passed / 6 fixme skipped. Evidence:
+  `artifacts/runs/20260525-082323/summary.md`.
 
 ## Exit gate (phase 4)
 

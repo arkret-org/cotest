@@ -98,7 +98,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    src = args.raw_config.read_text(encoding="utf-8")
+    src = args.raw_config.read_text(encoding="utf-8-sig")
     coauth_base = trailing_slash(args.coauth_base_url)
     soland_base = trailing_slash(args.soland_base_url)
     admin_audience = args.admin_audience or coauth_base.rstrip("/") + "/api/v1"

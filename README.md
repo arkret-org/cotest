@@ -56,6 +56,7 @@ Recommended entrypoints:
 ```powershell
 .\scripts\run-cotest.ps1 -Runtime process
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
 .\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
@@ -164,7 +165,9 @@ This gives `cotest` an explicit result surface instead of relying only on
 scrolling terminal output.
 
 `-Profile fast-smoke` runs a small PR-oriented set from
-`config/ci-profiles.json`; `-Profile full-nightly` runs the complete suite.
+`config/ci-profiles.json`; `-Profile dual-soland` starts alpha/beta soland
+and alpha/beta yougen locally, then runs the federation Playwright matrix;
+`-Profile full-nightly` runs the complete suite.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous `artifacts/latest/coverage-matrix.json`.
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run

@@ -102,6 +102,9 @@ e2e/
 # 双服务器 + 全部 mocks(最大覆盖)
 & "D:\Works\contrix-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -DualSoland -StartMocks -RunProfile joint-full
 
+# cotest 本地 dual-soland profile(只跑 federation matrix)
+& "D:\Works\contrix-dev\cotest\scripts\run-cotest.ps1" -Profile dual-soland
+
 # 单个领域
 & "..." -StartCoauth -Grep "encryption/"
 

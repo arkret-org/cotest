@@ -96,6 +96,7 @@ Recommended scripted entrypoints:
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-cotest.ps1 -Runtime process -Profile release-gate
 .\scripts\run-cotest.ps1 -Runtime process -Profile full-nightly
+.\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
 .\scripts\run-cotest.ps1 -Runtime docker -BuildImage
 ```
 
@@ -114,6 +115,13 @@ as `cx.profile.core_event_store.v1`, `cx.profile.chat_mvp.v1`, and
 `coverage-gate.*`, `release-gate.*`, `spec-sync-gate.*`, and
 `secret-scan.*` artifacts and can fail on coverage regressions with
 `-FailOnCoverageRegression`.
+
+`dual-soland` is a local matrix profile, not a remote workflow. It delegates to
+`run-joint-e2e.ps1 -DualSoland -RunProfile joint-full -Grep "cross-server.federation"`,
+starts alpha/beta soland on separate ports, starts alpha/beta yougen when the
+runner owns the web servers, and injects `COTEST_SOLAND_ALPHA_*`,
+`COTEST_SOLAND_BETA_*`, `COTEST_YOUGEN_ALPHA_BASE_URL`, and
+`COTEST_YOUGEN_BETA_BASE_URL` for federation specs.
 
 The latest recorded local protocol release gate is
 `artifacts/runs/20260525-055932`: 28 passed, 0 failed, coverage gate passed,
@@ -213,6 +221,7 @@ Recommended local run:
 .\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
+.\scripts\run-cotest.ps1 -Profile dual-soland
 ```
 
 Omit `-SkipNpmInstall` on a fresh checkout so the script installs the local
@@ -237,6 +246,11 @@ spec is wired end-to-end against real services.
 `scripts/run-cotest.ps1 -Profile release-gate` now invokes joint smoke as an
 additional release-gate check and writes `joint-smoke-gate.*`. Use
 `-SkipJointSmokeGate` only for local protocol-only release-gate debugging.
+
+Dual-soland runs write both `service-gaps.md` and `service-traces.md` under the
+joint artifact directory. `service-traces.md` indexes each alpha/beta soland
+trace file plus stdout/stderr and command logs, so projection and federation
+failures can be debugged without reconstructing paths from HAR files.
 
 ### Mock services
 

@@ -29,9 +29,11 @@ param(
     [string]$YougenRoot,
     [string]$SolandBaseUrl,
     [string]$YougenBaseUrl,
+    [string]$YougenBetaBaseUrl,
     [string]$CoauthBaseUrl,
     [string]$SolandCommand,
     [string]$YougenCommand,
+    [string]$YougenBetaCommand,
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
@@ -147,6 +149,22 @@ function Find-CommandPath {
         }
     }
     return $null
+}
+
+function Invoke-NativeCapture {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @()
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        return & $FilePath @Arguments 2>&1
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
 }
 
 function Invoke-JointE2ePreflight {
@@ -296,13 +314,13 @@ function Invoke-JointE2ePreflight {
         $docker = Find-CommandPath @("docker.exe", "docker")
         if ($docker) {
             Add-PreflightResult $results "docker cli" "pass" $docker
-            $dockerInfo = (& $docker info 2>&1) -join "`n"
+            $dockerInfo = (Invoke-NativeCapture -FilePath $docker -Arguments @("info")) -join "`n"
             if ($LASTEXITCODE -eq 0) {
                 Add-PreflightResult $results "docker daemon" "pass" "daemon reachable"
             } else {
                 Add-PreflightResult $results "docker daemon" "fail" $dockerInfo
             }
-            $imageInspect = (& $docker image inspect $CoauthPostgresImage 2>&1) -join "`n"
+            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $CoauthPostgresImage)) -join "`n"
             if ($LASTEXITCODE -eq 0) {
                 Add-PreflightResult $results "postgres image" "pass" $CoauthPostgresImage
             } else {
@@ -438,13 +456,17 @@ function Start-EphemeralPostgres {
     $null = Get-Command docker -ErrorAction Stop
     $port = Get-FreeTcpPort
     $containerName = "$NamePrefix-pg-$PID"
-    $runOutput = & docker run --rm -d `
-        --name $containerName `
-        -e POSTGRES_USER=contrix `
-        -e POSTGRES_PASSWORD=contrix `
-        -e POSTGRES_DB=contrix `
-        -p "127.0.0.1:$port`:5432" `
-        $Image 2>&1
+    $runOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @(
+        "run",
+        "--rm",
+        "-d",
+        "--name", $containerName,
+        "-e", "POSTGRES_USER=contrix",
+        "-e", "POSTGRES_PASSWORD=contrix",
+        "-e", "POSTGRES_DB=contrix",
+        "-p", "127.0.0.1:$port`:5432",
+        $Image
+    )
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to start PostgreSQL container: $($runOutput -join "`n")"
     }
@@ -452,7 +474,7 @@ function Start-EphemeralPostgres {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
-        $readyOutput = & docker exec $containerName pg_isready -U contrix -d contrix 2>&1
+        $readyOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @("exec", $containerName, "pg_isready", "-U", "contrix", "-d", "contrix")
         if ($LASTEXITCODE -eq 0) {
             return [pscustomobject]@{
                 ContainerName = $containerName
@@ -699,6 +721,48 @@ if (-not $YougenBaseUrl) {
 } else {
     $yougenPort = $null
 }
+$yougenBetaPort = $null
+$yougenBetaBaseUrl = $null
+$yougenBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("YougenBaseUrl")
+if ($DualSoland) {
+    if ($YougenBetaBaseUrl) {
+        $yougenBetaBaseUrl = $YougenBetaBaseUrl
+    } elseif ($YougenBetaCommand) {
+        throw "-YougenBetaCommand requires -YougenBetaBaseUrl so the harness can route browser contexts."
+    } elseif ($YougenCommand -or $yougenBaseUrlWasExplicit) {
+        $yougenBetaBaseUrl = $YougenBaseUrl
+    } else {
+        $yougenBetaPort = Get-FreeTcpPort
+        $yougenBetaBaseUrl = "http://127.0.0.1:$yougenBetaPort"
+    }
+}
+
+function Get-RelativePathCompat {
+    param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+    )
+
+    $method = [System.IO.Path].GetMethod(
+        "GetRelativePath",
+        [type[]]@([string], [string])
+    )
+    if ($method) {
+        return [System.IO.Path]::GetRelativePath($BasePath, $TargetPath)
+    }
+
+    $baseFull = [System.IO.Path]::GetFullPath($BasePath)
+    $targetFull = [System.IO.Path]::GetFullPath($TargetPath)
+    $separator = [System.IO.Path]::DirectorySeparatorChar
+    if (-not $baseFull.EndsWith([string]$separator)) {
+        $baseFull += $separator
+    }
+    $baseUri = [System.Uri]::new($baseFull)
+    $targetUri = [System.Uri]::new($targetFull)
+    return [System.Uri]::UnescapeDataString(
+        $baseUri.MakeRelativeUri($targetUri).ToString()
+    ).Replace('/', $separator)
+}
 if ($StartCoauth -and $CoauthCommand) {
     throw "Use either -StartCoauth or -CoauthCommand, not both."
 }
@@ -919,7 +983,7 @@ try {
         Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
     }
 
-    # CT-6: starid (DID resolver) — env-driven, no external deps. Spawned
+    # CT-6: starid (DID resolver) - env-driven, no external deps. Spawned
     # before soland so soland's SOLAND_STARID_WEBVH_RESOLVER_URL points at a
     # live listener from the first request onwards.
     if ($StartStarid) {
@@ -938,7 +1002,7 @@ try {
         Wait-HttpReady -Url "$($StaridBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
-    # CT-6: teabay (directory) — needs a Postgres DSN. The validation block
+    # CT-6: teabay (directory) - needs a Postgres DSN. The validation block
     # above already guaranteed $TeabayDatabaseUrl is set when -StartTeabay
     # is passed.
     if ($StartTeabay) {
@@ -983,7 +1047,7 @@ try {
             (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer)
     }
 
-    # CT-6: wire soland → starid (DID resolver) + soland → teabay
+    # CT-6: wire soland -> starid (DID resolver) + soland -> teabay
     # (directory announce). Each block is no-op when its service is not
     # part of the joint stack.
     $solandStaridEnv = ""
@@ -1007,7 +1071,9 @@ try {
             [Parameter(Mandatory = $true)][string]$ServiceDid,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
             [Parameter(Mandatory = $true)][int]$Port,
+            [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFile,
+            [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
             [string]$FederationPeers = ""
         )
         $federationEnv = ""
@@ -1041,18 +1107,20 @@ try {
             "`$env:SOLAND_SERVICE_DID={1}; " +
             "`$env:SOLAND_DEVELOPMENT_MODE='true'; " +
             "`$env:SOLAND_CORS_ALLOW_ORIGIN={2}; " +
+            "`$env:SOLAND_METRICS_BIND='127.0.0.1:{3}'; " +
             "`$env:SOLAND_OBJECT_STORAGE_BACKEND='filesystem'; " +
-            "`$env:SOLAND_OBJECT_STORAGE_LOCAL_ROOT={3}; " +
-            "`$env:SOLAND_LOG_FILE={4}; " +
-            "{5}" +
+            "`$env:SOLAND_OBJECT_STORAGE_LOCAL_ROOT={4}; " +
+            "`$env:SOLAND_LOG_FILE={5}; " +
             "{6}" +
             "{7}" +
             "{8}" +
-            "cargo run --manifest-path {9} -- --bind 127.0.0.1:{10}"
+            "{9}" +
+            "cargo run --manifest-path {10} -- --bind 127.0.0.1:{11}"
         ) -f `
             (Quote-PsLiteral $BaseUrl),
             (Quote-PsLiteral $ServiceDid),
-            (Quote-PsLiteral $YougenBaseUrl),
+            (Quote-PsLiteral $CorsAllowOrigin),
+            $MetricsPort,
             (Quote-PsLiteral $ObjectsRoot),
             (Quote-PsLiteral $LogFile),
             $solandCoauthEnv,
@@ -1075,12 +1143,15 @@ try {
     if (-not $SolandCommand -and $solandPort) {
         $generatedSolandCommand = $true
         $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
+        $solandMetricsPort = Get-FreeTcpPort
         $SolandCommand = Build-SolandCommand `
             -BaseUrl $SolandBaseUrl `
             -ServiceDid $SolandServiceDid `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
             -Port $solandPort `
+            -MetricsPort $solandMetricsPort `
             -LogFile $solandTraceFile `
+            -CorsAllowOrigin $YougenBaseUrl `
             -FederationPeers $alphaPeer
     }
     if ($SolandCommand) {
@@ -1092,28 +1163,49 @@ try {
 
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
+        $solandBetaMetricsPort = Get-FreeTcpPort
         $solandBetaCommand = Build-SolandCommand `
             -BaseUrl $solandBetaBaseUrl `
             -ServiceDid $SolandBetaServiceDid `
             -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
             -Port $solandBetaPort `
+            -MetricsPort $solandBetaMetricsPort `
             -LogFile $solandBetaTraceFile `
+            -CorsAllowOrigin $yougenBetaBaseUrl `
             -FederationPeers $SolandBaseUrl
         $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
+    $yougenService = $null
+    $yougenBetaService = $null
+    $generatedYougenBetaCommand = $false
     if (-not $YougenCommand -and $yougenPort) {
         $YougenCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false"
         $generatedYougenCommand = $true
     }
     if ($YougenCommand) {
-        $yougenService = Start-ManagedCommand -Name "yougen" -Command $YougenCommand -WorkingDirectory $YougenRoot -LogDirectory $serviceLogDir
+        $yougenName = if ($DualSoland) { "yougen-alpha" } else { "yougen" }
+        $yougenService = Start-ManagedCommand -Name $yougenName -Command $YougenCommand -WorkingDirectory $YougenRoot -LogDirectory $serviceLogDir
         $managedServices.Add($yougenService)
     }
     Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-    if ($generatedYougenCommand) {
+    if ($generatedYougenCommand -and $yougenService) {
         Wait-LogContains -Path $yougenService.Stdout -Pattern "Build completed successfully" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+    if ($DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
+        if (-not $YougenBetaCommand -and $yougenBetaPort) {
+            $YougenBetaCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false"
+            $generatedYougenBetaCommand = $true
+        }
+        if ($YougenBetaCommand) {
+            $yougenBetaService = Start-ManagedCommand -Name "yougen-beta" -Command $YougenBetaCommand -WorkingDirectory $YougenRoot -LogDirectory $serviceLogDir
+            $managedServices.Add($yougenBetaService)
+        }
+        Wait-HttpReady -Url $yougenBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedYougenBetaCommand -and $yougenBetaService) {
+            Wait-LogContains -Path $yougenBetaService.Stdout -Pattern "Build completed successfully" -TimeoutSeconds $StartupTimeoutSeconds
+        }
     }
 
     if (-not $SkipNpmInstall -and -not (Test-Path (Join-Path $e2eRoot "node_modules"))) {
@@ -1157,11 +1249,15 @@ try {
         $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
+        $env:COTEST_YOUGEN_ALPHA_BASE_URL = $YougenBaseUrl
+        $env:COTEST_YOUGEN_BETA_BASE_URL = $yougenBetaBaseUrl
     } else {
         Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_DID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_YOUGEN_ALPHA_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_YOUGEN_BETA_BASE_URL -ErrorAction SilentlyContinue
     }
     if ($CoauthBaseUrl) {
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
@@ -1346,7 +1442,7 @@ if ($screenshotFiles.Count -eq 0) {
     $screenshotLines += "- no screenshots captured"
 } else {
     foreach ($file in $screenshotFiles) {
-        $relative = [System.IO.Path]::GetRelativePath($jointDir, $file.FullName)
+        $relative = Get-RelativePathCompat -BasePath $jointDir -TargetPath $file.FullName
         $screenshotLines += "- [$relative]($relative)"
     }
 }
@@ -1361,13 +1457,13 @@ if ($visualBaselineFiles.Count -eq 0) {
     $visualBaselineLines += "- no visual baselines captured"
 } else {
     foreach ($file in $visualBaselineFiles) {
-        $relative = [System.IO.Path]::GetRelativePath($jointDir, $file.FullName)
+        $relative = Get-RelativePathCompat -BasePath $jointDir -TargetPath $file.FullName
         $visualBaselineLines += "- [$relative]($relative)"
     }
 }
 $visualBaselineManifest = Join-Path $visualBaselineDir "manifest.jsonl"
 if (Test-Path $visualBaselineManifest) {
-    $relativeManifest = [System.IO.Path]::GetRelativePath($jointDir, $visualBaselineManifest)
+    $relativeManifest = Get-RelativePathCompat -BasePath $jointDir -TargetPath $visualBaselineManifest
     $visualBaselineLines += ""
     $visualBaselineLines += "- manifest: [$relativeManifest]($relativeManifest)"
 }
@@ -1394,19 +1490,19 @@ if (Test-Path $serviceLogDir) {
         foreach ($file in $stderrFiles) {
             $matchesList = @(Select-String -LiteralPath $file.FullName -Pattern $serviceGapPattern -ErrorAction SilentlyContinue)
             if ($matchesList.Count -eq 0) { continue }
-            $relative = [System.IO.Path]::GetRelativePath($jointDir, $file.FullName)
+            $relative = Get-RelativePathCompat -BasePath $jointDir -TargetPath $file.FullName
             $serviceGapLines += "## $relative"
             $serviceGapLines += ""
             $shown = 0
             foreach ($match in $matchesList) {
                 if ($shown -ge $serviceGapMaxPerService) { break }
                 $line = $match.Line.Trim()
-                if ($line.Length -gt 280) { $line = $line.Substring(0, 280) + "…" }
-                $serviceGapLines += "- L$($match.LineNumber): $line"
+                if ($line.Length -gt 280) { $line = $line.Substring(0, 280) + "..." }
+                $serviceGapLines += ("- L{0}: {1}" -f $match.LineNumber, $line)
                 $shown++
             }
             if ($matchesList.Count -gt $shown) {
-                $serviceGapLines += "- (…$($matchesList.Count - $shown) more match(es) truncated)"
+                $serviceGapLines += ("- (...{0} more match(es) truncated)" -f ($matchesList.Count - $shown))
             }
             $serviceGapLines += ""
         }
@@ -1418,6 +1514,28 @@ if (Test-Path $serviceLogDir) {
     $serviceGapLines += "- service log directory missing"
 }
 $serviceGapLines | Set-Content -Path $serviceGapsReport -Encoding UTF8
+
+$serviceTracesReport = Join-Path $jointDir "service-traces.md"
+$serviceTraceLines = @("# joint e2e service traces", "",
+    "Runtime log index for reducer/projection/federation debugging.",
+    "")
+if (Test-Path $serviceLogDir) {
+    $traceFiles = @(Get-ChildItem -Path $serviceLogDir -Recurse -File -Include "*.trace.log", "*.stdout.log", "*.stderr.log", "*.command.txt" -ErrorAction SilentlyContinue |
+        Sort-Object FullName)
+    if ($traceFiles.Count -eq 0) {
+        $serviceTraceLines += "- no service trace files found"
+    } else {
+        $serviceTraceLines += "| file | bytes |"
+        $serviceTraceLines += "| --- | ---: |"
+        foreach ($file in $traceFiles) {
+            $relative = (Get-RelativePathCompat -BasePath $jointDir -TargetPath $file.FullName) -replace '\\', '/'
+            $serviceTraceLines += "| [$relative]($relative) | $($file.Length) |"
+        }
+    }
+} else {
+    $serviceTraceLines += "- service log directory missing"
+}
+$serviceTraceLines | Set-Content -Path $serviceTracesReport -Encoding UTF8
 
 # Scenario report: group junit testcases by spec file (= scenario) and emit
 # pass / fail / skipped counts so reviewers can read scenario-level health
@@ -1471,7 +1589,7 @@ function Get-StaticSpecStats {
     if (-not (Test-Path -LiteralPath $TestsRoot)) { return $result }
     $specFiles = @(Get-ChildItem -LiteralPath $TestsRoot -Recurse -File -Filter "*.spec.ts" -ErrorAction SilentlyContinue)
     foreach ($file in $specFiles) {
-        $rel = [System.IO.Path]::GetRelativePath($TestsRoot, $file.FullName) -replace '\\', '/'
+        $rel = (Get-RelativePathCompat -BasePath $TestsRoot -TargetPath $file.FullName) -replace '\\', '/'
         $source = $null
         try { $source = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop } catch { $source = "" }
         $fixmeTitles = @(Get-FixmeTitlesForSpec -Path $file.FullName)
@@ -1576,7 +1694,7 @@ if (Test-Path $junitPath) {
                     # Playwright JUnit reporter emits <skipped/> with no message
                     # for BOTH test.skip() and test.fixme(). Newer versions
                     # ALSO emit <property name="fixme" value=""/> on fixme'd
-                    # cases — use that as the primary signal when present,
+                    # cases - use that as the primary signal when present,
                     # then fall back to intersecting the case name with the
                     # per-spec fixme title set harvested from source.
                     $isFixme = $false
@@ -1591,7 +1709,7 @@ if (Test-Path $junitPath) {
                             if ([string]::IsNullOrEmpty($title)) { continue }
                             if ($normalizedCaseName -eq $title) { $isFixme = $true; break }
                             if ($normalizedCaseName.EndsWith($title)) { $isFixme = $true; break }
-                            # Some Playwright JUnit reporters insert U+203A "›"
+                            # Some Playwright JUnit reporters insert U+203A ">"
                             # or plain ">" between describe and test title; an
                             # EndsWith match against the bare title catches it,
                             # and Contains() covers nested-describe edge cases.
@@ -1654,7 +1772,7 @@ if ($junitByScenario.Count -gt 0) {
 }
 
 # Drift section: compare static-source counts vs junit-observed counts. The
-# union of keys catches both directions of drift — specs in the source tree
+# union of keys catches both directions of drift - specs in the source tree
 # that junit never saw (likely crashed pre-report) and junit suites that
 # don't correspond to any static spec file (likely a key-extraction miss).
 $scenarioLines += "## drift vs static count"
@@ -1695,11 +1813,11 @@ foreach ($key in ($allKeys | Sort-Object)) {
 }
 $scenarioLines += ""
 if (-not (Test-Path $junitPath)) {
-    $scenarioLines += "Note: junit.xml absent — only static counts shown above."
+    $scenarioLines += "Note: junit.xml absent - only static counts shown above."
 } elseif ($driftAny) {
-    $scenarioLines += "Drift detected — investigate `[!]` rows: either tests crashed before junit emission, or fixme parsing missed a title."
+    $scenarioLines += "Drift detected - investigate `[!]` rows: either tests crashed before junit emission, or fixme parsing missed a title."
 } else {
-    $scenarioLines += "No drift — junit totals align with static-source counts."
+    $scenarioLines += "No drift - junit totals align with static-source counts."
 }
 
 $scenarioLines | Set-Content -Path $scenariosReport -Encoding UTF8
@@ -1717,6 +1835,8 @@ $summary = [pscustomobject]@{
     soland_beta_base_url = $solandBetaBaseUrl
     soland_beta_service_did = if ($DualSoland) { $SolandBetaServiceDid } else { $null }
     dual_soland = [bool]$DualSoland
+    yougen_alpha_base_url = if ($DualSoland) { $YougenBaseUrl } else { $null }
+    yougen_beta_base_url = if ($DualSoland) { $yougenBetaBaseUrl } else { $null }
     mock_idp_base_url = $mockIdpBaseUrl
     mock_email_base_url = $mockEmailBaseUrl
     mock_witness_base_url = $mockWitnessBaseUrl
@@ -1748,6 +1868,7 @@ $summary = [pscustomobject]@{
     visual_baseline_index = $visualBaselineIndex
     scenarios_report = $scenariosReport
     service_gaps_report = $serviceGapsReport
+    service_traces_report = $serviceTracesReport
     services = $serviceLogDir
 }
 $summaryJson = Join-Path $jointDir "summary.json"
@@ -1768,6 +1889,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - soland_beta_base_url: $($summary.soland_beta_base_url)
 - soland_beta_service_did: $($summary.soland_beta_service_did)
 - dual_soland: $($summary.dual_soland)
+- yougen_alpha_base_url: $($summary.yougen_alpha_base_url)
+- yougen_beta_base_url: $($summary.yougen_beta_base_url)
 - mock_idp_base_url: $($summary.mock_idp_base_url)
 - mock_email_base_url: $($summary.mock_email_base_url)
 - mock_witness_base_url: $($summary.mock_witness_base_url)
@@ -1797,6 +1920,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - visual_baseline_index: $($summary.visual_baseline_index)
 - scenarios_report: $($summary.scenarios_report)
 - service_gaps_report: $($summary.service_gaps_report)
+- service_traces_report: $($summary.service_traces_report)
 - services: $($summary.services)
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
@@ -1825,6 +1949,9 @@ if ($mockAuditAgentBaseUrl) {
     Write-Host "  mock-audit-agent: $mockAuditAgentBaseUrl$auditAgentLabel"
 }
 Write-Host "  yougen      : $YougenBaseUrl"
+if ($DualSoland -and $yougenBetaBaseUrl) {
+    Write-Host "  yougen-beta : $yougenBetaBaseUrl"
+}
 if ($CoauthBaseUrl) {
     Write-Host "  coauth      : $CoauthBaseUrl"
 }

@@ -6,7 +6,7 @@ param(
     [string]$SutImage = "cotest-soland:latest",
     [string]$OutputRoot,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "soak", "joint", "mock-parity")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "soak", "joint", "dual-soland", "mock-parity")]
     [string]$Profile = "all",
     [string[]]$RequiredCoverageProfiles = @(),
     [string]$CoverageBaselinePath,
@@ -40,7 +40,10 @@ function Invoke-JointSmokeGate {
         [string]$OutputName = "joint-smoke",
         [ValidateSet("joint-smoke", "joint-full")][string]$RunProfile = "joint-smoke",
         [string]$PlaywrightProject = "chromium",
-        [bool]$StartCoauth = $true
+        [bool]$StartCoauth = $true,
+        [bool]$DualSoland = $false,
+        [bool]$StartMocks = $false,
+        [string]$Grep
     )
 
     $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
@@ -54,10 +57,19 @@ function Invoke-JointSmokeGate {
     if ($StartCoauth) {
         $args += "-StartCoauth"
     }
+    if ($DualSoland) {
+        $args += "-DualSoland"
+    }
+    if ($StartMocks) {
+        $args += "-StartMocks"
+    }
     $args += @(
         "-RunProfile", $RunProfile,
         "-PlaywrightProject", $PlaywrightProject
     )
+    if ($Grep) {
+        $args += @("-Grep", $Grep)
+    }
     if (Test-Path (Join-Path $RepoRoot "e2e\node_modules")) {
         $args += "-SkipNpmInstall"
     }
@@ -65,9 +77,23 @@ function Invoke-JointSmokeGate {
     Add-Content -Path $RawLog -Value ""
     Add-Content -Path $RawLog -Value "=== $OutputName $RunProfile ==="
     $startedAt = Get-Date
-    $output = & $psExe @args 2>&1
-    $exitCode = $LASTEXITCODE
-    $output | Add-Content -Path $RawLog
+    $childLabel = ($OutputName -replace '[^A-Za-z0-9_.-]', '_')
+    $childStdout = Join-Path $RunDir "$childLabel.stdout.log"
+    $childStderr = Join-Path $RunDir "$childLabel.stderr.log"
+    $process = Start-Process `
+        -FilePath $psExe `
+        -ArgumentList $args `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $childStdout `
+        -RedirectStandardError $childStderr
+    $exitCode = $process.ExitCode
+    foreach ($path in @($childStdout, $childStderr)) {
+        if (Test-Path $path) {
+            Get-Content $path | Add-Content -Path $RawLog
+        }
+    }
     $finishedAt = Get-Date
 
     $summaryJson = $null
@@ -194,8 +220,8 @@ function New-CargoTestArgs {
     }
     $args += @("--tests", "--no-fail-fast", "--", "--nocapture")
     if ($IncludeIgnored) {
-        # The soak (CT-18) profile — and any future opt-in long-running
-        # profiles — must promote `#[ignore]`'d tests, otherwise the run
+        # The soak (CT-18) profile - and any future opt-in long-running
+        # profiles - must promote `#[ignore]`'d tests, otherwise the run
         # would silently skip every scenario in the profile.
         $args += "--ignored"
     }
@@ -291,7 +317,7 @@ function New-SummaryMarkdown {
     $lines.Add("")
     if ($Summary.PSObject.Properties.Name -contains "e2e_coverage_status") {
         $ratio = if ($null -ne $Summary.e2e_coverage_verified_ratio) { "{0:P1}" -f [double]$Summary.e2e_coverage_verified_ratio } else { "n/a" }
-        $lines.Add("Promised: $($Summary.e2e_coverage_promised_count) · Verified: $($Summary.e2e_coverage_verified_count) ($ratio)")
+        $lines.Add("Promised: $($Summary.e2e_coverage_promised_count) / Verified: $($Summary.e2e_coverage_verified_count) ($ratio)")
         $lines.Add("")
         $lines.Add("| Coverage mode | Promised | Verified | Verified ratio | Verified-only pass |")
         $lines.Add("|---|---:|---:|---:|---|")
@@ -1700,6 +1726,49 @@ if ($Profile -eq "joint") {
     Write-Host "  summary  : $summaryMd"
     Write-Host "  joint    : $($summary.joint_summary_markdown)"
     exit ([int]$jointRun.exit_code)
+}
+
+if ($Profile -eq "dual-soland") {
+    $dualRun = Invoke-JointSmokeGate `
+        -RepoRoot $repoRoot `
+        -RunDir $runDir `
+        -RawLog $rawLog `
+        -OutputName "dual-soland" `
+        -RunProfile "joint-full" `
+        -PlaywrightProject "chromium" `
+        -StartCoauth $true `
+        -DualSoland $true `
+        -StartMocks $false `
+        -Grep "cross-server.federation"
+
+    $summary = [pscustomobject]@{
+        generated_at           = (Get-Date).ToString("o")
+        profile                = $Profile
+        status                 = $dualRun.status
+        exit_code              = $dualRun.exit_code
+        joint_summary_json     = $dualRun.summary_json
+        joint_summary_markdown = $dualRun.summary_markdown
+        output_root            = $dualRun.output_root
+        raw_log                = $rawLog
+    }
+    $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UTF8
+    @(
+        "# cotest dual-soland profile",
+        "",
+        "- status: $($summary.status)",
+        "- exit_code: $($summary.exit_code)",
+        "- joint_summary_json: $($summary.joint_summary_json)",
+        "- joint_summary_markdown: $($summary.joint_summary_markdown)",
+        "- output_root: $($summary.output_root)",
+        "- raw_log: $($summary.raw_log)"
+    ) | Set-Content -Path $summaryMd -Encoding UTF8
+
+    Write-Host ""
+    Write-Host "Cotest dual-soland profile complete:"
+    Write-Host "  status   : $($summary.status)"
+    Write-Host "  summary  : $summaryMd"
+    Write-Host "  joint    : $($summary.joint_summary_markdown)"
+    exit ([int]$dualRun.exit_code)
 }
 
 if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -ImageTag $SutImage))) {
