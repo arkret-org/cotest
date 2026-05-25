@@ -73,13 +73,14 @@
    ```
 8. 断言:响应 200 + `report_id` + `status="submitted"`
 9. 断言 §3.3 隐私要求:
+   - bob 作为 reporter 调用 `GET /api/v1/moderation/reports?realm_id=S` → 能看到这个 report
    - mallory 用自己的 token 调用 list-reports endpoint → **看不到** 这个 report
    - mallory 的 timeline 上 `M_bad` 没有任何"被举报"的标记
    - carol (旁观者) 同样看不到 report
 
 ### Phase D — alice 处理:capability 检查 + anchored ban
 
-10. **alice** 调用 list-reports endpoint → 能看到 bob 提交的这个 report
+10. **alice** 调用 `GET /api/v1/moderation/reports?realm_id=S` 或 `GET /api/v1/admin/reports` → 能看到 bob 提交的这个 report
 11. **alice** 决定 ban mallory:
     - 调用 `cx.member.state` Move,membership = `ban`,subject = mallory.did
     - 该 Move 必须签名 + 引用 `cx.space.moderate` capability grant
@@ -135,7 +136,8 @@
 
 ## Implementation notes
 
-- **yougen UI 缺口**:举报入口、moderator 报告列表、个人 mute/block UI — 当前 yougen 是否有这些 testid 需要查;如缺,先把 scenario 完成 spec 文档,实测时通过 soland HTTP API 直接驱动
+- **soland report privacy**:`GET /api/v1/moderation/reports` 只向 reporter、realm owner、配置的 admin principal 返回 report;dev-mode `GET /api/v1/admin/reports` 复用同一过滤,避免被举报人或普通成员通过 admin collection 读到 report。
+- **yougen UI 缺口**:举报入口、moderator 报告列表、个人 mute/block UI — 当前 live 测试通过 soland HTTP API 直接驱动;后续 UI testid 可在 yougen 任务中补。
 - 现有 `/space/:id/admin` 应该有 ban / unban 入口 — 需要查 space_admin.rs 的 testid (例如有没有 `ban-member-button`)
 - 测试侧需要直接读 `cx.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /api/v1/spaces/${spaceId}/cells/cx.component.moderation_state.v1` 或等价 endpoint
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试

@@ -86,6 +86,40 @@ test.describe("moderation and ban", () => {
     expect(reportBody.report_id).toMatch(/^cx:report:/);
     expect(reportBody.status).toBe("queued");
 
+    const reporterReports = await request.get(
+      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      { headers: authHeaders(bobToken) },
+    );
+    expect(reporterReports.ok()).toBeTruthy();
+    expect(JSON.stringify(await reporterReports.json())).toContain(reportBody.report_id);
+
+    const targetReports = await request.get(
+      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      { headers: authHeaders(malloryToken) },
+    );
+    expect(targetReports.ok()).toBeTruthy();
+    expect(JSON.stringify(await targetReports.json())).not.toContain(reportBody.report_id);
+
+    const bystanderReports = await request.get(
+      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      { headers: authHeaders(carolToken) },
+    );
+    expect(bystanderReports.ok()).toBeTruthy();
+    expect(JSON.stringify(await bystanderReports.json())).not.toContain(reportBody.report_id);
+
+    const targetAdminReports = await request.get(`${solandBaseUrl()}/api/v1/admin/reports`, {
+      headers: authHeaders(malloryToken),
+    });
+    expect(targetAdminReports.ok()).toBeTruthy();
+    expect(JSON.stringify(await targetAdminReports.json())).not.toContain(reportBody.report_id);
+
+    const ownerReports = await request.get(
+      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      { headers: authHeaders(aliceToken) },
+    );
+    expect(ownerReports.ok()).toBeTruthy();
+    expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
+
     const reports = await request.get(`${solandBaseUrl()}/api/v1/admin/reports`, {
       headers: authHeaders(aliceToken),
     });
