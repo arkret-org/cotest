@@ -57,6 +57,7 @@ Recommended entrypoints:
 .\scripts\run-cotest.ps1 -Runtime process
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
+.\scripts\run-hygiene.ps1
 .\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
@@ -76,9 +77,16 @@ Recommended entrypoints:
   CI profile, coverage gate, secret scan, and per-service logs to
   `artifacts/runs/<timestamp>/`, then copies the latest set to
   `artifacts/latest/`.
+- `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
+  advisories/licensing (`cargo deny check`), spelling drift (`typos`), and
+  RustSec vulnerabilities (`cargo audit`). It writes `raw.log`,
+  `summary.json`, `summary.md`, and per-tool stdout/stderr logs to
+  `artifacts/hygiene/<timestamp>/`.
 
 The primary human-readable report is
 `artifacts/latest/summary.md`.
+
+The local hygiene report is `artifacts/hygiene/<timestamp>/summary.md`.
 
 ## Direct Cargo Run
 
@@ -168,6 +176,9 @@ scrolling terminal output.
 `config/ci-profiles.json`; `-Profile dual-soland` starts alpha/beta soland
 and alpha/beta yougen locally, then runs the federation Playwright matrix;
 `-Profile full-nightly` runs the complete suite.
+`scripts/run-hygiene.ps1` is run separately from scenario profiles so
+dependency policy, typo checks, and advisory scans can fail fast without
+starting services.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous `artifacts/latest/coverage-matrix.json`.
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run

@@ -51,9 +51,9 @@ Order by user-impact and current coverage:
 - [x] §19 Keep `mock-parity-allowlist.json` empty. Enforce in the local release gate: any addition requires a referenced issue.
 
 ### Engineering hygiene
-- [ ] §20 Add `cargo deny check` to CI.
-- [ ] §21 Add `typos` workflow.
-- [ ] §22 Add `cargo audit`.
+- [x] §20 Add `cargo deny check` to the local hygiene gate.
+- [x] §21 Add `typos` to the local hygiene gate.
+- [x] §22 Add `cargo audit` to the local hygiene gate.
 
 ### Docs
 - [x] §23 Update `docs/test-strategy.md` with the new local runner/profile matrix.

@@ -123,6 +123,12 @@ runner owns the web servers, and injects `COTEST_SOLAND_ALPHA_*`,
 `COTEST_SOLAND_BETA_*`, `COTEST_YOUGEN_ALPHA_BASE_URL`, and
 `COTEST_YOUGEN_BETA_BASE_URL` for federation specs.
 
+The local hygiene gate is `scripts/run-hygiene.ps1`. It runs
+`cargo deny check`, `typos`, and `cargo audit`, then records
+`raw.log`, `summary.json`, `summary.md`, and per-tool stdout/stderr logs under
+`artifacts/hygiene/<timestamp>/`. This is intentionally local-only; it does
+not publish packages, tags, releases, or remote workflow artifacts.
+
 The latest recorded local protocol release gate is
 `artifacts/runs/20260525-055932`: 28 passed, 0 failed, coverage gate passed,
 secret scan passed, and `mock-parity-allowlist.json` remained empty. The
