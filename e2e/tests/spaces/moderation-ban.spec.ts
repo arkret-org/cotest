@@ -17,10 +17,12 @@ import {
   pushFederationOperations,
   querySpaceEventsApi,
   sendMessageApi,
+  signedEventEnvelope,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
+  openUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -119,6 +121,23 @@ test.describe("moderation and ban", () => {
     );
     expect(ownerReports.ok()).toBeTruthy();
     expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
+
+    const unauthorizedBan = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      headers: authHeaders(bobToken),
+      data: signedEventEnvelope({
+        actorDid: bob.did,
+        realmId: spaceId,
+        kind: "cx.member.state",
+        payload: {
+          actor_id: mallory.did,
+          member: mallory.did,
+          membership: "ban",
+          reason: "non_moderator_attempt",
+        },
+      }),
+    });
+    expect(unauthorizedBan.status()).toBe(403);
+    expect(JSON.stringify(await unauthorizedBan.json())).toContain("missing_capability");
 
     const reports = await request.get(`${solandBaseUrl()}/api/v1/admin/reports`, {
       headers: authHeaders(aliceToken),
@@ -241,5 +260,47 @@ test.describe("moderation and ban", () => {
     expect(space.ok()).toBeTruthy();
     const body = await space.json();
     expect(body.members ?? []).not.toContain(mallory.did);
+  });
+
+  test("owner can ban a member from the yougen admin member row", async ({
+    browser,
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("s5-ui-alice");
+    const mallory = uniqueUser("s5-ui-mallory");
+
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, mallory)]);
+    const aliceToken = await issueDevSession(request, alice);
+    const spaceId = await createSpaceApi(request, aliceToken, {
+      title: `S5 UI Ban ${stamp}`,
+      public: true,
+      discoverability: "public",
+      history_visibility: "shared",
+    });
+    await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
+
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    try {
+      await alicePage.gotoSpaceAdminSection(spaceId, "members");
+      const malloryRow = alicePage.page.locator(
+        `[data-testid="member-row"][data-member-did="${mallory.did}"]`,
+      );
+      await expect(malloryRow).toBeVisible({ timeout: 30_000 });
+      await malloryRow.getByTestId("ban-member-button").click();
+      await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(/banned/i, {
+        timeout: 30_000,
+      });
+
+      const space = await request.get(
+        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(space.ok()).toBeTruthy();
+      const body = await space.json();
+      expect(body.members ?? []).not.toContain(mallory.did);
+    } finally {
+      await alicePage.close();
+    }
   });
 });
