@@ -2,9 +2,17 @@
 // Contract: e2e/scenarios/identity/consent-grant.md
 // Spec: identity/consent-model.md §2-§4
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  authHeaders,
+  createSpaceApi,
+  expectJsonOk,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -37,7 +45,7 @@ async function gotoConsentSettings(actor: Awaited<ReturnType<typeof openUserPage
 }
 
 async function expectConsentCell(
-  request: import("@playwright/test").APIRequestContext,
+  request: APIRequestContext,
   token: string,
   holderDid: string,
   peerDid: string,
@@ -54,6 +62,20 @@ async function expectConsentCell(
   expect(JSON.stringify(body)).toContain(peerDid);
   expect(JSON.stringify(body)).toContain(scope);
   expect(JSON.stringify(body)).toContain(expectedState);
+  return body as Record<string, unknown>;
+}
+
+async function requestContactApi(
+  request: APIRequestContext,
+  token: string,
+  targetDid: string,
+  scope: "invite" | "message" | "call",
+) {
+  const response = await request.post(`${solandBaseUrl()}/api/v1/contacts/request`, {
+    headers: authHeaders(token),
+    data: { target: targetDid, scope },
+  });
+  return await expectJsonOk<Record<string, unknown>>(response, `request contact ${scope}`);
 }
 
 test.describe("consent grant", () => {
@@ -133,6 +155,81 @@ test.describe("consent grant", () => {
     expect(updateBody.state).toBe("accepted");
     expect(updateBody.receipt?.operation_id).toBe("cx.mimi.update_consent");
     expect(updateBody.receipt?.extra?.membership_still_required).toBe(true);
+  });
+
+  test("cx.consent.grant event projects consent cell and contact gate", async ({
+    request,
+  }) => {
+    const alice = uniqueUser("p1-020-consent-event-alice");
+    const bob = uniqueUser("p1-020-consent-event-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const realmId = await createSpaceApi(request, aliceToken, {
+      title: `P1-020 consent reducer ${Date.now()}`,
+      ownerDid: alice.did,
+    });
+
+    const pending = await requestContactApi(request, bobToken, alice.did, "message");
+    expect(pending.status).toBe("pending");
+
+    const consentId = typedId("operation").replace("cx:operation:", "cx:consent:");
+    const grantEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "cx.consent.grant",
+      payload: {
+        consent_id: consentId,
+        peer: bob.did,
+        consent_scope: "direct_message",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, grantEnvelope, {
+      context: "submit cx.consent.grant",
+    });
+    const grantDot = `${String(grantEnvelope.event_id)}:${Number(grantEnvelope.actor_seq)}`;
+
+    const granted = await expectConsentCell(
+      request,
+      aliceToken,
+      alice.did,
+      bob.did,
+      "message",
+      "granted",
+    );
+    expect(granted.cell_id).toBe(`cx:cell:cx.component.consent.grant.v1:${consentId}`);
+    expect(granted.grant_dots).toContain(grantDot);
+    const accepted = await requestContactApi(request, bobToken, alice.did, "message");
+    expect(accepted.status).toBe("accepted");
+
+    const revokeEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "cx.consent.revoke",
+      payload: {
+        consent_id: consentId,
+        observed_dots: [grantDot],
+        revoked_at: new Date(Date.now() + 1000).toISOString(),
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, revokeEnvelope, {
+      context: "submit cx.consent.revoke",
+    });
+
+    const revoked = await expectConsentCell(
+      request,
+      aliceToken,
+      alice.did,
+      bob.did,
+      "message",
+      "revoked",
+    );
+    expect(revoked.revoked_dots).toContain(grantDot);
+    const blocked = await requestContactApi(request, bobToken, alice.did, "message");
+    expect(blocked.status).toBe("pending");
   });
 
   test.fixme(
