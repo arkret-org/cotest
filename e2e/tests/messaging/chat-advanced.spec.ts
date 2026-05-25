@@ -433,15 +433,12 @@ test.describe("chat advanced", () => {
   },
   );
 
-  test.fixme("E14.D mentions route notifications only to the mentioned actor", async ({
-    // @blocking-on: soland#messaging-chat-advanced-gap
+  test("E14.D mentions route notifications only to the mentioned actor", async ({
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-    // @expected-live-by: 2026Q3
     browser,
     request,
   }, testInfo) => {
     // spec: discovery/push-notifications.md §4.3.1 mention_routing_hint
-    // soland gap: notification projection does not yet expose mention_routing_hint.
     const stamp = Date.now();
     const alice = uniqueUser("s14d-alice");
     const bob = uniqueUser("s14d-bob");

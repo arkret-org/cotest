@@ -54,14 +54,11 @@ test.describe("notifications", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#discovery-notifications-gap
+  test(
     // @user-promise: e2e/scenarios/discovery/notifications.md
-    // @expected-live-by: 2026Q3
     "muting a space stops push notifications for new messages but mention still notifies (spec §3 mention override)",
     async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §3 + §4.3.1.
-      // soland gap: per-space notification preferences and mention override projection.
       const stamp = Date.now();
       const alice = uniqueUser("s23-mute-alice");
       const bob = uniqueUser("s23-mute-bob");
@@ -116,10 +113,8 @@ test.describe("notifications", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#discovery-notifications-gap
+  test(
     // @user-promise: e2e/scenarios/discovery/notifications.md
-    // @expected-live-by: 2026Q3
     "Do-not-disturb window suppresses all notifications during configured hours; resumes after window ends",
     async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §3.2 do-not-disturb preference.
@@ -240,10 +235,8 @@ test.describe("notifications", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#discovery-notifications-gap
+  test(
     // @user-promise: e2e/scenarios/discovery/notifications.md
-    // @expected-live-by: 2026Q3
     "cross-device read state: marking read on device-2 clears unread on device-1 within sync window",
     async ({ browser, request }, testInfo) => {
       // spec: client-preferences.md read marker is per-account, synced to all devices.
