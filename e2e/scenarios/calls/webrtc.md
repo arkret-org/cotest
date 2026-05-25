@@ -117,8 +117,8 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ## Implementation notes
 
 - **soland 已落地(P3-070)**:`/api/v1/webrtc/sessions` 对参与者开放 signal append/read,并在 create/post/get 响应中派生 `ringing → connecting → active → ended` call_state;peer routing 由参与者读取同一 session 的信号覆盖。
+- **soland 已落地(P3-071)**:`/api/v1/calls/ice-config` 与 refresh 端点签发 realm/call-scoped STUN/TURN 配置,TURN username 使用 pairwise pseudonym,mid-call refresh 轮换 credential;`mode=sfu` 与 `recording_policy=allow|none` 已持久化并强制录制策略。
 - **yougen 已落地(P3-070)**:`/call` 的本地 renderer FSM 暴露 `call-status-ringing`、`call-status-connecting`、`call-status-active`、`call-status-ended`,与 soland 状态词汇一致。
-- **remaining soland 缺口**:ICE/TURN auth、pairwise pseudonym、mid-call refresh、recording policy enforcement 由 GAP-P3-071 覆盖。
 - **remaining yougen UI 缺口**:mute/screen-share/hangup 的真实 signal emit、recording indicator、group/SFU roster 由 GAP-P3-072 覆盖。
 - **测试侧难点**:
   - Playwright 用 `--use-fake-ui-for-media-stream` + `--use-fake-device-for-media-stream` 让 getUserMedia 返回 fake track 避免硬件依赖

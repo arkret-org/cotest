@@ -19,6 +19,7 @@ import {
   addSpaceMemberApi,
   authHeaders,
   createSpaceApi,
+  wireErrCode,
 } from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
@@ -179,43 +180,127 @@ test.describe("calls", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "group call mode=sfu: alice+bob+carol join; recording_policy=allow lets carol start recording (writes recording_blob_ref)",
-    async () => {
+    async ({ request }) => {
       // spec: webrtc-signaling.md §3 + §5 call.record capability
+      const { aliceToken, bob, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-allow");
+      const session = await createWebrtcSession(request, aliceToken, {
+        space_id: spaceId,
+        participants: [bob.did, carol.did],
+        mode: "sfu",
+        recording_policy: "allow",
+      });
+      expect(session.mode).toBe("sfu");
+      expect(session.recording_policy).toBe("allow");
+      expect(session.participants).toEqual(expect.arrayContaining([bob.did, carol.did]));
+
+      const recording = await startRecording(request, carolToken, session.session_id, spaceId);
+      expect(recording.ok).toBe(true);
+      expect(recording.recording_started_by).toBe(carol.did);
+      expect(recording.recording_policy).toBe("allow");
+      expect(recording.recording_blob_ref).toMatch(/^cx:blob:sha256:/);
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "E18.E recording_policy=none rejects carol's recording attempt with failed_precondition reason=recording_policy_violation",
-    async () => {
+    async ({ request }) => {
       // spec: webrtc-signaling.md §5
+      const { aliceToken, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-deny");
+      const session = await createWebrtcSession(request, aliceToken, {
+        space_id: spaceId,
+        participants: [carol.did],
+        mode: "sfu",
+        recording_policy: "none",
+      });
+
+      const denied = await request.post(
+        `${solandBaseUrl()}/api/v1/calls/${encodeURIComponent(session.session_id)}/recording/start`,
+        {
+          headers: authHeaders(carolToken),
+          data: { space_id: spaceId },
+        },
+      );
+      expect(denied.status()).toBe(412);
+      expect(wireErrCode(await denied.json())).toBe("recording_policy_violation");
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "E18.F mid-call TURN credential refresh: long calls renew credentials before expiry; call does not drop",
-    async () => {
+    async ({ request }) => {
       // spec: webrtc-signaling.md §6.3
+      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-turn-refresh");
+      const session = await createWebrtcSession(request, aliceToken, {
+        space_id: spaceId,
+        participants: [bob.did],
+        mode: "p2p",
+        recording_policy: "none",
+      });
+      await appendCallSignal(request, aliceToken, session.session_id, alice, "offer", 1, {
+        sdp: "v=0\r\no=alice",
+      });
+      await appendCallSignal(request, bobToken, session.session_id, bob, "answer", 2, {
+        sdp: "v=0\r\no=bob",
+      });
+
+      const issued = await issueIceConfig(request, aliceToken, {
+        space_id: spaceId,
+        call_id: session.session_id,
+        actor_id: alice.did,
+        device_id: alice.deviceId,
+      });
+      const refreshed = await refreshIceConfig(request, aliceToken, session.session_id, {
+        space_id: spaceId,
+        actor_id: alice.did,
+        device_id: alice.deviceId,
+      });
+      expect(refreshed.refreshed).toBe(true);
+      expect(refreshed.turn_servers[0].username).toBe(issued.turn_servers[0].username);
+      expect(refreshed.turn_servers[0].credential).not.toBe(issued.turn_servers[0].credential);
+      expect(refreshed.refresh_lead_seconds).toBeGreaterThan(0);
+
+      const afterRefresh = await readCallSignals(request, aliceToken, session.session_id, 0);
+      expect(afterRefresh.call_state).toBe("active");
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "E18.7 pairwise pseudonym in TURN credentials: username does not contain alice.did plaintext (spec §6 pseudonymization)",
-    async () => {
+    async ({ request }) => {
       // spec: webrtc-signaling.md §6 (pairwise pseudonym)
+      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-turn-pseudonym");
+      const session = await createWebrtcSession(request, aliceToken, {
+        space_id: spaceId,
+        participants: [bob.did],
+        mode: "p2p",
+        recording_policy: "none",
+      });
+
+      const aliceIce = await issueIceConfig(request, aliceToken, {
+        space_id: spaceId,
+        call_id: session.session_id,
+        actor_id: alice.did,
+        device_id: alice.deviceId,
+      });
+      const bobIce = await issueIceConfig(request, bobToken, {
+        space_id: spaceId,
+        call_id: session.session_id,
+        actor_id: bob.did,
+        device_id: bob.deviceId,
+      });
+      const aliceUsername = aliceIce.turn_servers[0].username as string;
+      const bobUsername = bobIce.turn_servers[0].username as string;
+      expect(aliceUsername).toMatch(/^cx-turn-/);
+      expect(bobUsername).toMatch(/^cx-turn-/);
+      expect(aliceUsername).not.toContain(alice.did);
+      expect(aliceUsername).not.toContain("did:web");
+      expect(aliceUsername).not.toContain(alice.name);
+      expect(bobUsername).not.toContain(bob.did);
+      expect(bobUsername).not.toContain("did:web");
+      expect(bobUsername).not.toContain(bob.name);
+      expect(bobUsername).not.toBe(aliceUsername);
     },
   );
 });
@@ -242,6 +327,102 @@ async function appendCallSignal(
     },
   );
   expect(response.ok(), `append ${messageType} seq=${seq}`).toBeTruthy();
+  return await response.json();
+}
+
+async function setupCallSpace(request: APIRequestContext, label: string) {
+  const stamp = Date.now();
+  const alice = uniqueUser(`${label}-alice-${stamp}`);
+  const bob = uniqueUser(`${label}-bob-${stamp}`);
+  const carol = uniqueUser(`${label}-carol-${stamp}`);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+    ensureRegistered(request, carol),
+  ]);
+  const aliceToken = await issueDevSession(request, alice);
+  const bobToken = await issueDevSession(request, bob);
+  const carolToken = await issueDevSession(request, carol);
+  const spaceId = await createSpaceApi(request, aliceToken, {
+    title: `S18 ${label} ${stamp}`,
+    public: true,
+  });
+  await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+  await addSpaceMemberApi(request, aliceToken, spaceId, carol.did);
+  return { alice, bob, carol, aliceToken, bobToken, carolToken, spaceId };
+}
+
+async function createWebrtcSession(
+  request: APIRequestContext,
+  token: string,
+  data: {
+    space_id: string;
+    participants: string[];
+    mode: string;
+    recording_policy: string;
+  },
+) {
+  const response = await request.post(`${solandBaseUrl()}/api/v1/webrtc/sessions`, {
+    headers: authHeaders(token),
+    data: { ...data, ttl_ms: 120_000 },
+  });
+  expect(response.ok(), "create WebRTC session").toBeTruthy();
+  return await response.json();
+}
+
+async function issueIceConfig(
+  request: APIRequestContext,
+  token: string,
+  data: {
+    space_id: string;
+    call_id: string;
+    actor_id: string;
+    device_id: string;
+  },
+) {
+  const response = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
+    headers: authHeaders(token),
+    data,
+  });
+  expect(response.ok(), "issue ICE config").toBeTruthy();
+  return await response.json();
+}
+
+async function refreshIceConfig(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  data: {
+    space_id: string;
+    actor_id: string;
+    device_id: string;
+  },
+) {
+  const response = await request.post(
+    `${solandBaseUrl()}/api/v1/calls/${encodeURIComponent(sessionId)}/ice-config/refresh`,
+    {
+      headers: authHeaders(token),
+      data,
+    },
+  );
+  expect(response.ok(), "refresh ICE config").toBeTruthy();
+  return await response.json();
+}
+
+async function startRecording(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  spaceId: string,
+) {
+  const response = await request.post(
+    `${solandBaseUrl()}/api/v1/calls/${encodeURIComponent(sessionId)}/recording/start`,
+    {
+      headers: authHeaders(token),
+      data: { space_id: spaceId },
+    },
+  );
+  expect(response.ok(), "start recording").toBeTruthy();
   return await response.json();
 }
 
