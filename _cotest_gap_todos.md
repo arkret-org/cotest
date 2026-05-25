@@ -33,7 +33,8 @@
 
 ## P0 - 先解除当前 live/workflow 阻塞
 
-- [ ] GAP-P0-001 `[soland]` 修复 seed-member invite 投射:由 `cx.member.state{membership:"invite"}` 写入的邀请必须出现在 `GET /api/v1/authz/invites`,让 `acceptInvite()` 在 workflows / notifications / kanban project simulation 中可用。
+- [x] GAP-P0-001 `[soland]` 修复 seed-member invite 投射:由 `cx.member.state{membership:"invite"}` 写入的邀请必须出现在 `GET /api/v1/authz/invites`,让 `acceptInvite()` 在 workflows / notifications / kanban project simulation 中可用。
+  - 2026-05-25 local close: `soland` event projection persists pending `SpaceInviteRecord` for `cx.member.state{membership:"invite"}` and `GET /api/v1/authz/invites` surfaces it to the invitee. Evidence: `cargo test --locked --test http_api seed_member_invite_event_surfaces_via_authz_invites -- --nocapture` passed.
 - [ ] GAP-P0-002 `[yougen]` 修复 `/space/:id/admin/members` hydration race: fresh navigation 后必须稳定渲染 `member-row`、`invite-member`、`refresh-members-button`。
 - [ ] GAP-P0-003 `[soland]` 落实 `history_visibility=joined/shared/world_readable` 读侧过滤,让 late joiner、world readable、redaction tests 不互相污染。
 - [x] GAP-P0-004 `[cotest]` 在 joint runner 下提供可靠 soland runtime tracing,避免 seed invite / projection 类问题只能从 HAR 反推。
