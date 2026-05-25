@@ -14,7 +14,7 @@
 - `contrix-spec/spec/v1/zh/governance/content-moderation.md` §4 — Personal blocklist 概念、与 quarantine 的边界
 - `contrix-spec/spec/v1/zh/governance/content-moderation.md` §5 — Mute vs block 语义差异
 - `contrix-spec/spec/v1/zh/governance/content-moderation.md` §6 — Federation 中的 block propagation(server hint,非 PII 泄露)
-- `contrix-spec/spec/v1/zh/discovery/client-preferences.md` §2 — account_data 写 blocklist entry 的 schema(`cx.account.blocklist.v1`)
+- `contrix-spec/spec/v1/zh/discovery/client-preferences.md` §2 — account_data 写 blocklist entry 的 schema(`cx.account.blocklist`)
 
 ## 拓扑
 
@@ -60,9 +60,9 @@
 ### Phase D — client 写 account_data blocklist entry
 
 8. alice 的 yougen client 应该把这次 block 持久化到 soland 的 actor-private account_data:
-   - 调用:`PUT /api/v1/account_data/cx.account.blocklist.v1`,payload `{ entries: [{ target: bob.did, kind: "block", created_at: <ts> }] }`
+   - 调用:`PUT /api/v1/account_data/cx.account.blocklist`,payload `{ entries: [{ target: bob.did, kind: "block", created_at: <ts> }] }`
    - 断言 (HTTP 层):`PUT` 返回 200
-   - 断言 (跨设备 sync):`GET /api/v1/account_data/cx.account.blocklist.v1` 返回同样的 entries
+   - 断言 (跨设备 sync):`GET /api/v1/account_data/cx.account.blocklist` 返回同样的 entries
    - 备注:这是 actor-private — 只对 alice 自己的 device 同步,bob 拿不到
 
 ### Phase E — bob 发 M2,alice 看不到(client-side filter)
@@ -79,7 +79,7 @@
 
 12. **alice** 回 `/settings/blocked-users`,在 bob 那行点 `unblock-button`
     - 断言:`blocked-users-list` 不再含 bob 行
-    - 断言:client 调 `PUT /api/v1/account_data/cx.account.blocklist.v1` 把 entry 移除(或 mark `kind: "unblock"`)
+    - 断言:client 调 `PUT /api/v1/account_data/cx.account.blocklist` 把 entry 移除(或 mark `kind: "unblock"`)
 13. **bob** 再发 `M3 = "bob is back ${stamp}"`
 14. **alice** sync `/timeline/${spaceId}`
     - 断言:`timeline-event` 含 `M3`
@@ -90,7 +90,7 @@
 15. 拓扑切到 2 server:`alice@server1`、`bob@server2`,通过 federation peering 共享 space `S_fed`
 16. **alice@server1** 在 `/settings/blocked-users` 中 block `bob@server2`
 17. server1 写 alice 的 account_data;同时 server1 应该向 server2 发一个 federation hint:
-    - `POST {server2}/federation/v1/peer/block-hint`,payload `{ actor: alice.did, blocked: bob.did }`
+    - `POST {server2}/api/v1/federation/block-hint`,payload `{ actor: alice.did, blocked: bob.did }`
     - 这个 hint **不泄露** alice 的 PII(只告诉 server2:bob → alice 方向的 push 可以减少 / 完全不送)
 18. **bob@server2** 在 `S_fed` 发 `M_fed`
 19. 断言:
@@ -115,15 +115,14 @@
 
 ## Implementation notes
 
-- **yougen 缺口**:`/settings/blocked-users` 页面、`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` testids;`timeline` 的 client-side filter 钩子(读 account_data → 过滤 author 在 blocklist 中的事件);`notifications-panel` 同样的过滤
-- **soland 缺口**:`PUT/GET /api/v1/account_data/cx.account.blocklist.v1` 的 account_data API 完整实现;federation `block-hint` 通道(`POST /federation/v1/peer/block-hint` + server2 上的 outbox suppression);account_data 跨设备 sync
-- **测试侧**:Phase G 需要 2-server harness — 可以参考 `federation/cross-server` scenario 的拓扑;`scripts/run-joint-e2e.ps1` 现有 `--two-soland` 模式应可复用
-- 主流程 (Phase A–F) 在单服务器即可全跑;Phase G 单独拆 fixme 等 federation harness 就绪
+- **yougen 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `cx.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
+- **soland 实现**:`PUT/GET /api/v1/account_data/cx.account.blocklist` 已用于个人 blocklist;事件 query、account sync timeline、`/api/v1/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /api/v1/federation/block-hint` 与 `GET /api/v1/federation/block-hints` 支持 block hint 记录和 unblock retract。
+- **测试侧**:主流程、E11.1、E11.2、E11.3 均为 live tests;Phase G 的跨服务器成本用本地 block-hint 记录/撤回端点验证,完整双 soland outbox suppression 可在 `federation/cross-server` harness 扩展时继续加深。
 
 ## 风险
 
-- 大部分 fixme territory:yougen 的 blocked-users UI 完全未实现;soland 的 account_data API 仅有占位;federation block hint 通道无任何实现
-- spec §4-§6 是 SHOULD/MUST 混合 — 主流程 (block / unblock / client filter) 是 MUST,federation hint 是 SHOULD,可以分级处理
+- Phase G 的远端 outbox 减载目前通过本地 block-hint contract 验证,未强制要求双服务器拓扑。
+- spec §4-§6 是 SHOULD/MUST 混合 — 主流程 (block / unblock / client filter) 是 MUST,federation hint 是 SHOULD,当前测试覆盖本地 contract 和撤回语义。
 
 ## 总耗时预估
 
