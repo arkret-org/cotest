@@ -120,6 +120,13 @@ def main() -> int:
     )
     src = replace_http_listeners(src, args.coauth_bind)
 
+    account = (
+        "account:\n"
+        "  password_registration_enabled: true\n"
+        "  registration_email_delivery_bypass_allowed: true\n"
+    )
+    src = replace_top_level_section(src, "account", account)
+
     contrix = (
         "contrix:\n"
         "  principal_servers:\n"

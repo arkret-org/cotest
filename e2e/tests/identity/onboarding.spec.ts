@@ -7,7 +7,7 @@
 //   - crypto-media/device-lifecycle.md §3 (registration paths)
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import { coauthBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -36,6 +36,97 @@ test.describe("account onboarding", () => {
     expect(meResp.ok()).toBeTruthy();
     const me = await meResp.json();
     expect(me.did).toBe(alice.did);
+  });
+
+  test("coauth exposes OIDC/passkey bridge metadata and email verification onboarding", async ({
+    request,
+  }) => {
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+
+    const bridgeResponse = await request.get(`${coauth}/api/v1/auth/bridge/describe`);
+    expect(bridgeResponse.status()).toBe(200);
+    const bridge = await bridgeResponse.json();
+    expect(bridge.todos).toEqual([]);
+    expect(bridge.oauth.supported_flows).toContain("authorization_code_pkce_browser");
+    expect(bridge.passkey.register_start_path).toBe("/api/v1/auth/passkey/register/start");
+    expect(bridge.contrix.session_grants_introspect_path).toBe(
+      "/api/v1/session-grants/introspect",
+    );
+
+    const user = uniqueUser("p1-025-webvh-email");
+    const bridgeSessionResponse = await request.post(
+      `${coauth}/api/v1/auth/oidc/browser-bridge/session`,
+      {
+        data: {
+          redirect_uri: "urn:yougen:oauth:callback",
+          login_hint: user.handle.slice(1),
+          device_id: user.deviceId,
+          principal_audience: solandServiceDid(),
+        },
+      },
+    );
+    expect(bridgeSessionResponse.status()).toBe(200);
+    const bridgeSession = await bridgeSessionResponse.json();
+    expect(bridgeSession.authorize_url).toContain("code_challenge=");
+    expect(bridgeSession.authorize_url).toContain(encodeURIComponent(solandServiceDid()));
+    expect(bridgeSession.code_challenge_method).toBe("S256");
+
+    const start = await request.post(`${coauth}/api/v1/auth/register/webvh/start`, {
+      data: {
+        handle: user.handle.slice(1),
+        principal_server_url: solandBaseUrl(),
+      },
+    });
+    expect(start.status()).toBe(200);
+    const started = await start.json();
+    expect(started, JSON.stringify(started)).toMatchObject({ status: "success" });
+    expect(started.email_verification_bypass_allowed).toBe(true);
+
+    const email = await request.post(
+      `${coauth}/api/v1/auth/register/webvh/${started.registration_id}/email`,
+      { data: { email: `${user.name}@example.test` } },
+    );
+    expect(email.status()).toBe(200);
+    const emailBody = await email.json();
+    expect(emailBody.status).toBe("sent");
+    expect(emailBody.delivery).toBe("skipped");
+    expect(emailBody.dev_code).toBeTruthy();
+
+    const verify = await request.post(
+      `${coauth}/api/v1/auth/register/webvh/${started.registration_id}/verify-email`,
+      { data: { code: emailBody.dev_code } },
+    );
+    expect(verify.status()).toBe(200);
+    const verified = await verify.json();
+    expect(verified.status).toBe("success");
+    expect(verified.next_step).toBe("finish");
+  });
+
+  test("yougen starts the coauth OIDC bridge instead of dev-login", async ({ browser }) => {
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+
+    const user = uniqueUser("p1-025-yougen-oidc");
+    const page = await openUserPage(browser, user);
+    try {
+      await page.gotoLogin();
+      await page.page.getByTestId("login-server-url").fill(solandBaseUrl());
+      await page.page.getByTestId("start-server-login-button").click();
+      await page.page.waitForURL(
+        (url) =>
+          url.origin === new URL(coauth).origin &&
+          url.pathname.endsWith("/authorize") &&
+          url.searchParams.get("code_challenge_method") === "S256",
+        { timeout: 60_000 },
+      );
+      const current = new URL(page.page.url());
+      expect(current.searchParams.get("resource")).toBe(solandServiceDid());
+      expect(current.searchParams.get("response_type")).toBe("code");
+      expect(current.searchParams.get("code_challenge")).toBeTruthy();
+    } finally {
+      await page.close();
+    }
   });
 
   test.fixme(

@@ -1089,12 +1089,14 @@ try {
     if ($CoauthBaseUrl) {
         $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
         $solandCoauthEnv = (
-            "`$env:SOLAND_OAUTH_INTROSPECTION_URL={0}; " +
-            "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={1}; " +
-            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={2}; " +
-            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={3}; " +
-            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={4}; "
+            "`$env:SOLAND_AUTH_SERVER_URL={0}; " +
+            "`$env:SOLAND_OAUTH_INTROSPECTION_URL={1}; " +
+            "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={2}; " +
+            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={3}; " +
+            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={4}; " +
+            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={5}; "
         ) -f `
+            (Quote-PsLiteral $coauthTrimmed),
             (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
             (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
             (Quote-PsLiteral "$coauthTrimmed/api/v1/session-grants/introspect"),
