@@ -130,18 +130,14 @@
 
 ## Implementation notes
 
-- **soland gap**(整体):
-  - 双节点 deployment profile / enclave registration / trust handshake **尚未实现**
-  - DID resolver policy 的 trust roots / per-realm policy **尚未实现**
-  - `cx.realm.deployment_profile = "enclave"`、`cx.realm.hosted_on`、`cx.realm.external_invite_policy` 字段 **尚未实现**
-  - `external-invite` / `accept-external-invite` 流程 **尚未实现**
-  - 主域 directory 对 enclave 外部用户的裁剪逻辑 **尚未实现**
-  - federation proxy 防 escape 检查 **尚未实现**
-  - 审计日志按 subject DID 聚合 + 边界拒绝事件 **尚未实现**
-  - federation store-and-forward 在 enclave outage 下的语义 **尚未实现**
-- **harness gap**:`scripts/run-joint-e2e.ps1` 目前只起一个 soland;需要扩成双 soland(`soland_main_port` + `soland_enclave_port`),并加 `EnclaveHandshake` helper;短期可以用同一个 soland 的两个 Realm 模拟边界(用 `cx.realm.deployment_profile` 标记),但 federation outage / store-and-forward 那一段必须真双节点才能验证
-- **yougen gap**:yougen 当前只支持单 server_url;enclave 用户的 session metadata UI、"enclave sync lag" 标记、对 main directory 的裁剪反馈都没有
-- 鉴于整体未实现,本 scenario 对应的 spec 测试主流程及所有 sub-test 都应挂 `test.fixme` + 写上述 gap 注释,作为契约骨架先入库;具体步骤的 testid / API path 可能随实现细化调整
+- **soland 已落地**:
+  - `/api/v1/deployment/configure`、`/api/v1/deployment/info`、`/api/v1/deployment/register-enclave` 提供本地 sovereign main / enclave profile 与 trust chain handshake。
+  - `/api/v1/deployment/realm.create`、`/api/v1/realm/:id` 记录 enclave Realm 的 `deployment_profile`、`hosted_on`、`external_invite_policy`。
+  - `/api/v1/deployment/external-invite` + `/api/v1/account/accept-external-invite` 验证 enclave trust roots;main 侧直接注册外部 DID 返回 `did_method_not_trusted`;enclave 侧 rogue DID 返回 `enclave_did_method_not_trusted`。
+  - `/api/v1/space/:id`、`/api/v1/directory/spaces`、`/api/v1/federation/proxy` 覆盖 external user 的 main-domain escape rejection 与边界审计。
+  - `/api/v1/deployment/store-and-forward/*` 覆盖 enclave upstream outage 下本地 accepted、非客户端 pending、恢复后 drain/ingest 收敛。
+- **harness 已落地**:`scripts/run-joint-e2e.ps1 -DualSoland` 提供 `soland_main` / `soland_enclave` 两节点;本 scenario 的 4 条 contract test 已全部 live。
+- **yougen 后续**:enclave session metadata UI、"enclave sync lag" 标记、directory 裁剪反馈仍可在后续 UI polish 中补;P2-056 当前关闭的是 soland 侧本地开发能力。
 
 ## 总耗时预估
 
