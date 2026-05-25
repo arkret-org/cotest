@@ -50,3 +50,5 @@ Thumbs.db
 
 # Backup files
 **/*.rs.bk
+/_circle_rollout_baseline.md
+/_*_todos.md
