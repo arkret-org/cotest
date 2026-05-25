@@ -41,7 +41,8 @@ Order by user-impact and current coverage:
 - [ ] §13 UJ-G privacy + governance + appeal + GDPR: from 39% to 70%. 17 fixmes.
 
 ### Stub completion in src/
-- [ ] §14 `src/conformance/redaction.rs` — `snapshot_pruning_stub` post-redaction snapshot integrity.
+- [x] §14 `src/conformance/redaction.rs` — `snapshot_pruning_stub` post-redaction snapshot integrity.
+  - 2026-05-25 local close: `snapshot_pruning_stub` asserts post-redaction snapshots drop `content` and `proofs`, retain the target/redaction reference, and emit `redaction.snapshot_pruning_stub` transcript evidence. Verified with `cargo test --locked --test conformance_fixtures redaction_fixture_suite_matches_reference_semantics -- --nocapture`.
 - [ ] §15 `src/scenarios/bridge_contracts/starid.rs` — starid proof / trust-root validation.
 - [ ] §16 `src/scenarios/chaos_kill_midwrite.rs` — replace 6 `unimplemented!` calls with a Tokio task-manager-based chaos contract.
 - [ ] §17 `src/conformance/round4_*.rs` — close `round4-lint-parity` and `round4-vector-*` TODOs.
