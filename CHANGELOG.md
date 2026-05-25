@@ -32,6 +32,11 @@ All notable changes to **cotest** are documented here.
   envelope), `takedown_audit_log` (canonical reason set + audit-row
   validator), `circle_not_indexed` (teabay MUST DROP Circle-scoped
   events). Driven from `tests/directory_scenarios.rs`.
+- **Added (P2F.5)** — `.github/workflows/ci.yml` (fmt / clippy / test /
+  typos / deny / audit, plus Playwright matrix list across chromium /
+  firefox / webkit) and `.github/workflows/integration.yml` (nightly
+  cross-project bring-up of soland + coauth + floria with
+  journey-coverage.json artifact upload). No release artefacts produced.
 - Notes: version number unchanged; this round is not released.
 
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
