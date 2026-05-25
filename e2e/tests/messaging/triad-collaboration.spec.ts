@@ -192,19 +192,13 @@ test.describe("single-server triad collaboration", () => {
     expect(ids).toContain(post.event_id);
   });
 
-  // soland gap (2026-05-21): history_visibility=joined is stored on the space
-  // policy (state.rs:316, projection.rs:1021-1028) but NOT enforced on the
-  // /sync read path — there is no `filter_history` / `visible_to_member`
-  // pass in soland/src/routing/events/*.rs. A late joiner (carol) still
-  // receives the full timeline history, so Phase C's "carol must not see
-  // pre-join M1/M2" assertion (lines 109-110) fails on the assertion, not
-  // on a yougen-side race. Re-activate this monolithic test once soland's
-  // event projection honours history_visibility=joined on read. Phase B
-  // (alice/bob mutual messaging + edit) and Phase D (redact tombstone) are
-  // already covered live via the E1 sub-cases below where they don't depend
-  // on the missing filter.
+  // The history_visibility=joined server gap is now covered live by the
+  // API late-join case above plus spaces/history-joined-enforcement.spec.ts.
+  // Keep this full UI workflow fixme until the remaining timeline reply/edit,
+  // invite, propagation, and redaction UI sequence is reactivated as one
+  // browser-driven scenario.
   test.fixme(
-    // @blocking-on: soland#messaging-triad-collaboration-gap
+    // @blocking-on: yougen#triad-ui-workflow-reactivation
     // @user-promise: e2e/scenarios/messaging/triad-collaboration.md
     // @expected-live-by: 2026Q3
     "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone",
