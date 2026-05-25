@@ -125,8 +125,8 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.schema.key_backup.v1` schema、backup API、recovery policy state、MLS epoch backfill(spec §2.4 + §7.3 step 6)— 大块未实现
-- **yougen 缺口**:`/settings/recovery` 设置向导(passphrase 强度 meter、确认、bytes 估算)、`/onboarding` Restore 入口、recovery 进度页(`"Decrypting backup..."`、`"Recovered X / Y messages"`)
+- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list/get、DELETE ownership proof,以及 yougen Argon2id + XChaCha20-Poly1305 round trip、wrong passphrase local reject、late-recovery banner helper。
+- **剩余缺口**:本 scenario 的完整"丢设备 → 新设备授权 → MLS commit chain backfill → 历史 E2EE 消息可解"仍未贯通;`key-backup.spec.ts` 保留这些全链路 fixme。
 - **harness**:Argon2id KDF 计算耗时 ~3s(intentional);测试要给足 timeout
 
 ## 风险
