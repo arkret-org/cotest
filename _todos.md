@@ -133,7 +133,7 @@ joint-e2e 当前 **29 passed / 0 failed / 194 skipped** —— skip 中除去 `d
 - [x] `/inspect` 端点 — 暴露 signed 日志 + 每个 scid 的链头 (last_entry_number, last_entry_hash) (2026-05-19)
 - [x] 真实 prev_entry_hash 链校验 — `/sign` 现在校验 `entry_number` 单调递增和 `prev_entry_hash` 与上一条一致,不匹配返 `409 prev_entry_hash_mismatch` / `non_monotonic_entry_number` / `unknown_chain_with_prev` (2026-05-19)
 - [x] backdated/forged timestamp 拒绝 — `entry_timestamp` 比 `MOCK_WITNESS_STALE_SECONDS`(默认 24h)旧返 `422 entry_timestamp_stale` (2026-05-19)
-- [~] 多 witness 仲裁 (`quorum > 1` 场景) — mock 单实例本身支持任意 DID,但 `run-joint-e2e.ps1` 当前只起一个 witness 进程;quorum 场景需要 harness 循环起 N 个进程(对应 `-MockWitnessExtraDids`)。**暂缓**,等第一个 quorum spec 落地再做 — 见 H-HARNESS-MULTIWIT-1
+- [x] 多 witness 仲裁 (`quorum > 1` 场景) — mock 单实例本身支持任意 DID,`run-joint-e2e.ps1 -MockWitnessExtraDids` 现在会循环起 N 个 witness 进程并导出 quorum base URL / DID 列表。见 H-HARNESS-MULTIWIT-1。
 
 ##### H-MOCK-AUDIT-AGENT-1 implementation status
 
