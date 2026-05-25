@@ -129,7 +129,8 @@
 
 ## P2 - Governance / moderation / organization
 
-- [ ] GAP-P2-060 `[soland]` 实现 retention_policy TTL tombstone,anchored events 不物理删除。
+- [x] GAP-P2-060 `[soland]` 实现 retention_policy TTL tombstone,anchored events 不物理删除。
+  - 2026-05-25 local close: `soland` now projects `retention_policy` TTL from Realm events, exposes a local admin retention sweeper, records `[expired]` tombstones without deleting canonical/projection events, and renders the tombstone consistently through `/api/v1/events` query, direct event read, and sync timeline paths. `cotest` promotes the GDPR retention TTL fixture to a live scenario and asserts `physical_delete_count=0` plus retained `event_id`. Evidence: `cargo check --locked` and `cargo test --locked --lib routing::events::projection::tests::retention_policy_ttl_reads_canonical_object_fields -- --nocapture` passed in `soland`; `node -c e2e\tests\governance\gdpr-audit-retention.spec.ts`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p2-060-retention -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "retention_policy.ttl" -SkipNpmInstall -SkipBrowserInstall` passed with 1 live test; `node e2e\scripts\summarize-e2e-coverage.mjs --check` reports 226/395 verified and 169 fixme.
 - [ ] GAP-P2-061 `[soland/yougen]` 实现 personal blocklist UI + server filter + unblock restore + federation block hint。
 - [ ] GAP-P2-062 `[soland]` moderation report privacy:reporter/owner 可见,被举报人和普通成员不可见。
 - [ ] GAP-P2-063 `[soland/yougen]` ban via `cx.member.state` Move:owner can ban,non-moderator denied,idempotent ban no duplicate。

@@ -65,8 +65,8 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 18. alice 创建另一个 space `S_short`,`retention_policy: { ttl: "30d" }`
 19. alice 发消息 `M_old`
-20. 测试 harness 把 system time stub 到 +31 天
-21. soland 后台 retention sweeper 把超过 30 天的 events 改成 tombstone(或物理删除,看 policy)
+20. 测试 harness 使用旧 `created_at` 或 admin sweep `now` 参数模拟 +31 天
+21. soland retention sweeper 把超过 30 天的 timeline events 改成 tombstone,不物理删除 anchored/canonical event
 22. 断言:alice 拉 timeline → `M_old` 变 `[expired]` tombstone
 
 ## Edge cases
@@ -78,9 +78,9 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ## Implementation notes
 
-- **soland 缺口**:retention sweeper；跨服务器 erasure fan-out 和历史消息 tombstone 已由 `cx.audit.erasure_receipt` live 覆盖
+- **soland**:retention_policy TTL sweeper 已 live;过期 timeline event 返回 `[expired]` tombstone,`event_id` / canonical history 保留不物理删除。跨服务器 erasure fan-out 和历史消息 tombstone 已由 `cx.audit.erasure_receipt` live 覆盖
 - **yougen 缺口**:`/settings/account` 的 export / erase 按钮、确认对话框
-- **测试侧**:retention 时间快进需要 soland 暴露 admin endpoint 或测试模式
+- **测试侧**:retention 时间快进通过 `/api/v1/admin/retention/sweep` 的本地 admin/test surface 或旧 `created_at` fixture 覆盖
 
 ## 风险
 

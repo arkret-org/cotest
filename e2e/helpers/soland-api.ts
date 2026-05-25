@@ -102,6 +102,7 @@ export async function createSpaceApi(
     public?: boolean;
     ownerDid?: string;
     audit_disclosure_policy?: Record<string, unknown>;
+    retention_policy?: Record<string, unknown>;
   },
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
@@ -141,6 +142,9 @@ export async function createSpaceApi(
           plaintext_visible_services: plaintextVisibleServices,
           ...(data.audit_disclosure_policy
             ? { audit_disclosure_policy: data.audit_disclosure_policy }
+            : {}),
+          ...(data.retention_policy
+            ? { retention_policy: data.retention_policy }
             : {}),
           security_class: "standard",
           federation_policy: "restricted",
@@ -258,13 +262,14 @@ export async function sendMessageApi(
   token: string,
   spaceId: string,
   body: string,
-  opts: { server?: SolandKey; encrypted?: boolean } = {},
+  opts: { server?: SolandKey; encrypted?: boolean; createdAt?: string } = {},
 ) {
   const actorDid = await currentActorDidApi(request, token, opts);
   const envelope = signedEventEnvelope({
     actorDid,
     realmId: spaceId,
     kind: "cx.message.create",
+    createdAt: opts.createdAt,
     payload: {
       flow_id: flowIdFromRealmId(spaceId),
       track: "discussion",

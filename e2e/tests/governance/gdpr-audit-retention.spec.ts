@@ -10,6 +10,8 @@ import {
 } from "../../helpers/env";
 import {
   acceptInviteApi,
+  authHeaders,
+  canonicalTimestamp,
   createSpaceApi,
   listInvitesApi,
   querySpaceEventsApi,
@@ -192,15 +194,80 @@ test.describe("GDPR / audit / retention", () => {
     expect(Array.isArray(receiptEvent?.payload?.proofs)).toBe(true);
   });
 
-  test.fixme(
-    // @blocking-on: soland#governance-gdpr-audit-retention-gap
-    // @user-promise: e2e/scenarios/governance/gdpr-audit-retention.md
-    // @expected-live-by: 2026Q3
-    "retention_policy.ttl: events older than the TTL are tombstoned (not physically deleted if anchored)",
-    async () => {
-      // spec: space-and-place.md §2.2
-    },
-  );
+  test("retention_policy.ttl: events older than the TTL are tombstoned (not physically deleted if anchored)", async ({
+    request,
+  }) => {
+    // spec: space-and-place.md §2.2 — expired timeline content is redacted
+    // while event_id / canonical history remain available for anchored chains.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s27-retention-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const spaceId = await createSpaceApi(request, aliceToken, {
+      title: `S27 retention ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "shared",
+      ownerDid: alice.did,
+      retention_policy: { ttl: "30d" },
+    });
+    const oldBody = `retention ttl should expire ${stamp}`;
+    const oldCreatedAt = canonicalTimestamp(
+      new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
+    );
+    const sent = await sendMessageApi(
+      request,
+      aliceToken,
+      spaceId,
+      oldBody,
+      { createdAt: oldCreatedAt },
+    );
+
+    const before = await querySpaceEventsApi(request, aliceToken, spaceId);
+    expect(JSON.stringify(before)).toContain(oldBody);
+
+    const sweep = await request.post(
+      `${solandBaseUrl()}/api/v1/admin/retention/sweep`,
+      {
+        headers: authHeaders(aliceToken),
+        data: { space_id: spaceId },
+      },
+    );
+    expect(sweep.status()).toBe(200);
+    const sweepBody = await sweep.json();
+    expect(sweepBody.physical_delete_count).toBe(0);
+    const tombstone = (
+      sweepBody.tombstoned as Array<{
+        event_id?: string;
+        anchored?: boolean;
+        physical_delete?: boolean;
+      }>
+    ).find((row) => row.event_id === sent.event_id);
+    expect(tombstone).toBeTruthy();
+    expect(tombstone?.anchored).toBe(true);
+    expect(tombstone?.physical_delete).toBe(false);
+
+    const after = await querySpaceEventsApi(request, aliceToken, spaceId);
+    const events = after.events as Array<{
+      event_id?: string;
+      payload?: Record<string, unknown>;
+    }>;
+    const retained = events.find((event) => event.event_id === sent.event_id);
+    expect(retained, "expired event_id must remain in the timeline").toBeTruthy();
+    const retainedJson = JSON.stringify(retained);
+    expect(retainedJson).toContain("[expired]");
+    expect(retainedJson).toContain("retention_policy.ttl");
+    expect(retainedJson).not.toContain(oldBody);
+
+    const direct = await request.get(
+      `${solandBaseUrl()}/api/v1/events/${encodeURIComponent(sent.event_id)}`,
+      { headers: authHeaders(aliceToken) },
+    );
+    expect(direct.status()).toBe(200);
+    const directJson = JSON.stringify(await direct.json());
+    expect(directJson).toContain("[expired]");
+    expect(directJson).not.toContain(oldBody);
+  });
 
   test(
     "E27.3 cross-server erasure fan-out: alice's DID erased on α; β tombstones her events too within reconciliation window",
