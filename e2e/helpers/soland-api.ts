@@ -27,6 +27,8 @@ export type SignedEventEnvelopeArgs = {
   operationId?: string;
   schemaId?: string;
   proofVerificationMethod?: string;
+  anchorRef?: string;
+  refs?: Array<Record<string, unknown>>;
 };
 
 export function authHeaders(token: string): Record<string, string> {
@@ -334,7 +336,8 @@ export function signedEventEnvelope(
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
     prev_refs: [],
-    refs: [],
+    refs: args.refs ?? [],
+    ...(args.anchorRef ? { anchor_ref: args.anchorRef } : {}),
     requirements: {
       schema: ["cx.schema.event.v1"],
       features: [],

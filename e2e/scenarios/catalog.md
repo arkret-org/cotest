@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 395 · Verified: 219 (55.4%)
+Promised: 395 · Verified: 221 (55.9%)
 
-Totals: 66 scenarios / 66 specs / 219 verified / 395 promised / 176 fixme / 20 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 221 verified / 395 promised / 174 fixme / 20 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 219 verified / 395 promised / 176 fixme / 20 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 219 |
-| test.fixme | 176 |
+| live tests | 221 |
+| test.fixme | 174 |
 | promised tests | 395 |
-| verified tests | 219 |
-| verified ratio | 55.4% |
+| verified tests | 221 |
+| verified ratio | 55.9% |
 | test.skip (conditional) | 20 |
 | domains | 19 |
 
@@ -39,7 +39,7 @@ Totals: 66 scenarios / 66 specs / 219 verified / 395 promised / 176 fixme / 20 s
 | messaging | 4 | 4 | 35 | 41 | 85.4% | 6 | 0 |
 | models | 4 | 4 | 6 | 21 | 28.6% | 15 | 0 |
 | spaces | 6 | 6 | 13 | 25 | 52.0% | 12 | 0 |
-| sync | 5 | 5 | 10 | 28 | 35.7% | 18 | 2 |
+| sync | 5 | 5 | 12 | 28 | 42.9% | 16 | 2 |
 | workflows | 6 | 6 | 9 | 18 | 50.0% | 9 | 0 |
 
 ## Per-spec
@@ -101,7 +101,7 @@ Totals: 66 scenarios / 66 specs / 219 verified / 395 promised / 176 fixme / 20 s
 | spaces/knock-application | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |
 | spaces/knock-auto-resolve | 0 | 5 | 0.0% | 5 | 0 | fixme-only | yes |  |
 | spaces/moderation-ban | 2 | 2 | 100.0% | 0 | 0 | live-only | yes |  |
-| sync/offline-conflict | 1 | 6 | 16.7% | 5 | 0 | mixed | yes |  |
+| sync/offline-conflict | 3 | 6 | 50.0% | 3 | 0 | mixed | yes |  |
 | sync/offline-queue-replay | 5 | 5 | 100.0% | 0 | 0 | live-only | yes |  |
 | sync/service-surface-contract | 2 | 7 | 28.6% | 5 | 1 | mixed | yes | @fully-implemented |
 | sync/sovereign-deployment | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |

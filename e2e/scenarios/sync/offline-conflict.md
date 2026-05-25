@@ -77,9 +77,10 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ## Implementation notes
 
-- **soland 缺口**:bottom cells projection 完整度、repair Move 验证 — partial(yougen `views/space_admin.rs` 已有 banner UI)
-- **yougen 缺口**:outbox / pending-sync UI、网络状态指示
-- **测试侧**:`page.context().setOffline()` 是 Playwright 标准 API;`route.fulfill` 模拟拦截可控
+- **soland 已落地**:`cx.realm.update` 同 anchor basis 的 cas-register 冲突进入 `bottom=expose`;`cx.conflict.repair` 验证 `conflict_heads`、`state_witness` / recovery capability shape 后清理 bottom;account sync 输出 `anchor_view.bottom_cells`。
+- **yougen 已落地**:sync 解析 `anchor_view.bottom_cells`;admin repair UI 为 realm organization conflict 填充 safer-side winner;repair Move 使用当前 session actor 提交。
+- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 的 `bottom_expose` 与 `prefer-safer-side-button` repair 流程已从 fixme 升为 live。
+- **剩余边界**:outbox capacity、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。
 
 ## 总耗时预估
 
