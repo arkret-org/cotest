@@ -124,7 +124,8 @@ runner owns the web servers, and injects `COTEST_SOLAND_ALPHA_*`,
 `COTEST_YOUGEN_BETA_BASE_URL` for federation specs.
 
 The local hygiene gate is `scripts/run-hygiene.ps1`. It runs
-`cargo deny check`, `typos`, and `cargo audit`, then records
+`cargo deny check`, `typos`, `cargo audit`, and
+`e2e/scripts/fixme-debt-report.mjs --strict`, then records
 `raw.log`, `summary.json`, `summary.md`, and per-tool stdout/stderr logs under
 `artifacts/hygiene/<timestamp>/`. This is intentionally local-only; it does
 not publish packages, tags, releases, or remote workflow artifacts.
@@ -228,6 +229,7 @@ Recommended local run:
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
 .\scripts\run-cotest.ps1 -Profile dual-soland
+.\scripts\run-joint-e2e.ps1 -StartMockMimiFacade -Grep "mock-mimi-facade"
 ```
 
 Omit `-SkipNpmInstall` on a fresh checkout so the script installs the local
@@ -260,13 +262,16 @@ failures can be debugged without reconstructing paths from HAR files.
 
 ### Mock services
 
-`run-joint-e2e.ps1` can spin up four in-process mock services under
+`run-joint-e2e.ps1` can spin up nine in-process mock services under
 `e2e/mocks/` to cover spec sections that depend on external infrastructure.
 Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
-`-StartMockWitness`, `-StartMockAuditAgent`) or all at once with
+`-StartMockWitness`, `-StartMockAuditAgent`, `-StartMockPolicyServer`,
+`-StartMockPushGateway`, `-StartMockAppletRegistry`, `-StartMockTspEndpoint`,
+`-StartMockMimiFacade`) or all at once with
 `-StartMocks`. Specs read the live base URLs via the helpers in
 `e2e/helpers/env.ts` (`mockIdpBaseUrl()`, `mockEmailBaseUrl()`,
-`mockWitnessBaseUrl()`, `mockAuditAgentBaseUrl()`).
+`mockWitnessBaseUrl()`, `mockAuditAgentBaseUrl()`, and the matching helpers
+for policy, push, applet, TSP, and MIMI).
 
 Witness quorum specs can pass extra witness DIDs with
 `-MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`.
@@ -282,6 +287,11 @@ single-witness env vars and the quorum lists
 | `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/api/v1/verification/send` (with `ttl_seconds` + `body_html`), `/inbox?to=`, `/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
 | `mock-witness.mjs` | S9 did:webvh rotation | `/api/v1/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/policy`, `/health` test hook, `/inspect` |
 | `mock-audit-agent.mjs` | S25 audited E2EE / `cx.audit.accessed` | `/api/v1/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `cx.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
+| `mock-policy-server.mjs` | authz policy server / obligation transcript | `/api/v1/policy/check`, `/api/v1/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
+| `mock-push-gateway.mjs` | notification push / blind wake | `/api/v1/push/register`, `/api/v1/push/notify`, `/api/v1/push/inbox`, `/scenarios`, `/jwks` |
+| `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/api/v1/applets/register`, `/api/v1/applets/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
+| `mock-tsp-endpoint.mjs` | TSP relationship bootstrap / message ACK | `/tsp/relationship-bootstrap`, `/tsp/message`, `/tsp/inbox`, `/tsp/outbox`, `/identity`, `/inspect` |
+| `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/api/v1/mimi/join-requests`, `/api/v1/mimi/approve`, `/api/v1/mimi/outbound`, `/api/v1/mimi/inbound`, `/identity`, `/inspect` |
 
 `e2e/tests/harness/mocks-selftest.spec.ts` is the contract pin for these
 mocks. It is tagged `@fully-implemented` so the `joint-smoke` profile runs
@@ -289,7 +299,9 @@ it automatically; each case skips itself when the corresponding mock is
 not started for the current run.
 
 `scripts/promote-fixme.ps1` promotes a placeholder after the backing feature is
-implemented. `scripts/demote-test.ps1` is the reverse shim: it turns a specific
+implemented and now requires `-FeatureId`, `-PassedSpecCommand`, and
+`-EvidencePath` per `docs/fixme-promotion-checklist.md`.
+`scripts/demote-test.ps1` is the reverse shim: it turns a specific
 Playwright `test(...)` line into `test.fixme(...)` and inserts a FIXME reason
 comment for temporary local regression containment.
 

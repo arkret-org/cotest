@@ -14,10 +14,10 @@ import { test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 test.describe("mimi federation", () => {
-  // soland gap: MIMI Provider Facade + room binding + identity bridging 未实现
-  // (MIMI interop 是 extension profile,v1 core 不必需)。
-  // helpers/mimi-facade.ts (mock facade + bob_mimi 预置身份) 尚未提供。
-  // 所有 case 暂以 fixme 形式锚定 spec 形状,等 facade 实装后再补主体。
+  // soland/yougen gap: MIMI Provider Facade binding + room binding +
+  // identity bridging 未实现(MIMI interop 是 extension profile,v1 core 不必需)。
+  // cotest 已提供 helpers/mimi-facade.ts 与 mock facade;业务 case 仍以 fixme
+  // 锚定服务端/客户端待实现链路。
 
   test.fixme(
     // @blocking-on: soland#extensions-mimi-federation-gap

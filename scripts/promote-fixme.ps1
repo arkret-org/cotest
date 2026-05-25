@@ -7,6 +7,9 @@
 # Usage:
 #   pwsh -File scripts/promote-fixme.ps1 `
 #       -SpecPath e2e/tests/identity/onboarding.spec.ts:42 `
+#       -FeatureId soland#identity-onboarding `
+#       -PassedSpecCommand 'npx playwright test --config playwright.config.ts --project chromium e2e/tests/identity/onboarding.spec.ts' `
+#       -EvidencePath artifacts/regression/onboarding.har `
 #       -NewBody @'
 #   async ({ page, request }) => {
 #       await page.goto("/onboarding");
@@ -20,12 +23,17 @@
 #   - Captures the test title from the existing fixme call.
 #   - Locates the matching closing paren for the fixme call (single-pass
 #     bracket counter on the source).
+#   - Requires promotion evidence before modifying a file: backing feature id,
+#     one passed single-spec command, and one screenshot/HAR/trace artifact path.
 #   - Use -DryRun to preview the rewrite without touching the file.
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$SpecPath,
     [Parameter(Mandatory = $true)][string]$NewBody,
+    [string]$FeatureId,
+    [string]$PassedSpecCommand,
+    [string]$EvidencePath,
     [switch]$DryRun
 )
 
@@ -40,6 +48,44 @@ $lineNumber = [int]$Matches.line
 
 if (-not (Test-Path $specFile)) {
     throw "spec file not found: $specFile"
+}
+
+function Assert-PromotionEvidence {
+    param(
+        [string]$FeatureId,
+        [string]$PassedSpecCommand,
+        [string]$EvidencePath
+    )
+
+    if (-not $FeatureId) {
+        throw "-FeatureId is required before removing .fixme"
+    }
+    if ($FeatureId -notmatch '^(soland|yougen|coauth|cotest)#[A-Za-z0-9._-]+$|^GAP-P\d+-\d+$') {
+        throw "-FeatureId must look like soland#feature-id, yougen#feature-id, coauth#feature-id, cotest#feature-id, or GAP-Px-yyy; got '$FeatureId'"
+    }
+    if (-not $PassedSpecCommand -or -not $PassedSpecCommand.Trim()) {
+        throw "-PassedSpecCommand is required before removing .fixme"
+    }
+    if (-not $EvidencePath) {
+        throw "-EvidencePath is required before removing .fixme"
+    }
+    if (-not (Test-Path -LiteralPath $EvidencePath)) {
+        throw "promotion evidence not found: $EvidencePath"
+    }
+    $item = Get-Item -LiteralPath $EvidencePath
+    if (-not $item.PSIsContainer) {
+        $extension = $item.Extension.ToLowerInvariant()
+        if ($extension -notin @(".png", ".jpg", ".jpeg", ".webp", ".har", ".zip", ".trace")) {
+            throw "-EvidencePath must be a screenshot, HAR, trace, zip, or directory; got '$EvidencePath'"
+        }
+    }
+}
+
+if (-not $DryRun) {
+    Assert-PromotionEvidence `
+        -FeatureId $FeatureId `
+        -PassedSpecCommand $PassedSpecCommand `
+        -EvidencePath $EvidencePath
 }
 
 $lines = Get-Content -LiteralPath $specFile
@@ -129,6 +175,12 @@ $newSource = $source.Substring(0, $fixmeStart) + $replacement + $source.Substrin
 
 if ($DryRun) {
     Write-Host "Would rewrite $specFile (test '$title') with:"
+    if ($FeatureId -or $PassedSpecCommand -or $EvidencePath) {
+        Write-Host "Evidence:"
+        Write-Host "  feature_id         : $FeatureId"
+        Write-Host "  passed_spec_command: $PassedSpecCommand"
+        Write-Host "  evidence_path      : $EvidencePath"
+    }
     Write-Host "----------------"
     Write-Host $replacement
     Write-Host "----------------"
@@ -137,3 +189,7 @@ if ($DryRun) {
 
 Set-Content -LiteralPath $specFile -Value $newSource -NoNewline -Encoding UTF8
 Write-Host "Promoted fixme '$title' in $specFile (line $lineNumber)"
+Write-Host "Evidence:"
+Write-Host "  feature_id         : $FeatureId"
+Write-Host "  passed_spec_command: $PassedSpecCommand"
+Write-Host "  evidence_path      : $EvidencePath"

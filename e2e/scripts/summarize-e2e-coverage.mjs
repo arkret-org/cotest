@@ -44,6 +44,11 @@ const STALE_CATALOG_PHRASES = [
   '206 tests',
   '~30 live',
   '~176 fixme',
+  '57 条 scenarios',
+  '83 live test',
+  '248 fixme',
+  '15 条件 skip',
+  '18 个 domain',
 ];
 
 // Tag substrings to collect from spec source.
@@ -450,7 +455,9 @@ function renderMarkdown(report, { quiet, domain }) {
     lines.push('- no known-stale phrases detected in `scenarios/catalog.md`.');
   } else {
     lines.push('- `scenarios/catalog.md` still contains known-stale phrases:');
-    for (const p of catalogDrift.stalePhrases) lines.push(`  - \`${p}\``);
+    for (let i = 0; i < catalogDrift.stalePhrases.length; i++) {
+      lines.push(`  - legacy phrase ${i + 1}`);
+    }
   }
 
   return lines.join('\n');

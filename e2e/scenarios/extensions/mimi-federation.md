@@ -20,7 +20,7 @@
 
 - 1 × soland (principal server,声明支持 MIMI 互通) — 假设监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
-- 1 × mimi_facade (mock 或 stub,模拟 MIMI Provider Facade) — 假设监听 `http://127.0.0.1:<mimi_facade_port>`,可选;无 mock 也可全 fixme
+- 1 × mimi_facade (cotest mock,模拟 MIMI Provider Facade) — 由 `run-joint-e2e.ps1 -StartMockMimiFacade` 或 `-StartMocks` 启动,并通过 `COTEST_MOCK_MIMI_FACADE_BASE_URL` 注入
 
 (soland 与 coauth 都是 cotest 现有 harness 直接提供的;mimi_facade 是新的可选外部组件,在 v1 core 不必需。)
 
@@ -38,7 +38,7 @@
 - alice 持有有效 dev session token (`POST /api/v1/auth/dev-login`)
 - alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
 - soland 配置中启用了 `extensions.mimi_interop = true` (extension profile);如果未启用,整个 spec 应该跳过而非失败
-- mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;如果 mock 不可用,所有 case 走 fixme
+- mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供,真实 soland/yougen federation 仍由当前 `.fixme` 锚定
 
 ## Steps
 
@@ -114,12 +114,12 @@
 
 ## Implementation notes
 
-- MIMI Provider Facade 是 **extension profile**,v1 core 不要求实现。整个 spec 在 facade mock 缺席时应整体 fixme,而不是 fail
+- MIMI Provider Facade 是 **extension profile**,v1 core 不要求实现。业务 spec 在 facade mock 缺席时应跳过或保持 fixme,而不是 fail
 - pairwise DID 的生成规则参见 `contrix-spec/spec/v1/zh/extensions/mimi-interop.md` §6;关键点是同一个 MIMI 身份在不同 Realm 得到不同 DID(unlinkability)
-- soland gap (撰写此 scenario 时):MIMI Provider Facade、room binding API、`federation_profile = "mimi_interop"` Realm 字段、identity bridging 到 pairwise DID 等都未实现;此 scenario 主要是把 spec 的形状落到测试结构上,跑通要等 facade 实现
-- 不需要新 helper,但需要一个 `helpers/mimi-facade.ts` (后续工作) 来启动 / 停止 mock facade 并预置 bob_mimi 身份;在它存在之前,所有 case 走 `test.fixme`
+- soland gap (撰写此 scenario 时):MIMI Provider Facade 绑定、room binding API、`federation_profile = "mimi_interop"` Realm 字段、identity bridging 到 pairwise DID 的服务端集成仍未实现;cotest 侧 mock/helper 已覆盖 bob_mimi join、fallback/deferred、content-kind quarantine。
+- `helpers/mimi-facade.ts` 提供 `createMimiFacadeClient()`;harness 自检 [`harness/mocks-selftest`](../harness/mocks-selftest.md) 负责锁住 facade mock 契约。
 - 与 `messaging/triad-collaboration` 的差别:这里的 "晚到成员" 不是 history_visibility 测试,而是跨 federation boundary 的 identity bridging 测试;消息双向不是 Contrix-Contrix 而是 Contrix-MIMI
 
 ## 总耗时预估
 
-facade mock 实装后单次跑约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。当前阶段全部 fixme,实际执行 < 1s。
+facade mock 已实装;当前业务链路仍全部 fixme,实际执行 < 1s。soland/yougen 侧 federation profile 落地后,单次业务 spec 预计约 90-120s(2 个 actor 但跨 federation,翻译延迟、approve 流程、多次双向消息)。

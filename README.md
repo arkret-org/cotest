@@ -59,6 +59,9 @@ Recommended entrypoints:
 .\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
 .\scripts\run-hygiene.ps1
 .\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
+.\scripts\promote-fixme.ps1 -SpecPath e2e\tests\path\spec.ts:42 -FeatureId cotest#local-feature `
+  -PassedSpecCommand "npx playwright test --config playwright.config.ts --project chromium --grep name" `
+  -EvidencePath artifacts\latest\joint-e2e\playwright-report -NewBody $body
 .\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
@@ -79,14 +82,18 @@ Recommended entrypoints:
   `artifacts/runs/<timestamp>/`, then copies the latest set to
   `artifacts/latest/`.
 - `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
-  advisories/licensing (`cargo deny check`), spelling drift (`typos`), and
-  RustSec vulnerabilities (`cargo audit`). It writes `raw.log`,
+  advisories/licensing (`cargo deny check`), spelling drift (`typos`),
+  RustSec vulnerabilities (`cargo audit`), and Playwright fixme debt metadata
+  (`fixme-debt-report.mjs --strict`). It writes `raw.log`,
   `summary.json`, `summary.md`, and per-tool stdout/stderr logs to
   `artifacts/hygiene/<timestamp>/`.
 - `.\scripts\demote-test.ps1` is the inverse of `promote-fixme.ps1`: it
   temporarily converts a concrete Playwright `test(...)` line into
   `test.fixme(...)` and inserts the reason comment required by the local
   fixme debt discipline.
+- `.\scripts\promote-fixme.ps1` refuses to remove `.fixme` without a backing
+  feature id, one local single-spec pass command, and one screenshot/HAR/trace
+  artifact path. See `docs/fixme-promotion-checklist.md`.
 
 The primary human-readable report is
 `artifacts/latest/summary.md`.
@@ -187,6 +194,9 @@ starting services.
 `scripts/run-joint-e2e.ps1 -StartMockWitness -MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`
 starts a mock witness quorum and exports the list helpers consumed by E2E
 specs.
+`scripts/run-joint-e2e.ps1 -StartMockMimiFacade` starts the local MIMI facade
+mock and exports `COTEST_MOCK_MIMI_FACADE_BASE_URL` /
+`COTEST_MOCK_MIMI_FACADE_DID`; `-StartMocks` includes it with the other mocks.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous `artifacts/latest/coverage-matrix.json`.
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run

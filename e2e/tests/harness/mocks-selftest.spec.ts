@@ -22,6 +22,7 @@ import {
   mockWitnessQuorumBaseUrls,
   mockWitnessQuorumDids,
 } from "../../helpers/env";
+import { createMimiFacadeClient } from "../../helpers/mimi-facade";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");
@@ -417,5 +418,90 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
     expect(jwks.keys?.[0]?.kid).toBe("mock-tsp-endpoint-key-1");
+  });
+
+  test("mock-mimi-facade: bob_mimi join, fallback/deferred, content quarantine", async ({
+    request,
+  }) => {
+    const facade = createMimiFacadeClient(request);
+    test.skip(!facade, "mock-mimi-facade not started for this run");
+
+    await facade.reset();
+    const identity = await (await request.get(`${facade.baseUrl}/identity`)).json();
+    expect(identity.did).toBe(facade.facadeDid ?? "did:web:mimi-facade.joint-e2e.local");
+    expect(identity.identities.some((entry: { mimi_handle: string }) => entry.mimi_handle === "bob_mimi")).toBe(true);
+
+    const stamp = Date.now();
+    const realmId = `cx:realm:mimi-selftest:${stamp}`;
+    const roomBindingId = `mimi-room-selftest-${stamp}`;
+    const join = await facade.createJoinRequest({
+      room_binding_id: roomBindingId,
+      mimi_handle: "bob_mimi",
+    });
+    expect(join.status).toBe("pending");
+    expect(join.origin).toBe("mimi");
+
+    const approval = await facade.approveJoin({
+      realm_id: realmId,
+      room_binding_id: roomBindingId,
+      join_request_id: String(join.join_request_id),
+    });
+    expect(approval.status).toBe("approved");
+    expect(String(approval.pairwise_did)).toMatch(/^did:pairwise:/);
+    expect(approval.source).toBe("mimi");
+
+    const delivered = await facade.sendOutbound({
+      realm_id: realmId,
+      room_binding_id: roomBindingId,
+      sender_did: "did:web:alice.selftest",
+      content_kind: "m.text",
+      content: { body: "hello MIMI" },
+    });
+    expect(delivered.status).toBe(200);
+    expect(delivered.body.status).toBe("delivered");
+    expect(String(delivered.body.mimi_event_id)).toMatch(/^mimi:event:/);
+
+    await facade.configure({ unavailable: true });
+    const deferred = await facade.sendOutbound({
+      realm_id: realmId,
+      room_binding_id: roomBindingId,
+      sender_did: "did:web:alice.selftest",
+      content_kind: "m.text",
+      content: { body: "local persist, MIMI deferred" },
+    });
+    expect(deferred.status).toBe(503);
+    expect(deferred.body.status).toBe("deferred");
+    expect(deferred.body.deferred_reason).toBe("mimi_facade_unavailable");
+    await facade.configure({ unavailable: false });
+
+    const accepted = await facade.injectInbound({
+      realm_id: realmId,
+      room_binding_id: roomBindingId,
+      mimi_handle: "bob_mimi",
+      content_kind: "m.text",
+      content: { body: "bob says hi" },
+    });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.status).toBe("accepted");
+    expect(String(accepted.body.contrix_event_hint)).toMatch(/^cx:event:mimi:/);
+
+    const quarantined = await facade.injectInbound({
+      realm_id: realmId,
+      room_binding_id: roomBindingId,
+      mimi_handle: "bob_mimi",
+      content_kind: "m.location.share.live",
+      content: { lat: 39.9, lon: 116.4 },
+    });
+    expect(quarantined.status).toBe(202);
+    expect(quarantined.body.status).toBe("quarantined");
+    expect(quarantined.body.unknown_content_kind).toBe("m.location.share.live");
+
+    const inspect = await facade.inspect();
+    const kinds = inspect.kinds as Record<string, unknown[]>;
+    expect(kinds.join_requests.length).toBeGreaterThanOrEqual(1);
+    expect(kinds.approvals.length).toBeGreaterThanOrEqual(1);
+    expect(kinds.outbound.length).toBeGreaterThanOrEqual(2);
+    expect(kinds.inbound.length).toBeGreaterThanOrEqual(1);
+    expect(kinds.quarantine.length).toBeGreaterThanOrEqual(1);
   });
 });

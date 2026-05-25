@@ -138,6 +138,14 @@ export function mockTspEndpointVid(): string | undefined {
   return optionalEnv("COTEST_MOCK_TSP_ENDPOINT_VID");
 }
 
+export function mockMimiFacadeBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_MIMI_FACADE_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockMimiFacadeDid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_MIMI_FACADE_DID");
+}
+
 export function diagnosticsRoot(): string {
   return path.join(
     optionalEnv("COTEST_JOINT_RUN_DIR") ?? path.resolve(process.cwd(), "..", "artifacts", "joint-e2e-local"),

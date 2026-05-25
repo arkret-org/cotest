@@ -72,6 +72,8 @@ param(
     [string]$MockAppletRegistryDid,
     [switch]$StartMockTspEndpoint,
     [string]$MockTspEndpointVid,
+    [switch]$StartMockMimiFacade,
+    [string]$MockMimiFacadeDid = "did:web:mimi-facade.joint-e2e.local",
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
     [string[]]$MockWitnessExtraDids = @(),
@@ -91,6 +93,7 @@ if ($StartMocks) {
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
     $StartMockTspEndpoint = $true
+    $StartMockMimiFacade = $true
 }
 
 $MockWitnessExtraDids = @(
@@ -871,6 +874,12 @@ if ($StartMockTspEndpoint) {
     $mockTspEndpointPort = Get-FreeTcpPort
     $mockTspEndpointBaseUrl = "http://127.0.0.1:$mockTspEndpointPort"
 }
+$mockMimiFacadePort = $null
+$mockMimiFacadeBaseUrl = $null
+if ($StartMockMimiFacade) {
+    $mockMimiFacadePort = Get-FreeTcpPort
+    $mockMimiFacadeBaseUrl = "http://127.0.0.1:$mockMimiFacadePort"
+}
 
 $managedServices = New-Object System.Collections.Generic.List[object]
 $ephemeralPostgres = $null
@@ -985,6 +994,13 @@ try {
         $mockTspEndpointCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-tsp-endpoint.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-tsp-endpoint" -Command $mockTspEndpointCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockTspEndpointBaseUrl/identity" -TimeoutSeconds 30
+    }
+    if ($StartMockMimiFacade) {
+        $mockMimiFacadeCmd = (
+            "`$env:MOCK_MIMI_FACADE_PORT='$mockMimiFacadePort'; `$env:MOCK_MIMI_FACADE_DID={0}; node {1}"
+        ) -f (Quote-PsLiteral $MockMimiFacadeDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-mimi-facade.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-mimi-facade" -Command $mockMimiFacadeCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockMimiFacadeBaseUrl/health" -TimeoutSeconds 30
     }
 
     if ($StartCoauth) {
@@ -1389,13 +1405,20 @@ try {
         Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_TSP_ENDPOINT_VID -ErrorAction SilentlyContinue
     }
+    if ($mockMimiFacadeBaseUrl) {
+        $env:COTEST_MOCK_MIMI_FACADE_BASE_URL = $mockMimiFacadeBaseUrl
+        $env:COTEST_MOCK_MIMI_FACADE_DID = $MockMimiFacadeDid
+    } else {
+        Remove-Item Env:COTEST_MOCK_MIMI_FACADE_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_MIMI_FACADE_DID -ErrorAction SilentlyContinue
+    }
 
     $playwrightArgs = @("playwright", "test", "--config", "playwright.config.ts")
     foreach ($project in $playwrightProjects) {
         $playwrightArgs += @("--project", $project)
     }
     # G4.T1: joint-smoke is the PR gate. It runs only describe blocks tagged
-    # @fully-implemented. The remaining ~248 fixme placeholders are excluded
+    # @fully-implemented. The remaining fixme placeholders are excluded
     # so the gate stays fast (< 5 min on joint). An explicit -Grep overrides
     # this entirely.
     $effectiveGrep = $Grep
@@ -1407,7 +1430,7 @@ try {
         Write-Host ""
         Write-Host "=== joint-smoke profile: PR gate ==="
         Write-Host "- includes: @fully-implemented"
-        Write-Host "- excludes: 248 fixme + remaining mixed specs"
+        Write-Host "- excludes: fixme + remaining mixed specs"
         Write-Host "- prereq: coverage --check"
         Write-Host ("- grep: {0}" -f $effectiveGrep)
         Write-Host ""
@@ -1593,6 +1616,8 @@ $serviceTraceLines | Set-Content -Path $serviceTracesReport -Encoding UTF8
 # truncated the junit (junit_total < static_total) or fixme-detection misses.
 $scenariosReport = Join-Path $jointDir "scenarios.md"
 $junitPath = Join-Path $jointDir "junit.xml"
+$gapTodosPath = Join-Path $repoRoot "_cotest_gap_todos.md"
+$fixmeChecklistPath = Join-Path $repoRoot "docs\fixme-promotion-checklist.md"
 
 # Extracts fixme test titles from a Playwright spec file. Handles both
 # `test.fixme("title", ...)` and `test.fixme('title', ...)`. Multi-line first
@@ -1636,6 +1661,12 @@ function Get-StaticSpecStats {
         $source = $null
         try { $source = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop } catch { $source = "" }
         $fixmeTitles = @(Get-FixmeTitlesForSpec -Path $file.FullName)
+        $ownerGapSet = @{}
+        foreach ($m in [regex]::Matches($source, '@blocking-on:\s*([^\r\n]+)')) {
+            $gap = $m.Groups[1].Value.Trim()
+            if ($gap) { $ownerGapSet[$gap] = $true }
+        }
+        $ownerGaps = @($ownerGapSet.Keys | Sort-Object)
         # Count `test(` and `test.skip(` (but not `test.fixme`, `test.describe`,
         # `test.beforeAll`, etc.) as "live" definitions.
         $liveMatches = [regex]::Matches($source, '(?m)(^|[^.\w])test\s*\(\s*[''"]')
@@ -1646,6 +1677,7 @@ function Get-StaticSpecStats {
             live        = $live
             fixme       = $fixmeTitles.Count
             fixmeTitles = $fixmeTitles
+            ownerGaps   = $ownerGaps
         }
     }
     return $result
@@ -1667,7 +1699,15 @@ if ($env:COTEST_SELFTEST -eq '1') {
 $testsRoot = Join-Path $e2eRoot "tests"
 $staticStats = Get-StaticSpecStats -TestsRoot $testsRoot
 
-$scenarioLines = @("# joint e2e scenarios", "")
+$gapTodosDisplay = $gapTodosPath -replace '\\', '/'
+$fixmeChecklistDisplay = $fixmeChecklistPath -replace '\\', '/'
+$scenarioLines = @(
+    "# joint e2e scenarios",
+    "",
+    "- gap todos: $gapTodosDisplay",
+    "- fixme promotion checklist: $fixmeChecklistDisplay",
+    ""
+)
 $junitByScenario = @{}
 $totals = [pscustomobject]@{
     passed  = 0
@@ -1823,17 +1863,20 @@ $scenarioLines += ""
 $scenarioLines += "Static counts come from a regex walk of tests/**/*.spec.ts;"
 $scenarioLines += "junit counts come from this run. `[!]` flags a divergence."
 $scenarioLines += ""
-$scenarioLines += "| spec | static live | static fixme | junit pass | junit fail | junit skip | junit fixme | flag |"
-$scenarioLines += "|------|-------------|--------------|------------|------------|------------|-------------|------|"
+$scenarioLines += "| spec | static live | static fixme | owner gaps | junit pass | junit fail | junit skip | junit fixme | flag |"
+$scenarioLines += "|------|-------------|--------------|------------|------------|------------|------------|-------------|------|"
 $allKeys = New-Object System.Collections.Generic.HashSet[string]
 foreach ($k in $staticStats.Keys)      { [void]$allKeys.Add($k) }
 foreach ($k in $junitByScenario.Keys)  { [void]$allKeys.Add($k) }
 $driftAny = $false
 foreach ($key in ($allKeys | Sort-Object)) {
-    $sLive = 0; $sFixme = 0
+    $sLive = 0; $sFixme = 0; $ownerGaps = "-"
     if ($staticStats.ContainsKey($key)) {
         $sLive = $staticStats[$key].live
         $sFixme = $staticStats[$key].fixme
+        if ($staticStats[$key].ownerGaps.Count -gt 0) {
+            $ownerGaps = ($staticStats[$key].ownerGaps -join "<br>")
+        }
     }
     $jPass = 0; $jFail = 0; $jSkip = 0; $jFixme = 0
     if ($junitByScenario.ContainsKey($key)) {
@@ -1852,7 +1895,7 @@ foreach ($key in ($allKeys | Sort-Object)) {
         $flag = "-"
     }
     if ($flag -eq "[!]") { $driftAny = $true }
-    $scenarioLines += "| $key | $sLive | $sFixme | $jPass | $jFail | $jSkip | $jFixme | $flag |"
+    $scenarioLines += "| $key | $sLive | $sFixme | $ownerGaps | $jPass | $jFail | $jSkip | $jFixme | $flag |"
 }
 $scenarioLines += ""
 if (-not (Test-Path $junitPath)) {
@@ -1888,6 +1931,8 @@ $summary = [pscustomobject]@{
     mock_witness_quorum_dids = if ($mockWitnessBaseUrl) { $mockWitnessQuorumDids } else { @() }
     mock_audit_agent_base_url = $mockAuditAgentBaseUrl
     mock_audit_agent_did = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
+    mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
+    mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     yougen_base_url = $YougenBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_service_did = if ($CoauthBaseUrl) { $CoauthServiceDid } else { $null }
@@ -1914,6 +1959,8 @@ $summary = [pscustomobject]@{
     scenarios_report = $scenariosReport
     service_gaps_report = $serviceGapsReport
     service_traces_report = $serviceTracesReport
+    gap_todos = $gapTodosPath
+    fixme_promotion_checklist = $fixmeChecklistPath
     services = $serviceLogDir
 }
 $summaryJson = Join-Path $jointDir "summary.json"
@@ -1944,6 +1991,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_witness_quorum_dids: $($mockWitnessQuorumDids -join ",")
 - mock_audit_agent_base_url: $($summary.mock_audit_agent_base_url)
 - mock_audit_agent_did: $($summary.mock_audit_agent_did)
+- mock_mimi_facade_base_url: $($summary.mock_mimi_facade_base_url)
+- mock_mimi_facade_did: $($summary.mock_mimi_facade_did)
 - yougen_base_url: $($summary.yougen_base_url)
 - coauth_base_url: $($summary.coauth_base_url)
 - coauth_service_did: $($summary.coauth_service_did)
@@ -1968,6 +2017,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - scenarios_report: $($summary.scenarios_report)
 - service_gaps_report: $($summary.service_gaps_report)
 - service_traces_report: $($summary.service_traces_report)
+- gap_todos: $($summary.gap_todos)
+- fixme_promotion_checklist: $($summary.fixme_promotion_checklist)
 - services: $($summary.services)
 "@ | Set-Content -Path $summaryMd -Encoding UTF8
 
@@ -1997,6 +2048,9 @@ if ($mockWitnessBaseUrl) {
 if ($mockAuditAgentBaseUrl) {
     $auditAgentLabel = if ($MockAuditAgentDid) { " ($MockAuditAgentDid)" } else { "" }
     Write-Host "  mock-audit-agent: $mockAuditAgentBaseUrl$auditAgentLabel"
+}
+if ($mockMimiFacadeBaseUrl) {
+    Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"
 }
 Write-Host "  yougen      : $YougenBaseUrl"
 if ($DualSoland -and $yougenBetaBaseUrl) {

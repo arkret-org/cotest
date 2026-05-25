@@ -7,8 +7,9 @@
 //   @user-promise:
 //   @expected-live-by:
 //
-// By default the script writes `fixme-debt.md` at the repository root. Use
-// `--strict` in CI to fail when metadata is missing or the ETA has expired.
+// Strict mode also verifies that @blocking-on points at an owner gap, the
+// @user-promise scenario doc exists, and the fixme has an executable body (or
+// an explicit @blocked-reason comment).
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep, posix } from 'node:path';
@@ -96,6 +97,31 @@ function firstMagic(block, name) {
   return null;
 }
 
+const OWNER_GAP_RE =
+  /^(?:soland|yougen|coauth|cotest|mock-[a-z0-9-]+|soland\/yougen|soland\/coauth|coauth\/yougen)#[A-Za-z0-9._-]+$|^GAP-P\d+-\d+$/;
+
+function validateBlockingOn(value) {
+  if (!value) return null;
+  return OWNER_GAP_RE.test(value) ? null : 'blocking-on-not-owner-gap';
+}
+
+function validateUserPromise(value) {
+  if (!value) return null;
+  if (!value.startsWith('e2e/scenarios/') || !value.endsWith('.md')) {
+    return 'user-promise-not-scenario-ref';
+  }
+  return existsSync(join(REPO_ROOT, value)) ? null : 'user-promise-missing-file';
+}
+
+function validateFixmeBody(block) {
+  if (/@blocked-reason:\s*\S+/.test(block)) return null;
+  if (/,\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*{/.test(block)) {
+    return null;
+  }
+  if (/,\s*async\s+function\b/.test(block)) return null;
+  return 'missing-executable-body-or-blocked-reason';
+}
+
 function expectedSortKey(value) {
   if (!value) return '9999-Z';
   const quarter = value.match(/^(\d{4})Q([1-4])$/i);
@@ -136,6 +162,13 @@ function analyzeFixmes() {
       if (!blockingOn) missing.push('blocking-on');
       if (!userPromise) missing.push('user-promise');
       if (!expectedLiveBy) missing.push('expected-live-by');
+      const invalid = [];
+      const blockingOnError = validateBlockingOn(blockingOn);
+      if (blockingOnError) invalid.push(blockingOnError);
+      const userPromiseError = validateUserPromise(userPromise);
+      if (userPromiseError) invalid.push(userPromiseError);
+      const bodyError = validateFixmeBody(block);
+      if (bodyError) invalid.push(bodyError);
       items.push({
         file: rel(REPO_ROOT, file),
         line: i + 1,
@@ -144,6 +177,7 @@ function analyzeFixmes() {
         user_promise: userPromise,
         expected_live_by: expectedLiveBy,
         missing,
+        invalid,
         expired: isExpired(expectedLiveBy),
       });
     }
@@ -166,6 +200,7 @@ function escapeCell(value) {
 function renderMarkdown(items) {
   const missingCount = items.filter((i) => i.missing.length > 0).length;
   const expiredCount = items.filter((i) => i.expired).length;
+  const invalidCount = items.filter((i) => i.invalid.length > 0).length;
   const groups = new Map();
   for (const item of items) {
     const key = item.blocking_on ?? '(missing @blocking-on)';
@@ -182,17 +217,24 @@ function renderMarkdown(items) {
   lines.push('|---|---:|');
   lines.push(`| total fixme | ${items.length} |`);
   lines.push(`| missing metadata | ${missingCount} |`);
+  lines.push(`| invalid metadata/body | ${invalidCount} |`);
   lines.push(`| expired expected_live_by | ${expiredCount} |`);
   lines.push('');
   for (const [blockingOn, groupItems] of groups) {
     lines.push(`## ${blockingOn}`);
     lines.push('');
-    lines.push('| expected_live_by | status | file:line | title | user_promise | missing |');
-    lines.push('|---|---|---|---|---|---|');
+    lines.push('| expected_live_by | status | file:line | title | user_promise | missing | invalid |');
+    lines.push('|---|---|---|---|---|---|---|');
     for (const item of groupItems) {
-      const status = item.expired ? 'expired' : item.missing.length > 0 ? 'metadata-missing' : 'tracked';
+      const status = item.expired
+        ? 'expired'
+        : item.missing.length > 0
+          ? 'metadata-missing'
+          : item.invalid.length > 0
+            ? 'invalid'
+            : 'tracked';
       lines.push(
-        `| ${escapeCell(item.expected_live_by)} | ${status} | ${escapeCell(`${item.file}:${item.line}`)} | ${escapeCell(item.title)} | ${escapeCell(item.user_promise)} | ${escapeCell(item.missing.join(', '))} |`,
+        `| ${escapeCell(item.expected_live_by)} | ${status} | ${escapeCell(`${item.file}:${item.line}`)} | ${escapeCell(item.title)} | ${escapeCell(item.user_promise)} | ${escapeCell(item.missing.join(', '))} | ${escapeCell(item.invalid.join(', '))} |`,
       );
     }
     lines.push('');
@@ -221,12 +263,14 @@ function main() {
 
   const missingCount = items.filter((i) => i.missing.length > 0).length;
   const expiredCount = items.filter((i) => i.expired).length;
+  const invalidCount = items.filter((i) => i.invalid.length > 0).length;
   const summary = {
     output: args.output,
     total_fixme: items.length,
     missing_metadata: missingCount,
+    invalid_metadata_or_body: invalidCount,
     expired_expected_live_by: expiredCount,
-    strict_pass: missingCount === 0 && expiredCount === 0,
+    strict_pass: missingCount === 0 && invalidCount === 0 && expiredCount === 0,
   };
   if (args.json) console.log(JSON.stringify({ summary, items }, null, 2));
   else console.log(`fixme debt report: ${args.output}`);
