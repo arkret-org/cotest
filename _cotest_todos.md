@@ -43,7 +43,8 @@ Order by user-impact and current coverage:
 ### Stub completion in src/
 - [x] §14 `src/conformance/redaction.rs` — `snapshot_pruning_stub` post-redaction snapshot integrity.
   - 2026-05-25 local close: `snapshot_pruning_stub` asserts post-redaction snapshots drop `content` and `proofs`, retain the target/redaction reference, and emit `redaction.snapshot_pruning_stub` transcript evidence. Verified with `cargo test --locked --test conformance_fixtures redaction_fixture_suite_matches_reference_semantics -- --nocapture`.
-- [ ] §15 `src/scenarios/bridge_contracts/starid.rs` — starid proof / trust-root validation.
+- [x] §15 `src/scenarios/bridge_contracts/starid.rs` — starid proof / trust-root validation.
+  - 2026-05-25 local close: the bridge scenario now asserts Soland publishes an empty identity-describe TODO list, local resolver proof-validation policy (`eddsa-jcs-2022`, webvh log/scid/witness requirements), freshness receipt discovery, and the external StarID provider trust root with `expected_trust_domain`. Upstream evidence: Soland commit `4cdcfe0` and StarID commit `f8f44c6`.
 - [ ] §16 `src/scenarios/chaos_kill_midwrite.rs` — replace 6 `unimplemented!` calls with a Tokio task-manager-based chaos contract.
 - [ ] §17 `src/conformance/round4_*.rs` — close `round4-lint-parity` and `round4-vector-*` TODOs.
 - [ ] §18 The 17 scenarios marked `#[ignore = "TODO(round23-T**)"]` — unignore as upstream servers land features.
