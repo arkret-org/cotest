@@ -78,7 +78,7 @@
 
 ## Implementation notes
 
-- **soland/coauth 缺口**:admin endpoints (`/admin/accounts/<did>/{lock,suspend,unsuspend}`);account state field exposed via `/account/me`;state-change audit events — 实现度未知,可能多数 ✗
+- **soland 本地状态**:`/api/v1/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/api/v1/admin/accounts/<did>/status`、`/api/v1/account/deactivate`、`/account/me.state` 与 `cx.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
 - **yougen 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
 
 ## 总耗时预估
