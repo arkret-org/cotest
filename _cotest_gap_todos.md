@@ -144,7 +144,8 @@
 
 ## P3 - Calls / extensions / external profiles
 
-- [ ] GAP-P3-070 `[soland/yougen]` WebRTC Call Morph state machine:ringing/connecting/active/ended,signaling frames routed to peers。
+- [x] GAP-P3-070 `[soland/yougen]` WebRTC Call Morph state machine:ringing/connecting/active/ended,signaling frames routed to peers。
+  - 2026-05-25 local close: `soland` now returns participant-scoped WebRTC call state on session create, signal append, and signal reads: empty sessions start `ringing`, offer/invite/candidate-style frames derive `connecting`, answer/focus joins derive `active`, and hangup/reject derives `ended`; peer routing is covered by Bob reading Alice's offer and Alice reading Bob's answer through the shared session. `yougen` call UI now exposes the same local state vocabulary through `call-status-ringing`, `call-status-connecting`, `call-status-active`, and `call-status-ended`. `cotest` promotes the 1:1 call state machine fixture to live coverage. Evidence: `cargo check --locked` and `cargo test --locked --test http_api webrtc_signaling_contracts_work -- --nocapture` in `soland`; `cargo check --locked --features experimental-agents` and `cargo test --locked --features experimental-agents webrtc -- --nocapture` in `yougen`; `node -c e2e\tests\calls\webrtc.spec.ts`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p3-070-call-state -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "alice initiates 1:1 call to bob" -SkipNpmInstall -SkipBrowserInstall` passed; `node e2e\scripts\summarize-e2e-coverage.mjs --check` reports 236/396 verified and 160 fixme.
 - [ ] GAP-P3-071 `[soland]` ICE/TURN credential auth、pairwise pseudonym、mid-call refresh、recording policy enforcement。
 - [ ] GAP-P3-072 `[yougen]` call UI:mute、screen share、hangup、recording indicator、group/SFU roster。
 - [ ] GAP-P3-073 `[soland]` applet manifest verifier、bot/ghost DID provisioning、portal realm routing、capability revoke。
