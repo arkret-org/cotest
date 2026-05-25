@@ -354,8 +354,8 @@ test.describe("chat advanced", () => {
   });
 
   // Direct `/chat/:space_id` channel hydration is covered live above. The
-  // full browser-driven chat workflows remain fixme until the remaining
-  // reaction/reply/poll/typing/presence UI and projection gaps are closed.
+  // remaining browser-driven chat workflows stay fixme until their owning
+  // server/client projections are closed.
   test.fixme(
     // @blocking-on: soland#messaging-chat-advanced-gap
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
@@ -575,7 +575,7 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test.fixme(
+  test(
     // @blocking-on: soland#messaging-chat-advanced-gap
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
     // @expected-live-by: 2026Q3
@@ -617,7 +617,7 @@ test.describe("chat advanced", () => {
     },
   );
 
-  test.fixme(
+  test(
     // @blocking-on: soland#messaging-chat-advanced-gap
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
     // @expected-live-by: 2026Q3
