@@ -36,18 +36,18 @@
 ## Pre-conditions
 
 - 三人都已注册 + 拿到 session token
-- 每人都已上传 KeyPackage 到 `POST /api/v1/keys/keypackages/upload`
+- 参与 Welcome 的设备已上传 KeyPackage 到 `POST /api/v1/keys/keypackages/upload`
 
 ## Steps
 
 ### Phase A — alice 创建 E2EE space + MLS group genesis
 
-1. alice 进 `/setup`,新建 space,**关键字段**:`encryption_profile = "mls_rfc9420"`(yougen 当前的 setup wizard 没这个选项,见 implementation notes)
+1. alice 进 `/setup`,新建 space,**关键字段**:`encryption_profile = "mls_rfc9420"`
 2. yougen 后台:
    - 生成 MLS group context、cipher suite(默认 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`)
    - 写 `cx.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
    - 写 `cx.space.create` Move,关联 genesis
-3. 断言:`/space/${spaceId}/admin` 显示"Encryption: MLS RFC9420"标识
+3. 断言:`/space/${spaceId}/admin/security` 显示 MLS 管理控件
 4. 断言:`GET /api/v1/spaces/${spaceId}` 返回 `encryption_profile = "mls_rfc9420"`
 
 ### Phase B — bob 加入(Welcome)
@@ -118,13 +118,13 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.mls.genesis/welcome/commit` Move kinds、`governance_binding` 校验、`covered_frontier_cell` 更新、`decryption_pending` projection — 部分实现(core MLS frame 可能有,governance binding 可能滞后)
-- **yougen 缺口**:`/setup` wizard 缺 `encryption_profile` 选项;timeline 缺 `decryption_pending` 标记 UI;`/space/:id/admin` 缺 encryption 标识。**这些都阻塞 UI 层验证**,测试需要先通过 API 调用创建 E2EE space
+- **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`cx.mls.genesis`、KeyPackage claim CAS、durable `cx.mls.welcome` pending queue + 一次性 drain、`cx.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、ban 后 yougen 显示 `epoch_update_required` 并禁用发送。
+- **剩余缺口**:完整 OpenMLS 客户端 secret 派生、E2EE 消息明文渲染 + 服务端 ciphertext-only invariant、carol pre-join history、并发 commit 的 `decryption_pending`、governance binding mismatch 的精确拒绝路径。
 - **测试侧难点**:断言"服务端只见 ciphertext"需要 soland 暴露一个 raw event endpoint;若没有,可以从 service log 抓 + grep
 
 ## 风险
 
-- MLS 完整实现复杂度高;`covered_frontier_cell` 是 spec 新概念,soland 应当还在实现中。Phase E (epoch_update_required) 完全是 fixme territory。
+- MLS 完整实现复杂度高;当前已覆盖本地 lifecycle 投射和 epoch pause,但真正的客户端加解密、多成员历史窗口和并发 frontier 收敛仍需后续阶段补齐。
 
 ## 总耗时预估
 

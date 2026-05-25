@@ -13,6 +13,7 @@ import {
   authHeaders,
   b64url,
   canonicalTimestamp,
+  addSpaceMemberApi,
   createSpaceApi,
   singleDidAnchorer,
   signedEventEnvelope,
@@ -30,7 +31,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("MLS group encryption", () => {
-  test("E2EE space surfaces encryption_profile=mls_rfc9420 in admin and rejects non-members from raw events", async ({
+  test("E2EE space surfaces MLS admin controls and rejects non-members from raw events", async ({
     browser,
     request,
   }, testInfo) => {
@@ -48,29 +49,18 @@ test.describe("MLS group encryption", () => {
     });
 
     try {
-      // yougen's /setup wizard 当前没有 encryption_profile 选项;先建普通 space,
-      // 然后通过 API 把 encryption_profile 升级到 mls_rfc9420(若 soland 接受)。
       const spaceId = await alicePage.createSpace({
         title: `S11 E2EE ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
       });
 
-      const upgradeResp = await request.put(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/policy`,
-        {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: { encryption_profile: "mls_rfc9420" },
-        },
-      );
-      // 若 soland 不支持运行时切换 encryption_profile(spec implies 创建时锁定),
-      // 该步骤会 4xx — 测试侧 tolerate,后续断言只跑可达的部分。
-      if (!upgradeResp.ok()) {
-        test.info().annotations.push({
-          type: "soland-gap",
-          description: `space encryption_profile upgrade returned ${upgradeResp.status()}; spec §2.2 implies create-time only.`,
-        });
-      }
+      await alicePage.gotoSpaceAdminSection(spaceId, "security");
+      await expect(alicePage.page.getByTestId("mls-rotation")).toBeVisible({
+        timeout: 30_000,
+      });
 
       // Non-member access to raw events MUST be rejected.
       const eventsResp = await request.get(
@@ -153,9 +143,10 @@ test.describe("MLS group encryption", () => {
   test("alice claims bob's KeyPackage; Welcome queue endpoint and commit epoch smoke stay live", async ({
     request,
   }) => {
-    // API-first smoke for the G3.S1 subset: KeyPackage publish/claim CAS,
-    // Welcome pending queue surface, and monotonic commit epoch. Full client
-    // derivation of epoch secrets remains a later yougen+MLS concern.
+    // API-first smoke for the G3.S1 subset: MLS group genesis,
+    // KeyPackage publish/claim CAS, durable Welcome delivery, and
+    // monotonic commit epoch. Full client derivation of epoch secrets
+    // remains a later yougen+MLS concern.
     const stamp = Date.now();
     const alice = uniqueUser("s11-claim-alice");
     const bob = uniqueUser("s11-claim-bob");
@@ -171,6 +162,7 @@ test.describe("MLS group encryption", () => {
     const keypackageId = typedId("mls_keypackage");
     const groupId = typedId("mls_group");
     const nowSeconds = Math.floor(Date.now() / 1000);
+    const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
 
     const publish = await request.post(
       `${solandBaseUrl()}/api/v1/keys/keypackages/upload`,
@@ -230,10 +222,93 @@ test.describe("MLS group encryption", () => {
     );
 
     const realmId = await createSpaceApi(request, aliceToken, {
-      title: `MLS commit ${stamp}`,
+      title: `MLS lifecycle ${stamp}`,
       ownerDid: alice.did,
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
     });
-    const frontierEventRef = typedId("event");
+
+    const genesisEventId = typedId("event");
+    const commitEventId = typedId("event");
+    const frontierEventRef = genesisEventId;
+    const genesisBinding = {
+      binding_version: 1,
+      encoding_profile: "cbor-deterministic-rfc8949-v1",
+      realm_id: realmId,
+      mls_group_id: groupId,
+      previous_epoch: 0,
+      next_epoch: 0,
+      membership_frontier: [frontierEventRef],
+      policy_root: digest("2"),
+    };
+    const genesisBody = await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.mls.genesis",
+        eventId: genesisEventId,
+        payload: {
+          mls_group_id: groupId,
+          realm_key_scope: {
+            realm_id: realmId,
+            policy_digest: digest("2"),
+          },
+          epoch: 0,
+          creator_principal_id: alice.did,
+          creator_device_id: alice.deviceId,
+          cipher_suite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+          group_info_digest: digest("3"),
+          ratchet_tree_digest: digest("4"),
+          governance_binding: genesisBinding,
+          created_at: canonicalTimestamp(),
+        },
+      }),
+      {
+        context: "submit MLS genesis",
+      },
+    );
+    expect(genesisBody.event_id).toBe(genesisEventId);
+
+    const welcomeId = typedId("mls_welcome");
+    const keypackageDigest = digest("5");
+    const welcomeBody = await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.mls.welcome",
+        payload: {
+          welcome_id: welcomeId,
+          mls_group_id: groupId,
+          epoch: 1,
+          recipient_principal_id: bob.did,
+          recipient_device_id: bob.deviceId,
+          key_package_id: keypackageId,
+          keypackage_ref: keypackageDigest,
+          keypackage_digest: keypackageDigest,
+          claim_id: `claim-${stamp}`,
+          claim_ref: {
+            claim_id: `claim-${stamp}`,
+            keypackage_ref: keypackageDigest,
+            keypackage_digest: keypackageDigest,
+            capabilities_digest: digest("6"),
+            ssk_generation: 1,
+          },
+          ciphertext: `opaque-mls-welcome-${stamp}`,
+          expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
+          commit_ref: commitEventId,
+          governance_binding: genesisBinding,
+        },
+      }),
+      {
+        context: "submit MLS welcome",
+      },
+    );
+    expect(welcomeBody.event_id).toMatch(/^cx:event:/);
+
     const commitPayload = (label: string, nextEpoch = 1) => ({
       group_id: groupId,
       expected_prev_epoch: 0,
@@ -244,7 +319,7 @@ test.describe("MLS group encryption", () => {
       base_epoch_ref: frontierEventRef,
       proposal_refs: [],
       next_epoch: nextEpoch,
-      commit_digest: `sha256:${"1".repeat(64)}`,
+      commit_digest: digest("7"),
       governance_binding: {
         binding_version: 1,
         encoding_profile: "cbor-deterministic-rfc8949-v1",
@@ -253,7 +328,7 @@ test.describe("MLS group encryption", () => {
         previous_epoch: 0,
         next_epoch: nextEpoch,
         membership_frontier: [frontierEventRef],
-        policy_root: `sha256:${"2".repeat(64)}`,
+        policy_root: digest("2"),
         threshold: {
           k: 2,
           n: 3,
@@ -269,6 +344,7 @@ test.describe("MLS group encryption", () => {
       actorDid: alice.did,
       realmId,
       kind: "cx.mls.commit",
+      eventId: commitEventId,
       payload: commitPayload(`opaque-commit-${stamp}`),
     });
     const commitBody = await submitSignedEventApi(
@@ -281,6 +357,31 @@ test.describe("MLS group encryption", () => {
     );
     expect(commitBody.event_id).toMatch(/^cx:event:/);
 
+    const pendingAfterWelcome = await request.get(
+      `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,
+      {
+        headers: authHeaders(bobToken),
+      },
+    );
+    expect(pendingAfterWelcome.ok()).toBeTruthy();
+    const pendingAfterWelcomeBody = await pendingAfterWelcome.json();
+    expect(pendingAfterWelcomeBody.welcomes).toHaveLength(1);
+    expect(pendingAfterWelcomeBody.welcomes[0]).toMatchObject({
+      welcome_id: welcomeId,
+      group_id: groupId,
+      key_package_id: keypackageId,
+    });
+    expect(pendingAfterWelcomeBody.welcomes[0].delivered_at).toBeTruthy();
+
+    const pendingAfterDrain = await request.get(
+      `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,
+      {
+        headers: authHeaders(bobToken),
+      },
+    );
+    expect(pendingAfterDrain.ok()).toBeTruthy();
+    expect((await pendingAfterDrain.json()).welcomes).toEqual([]);
+
     const staleCommit = await request.post(`${solandBaseUrl()}/api/v1/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
@@ -292,15 +393,6 @@ test.describe("MLS group encryption", () => {
     });
     expect([409, 412, 422]).toContain(staleCommit.status());
     expect(wireErrCode(await staleCommit.json())).toBe("mls_epoch_skew");
-
-    const pendingAfter = await request.get(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,
-      {
-        headers: authHeaders(bobToken),
-      },
-    );
-    expect(pendingAfter.ok()).toBeTruthy();
-    expect(Array.isArray((await pendingAfter.json()).welcomes)).toBe(true);
   });
 
   test.fixme(// @blocking-on: soland#encryption-mls-group-gap
@@ -318,11 +410,68 @@ test.describe("MLS group encryption", () => {
     // spec: encryption-and-audit.md §2.4.1, models/space-and-place.md §3.4
   });
 
-  test.fixme(// @blocking-on: soland#encryption-mls-group-gap
-  // @user-promise: e2e/scenarios/encryption/mls-group.md
-  // @expected-live-by: 2026Q3
-  "alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms", async () => {
-    // spec: encryption-and-audit.md §2.4.1, §2.5
+  test("alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("s11-ban-alice");
+    const bob = uniqueUser("s11-ban-bob");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const aliceToken = await issueDevSession(request, alice);
+    const spaceId = await createSpaceApi(request, aliceToken, {
+      title: `S11 MLS ban ${stamp}`,
+      ownerDid: alice.did,
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+    await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+
+    const alicePage = await openUserPage(browser, alice, {
+      sessionToken: aliceToken,
+    });
+
+    try {
+      await alicePage.gotoSpaceAdminSection(spaceId, "members");
+      const refresh = alicePage.page.getByTestId("refresh-members-button");
+      await expect(refresh).toBeVisible({ timeout: 120_000 });
+      const bobRow = alicePage.page.getByTestId("member-row").filter({
+        has: alicePage.page.locator(`[title="${bob.did}"]`),
+      });
+      await expect
+        .poll(
+          async () => {
+            await refresh.click();
+            return await bobRow.count();
+          },
+          {
+            timeout: 120_000,
+            intervals: [1_000, 2_000, 5_000],
+            message: "Bob joined member row should appear in synced admin projection",
+          },
+        )
+        .toBeGreaterThan(0);
+
+      await bobRow.first().getByTestId("ban-member-button").click();
+      await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(
+        "epoch_update_required",
+        { timeout: 30_000 },
+      );
+
+      await alicePage.gotoTimelineSpace(spaceId);
+      const epochBanner = alicePage.page.getByTestId(
+        "epoch-update-required-banner",
+      );
+      await expect(epochBanner).toBeVisible({ timeout: 30_000 });
+      await expect(epochBanner).toContainText("epoch_update_required");
+      await expect(alicePage.page.getByTestId("send-button")).toBeDisabled();
+      await stepShot(alicePage.page, testInfo, "epoch-update-required-after-ban");
+    } finally {
+      await alicePage.close();
+    }
   });
 
   test.fixme(// @blocking-on: soland#encryption-mls-group-gap
