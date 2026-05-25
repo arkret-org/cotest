@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 404 · Verified: 206 (51.0%)
+Promised: 398 · Verified: 207 (52.0%)
 
-Totals: 66 scenarios / 66 specs / 206 verified / 404 promised / 198 fixme / 19 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 207 verified / 398 promised / 191 fixme / 19 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 206 verified / 404 promised / 198 fixme / 19 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 206 |
-| test.fixme | 198 |
-| promised tests | 404 |
-| verified tests | 206 |
-| verified ratio | 51.0% |
+| live tests | 207 |
+| test.fixme | 191 |
+| promised tests | 398 |
+| verified tests | 207 |
+| verified ratio | 52.0% |
 | test.skip (conditional) | 19 |
 | domains | 19 |
 
@@ -26,7 +26,7 @@ Totals: 66 scenarios / 66 specs / 206 verified / 404 promised / 198 fixme / 19 s
 | calls | 4 | 4 | 5 | 13 | 38.5% | 8 | 0 |
 | conformance | 4 | 4 | 21 | 33 | 63.6% | 12 | 3 |
 | discovery | 2 | 2 | 10 | 11 | 90.9% | 1 | 0 |
-| documents | 1 | 1 | 1 | 8 | 12.5% | 7 | 0 |
+| documents | 1 | 1 | 2 | 2 | 100.0% | 0 | 0 |
 | encryption | 5 | 5 | 13 | 36 | 36.1% | 23 | 0 |
 | extensions | 3 | 3 | 1 | 14 | 7.1% | 13 | 0 |
 | federation | 2 | 2 | 10 | 16 | 62.5% | 6 | 1 |
@@ -58,7 +58,7 @@ Totals: 66 scenarios / 66 specs / 206 verified / 404 promised / 198 fixme / 19 s
 | conformance/snapshot-query-scalability | 2 | 7 | 28.6% | 5 | 1 | mixed | yes | @fully-implemented |
 | discovery/directory | 4 | 5 | 80.0% | 1 | 0 | mixed | yes |  |
 | discovery/notifications | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
-| documents/collaboration | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |
+| documents/collaboration | 2 | 2 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/audited-e2ee | 1 | 6 | 16.7% | 5 | 0 | mixed | yes |  |
 | encryption/encrypted-attachments | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
 | encryption/key-backup | 1 | 8 | 12.5% | 7 | 0 | mixed | yes |  |

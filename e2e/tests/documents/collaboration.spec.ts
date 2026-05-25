@@ -5,9 +5,19 @@
 //   - models/content-types.md §2-§3 (content blocks)
 //   - models/flow-and-message.md §4.3 (discussion track for comments)
 //   - discovery/profiles-presence.md §3 (cursor presence)
-//   - authz/event-auth-state-resolution.md §2-§4 (anchor finality), §8.1 (conflict recovery)
+//   - authz/event-auth-state-resolution.md §2-§4 (anchor finality)
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { solandBaseUrl } from "../../helpers/env";
+import { stepShot } from "../../helpers/screenshots";
+import {
+  authHeaders,
+  createSpaceApi,
+  flowIdFromRealmId,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -17,95 +27,308 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("document collaboration", () => {
-  test("document view route loads (probe before fuller assertions)", async ({
-    browser,
+test.describe("Document Morph collaboration", () => {
+  test("Document Morph projection reports body versions, relation links, range comments, and orphan state", async ({
     request,
   }) => {
-    const alice = uniqueUser("s17-probe");
+    // spec: morph.md §2/§4 + flow-and-message.md §4.3 + relation.md §3.2.
+    const alice = uniqueUser("doc-projection-alice");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: token });
+    const realmId = await createSpaceApi(request, token, {
+      title: `Document projection ${Date.now()}`,
+      history_visibility: "shared",
+    });
+    const morphId = documentMorphId();
+    const relationId = documentRelationId();
+    const initialBody = paragraphDocumentBody("abcdefghij");
+    const updatedBody = paragraphDocumentBody("abc");
 
-    try {
-      // yougen has /document — verify it renders without 404.
-      const resp = await alicePage.page.goto("/document", { waitUntil: "domcontentloaded" });
-      expect(resp).not.toBeNull();
-      expect(resp!.status()).toBeLessThan(500);
-    } finally {
-      await alicePage.close();
-    }
+    await submitSignedEventApi(
+      request,
+      token,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.morph.create",
+        payload: {
+          morph_id: morphId,
+          object: {
+            id: morphId,
+            schema: "cx.schema.morph.v1",
+            realm_id: realmId,
+            space_id: realmId,
+            morph_type: "document",
+            title: "Projection draft",
+            stage: "draft",
+            schema_refs: ["cx.schema.morph.v1"],
+            facets: { documentable: {} },
+            fields: { document: initialBody },
+            created_by: alice.did,
+            created_at: nowIso(),
+          },
+        },
+      }),
+      { context: "create document morph" },
+    );
+
+    await submitSignedEventApi(
+      request,
+      token,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.relation.create",
+        payload: {
+          relation_id: relationId,
+          kind: "references",
+          from_ref: morphId,
+          to_ref: realmId,
+          fields: { role: "postmortem_for" },
+        },
+      }),
+      { context: "link document morph relation" },
+    );
+
+    await submitSignedEventApi(
+      request,
+      token,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.message.create",
+        payload: {
+          flow_id: flowIdFromRealmId(realmId),
+          thread_id: morphId,
+          track: "discussion",
+          content: {
+            kind: "cx.content.text",
+            morph_id: morphId,
+            body: "tighten this range",
+            anchor_range: {
+              target_ref: morphId,
+              start: 2,
+              end: 9,
+            },
+          },
+        },
+      }),
+      { context: "create document range comment" },
+    );
+
+    await submitSignedEventApi(
+      request,
+      token,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.morph.update",
+        payload: {
+          morph_id: morphId,
+          target_ref: morphId,
+          patch: {
+            fields: {
+              $op: "set",
+              value: { document: updatedBody },
+            },
+          },
+        },
+      }),
+      { context: "update document morph body" },
+    );
+
+    const projection = await readDocumentProjection(request, token, morphId);
+    expect(projection.document.morph_id).toBe(morphId);
+    expect(projection.document.realm_id).toBe(realmId);
+    expect(projection.document.morph_type).toBe("document");
+    expect(projection.document.body.blocks[0].content).toBe("abc");
+    expect(projection.versions).toHaveLength(2);
+    expect(projection.versions[0].body.blocks[0].content).toBe("abcdefghij");
+    expect(projection.versions[1].body.blocks[0].content).toBe("abc");
+    expect(projection.relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          relation_id: relationId,
+          relation_kind: "references",
+          from: morphId,
+          to: realmId,
+        }),
+      ]),
+    );
+    expect(projection.comments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          body: "tighten this range",
+          state: "orphaned",
+          anchor_range: expect.objectContaining({ start: 2, end: 9 }),
+        }),
+      ]),
+    );
+    expect(projection.cursor_presence).toEqual([]);
   });
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "alice creates a Document Morph (morph_type=document); bob joins same space and sees initial body",
-    async () => {
-      // spec: morph.md §2 + content-types.md §2
-      // soland gap: cx.morph.create + content-types document type.
-      // yougen gap: /document/new compose form + /document/:morph_id viewer.
-    },
-  );
+  test("yougen creates and hydrates Document Morphs with versions, range comments, and cursor presence UI", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    // spec: morph.md §2 + flow-and-message.md §4.3 + profiles-presence.md §3.
+    const stamp = Date.now();
+    const alice = uniqueUser("doc-ui-alice");
+    const bob = uniqueUser("doc-ui-bob");
+    await ensureRegistered(request, alice);
+    await ensureRegistered(request, bob);
+    const aliceToken = await issueDevSession(request, alice);
+    const bobToken = await issueDevSession(request, bob);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "alice and bob edit concurrently; both edits visible after lattice merge (mv-register or cas-register depending on lattice)",
-    async () => {
-      // spec: authz/event-auth-state-resolution.md §2 + §3.2 multi-cell Moves
-    },
-  );
+    try {
+      const realmId = await alicePage.createSpace({
+        title: `Document UI ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [bob.did],
+      });
+      await bobPage.acceptInvite(realmId);
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "alice's cursor position propagates to bob's view via cx.presence ephemeral signal within 1s",
-    async () => {
-      // spec: profiles-presence.md §3 (presence + cursor as ephemeral)
-    },
-  );
+      await alicePage.page.goto("/document/new", { waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("document-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      const title = `Design doc ${stamp}`;
+      await alicePage.page.getByTestId("document-title-input").fill(title);
+      await alicePage.page
+        .getByTestId("document-body-editor")
+        .fill("Goals first section with detail for a range comment.");
+      await alicePage.page.getByTestId("document-link-incident-input").fill(realmId);
+      await alicePage.page.getByTestId("save-document-button").click();
+      await expect(alicePage.page.getByTestId("document-status")).toContainText(
+        /document cx:morph:/i,
+        { timeout: 45_000 },
+      );
+      const morphId = await waitForDocumentMorphId(request, aliceToken, realmId, title);
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "bob anchors a comment to text range offset 100..110; alice's view shows the comment marker at that range",
-    async () => {
-      // spec: flow-and-message.md §4.3 (discussion track) + relation.md §3.2 (replies_to)
-    },
-  );
+      await bobPage.page.goto(`/document/${morphId}`, { waitUntil: "domcontentloaded" });
+      await expect(bobPage.page.getByTestId("document-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(bobPage.page.getByTestId("document-body-editor")).toHaveValue(
+        "Goals first section with detail for a range comment.",
+        { timeout: 45_000 },
+      );
+      await expect(bobPage.page.getByTestId("document-cursor-self")).toBeVisible();
+      await expect(
+        bobPage.page.getByTestId("document-presence-list").locator("li").first(),
+      ).toHaveAttribute("title", bob.did);
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "document versions: each anchor finality boundary produces a labeled version; /document/:id/versions lists them",
-    async () => {
-      // spec: authz/event-auth-state-resolution.md §4 anchor finality.
-    },
-  );
+      await bobPage.page.getByTestId("document-comment-add-button").click();
+      await bobPage.page.getByTestId("document-comment-range-input").fill("6..40");
+      await bobPage.page.getByTestId("document-comment-text-input").fill("needs more evidence");
+      await bobPage.page.getByTestId("document-comment-submit-button").click();
+      await expect(bobPage.page.getByTestId("document-comment-thread")).toContainText(
+        "needs more evidence",
+        { timeout: 45_000 },
+      );
+      await waitForDocumentComment(request, bobToken, morphId, "needs more evidence");
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "restore an earlier version: cx.morph.update with state_witness + inclusion_proof referring to past anchor accepted; current state reverts",
-    async () => {
-      // spec: authz/event-auth-state-resolution.md §8.1
-    },
-  );
+      await alicePage.page.getByTestId("document-body-editor").fill("Short.");
+      await alicePage.page.getByTestId("save-document-button").click();
+      await expect(alicePage.page.getByTestId("document-status")).toContainText(
+        /saved and synced document/i,
+        { timeout: 45_000 },
+      );
 
-  test.fixme(
-    // @blocking-on: soland#documents-collaboration-gap
-    // @user-promise: e2e/scenarios/documents/collaboration.md
-    // @expected-live-by: 2026Q3
-    "E17.2 comment anchored to a range that was later removed becomes orphaned (state=locked); UI surfaces orphan badge",
-    async () => {
-      // spec: relation.md §3.2 + flow-and-message.md §4.3
-    },
-  );
+      await alicePage.page.goto(`/document/${morphId}`, { waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("document-body-editor")).toHaveValue("Short.", {
+        timeout: 45_000,
+      });
+      await expect(alicePage.page.getByTestId("document-version-row")).toHaveCount(2, {
+        timeout: 45_000,
+      });
+      await expect(alicePage.page.getByTestId("document-comment-thread")).toContainText(
+        "needs more evidence",
+        { timeout: 45_000 },
+      );
+      await expect(alicePage.page.getByTestId("document-comment-orphan-badge")).toBeVisible();
+      await alicePage.page.getByTestId("document-version-restore-button").first().click();
+      await expect(alicePage.page.getByTestId("document-version-restore-status")).toContainText(
+        /restored|already at/i,
+      );
+      await stepShot(alicePage.page, testInfo, "document-morph-projection-ui");
+    } finally {
+      await alicePage.close();
+      await bobPage.close();
+    }
+  });
 });
+
+function documentMorphId(): string {
+  return typedId("operation").replace("cx:operation:", "cx:morph:");
+}
+
+function documentRelationId(): string {
+  return typedId("operation").replace("cx:operation:", "cx:relation:");
+}
+
+function paragraphDocumentBody(body: string) {
+  return {
+    schema_version: 1,
+    blocks: [{ id: "body", kind: "Paragraph", content: body }],
+  };
+}
+
+async function readDocumentProjection(request: APIRequestContext, token: string, morphId: string) {
+  const response = await request.get(
+    `${solandBaseUrl()}/api/v1/projection/documents/${encodeURIComponent(morphId)}`,
+    { headers: authHeaders(token) },
+  );
+  const text = await response.text();
+  expect(response.ok(), `read document projection returned ${response.status()}: ${text}`).toBeTruthy();
+  return JSON.parse(text);
+}
+
+async function waitForDocumentMorphId(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  title: string,
+): Promise<string> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const response = await request.get(
+      `${solandBaseUrl()}/api/v1/projection/morphs?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: authHeaders(token) },
+    );
+    if (response.ok()) {
+      const body = await response.json();
+      const match = (body.morphs ?? []).find(
+        (morph: Record<string, unknown>) =>
+          morph.morph_type === "document" && morph.title === title && typeof morph.morph_id === "string",
+      );
+      if (match?.morph_id) {
+        return String(match.morph_id);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`document morph with title ${title} not projected in ${realmId}`);
+}
+
+async function waitForDocumentComment(
+  request: APIRequestContext,
+  token: string,
+  morphId: string,
+  body: string,
+) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const projection = await readDocumentProjection(request, token, morphId);
+    if ((projection.comments ?? []).some((comment: Record<string, unknown>) => comment.body === body)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`document comment ${body} not projected for ${morphId}`);
+}
+
+function nowIso(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}

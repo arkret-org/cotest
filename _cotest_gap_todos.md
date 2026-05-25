@@ -24,7 +24,7 @@
 | notifications | mark-all-read live;mute/DND/mention/blind wake/cross-device 仍 fixme | 只有基础 marker 可用;push policy projection 未完成 |
 | chat advanced | reactions/replies已有主体;mentions/polls/typing/presence补齐为 fixme | yougen chat sync + content-type UI + soland projection 未完成 |
 | kanban | 单用户 board/card/archive 有 live tests | cross-user sync、status FSM、rank/child_order、list/archive cascade 未完成 |
-| documents | `/document` route probe live | Document Morph、range comments、presence、versions、restore 未完成 |
+| documents | Document Morph projection + `/document/new` / `/document/:id` UI live | create/update、versions、relation、range comment、orphan badge、presence shell 已覆盖;CRDT/real-time cursor/proof restore 留后续边界 |
 | calls | ICE endpoint probe live | WebRTC signaling、Call Morph、SFU、recording policy 未完成 |
 | federation / sync | endpoint probes live | dual-soland push/pull、signature、reconciliation、transport negotiation 未完成 |
 | identity advanced | dev-login baseline live | consent、passkey/OIDC/email onboarding、device revoke、WebVH、TSP、recovery 未完成 |
@@ -97,8 +97,10 @@
 
 ## P2 - 文档、附件、加密与恢复
 
-- [ ] GAP-P2-040 `[soland]` 实现 Document Morph:create/update/version/relation/range comment/orphan comment projection。
-- [ ] GAP-P2-041 `[yougen]` 实现 `/document/new`、`/document/:id`、版本列表、range comment、cursor presence UI。
+- [x] GAP-P2-040 `[soland]` 实现 Document Morph:create/update/version/relation/range comment/orphan comment projection。
+  - 2026-05-25 local close: `soland` exposes `GET /api/v1/projection/documents/:morph_id` with current body, version snapshots, relation rows, range comments, orphan-state projection, and cursor_presence shape; cotest promotes the API projection contract to a live Document Morph test. Evidence: `cargo check --locked` and `cargo test --locked --test http_api projection_document_endpoint_reports_body_versions_relations_and_range_comments -- --nocapture` in `soland`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p2-040-041-document-morph -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "Document Morph collaboration" -SkipNpmInstall -SkipBrowserInstall` passed with 2 tests.
+- [x] GAP-P2-041 `[yougen]` 实现 `/document/new`、`/document/:id`、版本列表、range comment、cursor presence UI。
+  - 2026-05-25 local close: `yougen` now creates/saves document Morphs from `/document/new`, hydrates `/document/:id` from soland's document projection, renders version rows, submits range comments, surfaces orphan badges, and renders stable self-cursor/presence UI. Evidence: `cargo check --locked --features experimental-agents` in `yougen`; `npx playwright test --config playwright.config.ts --list --grep "Document Morph collaboration"` in `cotest\e2e`; the same joint e2e command above passed with 2 tests and screenshot evidence under `artifacts\verify-p2-040-041-document-morph\latest\joint-e2e`.
 - [ ] GAP-P2-042 `[soland/yougen]` 实现 MLS space genesis、KeyPackage claim、Welcome、epoch update、ban/remove 与 `epoch_update_required`。
 - [ ] GAP-P2-043 `[soland/yougen]` 实现 key backup:Argon2id + XChaCha20 envelope、restore、wrong passphrase no-oracle、DELETE ownership proof。
 - [ ] GAP-P2-044 `[soland/yougen]` 实现 encrypted attachment ciphertext-only metadata、opaque non-member error、client thumbnail encryption。
