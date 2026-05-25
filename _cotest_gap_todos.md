@@ -80,7 +80,8 @@
 
 ## P1 - Kanban / workflow / incident response
 
-- [ ] GAP-P1-030 `[yougen]` 稳定 column drag/drop handles:`column-drag-handle`、`column-drop-target-before`、`kanban-column-title`。
+- [x] GAP-P1-030 `[yougen]` 稳定 column drag/drop handles:`column-drag-handle`、`column-drop-target-before`、`kanban-column-title`。
+  - 2026-05-25 local close: `yougen` now renders stable column drag handles, before-column drop targets, and column-title testids; column drag/drop reorders visible columns locally while leaving server `child_order` persistence to P1-031. Evidence: `cargo check --locked --features experimental-agents` in `yougen`; `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-030-kanban-column-handles -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "column drag handles" -SkipNpmInstall -SkipBrowserInstall` passed with 1 test.
 - [ ] GAP-P1-031 `[soland]` 暴露并维护 `cx.component.child_order.v1`,drag reorder 后与 UI 顺序一致。
 - [ ] GAP-P1-032 `[soland]` 实现 card/list/board archive cascade 与 restore rank 保留。
 - [ ] GAP-P1-033 `[soland/yougen]` 实现 kanban cross-user sync,Mei/Bob/Carol 看到同一 board。

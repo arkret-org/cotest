@@ -110,7 +110,7 @@
 ## Implementation notes
 
 - **soland 缺口**:`cx.place.create/reorder/archive`、`cx.flow.move` cas-register、`cx:cell:cx.component.place.child_order.v1` ordered-log、archive cascade — 大概率 partial 实现
-- **yougen 缺口**:`/kanban` 视图、`board-card`、`list-column`、`flow-card`、drag-and-drop 交互 — 这些 testid 未确认。当前 yougen 在 `views/kanban.rs` 有 view,但具体 testid 形态需要测试时校对
+- **yougen**:`/kanban` 视图已稳定 `kanban-column`、`column-drag-handle`、`column-drop-target-before`、`kanban-column-title` 与本地列重排；server `child_order` 持久化仍由 P1-031 覆盖。
 - **harness**:Playwright 的 drag-and-drop 用 `locator.dragTo(target)`;但 dioxus 的拖拽可能需要 mouse event sequence(`mouse.down`/`mouse.move`/`mouse.up`)
 
 ## 总耗时预估

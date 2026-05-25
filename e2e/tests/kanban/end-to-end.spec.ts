@@ -150,6 +150,67 @@ test.describe("kanban end-to-end", () => {
     },
   );
 
+  test("column drag handles expose stable targets and reorder columns locally", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-column-drag-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    const first = `First-${stamp}`;
+    const second = `Second-${stamp}`;
+    const third = `Third-${stamp}`;
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `Kanban Column Drag ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+      });
+      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await alicePage.page.getByTestId("new-board-toggle").click();
+      await alicePage.page.getByTestId("new-board-title-input").fill(`Column Drag ${stamp}`);
+      await alicePage.page.getByTestId("create-board-space-button").click();
+      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+        timeout: 30_000,
+      });
+
+      for (const columnName of [first, second, third]) {
+        await alicePage.page.getByTestId("new-column-input").fill(columnName);
+        await alicePage.page.getByTestId("add-column-button").click();
+        await expect(
+          alicePage.page.getByTestId("kanban-column").filter({ hasText: columnName }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+
+      const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
+      const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
+      await expect(firstColumn.getByTestId("column-drop-target-before")).toBeVisible();
+      await expect(thirdColumn.getByTestId("column-drag-handle")).toBeVisible();
+
+      await thirdColumn
+        .getByTestId("column-drag-handle")
+        .dragTo(firstColumn.getByTestId("column-drop-target-before"));
+      await stepShot(alicePage.page, testInfo, "column-handles-reordered");
+
+      const labels = await alicePage.page.getByTestId("kanban-column-title").allTextContents();
+      const firstIndex = labels.findIndex((label) => label.includes(first));
+      const secondIndex = labels.findIndex((label) => label.includes(second));
+      const thirdIndex = labels.findIndex((label) => label.includes(third));
+      expect(thirdIndex).toBeGreaterThanOrEqual(0);
+      expect(firstIndex).toBeGreaterThanOrEqual(0);
+      expect(secondIndex).toBeGreaterThanOrEqual(0);
+      expect(thirdIndex).toBeLessThan(firstIndex);
+      expect(firstIndex).toBeLessThan(secondIndex);
+    } finally {
+      await alicePage.close();
+    }
+  });
+
   test.fixme("reordering lists (drag column) updates board's child_order cell", async ({
     // @blocking-on: soland#kanban-end-to-end-gap
     // @user-promise: e2e/scenarios/kanban/end-to-end.md
@@ -158,7 +219,8 @@ test.describe("kanban end-to-end", () => {
     request,
   }, testInfo) => {
     // spec: space-and-place.md §4.5 cas-register basis
-    // yougen gap: stable column drag handles and child_order projection not yet verified.
+    // P1-030 covers yougen's stable column drag handles. This remaining
+    // fixture is blocked on the soland child_order projection in P1-031.
     const stamp = Date.now();
     const alice = uniqueUser("kanban-order-alice");
     await ensureRegistered(request, alice);
