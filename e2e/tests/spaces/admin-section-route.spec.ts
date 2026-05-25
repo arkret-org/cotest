@@ -19,7 +19,9 @@ test.describe("admin section route @fully-implemented", () => {
     const alice = uniqueUser("admin-probe");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, {
+      sessionToken: aliceToken,
+    });
 
     try {
       const spaceId = await alicePage.createSpace({
@@ -32,14 +34,31 @@ test.describe("admin section route @fully-implemented", () => {
       await alicePage.page.goto(`/space/${spaceId}/admin/members`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(alicePage.page.getByTestId("space-admin-panel")).toBeVisible({
-        timeout: 120_000,
-      });
-      const sectionLabel = alicePage.page.getByTestId("space-admin-active-section");
+      await expect(alicePage.page.getByTestId("space-admin-panel")).toBeVisible(
+        {
+          timeout: 120_000,
+        },
+      );
+      const sectionLabel = alicePage.page.getByTestId(
+        "space-admin-active-section",
+      );
       await expect(sectionLabel).toBeVisible({ timeout: 30_000 });
       const text = (await sectionLabel.textContent())?.trim();
       console.log(`active_section text = ${JSON.stringify(text)}`);
       expect(text).toBe("Members");
+      await expect(alicePage.page.getByTestId("invite-member")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        alicePage.page.getByTestId("refresh-members-button"),
+      ).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(
+        alicePage.page.getByTestId("member-row").first(),
+      ).toBeVisible({
+        timeout: 30_000,
+      });
     } finally {
       await alicePage.close();
     }
