@@ -3,8 +3,19 @@
 // Spec: identity/account-lifecycle.md §3, §8, models/space-and-place.md §2.2 (retention)
 
 import { expect, test } from "@playwright/test";
-import { hasDualSoland, solandBaseUrl } from "../../helpers/env";
-import { wireErrCode } from "../../helpers/soland-api";
+import {
+  hasDualSoland,
+  solandBaseUrl,
+  solandServiceDid,
+} from "../../helpers/env";
+import {
+  acceptInviteApi,
+  createSpaceApi,
+  listInvitesApi,
+  querySpaceEventsApi,
+  sendMessageApi,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -191,10 +202,7 @@ test.describe("GDPR / audit / retention", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#governance-gdpr-audit-retention-gap
-    // @user-promise: e2e/scenarios/governance/gdpr-audit-retention.md
-    // @expected-live-by: 2026Q3
+  test(
     "E27.3 cross-server erasure fan-out: alice's DID erased on α; β tombstones her events too within reconciliation window",
     async ({ request }) => {
       // spec: identity/account-lifecycle.md §8 + federation reconciliation:
@@ -211,35 +219,77 @@ test.describe("GDPR / audit / retention", () => {
         issueDevSession(request, bob, { server: "beta" }),
       ]);
 
-      const create = await request.post(`${solandBaseUrl("alpha")}/api/v1/spaces`, {
-        headers: { authorization: `Bearer ${aliceToken}` },
-        data: {
+      const spaceId = await createSpaceApi(
+        request,
+        aliceToken,
+        {
           title: `S27 fanout ${stamp}`,
           discoverability: "listed",
-          join_rule: "invite",
-          federation: { allow_servers: ["beta"] },
+          history_visibility: "shared",
+          invitees: [bob.did],
+          ownerDid: alice.did,
+          plaintext_visible_services: [
+            solandServiceDid("alpha"),
+            solandServiceDid("beta"),
+          ],
         },
-      });
-      expect(create.status()).toBe(201);
-      const created = await create.json();
-      const spaceId = created.space_id ?? created.id;
-      expect(spaceId).toBeTruthy();
-
-      const invite = await request.post(
-        `${solandBaseUrl("alpha")}/api/v1/spaces/${encodeURIComponent(spaceId)}/invite`,
-        {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: { invitee: bob.did },
-        },
+        { server: "alpha" },
       );
-      expect(invite.status()).toBeLessThan(500);
+
+      let betaInvite:
+        | { invite_id: string; space_id: string; invitee?: string }
+        | undefined;
+      await expect
+        .poll(
+          async () => {
+            const invites = await listInvitesApi(request, bobToken, {
+              server: "beta",
+            });
+            betaInvite = invites.find(
+              (invite) =>
+                invite.invitee === bob.did &&
+                invite.space_id.replace(/^cx:space:/, "cx:realm:") ===
+                  spaceId.replace(/^cx:space:/, "cx:realm:"),
+            );
+            return Boolean(betaInvite);
+          },
+          { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBeTruthy();
+      await acceptInviteApi(
+        request,
+        bobToken,
+        bob.did,
+        betaInvite!.space_id,
+        betaInvite!.invite_id,
+        { server: "beta" },
+      );
+
+      const aliceBody = `alice erasable cross-server body ${stamp}`;
+      await sendMessageApi(request, aliceToken, spaceId, aliceBody, {
+        server: "alpha",
+      });
+      await expect
+        .poll(
+          async () => {
+            const body = await querySpaceEventsApi(request, bobToken, spaceId, {
+              server: "beta",
+              limit: 100,
+            });
+            return JSON.stringify(body);
+          },
+          { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toContain(aliceBody);
 
       const remoteBefore = await request.get(
         `${solandBaseUrl("beta")}/api/v1/federation/actors/${encodeURIComponent(alice.did)}/events`,
         { headers: { authorization: `Bearer ${bobToken}` } },
       );
       expect(remoteBefore.status()).toBe(200);
-      expect(JSON.stringify(await remoteBefore.json())).toContain(alice.did);
+      const beforeJson = JSON.stringify(await remoteBefore.json());
+      expect(beforeJson).toContain(alice.did);
+      expect(beforeJson).toContain(aliceBody);
 
       const erase = await request.post(`${solandBaseUrl("alpha")}/api/v1/account/erase`, {
         headers: { authorization: `Bearer ${aliceToken}` },
@@ -262,6 +312,19 @@ test.describe("GDPR / audit / retention", () => {
           { timeout: 60_000 },
         )
         .toContain("[user erased]");
+
+      const betaTimelineAfter = await querySpaceEventsApi(
+        request,
+        bobToken,
+        spaceId,
+        {
+          server: "beta",
+          limit: 100,
+        },
+      );
+      const betaTimelineAfterJson = JSON.stringify(betaTimelineAfter);
+      expect(betaTimelineAfterJson).toContain("[user erased]");
+      expect(betaTimelineAfterJson).not.toContain(aliceBody);
     },
   );
 });

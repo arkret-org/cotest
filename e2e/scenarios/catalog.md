@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 395 · Verified: 218 (55.2%)
+Promised: 395 · Verified: 219 (55.4%)
 
-Totals: 66 scenarios / 66 specs / 218 verified / 395 promised / 177 fixme / 20 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 219 verified / 395 promised / 176 fixme / 20 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 218 verified / 395 promised / 177 fixme / 20 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 218 |
-| test.fixme | 177 |
+| live tests | 219 |
+| test.fixme | 176 |
 | promised tests | 395 |
-| verified tests | 218 |
-| verified ratio | 55.2% |
+| verified tests | 219 |
+| verified ratio | 55.4% |
 | test.skip (conditional) | 20 |
 | domains | 19 |
 
@@ -30,7 +30,7 @@ Totals: 66 scenarios / 66 specs / 218 verified / 395 promised / 177 fixme / 20 s
 | encryption | 5 | 5 | 20 | 33 | 60.6% | 13 | 1 |
 | extensions | 3 | 3 | 1 | 14 | 7.1% | 13 | 0 |
 | federation | 2 | 2 | 14 | 16 | 87.5% | 2 | 1 |
-| governance | 4 | 4 | 16 | 28 | 57.1% | 12 | 1 |
+| governance | 4 | 4 | 17 | 28 | 60.7% | 11 | 1 |
 | harness | 1 | 1 | 10 | 10 | 100.0% | 0 | 10 |
 | identity | 9 | 9 | 31 | 69 | 44.9% | 38 | 2 |
 | invites | 1 | 1 | 1 | 7 | 14.3% | 6 | 0 |
@@ -69,7 +69,7 @@ Totals: 66 scenarios / 66 specs / 218 verified / 395 promised / 177 fixme / 20 s
 | extensions/mimi-federation | 0 | 4 | 0.0% | 4 | 0 | fixme-only | yes |  |
 | federation/cross-server | 8 | 10 | 80.0% | 2 | 1 | mixed | yes |  |
 | federation/signing-and-trust-domain | 6 | 6 | 100.0% | 0 | 0 | live-only | yes |  |
-| governance/gdpr-audit-retention | 5 | 7 | 71.4% | 2 | 1 | mixed | yes |  |
+| governance/gdpr-audit-retention | 6 | 7 | 85.7% | 1 | 1 | mixed | yes |  |
 | governance/moderation-appeal | 9 | 9 | 100.0% | 0 | 0 | live-only | yes |  |
 | governance/organization-policy | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
 | governance/personal-blocklist | 1 | 5 | 20.0% | 4 | 0 | mixed | yes |  |

@@ -78,7 +78,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ## Implementation notes
 
-- **soland 缺口**:retention sweeper、跨服务器 erasure fan-out、历史消息 tombstone；hard-erasure receipt 已走 `cx.audit.erasure_receipt`
+- **soland 缺口**:retention sweeper；跨服务器 erasure fan-out 和历史消息 tombstone 已由 `cx.audit.erasure_receipt` live 覆盖
 - **yougen 缺口**:`/settings/account` 的 export / erase 按钮、确认对话框
 - **测试侧**:retention 时间快进需要 soland 暴露 admin endpoint 或测试模式
 
