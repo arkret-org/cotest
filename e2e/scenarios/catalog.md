@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 404 · Verified: 202 (50.0%)
+Promised: 404 · Verified: 203 (50.2%)
 
-Totals: 66 scenarios / 66 specs / 202 verified / 404 promised / 202 fixme / 19 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 203 verified / 404 promised / 201 fixme / 19 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 202 verified / 404 promised / 202 fixme / 19 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 202 |
-| test.fixme | 202 |
+| live tests | 203 |
+| test.fixme | 201 |
 | promised tests | 404 |
-| verified tests | 202 |
-| verified ratio | 50.0% |
+| verified tests | 203 |
+| verified ratio | 50.2% |
 | test.skip (conditional) | 19 |
 | domains | 19 |
 
@@ -35,7 +35,7 @@ Totals: 66 scenarios / 66 specs / 202 verified / 404 promised / 202 fixme / 19 s
 | identity | 9 | 9 | 31 | 69 | 44.9% | 38 | 2 |
 | invites | 1 | 1 | 1 | 7 | 14.3% | 6 | 0 |
 | joint | 1 | 1 | 1 | 1 | 100.0% | 0 | 0 |
-| kanban | 2 | 2 | 4 | 13 | 30.8% | 9 | 0 |
+| kanban | 2 | 2 | 5 | 13 | 38.5% | 8 | 0 |
 | messaging | 4 | 4 | 35 | 41 | 85.4% | 6 | 0 |
 | models | 4 | 4 | 6 | 21 | 28.6% | 15 | 0 |
 | spaces | 6 | 6 | 13 | 25 | 52.0% | 12 | 0 |
@@ -86,7 +86,7 @@ Totals: 66 scenarios / 66 specs / 202 verified / 404 promised / 202 fixme / 19 s
 | invites/third-party | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
 | joint/joint-yougen-smoke | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | kanban/end-to-end | 3 | 6 | 50.0% | 3 | 0 | mixed | yes |  |
-| kanban/project-simulation | 1 | 7 | 14.3% | 6 | 0 | mixed | yes |  |
+| kanban/project-simulation | 2 | 7 | 28.6% | 5 | 0 | mixed | yes |  |
 | messaging/chat-advanced | 11 | 12 | 91.7% | 1 | 0 | mixed | yes |  |
 | messaging/discussion-upgrade | 11 | 11 | 100.0% | 0 | 0 | live-only | yes |  |
 | messaging/read-receipts | 9 | 13 | 69.2% | 4 | 0 | mixed | yes |  |

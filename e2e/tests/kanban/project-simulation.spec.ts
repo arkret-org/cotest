@@ -5,8 +5,18 @@
 //   - models/flow-and-message.md §3 (Flow fields)
 //   - models/relation.md §3.2 (assigned_to), §6 (conflict resolution)
 
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { stepShot } from "../../helpers/screenshots";
+import { solandBaseUrl } from "../../helpers/env";
+import {
+  authHeaders,
+  canonicalTimestamp,
+  createSpaceApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -69,13 +79,136 @@ test.describe("project simulation", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#kanban-project-simulation-gap
-    // @user-promise: e2e/scenarios/kanban/project-simulation.md
-    // @expected-live-by: 2026Q3
+  test(
     "status FSM: Card transitions todo → in_progress → done via cx.flow.update; invalid transition (todo → done direct) rejected by FSM cell",
-    async () => {
-      // spec: flow-and-message.md §3 + space-and-place.md §3.8 FSM analogy.
+    async ({ request }) => {
+      const alice = uniqueUser("s16-fsm-alice");
+      await ensureRegistered(request, alice);
+      const aliceToken = await issueDevSession(request, alice);
+      const spaceId = await createSpaceApi(request, aliceToken, {
+        title: `S16 FSM ${Date.now()}`,
+        ownerDid: alice.did,
+      });
+      const taskFlowId = typedId("flow");
+      const incidentFlowId = typedId("flow");
+      const taskCreatedAt = canonicalTimestamp();
+
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.flow.create",
+          createdAt: taskCreatedAt,
+          payload: {
+            object: {
+              id: taskFlowId,
+              schema: "cx.schema.flow.v1",
+              realm_id: spaceId,
+              space_id: spaceId,
+              title: "Implement login",
+              stage: "planned",
+              tracks: { discussion: { enabled: true, is_primary: true } },
+              fields: { status: "todo" },
+              created_by: alice.did,
+              created_at: taskCreatedAt,
+            },
+          },
+        }),
+        { context: "create todo card flow" },
+      );
+
+      const badDone = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.flow.update",
+          payload: {
+            target_ref: taskFlowId,
+            flow_id: taskFlowId,
+            patch: { fields: { status: "done" } },
+          },
+        }),
+      });
+      expect(badDone.status()).toBe(412);
+      expect(wireErrCode(await badDone.json())).toBe("flow_status_transition_invalid");
+
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.flow.update",
+          payload: {
+            target_ref: taskFlowId,
+            flow_id: taskFlowId,
+            patch: { fields: { status: "in_progress" } },
+          },
+        }),
+        { context: "advance card to in_progress" },
+      );
+
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.flow.update",
+          payload: {
+            target_ref: taskFlowId,
+            flow_id: taskFlowId,
+            patch: { fields: { status: "done" } },
+          },
+        }),
+        { context: "advance card to done" },
+      );
+
+      const incidentCreatedAt = canonicalTimestamp();
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.flow.create",
+          createdAt: incidentCreatedAt,
+          payload: {
+            object: {
+              id: incidentFlowId,
+              schema: "cx.schema.flow.v1",
+              realm_id: spaceId,
+              space_id: spaceId,
+              title: "SEV-2 checkout outage",
+              stage: "in_progress",
+              tracks: { discussion: { enabled: true, is_primary: true } },
+              fields: { status: "investigating" },
+              created_by: alice.did,
+              created_at: incidentCreatedAt,
+            },
+          },
+        }),
+        { context: "create investigating incident flow" },
+      );
+
+      const badResolved = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: spaceId,
+          kind: "cx.flow.update",
+          payload: {
+            target_ref: incidentFlowId,
+            flow_id: incidentFlowId,
+            patch: { fields: { status: "resolved" } },
+          },
+        }),
+      });
+      expect(badResolved.status()).toBe(412);
+      expect(wireErrCode(await badResolved.json())).toBe("flow_status_transition_invalid");
     },
   );
 

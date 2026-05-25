@@ -114,7 +114,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.relation.create assigned_to`、FSM cell `cx.component.flow.status_fsm.v1`、`cx.place.update state=archived`、cascade rules — 多数 partial。FSM cell 大概率未实现 lattice join
+- **soland 缺口**:`cx.relation.create assigned_to`、`cx.place.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `cx.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **yougen 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 
