@@ -268,6 +268,14 @@ Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
 `e2e/helpers/env.ts` (`mockIdpBaseUrl()`, `mockEmailBaseUrl()`,
 `mockWitnessBaseUrl()`, `mockAuditAgentBaseUrl()`).
 
+Witness quorum specs can pass extra witness DIDs with
+`-MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`.
+The runner starts one mock witness process per DID and exports both the primary
+single-witness env vars and the quorum lists
+`COTEST_MOCK_WITNESS_QUORUM_BASE_URLS` /
+`COTEST_MOCK_WITNESS_QUORUM_DIDS`. Specs should use
+`mockWitnessQuorumBaseUrls()` and `mockWitnessQuorumDids()` when `quorum > 1`.
+
 | mock | covers spec sections | key endpoints |
 |------|---------------------|---------------|
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
@@ -279,6 +287,11 @@ Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
 mocks. It is tagged `@fully-implemented` so the `joint-smoke` profile runs
 it automatically; each case skips itself when the corresponding mock is
 not started for the current run.
+
+`scripts/promote-fixme.ps1` promotes a placeholder after the backing feature is
+implemented. `scripts/demote-test.ps1` is the reverse shim: it turns a specific
+Playwright `test(...)` line into `test.fixme(...)` and inserts a FIXME reason
+comment for temporary local regression containment.
 
 ## Per-test state isolation
 

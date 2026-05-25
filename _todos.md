@@ -169,8 +169,8 @@ cotest/e2e/mocks/
 
 ### 6.D 后续 follow-up (deferred)
 
-- [ ] **H-HARNESS-MULTIWIT-1** multi-witness quorum 编排 — `mock-witness.mjs` 单实例已经能用任意 DID 启动,但 `run-joint-e2e.ps1` 当前只起一个进程。等第一个 quorum spec 实际落地时,把 `-MockWitnessExtraDids "did:web:...,did:web:..."` 之类参数加到 run script,循环 spawn 额外 witness 并把 base URL/DID 列表通过 `COTEST_MOCK_WITNESS_QUORUM_BASE_URLS` / `COTEST_MOCK_WITNESS_QUORUM_DIDS` export 给 spec
-- [ ] **H-SHIM-4** promote-fixme 反向 demotion — `scripts/demote-test.ps1`,当回归测试失败但功能未回退到 fixme 时,临时把 test 转 `test.fixme` 保 CI;附 reason 注释。低优先级,失败时手工注释即可
+- [x] **H-HARNESS-MULTIWIT-1** multi-witness quorum 编排 — `mock-witness.mjs` 单实例已经能用任意 DID 启动,`run-joint-e2e.ps1 -MockWitnessExtraDids` 现在会循环 spawn 额外 witness,并通过 `COTEST_MOCK_WITNESS_QUORUM_BASE_URLS` / `COTEST_MOCK_WITNESS_QUORUM_DIDS` export 给 spec。
+- [x] **H-SHIM-4** promote-fixme 反向 demotion — `scripts/demote-test.ps1` 已落地,当回归测试失败但功能未回退到 fixme 时,可临时把 test 转 `test.fixme` 并附 reason 注释。
 
 ### 6.C 当前已落地
 

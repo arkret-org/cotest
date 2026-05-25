@@ -19,6 +19,8 @@ import {
   mockPushGatewayBaseUrl,
   mockTspEndpointBaseUrl,
   mockWitnessBaseUrl,
+  mockWitnessQuorumBaseUrls,
+  mockWitnessQuorumDids,
 } from "../../helpers/env";
 
 function b64url(buf: Buffer): string {
@@ -171,6 +173,21 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       (c) => c.scid === scid,
     );
     expect(chainHead?.last_entry_number).toBe(2);
+  });
+
+  test("mock-witness quorum: every configured witness exposes policy", async ({ request }) => {
+    const baseUrls = mockWitnessQuorumBaseUrls();
+    const dids = mockWitnessQuorumDids();
+    test.skip(baseUrls.length < 2, "mock-witness quorum not started for this run");
+
+    expect(dids.length).toBe(baseUrls.length);
+    for (const [index, baseUrl] of baseUrls.entries()) {
+      const policy = await request.get(`${baseUrl}/api/v1/witness/policy`);
+      expect(policy.status()).toBe(200);
+      const body = await policy.json();
+      expect(body.witness_did).toBe(dids[index]);
+      expect(body.health).toBe("healthy");
+    }
   });
 
   test("mock-audit-agent: identity, invite ack, accessed log, jwks", async ({ request }) => {

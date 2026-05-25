@@ -74,6 +74,7 @@ param(
     [string]$MockTspEndpointVid,
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
+    [string[]]$MockWitnessExtraDids = @(),
     [string]$MockAuditAgentDid,
     [ValidateSet("joint-smoke", "joint-full")]
     [string]$RunProfile,
@@ -90,6 +91,16 @@ if ($StartMocks) {
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
     $StartMockTspEndpoint = $true
+}
+
+$MockWitnessExtraDids = @(
+    $MockWitnessExtraDids |
+        ForEach-Object { $_ -split "," } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ }
+)
+if ($MockWitnessExtraDids.Count -gt 0) {
+    $StartMockWitness = $true
 }
 
 $ErrorActionPreference = "Stop"
@@ -807,9 +818,28 @@ if ($StartMockEmail) {
 }
 $mockWitnessPort = $null
 $mockWitnessBaseUrl = $null
+$mockWitnessExtraInstances = New-Object System.Collections.Generic.List[object]
+$mockWitnessQuorumBaseUrls = @()
+$mockWitnessQuorumDids = @()
 if ($StartMockWitness) {
     $mockWitnessPort = Get-FreeTcpPort
     $mockWitnessBaseUrl = "http://127.0.0.1:$mockWitnessPort"
+    $mockWitnessQuorumBaseUrls += $mockWitnessBaseUrl
+    $mockWitnessQuorumDids += $MockWitnessDid
+    foreach ($extraDid in $MockWitnessExtraDids) {
+        if ($extraDid -eq $MockWitnessDid -or ($mockWitnessQuorumDids -contains $extraDid)) {
+            throw "Duplicate mock witness DID '$extraDid'"
+        }
+        $extraPort = Get-FreeTcpPort
+        $extraBaseUrl = "http://127.0.0.1:$extraPort"
+        $mockWitnessExtraInstances.Add([pscustomobject]@{
+                did      = $extraDid
+                port     = $extraPort
+                base_url = $extraBaseUrl
+            })
+        $mockWitnessQuorumBaseUrls += $extraBaseUrl
+        $mockWitnessQuorumDids += $extraDid
+    }
 }
 $mockAuditAgentPort = $null
 $mockAuditAgentBaseUrl = $null
@@ -901,6 +931,15 @@ try {
         ) -f (Quote-PsLiteral $MockWitnessDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-witness" -Command $mockWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockWitnessBaseUrl/api/v1/witness/policy" -TimeoutSeconds 30
+        $witnessIndex = 2
+        foreach ($witness in $mockWitnessExtraInstances) {
+            $extraWitnessCmd = (
+                "`$env:MOCK_WITNESS_PORT='{0}'; `$env:MOCK_WITNESS_DID={1}; node {2}"
+            ) -f $witness.port, (Quote-PsLiteral $witness.did), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
+            $managedServices.Add((Start-ManagedCommand -Name "mock-witness-$witnessIndex" -Command $extraWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+            Wait-HttpReady -Url "$($witness.base_url)/api/v1/witness/policy" -TimeoutSeconds 30
+            $witnessIndex++
+        }
     }
     if ($StartMockAuditAgent) {
         $auditEnv = "`$env:MOCK_AUDIT_AGENT_PORT='$mockAuditAgentPort'"
@@ -1293,9 +1332,13 @@ try {
     if ($mockWitnessBaseUrl) {
         $env:COTEST_MOCK_WITNESS_BASE_URL = $mockWitnessBaseUrl
         $env:COTEST_MOCK_WITNESS_DID = $MockWitnessDid
+        $env:COTEST_MOCK_WITNESS_QUORUM_BASE_URLS = ($mockWitnessQuorumBaseUrls -join ",")
+        $env:COTEST_MOCK_WITNESS_QUORUM_DIDS = ($mockWitnessQuorumDids -join ",")
     } else {
         Remove-Item Env:COTEST_MOCK_WITNESS_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_WITNESS_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_WITNESS_QUORUM_BASE_URLS -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_WITNESS_QUORUM_DIDS -ErrorAction SilentlyContinue
     }
     if ($mockAuditAgentBaseUrl) {
         $env:COTEST_MOCK_AUDIT_AGENT_BASE_URL = $mockAuditAgentBaseUrl
@@ -1841,6 +1884,8 @@ $summary = [pscustomobject]@{
     mock_email_base_url = $mockEmailBaseUrl
     mock_witness_base_url = $mockWitnessBaseUrl
     mock_witness_did = if ($mockWitnessBaseUrl) { $MockWitnessDid } else { $null }
+    mock_witness_quorum_base_urls = if ($mockWitnessBaseUrl) { $mockWitnessQuorumBaseUrls } else { @() }
+    mock_witness_quorum_dids = if ($mockWitnessBaseUrl) { $mockWitnessQuorumDids } else { @() }
     mock_audit_agent_base_url = $mockAuditAgentBaseUrl
     mock_audit_agent_did = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
     yougen_base_url = $YougenBaseUrl
@@ -1895,6 +1940,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_email_base_url: $($summary.mock_email_base_url)
 - mock_witness_base_url: $($summary.mock_witness_base_url)
 - mock_witness_did: $($summary.mock_witness_did)
+- mock_witness_quorum_base_urls: $($mockWitnessQuorumBaseUrls -join ",")
+- mock_witness_quorum_dids: $($mockWitnessQuorumDids -join ",")
 - mock_audit_agent_base_url: $($summary.mock_audit_agent_base_url)
 - mock_audit_agent_did: $($summary.mock_audit_agent_did)
 - yougen_base_url: $($summary.yougen_base_url)
@@ -1943,6 +1990,9 @@ if ($mockEmailBaseUrl) {
 }
 if ($mockWitnessBaseUrl) {
     Write-Host "  mock-witness: $mockWitnessBaseUrl ($MockWitnessDid)"
+    if ($mockWitnessQuorumBaseUrls.Count -gt 1) {
+        Write-Host "  mock-witness-quorum: $($mockWitnessQuorumBaseUrls -join ', ')"
+    }
 }
 if ($mockAuditAgentBaseUrl) {
     $auditAgentLabel = if ($MockAuditAgentDid) { " ($MockAuditAgentDid)" } else { "" }

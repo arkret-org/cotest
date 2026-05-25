@@ -78,6 +78,30 @@ export function mockWitnessDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_WITNESS_DID");
 }
 
+export function mockWitnessQuorumBaseUrls(): string[] {
+  const raw = optionalEnv("COTEST_MOCK_WITNESS_QUORUM_BASE_URLS");
+  if (!raw) {
+    const single = mockWitnessBaseUrl();
+    return single ? [single] : [];
+  }
+  return raw
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
+export function mockWitnessQuorumDids(): string[] {
+  const raw = optionalEnv("COTEST_MOCK_WITNESS_QUORUM_DIDS");
+  if (!raw) {
+    const single = mockWitnessDid();
+    return single ? [single] : [];
+  }
+  return raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
 export function mockAuditAgentBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_AUDIT_AGENT_BASE_URL")?.replace(/\/$/, "");
 }

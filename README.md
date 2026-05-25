@@ -58,6 +58,7 @@ Recommended entrypoints:
 .\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
 .\scripts\run-hygiene.ps1
+.\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
 .\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
@@ -82,6 +83,10 @@ Recommended entrypoints:
   RustSec vulnerabilities (`cargo audit`). It writes `raw.log`,
   `summary.json`, `summary.md`, and per-tool stdout/stderr logs to
   `artifacts/hygiene/<timestamp>/`.
+- `.\scripts\demote-test.ps1` is the inverse of `promote-fixme.ps1`: it
+  temporarily converts a concrete Playwright `test(...)` line into
+  `test.fixme(...)` and inserts the reason comment required by the local
+  fixme debt discipline.
 
 The primary human-readable report is
 `artifacts/latest/summary.md`.
@@ -179,6 +184,9 @@ and alpha/beta yougen locally, then runs the federation Playwright matrix;
 `scripts/run-hygiene.ps1` is run separately from scenario profiles so
 dependency policy, typo checks, and advisory scans can fail fast without
 starting services.
+`scripts/run-joint-e2e.ps1 -StartMockWitness -MockWitnessExtraDids "did:web:witness-b.local,did:web:witness-c.local"`
+starts a mock witness quorum and exports the list helpers consumed by E2E
+specs.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous `artifacts/latest/coverage-matrix.json`.
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run
