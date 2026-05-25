@@ -2,6 +2,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceDid, type SolandKey } from "./env";
 import {
   canonicalTimestamp,
+  singleDidAnchorer,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -86,10 +87,7 @@ export async function createSpaceViaApi(
           federation_policy: "restricted",
           anchor_profile: "single_did",
           digest_algorithm: "sha256",
-          anchorer: {
-            type: "single_did",
-            did: opts.ownerDid!,
-          },
+          anchorer: singleDidAnchorer(opts.ownerDid!),
           created_at: createdAt,
         },
       },

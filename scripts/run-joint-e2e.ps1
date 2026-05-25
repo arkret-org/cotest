@@ -1236,7 +1236,7 @@ try {
     $yougenBetaService = $null
     $generatedYougenBetaCommand = $false
     if (-not $YougenCommand -and $yougenPort) {
-        $YougenCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false"
+        $YougenCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents"
         $generatedYougenCommand = $true
     }
     if ($YougenCommand) {
@@ -1250,7 +1250,7 @@ try {
     }
     if ($DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
         if (-not $YougenBetaCommand -and $yougenBetaPort) {
-            $YougenBetaCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false"
+            $YougenBetaCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents"
             $generatedYougenBetaCommand = $true
         }
         if ($YougenBetaCommand) {

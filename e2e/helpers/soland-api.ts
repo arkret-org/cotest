@@ -55,6 +55,16 @@ export function wireErrCode(body: unknown): string | undefined {
     ?? stringValue(nested?.reason);
 }
 
+export function singleDidAnchorer(did: string): Record<string, unknown> {
+  return {
+    type: "single_did",
+    did,
+    recovery_members: ["did:web:recovery.soland.local"],
+    controller_organization: "did:web:organization.primary.soland.local",
+    recovery_controller_organizations: ["did:web:organization.recovery.soland.local"],
+  };
+}
+
 export async function expectJsonOk<T = Record<string, unknown>>(
   response: APIResponse,
   context: string,
@@ -117,10 +127,7 @@ export async function createSpaceApi(
           federation_policy: "restricted",
           anchor_profile: "single_did",
           digest_algorithm: "sha256",
-          anchorer: {
-            type: "single_did",
-            did: ownerDid,
-          },
+          anchorer: singleDidAnchorer(ownerDid),
           created_at: createdAt,
         },
       },

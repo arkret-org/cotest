@@ -8,6 +8,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   flowIdFromRealmId,
+  singleDidAnchorer,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -236,10 +237,7 @@ async function createRealm(
           federation_policy: "restricted",
           anchor_profile: "single_did",
           digest_algorithm: "sha256",
-          anchorer: {
-            type: "single_did",
-            did: actor.did,
-          },
+          anchorer: singleDidAnchorer(actor.did),
           created_at: createdAtValue,
         },
       },
@@ -339,15 +337,13 @@ async function accountSubscribeBodies(
   const frames = parseNdjson(text);
   const delta = frames.find((frame) => frame.kind === "delta") as
     | {
-        realms?: {
-          join?: Record<
-            string,
-            { timeline?: { events?: Array<Record<string, unknown>> } }
-          >;
-        };
+        realms?: Record<
+          string,
+          { timeline?: { events?: Array<Record<string, unknown>> } }
+        >;
       }
     | undefined;
-  const events = delta?.realms?.join?.[realmId]?.timeline?.events ?? [];
+  const events = delta?.realms?.[realmId]?.timeline?.events ?? [];
   return events.map(messageBody).filter(isString);
 }
 

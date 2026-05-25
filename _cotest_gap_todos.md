@@ -38,7 +38,8 @@
 - [ ] GAP-P0-003 `[soland]` 落实 `history_visibility=joined/shared/world_readable` 读侧过滤,让 late joiner、world readable、redaction tests 不互相污染。
 - [x] GAP-P0-004 `[cotest]` 在 joint runner 下提供可靠 soland runtime tracing,避免 seed invite / projection 类问题只能从 HAR 反推。
   - 2026-05-25 local close: `run-joint-e2e.ps1` now writes per-instance `SOLAND_LOG_FILE` traces for alpha/beta and emits `service-traces.md` beside `service-gaps.md`, indexing trace/stdout/stderr/command logs for every managed service.
-- [ ] GAP-P0-005 `[cotest]` 跑一轮干净 `scripts/run-joint-e2e.ps1 -StartCoauth -StartMocks -RunProfile joint-full` 基线,更新 passed/failed/skipped 与根因表。
+- [x] GAP-P0-005 `[cotest]` 跑一轮干净 `scripts/run-joint-e2e.ps1 -StartCoauth -StartMocks -RunProfile joint-full` 基线,更新 passed/failed/skipped 与根因表。
+  - 2026-05-25 local close: `scripts/run-joint-e2e.ps1 -OutputRoot artifacts\baseline-p0-005-clean -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -SkipNpmInstall -SkipBrowserInstall` passed with 178 passed / 231 skipped / 0 failed. Evidence: `artifacts\baseline-p0-005-clean\runs\20260525-095716\joint-e2e\summary.md`.
 
 ## P1 - 消息、通知与协作体验
 
