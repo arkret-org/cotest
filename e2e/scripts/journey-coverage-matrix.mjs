@@ -55,6 +55,16 @@ const JOURNEYS = [
     title: 'Calls, push, and cross-platform sync',
     patterns: ['calls/*', 'discovery/notifications', 'sync/transport-negotiation'],
   },
+  {
+    id: 'UJ-I',
+    title: 'Circle lifecycle and anti-enumeration (CXP-0007)',
+    // Covered by SDK-pure Rust scenarios under src/scenarios/circle/* and
+    // src/scenarios/directory/* (entrypoints tests/circle_scenarios.rs +
+    // tests/directory_scenarios.rs). The matrix script scans Playwright .spec.ts
+    // files, so UJ-I shows 0 e2e specs here; see journey-coverage.md for the
+    // hand-written summary that includes the Rust evidence.
+    patterns: ['circle/*', 'directory/anti-enumeration'],
+  },
 ];
 
 function parseArgs(argv) {
