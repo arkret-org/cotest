@@ -3,6 +3,7 @@ use std::{
     fs,
     fs::OpenOptions,
     future::Future,
+    mem,
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -58,6 +59,7 @@ pub struct RecordedResponse {
 enum SutHandle {
     Local(Child),
     Docker { container_name: String },
+    Terminated,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -73,6 +75,17 @@ impl ContrixServer {
 
     pub async fn spawn_with_env(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
         Self::spawn_with_network_and_env(name, None, extra_env).await
+    }
+
+    pub async fn spawn_with_database_url(
+        name: &str,
+        database_url: &str,
+        extra_env: &[(&str, &str)],
+    ) -> Result<Self> {
+        let mut env = Vec::with_capacity(extra_env.len() + 1);
+        env.push(("DATABASE_URL", database_url));
+        env.extend_from_slice(extra_env);
+        Self::spawn_with_env(name, &env).await
     }
 
     async fn spawn_with_network(name: &str, docker_network: Option<&str>) -> Result<Self> {
@@ -328,6 +341,35 @@ impl ContrixServer {
             .to_string()
     }
 
+    pub async fn kill_immediately(&mut self) -> Result<()> {
+        let handle = mem::replace(&mut self.handle, SutHandle::Terminated);
+        match handle {
+            SutHandle::Local(mut child) => {
+                let _ = child.kill();
+                child.wait().context("wait for killed soland child")?;
+            }
+            SutHandle::Docker { container_name } => {
+                if let Ok(logs) = docker_logs(&container_name) {
+                    let _ = append_service_log(self.log_path.as_deref(), &logs);
+                }
+                docker_remove_container(&container_name)
+                    .with_context(|| format!("remove killed docker SUT {container_name}"))?;
+            }
+            SutHandle::Terminated => {}
+        }
+        if let Some(blob_root) = self.blob_root.take() {
+            let _ = fs::remove_dir_all(blob_root);
+        }
+        Ok(())
+    }
+
+    pub async fn diagnostic_operation_query(&self, operation_id: &str) -> Result<Value> {
+        let mut url = self.base_url.join("api/v1/conformance/chaos/operation")?;
+        url.query_pairs_mut()
+            .append_pair("operation_id", operation_id);
+        expect_json(self.http().get(url), StatusCode::OK).await
+    }
+
     pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let token = dev_login(self, actor, device_id).await?;
         self.actor_client(actor, device_id, token)
@@ -373,6 +415,7 @@ impl Drop for ContrixServer {
                 }
                 let _ = docker_remove_container(container_name);
             }
+            SutHandle::Terminated => {}
         }
         if let Some(blob_root) = &self.blob_root {
             let _ = fs::remove_dir_all(blob_root);
