@@ -217,11 +217,27 @@ test.describe("chat advanced", () => {
     expect(JSON.stringify(ephemeral)).toContain("discussion");
   });
 
-  // yougen gap: ChatPanel's channel list (`channel-item`) doesn't hydrate
-  // from sync.spaces flows on first /chat/<id> mount in a fresh browser
-  // context; the panel renders but no channels appear. Since the send
-  // button no-ops without a selected_channel (chat.rs:2186-2189), every
-  // chat-advanced step blocks until yougen ships the initial chat sync.
+  test("chat route hydrates the default discussion channel on first mount", async ({
+    browser,
+    request,
+  }) => {
+    const fixture = await createChatApiFixture(request, "chat-route");
+    const alicePage = await openUserPage(browser, fixture.alice, {
+      sessionToken: fixture.aliceToken,
+    });
+    try {
+      await gotoChat(alicePage, fixture.spaceId);
+      await expect(alicePage.page.getByTestId("channel-item").first()).toContainText(
+        /Discussion|Default Flow/,
+      );
+    } finally {
+      await alicePage.close();
+    }
+  });
+
+  // Direct `/chat/:space_id` channel hydration is covered live above. The
+  // full browser-driven chat workflows remain fixme until the remaining
+  // reaction/reply/poll/typing/presence UI and projection gaps are closed.
   test.fixme(
     // @blocking-on: soland#messaging-chat-advanced-gap
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
