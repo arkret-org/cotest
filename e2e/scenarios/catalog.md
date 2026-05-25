@@ -1,8 +1,8 @@
 # cotest e2e coverage
 
-Promised: 396 · Verified: 240 (60.6%)
+Promised: 396 · Verified: 243 (61.4%)
 
-Totals: 66 scenarios / 66 specs / 240 verified / 396 promised / 156 fixme / 21 skip (19 domains)
+Totals: 66 scenarios / 66 specs / 243 verified / 396 promised / 153 fixme / 21 skip (19 domains)
 
 ## Totals
 
@@ -10,11 +10,11 @@ Totals: 66 scenarios / 66 specs / 240 verified / 396 promised / 156 fixme / 21 s
 |---|---:|
 | scenario docs | 66 |
 | spec files | 66 |
-| live tests | 240 |
-| test.fixme | 156 |
+| live tests | 243 |
+| test.fixme | 153 |
 | promised tests | 396 |
-| verified tests | 240 |
-| verified ratio | 60.6% |
+| verified tests | 243 |
+| verified ratio | 61.4% |
 | test.skip (conditional) | 21 |
 | domains | 19 |
 
@@ -23,7 +23,7 @@ Totals: 66 scenarios / 66 specs / 240 verified / 396 promised / 156 fixme / 21 s
 | domain | scenarios | specs | verified | promised | ratio | fixme | skip |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | authz | 2 | 2 | 8 | 12 | 66.7% | 4 | 0 |
-| calls | 4 | 4 | 10 | 13 | 76.9% | 3 | 0 |
+| calls | 4 | 4 | 13 | 13 | 100.0% | 0 | 0 |
 | conformance | 4 | 4 | 21 | 33 | 63.6% | 12 | 3 |
 | discovery | 2 | 2 | 10 | 11 | 90.9% | 1 | 0 |
 | documents | 1 | 1 | 2 | 2 | 100.0% | 0 | 0 |
@@ -48,7 +48,7 @@ Totals: 66 scenarios / 66 specs / 240 verified / 396 promised / 156 fixme / 21 s
 |---|---:|---:|---:|---:|---:|---|---|---|
 | authz/capability-chain | 7 | 7 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | authz/policy-server-check | 1 | 5 | 20.0% | 4 | 0 | mixed | yes |  |
-| calls/webrtc | 6 | 9 | 66.7% | 3 | 0 | mixed | yes |  |
+| calls/webrtc | 9 | 9 | 100.0% | 0 | 0 | live-only | yes |  |
 | calls/webrtc-renegotiate | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
 | calls/webrtc-seq-monotonic | 2 | 2 | 100.0% | 0 | 0 | live-only | yes |  |
 | calls/webrtc-signals | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |

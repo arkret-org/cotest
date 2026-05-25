@@ -6,7 +6,7 @@
 //   - §6-§6.3 (ICE config, pairwise pseudonym, mid-call refresh)
 //   - §7-§8 (signaling envelope, 1:1 payloads)
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
@@ -150,41 +150,93 @@ test.describe("calls", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "alice mutes mic: cx.call.signal{kind=mute_state, muted=true} routes to bob; bob's UI shows muted indicator",
-    async () => {
+    async ({ browser, request }) => {
       // spec: webrtc-signaling.md §7 + §8
+      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-mute");
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      try {
+        const sessionId = await startUiCall(alicePage.page, spaceId, bob.did);
+        await alicePage.page.getByTestId("webrtc-mute-button").click();
+        await expect(alicePage.page.getByTestId("webrtc-local-mic-status")).toHaveAttribute(
+          "data-muted",
+          "true",
+        );
+        await expect(
+          alicePage.page.locator(`[data-testid="webrtc-participant-row"][data-actor-did="${alice.did}"]`),
+        ).toHaveAttribute("data-stream-state", "muted");
+        await expect
+          .poll(() => signalSeen(request, bobToken, sessionId, "mute_state", { muted: true }), {
+            timeout: 30_000,
+          })
+          .toBe(true);
+      } finally {
+        await alicePage.close();
+      }
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "alice shares screen: getDisplayMedia track added; cx.call.signal{kind=media_state, screen_share=true} routes",
-    async () => {
+    async ({ browser, request }) => {
       // spec: webrtc-signaling.md §5 call.screen_share capability
+      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-screen");
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      try {
+        const sessionId = await startUiCall(alicePage.page, spaceId, bob.did);
+        await alicePage.page.getByTestId("webrtc-screen-share-start-button").click();
+        await expect(alicePage.page.getByTestId("webrtc-screen-share-status")).toHaveAttribute(
+          "data-state",
+          "sharing",
+        );
+        await expect(alicePage.page.getByTestId("webrtc-screen-share-preview")).toBeVisible();
+        await expect(
+          alicePage.page.locator(`[data-testid="webrtc-participant-row"][data-actor-did="${alice.did}"]`),
+        ).toHaveAttribute("data-screen-sharing", "true");
+        await expect
+          .poll(
+            () => signalSeen(request, bobToken, sessionId, "media_state", { screen_share: true }),
+            { timeout: 30_000 },
+          )
+          .toBe(true);
+      } finally {
+        await alicePage.close();
+      }
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#calls-webrtc-gap
-    // @user-promise: e2e/scenarios/calls/webrtc.md
-    // @expected-live-by: 2026Q3
+  test(
     "hangup terminates peer connections; Call Morph state=ended; duration persisted",
-    async () => {
+    async ({ browser, request }) => {
       // spec: webrtc-signaling.md §4
+      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-hangup");
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      try {
+        const sessionId = await startUiCall(alicePage.page, spaceId, bob.did);
+        await alicePage.page.getByTestId("webrtc-leave-call-button").click();
+        await expect(alicePage.page.getByTestId("call-status-ended")).toBeVisible();
+        await expect(alicePage.page.getByTestId("webrtc-call-ended-panel")).toBeVisible();
+        await expect
+          .poll(async () => {
+            const body = await readCallSignals(request, bobToken, sessionId, 0);
+            return {
+              ended: body.call_state === "ended",
+              hangup: body.events.some((event: any) => event.type === "hangup"),
+            };
+          }, { timeout: 30_000 })
+          .toEqual({ ended: true, hangup: true });
+      } finally {
+        await alicePage.close();
+      }
     },
   );
 
   test(
     "group call mode=sfu: alice+bob+carol join; recording_policy=allow lets carol start recording (writes recording_blob_ref)",
-    async ({ request }) => {
+    async ({ browser, request }) => {
       // spec: webrtc-signaling.md §3 + §5 call.record capability
-      const { aliceToken, bob, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-allow");
+      const { alice, aliceToken, bob, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-allow");
       const session = await createWebrtcSession(request, aliceToken, {
         space_id: spaceId,
         participants: [bob.did, carol.did],
@@ -200,6 +252,28 @@ test.describe("calls", () => {
       expect(recording.recording_started_by).toBe(carol.did);
       expect(recording.recording_policy).toBe("allow");
       expect(recording.recording_blob_ref).toMatch(/^cx:blob:sha256:/);
+
+      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      try {
+        await startUiGroupCall(alicePage.page, spaceId, [bob.did, carol.did]);
+        await expect(alicePage.page.getByTestId("webrtc-call-mode")).toHaveAttribute("data-mode", "sfu");
+        await expect(alicePage.page.getByTestId("webrtc-recording-policy")).toHaveAttribute(
+          "data-policy",
+          "allow",
+        );
+        await expect(alicePage.page.getByTestId("webrtc-roster-count")).toHaveText("3");
+        await alicePage.page.getByTestId("webrtc-recording-toggle-button").click();
+        await expect(alicePage.page.getByTestId("webrtc-recording-status")).toHaveAttribute(
+          "data-state",
+          "recording",
+        );
+        await expect(alicePage.page.getByTestId("webrtc-recording-indicator")).toBeVisible();
+        await expect(alicePage.page.getByTestId("webrtc-recording-blob-ref")).toContainText(
+          /^cx:blob:sha256:/,
+        );
+      } finally {
+        await alicePage.close();
+      }
     },
   );
 
@@ -304,6 +378,65 @@ test.describe("calls", () => {
     },
   );
 });
+
+async function startUiCall(page: Page, spaceId: string, peerDid: string): Promise<string> {
+  await page.goto("/call", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("call-panel")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("webrtc-panel")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("webrtc-space-id-input").fill(spaceId);
+  await page.getByTestId("webrtc-peer-did-input").fill(peerDid);
+  await page.getByTestId("webrtc-call-start-button").click();
+  await expect(page.getByTestId("call-status-ringing")).toBeVisible();
+  await expect
+    .poll(async () => page.getByTestId("webrtc-session-id").getAttribute("data-session-id"), {
+      timeout: 30_000,
+    })
+    .toMatch(/^cx:call:/);
+  const sessionId = (await page.getByTestId("webrtc-session-id").getAttribute("data-session-id"))!;
+  await page.getByTestId("webrtc-call-connect-button").click();
+  await expect(page.getByTestId("call-status-connecting")).toBeVisible();
+  await page.getByTestId("webrtc-call-activate-button").click();
+  await expect(page.getByTestId("call-status-active")).toBeVisible();
+  await expect(page.getByTestId("webrtc-roster-count")).toHaveText("2");
+  return sessionId;
+}
+
+async function startUiGroupCall(page: Page, spaceId: string, participantDids: string[]): Promise<string> {
+  await page.goto("/call", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("call-panel")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("webrtc-panel")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("webrtc-space-id-input").fill(spaceId);
+  await page.getByTestId("webrtc-group-participants-input").fill(participantDids.join("\n"));
+  await page.getByTestId("webrtc-group-call-start-button").click();
+  await expect(page.getByTestId("call-status-active")).toBeVisible();
+  await expect
+    .poll(async () => page.getByTestId("webrtc-session-id").getAttribute("data-session-id"), {
+      timeout: 30_000,
+    })
+    .toMatch(/^cx:call:/);
+  return (await page.getByTestId("webrtc-session-id").getAttribute("data-session-id"))!;
+}
+
+async function signalSeen(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  signalType: string,
+  payloadSubset: Record<string, unknown>,
+) {
+  const body = await readCallSignals(request, token, sessionId, 0);
+  return body.events.some((event: any) => {
+    if (event.type !== signalType) {
+      return false;
+    }
+    for (const [key, value] of Object.entries(payloadSubset)) {
+      if (event.payload?.[key] !== value) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
 
 async function appendCallSignal(
   request: APIRequestContext,
