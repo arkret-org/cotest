@@ -309,6 +309,12 @@ fn extract_cursor_handle_candidates(line: &str) -> Vec<(usize, String)> {
 }
 
 // ── Forbidden wire field: discussion_space_ref ──────────────────────────────
+//
+// The pre-round-2+3 form was `discussion_space_ref` (rejected). The
+// round-2+3 replacement was the now-also-forbidden `discussion_realm_ref`
+// (CXP-0007 hard removal). Today the correct binding is
+// `scope_circle_id` pointing at a Circle in the same Realm. Both
+// historical names are hard-rejected here; suggest the modern field.
 
 fn scan_discussion_space_ref(
     path: &Path,
@@ -325,8 +331,10 @@ fn scan_discussion_space_ref(
             rule: Round23Rule::ForbiddenWireField,
             matched_literal: token.to_string(),
             message: format!(
-                "`{token}` is forbidden on the round 2+3 wire (Realm/Space inversion); \
-                 use `discussion_realm_ref`."
+                "`{token}` is forbidden on the wire (round 2+3 Realm/Space \
+                 inversion); CXP-0007 also hard-removed its successor \
+                 `discussion_realm_ref`. Use `scope_circle_id` (Flow / \
+                 Space / Morph)."
             ),
         });
     }
