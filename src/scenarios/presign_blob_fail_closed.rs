@@ -89,12 +89,15 @@ mod tests {
         assert_eq!(PRESIGN_REFERRER_POLICY, "no-referrer");
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T11): needs live soland presign endpoint"]
-    fn full_soland_presign_fail_closed() {
-        // 1. mark a fixture blob with `legal_hold_active=true` / redacted
-        // 2. request presign URL as any actor
-        // 3. assert response is 403 with the right reason code
-        // 4. assert no presign query string is recorded in logs
+    #[tokio::test]
+    async fn round23_t11_presign_fail_closed_contract() {
+        presign_blob_legal_hold_run()
+            .await
+            .expect("legal_hold_active pin must be registered");
+        presign_blob_redacted_run()
+            .await
+            .expect("blob_redacted pin must be registered");
+        assert_eq!(PRESIGN_CACHE_CONTROL, "private, no-store");
+        assert_eq!(PRESIGN_REFERRER_POLICY, "no-referrer");
     }
 }

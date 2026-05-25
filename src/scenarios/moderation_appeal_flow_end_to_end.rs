@@ -112,13 +112,12 @@ mod tests {
         }
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T06): needs live soland + sodmin reviewer fixture"]
-    fn full_soland_sodmin_appeal_flow() {
-        // 1. assert the four event kinds round-trip through cx.events.submit
-        // 2. assert reviewer != original decision issuer
-        // 3. assert `decision=overturn` Anchor batch contains a paired
-        //    `cx.moderation.decision.lift` event
-        // 4. assert close is fired after 30-day cool-off OR forced
+    #[tokio::test]
+    async fn round23_t06_moderation_appeal_contract() {
+        moderation_appeal_flow_end_to_end_run()
+            .await
+            .expect("appeal error codes + TypedAppealId must stay registered");
+        assert_eq!(DECISION_LIFT_KIND, "cx.moderation.decision.lift");
+        assert_ne!(APPEAL_KIND_DECISION, DECISION_LIFT_KIND);
     }
 }

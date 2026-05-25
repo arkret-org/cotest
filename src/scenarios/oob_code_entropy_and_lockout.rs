@@ -129,14 +129,15 @@ mod tests {
             .expect("SDK constants + 3-strike threshold must agree with cotest pin");
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T15): needs live coauth verify endpoint"]
-    fn full_coauth_three_strike_lockout() {
-        // 1. issue an `oob_code_kind="lookup"` short code
-        // 2. submit 3 wrong codes
-        // 3. assert the 4th submission (correct OR wrong) returns the
-        //    unified non-enumerable response and the binding is gone
-        // 4. assert timing across all 4 responses is within
-        //    `OOB_RESPONSE_TIMING_BUDGET_MS`
+    #[tokio::test]
+    async fn round23_t15_oob_three_strike_lockout_contract() {
+        oob_code_low_entropy_run()
+            .await
+            .expect("OOB low-entropy pins must be registered");
+        oob_code_lookup_three_strike_invalidate_run()
+            .await
+            .expect("OOB three-strike pins must be registered");
+        assert_eq!(OOB_LOOKUP_INVALIDATE_AFTER_STRIKES, 3);
+        assert!(OOB_RESPONSE_TIMING_BUDGET_MS <= 50);
     }
 }

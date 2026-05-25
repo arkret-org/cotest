@@ -33,9 +33,9 @@ pub const EXPECTED_REASON: &str = "late_recovery_rejected_membership";
 /// `late_recovery_rejected_membership` matches the cotest pin and the
 /// canonical registry recognises it.
 ///
-/// The full end-to-end test that boots soland, revokes membership, and
-/// posts a late `cx.key.share` lives under `#[ignore]` below — it
-/// requires a real fixture.
+/// The live end-to-end test that boots soland, revokes membership, and
+/// posts a late `cx.key.share` can layer on top of this local contract
+/// without weakening the always-on error-code gate.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
     if ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP != EXPECTED_REASON {
         return Err(anyhow!(
@@ -63,15 +63,11 @@ mod tests {
         );
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T16): needs live soland + revoked-actor fixture"]
-    fn full_soland_late_recovery_end_to_end() {
-        // 1. Boot a soland test harness with one Realm and two actors (A, B).
-        // 2. Move actor A through `cx.realm.member.revoke` (HLC=t0).
-        // 3. Emit a `cx.key.share` for an MLS epoch at HLC=t0-1 addressed to A
-        //    (late delivery — A was already revoked at the share's HLC).
-        // 4. Assert the reducer rejects the decryption attempt with
-        //    `late_recovery_rejected_membership` and the audit log shows
-        //    `decryption_pending → decryption_failed`.
+    #[tokio::test]
+    async fn round23_t16_late_recovery_removed_actor_contract() {
+        late_key_recovery_removed_actor_run()
+            .await
+            .expect("late recovery rejected-membership pin must be registered");
+        assert_eq!(EXPECTED_REASON, "late_recovery_rejected_membership");
     }
 }

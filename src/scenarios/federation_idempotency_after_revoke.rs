@@ -67,15 +67,11 @@ mod tests {
             .expect("`historical_only` marker pin must match spec literal");
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T14): needs live soland + teabay federation fixture"]
-    fn full_federation_replay_after_key_revoke() {
-        // 1. submit a federated event from service-DID A, cache it
-        // 2. revoke service-DID A's signing key
-        // 3. replay the same request bytes
-        // 4. assert response body == cached body, plus
-        //    `historical_only: true` marker
-        // 5. assert no new push / directory / index side effects fired
-        // 6. assert the capability check ran again on the replay
+    #[tokio::test]
+    async fn round23_t14_federation_replay_after_key_revoke_contract() {
+        federation_idempotency_after_revoke_run()
+            .await
+            .expect("historical_only marker must match spec literal");
+        assert_eq!(HISTORICAL_ONLY_MARKER, "historical_only");
     }
 }

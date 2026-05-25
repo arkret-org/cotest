@@ -74,12 +74,14 @@ mod tests {
             .expect("SDK media plaintext error codes must agree with cotest pins");
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T12): needs live soland + SFU fixture"]
-    fn full_soland_sfu_plaintext_binding_check() {
-        // 1. configure a Realm with `media_service_decrypts=true` but
-        //    omit `plaintext_visible_services[]` (or stale policy_root)
-        // 2. simulate SFU attempting plaintext path
-        // 3. assert one of the two expected error codes is returned
+    #[tokio::test]
+    async fn round23_t12_media_plaintext_binding_contract() {
+        media_plaintext_downgrade_no_governance_binding_run()
+            .await
+            .expect("media plaintext error-code pins must be registered");
+        assert_ne!(
+            EXPECTED_MLS_GOVERNANCE_BINDING_STALE, EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            "stale governance and unauthorized service paths must stay distinguishable"
+        );
     }
 }

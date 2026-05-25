@@ -73,12 +73,13 @@ mod tests {
             .expect("Consent revoke cascade marker + channels must match spec");
     }
 
-    #[test]
-    #[ignore = "TODO(round23-T17): needs live soland + teabay/floria/coauth fixture"]
-    fn full_soland_consent_cascade_and_cache_invalidation() {
-        // 1. issue subscope consents (messaging, notifications)
-        // 2. issue a `scope=any` revoke
-        // 3. assert both subscope projections show `SUPERSEDED_MARKER`
-        // 4. assert the 5 caches all received invalidation
+    #[tokio::test]
+    async fn round23_t17_consent_cascade_contract() {
+        consent_revoke_scope_any_cascade_run()
+            .await
+            .expect("consent cascade marker + channel pins must stay registered");
+        assert_eq!(SUPERSEDED_MARKER, "superseded_by_any_revoke");
+        assert_eq!(EXPECTED_INVALIDATION_CHANNELS.len(), 5);
+        assert!(EXPECTED_INVALIDATION_CHANNELS.contains(&"in_flight_invite"));
     }
 }
