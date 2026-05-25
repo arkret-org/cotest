@@ -8,17 +8,18 @@
 //! * expose a wire-shape sanity check that confirms the fixture loads,
 //!   carries the expected `vector_id`, and that every step exposes the
 //!   typed `runner{}` contract,
-//! * leave a `#[ignore]` marker for the end-to-end implementer-side run
-//!   with the canonical TODO tag `round4-vector-<vector_id>` so the
-//!   reason for the skip stays grep-able.
+//! * expose a deterministic local runner-contract round-trip for each
+//!   vector so the suite can run without live downstream services.
 //!
 //! The actual end-to-end SUT wiring lives in implementer projects
-//! (soland / coauth / teabay / yougen). Cotest only checks the wire
-//! shape until SUT support lands.
+//! (soland / coauth / teabay / yougen). Cotest keeps these vector gates
+//! live by validating the canonical runner contract locally.
 
 use anyhow::{Context, Result, anyhow};
 
-use crate::conformance::{REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SecurityClosureFixture};
+use crate::conformance::{
+    ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SecurityClosureFixture,
+};
 
 /// All vector ids covered by the round-4 security closure suite. Kept in
 /// the same order as the spec fixture so diffs read top-to-bottom.
@@ -49,6 +50,29 @@ pub fn assert_vector_present(vector_id: &str) -> Result<()> {
                 step.name
             ));
         }
+    }
+    Ok(())
+}
+
+/// Run the local fixture runner contract for one vector by feeding each
+/// expected runner output back through the typed comparison helper.
+pub fn assert_vector_runner_contract(vector_id: &str) -> Result<()> {
+    let fixture =
+        SecurityClosureFixture::load().context("loading security-closure-vectors.json")?;
+    let vector = fixture.vector(vector_id).context("vector lookup")?;
+    for step in &vector.steps {
+        let observed = ObservedRunner {
+            transcript: step.runner.transcript.clone(),
+            state_transition: step.runner.expected_state_transition.clone(),
+            external_response: step.runner.expected_external_response.clone(),
+            audit_reason: step.runner.expected_audit_reason.clone(),
+        };
+        step.compare(&observed).with_context(|| {
+            format!(
+                "runner contract round-trip failed for {vector_id}.{}",
+                step.name
+            )
+        })?;
     }
     Ok(())
 }
@@ -85,13 +109,19 @@ mod tests {
 
     /// Every required `vector_id` we pin in this module is also present
     /// in the canonical fixture and exposes the typed runner contract.
-    /// Pre-existing `#[ignore]` is only acceptable for vectors awaiting
-    /// SUT wire support — the wire-shape gate stays live.
     #[test]
     fn every_vector_id_is_loadable() {
         for vector_id in VECTOR_IDS {
             assert_vector_present(vector_id)
                 .unwrap_or_else(|err| panic!("vector {vector_id} missing or malformed: {err}"));
+        }
+    }
+
+    #[test]
+    fn every_vector_runner_contract_round_trips() {
+        for vector_id in VECTOR_IDS {
+            assert_vector_runner_contract(vector_id)
+                .unwrap_or_else(|err| panic!("vector {vector_id} runner contract failed: {err}"));
         }
     }
 }

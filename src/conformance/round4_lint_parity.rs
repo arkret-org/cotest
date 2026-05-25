@@ -3,10 +3,8 @@
 //! `check_policy_check_alignment`, and `check_vector_reference_closure`
 //! rules from `contrix-spec/tools/lint_artifacts.py`).
 //!
-//! Each rule pins a structural invariant the cotest harness can check
-//! without re-implementing the prose `text_reference_targets` machinery.
-//! Wider Python lint parity is tracked with
-//! `// TODO(round4-lint-parity)` markers in the relevant cotest spots.
+//! Each rule pins a structural invariant the cotest harness can check from
+//! canonical artifacts and the conformance prose.
 
 use std::collections::BTreeSet;
 
@@ -167,17 +165,13 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
     Ok(())
 }
 
-/// Best-effort mirror of `lint_artifacts.py::check_vector_reference_closure`
-/// — verifies that every `cx.vector.*` id referenced from any fixture
-/// JSON resolves to a declared vector in the canonical conformance prose
-/// (`spec/v1/zh/conformance/conformance-vectors.md`) **or** the fixture
-/// file itself defines it. Cotest can't easily parse the Chinese prose
-/// markdown, so we lean on the union of every `cx.vector.*` token found
-/// across the artifacts/fixtures directory. Tagged with
-/// `// TODO(round4-lint-parity)` because the full prose pass lives on
-/// the Python side.
+/// Mirror of `lint_artifacts.py::check_vector_reference_closure` — verifies
+/// that every `cx.vector.*` id referenced from any fixture JSON resolves to a
+/// declared vector in the canonical conformance prose
+/// (`spec/v1/zh/conformance/conformance-vectors.md`) or the fixture file
+/// itself defines it.
 pub fn run_vector_reference_closure_check() -> Result<()> {
-    use std::collections::HashSet;
+    use std::collections::BTreeSet;
     use std::fs;
     let root = super::spec_artifacts_root();
     let fixtures_dir = root.join("fixtures");
@@ -187,8 +181,19 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
             fixtures_dir.display()
         );
     }
-    let mut declared: HashSet<String> = HashSet::new();
-    let mut referenced: HashSet<String> = HashSet::new();
+    let mut declared: BTreeSet<String> = BTreeSet::new();
+    let mut referenced: BTreeSet<String> = BTreeSet::new();
+    if let Some(prose_path) = root.parent().map(|spec_v1| {
+        spec_v1
+            .join("zh")
+            .join("conformance")
+            .join("conformance-vectors.md")
+    }) {
+        if prose_path.is_file() {
+            let prose = fs::read_to_string(&prose_path)?;
+            declared.extend(extract_vector_tokens(&prose));
+        }
+    }
     for entry in fs::read_dir(&fixtures_dir)? {
         let path = entry?.path();
         if path.extension().and_then(|e| e.to_str()) != Some("json") {
@@ -207,16 +212,13 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
             }
         }
     }
-    // Round-4 fixture supplies all the canonical 12 ids. Any other
-    // referenced vector should also be declared somewhere across the
-    // fixture set. Otherwise we'd report a stale reference.
+    if declared.is_empty() {
+        bail!("no cx.vector.* declarations found in fixtures or conformance prose");
+    }
     for vector_id in &referenced {
         if !declared.contains(vector_id) {
-            // TODO(round4-lint-parity): full closure requires reading
-            // conformance-vectors.md prose — skip the failure rather
-            // than firing a false positive here.
-            tracing::debug!(
-                "vector_reference_closure: `{vector_id}` referenced but not declared in any fixture (best-effort skip)"
+            bail!(
+                "vector_reference_closure: `{vector_id}` referenced by fixtures but not declared in any fixture or conformance prose"
             );
         }
     }

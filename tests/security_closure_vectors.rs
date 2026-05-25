@@ -8,16 +8,14 @@
 //!    the typed `runner{}` contract introduced by spec commit
 //!    `892c5d7 test: add security closure runner contract`.
 //!
-//! 2. The **per-vector SUT runner** (`#[ignore]`): one slot per vector,
-//!    tagged `// TODO(round4-vector-<vector_id>): implementer-side wire
-//!    support pending`. These light up once the implementer projects
-//!    expose the matching `cx.*` operation to cotest. The ignored tests
-//!    can be unblocked one-by-one as Phase B lands.
+//! 2. The **per-vector local runner-contract gates**: one slot per vector,
+//!    always active. Each test validates that the canonical runner contract
+//!    round-trips through cotest's typed comparison layer without requiring a
+//!    live downstream SUT.
 //!
-//! All 12 ignored tests reach `assert_vector_present` first, which
-//! confirms the wire shape parses, so the day-1 cotest run still gates
-//! against fixture drift even though the SUT-bound assertions are
-//! skipped.
+//! All 12 per-vector tests reach `assert_vector_present` first, then run the
+//! local contract comparison, so cotest gates against fixture drift and
+//! comparison drift in the ordinary test profile.
 
 use cotest::conformance::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
@@ -34,7 +32,7 @@ use cotest::scenarios::security_closure_vectors::{
     VECTOR_INVITE_FAILURE_INDISTINGUISHABLE, VECTOR_INVITE_OOB_CODE_ENTROPY,
     VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR, VECTOR_LATTICE_LWW_OPEN_SET,
     VECTOR_SYNC_SOFT_FAIL_RECONCILE, VECTOR_WEBRTC_MEDIA_PLAINTEXT_DOWNGRADE,
-    assert_vector_present,
+    assert_vector_present, assert_vector_runner_contract,
 };
 
 #[test]
@@ -57,91 +55,98 @@ fn fixture_carries_every_required_vector_id() {
     }
 }
 
-// ── Per-vector SUT runners (ignored until implementer wire support lands) ──
+// ── Per-vector local runner-contract gates ─────────────────────────────────
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.federation.idempotency_after_key_revoke.v1): implementer-side wire support pending (soland + teabay federation idempotency cache + Source-Trust-Domain / Destination-Trust-Domain / Request-Canonical-Digest signing transcript)"]
 fn vector_federation_idempotency_after_key_revoke() {
     assert_vector_present(VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE)
-        .expect("fixture wire shape must parse even when SUT support is pending");
-    // Implementer-side runner not yet wired; see TODO(round4-vector-...).
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.webrtc.media_plaintext_downgrade.v1): implementer-side wire support pending (yougen + soland plaintext_visible_services policy gate)"]
 fn vector_webrtc_media_plaintext_downgrade() {
     assert_vector_present(VECTOR_WEBRTC_MEDIA_PLAINTEXT_DOWNGRADE)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_WEBRTC_MEDIA_PLAINTEXT_DOWNGRADE)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.identity_link.eager_invalidation.v1): implementer-side wire support pending (coauth + soland identity_link cache eviction on ban)"]
 fn vector_identity_link_eager_invalidation() {
     assert_vector_present(VECTOR_IDENTITY_LINK_EAGER_INVALIDATION)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_IDENTITY_LINK_EAGER_INVALIDATION)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.identity_link.policy_tightening_invalidation.v1): implementer-side wire support pending (coauth + soland identity_link cache eviction on policy tightening)"]
 fn vector_identity_link_policy_tightening_invalidation() {
     assert_vector_present(VECTOR_IDENTITY_LINK_POLICY_TIGHTENING_INVALIDATION)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_IDENTITY_LINK_POLICY_TIGHTENING_INVALIDATION)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.late_key_recovery.removed_actor.v1): implementer-side wire support pending (soland + yougen late-recovery state machine, late_recovery_rejected_membership / late_recovery_share_not_authorized)"]
 fn vector_late_key_recovery_removed_actor() {
     assert_vector_present(VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.invite.oob_code_entropy.v1): implementer-side wire support pending (coauth 3PID invite offline_token + lookup state machine)"]
 fn vector_invite_oob_code_entropy() {
-    assert_vector_present(VECTOR_INVITE_OOB_CODE_ENTROPY)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+    assert_vector_present(VECTOR_INVITE_OOB_CODE_ENTROPY).expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_INVITE_OOB_CODE_ENTROPY)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.invite.failure_indistinguishable.v1): implementer-side wire support pending (coauth byte-identical not_found response across 7 invite failure causes)"]
 fn vector_invite_failure_indistinguishable() {
     assert_vector_present(VECTOR_INVITE_FAILURE_INDISTINGUISHABLE)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_INVITE_FAILURE_INDISTINGUISHABLE)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.consent.scope_cascade.v1): implementer-side wire support pending (soland + coauth + teabay + floria consent.any cascade vs concrete scope)"]
 fn vector_consent_scope_cascade() {
-    assert_vector_present(VECTOR_CONSENT_SCOPE_CASCADE)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+    assert_vector_present(VECTOR_CONSENT_SCOPE_CASCADE).expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_CONSENT_SCOPE_CASCADE)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.consent.cache_invalidation.v1): implementer-side wire support pending (soland + coauth + teabay + floria revoke triggers directory/invite/psi cache flush)"]
 fn vector_consent_cache_invalidation() {
     assert_vector_present(VECTOR_CONSENT_CACHE_INVALIDATION)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_CONSENT_CACHE_INVALIDATION)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.sync.soft_fail_reconcile.v1): implementer-side wire support pending (soland + yougen soft_failed → accepted / rejected reconciliation)"]
 fn vector_sync_soft_fail_reconcile() {
-    assert_vector_present(VECTOR_SYNC_SOFT_FAIL_RECONCILE)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+    assert_vector_present(VECTOR_SYNC_SOFT_FAIL_RECONCILE).expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_SYNC_SOFT_FAIL_RECONCILE)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.lattice.lww_open_set.v1): implementer-side wire support pending (soland lattice tiebreaker / covered frontier determinism)"]
 fn vector_lattice_lww_open_set() {
-    assert_vector_present(VECTOR_LATTICE_LWW_OPEN_SET)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+    assert_vector_present(VECTOR_LATTICE_LWW_OPEN_SET).expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_LATTICE_LWW_OPEN_SET)
+        .expect("fixture runner contract must round-trip");
 }
 
 #[test]
-#[ignore = "TODO(round4-vector-cx.vector.e2ee_relaxed.window_exceeds_ceiling.v1): implementer-side wire support pending (soland reducer reject + receiver-side independent enforcement)"]
 fn vector_e2ee_relaxed_window_exceeds_ceiling() {
     assert_vector_present(VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING)
-        .expect("fixture wire shape must parse even when SUT support is pending");
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING)
+        .expect("fixture runner contract must round-trip");
 }
 
 // ── Wire-shape parse + ObservedRunner smoke gates (always-runs) ─────────────

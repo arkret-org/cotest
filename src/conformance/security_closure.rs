@@ -21,7 +21,7 @@
 //! `(transcript, state_transition, external_response, audit_reason)` quad
 //! against the fixture. Vectors whose implementer-side wire support is not
 //! yet ready stay behind `#[ignore]` in `tests/security_closure_vectors.rs`
-//! with `TODO(round4-vector-<vector_id>)`.
+//! as active local runner-contract checks in `tests/security_closure_vectors.rs`.
 
 use std::{
     collections::BTreeMap,
