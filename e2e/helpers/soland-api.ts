@@ -90,6 +90,7 @@ export async function createSpaceApi(
     plaintext_visible_services?: string[];
     public?: boolean;
     ownerDid?: string;
+    audit_disclosure_policy?: Record<string, unknown>;
   },
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
@@ -123,6 +124,9 @@ export async function createSpaceApi(
           history_visibility: data.history_visibility ?? "shared",
           encryption_profile: data.encryption_profile ?? "none",
           plaintext_visible_services: plaintextVisibleServices,
+          ...(data.audit_disclosure_policy
+            ? { audit_disclosure_policy: data.audit_disclosure_policy }
+            : {}),
           security_class: "standard",
           federation_policy: "restricted",
           anchor_profile: "single_did",

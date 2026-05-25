@@ -71,9 +71,10 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.moderation.franking_proof` 自动生成、`audit_disclosure_policy` 字段、`/audit/events` endpoint、`cx.audit.{accessed,rejected_access}` event kinds
-- **harness 缺口**:audit-agent mock service(注册 DID + 接收 audit request callback + 模拟解密)
-- **yougen 缺口**:audit log viewer in space admin
+- **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `cx.message.create` 后自动追加 `cx.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/api/v1/audit/franking/verify` 做 tamper 校验。
+- **2026-05-25 P2-045 local close**:soland `POST /api/v1/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `cx.audit.accessed` 记录写入 `/api/v1/audit/events?space_id=...&kind=cx.audit.accessed`。
+- **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`cx.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
+- **仍待后续**:policy revoke 后的 `cx.audit.rejected_access` 细化测试保留为 E25.3 fixme;yougen space-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
 
 ## 总耗时预估
 
