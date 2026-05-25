@@ -83,9 +83,8 @@ test.describe("consent grant", () => {
     browser,
     request,
   }, testInfo) => {
-    // Live G2.T5 UI smoke: the settings page exists and its local placeholder
-    // grant form is mounted. The canonical soland consent reducer remains
-    // covered by the lifecycle fixme cases below.
+    // Live G2.T5 UI smoke: the settings page exists and its direct grant form
+    // is mounted; the live grant/revoke flow is covered below.
     const alice = uniqueUser("g2t5-consent-ui-alice");
     const bob = uniqueUser("g2t5-consent-ui-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
@@ -110,6 +109,28 @@ test.describe("consent grant", () => {
       await expect(alicePage.page.getByTestId("consent-grant-empty")).toBeVisible();
     } finally {
       await alicePage.close();
+    }
+  });
+
+  test("contacts new page submits scoped consent request", async ({
+    browser,
+    request,
+  }) => {
+    const alice = uniqueUser("p1-022-contact-new-alice");
+    const bob = uniqueUser("p1-022-contact-new-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+
+    try {
+      const status = await requestContact(bobPage, alice.did, "message");
+      await expect(status).toContainText(/pending/i, { timeout: 30_000 });
+      await expectConsentCell(request, aliceToken, alice.did, bob.did, "message", "pending");
+    } finally {
+      await bobPage.close();
     }
   });
 
@@ -230,6 +251,56 @@ test.describe("consent grant", () => {
     expect(revoked.revoked_dots).toContain(grantDot);
     const blocked = await requestContactApi(request, bobToken, alice.did, "message");
     expect(blocked.status).toBe("pending");
+  });
+
+  test("consent settings grants and revokes a pending request", async ({
+    browser,
+    request,
+  }) => {
+    const alice = uniqueUser("p1-023-settings-consent-alice");
+    const bob = uniqueUser("p1-023-settings-consent-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    await requestContactApi(request, bobToken, alice.did, "message");
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    try {
+      await gotoConsentSettings(alicePage);
+      const pendingRow = alicePage.page.getByTestId("consent-pending-row").filter({
+        hasText: bob.did,
+      });
+      await expect(pendingRow).toBeVisible({ timeout: 30_000 });
+      await pendingRow.getByTestId("consent-detail-button").click();
+      const detail = alicePage.page.getByTestId("consent-pending-detail");
+      await expect(detail).toContainText(bob.did);
+      await detail.getByTestId("consent-scope-select").selectOption("message");
+      await detail.getByTestId("consent-valid-until-input").fill(
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      );
+      await detail.getByTestId("grant-consent-button").click();
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(/granted/i, {
+        timeout: 30_000,
+      });
+      await expect(
+        alicePage.page.getByTestId("consent-granted-row").filter({ hasText: bob.did }),
+      ).toBeVisible({ timeout: 30_000 });
+      await expectConsentCell(request, aliceToken, alice.did, bob.did, "message", "granted");
+
+      await alicePage.page
+        .getByTestId("consent-granted-row")
+        .filter({ hasText: bob.did })
+        .getByTestId("revoke-consent-button")
+        .click();
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(/revoked/i, {
+        timeout: 30_000,
+      });
+      await expectConsentCell(request, aliceToken, alice.did, bob.did, "message", "revoked");
+    } finally {
+      await alicePage.close();
+    }
   });
 
   test.fixme(
