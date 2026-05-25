@@ -57,6 +57,7 @@
 - Space 权限: 未认证创建失败、空 title 失败、非法 invitee 失败、非 owner 添加成员失败、owner 不能移除自己、非 owner 删除 Space 失败。
 - 私有可见性: 匿名搜索私有 Space 为空、非成员发送消息失败、成员发送成功、删除后再发送失败。
 - 交互模型: 消息修改/删除、reaction、read marker、subscription、entity/relation/view projection。
+- 事件流幂等/replay: `tests/event_idempotency_replay.rs` 通过 `TestServerGroup::single` 启动隔离 soland,覆盖同一 Event Envelope 二次提交返回 `status=duplicate`/`receipt.idempotent=true`,并确认 `cx.message.create`、`cx.message.revise` edit chain、`cx.message.redact` redaction tombstone 的投影只生效一次。该 test 继续使用 `serial_test::serial`;每个 case 自建 server group,不复用进程内投影状态。
 - schema/policy/realtime: schema registry、policy document、typing ephemeral、push rules、WebRTC signaling。
 - delivery/media: device key upload/query/claim、to-device 消息、blob 上传下载、Range/hash、反枚举、query-string auth 拒绝。
 - identity/directory: DID resolve/document/log/receipt、directory discoverability/privacy、export/audit/notification/inbox。

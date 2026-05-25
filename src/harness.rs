@@ -846,6 +846,8 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Valu
         "kind": kind,
         "actor_id": actor,
         "actor_seq": seq,
+        "schema_id": "cx.schema.event.v1",
+        "realm_id": space_id,
         "space_id": space_id,
         "created_at": "2026-05-02T00:00:00Z",
         "hlc": format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"),

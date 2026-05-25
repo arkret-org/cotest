@@ -200,8 +200,8 @@ Phase 6 把 harness 侧的 mock 服务全部补齐之后,joint-e2e 主体上可�
 
 ### 7.B Rust scenario 反向覆盖
 
-- [ ] T7.3 review `src/scenarios/event_idempotency_replay.rs` (2026-05-18 新增) 是否需要在 `_report.md` 的 spec 覆盖矩阵里登记;现在 `tests/event_idempotency_replay.rs` 用 `serial_test::serial` 串行运行,确认 `TestServerGroup` 隔离仍然成立。
-- [ ] T7.4 把同类的事件流幂等 / replay 场景扩展到 redaction、tombstone、edit chain (cx.message.update / cx.message.redact);currently only `cx.message.create` 被覆盖。
+- [x] T7.3 review `src/scenarios/event_idempotency_replay.rs` (2026-05-18 新增) 是否需要在 `_report.md` 的 spec 覆盖矩阵里登记;现在 `tests/event_idempotency_replay.rs` 用 `serial_test::serial` 串行运行,确认 `TestServerGroup` 隔离仍然成立。
+- [x] T7.4 把同类的事件流幂等 / replay 场景扩展到 redaction、tombstone、edit chain (当前规范/SDK kind 为 `cx.message.revise` + `cx.message.redact`;旧称 `cx.message.update` 不再使用)。
 
 ### 7.C harness 文档同步
 
