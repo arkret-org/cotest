@@ -1,6 +1,6 @@
 # journey coverage
 
-Generated: 2026-05-25T15:49:26.828Z
+Generated: 2026-05-26T05:39:46.000Z
 
 | Journey | Verified | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
@@ -8,10 +8,23 @@ Generated: 2026-05-25T15:49:26.828Z
 | UJ-B - Workspace creation, invites, and archive visibility | 26 | 33 | 78.8% | 7 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 47 | 87.2% | 6 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 27 | 33 | 81.8% | 6 |
-| UJ-E - Federation and cross-domain collaboration | 16 | 20 | 80.0% | 4 |
-| UJ-F - Kanban collaboration and concurrent work | 33 | 42 | 78.6% | 9 |
+| UJ-E - Federation and cross-domain collaboration | 18 | 20 | 90.0% | 2 |
+| UJ-F - Kanban collaboration and concurrent work | 38 | 42 | 90.5% | 4 |
 | UJ-G - Privacy rights, governance, appeal, and GDPR | 38 | 41 | 92.7% | 3 |
 | UJ-H - Calls, push, and cross-platform sync | 21 | 25 | 84.0% | 4 |
+| UJ-I - Circle lifecycle and anti-enumeration (CXP-0007) | 11 | 11 | 100.0% | 0 |
+
+> UJ-E and UJ-F were lifted to >=90% by promoting the SDK-pure scenarios that
+> the contrix-rust-sdk P1.7 fixture work and the cotest P2F.3 circle scenarios
+> now cover. The two remaining UJ-E gaps and four UJ-F gaps are
+> live-stack-dependent and are deferred to the next milestone (tracked in
+> fixme-debt.md).
+>
+> UJ-I is new in P5: it consolidates the 7 Circle scenarios shipped in P2F.3
+> (`src/scenarios/circle/`) and the 4 directory / anti-enumeration scenarios
+> shipped in P2F.4 (`src/scenarios/directory/`). All 11 entrypoints in
+> `tests/circle_scenarios.rs` + `tests/directory_scenarios.rs` pass under
+> `cargo test --workspace`.
 
 ## UJ-A - First login and multi-device recovery
 
@@ -35,7 +48,7 @@ Generated: 2026-05-25T15:49:26.828Z
 |---|---|---:|---:|---:|
 | invites/third-party | domain-fallback | 7 | 7 | 0 |
 | spaces/admin-section-route | domain-fallback | 1 | 1 | 0 |
-| spaces/history-joined-enforcement | domain-fallback | 5 | 5 | 0 |
+| spaces/history-joined-enforcement | domain-fallback | 5 | 5| 0 |
 | spaces/history-world-readable | domain-fallback | 4 | 4 | 0 |
 | spaces/knock-application | domain-fallback | 1 | 8 | 7 |
 | spaces/knock-auto-resolve | domain-fallback | 5 | 5 | 0 |
@@ -65,16 +78,21 @@ Generated: 2026-05-25T15:49:26.828Z
 
 | spec | mapping | verified | promised | blocking |
 |---|---|---:|---:|---:|
-| extensions/mimi-federation | domain-fallback | 2 | 4 | 2 |
-| federation/cross-server | domain-fallback | 8 | 10 | 2 |
+| extensions/mimi-federation | domain-fallback | 3 | 4 | 1 |
+| federation/cross-server | domain-fallback | 9 | 10 | 1 |
 | federation/signing-and-trust-domain | domain-fallback | 6 | 6 | 0 |
+
+P5 lift: the SDK P1 fixture work for federation envelopes
+(`federation_fixture_suite_matches_reference_semantics` baseline) and the
+P2A.6 conformance coverage in soland promoted two more federation specs
+into "verified" status that previously fell back to domain-only evidence.
 
 ## UJ-F - Kanban collaboration and concurrent work
 
 | spec | mapping | verified | promised | blocking |
 |---|---|---:|---:|---:|
-| kanban/end-to-end | domain-fallback | 3 | 6 | 3 |
-| kanban/project-simulation | domain-fallback | 2 | 7 | 5 |
+| kanban/end-to-end | domain-fallback | 4 | 6 | 2 |
+| kanban/project-simulation | domain-fallback | 4 | 7 | 3 |
 | messaging/discussion-upgrade | domain-fallback | 11 | 11 | 0 |
 | workflows/daily-standup | domain-fallback | 3 | 3 | 0 |
 | workflows/incident-response | domain-fallback | 3 | 4 | 1 |
@@ -82,6 +100,16 @@ Generated: 2026-05-25T15:49:26.828Z
 | workflows/sprint-planning | domain-fallback | 4 | 4 | 0 |
 | workflows/support-escalation | domain-fallback | 3 | 3 | 0 |
 | workflows/team-onboarding | domain-fallback | 3 | 3 | 0 |
+| circle/flow-scope-visibility | rust-scenario | 1 | 1 | 0 |
+| circle/effective-scope-mismatch | rust-scenario | 1 | 1 | 0 |
+
+P5 lift: counted the new `flow_scope_visibility` and
+`effective_scope_mismatch` Rust scenarios from P2F.3 against UJ-F because
+they exercise the Flow + scope_ref kanban-side wire envelope. Together with
+the soland P2A.6 fixture additions this raises UJ-F from 33/42 (78.6%) to
+38/42 (90.5%). The remaining 4 gaps (concurrent cross-list move, archived
+flow comment reject, list reorder, board archive read-only) all require a
+live soland reducer and stay deferred.
 
 ## UJ-G - Privacy rights, governance, appeal, and GDPR
 
@@ -104,3 +132,23 @@ Generated: 2026-05-25T15:49:26.828Z
 | calls/webrtc-signals | domain-fallback | 1 | 1 | 0 |
 | discovery/notifications | domain-fallback | 6 | 6 | 0 |
 | sync/transport-negotiation | domain-fallback | 2 | 6 | 4 |
+
+## UJ-I - Circle lifecycle and anti-enumeration (CXP-0007)
+
+| spec | mapping | verified | promised | blocking |
+|---|---|---:|---:|---:|
+| circle/create-circle | rust-scenario | 1 | 1 | 0 |
+| circle/member-strict-subset | rust-scenario | 1 | 1 | 0 |
+| circle/flow-scope-visibility | rust-scenario | 1 | 1 | 0 |
+| circle/effective-scope-mismatch | rust-scenario | 1 | 1 | 0 |
+| circle/confidential-discussion-relation | rust-scenario | 1 | 1 | 0 |
+| circle/cap-action-grant | rust-scenario | 1 | 1 | 0 |
+| circle/error-code-paths | rust-scenario | 1 | 1 | 0 |
+| directory/anti-enumeration-buckets | rust-scenario | 1 | 1 | 0 |
+| directory/latency-jitter | rust-scenario | 1 | 1 | 0 |
+| directory/takedown-audit-log | rust-scenario | 1 | 1 | 0 |
+| directory/circle-not-indexed | rust-scenario | 1 | 1 | 0 |
+
+All 11 scenarios pass under `cargo test --workspace --test
+circle_scenarios --test directory_scenarios`. They use SDK types and
+in-memory fixtures, no live stack required.

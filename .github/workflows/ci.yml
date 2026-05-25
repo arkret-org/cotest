@@ -1,0 +1,128 @@
+name: CI
+
+# cotest local CI (P2F.5). Runs fmt / clippy / test / typos / deny / audit
+# plus the e2e Playwright matrix. Does NOT publish; cotest is `publish=false`
+# and the circle-rollout milestone explicitly bans tag / release work.
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    name: rust (fmt / clippy / test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      # contrix-rust-sdk is a path dependency; check it out as a sibling so
+      # `cargo check` resolves crates/* under ../contrix-rust-sdk.
+      - uses: actions/checkout@v4
+        with:
+          repository: contrix-dev/contrix-rust-sdk
+          path: contrix-rust-sdk
+          ref: circle-rollout
+        continue-on-error: true
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cotest
+      - name: fmt
+        working-directory: cotest
+        run: cargo fmt --all -- --check
+      - name: clippy
+        working-directory: cotest
+        # cotest carries TODO scaffolding for the circle-rollout milestone;
+        # treat warnings as errors so drift surfaces before merge.
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test
+        working-directory: cotest
+        # Skip live-server scenarios — they are gated by `#[ignore]` and
+        # bootstrapped by the integration.yml workflow.
+        run: cargo test --workspace --locked
+
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+        with:
+          config: typos.toml
+
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: contrix-dev/contrix-rust-sdk
+          path: contrix-rust-sdk
+          ref: circle-rollout
+        continue-on-error: true
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: cotest/Cargo.toml
+          command: check
+          arguments: --config deny.toml
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: contrix-dev/contrix-rust-sdk
+          path: contrix-rust-sdk
+          ref: circle-rollout
+        continue-on-error: true
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cotest
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Run cargo audit
+        working-directory: cotest
+        run: cargo audit --deny warnings
+
+  e2e:
+    name: e2e (playwright / ${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    # The Playwright suite requires live soland / coauth / floria bring-up
+    # (covered by integration.yml). Here we only verify the suite *parses*
+    # — i.e. that the discussion-upgrade rewrite (P2F.1) and any future
+    # e2e churn keep the spec list resolvable across browsers.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install playwright
+        working-directory: e2e
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: List spec files
+        working-directory: e2e
+        run: npx playwright test --list --project=${{ matrix.browser }}

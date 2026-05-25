@@ -4,6 +4,41 @@ All notable changes to **cotest** are documented here.
 
 ## [Unreleased]
 
+### CXP-0007 Circle primitive rollout (contrix-spec `2b0d70d`)
+
+- **Fixed (P2F.1)** — purged `discussion_realm_ref` from the e2e
+  Playwright suite (`e2e/tests/messaging/discussion-upgrade.spec.ts`),
+  fixture comments (`tests/fixtures/composite_state_subject_fixture.json`,
+  `tests/fixtures/read_receipt_policy_fixture.json`),
+  `src/conformance/wire_model.rs` and `src/round23_rules.rs`. The
+  discussion-upgrade flow now promotes to a Circle via `scope_circle_id`
+  (per CXP-0007); the legacy field is hard-rejected.
+- **Added (P2F.2)** — `src/circle_rules.rs` literal-scanner module with
+  four rules: `DiscussionRealmRef` (hard-reject), `UnknownCircleEventKind`
+  (allowlist of 7 event kinds + 6 capability actions),
+  `EffectiveScopeCircleMissingId`, and
+  `ConfidentialDiscussionEndpointsNotFlow`. Wired into the harness via
+  `literal_scanner::scan_tree_circle`. Supports the `CIRCLE-ALLOW` marker
+  comment for self-tests and migration notes.
+- **Added (P2F.3)** — seven Rust scenarios under `src/scenarios/circle/`:
+  `create_circle`, `member_strict_subset`, `flow_scope_visibility`,
+  `effective_scope_mismatch`, `confidential_discussion_relation`,
+  `cap_action_grant`, `error_code_paths`. Each is driven from
+  `tests/circle_scenarios.rs`; scenarios are pure SDK-level and need no
+  live server.
+- **Added (P2F.4)** — four directory / anti-enumeration scenarios under
+  `src/scenarios/directory/`: `anti_enumeration_buckets` (member-count
+  bucket ladder), `latency_jitter` (response-latency floor + jitter
+  envelope), `takedown_audit_log` (canonical reason set + audit-row
+  validator), `circle_not_indexed` (teabay MUST DROP Circle-scoped
+  events). Driven from `tests/directory_scenarios.rs`.
+- **Added (P2F.5)** — `.github/workflows/ci.yml` (fmt / clippy / test /
+  typos / deny / audit, plus Playwright matrix list across chromium /
+  firefox / webkit) and `.github/workflows/integration.yml` (nightly
+  cross-project bring-up of soland + coauth + floria with
+  journey-coverage.json artifact upload). No release artefacts produced.
+- Notes: version number unchanged; this round is not released.
+
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
 
 Closes the round-4 protocol-review commits on the test-harness surface.
@@ -75,8 +110,9 @@ commit `8b7978d spec: round 2+3 cleanup`):
   - `relaxed_window_max_ms > 300_000` in policy components flagged
     (T09).
   - Cursor handle literals shorter than 22 chars flagged (T03).
-  - `discussion_space_ref` flagged as renamed to `discussion_realm_ref`
-    (R1.x rename).
+  - `discussion_space_ref` flagged as legacy of `discussion_realm_ref`
+    (R1.x rename); both names are now forbidden — CXP-0007 replaces them
+    with `scope_circle_id` on the modern wire.
 - **12 new scenarios** under `src/scenarios/`:
   - `late_key_recovery_removed_actor` (T16)
   - `moderation_appeal_flow_end_to_end` (T06)

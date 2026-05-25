@@ -2,7 +2,7 @@
   "profile": "cx.profile.composite_state_subject_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). C18 (spec 2026-05-08): cx.flow.branch.* renamed to cx.flow.track.*; spec also dropped member/history_visibility/policy_components (Flow tracks no longer carry independent membership/visibility/policy — see Flow.discussion_realm_ref). Vectors retained as historical-shape examples to verify the encoding rule, which is kind-independent.",
+  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). C18 (spec 2026-05-08): cx.flow.branch.* renamed to cx.flow.track.*; spec also dropped member/history_visibility/policy_components (Flow tracks no longer carry independent membership/visibility/policy — see Flow.scope_circle_id introduced by CXP-0007). Vectors retained as historical-shape examples to verify the encoding rule, which is kind-independent.",
   "encoder": {
     "canonical_json": "RFC 8785 / spec encoding.md §1: sorted object keys, no whitespace, exact JSON string representation",
     "digest": "SHA-256",

@@ -1,9 +1,12 @@
-// Discussion track upgrade to independent child Space
+// Discussion track upgrade to a Circle-scoped Flow (CXP-0007).
 // Contract: e2e/scenarios/messaging/discussion-upgrade.md
 // Spec refs:
-//   - models/flow-and-message.md §5, §5.1 (discussion_space_ref)
+//   - models/flow-and-message.md §5, §5.1 (scope_circle_id on Flow)
+//   - models/circle.md (Circle primitive, encryption boundary)
 //   - models/space-hierarchy.md §3-§4 (parent/child confirmed edge)
 //   - discovery/read-receipts.md §2.5 (scope override)
+// History: prior to CXP-0007 the same upgrade lived under Flow.discussion_realm_ref;
+// that field is hard-removed and no longer accepted on the wire.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
@@ -267,18 +270,11 @@ test.describe("discussion upgrade to child space", () => {
     }
   });
 
-  test("alice promotes F1's discussion to a new child space S_discussion; F1.discussion_space_ref = S_discussion.id; parent/child edges confirmed", async ({
+  test("alice promotes F1 to a Circle scope; F1.scope_circle_id = C.id; cx.circle.create on parent Realm", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "fixme-promote");
-    const childId = await createSharedSpaceViaApi(
-      request,
-      fixture.alice,
-      fixture.aliceToken,
-      fixture.bob,
-      fixture.bobToken,
-      { title: `promoted child ${Date.now()}`, historyVisibility: "shared" },
-    );
+    const circleId = typedId("circle");
     const flowId = await createFlowViaApi(
       request,
       fixture.aliceToken,
@@ -286,13 +282,13 @@ test.describe("discussion upgrade to child space", () => {
       fixture.parentId,
       "promoted F1",
     );
-    await setFlowDiscussionRealmViaApi(
+    await setFlowScopeCircleViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
       fixture.parentId,
       flowId,
-      childId,
+      circleId,
     );
 
     const parentEvents = await listSpaceEventsViaApi(
@@ -305,15 +301,12 @@ test.describe("discussion upgrade to child space", () => {
         ?.payload,
     ).toMatchObject({
       flow_id: flowId,
-      patch: { discussion_realm_ref: { $op: "set", value: childId } },
+      patch: { scope_circle_id: { $op: "set", value: circleId } },
     });
-    const childEvents = await listSpaceEventsViaApi(
-      request,
-      fixture.bobToken,
-      childId,
-    );
-    expect(childEvents.map((event) => event.event_kind)).toContain(
-      "cx.realm.create",
+    // The Circle creation event lives on the parent Realm; child Spaces
+    // are no longer minted as part of the discussion-upgrade flow.
+    expect(parentEvents.map((event) => event.event_kind)).toContain(
+      "cx.circle.create",
     );
   });
 
@@ -493,7 +486,7 @@ test.describe("discussion upgrade to child space", () => {
     });
   });
 
-  test("E21.1 orphan discussion realm update is projected with explicit discussion_realm_ref", async ({
+  test("E21.1 orphan scope_circle_id update is projected verbatim", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(
@@ -507,7 +500,7 @@ test.describe("discussion upgrade to child space", () => {
       fixture.parentId,
       "orphan F1",
     );
-    const orphanRealmId = typedId("realm");
+    const orphanCircleId = typedId("circle");
     const response = await request.post(`${solandBaseUrl()}/api/v1/events`, {
       headers: authHeaders(fixture.aliceToken),
       data: signedEventEnvelope({
@@ -517,7 +510,7 @@ test.describe("discussion upgrade to child space", () => {
         payload: {
           target_ref: flowId,
           flow_id: flowId,
-          patch: { discussion_realm_ref: { $op: "set", value: orphanRealmId } },
+          patch: { scope_circle_id: { $op: "set", value: orphanCircleId } },
         },
       }),
     });
@@ -531,11 +524,11 @@ test.describe("discussion upgrade to child space", () => {
       events.find(
         (event) =>
           event.event_kind === "cx.flow.update" &&
-          JSON.stringify(event.payload).includes(orphanRealmId),
+          JSON.stringify(event.payload).includes(orphanCircleId),
       )?.payload,
     ).toMatchObject({
       flow_id: flowId,
-      patch: { discussion_realm_ref: { $op: "set", value: orphanRealmId } },
+      patch: { scope_circle_id: { $op: "set", value: orphanCircleId } },
     });
   });
 
@@ -656,14 +649,47 @@ async function createFlowViaApi(
   return flowId;
 }
 
-async function setFlowDiscussionRealmViaApi(
+async function setFlowScopeCircleViaApi(
   request: APIRequestContext,
   token: string,
   actor: JointUser,
   realmId: string,
   flowId: string,
-  discussionRealmId: string,
+  circleId: string,
 ) {
+  // CXP-0007: promoting a Flow to its own confidential scope binds the
+  // Flow to a Circle via `scope_circle_id`. The pre-CXP-0007 wire field
+  // `discussion_realm_ref` is in `forbidden-wire-fields` (hard_reject).
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: actor.did,
+      realmId,
+      kind: "cx.circle.create",
+      payload: {
+        object: {
+          id: circleId,
+          schema: "cx.schema.circle.v1",
+          realm_id: realmId,
+          title: `circle for ${flowId}`,
+          display: {
+            short_name: "F1",
+            color_token: "indigo",
+            symbol: { kind: "glyph", glyph: "shield" },
+          },
+          directory_visibility: "members",
+          join_rule: "invite",
+          history_visibility: "joined",
+          encryption_profile: "mls_rfc9420",
+          state: "active",
+          created_by: actor.did,
+          created_at: new Date().toISOString(),
+        },
+      },
+    }),
+    { context: `create circle ${circleId}` },
+  );
   await submitSignedEventApi(
     request,
     token,
@@ -675,11 +701,11 @@ async function setFlowDiscussionRealmViaApi(
         target_ref: flowId,
         flow_id: flowId,
         patch: {
-          discussion_realm_ref: { $op: "set", value: discussionRealmId },
+          scope_circle_id: { $op: "set", value: circleId },
         },
       },
     }),
-    { context: `set discussion realm ${flowId}` },
+    { context: `set scope_circle_id ${flowId}` },
   );
 }
 

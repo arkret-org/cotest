@@ -1,7 +1,7 @@
 {
   "profile": "cx.profile.read_receipt_policy_vectors.v1",
   "version": "2026-05-19",
-  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell cx.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.discussion_realm_ref) whose own cx.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key cx.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell cx.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.scope_circle_id pointing at a Circle, per CXP-0007) whose own cx.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key cx.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
   "vectors": [
     {
       "name": "disclosure_required_locks_client_send",
@@ -61,7 +61,7 @@
     },
     {
       "name": "branch_overrides_tighten_only",
-      "comment": "A child Space (upgraded discussion timeline, Flow.discussion_realm_ref) MAY tighten the parent Space's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the child Space is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy) — the child-Space surface is the only legitimate scope for a per-discussion override.",
+      "comment": "A child Space (upgraded discussion timeline, Flow.scope_circle_id binding) MAY tighten the parent Space's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the child Space is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy) — the child-Space surface is the only legitimate scope for a per-discussion override.",
       "policy": {
         "scope": "child_space",
         "parent": {
@@ -118,7 +118,7 @@
     },
     {
       "name": "prefs_resolution_flow_overrides_space",
-      "comment": "When policy is optional and the user has both parent-Space-level and child-Space-level (discussion_realm_ref) overrides, the child-Space override wins. Resolution order is child_space → space → default (track-level overrides are not in v1; see removed-event-kinds.json).",
+      "comment": "When policy is optional and the user has both parent-Space-level and child-Space-level (Flow.scope_circle_id, CXP-0007) overrides, the child-Space override wins. Resolution order is child_space → space → default (track-level overrides are not in v1; see removed-event-kinds.json).",
       "policy": {
         "scope": "space",
         "disclosure": "optional",
