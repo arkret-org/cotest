@@ -498,15 +498,14 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test.fixme("E14.E poll create + vote + close (vote replacement per actor)", async ({
-    // @blocking-on: soland#messaging-chat-advanced-gap
+  test("E14.E poll create + vote + close (vote replacement per actor)", async ({
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
     // @expected-live-by: 2026Q3
     browser,
     request,
   }, testInfo) => {
     // spec: models/content-types.md §4.9 polls
-    // yougen gap: poll composer and poll result controls are not wired.
+    // soland projects poll content state; yougen hydrates poll cards from sync/backfill.
     const stamp = Date.now();
     const alice = uniqueUser("s14e-alice");
     const bob = uniqueUser("s14e-bob");
