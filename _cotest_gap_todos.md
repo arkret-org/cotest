@@ -48,7 +48,8 @@
 
 - [x] GAP-P1-010 `[yougen]` 修复 `/chat/:space_id` 首次加载时 `channel-item` 不 hydrate 的问题,让 chat advanced 主体可激活。
   - 2026-05-25 local close: `yougen` now routes `/chat/:space_id` directly to `ChatPanel` with the default discussion flow selected, and cotest verifies a fresh browser mount renders `chat-panel` plus `channel-item`. Evidence: `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-010-chat-route -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "chat route hydrates the default discussion channel" -SkipNpmInstall -SkipBrowserInstall` passed.
-- [ ] GAP-P1-011 `[soland]` 实现 reaction OR-Set、reply relation、mention routing projection,并输出可审计的 mention routing hint。
+- [x] GAP-P1-011 `[soland]` 实现 reaction OR-Set、reply relation、mention routing projection,并输出可审计的 mention routing hint。
+  - 2026-05-25 local close: `soland` sync timeline messages now expose active reaction OR-Set summaries, reply relations, mentions, and top-level auditable `mention_routing_hint`; `target_ref: cx:message:*` reactions are normalized to their source event. Evidence: `cargo test --locked --test discussion_sync chat_projection_exposes_reactions_reply_and_mention_routing -- --nocapture`, `cargo check --locked`, and `scripts\run-joint-e2e.ps1 -OutputRoot artifacts\verify-p1-011-chat-projection -StartCoauth -StartMocks -RunProfile joint-full -PlaywrightProject chrome -Grep "sync projection exposes active reactions" -SkipNpmInstall -SkipBrowserInstall` passed.
 - [ ] GAP-P1-012 `[yougen]` 实现 poll composer/result/close UI:`open-poll-composer-button`、`poll-card`、`poll-option`、`poll-close-button`。
 - [ ] GAP-P1-013 `[soland]` 实现 poll content type reducer:每 actor 单票替换、close 后拒绝新 vote、结果可投影。
 - [ ] GAP-P1-014 `[soland/yougen]` 实现 `cx.typing` ephemeral 与 presence online/offline TTL,满足 1s propagation / 5s clear。

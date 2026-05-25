@@ -50,6 +50,23 @@ async function sendChat(page: JointUserPage, spaceId: string, body: string) {
   ).toBeVisible({ timeout: 30_000 });
 }
 
+async function accountSubscribeTimelineEvents(
+  request: APIRequestContext,
+  token: string,
+  spaceId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const subscribe = await request.get(`${solandBaseUrl()}/api/v1/account/subscribe?catchup=true`, {
+    headers: authHeaders(token),
+  });
+  expect(subscribe.status()).toBe(200);
+  const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
+  const realmId = spaceId.replace(/^cx:space:/, "cx:realm:");
+  const realmFrame = frame.realms[realmId] ?? frame.realms[spaceId];
+  expect(realmFrame, `sync realm frame for ${spaceId}`).toBeTruthy();
+  expect(Array.isArray(realmFrame.timeline?.events)).toBe(true);
+  return realmFrame.timeline.events as Array<Record<string, unknown>>;
+}
+
 test.describe("chat advanced", () => {
   test("API reactions add/remove round-trip as projection events", async ({ request }) => {
     const fixture = await createChatApiFixture(request, "reaction-api");
@@ -180,6 +197,107 @@ test.describe("chat advanced", () => {
         mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
       },
       mention_routing_hint: { mentioned: [fixture.bob.did] },
+    });
+  });
+
+  test("API sync projection exposes active reactions, reply relation, and mention routing hint", async ({
+    request,
+  }) => {
+    const fixture = await createChatApiFixture(request, "sync-projection-api");
+    const body = `@${fixture.bob.handle.replace(/^@/, "")} sync projection ${Date.now()}`;
+    const root = signedEventEnvelope({
+      actorDid: fixture.alice.did,
+      realmId: fixture.spaceId,
+      kind: "cx.message.create",
+      payload: {
+        flow_id: flowIdFromRealmId(fixture.spaceId),
+        track: "discussion",
+        thread_id: "discussion",
+        content: {
+          kind: "cx.content.text",
+          body,
+          mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
+        },
+        mention_routing_hint: {
+          mentioned: [fixture.bob.did],
+        },
+        encrypted: false,
+      },
+    });
+    await submitSignedEventApi(request, fixture.aliceToken, root, { context: "root mention" });
+    const rootEventId = String(root.event_id);
+    const rootMessageRef = rootEventId.replace(/^cx:event:/, "cx:message:");
+    const reply = signedEventEnvelope({
+      actorDid: fixture.bob.did,
+      realmId: fixture.spaceId,
+      kind: "cx.message.create",
+      payload: {
+        flow_id: flowIdFromRealmId(fixture.spaceId),
+        track: "discussion",
+        thread_id: "discussion",
+        reply_to: rootMessageRef,
+        content: { kind: "cx.content.text", body: `reply ${Date.now()}` },
+        encrypted: false,
+      },
+    });
+    await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
+
+    await submitSignedEventApi(
+      request,
+      fixture.aliceToken,
+      signedEventEnvelope({
+        actorDid: fixture.alice.did,
+        realmId: fixture.spaceId,
+        kind: "cx.reaction.add",
+        payload: { target_ref: rootMessageRef, actor: fixture.alice.did, key: "+1" },
+      }),
+      { context: "alice add reaction" },
+    );
+    await submitSignedEventApi(
+      request,
+      fixture.bobToken,
+      signedEventEnvelope({
+        actorDid: fixture.bob.did,
+        realmId: fixture.spaceId,
+        kind: "cx.reaction.add",
+        payload: { target_ref: rootMessageRef, actor: fixture.bob.did, key: "+1" },
+      }),
+      { context: "bob add reaction" },
+    );
+    await submitSignedEventApi(
+      request,
+      fixture.bobToken,
+      signedEventEnvelope({
+        actorDid: fixture.bob.did,
+        realmId: fixture.spaceId,
+        kind: "cx.reaction.remove",
+        payload: { target_ref: rootMessageRef, actor: fixture.bob.did, key: "+1" },
+      }),
+      { context: "bob remove reaction" },
+    );
+
+    const events = await accountSubscribeTimelineEvents(
+      request,
+      fixture.aliceToken,
+      fixture.spaceId,
+    );
+    const rootProjection = events.find((event) => event.event_id === rootEventId);
+    expect(rootProjection).toMatchObject({
+      mention_routing_hint: { mentioned: [fixture.bob.did] },
+      mentions: [{ did: fixture.bob.did }],
+      reaction_summary: { "+1": [fixture.alice.did] },
+    });
+    expect(JSON.stringify(rootProjection?.reaction_summary)).not.toContain(fixture.bob.did);
+    expect(rootProjection?.reactions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ actor: fixture.alice.did, key: "+1", active: true }),
+      ]),
+    );
+
+    const replyProjection = events.find((event) => event.event_id === reply.event_id);
+    expect(replyProjection).toMatchObject({
+      reply_to: rootMessageRef,
+      relations: [expect.objectContaining({ kind: "reply_to", target_ref: rootMessageRef })],
     });
   });
 
