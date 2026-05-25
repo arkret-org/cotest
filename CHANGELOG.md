@@ -26,6 +26,12 @@ All notable changes to **cotest** are documented here.
   `cap_action_grant`, `error_code_paths`. Each is driven from
   `tests/circle_scenarios.rs`; scenarios are pure SDK-level and need no
   live server.
+- **Added (P2F.4)** — four directory / anti-enumeration scenarios under
+  `src/scenarios/directory/`: `anti_enumeration_buckets` (member-count
+  bucket ladder), `latency_jitter` (response-latency floor + jitter
+  envelope), `takedown_audit_log` (canonical reason set + audit-row
+  validator), `circle_not_indexed` (teabay MUST DROP Circle-scoped
+  events). Driven from `tests/directory_scenarios.rs`.
 - Notes: version number unchanged; this round is not released.
 
 ### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)

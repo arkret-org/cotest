@@ -10,6 +10,7 @@ pub mod collaboration_workflow;
 pub mod consent_revoke_scope_any_cascade;
 pub mod cross_signing_reset_cross_domain;
 pub mod delivery_media;
+pub mod directory;
 pub mod directory_service;
 pub mod e2ee_relaxed_window_negative;
 pub mod event_idempotency_replay;
