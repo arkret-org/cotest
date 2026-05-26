@@ -108,11 +108,25 @@ milestone.
 
 ## 5. Accepted risk (TODO markers across all projects)
 
-Total: 33 files contain `TODO(circle-rollout-Pxxx)` markers across 10
-projects. Each is owned by the project that wrote it; each names the
-specific milestone phase in the tag (so e.g. `circle-rollout-P3B.4.3`
-unambiguously belongs to yougen P3B and must be resolved before the next
-yougen-touching milestone).
+Originally 32 `TODO(circle-rollout-Pxxx)` markers were enumerated at P5
+close across 10 projects. A subsequent sweep (this commit) reconciles
+the catalog against the live tree:
+
+- 17 markers have already been resolved in their owning project
+  (contrix-rust-sdk P1.3 + P1.5; coauth P2B.3 + P2B.5; all 11 yougen
+  P3B/P4 markers; starid P2G.2 + P2G.5). Those rows have been removed
+  from the inventory below.
+- 1 row (coauth circle_capabilities.rs P2B.2/P2B.5) has been rewritten
+  to point at the actual surviving follow-up marker
+  (`TODO(circle-rollout-followup-A.2)`).
+- 1 row (`crates/server/tests/integration_with_coauth.rs:17 P2G.4`) was
+  filed under teabay but the file actually lives in starid — corrected
+  below.
+- The remaining 12 marker rows are still open and explicitly tagged
+  `[deferred to P6 or later]`. Each is owned by the project that wrote
+  it; each names the specific milestone phase in the tag (so e.g.
+  `circle-rollout-P2A.4` unambiguously belongs to soland P2A and must
+  be resolved before the next soland-touching milestone).
 
 ### 5.A cotest baseline drifts
 
@@ -142,34 +156,38 @@ contrix-rust-sdk fixture maintenance.
 
 #### contrix-rust-sdk (97d9dc8)
 
-| file:line | marker |
-|---|---|
-| `crates/core/src/forbidden_wire_fields.rs:45` | `TODO(circle-rollout-P1.5)` — Policy-object wire form follow-up |
-| `crates/sdk/src/authz/engine.rs:982` | `TODO(circle-rollout-P1.3)` — precise allow/deny constraint binding |
-| `CHANGELOG.md:88-89` | cross-references the above two markers |
+All `TODO(circle-rollout-Pxxx)` markers closed. Per
+`contrix-rust-sdk/CHANGELOG.md` lines 57–62, `TODO(circle-rollout-P1.3)`
+in `crates/sdk/src/authz/engine.rs` and `TODO(circle-rollout-P1.5)` in
+`crates/core/src/forbidden_wire_fields.rs` were both resolved in the
+follow-on round on top of `97d9dc8`.
 
 #### soland (a6953b8)
 
-| file:line | marker |
-|---|---|
-| `src/kinds.rs:218` | `TODO(circle-rollout-P2A.4)` — cross-Realm `allowed_circle_refs` |
-| `src/routing/circles.rs:23,343,368` | `TODO(circle-rollout-P2A.4)` — MLS group rotation on Circle membership change |
+| file:line | marker | disposition |
+|---|---|---|
+| `src/kinds.rs:218` | `TODO(circle-rollout-P2A.4)` — cross-Realm `allowed_circle_refs` | [deferred to P6 or later] |
+| `src/routing/circles.rs:23,343,368` | `TODO(circle-rollout-P2A.4)` — MLS group rotation on Circle membership change | [deferred to P6 or later] |
 
 #### coauth (53a95ad)
 
-| file:line | marker |
-|---|---|
-| `crates/backend/src/services/did_binding_proof.rs:36` | `TODO(circle-rollout-P2B.3)` — swap hand-rolled envelope path for SDK helper |
-| `crates/backend/src/handlers/admin/v1/accounts.rs:438` | `TODO(circle-rollout-P2B.5)` — require N-of-M signed governance |
-| `crates/backend/src/handlers/admin/v1/circle_capabilities.rs:12,93` | `TODO(circle-rollout-P2B.2,P2B.5)` — persist scope-narrowed grants + audit row for high-risk grants |
+P2B.3 (`did_binding_proof.rs`) and P2B.5 (`accounts.rs`) were closed in
+the P2B closeout commit on top of `53a95ad`; the original P2B.2/P2B.5
+row on `circle_capabilities.rs` has been replaced by a more precise
+follow-up marker (in-process `Mutex<Vec<…>>` → diesel migration +
+repository). See `coauth/CHANGELOG.md` § "coauth P2B closeout".
+
+| file:line | marker | disposition |
+|---|---|---|
+| `crates/backend/src/handlers/admin/v1/circle_capabilities.rs:12` | `TODO(circle-rollout-followup-A.2)` — promote in-process grant store to diesel migration + repository | [deferred to P6 or later] |
 
 #### floria (f20bca7)
 
-| file:line | marker |
-|---|---|
-| `src/circuit_breaker.rs:37` | `TODO(circle-rollout-P2C.5)` — reset RPC |
-| `src/pushkin/mod.rs:560` | `TODO(circle-rollout-P2C.5)` — wait for SDK helper |
-| `src/service/notify.rs:598` | `TODO(circle-rollout-P2C.3)` — enforcement follow-up |
+| file:line | marker | disposition |
+|---|---|---|
+| `src/circuit_breaker.rs:37` | `TODO(circle-rollout-P2C.5)` — reset RPC | [deferred to P6 or later] |
+| `src/pushkin/mod.rs:560` | `TODO(circle-rollout-P2C.5)` — wait for SDK helper | [deferred to P6 or later] |
+| `src/service/notify.rs:598` | `TODO(circle-rollout-P2C.3)` — enforcement follow-up | [deferred to P6 or later] |
 
 #### chime (3a054ad)
 
@@ -178,43 +196,44 @@ was hygiene-only.
 
 #### sodmin (f0f43f1)
 
-| file:line | marker |
-|---|---|
-| `src/pages/audit.rs:302` | `TODO(circle-rollout-P3A.5)` — attestation evidence rows follow-up |
-| `src/pages/audit_attestation.rs:19` | `TODO(circle-rollout-P3A.5)` — attestation surface |
-| `src/pages/circles/scope.rs:7` | `TODO(circle-rollout-P2A.4)` — trigger awaits soland reducer wiring |
+| file:line | marker | disposition |
+|---|---|---|
+| `src/pages/audit.rs:302` | `TODO(circle-rollout-P3A.5)` — attestation evidence rows follow-up | [deferred to P6 or later] |
+| `src/pages/audit_attestation.rs:19` | `TODO(circle-rollout-P3A.5)` — attestation surface | [deferred to P6 or later] |
+| `src/pages/circles/scope.rs:7` | `TODO(circle-rollout-P2A.4)` — trigger awaits soland reducer wiring | [deferred to P6 or later, gated on soland P2A.4] |
 
 #### yougen (3a67778)
 
-| file:line | marker |
-|---|---|
-| `src/api.rs:1021` | `TODO(circle-rollout-P3B.2.6)` — typed SDK surface |
-| `src/circle.rs:26,224` | `TODO(circle-rollout-P3B.2.x,P3B.2.7)` — next-iteration UX + chime envelope decoder |
-| `src/components/account_switcher.rs:11` | `TODO(circle-rollout-P3B.4.3)` — sync engine listening |
-| `src/components/circle_scope_picker.rs:112` | `TODO(circle-rollout-P3B.2.8)` — click handler |
-| `src/config.rs:89` | `TODO(circle-rollout-P3B.4.3)` — sync engine call |
-| `src/cursor.rs:24` | `TODO(circle-rollout-P3B.9.2)` — flow position projection |
-| `src/offline.rs:447` | `TODO(circle-rollout-P3B.5.2)` — per-profile cursor integration |
-| `src/push.rs:56` | `TODO(circle-rollout-P4)` — delete legacy constant next iteration |
-| `src/push_registration.rs:329` | `TODO(circle-rollout-P3B.2.9)` — forward Circle id |
-| `src/sync_engine.rs:90` | `TODO(circle-rollout-P3B.4.3)` — active profile coupling |
-| `src/views/chat.rs:1534` | `TODO(circle-rollout-P3B.2.7)` — sync_engine dispatch_envelope wiring |
+All 11 `TODO(circle-rollout-Pxxx)` markers closed. A subsequent
+`grep -rn "TODO(circle-rollout" yougen/` returns zero hits across both
+source and CHANGELOG; the entire yougen P3B/P4 follow-up backlog has
+been retired in commits on top of `3a67778`.
 
 #### teabay (a2a4716)
 
-| file:line | marker |
-|---|---|
-| `crates/server/src/ingest/heartbeat.rs:243` | `TODO(circle-rollout-P2E.5)` — background expiry worker |
-| `crates/admin/src/main.rs:460,463` | `TODO(circle-rollout-P2E.3)` — live ingest QPS panel + Freshness panel |
-| `crates/server/tests/integration_with_coauth.rs:17` | `TODO(circle-rollout-P2G.4)` — swap in-process MockCoauth for live coauth |
-| `docs/scaling.md:92`, `docs/freshness-model.md:131`, `CHANGELOG.md:56` | doc cross-references to the above |
+| file:line | marker | disposition |
+|---|---|---|
+| `crates/server/src/ingest/heartbeat.rs:243` | `TODO(circle-rollout-P2E.5)` — background expiry worker | [deferred to P6 or later] |
+| `crates/admin/src/main.rs:460,463` | `TODO(circle-rollout-P2E.3)` — live ingest QPS panel + Freshness panel | [deferred to P6 or later] |
+| `docs/scaling.md:92`, `docs/freshness-model.md:131`, `CHANGELOG.md:67` | doc cross-references to `P2E.5` above | informational only |
+
+Note: the original P5 inventory listed
+`crates/server/tests/integration_with_coauth.rs:17 P2G.4` under teabay,
+but that file actually lives in starid. The corrected entry is in the
+starid section below.
 
 #### starid (9f28965)
 
-| file:line | marker |
-|---|---|
-| `crates/admin/src/main.rs:8` | `TODO(circle-rollout-P2G.5)` — end-to-end Playwright browser test |
-| `docs/fuzzing.md:57` | `TODO(circle-rollout-P2G.2)` — dispatch-only fuzz target |
+P2G.2 (`docs/fuzzing.md:57`) and P2G.5 (`crates/admin/src/main.rs:8`)
+have been rewritten as plain `Deferred:` notes / removed in starid's
+cleanup commit (`1395801`). The remaining marker is the in-process
+`MockCoauth` follow-up, which is intentionally preserved inside the
+`#[ignore = "..."]` reason on two `#[tokio::test]` functions (per the
+"don't delete `#[ignore]` markers — they are planned P5/P6 stubs" rule).
+
+| file:line | marker | disposition |
+|---|---|---|
+| `crates/server/tests/integration_with_coauth.rs:17,99,198` | `TODO(circle-rollout-P2G.4)` — swap in-process `MockCoauth` for live coauth via testcontainers | [deferred to P6 or later, kept as `#[ignore]` reason] |
 
 #### cotest (this commit)
 
