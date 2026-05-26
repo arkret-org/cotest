@@ -1,5 +1,6 @@
 # Build outputs
 /target/
+/target-*/
 
 # Dependency installs
 node_modules/
