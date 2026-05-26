@@ -369,7 +369,7 @@ fn signed_realm_create_event(
             "title": title,
             "summary": title,
             "trust_domain": "cx:trust_domain:delivery-media.cotest.local",
-            "created_by_principal": actor_id,
+            "created_by": actor_id,
             "schema_refs": ["cx.schema.realm.v1"],
             "default_discoverability": "public",
             "default_join_rule": "public",

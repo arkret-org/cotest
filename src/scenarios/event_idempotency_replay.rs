@@ -169,7 +169,7 @@ async fn create_test_realm(
                 "title": title,
                 "summary": title,
                 "trust_domain": "cx:trust_domain:event-idempotency.cotest.local",
-                "created_by_principal": &alice.actor,
+                "created_by": &alice.actor,
                 "schema_refs": ["cx.schema.realm.v1"],
                 "default_discoverability": "public",
                 "default_join_rule": "public",

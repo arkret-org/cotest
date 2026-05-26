@@ -255,7 +255,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             "schema": "cx.schema.realm.v1",
             "title": title,
             "trust_domain": "cx:trust_domain:mock-parity.cotest.local",
-            "created_by_principal": ctx.alice_did,
+            "created_by": ctx.alice_did,
             "schema_refs": ["cx.schema.realm.v1"],
             "summary": "created by T-P0-04 parity baseline",
             "default_discoverability": "public",

@@ -45,7 +45,7 @@ fn build_realm(
         trust_domain,
         summary: None,
         security_class,
-        created_by_principal: principal,
+        created_by: principal,
         owning_organizations: Vec::new(),
         schema_refs: vec!["cx.profile.realm.v1".to_owned()],
         policy_ref: None,

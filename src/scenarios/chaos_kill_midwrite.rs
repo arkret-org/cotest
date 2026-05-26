@@ -147,7 +147,7 @@ fn chaos_realm_event() -> Value {
                 "title": "Chaos Midwrite",
                 "summary": "Chaos Midwrite",
                 "trust_domain": "cx:trust_domain:chaos-midwrite.cotest.local",
-                "created_by_principal": ACTOR_DID,
+                "created_by": ACTOR_DID,
                 "schema_refs": ["cx.schema.realm.v1"],
                 "default_discoverability": "public",
                 "default_join_rule": "public",
