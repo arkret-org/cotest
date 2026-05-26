@@ -7,12 +7,17 @@
 
 use cotest::scenarios::circle::{
     cap_action_grant::cap_action_grant_run,
+    child_scope_policy::child_scope_policy_run,
     confidential_discussion_relation::confidential_discussion_relation_run,
     create_circle::create_circle_run,
     effective_scope_mismatch::effective_scope_mismatch_run,
     error_code_paths::error_code_paths_run,
     flow_scope_visibility::flow_scope_visibility_run,
+    history_visibility_floor::history_visibility_floor_run,
+    member_state_machine::member_state_machine_run,
     member_strict_subset::member_strict_subset_run,
+    metadata_encryption_floor::metadata_encryption_floor_run,
+    scope_circle_id_immutability::scope_circle_id_immutability_run,
 };
 
 #[tokio::test]
@@ -60,4 +65,41 @@ async fn circle_error_code_paths() {
     error_code_paths_run()
         .await
         .expect("error_code_paths scenario");
+}
+
+// ── CXP-0007 Phase A invariant scenarios (P2F.3.2).
+
+#[tokio::test]
+async fn circle_member_state_machine() {
+    member_state_machine_run()
+        .await
+        .expect("member_state_machine scenario");
+}
+
+#[tokio::test]
+async fn circle_scope_circle_id_immutability() {
+    scope_circle_id_immutability_run()
+        .await
+        .expect("scope_circle_id_immutability scenario");
+}
+
+#[tokio::test]
+async fn circle_history_visibility_floor() {
+    history_visibility_floor_run()
+        .await
+        .expect("history_visibility_floor scenario");
+}
+
+#[tokio::test]
+async fn circle_metadata_encryption_floor() {
+    metadata_encryption_floor_run()
+        .await
+        .expect("metadata_encryption_floor scenario");
+}
+
+#[tokio::test]
+async fn circle_child_scope_policy() {
+    child_scope_policy_run()
+        .await
+        .expect("child_scope_policy scenario");
 }
