@@ -54,7 +54,7 @@ fn build_realm(
         history_visibility: HistoryVisibility::Joined,
         encryption_profile: EncryptionProfile::None,
         federation_policy,
-        retention_policy_ref: None,
+        retention_policy_id: None,
         avatar_blob_ref: None,
         created_at: chrono::Utc::now(),
         updated_at: None,
