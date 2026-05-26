@@ -93,6 +93,9 @@ fn scan_tree_round4_does_not_flag_legal_did_web() {
     let _ = fs::remove_dir_all(&base);
 }
 
+/// Gating: manual operator scan over sibling project trees — needs
+/// `CONTRIX_DEV_ROOT` set; not a CI gate.
+/// Issue: Round-4 (cross-project rule scan)
 #[test]
 #[ignore = "manual: cargo test --test round4_rules_smoke -- --ignored round4_tree_scan_other_projects --nocapture"]
 fn round4_tree_scan_other_projects() {

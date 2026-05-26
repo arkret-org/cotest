@@ -18,6 +18,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs mock-witness Rust spawner + starid health-state
+/// diagnostic + `max-evidence-age` override + `rotation_kind=emergency`
+/// tagging.
+/// Issue: CT-5 (webvh witness offline)
 #[tokio::test]
 #[ignore = "needs mock-witness Rust spawner + starid health-state diagnostic + max-evidence-age override + rotation_kind=emergency tagging (see CT-5)"]
 #[serial]

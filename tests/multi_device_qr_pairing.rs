@@ -20,6 +20,11 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs soland E2E-MULTI-DEV-1: `GET /api/v1/devices` list
+/// endpoint + `cross_signing_binding` validation + MLS state machine
+/// (`cx.mls.commit` reducer) + `cx.device.list_update` emission +
+/// Remove-proposal fanout on device revoke.
+/// Issue: CT-9 (multi-device QR pairing)
 #[tokio::test]
 #[ignore = "needs soland E2E-MULTI-DEV-1: `GET /api/v1/devices` list endpoint + `cross_signing_binding` validation + MLS state machine (cx.mls.commit reducer) + cx.device.list_update emission + Remove-proposal fanout on device revoke — see CT-9"]
 #[serial]

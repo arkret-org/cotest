@@ -52,6 +52,9 @@ use serial_test::serial;
 
 use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
+/// Gating: live soland + teabay stack — default-ignored, set
+/// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
+/// Issue: CXP-0007 (Circle directory_visibility tiering)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "CXP-0007 Circle directory_visibility tiering — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]

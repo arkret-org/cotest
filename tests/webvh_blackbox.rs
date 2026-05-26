@@ -18,6 +18,9 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs a `starid` binary on PATH (or `STARID_BIN=...`); spawns
+/// a real process to run the 5 webvh conformance vectors.
+/// Issue: Round-27 / C32.8 (webvh blackbox)
 #[tokio::test]
 #[ignore = "needs starid binary on PATH or `STARID_BIN=...`"]
 #[serial]

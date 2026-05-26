@@ -28,6 +28,11 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: live leg spawns coauth/soland/teabay binaries; runs only when
+/// COAUTH_BIN / SOLAND_BIN / TEABAY_BIN (or sibling-checkout builds) are
+/// available. Without binaries the scenario still exercises the SDK
+/// contract surface.
+/// Issue: T3.5 (Handle → Join end-to-end)
 #[tokio::test]
 #[ignore = "T3.5 — exercises the Handle → Join chain; live leg spawns coauth/soland/teabay binaries. Run with --ignored when COAUTH_BIN / SOLAND_BIN / TEABAY_BIN (or sibling-checkout builds) are available."]
 #[serial]

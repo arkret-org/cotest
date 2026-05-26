@@ -11,6 +11,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: opt-in only — destructive process kill against a real soland
+/// child. Needs `COTEST_SOLAND_DATABASE_URL` or Docker so an ephemeral
+/// Postgres is available. Tracked by CT-16.
+/// Issue: CT-16 (chaos kill mid-write recovery harness)
 #[tokio::test]
 #[ignore = "destructive process-kill chaos test; requires COTEST_SOLAND_DATABASE_URL or Docker for ephemeral Postgres"]
 #[serial]

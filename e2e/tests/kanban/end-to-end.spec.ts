@@ -84,12 +84,14 @@ test.describe("kanban end-to-end", () => {
       await stepShot(alicePage.page, testInfo, "C-two-cards");
 
       // Archive Card A → it should disappear from the active column.
-      await todoColumn
+      // The card-archive-button is hidden until the parent .board-card is
+      // hovered, so hover the card first to make it actionable.
+      const cardALocator = todoColumn
         .getByTestId("kanban-card")
         .filter({ hasText: cardA })
-        .first()
-        .getByTestId("card-archive-button")
-        .click();
+        .first();
+      await cardALocator.hover();
+      await cardALocator.getByTestId("card-archive-button").click();
       await expect(todoColumn.getByTestId("kanban-card").filter({ hasText: cardA })).toHaveCount(0, {
         timeout: 30_000,
       });

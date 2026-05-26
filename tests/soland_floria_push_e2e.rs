@@ -14,6 +14,9 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs real `soland` + `floria` binaries plus the outstanding
+/// CT-7 service API wiring (push device register + send + receiver mock).
+/// Issue: CT-7 (soland + floria push blind-wakeup)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "needs soland + floria binaries and remaining CT-7 service API wiring"]
 #[serial]

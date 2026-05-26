@@ -506,6 +506,10 @@ mod tests {
     /// docker, performs a real key rotation, and observes the federation
     /// idempotency cache HTTP behaviour. Stays `#[ignore]` until the
     /// docker harness is wired.
+    /// Gating: needs live soland + teabay binaries via docker plus a key-
+    /// rotation harness so the idempotency cache replay can be observed end-
+    /// to-end.
+    /// Issue: round4-federation-e2e-docker
     #[test]
     #[ignore = "TODO(round4-federation-e2e-docker): needs live soland + teabay + key rotation harness"]
     fn live_multi_server_federation_historical_only_docker_e2e() {

@@ -19,6 +19,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: spawns a live soland binary; requires `SOLAND_BIN` or a
+/// sibling-checkout build. Silently returns `Ok(())` when no binary is
+/// locatable.
+/// Issue: T1.3 (production rejects placeholder proof)
 #[tokio::test]
 #[ignore = "T1.3 — spawns soland binary; run with --ignored when SOLAND_BIN or a sibling-checkout build is available."]
 #[serial]

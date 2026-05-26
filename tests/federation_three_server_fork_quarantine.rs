@@ -16,6 +16,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs soland E2E-FED-1 (outbound HTTP federation push) +
+/// E2E-FED-2 (RFC 9421 verify) + §4.5 quarantine surface (`GET
+/// /api/v1/federation/quarantine` + `duplicate_conflict` reason_code).
+/// Issue: CT-1 (three-server fork quarantine)
 #[tokio::test]
 #[ignore = "needs soland E2E-FED-1 (outbound HTTP federation push) + E2E-FED-2 (RFC 9421 verify) + §4.5 quarantine surface (`GET /api/v1/federation/quarantine` + `duplicate_conflict` reason_code) — see CT-1"]
 #[serial]

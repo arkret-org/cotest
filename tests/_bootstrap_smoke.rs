@@ -12,6 +12,9 @@ use cotest::scenarios::_helpers::coauth_bootstrap::{
 use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
 use cotest::scenarios::four_service_smoke::four_service_smoke_run;
 
+/// Gating: manual debug helper — needs a built coauth binary at the
+/// hard-coded sibling path. Not for CI.
+/// Issue: C34.3 (coauth bootstrap config debug)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn dump_patched_coauth_config() -> Result<()> {
@@ -32,6 +35,9 @@ async fn dump_patched_coauth_config() -> Result<()> {
     Ok(())
 }
 
+/// Gating: needs Docker daemon for the ephemeral Postgres image; soft-skips
+/// (prints `skip:`) when docker is unavailable.
+/// Issue: C34.3 (ephemeral Postgres helper smoke)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
@@ -48,6 +54,9 @@ async fn ephemeral_postgres_starts_and_stops() -> Result<()> {
     Ok(())
 }
 
+/// Gating: needs Docker (for ephemeral Postgres) plus a coauth binary;
+/// soft-skips when prereqs are missing.
+/// Issue: C34.3 (coauth bootstrap smoke)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
@@ -70,6 +79,9 @@ async fn coauth_can_be_spawned_with_ephemeral_postgres() -> Result<()> {
     Ok(())
 }
 
+/// Gating: needs a floria binary on PATH (or `FLORIA_BIN`); soft-skips
+/// when the binary is missing.
+/// Issue: C34.3 (floria bootstrap smoke)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
@@ -97,6 +109,9 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
 /// When all prereqs are present the test boots the stack and asserts every
 /// service answers /health with 2xx; when any piece is missing it bails with
 /// a descriptive message naming the missing dependency.
+/// Gating: needs Docker (coauth ephemeral Postgres) plus sibling
+/// coauth/starid/teabay binaries and a `DATABASE_URL` for teabay.
+/// Issue: CT-6 (four-service joint bootstrap smoke)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn four_service_joint_smoke() -> Result<()> {

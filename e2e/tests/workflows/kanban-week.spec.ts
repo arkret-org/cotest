@@ -102,13 +102,16 @@ test.describe("workflow: kanban week-in-review", () => {
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
       // Phase C — archive two finished tasks.
+      // The card-archive-button is hover-revealed (hidden until the user
+      // hovers the parent .board-card), so hover the card first before
+      // clicking the now-actionable button.
       for (const finished of [triageTask, planTask]) {
-        await today
+        const finishedCard = today
           .getByTestId("kanban-card")
           .filter({ hasText: finished })
-          .first()
-          .getByTestId("card-archive-button")
-          .click();
+          .first();
+        await finishedCard.hover();
+        await finishedCard.getByTestId("card-archive-button").click();
         await expect(today.getByTestId("kanban-card").filter({ hasText: finished })).toHaveCount(
           0,
           { timeout: 30_000 },
@@ -127,12 +130,12 @@ test.describe("workflow: kanban week-in-review", () => {
       await stepShot(patPage.page, testInfo, "C-two-done");
 
       // Phase D — Pat archives prTask by mistake, then restores it.
-      await today
+      const prCard = today
         .getByTestId("kanban-card")
         .filter({ hasText: prTask })
-        .first()
-        .getByTestId("card-archive-button")
-        .click();
+        .first();
+      await prCard.hover();
+      await prCard.getByTestId("card-archive-button").click();
       await expect(today.getByTestId("kanban-card").filter({ hasText: prTask })).toHaveCount(0, {
         timeout: 30_000,
       });
@@ -165,6 +168,9 @@ test.describe("workflow: kanban week-in-review", () => {
         .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue))
         .toBe("active");
 
+      // list-archive-button is hover-revealed on the column header — hover
+      // the column itself first so the button becomes actionable.
+      await today.hover();
       await today.getByTestId("list-archive-button").click();
       const archivedLists = patPage.page.getByTestId("kanban-archived-lists");
       await archivedLists.locator("summary").click();

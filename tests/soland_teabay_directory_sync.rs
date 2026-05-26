@@ -15,6 +15,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs Docker (coauth ephemeral Postgres) + sibling
+/// coauth/starid/teabay binaries + `DATABASE_URL`. The CT-6
+/// `FourServiceStack` bootstrap is already wired.
+/// Issue: CT-8 (soland + teabay directory sync latency)
 #[tokio::test]
 #[ignore = "requires DATABASE_URL + starid/teabay/coauth binaries; CT-6 bootstrap is ready"]
 #[serial]

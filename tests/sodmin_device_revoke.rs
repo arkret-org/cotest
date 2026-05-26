@@ -19,6 +19,10 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs sodmin Dioxus UI spawner + joint
+/// soland+coauth+sodmin bootstrap + Rust-side playwright integration +
+/// soland device-revoke cascade.
+/// Issue: SOD-1 (sodmin device revoke cascade)
 #[tokio::test]
 #[ignore = "needs sodmin Dioxus UI spawner + soland+coauth+sodmin joint bootstrap + Rust-side playwright + soland device-revoke cascade (see SOD-1)"]
 #[serial]

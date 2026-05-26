@@ -17,6 +17,11 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: needs soland MLS state machine (no `cx.mls.commit` reducer /
+/// epoch tracking today) + soland E2E-KEY-BACKUP-2 (SSK-proof-gated
+/// DELETE + recovery attestation surface) + cotest argon2 dep.
+/// `PUT/GET /api/v1/keys/backups/{id}` already exist.
+/// Issue: CT-11 (key backup → MLS history replay)
 #[tokio::test]
 #[ignore = "needs soland MLS state machine (no cx.mls.commit reducer / epoch tracking today) + soland E2E-KEY-BACKUP-2 (SSK-proof-gated DELETE + recovery attestation surface) + cotest argon2 dep; PUT/GET /api/v1/keys/backups/{id} ARE implemented today — see CT-11"]
 #[serial]

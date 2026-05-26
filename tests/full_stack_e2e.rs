@@ -25,6 +25,11 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: live multi-service stack — spawns coauth/starid/soland/teabay/
+/// floria binaries. Requires all `*_BIN` env vars (or sibling-checkout
+/// builds) on PATH. When any binary is missing the live leg silently
+/// skips and the SDK contract surface still runs.
+/// Issue: T8.1 (full-stack E2E)
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "T8.1 — full multi-service E2E; live leg spawns coauth/starid/soland/teabay/floria. Run with --ignored when all *_BIN env vars (or sibling-checkout builds) are available."]
 #[serial]

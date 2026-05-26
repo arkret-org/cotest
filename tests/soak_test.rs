@@ -27,6 +27,11 @@
 use anyhow::Result;
 use serial_test::serial;
 
+/// Gating: long-running soak (100 actors × 10k messages, ~1M events) —
+/// opt-in via `--profile soak`. Also needs the shared persistent-storage
+/// harness hook, per-process memory introspection, `hdrhistogram`, and
+/// an anchor-store row-count probe.
+/// Issue: CT-18 (soak test)
 #[tokio::test]
 #[ignore = "long-running soak; opt-in via --profile soak; also needs persistent-storage harness hook + memory introspection + hdrhistogram + anchor row-count probe (see CT-18)"]
 #[serial]

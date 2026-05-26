@@ -20,6 +20,9 @@ use std::path::PathBuf;
 
 use cotest::literal_scanner::scan_tree_round4;
 
+/// Gating: manual operator scan over sibling project trees — uses
+/// `CONTRIX_DEV_ROOT` (default `D:\Works\contrix-dev`); not a CI gate.
+/// Issue: Round-4 (external literal scan)
 #[test]
 #[ignore = "manual: cargo test --test round4_external_scan -- --ignored --nocapture"]
 fn round4_external_scan_all_projects() {

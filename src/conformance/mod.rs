@@ -6,6 +6,7 @@ mod envelope;
 mod federation;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
+pub mod mock_vector_base;
 mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
@@ -44,6 +45,7 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
+pub use capability::run_capability_boundary_fixture_suite;
 pub use capability::run_capability_facet_fixture_suite;
 pub use capability::run_capability_fixture_suite;
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
