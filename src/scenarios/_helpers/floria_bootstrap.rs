@@ -4,7 +4,7 @@
 //! Unlike coauth, floria has **no** external runtime dependencies — it just
 //! needs a YAML/KDL config wired with at least one app. We render a minimal
 //! YAML on the fly (one `custom` pushkin pointed at a sink URL) and spawn
-//! floria directly with `SOFLARE_CONF` exported so its `Config::load`
+//! floria directly with `FLORIA_CONF` exported so its `Config::load`
 //! picks up our temp file.
 //!
 //! Returns `Ok(None)` if the floria binary cannot be located, mirroring the
@@ -111,13 +111,13 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         Err(_) => return Ok(None),
     };
 
-    // Spawn floria directly. We pass SOFLARE_CONF as an env var for the
+    // Spawn floria directly. We pass FLORIA_CONF as an env var for the
     // child only, so concurrent test threads don't race over the parent
     // process's environment (the bridge_contracts suite is `serial_test`-
     // serialised, but other suites may run in parallel).
     let mut command = Command::new(&floria_bin);
     command
-        .env("SOFLARE_CONF", config_file.path())
+        .env("FLORIA_CONF", config_file.path())
         .env("RUST_LOG", "warn")
         .stdout(Stdio::null())
         .stderr(Stdio::null());

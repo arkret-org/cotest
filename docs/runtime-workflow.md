@@ -151,7 +151,7 @@ then stops those processes after the run:
 ```powershell
 .\scripts\run-compose.ps1 `
   -FloriaBaseUrl http://127.0.0.1:5000 `
-  -FloriaCommand '$env:SOFLARE_CONF="D:\Works\contrix-dev\floria\soflare.sample.kdl"; cargo run --manifest-path D:\Works\contrix-dev\floria\Cargo.toml'
+  -FloriaCommand '$env:FLORIA_CONF="D:\Works\contrix-dev\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\contrix-dev\floria\Cargo.toml'
 ```
 
 ### Run in Docker mode
