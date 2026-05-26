@@ -5,7 +5,10 @@
 node_modules/
 
 # Cotest / Playwright run artifacts
+/artifacts/
 artifacts/
+/data/
+/and/
 test-results/
 playwright-report/
 playwright-output/
