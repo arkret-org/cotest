@@ -78,9 +78,14 @@ jobs:
         # tests/_bootstrap_smoke.rs / tests/full_stack_e2e.rs. The
         # circle / directory scenarios already run in ci.yml; this job
         # adds the live cross-service exercises.
+        #
+        # The `test-with-containers` feature is Linux-only (see
+        # `src/scenarios/_helpers/coauth_bootstrap.rs`). We enable it
+        # here so the Ubuntu job exercises the testcontainers bring-up
+        # alongside the docker-CLI path.
         run: |
           cargo test --workspace --locked
-          cargo test --workspace --locked -- --ignored || true
+          cargo test --workspace --locked --features test-with-containers -- --ignored || true
       - name: upload journey-coverage
         uses: actions/upload-artifact@v4
         if: always()

@@ -14,8 +14,15 @@ env:
 
 jobs:
   rust:
-    name: rust (fmt / clippy / test)
+    name: rust (${{ matrix.toolchain }} / fmt / clippy / test)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # MSRV (1.80) catches accidental use of newer std APIs; the
+        # current pinned toolchain (1.92) is what local devs and the
+        # release pipeline use. Both must stay green.
+        toolchain: ["1.80", "1.92"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,7 +37,7 @@ jobs:
         continue-on-error: true
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.92"
+          toolchain: ${{ matrix.toolchain }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -43,11 +50,22 @@ jobs:
         # cotest carries TODO scaffolding for the circle-rollout milestone;
         # treat warnings as errors so drift surfaces before merge.
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: build (all-features)
+        working-directory: cotest
+        run: cargo build --workspace --all-features --locked
+      - name: build (no-default-features)
+        working-directory: cotest
+        run: cargo build --workspace --no-default-features --locked
       - name: test
         working-directory: cotest
         # Skip live-server scenarios — they are gated by `#[ignore]` and
         # bootstrapped by the integration.yml workflow.
         run: cargo test --workspace --locked
+      - name: check_ignore_comments hygiene
+        working-directory: cotest
+        # Every `#[ignore]` attribute must carry a `/// Issue:` or
+        # `/// Gating:` justification — see scripts/check_ignore_comments.sh.
+        run: bash scripts/check_ignore_comments.sh
 
   typos:
     name: typos

@@ -2,8 +2,16 @@
 name = "cotest"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.92"
+rust-version = "1.85"
 publish = false
+
+[features]
+# C.8 — opt-in testcontainers-backed Postgres bring-up for Linux CI.
+# `coauth_bootstrap` historically shelled out to the docker CLI because
+# named-pipe docker-engine integration is fragile on Windows; with this
+# feature on, Linux jobs get a managed `testcontainers` lifecycle that
+# survives panics without depending on `docker rm -fv`.
+test-with-containers = ["dep:testcontainers"]
 
 [dependencies]
 anyhow = "1.0.100"
@@ -39,6 +47,11 @@ sha2 = "0.10.9"
 # and need a Drop-managed temp file. Pinned to the version already in the
 # lockfile so `cargo test --locked` doesn't try to mutate Cargo.lock.
 tempfile = "3.27.0"
+# C.8 — Linux-only testcontainers integration (see `test-with-containers`
+# feature). Pinned conservatively; the cotest harness only uses the
+# stable `Container` / `RunnableImage` surface so a minor bump in
+# testcontainers itself shouldn't affect us.
+testcontainers = { version = "0.15", optional = true }
 tokio = { version = "1.48.0", features = ["macros", "process", "rt-multi-thread", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }

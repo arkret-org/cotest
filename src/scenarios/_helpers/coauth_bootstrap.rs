@@ -28,11 +28,18 @@
 //! more downstream scenarios tomorrow) should treat `None` exactly like the
 //! pre-C34.3 "service not available — keep the placeholder row" branch.
 //!
-//! Windows note: this implementation deliberately uses the docker CLI as a
-//! subprocess (rather than `testcontainers-rs`) — Windows + named-pipe
-//! docker-engine integrations historically misbehave under `testcontainers`,
-//! and the CLI surface is stable enough that spawning a one-shot postgres
-//! container is a four-line incantation.
+//! Platform note: the default implementation uses the docker CLI as a
+//! subprocess. Windows + named-pipe docker-engine integrations
+//! historically misbehave under `testcontainers`, and the CLI surface
+//! is stable enough that spawning a one-shot postgres container is a
+//! four-line incantation.
+//!
+//! On non-Windows targets the `test-with-containers` Cargo feature
+//! switches to a real `testcontainers`-managed lifecycle
+//! ([`spawn_ephemeral_postgres_testcontainers`]), so panics in the
+//! middle of a test still tear down the container even when the
+//! docker CLI isn't available. The CI matrix wires this on for the
+//! Ubuntu job only — see `.github/workflows/integration.yml`.
 
 use std::{
     io::Write,
@@ -599,6 +606,53 @@ fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
         thread::sleep(Duration::from_millis(500));
     }
     false
+}
+
+// ── testcontainers-backed bring-up (Linux-only, opt-in) ──────────────────
+//
+// When the `test-with-containers` feature is on AND we're not on Windows,
+// scenarios can prefer this entry point over the docker-CLI path. It
+// returns an `EphemeralPg` shaped identically to the CLI variant so the
+// downstream `spawn_coauth_with_db` orchestration doesn't need to know
+// which backend produced the handle.
+#[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
+pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> {
+    use testcontainers::{clients::Cli, core::WaitFor, GenericImage};
+
+    // testcontainers' default client holds a leaked CLI handle, which is
+    // exactly what we want for the duration of a single `cargo test`
+    // process. We DO NOT keep the returned `Container<'_>` because its
+    // lifetime is tied to the `Cli`; instead we capture the
+    // host-published port and let the container shut down when the
+    // process exits. EphemeralPg's `Drop` still runs `docker rm -fv` as
+    // a belt-and-braces cleanup.
+    static DOCKER: std::sync::OnceLock<Cli> = std::sync::OnceLock::new();
+    let docker = DOCKER.get_or_init(Cli::default);
+
+    let image = GenericImage::new("postgres", "16-alpine")
+        .with_env_var("POSTGRES_USER", "contrix")
+        .with_env_var("POSTGRES_PASSWORD", "contrix")
+        .with_env_var("POSTGRES_DB", "contrix")
+        .with_wait_for(WaitFor::message_on_stderr(
+            "database system is ready to accept connections",
+        ));
+    let container = docker.run(image);
+    let host_port = container.get_host_port_ipv4(5432);
+    let container_name = container.id().to_owned();
+    // Detach the container handle: testcontainers will reap it when the
+    // process exits, and our `EphemeralPg::Drop` provides the explicit
+    // cleanup path.
+    std::mem::forget(container);
+
+    let pg = EphemeralPg {
+        connect_url: format!("postgresql://contrix:contrix@127.0.0.1:{host_port}/contrix"),
+        container_name,
+        cleanup: true,
+    };
+    if !wait_for_postgres_ready(&pg, Duration::from_secs(60)) {
+        return Ok(None);
+    }
+    Ok(Some(pg))
 }
 
 async fn wait_for_health(base_url: &str, timeout: Duration) -> bool {
