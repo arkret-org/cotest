@@ -38,7 +38,7 @@
 
 5. alice 在 `F1` 详情点 "Promote discussion to separate space"
 6. yougen 客户端:
-   - 创建新 Space `S_discussion`:`cx.space.create`,parent_ref = `S_parent`
+   - 创建新 Space `S_discussion`:`cx.space.create`,parent_space_id = `S_parent`
    - 更新 `F1`:`cx.flow.update`,`discussion_space_ref = S_discussion.id`
    - 父子边互相确认:`cx.space.child`(在 `S_parent` 写入)+ `cx.space.parent`(在 `S_discussion` 写入)
    - 两条边都 status=active 后,reducer 标记 edge `confirmed`(spec §3-§4)

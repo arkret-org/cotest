@@ -44,7 +44,7 @@
 ### Phase C — 加三个 List
 
 6. alice 进 board,点 "Add list" 三次,分别命名 `Todo`、`In Progress`、`Done`
-7. 每次 yougen 提交 `cx.space.create`:`{ kind: "list", parent_ref: boardId, title }`
+7. 每次 yougen 提交 `cx.space.create`:`{ kind: "list", parent_space_id: boardId, title }`
 8. 内部:通过 `GET /api/v1/spaces/{boardId}/cells/cx.component.child_order.v1` 暴露 list 顺序
 9. 断言:board 视图渲染三列(`list-column` testid × 3),按创建顺序排列
 
