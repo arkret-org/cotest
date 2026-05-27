@@ -11,8 +11,9 @@ use serde_json::Value;
 
 use cotest::conformance::{
     ALL_AGENT_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
-    ALL_SIDECAR_VECTOR_IDS, run_agent_vector_suite, run_cursor_vector_suite,
-    run_media_binding_vector_suite, run_sidecar_vector_suite,
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
+    run_agent_vector_suite, run_cursor_vector_suite, run_media_binding_vector_suite,
+    run_member_identity_vector_suite, run_member_roster_vector_suite, run_sidecar_vector_suite,
 };
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -59,6 +60,22 @@ fn sidecar_vector_suite_runs_clean() {
 fn cursor_vector_suite_runs_clean() {
     run_cursor_vector_suite().expect("cursor vectors must pass");
     assert_eq!(ALL_CURSOR_VECTOR_IDS.len(), 2);
+}
+
+// ─── R3.1 / VECT-MID-1..7 — MemberIdentity vectors ─────────────────────────
+
+#[test]
+fn member_identity_vector_suite_runs_clean() {
+    run_member_identity_vector_suite().expect("member-identity vectors must pass");
+    assert_eq!(ALL_MEMBER_IDENTITY_VECTOR_IDS.len(), 7);
+}
+
+// ─── R3.1 / VECT-ROST-1..3 — sync member roster vectors ───────────────────
+
+#[test]
+fn member_roster_vector_suite_runs_clean() {
+    run_member_roster_vector_suite().expect("member-roster vectors must pass");
+    assert_eq!(ALL_MEMBER_ROSTER_VECTOR_IDS.len(), 3);
 }
 
 // ─── P0 / FIX-1 — fixture presence + shape ────────────────────────────────
@@ -304,4 +321,212 @@ fn test_6_handle_homograph_script_mix_or_nfc_variant_reject() {
     //   3. Display-layer mitigation MUST still surface a confusable
     //      hint when the canonical compare passes.
     unreachable!("integration target gated on starid / teabay P2-impl");
+}
+
+// ─── R3.1 / TEST-7 — `cx.member.identity.update` end-to-end ───────────────
+
+#[test]
+fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
+    // SDK-level positive control: the canonical-bytes helper +
+    // effective-set filter that soland's MID reducer MUST mirror. An
+    // initial event followed by a replacement event with a matching
+    // payload_digest collapses to a single effective entry — the second.
+    use contrix_core::model::{
+        DisplayProfile, Handle, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
+        MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
+        MemberIdentityUpdatePayload, effective_identity_events,
+    };
+    use contrix_core::{Did, EventId, Hash, RealmId};
+
+    let realm = RealmId::new("cx:realm:01904100-0000-7000-8000-000000007007")
+        .map_err(|e| anyhow!("realm: {e}"))?;
+    let alice = Did::new("did:web:alice.acme.example".to_owned())?;
+    let subject = Did::new("did:web:alice.principal.example".to_owned())?;
+
+    let make_identity = |name: &str| -> Result<MemberIdentity> {
+        Ok(MemberIdentity {
+            schema: "cx.schema.member_identity.v1".to_owned(),
+            realm_id: realm.clone(),
+            actor_id: alice.clone(),
+            subject_id: subject.clone(),
+            primary_handle: Some(
+                Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?,
+            ),
+            handles: vec![],
+            display_profile: DisplayProfile { display_name: name.to_owned(), avatar_ref: None },
+            asserted_at: chrono::Utc::now(),
+            expires_at: None,
+            proof: MemberIdentityProof {
+                verification_method: "did:web:alice.acme.example#key-1".to_owned(),
+                signature_algorithm: MemberIdentitySignatureAlgorithm::Ed25519,
+                payload_digest: Hash::new(
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                )?,
+                signature: "AAAA".to_owned(),
+            },
+        })
+    };
+
+    let v1 = make_identity("Alice v1")?;
+    let v2 = make_identity("Alice v2 (display_name changed)")?;
+    let event_a = EventId::new("cx:event:01904100-0000-7000-8000-000000007a01")?;
+    let event_b = EventId::new("cx:event:01904100-0000-7000-8000-000000007a02")?;
+    let carrier_a = IdentityPayloadCarrier::MemberIdentity { member_identity: v1 };
+    let carrier_b = IdentityPayloadCarrier::MemberIdentity { member_identity: v2 };
+    let digest_a = Hash::new(
+        carrier_a
+            .carrier_sha256()
+            .map_err(|e| anyhow!("carrier_sha256: {e}"))?,
+    )?;
+
+    let payload_a = MemberIdentityUpdatePayload {
+        realm_id: realm.clone(),
+        actor_id: alice.clone(),
+        segment: MemberIdentitySegment::MemberIdentity,
+        replaces: vec![],
+        identity_payload: carrier_a,
+        identity_state_digest: None,
+        expected_state_digest: None,
+    };
+    let payload_b = MemberIdentityUpdatePayload {
+        realm_id: realm,
+        actor_id: alice,
+        segment: MemberIdentitySegment::MemberIdentity,
+        replaces: vec![MemberIdentityReplacementRef {
+            event_id: event_a.clone(),
+            payload_digest: digest_a,
+        }],
+        identity_payload: carrier_b,
+        identity_state_digest: None,
+        expected_state_digest: None,
+    };
+
+    let effective = effective_identity_events([(&event_a, &payload_a), (&event_b, &payload_b)])
+        .map_err(|e| anyhow!("effective: {e}"))?;
+    if effective.len() != 1 || effective[0].0.as_str() != event_b.as_str() {
+        bail!(
+            "TEST-7: client MUST see only the replacing event in the effective \
+             set (replaces[] semantics); got {} entries: {:?}",
+            effective.len(),
+            effective.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "R3.1: soland MID reducer + cx.profile.update field-level delta wiring not yet implemented"]
+fn test_7_cx_member_identity_update_live() {
+    // Live integration:
+    //   1. Actor publishes initial `cx.member.identity.update` event
+    //      with MemberIdentity v1 (display_name="Alice").
+    //   2. Actor publishes second event with `replaces[]` pointing at
+    //      the first; payload carries MemberIdentity v2 with
+    //      display_name="Alice (work)".
+    //   3. Client `account.subscribe` frame surfaces a roster with only
+    //      the second event in `identity_event_ids[]`.
+    //   4. `cx.profile.update` field-level delta MUST drive the v2
+    //      display_name onto the projected profile; the
+    //      `cx.profile.space_override` profile MUST take precedence
+    //      when set per-Space.
+    unreachable!("integration target gated on soland MID reducer (R3.1)");
+}
+
+// ─── R3.1 / TEST-8 — Handle rename round-trip ──────────────────────────────
+
+#[test]
+fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
+    // SDK-level positive control: invite by canonical handle
+    // `alice:acme.example`. The `MemberDeliveryBindingCandidate` carries
+    // `payload.handle` (NOT `handle_uri`) and the directory's
+    // `resolve_handle` response surface MUST round-trip the same wire
+    // form. The full wire round-trip across coauth/soland/teabay is the
+    // live `#[ignore]` companion below.
+    use contrix_core::{
+        CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle, HandleHintBindingSource,
+        MemberDeliveryBindingCandidate, RecipientServiceType,
+    };
+    use std::collections::BTreeSet;
+
+    let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
+    if invite_handle.canonical() != "alice:acme.example" {
+        bail!(
+            "TEST-8: canonical handle wire form must be `<localpart>:<domain>`; got `{}`",
+            invite_handle.canonical()
+        );
+    }
+
+    let principal = Did::new("did:web:principal.acme.example".to_owned())?;
+    let mut modes = BTreeSet::new();
+    modes.insert(DeliveryMode::Events);
+    let candidate = MemberDeliveryBindingCandidate {
+        subject_id: Did::new("did:web:alice.acme.example".to_owned())?,
+        handle: invite_handle,
+        handle_aliases: vec!["acct:alice@acme.example".to_owned()],
+        member_delivery_binding: DeliveryBindingHint {
+            recipient_service_did: principal.clone(),
+            recipient_service_type: RecipientServiceType::PrincipalServer,
+            binding_source: HandleHintBindingSource::OrganizationPolicy,
+            delivery_modes: modes,
+            service_acceptance_ref: None,
+            policy_ref: None,
+        },
+        issuer_service_did: principal,
+        audience: "cx:realm:01904100-0000-7000-8000-test8audience".to_owned(),
+        expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
+        issued_at: Some(chrono::Utc::now()),
+        source_refs: vec!["cx:event:01904100-0000-7000-8000-test8source01".to_owned()],
+        proofs: vec![serde_json::json!({
+            "kind": "detached_jws",
+            "alg": "EdDSA",
+            "verification_method": "did:web:principal.acme.example#key-1",
+            "payload_digest":
+                "sha256:0000000000000000000000000000000000000000000000000000000000000088",
+            "created_at": "2026-05-27T00:00:00Z",
+            "audience": "cx:realm:01904100-0000-7000-8000-test8audience",
+            "jws": "test8.real.shaped.jws"
+        })],
+        claim_digest: None,
+        intent: CandidateIntent::MemberAdd,
+    };
+
+    // Round-trip through serde to confirm the wire form carries `handle`
+    // (NOT `handle_uri`) and round-trips back to the same Handle.
+    let wire = serde_json::to_value(&candidate).map_err(|e| anyhow!("serialise: {e}"))?;
+    if wire.get("handle").is_none() {
+        bail!(
+            "TEST-8: serialised candidate MUST carry `handle` field (R3.1 wire \
+             rename); shape: {wire:#}"
+        );
+    }
+    if wire.get("handle_uri").is_some() {
+        bail!(
+            "TEST-8: serialised candidate MUST NOT carry the retired \
+             `handle_uri` field"
+        );
+    }
+    let decoded: MemberDeliveryBindingCandidate =
+        serde_json::from_value(wire).map_err(|e| anyhow!("deserialise: {e}"))?;
+    if decoded.handle.canonical() != "alice:acme.example" {
+        bail!(
+            "TEST-8: handle wire round-trip drifted; got `{}`",
+            decoded.handle.canonical()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+#[ignore = "R3.1: live coauth + soland + teabay handle wire rename not yet visible at runtime"]
+fn test_8_handle_rename_round_trip_live() {
+    // Live integration:
+    //   1. Client builds invite for canonical handle `alice:acme.example`.
+    //   2. soland reducer accepts member-add with `payload.handle =
+    //      "alice:acme.example"` (NO `handle_uri` field).
+    //   3. teabay's `cx.directory.resolve_handle(handle=...)` accepts the
+    //      canonical handle string in the request body and returns a
+    //      candidate whose `handle` field is the same canonical wire form.
+    //   4. coauth's handle-claim issuance + sync surface MUST NOT emit
+    //      `handle_uri` anywhere on a fresh R3.1 wire shape.
+    unreachable!("integration target gated on coauth+soland+teabay R3.1 rename");
 }

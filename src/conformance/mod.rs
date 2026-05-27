@@ -9,6 +9,8 @@ mod federation;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod media_binding;
+mod member_identity_vectors;
+mod member_roster_vectors;
 pub mod mock_vector_base;
 mod principal_server_certification;
 mod privacy;
@@ -75,6 +77,20 @@ pub use media_binding::{
     run_recording_artifact_via_contrix_blob_vector, run_session_focus_no_split_brain_vector,
     run_token_exchange_minimal_vector, run_token_issuer_unauthorised_vector,
     run_unknown_type_fail_closed_vector,
+};
+pub use member_identity_vectors::{
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, run_member_identity_cross_subject_replacement_ignored_vector,
+    run_member_identity_expected_state_digest_mismatch_vector,
+    run_member_identity_proof_invalid_vector,
+    run_member_identity_replacement_digest_mismatch_vector,
+    run_member_identity_unknown_segment_rejected_vector,
+    run_member_identity_update_initial_vector, run_member_identity_update_replacement_vector,
+    run_member_identity_vector_suite, sample_member_identity_value,
+};
+pub use member_roster_vectors::{
+    ALL_MEMBER_ROSTER_VECTOR_IDS, run_member_roster_limited_vector,
+    run_member_roster_shape_vector, run_member_roster_vector_suite,
+    run_member_roster_with_inline_identity_events_vector,
 };
 pub use principal_server_certification::{
     PrincipalCertificationStatus, run_principal_server_certification_gate_suite,
