@@ -42,8 +42,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: cotest
-      # rustfmt enforcement was dropped intentionally in commit 9232001;
-      # restore via `cargo fmt --all -- --check` before tagging a release.
+      - name: fmt
+        working-directory: cotest
+        run: cargo fmt --all -- --check
       - name: clippy
         working-directory: cotest
         # cotest carries TODO scaffolding for the circle-rollout milestone;

@@ -7,6 +7,20 @@ after Complement. It starts real server processes or real server containers,
 drives public HTTP endpoints, and uses `contrix-rust-sdk` where typed protocol
 helpers and client smoke coverage are useful.
 
+## Pre-commit hook setup
+
+After cloning, enable the project's pre-commit hooks:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
+warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
+a branch, copy it from
+[`contrix-rust-sdk`](https://github.com/contrix-dev/contrix-rust-sdk) and
+adapt to your local toolchain.
+
 The current default server under test is the sibling
 `../soland/Cargo.toml` checkout.
 
