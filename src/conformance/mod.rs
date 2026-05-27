@@ -1,12 +1,16 @@
+mod agent_vectors;
 mod blind_payload;
 mod capability;
 mod coauth_lifecycle;
+mod cursor_vectors;
 mod encoding;
 mod envelope;
 mod federation;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
+mod media_binding;
 pub mod mock_vector_base;
+mod sidecar_vectors;
 mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
@@ -42,8 +46,30 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
+pub use agent_vectors::{
+    ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
+    run_agent_pairing_expiry_vector, run_agent_provision_vector,
+    run_agent_session_grant_replay_vector, run_agent_vector_suite,
+};
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
+};
+pub use cursor_vectors::{
+    ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector,
+    run_cursor_opaque_stateless_profile_vector, run_cursor_vector_suite,
+};
+pub use media_binding::{
+    ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
+    run_focus_selection_oldest_membership_vector, run_media_binding_vector_suite,
+    run_participant_binding_required_vector, run_participant_identity_unrecognised_vector,
+    run_recording_artifact_via_contrix_blob_vector, run_session_focus_no_split_brain_vector,
+    run_token_exchange_minimal_vector, run_token_issuer_unauthorised_vector,
+    run_unknown_type_fail_closed_vector,
+};
+pub use sidecar_vectors::{
+    ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
+    run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
+    run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
 };
 pub use capability::run_capability_boundary_fixture_suite;
 pub use capability::run_capability_facet_fixture_suite;

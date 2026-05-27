@@ -1,0 +1,106 @@
+{
+  "suite": "agent_payloads",
+  "profile": "cx.profile.agent_payload_vectors.v1",
+  "schema_ref": "cx.schema.event_payload.v1",
+  "spec_anchor": "spec/v1/artifacts/schemas/event-payload.schema.json",
+  "comment": "R3 sync (contrix-spec @ b47ff6ec) — minimal payload shapes for the new agent event kinds. Live reducer wiring is R3.1; this fixture only pins wire-shape.",
+  "cases": [
+    {
+      "name": "agent_pause_payload_minimal",
+      "event_kind": "cx.agent.pause",
+      "payload_def_ref": "agent_pause_payload",
+      "payload": {
+        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "reason": "controller_initiated",
+        "at": "2026-05-27T05:00:00Z"
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "agent_resume_payload_minimal",
+      "event_kind": "cx.agent.resume",
+      "payload_def_ref": "agent_resume_payload",
+      "payload": {
+        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "at": "2026-05-27T05:05:00Z"
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "agent_deactivate_payload_terminal",
+      "event_kind": "cx.agent.deactivate",
+      "payload_def_ref": "agent_deactivate_payload",
+      "payload": {
+        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "reason": "controller_revoked",
+        "at": "2026-05-27T06:00:00Z",
+        "terminal": true
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "agent_draft_propose_actor_private",
+      "event_kind": "cx.agent.draft.propose",
+      "payload_def_ref": "agent_draft_propose_payload",
+      "reducer_input": false,
+      "payload": {
+        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "draft_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c001",
+        "target_realm_id": "cx:realm:01999999-0000-7000-8000-000000000001",
+        "body_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "proposed_at": "2026-05-27T07:00:00Z"
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "agent_action_request_actor_private",
+      "event_kind": "cx.agent.action_request",
+      "payload_def_ref": "agent_action_request_payload",
+      "reducer_input": false,
+      "payload": {
+        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "request_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c002",
+        "action_kind": "cx.message.create",
+        "requested_at": "2026-05-27T07:01:00Z"
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "agent_action_approve_actor_private",
+      "event_kind": "cx.agent.action_approve",
+      "payload_def_ref": "agent_action_approve_payload",
+      "reducer_input": false,
+      "payload": {
+        "request_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c002",
+        "approver_did": "did:web:controller.example",
+        "approved_at": "2026-05-27T07:02:00Z"
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "agent_action_reject_actor_private",
+      "event_kind": "cx.agent.action_reject",
+      "payload_def_ref": "agent_action_reject_payload",
+      "reducer_input": false,
+      "payload": {
+        "request_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c003",
+        "approver_did": "did:web:controller.example",
+        "reject_reason": "policy_violation",
+        "rejected_at": "2026-05-27T07:03:00Z"
+      },
+      "expect": "pass"
+    },
+    {
+      "name": "actor_kind_field_must_fail",
+      "event_kind": "cx.agent.pause",
+      "payload_def_ref": "agent_pause_payload",
+      "reason": "actor_kind_reducer_managed",
+      "payload": {
+        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "actor_kind": "agent",
+        "at": "2026-05-27T08:00:00Z"
+      },
+      "expect": "fail"
+    }
+  ]
+}

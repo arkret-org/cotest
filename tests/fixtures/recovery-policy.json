@@ -1,0 +1,100 @@
+{
+  "suite": "recovery_policy",
+  "profile": "cx.profile.recovery_policy_vectors.v1",
+  "schema_ref": "cx.schema.recovery_policy.v1",
+  "spec_anchor": "spec/v1/artifacts/schemas/recovery-policy.schema.json",
+  "cases": [
+    {
+      "name": "active_passphrase_policy_minimal",
+      "expect": "pass",
+      "policy": {
+        "schema": "cx.schema.recovery_policy.v1",
+        "policy_id": "cx:recovery_policy:01999999-0000-7000-8000-0000000000a1",
+        "lifecycle": "active",
+        "epoch": 1,
+        "body": {
+          "proof_kinds": ["recovery_unlock"],
+          "kdf_profile": "argon2id-default"
+        },
+        "created_at": "2026-05-27T00:00:00Z"
+      }
+    },
+    {
+      "name": "device_quorum_three_of_five",
+      "expect": "pass",
+      "policy": {
+        "schema": "cx.schema.recovery_policy.v1",
+        "policy_id": "cx:recovery_policy:01999999-0000-7000-8000-0000000000a2",
+        "lifecycle": "active",
+        "epoch": 2,
+        "body": {
+          "proof_kinds": ["device_quorum"],
+          "threshold": {"k": 3, "n": 5}
+        },
+        "created_at": "2026-05-27T00:00:00Z"
+      }
+    },
+    {
+      "name": "trusted_recovery_service_oidc",
+      "expect": "pass",
+      "policy": {
+        "schema": "cx.schema.recovery_policy.v1",
+        "policy_id": "cx:recovery_policy:01999999-0000-7000-8000-0000000000a3",
+        "lifecycle": "active",
+        "epoch": 3,
+        "body": {
+          "proof_kinds": ["trusted_recovery_service"],
+          "service_did": "did:web:custodian.example",
+          "service_audience": "https://custodian.example"
+        },
+        "created_at": "2026-05-27T00:00:00Z"
+      }
+    },
+    {
+      "name": "principal_signing_sovereign",
+      "expect": "pass",
+      "policy": {
+        "schema": "cx.schema.recovery_policy.v1",
+        "policy_id": "cx:recovery_policy:01999999-0000-7000-8000-0000000000a4",
+        "lifecycle": "active",
+        "epoch": 4,
+        "body": {
+          "proof_kinds": ["principal_signing"]
+        },
+        "created_at": "2026-05-27T00:00:00Z"
+      }
+    },
+    {
+      "name": "retired_policy_must_not_satisfy_new_recovery",
+      "expect": "fail",
+      "reason": "lifecycle=retired blocks new recovery sessions",
+      "policy": {
+        "schema": "cx.schema.recovery_policy.v1",
+        "policy_id": "cx:recovery_policy:01999999-0000-7000-8000-0000000000a5",
+        "lifecycle": "retired",
+        "epoch": 5,
+        "body": {
+          "proof_kinds": ["recovery_unlock"]
+        },
+        "created_at": "2026-05-25T00:00:00Z",
+        "retired_at": "2026-05-26T00:00:00Z"
+      }
+    },
+    {
+      "name": "epoch_must_be_monotonic",
+      "expect": "fail",
+      "reason": "epoch rollback rejected with recovery_policy_mismatch",
+      "prior_epoch": 7,
+      "policy": {
+        "schema": "cx.schema.recovery_policy.v1",
+        "policy_id": "cx:recovery_policy:01999999-0000-7000-8000-0000000000a6",
+        "lifecycle": "active",
+        "epoch": 6,
+        "body": {
+          "proof_kinds": ["recovery_unlock"]
+        },
+        "created_at": "2026-05-27T00:00:00Z"
+      }
+    }
+  ]
+}
