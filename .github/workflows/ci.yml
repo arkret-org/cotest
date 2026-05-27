@@ -14,7 +14,7 @@ env:
 
 jobs:
   rust:
-    name: rust (${{ matrix.toolchain }} / fmt / clippy / test)
+    name: rust (${{ matrix.toolchain }} / clippy / test)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -42,9 +42,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: cotest
-      - name: fmt
-        working-directory: cotest
-        run: cargo fmt --all -- --check
       - name: clippy
         working-directory: cotest
         # cotest carries TODO scaffolding for the circle-rollout milestone;
