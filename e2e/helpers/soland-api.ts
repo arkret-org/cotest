@@ -132,7 +132,7 @@ export async function createSpaceApi(
           schema: "cx.schema.realm.v1",
           title: data.title,
           summary: data.summary,
-          created_by_principal: ownerDid,
+          created_by: ownerDid,
           trust_domain: "cx:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability:

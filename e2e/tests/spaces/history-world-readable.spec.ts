@@ -166,7 +166,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       id: realmId,
       schema: "cx.schema.realm.v1",
       title: `incompat ${Date.now()}`,
-      created_by_principal: actorDid,
+      created_by: actorDid,
       trust_domain: "cx:trust_domain:soland.local",
       schema_refs: ["cx.schema.realm.v1"],
       default_discoverability: "listed",

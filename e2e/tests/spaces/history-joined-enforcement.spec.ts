@@ -225,7 +225,7 @@ async function createRealm(
           schema: "cx.schema.realm.v1",
           title: `history ${historyVisibility} ${Date.now()}`,
           summary: "cotest joined-history enforcement fixture",
-          created_by_principal: actor.did,
+          created_by: actor.did,
           trust_domain: "cx:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability: "public",

@@ -116,7 +116,7 @@ test.describe("MLS group encryption", () => {
               id: incompatibleRealmId,
               schema: "cx.schema.realm.v1",
               title: `S11 MLS incompatible ${stamp}`,
-              created_by_principal: alice.did,
+              created_by: alice.did,
               trust_domain: "cx:trust_domain:soland.local",
               schema_refs: ["cx.schema.realm.v1"],
               default_discoverability: "listed",

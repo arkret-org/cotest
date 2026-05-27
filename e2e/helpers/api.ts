@@ -75,7 +75,7 @@ export async function createSpaceViaApi(
           schema: "cx.schema.realm.v1",
           title: opts.title,
           summary: opts.summary,
-          created_by_principal: opts.ownerDid!,
+          created_by: opts.ownerDid!,
           trust_domain: "cx:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability: "public",
