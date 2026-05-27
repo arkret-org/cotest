@@ -1,0 +1,167 @@
+//! Soland `cx.account.subscribe` long-poll + realms-incremental coverage.
+//!
+//! Pins the two behaviors that landed in `routing::events::sync`:
+//!
+//! 1. Incremental syncs hold on `event_broadcast` until something
+//!    interesting happens or `max_wait_ms` elapses — clients that send
+//!    `?max_wait_ms=0` keep the legacy immediate-return semantics.
+//! 2. Incremental delta frames omit realms whose timeline position and
+//!    `realm_meta.updated_at` are both unchanged since the cursor was
+//!    issued. The realm's baseline (`summary`/`flows`/`state_after`/
+//!    `members`) is no longer re-sent on every quiet poll.
+
+use std::time::{Duration, Instant};
+
+use anyhow::{Result, anyhow};
+use reqwest::StatusCode;
+use serde_json::Value;
+
+use crate::harness::{TestServerGroup, expect_response};
+
+const QUIET_RESPONSE_BYTES_CEILING: usize = 512;
+
+pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()> {
+    let group = TestServerGroup::single("account-subscribe-long-poll").await?;
+    let server = group.server(0);
+    let alice = server
+        .demo_client("did:web:alice.example", "dev_alice")
+        .await?;
+    let space_id = alice.create_space("Long-Poll Recovery Space").await?;
+    alice
+        .send_message(&space_id, "cx:thread:long-poll", "baseline message")
+        .await?;
+
+    // Full sync establishes the baseline + a cursor the rest of the
+    // scenario re-uses. After this point the realm is "quiet" — every
+    // subsequent assertion drives the delta-empty path.
+    let baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
+    let baseline_realm = baseline["realms"][&space_id].clone();
+    assert!(
+        baseline_realm.is_object(),
+        "full sync MUST include the realm baseline: {baseline}"
+    );
+    let cursor = baseline["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("baseline sync missing cursor: {baseline}"))?
+        .to_owned();
+
+    // (1) Quiet incremental sync with long-poll opted out — must drop
+    //     the realm from the response so idle clients no longer
+    //     re-receive the full baseline.
+    let (quiet, quiet_bytes) =
+        fetch_account_subscribe_with_size(&alice, &format!("catchup=true&max_wait_ms=0&after={cursor}"))
+            .await?;
+    assert!(
+        quiet["realms"][&space_id].is_null(),
+        "quiet incremental sync MUST drop the realm baseline: {quiet}"
+    );
+    assert!(
+        quiet["realms"].as_object().is_some_and(|map| map.is_empty()),
+        "quiet incremental sync should leave realms empty: {quiet}"
+    );
+    assert!(
+        quiet_bytes < QUIET_RESPONSE_BYTES_CEILING,
+        "quiet response should be tiny (< {QUIET_RESPONSE_BYTES_CEILING}B), was {quiet_bytes}B"
+    );
+
+    // (2) Long-poll deadline behavior — with no broadcast in flight,
+    //     the request should hold at least to the supplied window and
+    //     return an empty delta. Use a short window so the scenario
+    //     itself stays fast.
+    let timeout_start = Instant::now();
+    let timed_out =
+        fetch_account_subscribe(&alice, &format!("catchup=true&max_wait_ms=400&after={cursor}"))
+            .await?;
+    let elapsed = timeout_start.elapsed();
+    assert!(
+        timed_out["realms"]
+            .as_object()
+            .is_some_and(|map| map.is_empty()),
+        "long-poll timeout MUST still return an empty realms delta: {timed_out}"
+    );
+    assert!(
+        elapsed >= Duration::from_millis(300),
+        "long-poll should hold ~max_wait_ms before returning empty (got {elapsed:?})"
+    );
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "long-poll should not overshoot the deadline by much (got {elapsed:?})"
+    );
+
+    // (3) A real timeline event must wake the long-poll — fire a
+    //     concurrent send and verify the incremental subscribe returns
+    //     well inside the deadline with the new realm baseline + event.
+    let alice_for_wake = alice.clone();
+    let space_id_for_wake = space_id.clone();
+    let waker = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        alice_for_wake
+            .send_message(&space_id_for_wake, "cx:thread:long-poll", "wake the poll")
+            .await
+    });
+
+    let wake_start = Instant::now();
+    let woken = fetch_account_subscribe(
+        &alice,
+        &format!("catchup=true&max_wait_ms=5000&after={cursor}"),
+    )
+    .await?;
+    let wake_elapsed = wake_start.elapsed();
+    let sent_event = waker.await.expect("waker task did not panic")?;
+    let sent_event_id = sent_event["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("send response missing event_id: {sent_event}"))?;
+
+    assert!(
+        wake_elapsed < Duration::from_secs(3),
+        "broadcast should wake long-poll well before its deadline (got {wake_elapsed:?})"
+    );
+    let timeline_events = woken["realms"][&space_id]["timeline"]["events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("woken delta missing realm timeline: {woken}"))?;
+    assert!(
+        timeline_events
+            .iter()
+            .any(|event| event["event_id"] == sent_event_id),
+        "woken delta MUST include the wake-up event: {woken}"
+    );
+
+    Ok(())
+}
+
+async fn fetch_account_subscribe(
+    actor: &crate::harness::TestActorClient,
+    query: &str,
+) -> Result<Value> {
+    Ok(fetch_account_subscribe_with_size(actor, query).await?.0)
+}
+
+async fn fetch_account_subscribe_with_size(
+    actor: &crate::harness::TestActorClient,
+    query: &str,
+) -> Result<(Value, usize)> {
+    let response = expect_response(
+        actor
+            .get(&format!("/api/v1/account/subscribe?{query}"))
+            .header("accept", "application/x-ndjson"),
+        StatusCode::OK,
+    )
+    .await?;
+    let body = response.text();
+    let bytes = body.len();
+    let frame = parse_delta_frame(&body)?;
+    Ok((frame, bytes))
+}
+
+fn parse_delta_frame(ndjson: &str) -> Result<Value> {
+    for line in ndjson.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let frame: Value = serde_json::from_str(line)
+            .map_err(|error| anyhow!("invalid subscribe frame `{line}`: {error}"))?;
+        if frame.get("kind").and_then(Value::as_str) == Some("delta") {
+            return Ok(frame);
+        }
+    }
+    Err(anyhow!(
+        "account subscribe NDJSON missing delta frame: {ndjson:?}"
+    ))
+}
