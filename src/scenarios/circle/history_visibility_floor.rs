@@ -47,9 +47,7 @@ fn compute_effective_history_visibility(
         anyhow!("realm floor `restricted` is not in the linear floor space (CXP-0007 §3.4)")
     })?;
     let c = strictness_rank(&circle_setting).ok_or_else(|| {
-        anyhow!(
-            "circle setting `restricted` is not in the linear floor space (CXP-0007 §3.4)"
-        )
+        anyhow!("circle setting `restricted` is not in the linear floor space (CXP-0007 §3.4)")
     })?;
     Ok(if r >= c { realm_floor } else { circle_setting })
 }

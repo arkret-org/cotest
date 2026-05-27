@@ -15,9 +15,7 @@ pub async fn ann_announce_id_run() -> Result<()> {
     let ok = AnnounceId::new("cx:announce:01999999-0000-7000-8000-00000000aaa1".to_owned())
         .map_err(|e| anyhow!("canonical AnnounceId construction: {e}"))?;
     if !ok.as_str().starts_with("cx:announce:") {
-        return Err(anyhow!(
-            "canonical AnnounceId lost prefix: {ok}"
-        ));
+        return Err(anyhow!("canonical AnnounceId lost prefix: {ok}"));
     }
     // Legacy form is rejected.
     for legacy in ["ann_x", "ann_alice", "ann_01999999"] {

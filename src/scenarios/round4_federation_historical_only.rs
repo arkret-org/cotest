@@ -232,9 +232,8 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     });
     let body_x_bytes = canonical_json_bytes(&body_x)
         .map_err(|e| anyhow!("canonical_json_bytes(body_x) failed: {e}"))?;
-    let request_canonical_digest =
-        Hash::new(format!("sha256:{:x}", Sha256::digest(&body_x_bytes)))
-            .map_err(|e| anyhow!("typed request canonical hash failed: {e}"))?;
+    let request_canonical_digest = Hash::new(format!("sha256:{:x}", Sha256::digest(&body_x_bytes)))
+        .map_err(|e| anyhow!("typed request canonical hash failed: {e}"))?;
 
     // Initial key state (before A revokes / rotates).
     let key_state_a = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -267,10 +266,16 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
 
     // Signing-transcript fragment assertion: SDK helper output is
     // byte-stable across calls.
-    let fragment_a =
-        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_digest);
-    let fragment_b =
-        federation_trust_domain_transcript_fragment(&source_td, &dest_td, &request_canonical_digest);
+    let fragment_a = federation_trust_domain_transcript_fragment(
+        &source_td,
+        &dest_td,
+        &request_canonical_digest,
+    );
+    let fragment_b = federation_trust_domain_transcript_fragment(
+        &source_td,
+        &dest_td,
+        &request_canonical_digest,
+    );
     if fragment_a != fragment_b {
         return Err(anyhow!(
             "federation_trust_domain_transcript_fragment is not byte-stable across calls"

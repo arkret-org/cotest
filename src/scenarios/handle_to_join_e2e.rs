@@ -161,11 +161,19 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
     }
 
     // The recipient route is single-sourced through member_delivery_binding.
-    if candidate.member_delivery_binding.recipient_service_did.as_str() != PRINCIPAL_DID {
+    if candidate
+        .member_delivery_binding
+        .recipient_service_did
+        .as_str()
+        != PRINCIPAL_DID
+    {
         bail!(
             "T3.5 happy path: member_delivery_binding.recipient_service_did \
              must remain the principal service; got {}",
-            candidate.member_delivery_binding.recipient_service_did.as_str()
+            candidate
+                .member_delivery_binding
+                .recipient_service_did
+                .as_str()
         );
     }
 
@@ -286,7 +294,12 @@ fn negative_case_service_not_allowed() -> Result<()> {
     candidate.validate(&CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()))?;
 
     let allowed = [PRINCIPAL_DID];
-    if allowed.contains(&candidate.member_delivery_binding.recipient_service_did.as_str()) {
+    if allowed.contains(
+        &candidate
+            .member_delivery_binding
+            .recipient_service_did
+            .as_str(),
+    ) {
         bail!("T3.5 service_not_allowed: rogue recipient unexpectedly passed allow-list");
     }
     Ok(())

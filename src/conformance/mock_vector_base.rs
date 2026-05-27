@@ -123,10 +123,7 @@ impl ParityReport {
     }
 
     pub fn failed(&self) -> usize {
-        self.entries
-            .iter()
-            .filter(|(_, o)| o.is_failure())
-            .count()
+        self.entries.iter().filter(|(_, o)| o.is_failure()).count()
     }
 
     /// Convenience: return `Err` with a multi-vector summary if any vector
@@ -314,7 +311,9 @@ mod tests {
                     reason: "no binary".to_owned(),
                 });
             }
-            Ok(Output::Json(serde_json::json!({"out": if self.same { 1 } else { 2 }})))
+            Ok(Output::Json(
+                serde_json::json!({"out": if self.same { 1 } else { 2 }}),
+            ))
         }
     }
 
@@ -326,7 +325,9 @@ mod tests {
         });
         assert_eq!(report.passed(), 1);
         assert_eq!(report.failed(), 0);
-        report.assert_all_passed().expect("matching parity must pass");
+        report
+            .assert_all_passed()
+            .expect("matching parity must pass");
     }
 
     #[test]

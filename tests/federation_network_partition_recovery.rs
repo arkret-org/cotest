@@ -145,9 +145,13 @@ async fn federation_partition_then_heal_converges_on_canonical_frontier() -> Res
         sim.events
     );
     assert!(
-        !sim.events.iter().any(|e| e.server == "C" && !e.accepted && e.hlc_physical_ms < 3_000
-            && e.hlc_physical_ms >= 2_000
-            && false /* we already filtered above; this is a sanity belt */),
+        !sim.events.iter().any(
+            |e| e.server == "C"
+                && !e.accepted
+                && e.hlc_physical_ms < 3_000
+                && e.hlc_physical_ms >= 2_000
+                && false /* we already filtered above; this is a sanity belt */
+        ),
         "no false negatives expected post-heal"
     );
 

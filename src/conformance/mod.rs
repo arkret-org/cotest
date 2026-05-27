@@ -10,7 +10,6 @@ mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod media_binding;
 pub mod mock_vector_base;
-mod sidecar_vectors;
 mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
@@ -24,6 +23,7 @@ mod schema_validation;
 mod schema_validation_fixture;
 mod security_closure;
 mod security_negative;
+mod sidecar_vectors;
 mod snapshot_v2_tampered_merkle;
 mod state_resolution;
 mod sync;
@@ -54,10 +54,20 @@ pub use agent_vectors::{
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
+pub use capability::run_capability_boundary_fixture_suite;
+pub use capability::run_capability_facet_fixture_suite;
+pub use capability::run_capability_fixture_suite;
+pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector,
     run_cursor_opaque_stateless_profile_vector, run_cursor_vector_suite,
 };
+pub use encoding::run_encoding_fixture_suite;
+pub use encoding::run_projection_position_discriminator_fixture_suite;
+pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
+pub use federation::run_federation_fixture_suite;
+pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
+pub use lattice_round_trip::run_lattice_round_trip_suite;
 pub use media_binding::{
     ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
     run_focus_selection_oldest_membership_vector, run_media_binding_vector_suite,
@@ -66,21 +76,6 @@ pub use media_binding::{
     run_token_exchange_minimal_vector, run_token_issuer_unauthorised_vector,
     run_unknown_type_fail_closed_vector,
 };
-pub use sidecar_vectors::{
-    ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
-    run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
-    run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
-};
-pub use capability::run_capability_boundary_fixture_suite;
-pub use capability::run_capability_facet_fixture_suite;
-pub use capability::run_capability_fixture_suite;
-pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
-pub use encoding::run_encoding_fixture_suite;
-pub use encoding::run_projection_position_discriminator_fixture_suite;
-pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
-pub use federation::run_federation_fixture_suite;
-pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
-pub use lattice_round_trip::run_lattice_round_trip_suite;
 pub use principal_server_certification::{
     PrincipalCertificationStatus, run_principal_server_certification_gate_suite,
     validate_principal_server_certification,
@@ -118,6 +113,11 @@ pub use security_closure::{
     run_security_closure_vectors_suite, validate_security_closure_fixture,
 };
 pub use security_negative::run_security_negative_profile_suite;
+pub use sidecar_vectors::{
+    ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
+    run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
+    run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
+};
 pub use snapshot_v2_tampered_merkle::run_snapshot_v2_tampered_merkle_suite;
 pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,

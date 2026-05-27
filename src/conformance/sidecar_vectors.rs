@@ -21,14 +21,10 @@ use contrix_core::{
     OP_AGENT_SIDECAR_THREAD_ENSURE, PROFILE_AGENT_SIDECAR_THREAD,
 };
 
-pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str =
-    "cx.vector.sidecar.ensure_idempotent.v1";
-pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str =
-    "cx.vector.sidecar.eligibility_states.v1";
-pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str =
-    "cx.vector.sidecar.existence_privacy.v1";
-pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str =
-    "cx.vector.sidecar.multi_agent_publish.v1";
+pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "cx.vector.sidecar.ensure_idempotent.v1";
+pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "cx.vector.sidecar.eligibility_states.v1";
+pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "cx.vector.sidecar.existence_privacy.v1";
+pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "cx.vector.sidecar.multi_agent_publish.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT,
@@ -41,9 +37,7 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     if OP_AGENT_SIDECAR_THREAD_ENSURE != "cx.agent.sidecar_thread.ensure" {
-        bail!(
-            "OP_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {OP_AGENT_SIDECAR_THREAD_ENSURE}"
-        );
+        bail!("OP_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {OP_AGENT_SIDECAR_THREAD_ENSURE}");
     }
     if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "cx.agent.sidecar_thread.ensure" {
         bail!(
@@ -51,9 +45,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         );
     }
     if PROFILE_AGENT_SIDECAR_THREAD != "cx.profile.agent_sidecar_thread.v1" {
-        bail!(
-            "PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}"
-        );
+        bail!("PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}");
     }
     // Idempotency invariant: same (controller, agent_principal) MUST
     // yield the same `sidecar_circle_id`. Wire-shape: deterministic
@@ -72,9 +64,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
         bail!("ERROR_CODE_AGENT_PAUSED spelling drifted: {ERROR_CODE_AGENT_PAUSED}");
     }
     if ERROR_CODE_AGENT_DEACTIVATED != "agent_deactivated" {
-        bail!(
-            "ERROR_CODE_AGENT_DEACTIVATED spelling drifted: {ERROR_CODE_AGENT_DEACTIVATED}"
-        );
+        bail!("ERROR_CODE_AGENT_DEACTIVATED spelling drifted: {ERROR_CODE_AGENT_DEACTIVATED}");
     }
     // Default home-policy is `context_realm_preferred` (B-F).
     if AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED != "context_realm_preferred" {

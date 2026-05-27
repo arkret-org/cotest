@@ -24,10 +24,9 @@ fn fixture_path(name: &str) -> PathBuf {
 
 fn load_fixture_value(name: &str) -> Result<Value> {
     let path = fixture_path(name);
-    let raw = fs::read_to_string(&path)
-        .map_err(|e| anyhow!("failed to read {}: {e}", path.display()))?;
-    serde_json::from_str(&raw)
-        .map_err(|e| anyhow!("failed to parse {}: {e}", path.display()))
+    let raw =
+        fs::read_to_string(&path).map_err(|e| anyhow!("failed to read {}: {e}", path.display()))?;
+    serde_json::from_str(&raw).map_err(|e| anyhow!("failed to parse {}: {e}", path.display()))
 }
 
 // ─── P0 / VECT-MB-1..9 — media binding vectors ─────────────────────────────
@@ -99,7 +98,10 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
         .get("cases")
         .and_then(Value::as_array)
         .expect("cases array");
-    assert!(cases.len() >= 8, "agent_payloads.json must cover all new kinds");
+    assert!(
+        cases.len() >= 8,
+        "agent_payloads.json must cover all new kinds"
+    );
     let kinds: Vec<&str> = cases
         .iter()
         .filter_map(|c| c.get("event_kind").and_then(Value::as_str))
@@ -267,8 +269,7 @@ fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
         .and_then(Value::as_array)
         .map(|a| {
             a.iter().any(|c| {
-                c.get("reason").and_then(Value::as_str)
-                    == Some("recovery_witness_revoke_lagging")
+                c.get("reason").and_then(Value::as_str) == Some("recovery_witness_revoke_lagging")
             })
         })
         .unwrap_or(false);

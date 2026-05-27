@@ -44,5 +44,8 @@ fn testcontainers_postgres_bringup_smoke() {
         eprintln!("docker daemon unavailable on this runner — skipping");
         return;
     };
-    assert!(pg.connect_url.starts_with("postgresql://contrix:contrix@127.0.0.1:"));
+    assert!(
+        pg.connect_url
+            .starts_with("postgresql://contrix:contrix@127.0.0.1:")
+    );
 }

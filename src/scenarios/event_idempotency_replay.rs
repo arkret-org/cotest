@@ -153,11 +153,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     Ok(())
 }
 
-async fn create_test_realm(
-    alice: &TestActorClient,
-    realm_id: &str,
-    title: &str,
-) -> Result<String> {
+async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str) -> Result<String> {
     let event = event_envelope(
         &alice.actor,
         realm_id,
@@ -196,10 +192,7 @@ async fn create_test_realm(
     Ok(realm_id.to_owned())
 }
 
-async fn submit_and_duplicate(
-    alice: &TestActorClient,
-    event: &Value,
-) -> Result<Value> {
+async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<Value> {
     let first = expect_json(alice.post("/api/v1/events").json(event), StatusCode::OK).await?;
     assert_eq!(first["status"], "accepted");
     assert_eq!(first["event_id"].as_str(), event["event_id"].as_str());

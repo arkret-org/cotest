@@ -78,7 +78,8 @@ pub async fn takedown_audit_log_run() -> Result<()> {
     // Every reason MUST serialise to a unique snake_case literal.
     let mut seen: Vec<String> = Vec::new();
     for reason in ALL_TAKEDOWN_REASONS {
-        let value = serde_json::to_value(reason).map_err(|e| anyhow!("serialise {reason:?}: {e}"))?;
+        let value =
+            serde_json::to_value(reason).map_err(|e| anyhow!("serialise {reason:?}: {e}"))?;
         let s = value
             .as_str()
             .ok_or_else(|| anyhow!("takedown reason MUST serialise as a string; got {value:?}"))?;
@@ -117,9 +118,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
         now,
     );
     if bad.is_ok() {
-        return Err(anyhow!(
-            "expected reject of untyped realm id; got accept"
-        ));
+        return Err(anyhow!("expected reject of untyped realm id; got accept"));
     }
 
     // Sanity: a round-tripped audit row keeps every field.

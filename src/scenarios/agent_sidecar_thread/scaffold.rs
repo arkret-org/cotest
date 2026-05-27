@@ -34,14 +34,11 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
     }
 
     // (3) typed-id round-trip.
-    let sidecar = SidecarCircleId::new(
-        "cx:sidecar_circle:01999999-0000-7000-8000-00000000c001".to_owned(),
-    )
-    .map_err(|e| anyhow!("SidecarCircleId: {e}"))?;
+    let sidecar =
+        SidecarCircleId::new("cx:sidecar_circle:01999999-0000-7000-8000-00000000c001".to_owned())
+            .map_err(|e| anyhow!("SidecarCircleId: {e}"))?;
     if !sidecar.as_str().starts_with("cx:sidecar_circle:") {
-        return Err(anyhow!(
-            "SidecarCircleId lost canonical prefix: {sidecar}"
-        ));
+        return Err(anyhow!("SidecarCircleId lost canonical prefix: {sidecar}"));
     }
 
     // (4) The 3 sidecar actions form the canonical ensure/write/publish

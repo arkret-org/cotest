@@ -228,10 +228,7 @@ pub fn kill_with_term(child: &mut Child) {
 /// deadline elapses. Returns `Ok(Some(status))` on exit, `Ok(None)` on
 /// timeout, or the underlying `io::Error` from `try_wait` if the OS
 /// lost the pid.
-pub fn wait_with_timeout(
-    child: &mut Child,
-    timeout: Duration,
-) -> io::Result<Option<ExitStatus>> {
+pub fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
     let deadline = Instant::now() + timeout;
     loop {
         match child.try_wait()? {
@@ -251,9 +248,7 @@ pub fn wait_with_timeout(
 /// `assert!` failure so the chaos kind shows up in the test log.
 pub fn assert_clean_exit(outcome: &ShutdownOutcome) {
     if !outcome.is_clean_exit() {
-        panic!(
-            "chaos_inject: expected clean graceful shutdown but got {outcome:?}"
-        );
+        panic!("chaos_inject: expected clean graceful shutdown but got {outcome:?}");
     }
 }
 

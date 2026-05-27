@@ -31,7 +31,9 @@ fn is_well_formed(action: &str) -> Result<()> {
         return Err(anyhow!("capability action is empty"));
     }
     if !action.starts_with("cx.") {
-        return Err(anyhow!("capability action `{action}` MUST start with `cx.`"));
+        return Err(anyhow!(
+            "capability action `{action}` MUST start with `cx.`"
+        ));
     }
     if action.ends_with('.') {
         return Err(anyhow!(

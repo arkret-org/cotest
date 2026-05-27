@@ -17,9 +17,7 @@ async fn directory_anti_enumeration_buckets() {
 
 #[tokio::test]
 async fn directory_latency_jitter() {
-    latency_jitter_run()
-        .await
-        .expect("latency_jitter scenario");
+    latency_jitter_run().await.expect("latency_jitter scenario");
 }
 
 #[tokio::test]

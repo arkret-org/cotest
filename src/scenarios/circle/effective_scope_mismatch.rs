@@ -34,10 +34,11 @@ fn circle_b() -> Result<CircleId> {
 /// envelope carries [`EffectiveScope::Circle`] AND the inner payload
 /// declares a `scope_circle_id`, the two MUST agree on both realm_id and
 /// circle_id. Returns `Ok(())` when consistent, `Err(reason)` when not.
-fn assert_envelope_payload_scope_agrees(envelope_scope: &EffectiveScope, payload: &Value) -> Result<()> {
-    let payload_realm = payload
-        .pointer("/object/realm_id")
-        .and_then(|v| v.as_str());
+fn assert_envelope_payload_scope_agrees(
+    envelope_scope: &EffectiveScope,
+    payload: &Value,
+) -> Result<()> {
+    let payload_realm = payload.pointer("/object/realm_id").and_then(|v| v.as_str());
     let payload_circle = payload
         .pointer("/object/scope_circle_id")
         .and_then(|v| v.as_str());

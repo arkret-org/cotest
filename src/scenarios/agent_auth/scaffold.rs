@@ -56,7 +56,10 @@ pub async fn agent_auth_run() -> Result<()> {
             "verification_method must be a DID URL fragment, got `{verification_method}`"
         ));
     }
-    if !agent_principal_id.as_str().starts_with("cx:agent_principal:") {
+    if !agent_principal_id
+        .as_str()
+        .starts_with("cx:agent_principal:")
+    {
         return Err(anyhow!(
             "agent_principal_id MUST keep the `cx:agent_principal:` prefix"
         ));

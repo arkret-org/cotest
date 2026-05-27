@@ -48,15 +48,19 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     // (1) Quiet incremental sync with long-poll opted out — must drop
     //     the realm from the response so idle clients no longer
     //     re-receive the full baseline.
-    let (quiet, quiet_bytes) =
-        fetch_account_subscribe_with_size(&alice, &format!("catchup=true&max_wait_ms=0&after={cursor}"))
-            .await?;
+    let (quiet, quiet_bytes) = fetch_account_subscribe_with_size(
+        &alice,
+        &format!("catchup=true&max_wait_ms=0&after={cursor}"),
+    )
+    .await?;
     assert!(
         quiet["realms"][&space_id].is_null(),
         "quiet incremental sync MUST drop the realm baseline: {quiet}"
     );
     assert!(
-        quiet["realms"].as_object().is_some_and(|map| map.is_empty()),
+        quiet["realms"]
+            .as_object()
+            .is_some_and(|map| map.is_empty()),
         "quiet incremental sync should leave realms empty: {quiet}"
     );
     assert!(
@@ -69,9 +73,11 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     //     return an empty delta. Use a short window so the scenario
     //     itself stays fast.
     let timeout_start = Instant::now();
-    let timed_out =
-        fetch_account_subscribe(&alice, &format!("catchup=true&max_wait_ms=400&after={cursor}"))
-            .await?;
+    let timed_out = fetch_account_subscribe(
+        &alice,
+        &format!("catchup=true&max_wait_ms=400&after={cursor}"),
+    )
+    .await?;
     let elapsed = timeout_start.elapsed();
     assert!(
         timed_out["realms"]
@@ -154,7 +160,11 @@ async fn fetch_account_subscribe_with_size(
 }
 
 fn parse_delta_frame(ndjson: &str) -> Result<Value> {
-    for line in ndjson.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for line in ndjson
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         let frame: Value = serde_json::from_str(line)
             .map_err(|error| anyhow!("invalid subscribe frame `{line}`: {error}"))?;
         if frame.get("kind").and_then(Value::as_str) == Some("delta") {

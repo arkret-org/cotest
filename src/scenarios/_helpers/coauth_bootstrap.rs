@@ -617,7 +617,7 @@ fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
 // which backend produced the handle.
 #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
 pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> {
-    use testcontainers::{clients::Cli, core::WaitFor, GenericImage};
+    use testcontainers::{GenericImage, clients::Cli, core::WaitFor};
 
     // testcontainers' default client holds a leaked CLI handle, which is
     // exactly what we want for the duration of a single `cargo test`

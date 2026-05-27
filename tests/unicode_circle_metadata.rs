@@ -24,8 +24,7 @@ fn unicode_emoji_and_cjk_on_metadata_round_trip() {
     for (name, input) in cases {
         let canonical =
             serde_json::to_string(&serde_json::json!({"title": input})).expect("canonical encode");
-        let round: serde_json::Value =
-            serde_json::from_str(&canonical).expect("canonical decode");
+        let round: serde_json::Value = serde_json::from_str(&canonical).expect("canonical decode");
         let back = round
             .get("title")
             .and_then(|v| v.as_str())

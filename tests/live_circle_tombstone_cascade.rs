@@ -30,11 +30,11 @@
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::{
-    Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleState, CircleSymbol,
-    Did, RealmId,
-};
 use contrix_core::error::REASON_CIRCLE_NOT_ACTIVE;
+use contrix_core::{
+    Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleState, CircleSymbol, Did,
+    RealmId,
+};
 use serde_json::{Value, json};
 use serial_test::serial;
 
@@ -46,8 +46,8 @@ use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "CXP-0007 Circle tombstone cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
-async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circles()
--> Result<()> {
+async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circles() -> Result<()>
+{
     // ── 0. SDK-level invariants always run (mirror `full_stack_e2e`) ────
     // Ensure the wire reason code the live leg pins against is registered
     // in the SDK; a typo here would mask the live assertion.

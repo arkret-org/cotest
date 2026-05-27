@@ -165,7 +165,9 @@ pub fn run_snapshot_v2_tampered_merkle_suite() -> Result<()> {
                 let local_state = vector
                     .pointer("/local_recomputed_state_digest")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing local_recomputed_state_digest"))?;
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} missing local_recomputed_state_digest")
+                    })?;
                 if signed_state == local_state {
                     bail!(
                         "vector {name} dropped chunk MUST yield a different recomputed state_digest"

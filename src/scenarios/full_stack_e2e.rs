@@ -172,7 +172,12 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
             candidate.expires_at
         );
     }
-    if candidate.member_delivery_binding.recipient_service_did.as_str() != PRINCIPAL_DID {
+    if candidate
+        .member_delivery_binding
+        .recipient_service_did
+        .as_str()
+        != PRINCIPAL_DID
+    {
         bail!("T8.1 step 2: member_delivery_binding.recipient_service_did drifted");
     }
     Ok(())
@@ -374,7 +379,12 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
     handover.validate(&CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()))?;
 
     let allowed = [PRINCIPAL_DID];
-    if allowed.contains(&handover.member_delivery_binding.recipient_service_did.as_str()) {
+    if allowed.contains(
+        &handover
+            .member_delivery_binding
+            .recipient_service_did
+            .as_str(),
+    ) {
         bail!("T8.1 step 8: rebound recipient unexpectedly passed allow-list");
     }
     Ok(())

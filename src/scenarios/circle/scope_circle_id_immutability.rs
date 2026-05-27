@@ -60,10 +60,7 @@ fn actor() -> Result<Did> {
 /// Returns `Err` whose message contains the
 /// [`REASON_SCOPE_REBIND_FORBIDDEN`] reason code so callers can match on
 /// the wire reason.
-fn validate_no_scope_rebind(
-    prev: Option<&CircleId>,
-    next: Option<&CircleId>,
-) -> Result<()> {
+fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) -> Result<()> {
     match (prev, next) {
         (None, None) => Ok(()),
         (Some(a), Some(b)) if a.as_str() == b.as_str() => Ok(()),
@@ -92,7 +89,8 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     let mut flow_a = Flow::new("flow-cxp-0007", space_id()?, "Quarterly review", actor()?);
     flow_a.scope_circle_id = Some(circle_a()?);
 
-    let json_a: Value = serde_json::to_value(&flow_a).map_err(|e| anyhow!("serialise flow_a: {e}"))?;
+    let json_a: Value =
+        serde_json::to_value(&flow_a).map_err(|e| anyhow!("serialise flow_a: {e}"))?;
     let scope_field = json_a
         .get("scope_circle_id")
         .and_then(|v| v.as_str())
@@ -105,30 +103,42 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     }
     let parsed_a: Flow =
         serde_json::from_value(json_a).map_err(|e| anyhow!("parse flow_a: {e}"))?;
-    if parsed_a.scope_circle_id.as_ref().map(|c| c.as_str())
-        != Some(circle_a()?.as_str())
-    {
-        return Err(anyhow!(
-            "Flow.scope_circle_id round-trip lost the binding"
-        ));
+    if parsed_a.scope_circle_id.as_ref().map(|c| c.as_str()) != Some(circle_a()?.as_str()) {
+        return Err(anyhow!("Flow.scope_circle_id round-trip lost the binding"));
     }
 
     // ── Same prev/next: accept.
-    validate_no_scope_rebind(parsed_a.scope_circle_id.as_ref(), parsed_a.scope_circle_id.as_ref())
-        .map_err(|e| anyhow!("expected accept on identical prev/next; got: {e}"))?;
+    validate_no_scope_rebind(
+        parsed_a.scope_circle_id.as_ref(),
+        parsed_a.scope_circle_id.as_ref(),
+    )
+    .map_err(|e| anyhow!("expected accept on identical prev/next; got: {e}"))?;
 
     // ── None → None: accept.
     validate_no_scope_rebind(None, None)
         .map_err(|e| anyhow!("expected accept on None → None; got: {e}"))?;
 
     // ── circle_a → circle_a (build a sibling next-state Flow): accept.
-    let mut flow_a_next = Flow::new("flow-cxp-0007", space_id()?, "Quarterly review v2", actor()?);
+    let mut flow_a_next = Flow::new(
+        "flow-cxp-0007",
+        space_id()?,
+        "Quarterly review v2",
+        actor()?,
+    );
     flow_a_next.scope_circle_id = Some(circle_a()?);
-    validate_no_scope_rebind(parsed_a.scope_circle_id.as_ref(), flow_a_next.scope_circle_id.as_ref())
-        .map_err(|e| anyhow!("expected accept on same-circle update; got: {e}"))?;
+    validate_no_scope_rebind(
+        parsed_a.scope_circle_id.as_ref(),
+        flow_a_next.scope_circle_id.as_ref(),
+    )
+    .map_err(|e| anyhow!("expected accept on same-circle update; got: {e}"))?;
 
     // ── Rebind: circle_a → circle_b: reject with scope_rebind_forbidden.
-    let mut flow_b = Flow::new("flow-cxp-0007", space_id()?, "Quarterly review v3", actor()?);
+    let mut flow_b = Flow::new(
+        "flow-cxp-0007",
+        space_id()?,
+        "Quarterly review v3",
+        actor()?,
+    );
     flow_b.scope_circle_id = Some(circle_b()?);
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),

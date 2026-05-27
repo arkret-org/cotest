@@ -2,8 +2,7 @@
 
 use cotest::scenarios::legacy_alias_rejection::{
     ann_announce_id::ann_announce_id_run,
-    legacy_secret_storage_wire::legacy_secret_storage_wire_run,
-    renamed_fields::renamed_fields_run,
+    legacy_secret_storage_wire::legacy_secret_storage_wire_run, renamed_fields::renamed_fields_run,
 };
 
 #[tokio::test]

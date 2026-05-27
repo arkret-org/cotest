@@ -89,11 +89,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
         .await?;
     let circle_member = stack
         .soland
-        .register_client(
-            "did:web:incircle.cxp0007.example",
-            "@incircle",
-            "dev_in",
-        )
+        .register_client("did:web:incircle.cxp0007.example", "@incircle", "dev_in")
         .await?;
     let realm_only = stack
         .soland

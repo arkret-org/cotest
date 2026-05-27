@@ -28,8 +28,8 @@
 
 use anyhow::{Result, anyhow, bail};
 use contrix_core::{
-    Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleScopeError,
-    CircleSymbol, Did, RealmId,
+    Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleScopeError, CircleSymbol,
+    Did, RealmId,
 };
 use serde_json::json;
 use serial_test::serial;
@@ -64,9 +64,9 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
                 );
             }
         }
-        other => bail!(
-            "SDK invariant slipped: post-cascade strict-subset MUST reject X; got {other:?}"
-        ),
+        other => {
+            bail!("SDK invariant slipped: post-cascade strict-subset MUST reject X; got {other:?}")
+        }
     }
 
     // ── 1. Bootstrap the live stack ────────────────────────────────────

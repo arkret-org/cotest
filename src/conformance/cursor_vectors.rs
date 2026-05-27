@@ -32,9 +32,7 @@ pub const ALL_CURSOR_VECTOR_IDS: &[&str] = &[
 pub fn run_cursor_opaque_core_vector() -> Result<()> {
     let handle = generate_cursor_handle();
     if handle.len() < CURSOR_HANDLE_MIN_LEN {
-        bail!(
-            "cursor handle entropy below {CURSOR_HANDLE_MIN_LEN} chars: {handle}"
-        );
+        bail!("cursor handle entropy below {CURSOR_HANDLE_MIN_LEN} chars: {handle}");
     }
     let cursor = Cursor {
         v: "1".to_owned(),
@@ -58,8 +56,7 @@ pub fn run_cursor_opaque_core_vector() -> Result<()> {
     }
     // Canonical JSON serialisation must round-trip.
     let json = serde_json::to_string(&cursor).map_err(|e| anyhow!("cursor encode: {e}"))?;
-    let decoded: Cursor =
-        serde_json::from_str(&json).map_err(|e| anyhow!("cursor decode: {e}"))?;
+    let decoded: Cursor = serde_json::from_str(&json).map_err(|e| anyhow!("cursor decode: {e}"))?;
     if decoded.h.as_deref() != Some(handle.as_str()) {
         bail!("cursor round-trip lost handle");
     }
@@ -97,15 +94,12 @@ pub fn run_cursor_opaque_stateless_profile_vector() -> Result<()> {
     }
     // Round-trip preserves the stateless body fields.
     let json = serde_json::to_string(&cursor).map_err(|e| anyhow!("cursor encode: {e}"))?;
-    let decoded: Cursor =
-        serde_json::from_str(&json).map_err(|e| anyhow!("cursor decode: {e}"))?;
+    let decoded: Cursor = serde_json::from_str(&json).map_err(|e| anyhow!("cursor decode: {e}"))?;
     if decoded.issuer_kid != cursor.issuer_kid || decoded.mac != cursor.mac {
         bail!("stateless cursor round-trip lost integrity material");
     }
     if PROFILE_STATELESS_CURSOR != "cx.profile.stateless_cursor.v1" {
-        bail!(
-            "PROFILE_STATELESS_CURSOR spelling drifted: {PROFILE_STATELESS_CURSOR}"
-        );
+        bail!("PROFILE_STATELESS_CURSOR spelling drifted: {PROFILE_STATELESS_CURSOR}");
     }
     Ok(())
 }

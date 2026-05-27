@@ -30,7 +30,9 @@ use contrix_core::error::{
     ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED, ERROR_CODE_SESSION_FOCUS_ALREADY_COMMITTED,
     ERROR_CODE_TOKEN_ISSUER_UNAUTHORISED, ERROR_CODE_UNKNOWN_FOCUS_TYPE,
 };
-use contrix_core::{MEDIA_TOKEN_TTL_MAX_SECS, OP_CALL_MEDIA_TOKEN_EXCHANGE, PARTICIPANT_BINDING_SCHEMA};
+use contrix_core::{
+    MEDIA_TOKEN_TTL_MAX_SECS, OP_CALL_MEDIA_TOKEN_EXCHANGE, PARTICIPANT_BINDING_SCHEMA,
+};
 
 /// Vector id pins. Hard-fails any future rename of the canonical
 /// `cx.vector.media_binding.*.v1` registry entries.
@@ -79,7 +81,9 @@ const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
 ];
 
 fn known_backend_type(label: &str) -> bool {
-    KNOWN_MEDIA_BACKEND_TYPES.iter().any(|known| *known == label)
+    KNOWN_MEDIA_BACKEND_TYPES
+        .iter()
+        .any(|known| *known == label)
 }
 
 // ─── VECT-MB-1 — focus_selection_oldest_membership ─────────────────────────
@@ -202,9 +206,7 @@ pub fn run_token_exchange_minimal_vector() -> Result<()> {
         bail!("PARTICIPANT_BINDING_SCHEMA drifted: {PARTICIPANT_BINDING_SCHEMA}");
     }
     if MEDIA_TOKEN_TTL_MAX_SECS != 600 {
-        bail!(
-            "MEDIA_TOKEN_TTL_MAX_SECS drifted: {MEDIA_TOKEN_TTL_MAX_SECS} (spec ceiling is 600)"
-        );
+        bail!("MEDIA_TOKEN_TTL_MAX_SECS drifted: {MEDIA_TOKEN_TTL_MAX_SECS} (spec ceiling is 600)");
     }
 
     // TTL must be within [1, 600] seconds.
@@ -389,8 +391,7 @@ pub fn run_recording_artifact_via_contrix_blob_vector() -> Result<()> {
     // / arbitrary http upload is bypass.
     let is_contrix_blob = |url: &str| {
         url.starts_with("https://")
-            && (url.contains("/_matrix/contrix/v1/media")
-                || url.contains("/contrix/v1/media"))
+            && (url.contains("/_matrix/contrix/v1/media") || url.contains("/contrix/v1/media"))
     };
     if !is_contrix_blob("https://server.example/contrix/v1/media/upload") {
         bail!("legit contrix blob endpoint not accepted");

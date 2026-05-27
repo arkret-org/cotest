@@ -166,10 +166,9 @@ pub async fn child_scope_policy_run() -> Result<()> {
         EncryptionProfile::None,
     )
     .map_err(|e| anyhow!("require_e2ee MUST accept Circle-scoped child; got: {e}"))?;
-    enforce_child_scope_policy(&require_e2ee, None, None, EncryptionProfile::MlsRfc9420)
-        .map_err(|e| {
-            anyhow!("require_e2ee MUST accept Realm-default child under MLS Realm; got: {e}")
-        })?;
+    enforce_child_scope_policy(&require_e2ee, None, None, EncryptionProfile::MlsRfc9420).map_err(
+        |e| anyhow!("require_e2ee MUST accept Realm-default child under MLS Realm; got: {e}"),
+    )?;
     match enforce_child_scope_policy(&require_e2ee, None, None, EncryptionProfile::None) {
         Ok(()) => {
             return Err(anyhow!(
@@ -178,9 +177,7 @@ pub async fn child_scope_policy_run() -> Result<()> {
         }
         Err(e) => {
             if !e.to_string().contains("require_e2ee") {
-                return Err(anyhow!(
-                    "expected error to mention require_e2ee; got: {e}"
-                ));
+                return Err(anyhow!("expected error to mention require_e2ee; got: {e}"));
             }
         }
     }

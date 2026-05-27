@@ -161,11 +161,7 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .await?;
     let circle_member = stack
         .soland
-        .register_client(
-            "did:web:incircle.cxp0007.example",
-            "@incircle",
-            "dev_in",
-        )
+        .register_client("did:web:incircle.cxp0007.example", "@incircle", "dev_in")
         .await?;
     let _ = (
         outsider.actor.as_str(),

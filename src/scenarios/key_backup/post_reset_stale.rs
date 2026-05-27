@@ -41,9 +41,7 @@ pub async fn post_reset_stale_run() -> Result<()> {
     // Case 2: envelope after the reset → not stale.
     let fresh_envelope = now - Duration::hours(2);
     if is_post_reset_stale(fresh_envelope, reset_at) {
-        return Err(anyhow!(
-            "envelope emitted after reset should NOT be stale"
-        ));
+        return Err(anyhow!("envelope emitted after reset should NOT be stale"));
     }
     // Case 3: pre-reset envelope but reset only happened 2h ago → not stale yet.
     let just_reset_at = now - Duration::hours(2);

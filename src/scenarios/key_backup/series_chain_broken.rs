@@ -19,9 +19,7 @@ pub async fn series_chain_broken_run() -> Result<()> {
     let on_server = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
     let claimed = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
     if on_server == claimed {
-        return Err(anyhow!(
-            "test scaffold accidentally produced equal digests"
-        ));
+        return Err(anyhow!("test scaffold accidentally produced equal digests"));
     }
 
     // TODO(P4-impl): drive a live PUT /api/v1/keys/backups/{id} with

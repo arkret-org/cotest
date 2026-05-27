@@ -16,24 +16,21 @@
 use anyhow::{Result, anyhow, bail};
 use contrix_core::error::{
     ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_APPROVAL_ALREADY_CONSUMED,
-    ERROR_CODE_PAIRING_REQUEST_EXPIRED, ERROR_CODE_PROOF_INVALID,
-    ERROR_CODE_SIDECAR_CREATE_DENIED, ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-    REASON_ACCOUNTABILITY_GRANT_MISSING,
+    ERROR_CODE_PAIRING_REQUEST_EXPIRED, ERROR_CODE_PROOF_INVALID, ERROR_CODE_SIDECAR_CREATE_DENIED,
+    ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH, REASON_ACCOUNTABILITY_GRANT_MISSING,
 };
 use contrix_core::{
     CAP_ACTION_AGENT_PROVISION, OP_ACCOUNT_AGENT_KEY_PAIR, OP_ACCOUNT_ISSUE_SESSION_GRANT,
-    OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH,
-    OP_AGENT_LIST, OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY,
+    OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST,
+    OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY,
     OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "cx.vector.agent.provision.v1";
 pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "cx.vector.agent.pairing_expiry.v1";
-pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str =
-    "cx.vector.agent.controller_lifecycle.v1";
+pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "cx.vector.agent.controller_lifecycle.v1";
 pub const VECTOR_ID_AGENT_ACT_ON_BEHALF: &str = "cx.vector.agent.act_on_behalf.v1";
-pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str =
-    "cx.vector.agent.session_grant.replay.v1";
+pub const VECTOR_ID_AGENT_SESSION_GRANT_REPLAY: &str = "cx.vector.agent.session_grant.replay.v1";
 
 pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
@@ -73,9 +70,7 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
         );
     }
     if OP_ACCOUNT_AGENT_KEY_PAIR != "cx.account.agent_key_pair" {
-        bail!(
-            "OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}"
-        );
+        bail!("OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}");
     }
     // The error-response matrix for the key-pair endpoint MUST
     // include `verification_method_principal_mismatch`,
@@ -108,10 +103,7 @@ enum AgentState {
     Deactivated,
 }
 
-fn agent_transition(
-    state: AgentState,
-    op: &str,
-) -> std::result::Result<AgentState, &'static str> {
+fn agent_transition(state: AgentState, op: &str) -> std::result::Result<AgentState, &'static str> {
     use AgentState::*;
     match (state, op) {
         (Active, "pause") => Ok(Paused),
@@ -204,9 +196,7 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
 
 pub fn run_agent_session_grant_replay_vector() -> Result<()> {
     if OP_ACCOUNT_ISSUE_SESSION_GRANT != "cx.account.issue_session_grant" {
-        bail!(
-            "OP_ACCOUNT_ISSUE_SESSION_GRANT spelling drifted: {OP_ACCOUNT_ISSUE_SESSION_GRANT}"
-        );
+        bail!("OP_ACCOUNT_ISSUE_SESSION_GRANT spelling drifted: {OP_ACCOUNT_ISSUE_SESSION_GRANT}");
     }
     // Agent branch reject codes per §0.8:
     //   proof_invalid / verification_method_principal_mismatch /

@@ -11,10 +11,9 @@ use chrono::{Duration, Utc};
 use contrix_core::AgentSessionId;
 
 pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
-    let session = AgentSessionId::new(
-        "cx:agent_session:01999999-0000-7000-8000-00000000e001".to_owned(),
-    )
-    .map_err(|e| anyhow!("AgentSessionId: {e}"))?;
+    let session =
+        AgentSessionId::new("cx:agent_session:01999999-0000-7000-8000-00000000e001".to_owned())
+            .map_err(|e| anyhow!("AgentSessionId: {e}"))?;
     // A past `expires_at` deterministically marks the session as
     // pairing-expired.
     let expired_at = Utc::now() - Duration::hours(1);

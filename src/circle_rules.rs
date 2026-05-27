@@ -322,8 +322,8 @@ fn scan_effective_scope_circle(
     // discriminator `"kind": "circle"` — should also visibly reference a
     // `circle_id` on the same line.
     let mentions_rust = line.contains("EffectiveScope::Circle");
-    let mentions_json = line.contains("\"kind\": \"circle\"")
-        || line.contains("\"kind\":\"circle\"");
+    let mentions_json =
+        line.contains("\"kind\": \"circle\"") || line.contains("\"kind\":\"circle\"");
     if !(mentions_rust || mentions_json) {
         return;
     }
@@ -459,8 +459,7 @@ mod tests {
     fn flags_discussion_realm_ref_in_json_literal() {
         let f = scan(r#"let payload = json!({"discussion_realm_ref": "x"});"#);
         assert!(
-            f.iter()
-                .any(|r| r.rule == CircleRule::DiscussionRealmRef),
+            f.iter().any(|r| r.rule == CircleRule::DiscussionRealmRef),
             "expected DiscussionRealmRef finding, got {f:?}",
         );
     }
@@ -498,11 +497,11 @@ mod tests {
     #[test]
     fn marker_comment_suppresses_finding() {
         // CIRCLE-ALLOW: scanner self-test asserts marker suppression.
-        let text = "// CIRCLE-ALLOW: documenting the forbidden field\nlet x = \"discussion_realm_ref\";";
+        let text =
+            "// CIRCLE-ALLOW: documenting the forbidden field\nlet x = \"discussion_realm_ref\";";
         let f = scan(text);
         assert!(
-            f.iter()
-                .all(|r| r.rule != CircleRule::DiscussionRealmRef),
+            f.iter().all(|r| r.rule != CircleRule::DiscussionRealmRef),
             "expected marker to suppress finding, got {f:?}",
         );
     }
@@ -571,9 +570,8 @@ mod tests {
 
     #[test]
     fn allows_confidential_discussion_with_two_flows() {
-        let f = scan(
-            r#"add_relation(Relation::ConfidentialDiscussionOf, "cx:flow:a", "cx:flow:b");"#,
-        );
+        let f =
+            scan(r#"add_relation(Relation::ConfidentialDiscussionOf, "cx:flow:a", "cx:flow:b");"#);
         assert!(
             f.iter()
                 .all(|r| r.rule != CircleRule::ConfidentialDiscussionEndpointsNotFlow),

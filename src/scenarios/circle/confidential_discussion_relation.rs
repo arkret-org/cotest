@@ -27,8 +27,8 @@ pub async fn confidential_discussion_relation_run() -> Result<()> {
     }
 
     // Round-trip.
-    let parsed: RelationKind =
-        serde_json::from_str("\"confidential_discussion_of\"").map_err(|e| anyhow!("parse: {e}"))?;
+    let parsed: RelationKind = serde_json::from_str("\"confidential_discussion_of\"")
+        .map_err(|e| anyhow!("parse: {e}"))?;
     if !matches!(parsed, RelationKind::ConfidentialDiscussionOf) {
         return Err(anyhow!(
             "round-tripped RelationKind expected ConfidentialDiscussionOf; got {parsed:?}"

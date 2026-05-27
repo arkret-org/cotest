@@ -115,9 +115,8 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
 
     // ── Accept: Realm=body_only, Circle MAY pick any of the three.
     for circle in [BodyOnly, MinimalEncrypted, FullEncrypted] {
-        validate_metadata_floor_tightens(BodyOnly, circle).map_err(|e| {
-            anyhow!("expected accept Realm=BodyOnly Circle={circle:?}; got: {e}")
-        })?;
+        validate_metadata_floor_tightens(BodyOnly, circle)
+            .map_err(|e| anyhow!("expected accept Realm=BodyOnly Circle={circle:?}; got: {e}"))?;
     }
 
     // ── Accept: Realm=minimal_encrypted, Circle ∈ {minimal_encrypted, full_encrypted}.
@@ -171,8 +170,7 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
              MinimalEncrypted; got {effective:?}"
         ));
     }
-    let effective =
-        effective_floor(BodyOnly, Some(MinimalEncrypted), Some(FullEncrypted), None);
+    let effective = effective_floor(BodyOnly, Some(MinimalEncrypted), Some(FullEncrypted), None);
     if effective != FullEncrypted {
         return Err(anyhow!(
             "effective_floor MUST take max across all sources; expected FullEncrypted, got {effective:?}"
