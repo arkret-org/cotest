@@ -35,10 +35,16 @@ fn vectors() -> Vec<CanonicalVector> {
             // Mirrors coauth's `HandleClaimDigestInput` shape from
             // `crates/backend/src/handlers/contrix.rs`. RFC 3339 UTC strings
             // for timestamps; integer-only numbers; all-string scalar fields.
+            //
+            // R3.1 wire rename (contrix-spec @ 7157ee8): the previous
+            // `handle_uri: "contrix://contrix.example/users/alice"` field
+            // is now `handle: "alice:contrix.example"`. Field order is
+            // irrelevant in canonical JSON (keys are sorted), but the digest
+            // changes because both the field name and the value bytes change.
             payload: json!({
                 "type": "cx.handle.claim",
                 "subject_id": "did:web:alice.example",
-                "handle_uri": "contrix://contrix.example/users/alice",
+                "handle": "alice:contrix.example",
                 "handle_aliases": ["acct:alice@contrix.example"],
                 "issuer_service_did": "did:web:coauth.example",
                 "audience": "https://soland.example/api/v1",
@@ -51,7 +57,15 @@ fn vectors() -> Vec<CanonicalVector> {
                 "issued_at": "2026-05-20T00:00:00Z",
                 "expires_at": "2026-05-20T00:05:00Z",
             }),
-            expected_digest: "sha256:0e37e1aedcf71597c07997f929b1a33cab278158812f94508d5bfcb53de6f50b",
+            // R3.1 digest — recomputed after the `handle_uri` → `handle`
+            // wire rename. Source of truth: SDK's
+            // `contrix_core::canonical::canonical_sha256` over the canonical
+            // JSON bytes of the payload above. If this digest drifts, the
+            // first place to look is whether any downstream service has
+            // re-introduced a hand-rolled canonical encoder. To regenerate:
+            // `cargo test -p cotest --test canonical_hash_convergence \
+            //  dump_canonical_digests -- --ignored --nocapture`.
+            expected_digest: "sha256:36d8d1066819cdae75cfc9ff759eb84ac406be79e09aa6fe7b4d3134efeb6bd7",
         },
         CanonicalVector {
             label: "soland event envelope payload",
@@ -120,6 +134,19 @@ fn sdk_canonical_sha256_matches_pinned_vectors() {
         "one or more canonical hash vectors drifted:\n{}",
         drifted.join("\n")
     );
+}
+
+/// Diagnostic: prints the SDK-computed canonical digest for every vector.
+/// Run with `cargo test -p cotest --test canonical_hash_convergence \
+/// dump_canonical_digests -- --nocapture` to regenerate the pinned values
+/// after a fixture rename.
+#[test]
+#[ignore = "diagnostic — run with --nocapture to print canonical digests"]
+fn dump_canonical_digests() {
+    for vector in vectors() {
+        let actual = canonical_sha256(&vector.payload).expect("canonical_sha256");
+        println!("{} => {}", vector.label, actual);
+    }
 }
 
 /// Re-encoding the same payload value with permuted object keys MUST

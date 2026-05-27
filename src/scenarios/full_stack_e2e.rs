@@ -53,7 +53,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use contrix_core::{
     CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
-    Did, HandleHintBindingSource, HandleUri, MemberDeliveryBindingCandidate, RecipientServiceType,
+    Did, Handle, HandleHintBindingSource, MemberDeliveryBindingCandidate, RecipientServiceType,
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
 use serde_json::{Value, json};
@@ -68,7 +68,8 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 const ALICE_DID: &str = "did:web:alice.acme.example";
 const BOB_DID: &str = "did:web:bob.acme.example";
-const ALICE_HANDLE_URI: &str = "contrix://acme.example/users/alice";
+/// R3.1 canonical handle `<localpart>:<domain>` (contrix-spec @ 7157ee8).
+const ALICE_HANDLE: &str = "alice:acme.example";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
 const TARGET_SPACE_ID: &str = "cx:realm:0196419b-0000-7000-8000-fullstacke2e1";
@@ -143,16 +144,26 @@ fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
 /// coauth's `issue_handle_claim` (T3.2) is the only sanctioned producer of
 /// `MemberDeliveryBindingCandidate`. Without a live DB we exercise the SDK
 /// candidate validator that the live coauth output round-trips through:
-///  - canonical handle URI is `contrix://...`
+///  - canonical handle is `<localpart>:<domain>` (R3.1 wire rename)
 ///  - `acct:` only appears in `handle_aliases[]`
 ///  - `expires_at` is in the future (coauth's 5-minute TTL ceiling)
 ///  - `member_delivery_binding.recipient_service_did` matches the issuer
 fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
-    let canonical = candidate.handle_uri.canonical();
-    if !canonical.starts_with("contrix://") {
+    let canonical = candidate.handle.canonical();
+    let mut colon_parts = canonical.split(':');
+    let local = colon_parts.next().unwrap_or_default();
+    let domain = colon_parts.next().unwrap_or_default();
+    if local.is_empty() || domain.is_empty() || !domain.contains('.') {
         bail!(
-            "T8.1 step 2: coauth handle_claim must emit canonical contrix:// \
-             URIs; got `{canonical}`"
+            "T8.1 step 2: coauth handle_claim must emit canonical \
+             `<localpart>:<domain>` handles (R3.1); got `{canonical}`"
+        );
+    }
+    if canonical.starts_with("contrix://") || canonical.starts_with("acct:") {
+        bail!(
+            "T8.1 step 2: coauth handle_claim leaked a retired URI form \
+             (`{canonical}`); the `contrix://` form was retired at \
+             contrix-spec @ 7157ee8."
         );
     }
     if !candidate
@@ -554,7 +565,7 @@ async fn live_stack_probe() -> Result<()> {
     let resp = client
         .post(&resolve_url)
         .json(&json!({
-            "handle": ALICE_HANDLE_URI,
+            "handle": ALICE_HANDLE,
             "intent": "member_add",
             "requester": PRINCIPAL_DID,
             "audience": TARGET_SPACE_ID,
@@ -635,14 +646,14 @@ async fn live_stack_probe() -> Result<()> {
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = Did::new(ALICE_DID.to_owned())?;
     let principal = Did::new(PRINCIPAL_DID.to_owned())?;
-    let handle_uri = HandleUri::parse(ALICE_HANDLE_URI)?;
+    let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     modes.insert(DeliveryMode::Sync);
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
-        handle_uri,
+        handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_service_did: principal.clone(),

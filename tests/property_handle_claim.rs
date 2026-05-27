@@ -3,14 +3,14 @@
 //! invariants the conformance suite asserts on the wire are also
 //! exercised on randomly-generated inputs.
 //!
-//! Invariants pinned:
+//! Invariants pinned (post R3.1 wire rename — contrix-spec @ 7157ee8):
 //!
-//!  1. **URI canonical round-trip.** Any valid `contrix://` URI
+//!  1. **Canonical round-trip.** Any valid `<localpart>:<domain>` handle
 //!     survives parse → canonical without re-shape.
 //!  2. **alias canonicalisation.** `acct:` interop form maps to the
-//!     same canonical `contrix://` regardless of localpart casing.
+//!     same canonical handle regardless of localpart casing.
 //!  3. **audience mismatch is fatal.** When `member_delivery_binding`
-//!     is set, the claim MUST also carry `audience` + `handle_uri` +
+//!     is set, the claim MUST also carry `audience` + `handle` +
 //!     `expires_at` or `validate()` rejects.
 //!  4. **expiry boundary.** `binding_state=verified` MUST require
 //!     `expires_at` regardless of whether `verified_at` is set.
@@ -22,8 +22,8 @@ use std::collections::BTreeSet;
 use chrono::{Duration, Utc};
 use contrix_core::Did;
 use contrix_core::model::{
-    DeliveryBindingHint, DeliveryMode, HandleBindingState, HandleClaim, HandleHintBindingSource,
-    HandleUri, RecipientServiceType,
+    DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
+    HandleHintBindingSource, RecipientServiceType,
 };
 use proptest::prelude::*;
 
@@ -34,21 +34,23 @@ fn arb_localpart() -> impl Strategy<Value = String> {
 }
 
 fn arb_domain() -> impl Strategy<Value = String> {
-    proptest::collection::vec("[a-z0-9]{1,6}", 1..=3).prop_map(|l| l.join("."))
+    // R3.1 schema-conformant domain — at least 2 dot-separated labels.
+    proptest::collection::vec("[a-z0-9]{1,6}", 2..=3).prop_map(|l| l.join("."))
 }
 
-fn arb_uri() -> impl Strategy<Value = String> {
-    (arb_localpart(), arb_domain()).prop_map(|(l, d)| format!("contrix://{d}/users/{l}"))
+/// R3.1 canonical handle generator — `<localpart>:<domain>`.
+fn arb_handle() -> impl Strategy<Value = String> {
+    (arb_localpart(), arb_domain()).prop_map(|(l, d)| format!("{l}:{d}"))
 }
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(PROPTEST_CASES))]
 
-    /// Canonical URI parse → canonical() yields exactly the input bytes.
+    /// Canonical handle parse → canonical() yields exactly the input bytes.
     #[test]
-    fn canonical_uri_round_trip(uri in arb_uri()) {
-        let p = HandleUri::parse(&uri).expect("valid uri parses");
-        prop_assert_eq!(p.canonical(), uri.as_str());
+    fn canonical_handle_round_trip(handle in arb_handle()) {
+        let p = Handle::parse(&handle).expect("valid canonical handle parses");
+        prop_assert_eq!(p.canonical(), handle.as_str());
     }
 
     /// `acct:` alias maps to the same canonical regardless of casing.
@@ -57,8 +59,8 @@ proptest! {
         local in "[A-Za-z0-9]{1,10}",
         domain in arb_domain(),
     ) {
-        let lower = HandleUri::from_acct(&format!("acct:{}@{domain}", local.to_lowercase())).unwrap();
-        let mixed = HandleUri::from_acct(&format!("acct:{local}@{domain}")).unwrap();
+        let lower = Handle::from_acct(&format!("acct:{}@{domain}", local.to_lowercase())).unwrap();
+        let mixed = Handle::from_acct(&format!("acct:{local}@{domain}")).unwrap();
         prop_assert_eq!(lower.canonical(), mixed.canonical());
     }
 
@@ -66,11 +68,11 @@ proptest! {
     /// or `validate()` rejects.
     #[test]
     fn audience_mismatch_rejected(
-        uri in arb_uri(),
+        handle in arb_handle(),
         audience in prop::option::of("[a-z0-9.]{2,16}"),
     ) {
         let mut claim = HandleClaim::default();
-        claim.handle_uri = Some(HandleUri::parse(&uri).unwrap());
+        claim.handle = Some(Handle::parse(&handle).unwrap());
         claim.member_delivery_binding = Some(member_delivery_binding());
         claim.expires_at = Some(Utc::now() + Duration::minutes(5));
         claim.audience = audience.clone().map(|a| format!("did:web:{a}.example"));
@@ -86,13 +88,13 @@ proptest! {
     /// `verified_at` is supplied. Issuer / aliases never relax this.
     #[test]
     fn verified_requires_expires_regardless_of_verified_at(
-        uri in arb_uri(),
+        handle in arb_handle(),
         with_expiry in any::<bool>(),
         with_verified_at in any::<bool>(),
     ) {
         let mut claim = HandleClaim::default();
         claim.binding_state = Some(HandleBindingState::Verified);
-        claim.handle_uri = Some(HandleUri::parse(&uri).unwrap());
+        claim.handle = Some(Handle::parse(&handle).unwrap());
         claim.issuer = Some("did:web:issuer.example".to_owned());
         if with_expiry {
             claim.expires_at = Some(Utc::now() + Duration::minutes(5));
@@ -112,11 +114,11 @@ proptest! {
     /// the outcome of an otherwise-valid claim.
     #[test]
     fn issuer_is_validation_opaque(
-        uri in arb_uri(),
+        handle in arb_handle(),
         issuer in "[a-z0-9.:_\\-]{4,32}",
     ) {
         let mut claim = HandleClaim::default();
-        claim.handle_uri = Some(HandleUri::parse(&uri).unwrap());
+        claim.handle = Some(Handle::parse(&handle).unwrap());
         claim.issuer = Some(issuer);
         // No binding_state, no recipient — should validate trivially.
         prop_assert!(claim.validate().is_ok());

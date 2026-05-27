@@ -3,9 +3,10 @@
 //! Stitches the four pieces shipped in T3.1–T3.4 into a single black-box
 //! scenario:
 //!
-//!   1. coauth (T3.2) issues a `handle_claim` whose `handle_uri` is the
-//!      canonical `contrix://...` form and whose `member_delivery_binding`
-//!      points at a recipient principal server.
+//!   1. coauth (T3.2) issues a `handle_claim` whose `handle` is the
+//!      canonical `<localpart>:<domain>` form (R3.1 wire rename from
+//!      `handle_uri`, contrix-spec @ 7157ee8) and whose
+//!      `member_delivery_binding` points at a recipient principal server.
 //!   2. teabay (T3.4) hosts `cx.directory.resolve_handle(intent="member_add")`
 //!      and filters candidates against the target Space's
 //!      `allowed_recipient_services`.
@@ -45,7 +46,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use contrix_core::{
     CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
-    Did, HandleHintBindingSource, HandleUri, MemberDeliveryBindingCandidate, RecipientServiceType,
+    Did, Handle, HandleHintBindingSource, MemberDeliveryBindingCandidate, RecipientServiceType,
 };
 use serde_json::{Value, json};
 
@@ -71,10 +72,10 @@ const OTHER_PRINCIPAL_DID: &str = "did:web:rogue.example";
 /// Subject DID for the happy path actor.
 const ALICE_DID: &str = "did:web:alice.acme.example";
 
-/// Handle URI for alice in canonical Contrix form. The acct: alias appears
-/// in `handle_aliases[]` as the interop form, mirroring the coauth
-/// `issue_handle_claim` output.
-const ALICE_HANDLE_URI: &str = "contrix://acme.example/users/alice";
+/// Canonical handle for Alice — R3.1 wire form `<localpart>:<domain>`. The
+/// acct: alias appears in `handle_aliases[]` as the interop form, mirroring
+/// the coauth `issue_handle_claim` output (contrix-spec @ 7157ee8).
+const ALICE_HANDLE: &str = "alice:acme.example";
 
 /// Source-ref event id the directory would echo back on a real
 /// `cx.directory.resolve_handle` envelope. Carried so `source_refs[]` is
@@ -101,7 +102,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_service_not_allowed()
         .context("T3.5 negative — recipient_service_did not in Space allow-list")?;
     negative_case_acct_canonical_rejected()
-        .context("T3.5 negative — acct: as canonical handle_uri")?;
+        .context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
 
@@ -136,15 +137,27 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
         )
     })?;
 
-    // The candidate's canonical `handle_uri` MUST round-trip through the
-    // canonical form — guards against directory caches that silently
-    // rewrite to `acct:` (forbidden per T3.1).
-    let canonical = candidate.handle_uri.canonical();
-    if !canonical.starts_with("contrix://") || !canonical.contains("/users/") {
+    // The candidate's canonical `handle` MUST round-trip through the
+    // canonical `<localpart>:<domain>` form — guards against directory
+    // caches that silently rewrite to `acct:` or to the retired
+    // `contrix://` URI form (forbidden per T3.1 / R3.1).
+    let canonical = candidate.handle.canonical();
+    let mut colon_parts = canonical.split(':');
+    let local = colon_parts.next().unwrap_or_default();
+    let domain = colon_parts.next().unwrap_or_default();
+    if local.is_empty() || domain.is_empty() || !domain.contains('.') {
         bail!(
-            "T3.5 happy path: candidate.handle_uri is not canonical contrix://...; \
-             got `{canonical}`. The directory MUST NOT emit acct:/bare-host \
-             handle URIs (identity-handles.md §3.1)."
+            "T3.5 happy path: candidate.handle is not canonical \
+             `<localpart>:<domain>`; got `{canonical}`. The directory MUST \
+             NOT emit acct:/contrix:// handles (identity-handles.md §3.1, \
+             R3.1 wire rename)."
+        );
+    }
+    if canonical.starts_with("contrix://") || canonical.starts_with("acct:") {
+        bail!(
+            "T3.5 happy path: candidate.handle leaked a retired URI form \
+             (`{canonical}`); only `<localpart>:<domain>` is accepted on the \
+             wire after R3.1."
         );
     }
     if !candidate
@@ -305,39 +318,40 @@ fn negative_case_service_not_allowed() -> Result<()> {
     Ok(())
 }
 
-/// `acct_canonical_rejected` — the only canonical form is
-/// `contrix://...`. `acct:<local>@<domain>` may appear in `handle_aliases[]`
-/// but MUST NOT appear as the canonical `handle_uri`. The SDK's
-/// `HandleUri::parse` enforces this at construction time, so we exercise
-/// the rejection by feeding a serialised candidate where the
-/// `handle_uri` field carries the forbidden `acct:` string.
+/// `acct_canonical_rejected` — R3.1 canonical form is
+/// `<localpart>:<domain>`. `acct:<local>@<domain>` may appear in
+/// `handle_aliases[]` but MUST NOT appear as the canonical `handle`. The
+/// retired `contrix://...` URI form is also rejected. The SDK's
+/// `Handle::parse` enforces this at construction time, so we exercise the
+/// rejection by feeding a serialised candidate where the `handle` field
+/// carries the forbidden `acct:` string.
 fn negative_case_acct_canonical_rejected() -> Result<()> {
     let candidate = sample_candidate()?;
     let mut value =
         serde_json::to_value(&candidate).context("serialise sample candidate to JSON")?;
-    value["handle_uri"] = json!("acct:alice@acme.example");
+    value["handle"] = json!("acct:alice@acme.example");
 
     let parsed: std::result::Result<MemberDeliveryBindingCandidate, _> =
         serde_json::from_value(value);
     match parsed {
         Err(e) => {
             let msg = format!("{e}");
-            // `HandleUri::parse` returns `Error::Protocol("handle uri must start
-            // with contrix://: ...")` — the substring "contrix://" anchors
-            // the assertion to the canonical-form check we care about.
-            if !msg.contains("contrix://") && !msg.contains("handle uri") {
+            // `Handle::parse` returns `Error::Protocol("handle ...")` — the
+            // substring "handle" anchors the assertion to the canonical-form
+            // check we care about.
+            if !msg.to_lowercase().contains("handle") {
                 bail!(
                     "T3.5 acct_canonical_rejected: deserialisation rejected the \
                      payload but with an unexpected error message `{msg}` — \
-                     expected the `HandleUri::parse` canonical-form rejection"
+                     expected the `Handle::parse` canonical-form rejection"
                 );
             }
             Ok(())
         }
         Ok(_) => bail!(
             "T3.5 acct_canonical_rejected: an `acct:` value was accepted as the \
-             canonical handle_uri — `handle_uri` MUST be `contrix://...` \
-             (identity-handles.md §3.1)"
+             canonical handle — `handle` MUST be `<localpart>:<domain>` \
+             (identity-handles.md §3.1, R3.1 wire rename)"
         ),
     }
 }
@@ -421,7 +435,7 @@ async fn live_stack_probe() -> Result<()> {
     let resp = client
         .post(&url)
         .json(&json!({
-            "handle": ALICE_HANDLE_URI,
+            "handle": ALICE_HANDLE,
             "intent": "member_add",
             "requester": PRINCIPAL_DID,
             "audience": TARGET_SPACE_ID,
@@ -483,14 +497,14 @@ async fn live_stack_probe() -> Result<()> {
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = Did::new(ALICE_DID.to_owned())?;
     let principal = Did::new(PRINCIPAL_DID.to_owned())?;
-    let handle_uri = HandleUri::parse(ALICE_HANDLE_URI)?;
+    let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     modes.insert(DeliveryMode::Sync);
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
-        handle_uri,
+        handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_service_did: principal.clone(),
