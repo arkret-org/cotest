@@ -2,6 +2,15 @@
 
 All notable changes to **cotest** are documented here.
 
+## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
+
+- VECT-MB-1..9: nine `cx.vector.media_binding.*` conformance vectors covering oldest-membership focus selection, write-once `session_focus`, minimal token shape (`participant_binding.v1`, TTL `<=600s`), unauthorised issuer, missing / invalid binding, unknown focus type, MLS-Exporter-only E2EE key source, unrecognised participant identity, and recording artifacts via Contrix blob.
+- VECT-AG-1..5 / VECT-SC-1..4: full agent (`provision`, `pairing_expiry`, `controller_lifecycle`, `act_on_behalf`, `session_grant.replay`) and sidecar (`ensure_idempotent`, `eligibility_states`, `existence_privacy`, `multi_agent_publish`) vector sets.
+- VECT-CUR-1 / VECT-CUR-2 / FIX-1: cursor `core` vector now stateful and `stateless_profile` vector profile-gated; `fixtures/` extended with `recovery-policy.json`, `recovery-receipt.json`, `agent_payloads.json`.
+- TEST-1..6: scaffolded scenarios for agent FSM (active → paused → active → deactivated terminal), media token exchange happy + 4 negative paths, `accountable_to.strict_reject` profile toggle, cursor opaque round-trip, recovery policy state machine, and handle homograph reject — live integrations gated `#[ignore]` pending R3.1 server wiring.
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+
 ## [Unreleased]
 
 ### CXP-0007 Circle primitive rollout (contrix-spec `2b0d70d`)
