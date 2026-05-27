@@ -120,6 +120,43 @@ jobs:
         working-directory: cotest
         run: cargo audit --deny warnings
 
+  fuzz:
+    name: fuzz (envelope / snapshot / anchor, 60s each)
+    runs-on: ubuntu-latest
+    # P5.1 — wire-envelope fuzz harnesses get a per-target 60s libFuzzer
+    # budget. Total wall-clock is capped at 5 min so PR latency stays bounded;
+    # nightly extended runs live in integration.yml under a longer schedule.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: contrix-dev/contrix-rust-sdk
+          path: contrix-rust-sdk
+          ref: circle-rollout
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          # cargo-fuzz needs nightly for the libFuzzer integration.
+          toolchain: nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            cotest
+            cotest/fuzz
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: envelope_fuzz (60s)
+        working-directory: cotest
+        run: cargo fuzz run envelope_fuzz -- -max_total_time=60
+      - name: snapshot_fuzz (60s)
+        working-directory: cotest
+        run: cargo fuzz run snapshot_fuzz -- -max_total_time=60
+      - name: anchor_fuzz (60s)
+        working-directory: cotest
+        run: cargo fuzz run anchor_fuzz -- -max_total_time=60
+
   e2e:
     name: e2e (playwright / ${{ matrix.browser }})
     runs-on: ubuntu-latest

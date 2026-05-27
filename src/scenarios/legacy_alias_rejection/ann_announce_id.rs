@@ -9,8 +9,10 @@ use anyhow::{Result, anyhow};
 use contrix_core::AnnounceId;
 
 pub async fn ann_announce_id_run() -> Result<()> {
-    // Canonical form is accepted.
-    let ok = AnnounceId::new("cx:announce:01999999-0000-7000-8000-00000000ann1".to_owned())
+    // Canonical form is accepted. UUIDv7 literal: lowercase hex, version
+    // nibble = 7, variant nibble ∈ {8,9,a,b}; see `contrix-rust-sdk
+    // crates/identifiers` is_lowercase_uuidv7.
+    let ok = AnnounceId::new("cx:announce:01999999-0000-7000-8000-00000000aaa1".to_owned())
         .map_err(|e| anyhow!("canonical AnnounceId construction: {e}"))?;
     if !ok.as_str().starts_with("cx:announce:") {
         return Err(anyhow!(

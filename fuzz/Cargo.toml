@@ -1,0 +1,48 @@
+[package]
+name = "cotest-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.85"
+
+# P5.1 — cargo-fuzz crate that hosts the three CI fuzz targets
+# (envelope_fuzz / snapshot_fuzz / anchor_fuzz). Each target wraps the
+# matching entry point in `cotest::fuzz::*` so the host crate keeps the
+# arbitrary-derived input types and validator wiring.
+#
+# This sub-crate is intentionally NOT part of the cotest workspace
+# (`cargo check --workspace` skips it) — cargo-fuzz manages its own
+# nightly + libFuzzer toolchain and bringing it under -workspace would
+# force every CI job to install nightly. The crate is exercised only by
+# the dedicated `fuzz` CI job and by manual `cargo fuzz run` invocations.
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+cotest = { path = ".." }
+
+[[bin]]
+name = "envelope_fuzz"
+path = "fuzz_targets/envelope_fuzz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "snapshot_fuzz"
+path = "fuzz_targets/snapshot_fuzz.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "anchor_fuzz"
+path = "fuzz_targets/anchor_fuzz.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
+# Standalone crate; cargo-fuzz convention.

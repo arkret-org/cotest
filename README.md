@@ -202,6 +202,83 @@ mock and exports `COTEST_MOCK_MIMI_FACADE_BASE_URL` /
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run
 unless `-AllowSecretLeaks` is supplied.
 
+### Secret scan patterns (P5.1)
+
+`scripts/run-cotest.ps1` (`Find-SecretLeaks`) flags three categories of
+unredacted secret-shaped fields when scanning `raw.log`, `transcript.ndjson`,
+and `services/*.log`. Each is matched case-insensitively.
+
+**Positive examples (these MUST be flagged):**
+
+```
+Authorization: Bearer eyJhbGciOiJI...                       # authorization_header
+"access_token":"4f0e1a8b-09e4-4f10-..."                     # json_secret_field
+"push_key":"BEL5N6h..."                                     # json_secret_field
+"private_key":"-----BEGIN EC PRIVATE KEY-----..."            # json_secret_field + raw PEM
+?access_token=4f0e1a8b-09e4-4f10-...                        # query_secret_field
+?signed_link=https%3A%2F%2F...%26sig%3Dabc                  # query_secret_field
+```
+
+**Negative examples (these MUST NOT trip the scanner):**
+
+```
+Authorization: Bearer [redacted]                            # post-redaction placeholder
+"access_token":"[redacted]"                                 # post-redaction placeholder
+"token":"<masked-by-test-harness>"                          # no `[redacted]` prefix but
+                                                            # only matches the explicit
+                                                            # `[redacted]` allow form;
+                                                            # if you need a custom mask
+                                                            # rewrite it to `[redacted]`
+"token_kind":"oauth_bearer"                                 # field name does not match
+"token_count":42                                            # value is not a quoted string
+"refresh_token_url":"https://..."                           # field name does not match
+                                                            # the closed allowlist
+"public_key":"MFkwEwYHKoZIzj0..."                           # `public_key` is not in the
+                                                            # secret-field allowlist
+```
+
+**Redaction defaults:**
+
+| Field shape                                          | Redaction               |
+|------------------------------------------------------|-------------------------|
+| `Authorization: Bearer <token>`                      | `Authorization: Bearer [redacted]` |
+| JSON `"<allowed>":"<value>"`                         | `"<allowed>":"[redacted]"` |
+| Query `<allowed>=<value>`                            | `<allowed>=[redacted]`  |
+| PEM `-----BEGIN [RSA\|EC\|OPENSSH ]PRIVATE KEY-----` | `[redacted-private-key]` |
+
+The closed allowlist of secret-shaped field names is: `authorization`,
+`access_token`, `token`, `push_key`, `invite_token`, `signed_link`, `jws`,
+`sig`, `password`, `secret`, `private_key`, `seed`. Adding a new
+secret-shaped field anywhere in the harness or in a service log MUST be
+accompanied by:
+
+1. Adding the field name to all three patterns in `Find-SecretLeaks` and to
+   the redaction pass in `ConvertTo-SecretPreview`.
+2. Adding a positive and negative example to the table above.
+3. Re-running `.\scripts\run-cotest.ps1` and confirming `secret-scan.md`
+   reports `status: passed` with the redacted preview rendered as
+   `[redacted]`.
+
+**Failure example:**
+
+A run that fails the gate emits `artifacts/runs/<ts>/secret-scan.md`
+similar to:
+
+```
+# secret scan
+- status: failed
+- scanned_files: 142
+- leaks: 1
+
+| path | line | pattern | preview |
+|---|---|---|---|
+| artifacts/runs/.../raw.log | 8821 | json_secret_field | `"access_token":"[redacted]"` |
+```
+
+The preview is always rendered post-redaction so the report itself never
+re-leaks the offending value; the original line+file pointer is what the
+on-call engineer chases.
+
 For the runtime model comparison against Complement, including image creation,
 Docker networking, host-side execution, and result formatting, see
 [docs/complement-map.md](/E:/Works/contrix-dev/cotest/docs/complement-map.md:1).

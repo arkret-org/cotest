@@ -14,8 +14,10 @@ pub async fn series_predecessor_not_found_run() -> Result<()> {
              {ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND}"
         ));
     }
+    // UUIDv7 literal: lowercase hex, version nibble = 7, variant nibble ∈
+    // {8,9,a,b}; see `contrix-rust-sdk crates/identifiers` is_lowercase_uuidv7.
     let _series = BackupSeriesId::new(
-        "cx:backup_series:01999999-0000-7000-8000-0000000bs001".to_owned(),
+        "cx:backup_series:01999999-0000-7000-8000-00000000bbb1".to_owned(),
     )
     .map_err(|e| anyhow!("BackupSeriesId: {e}"))?;
 

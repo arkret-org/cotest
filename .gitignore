@@ -1,6 +1,10 @@
 # Build outputs
 /target/
 /target-*/
+# P5.1 — cargo-fuzz crate has its own build dir + lockfile
+/fuzz/target/
+/fuzz/Cargo.lock
+/fuzz/artifacts/
 
 # Dependency installs
 node_modules/

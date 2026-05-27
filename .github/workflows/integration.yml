@@ -32,24 +32,25 @@ jobs:
           repository: contrix-dev/contrix-rust-sdk
           path: contrix-rust-sdk
           ref: circle-rollout
+      # P5.1 — upstream checkout failures MUST hard-fail the job. The previous
+      # `continue-on-error: true` markers were a circle-rollout bootstrap
+      # tolerance; once the sibling repos are on the `circle-rollout` ref the
+      # job has no business green-lighting a partial bringup.
       - uses: actions/checkout@v4
         with:
           repository: contrix-dev/soland
           path: soland
           ref: circle-rollout
-        continue-on-error: true
       - uses: actions/checkout@v4
         with:
           repository: contrix-dev/coauth
           path: coauth
           ref: circle-rollout
-        continue-on-error: true
       - uses: actions/checkout@v4
         with:
           repository: contrix-dev/floria
           path: floria
           ref: circle-rollout
-        continue-on-error: true
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.92"
@@ -61,16 +62,15 @@ jobs:
             coauth
             floria
       - name: build upstream services
+        # P5.1 — upstream checkouts now hard-fail (see above) so the missing-svc
+        # warning branch is removed; the build step also no longer swallows
+        # individual `cargo build` failures.
         run: |
           set -euo pipefail
           for svc in soland coauth floria; do
-            if [ -d "$svc" ]; then
-              echo "::group::cargo build $svc"
-              (cd "$svc" && cargo build --release --locked || true)
-              echo "::endgroup::"
-            else
-              echo "::warning::$svc checkout missing; skipping"
-            fi
+            echo "::group::cargo build $svc"
+            (cd "$svc" && cargo build --release --locked)
+            echo "::endgroup::"
           done
       - name: run cotest harness
         working-directory: cotest
