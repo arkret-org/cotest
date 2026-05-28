@@ -1,7 +1,7 @@
 {
   "suite": "push_rule_core_consistency",
   "profile": "T4.4",
-  "description": "Cross-project v1 push rule vectors for soland::evaluate_push_rule, chime::evaluate_watch_level, and yougen::evaluate_notification.",
+  "description": "Shared v1 push rule vectors for the SDK core used by soland, chime, and yougen.",
   "cases": [
     {
       "name": "muted_direct_mention_short_circuits",
@@ -121,6 +121,52 @@
       "yougen": {
         "mentions_actor_known": false,
         "client_side_mentions_rule": true
+      },
+      "expected": {
+        "deliver": true,
+        "blind_wakeup": true,
+        "reason_code": "blind_wakeup_required",
+        "yougen": {
+          "should_notify": false,
+          "watch_suppressed": false,
+          "muted_short_circuit": false,
+          "blind_wakeup_required": true,
+          "unresolved_client_evaluation": true
+        }
+      }
+    },
+    {
+      "name": "e2ee_mentions_only_unknown_requires_blind_wakeup",
+      "watch_level": "mentions_only",
+      "event": {
+        "is_e2ee": true,
+        "local_decrypted": false
+      },
+      "yougen": {
+        "mentions_actor_known": false
+      },
+      "expected": {
+        "deliver": true,
+        "blind_wakeup": true,
+        "reason_code": "blind_wakeup_required",
+        "yougen": {
+          "should_notify": false,
+          "watch_suppressed": false,
+          "muted_short_circuit": false,
+          "blind_wakeup_required": true,
+          "unresolved_client_evaluation": true
+        }
+      }
+    },
+    {
+      "name": "e2ee_participating_unknown_requires_blind_wakeup",
+      "watch_level": "participating",
+      "event": {
+        "is_e2ee": true,
+        "local_decrypted": false
+      },
+      "yougen": {
+        "mentions_actor_known": false
       },
       "expected": {
         "deliver": true,

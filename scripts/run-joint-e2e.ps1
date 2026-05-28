@@ -367,15 +367,87 @@ function Invoke-JointE2ePreflight {
     }
 }
 
-function Get-FreeTcpPort {
-    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), 0)
+$script:AllocatedTcpPorts = [System.Collections.Generic.HashSet[int]]::new()
+$script:NextTcpPortCandidate = 20000 + (Get-Random -Minimum 0 -Maximum 5000)
+$script:WindowsExcludedTcpPortRanges = $null
+
+function Get-WindowsExcludedTcpPortRanges {
+    $isWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+        [System.Runtime.InteropServices.OSPlatform]::Windows
+    )
+    if (-not $isWindowsPlatform) {
+        return @()
+    }
+    if ($null -ne $script:WindowsExcludedTcpPortRanges) {
+        return $script:WindowsExcludedTcpPortRanges
+    }
+
+    $ranges = @()
+    $netsh = Get-Command netsh -ErrorAction SilentlyContinue
+    if ($netsh) {
+        $output = & netsh interface ipv4 show excludedportrange protocol=tcp 2>$null
+        foreach ($line in @($output)) {
+            if ($line -match '^\s*(\d+)\s+(\d+)\s*(\*)?\s*$') {
+                $ranges += [pscustomobject]@{
+                    Start = [int]$Matches[1]
+                    End   = [int]$Matches[2]
+                }
+            }
+        }
+    }
+
+    $script:WindowsExcludedTcpPortRanges = $ranges
+    return $script:WindowsExcludedTcpPortRanges
+}
+
+function Test-TcpPortExcluded {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    foreach ($range in @(Get-WindowsExcludedTcpPortRanges)) {
+        if ($Port -ge $range.Start -and $Port -le $range.End) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-TcpPortBindable {
+    param([Parameter(Mandatory = $true)][int]$Port)
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), $Port)
     try {
         $listener.Start()
-        return $listener.LocalEndpoint.Port
+        return $true
+    }
+    catch {
+        return $false
     }
     finally {
         $listener.Stop()
     }
+}
+
+function Get-FreeTcpPort {
+    for ($attempt = 0; $attempt -lt 10000; $attempt++) {
+        $port = $script:NextTcpPortCandidate
+        $script:NextTcpPortCandidate++
+        if ($script:NextTcpPortCandidate -gt 29999) {
+            $script:NextTcpPortCandidate = 20000
+        }
+
+        if ($script:AllocatedTcpPorts.Contains($port)) {
+            continue
+        }
+        if (Test-TcpPortExcluded -Port $port) {
+            continue
+        }
+        if (-not (Test-TcpPortBindable -Port $port)) {
+            continue
+        }
+
+        $null = $script:AllocatedTcpPorts.Add($port)
+        return $port
+    }
+
+    throw "Unable to allocate a free TCP port in the joint e2e harness range."
 }
 
 function Quote-PsLiteral {

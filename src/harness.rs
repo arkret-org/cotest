@@ -122,6 +122,7 @@ impl ContrixServer {
     ) -> Result<Self> {
         let port = free_port()?;
         let bind = format!("127.0.0.1:{port}");
+        let metrics_bind = format!("127.0.0.1:{}", free_port()?);
         let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
         let service_did = format!("did:web:{name}.cotest.local");
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{port}-blobs"));
@@ -138,6 +139,7 @@ impl ContrixServer {
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
             .env("SOLAND_SERVICE_DID", &service_did)
+            .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
             .env("SOLAND_BLOB_ROOT", &blob_root)
@@ -185,6 +187,7 @@ impl ContrixServer {
 
         let port = free_port()?;
         let bind = format!("127.0.0.1:{port}");
+        let metrics_bind = format!("127.0.0.1:{}", free_port()?);
         let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
         let service_did = format!("did:web:{name}.cotest.local");
         let manifest = sut_manifest();
@@ -207,6 +210,7 @@ impl ContrixServer {
             .env_remove("DATABASE_URL")
             .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
             .env("SOLAND_SERVICE_DID", &service_did)
+            .env("SOLAND_METRICS_BIND", &metrics_bind)
             .env("SOLAND_DEVELOPMENT_MODE", "1")
             .env("SOLAND_SEED_DEMO_DATA", "1")
             .env("SOLAND_BLOB_ROOT", &blob_root)
@@ -632,10 +636,7 @@ pub fn account_subscribe_delta_from_text(ndjson: &str) -> Result<Value> {
         let frame: Value = serde_json::from_str(line)
             .with_context(|| format!("invalid subscribe frame: {line}"))?;
         if frame.get("kind").and_then(Value::as_str) == Some("delta") {
-            return frame
-                .get("payload")
-                .cloned()
-                .ok_or_else(|| anyhow!("account subscribe delta frame missing payload: {frame}"));
+            return Ok(frame.get("payload").cloned().unwrap_or(frame));
         }
     }
     Err(anyhow!(

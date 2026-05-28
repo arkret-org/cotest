@@ -1,9 +1,6 @@
 //! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
 //! and `session_grant_exchange_uses_configured_coauth_introspection`.
 //!
-//! Pure mechanical extraction from the previous `bridge_contracts.rs` —
-//! no logic changes.
-
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};

@@ -24,8 +24,16 @@ import {
 const BLOCKLIST_DATA_TYPE = "cx.account.blocklist";
 
 type BlocklistEntry = {
-  target: string;
+  target:
+    | string
+    | {
+        kind?: string;
+        did?: string;
+        actor?: string;
+        id?: string;
+      };
   kind?: string;
+  mode?: string;
   created_at?: string;
 };
 
@@ -186,7 +194,7 @@ test.describe("personal blocklist", () => {
       await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
       await addSpaceMemberApi(request, aliceToken, spaceId, carol.did);
       await putBlocklist(request, aliceToken, [
-        { target: bob.did, kind: "block", created_at: new Date().toISOString() },
+        canonicalActorBlockEntry(bob.did),
       ]);
 
       const body = `S31 E11.1 bob ${stamp}`;
@@ -274,7 +282,7 @@ test.describe("personal blocklist", () => {
       expect(JSON.stringify(notifyBody)).toContain("push_rule");
 
       await putBlocklist(request, aliceToken, [
-        { target: bob.did, kind: "block", created_at: new Date().toISOString() },
+        canonicalActorBlockEntry(bob.did),
       ]);
       const blockedHidden = `S31 E11.2 blocked-hidden ${stamp}`;
       await sendMessageApi(request, bobToken, spaceId, blockedHidden);
@@ -302,7 +310,7 @@ test.describe("personal blocklist", () => {
       });
       await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
       await putBlocklist(request, aliceToken, [
-        { target: bob.did, kind: "block", created_at: new Date().toISOString() },
+        canonicalActorBlockEntry(bob.did),
       ]);
 
       const body = `S31 E11.3 bob own message ${stamp}`;
@@ -323,6 +331,14 @@ test.describe("personal blocklist", () => {
     },
   );
 });
+
+function canonicalActorBlockEntry(did: string): BlocklistEntry {
+  return {
+    target: { kind: "actor", did },
+    mode: "block",
+    created_at: new Date().toISOString(),
+  };
+}
 
 async function putBlocklist(
   request: APIRequestContext,
@@ -355,9 +371,22 @@ async function blocklistContains(
   const body = await response.json();
   const entries = ((body.content?.entries ?? body.entries ?? []) as Array<Record<string, unknown>>);
   return entries.some((entry) => {
-    const entryTarget = entry.target ?? entry.did ?? entry.actor;
-    return entryTarget === target && (entry.kind ?? "block") === "block";
+    const entryTarget = targetDid(entry.target) ?? entry.did ?? entry.actor;
+    return entryTarget === target && (entry.mode ?? entry.kind ?? "block") === "block";
   });
+}
+
+function targetDid(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value && typeof value === "object") {
+    const target = value as Record<string, unknown>;
+    return [target.did, target.actor, target.id].find((candidate): candidate is string => {
+      return typeof candidate === "string";
+    });
+  }
+  return undefined;
 }
 
 async function blockHintSuppressed(

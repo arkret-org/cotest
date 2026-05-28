@@ -100,6 +100,7 @@ export async function createSpaceApi(
     invitees?: string[];
     plaintext_visible_services?: string[];
     public?: boolean;
+    federation_policy?: string;
     ownerDid?: string;
     owning_organizations?: string[];
     audit_disclosure_policy?: Record<string, unknown>;
@@ -151,7 +152,7 @@ export async function createSpaceApi(
             ? { retention_policy: data.retention_policy }
             : {}),
           security_class: "standard",
-          federation_policy: "restricted",
+          federation_policy: data.federation_policy ?? "restricted",
           anchor_profile: "single_did",
           digest_algorithm: "sha256",
           anchorer: singleDidAnchorer(ownerDid),

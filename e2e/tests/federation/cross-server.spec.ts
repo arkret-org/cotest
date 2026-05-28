@@ -493,6 +493,7 @@ test.describe("cross-server federation", () => {
           solandServiceDid("alpha"),
           solandServiceDid("beta"),
         ],
+        federation_policy: "open",
       },
       { server: "alpha" },
     );

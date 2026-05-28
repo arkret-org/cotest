@@ -60,7 +60,7 @@
 ### Phase D — client 写 account_data blocklist entry
 
 8. alice 的 yougen client 应该把这次 block 持久化到 soland 的 actor-private account_data:
-   - 调用:`PUT /api/v1/account_data/cx.account.blocklist`,payload `{ entries: [{ target: bob.did, kind: "block", created_at: <ts> }] }`
+   - 调用:`PUT /api/v1/account_data/cx.account.blocklist`,payload `{ version: 1, entries: [{ target: { kind: "actor", did: bob.did }, mode: "block", applies_to: ["messages", "mentions", "dm", "calls", "presence", "notifications", "directory"], created_at: <ts> }] }`
    - 断言 (HTTP 层):`PUT` 返回 200
    - 断言 (跨设备 sync):`GET /api/v1/account_data/cx.account.blocklist` 返回同样的 entries
    - 备注:这是 actor-private — 只对 alice 自己的 device 同步,bob 拿不到
