@@ -6,12 +6,16 @@ mod cursor_vectors;
 mod encoding;
 mod envelope;
 mod federation;
+mod handle_claim_rejection_vectors;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
+mod list_handles_for_subject_vectors;
 mod media_binding;
 mod member_identity_vectors;
 mod member_roster_vectors;
+mod mention_rendering_vectors;
 pub mod mock_vector_base;
+mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
@@ -68,7 +72,18 @@ pub use encoding::run_encoding_fixture_suite;
 pub use encoding::run_projection_position_discriminator_fixture_suite;
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
+pub use handle_claim_rejection_vectors::{
+    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
+    run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
+};
 pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
+pub use list_handles_for_subject_vectors::{
+    ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, run_as_of_historical_replay_vector,
+    run_audience_filter_applied_vector, run_cursor_pagination_vector,
+    run_happy_path_single_claim_vector, run_issuer_trust_filter_vector,
+    run_list_handles_for_subject_vector_suite,
+    run_primary_handle_field_aligned_with_3_2_1_vector, run_subject_mismatch_rejected_vector,
+};
 pub use lattice_round_trip::run_lattice_round_trip_suite;
 pub use media_binding::{
     ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
@@ -79,18 +94,39 @@ pub use media_binding::{
     run_unknown_type_fail_closed_vector,
 };
 pub use member_identity_vectors::{
-    ALL_MEMBER_IDENTITY_VECTOR_IDS, run_member_identity_cross_subject_replacement_ignored_vector,
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN,
+    run_member_identity_cross_subject_replacement_ignored_vector,
     run_member_identity_expected_state_digest_mismatch_vector,
-    run_member_identity_proof_invalid_vector,
+    run_member_identity_handle_field_forbidden_vector, run_member_identity_proof_invalid_vector,
     run_member_identity_replacement_digest_mismatch_vector,
     run_member_identity_unknown_segment_rejected_vector,
     run_member_identity_update_initial_vector, run_member_identity_update_replacement_vector,
     run_member_identity_vector_suite, sample_member_identity_value,
 };
 pub use member_roster_vectors::{
-    ALL_MEMBER_ROSTER_VECTOR_IDS, run_member_roster_limited_vector,
-    run_member_roster_shape_vector, run_member_roster_vector_suite,
-    run_member_roster_with_inline_identity_events_vector,
+    ALL_MEMBER_ROSTER_VECTOR_IDS,
+    run_member_roster_display_state_digest_stable_under_freshness_hints_vector,
+    run_member_roster_handle_claims_limited_semantics_vector,
+    run_member_roster_handle_claims_subject_alignment_vector, run_member_roster_limited_vector,
+    run_member_roster_shape_vector, run_member_roster_subject_undisclosed_omits_gated_fields_vector,
+    run_member_roster_vector_suite, run_member_roster_with_inline_identity_events_vector,
+};
+pub use mention_rendering_vectors::{
+    ALL_MENTION_RENDERING_VECTOR_IDS,
+    run_actor_attribution_independent_of_handle_at_time_vector, run_legacy_shape_rejected_vector,
+    run_mention_rendering_vector_suite, run_new_shape_accepted_vector,
+    run_render_fallback_cached_vector, run_render_fallback_name_only_vector,
+    run_render_fallback_unresolved_vector, run_render_step1_multi_to_step2_live_vector,
+    run_render_step1_unique_success_vector,
+};
+pub use primary_handle_vectors::{
+    ALL_PRIMARY_HANDLE_VECTOR_IDS, run_as_of_replay_vs_realtime_vector,
+    run_audience_match_wins_vector, run_claim_digest_stable_under_hint_vector,
+    run_empty_candidate_fallback_vector, run_holder_flag_wins_over_most_recent_vector,
+    run_holder_primary_null_skips_layer_vector, run_most_recent_wins_when_neither_vector,
+    run_policy_snapshot_as_of_replay_vector, run_primary_handle_vector_suite,
+    run_single_candidate_passthrough_vector, run_tie_break_by_accepted_issuers_position_vector,
+    run_tie_break_by_claim_digest_vector, run_tie_break_by_created_at_vector,
 };
 pub use principal_server_certification::{
     PrincipalCertificationStatus, run_principal_server_certification_gate_suite,

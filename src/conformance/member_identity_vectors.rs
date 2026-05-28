@@ -1,17 +1,30 @@
-//! R3.1 spec-sync (contrix-spec @ 7157ee8) — `cx.member.identity.update`
-//! conformance vectors (VECT-MID-1..7).
+//! R3.2 spec-sync (contrix-spec @ b56cab1) — `cx.member.identity.update`
+//! conformance vectors (VECT-MID-1..7) + VECT-COT-8.
 //!
 //! Source artefacts:
 //!   * `artifacts/schemas/member-identity.schema.json`
 //!   * `artifacts/schemas/event-payload.schema.json#/$defs/member_identity_update_payload`
 //!   * `artifacts/schemas/account-subscribe-frame.schema.json`
 //!
+//! R3.2 wire-breaking changes pinned here:
+//!   * `MemberIdentity` no longer carries `primary_handle` / `handles[]`;
+//!     handle lifecycle is governed solely by `cx.schema.handle_claim.v1`.
+//!     A payload that re-introduces those fields MUST schema-reject
+//!     (VECT-COT-8 — reason `member_identity_handle_field_forbidden`).
+//!   * Payload field `identity_state_digest` is renamed to
+//!     `identity_payload_digest` (carrier cache key,
+//!     [`IdentityPayloadCarrier::carrier_sha256`]).
+//!   * `expected_state_digest` is the writer-observed effective-set guard
+//!     computed by [`member_identity_effective_set_digest`] — it is NOT the
+//!     `identity_payload_digest` and NOT the roster
+//!     `member_display_state_digest`.
+//!
 //! Each vector pins one wire-level invariant of the
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
 //! SDK-pure — they exercise the canonical-bytes helpers
 //! ([`IdentityPayloadCarrier::carrier_sha256`],
 //! [`contrix_core::model::effective_identity_events`],
-//! [`contrix_core::model::identity_state_digest`],
+//! [`contrix_core::model::member_identity_effective_set_digest`],
 //! [`MemberIdentity::canonical_payload_sha256`]) plus the
 //! `member_identity_*` error-code constants exported from
 //! [`contrix_core::error`]. Live integration is layered on top in
@@ -24,10 +37,10 @@ use contrix_core::error::{
     ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH, ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
 };
 use contrix_core::model::{
-    DisplayProfile, EffectiveIdentityEntry, Handle, IdentityPayloadCarrier, MemberIdentity,
+    DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
-    MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, VerifiedHandle,
-    effective_identity_events, identity_state_digest,
+    MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,
+    member_identity_effective_set_digest,
 };
 use contrix_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
@@ -44,6 +57,13 @@ pub const VECTOR_ID_MID_UNKNOWN_SEGMENT_REJECTED: &str =
     "cx.vector.member_identity.unknown_segment_rejected.v1";
 pub const VECTOR_ID_MID_CROSS_SUBJECT_REPLACEMENT_IGNORED: &str =
     "cx.vector.member_identity.cross_subject_replacement_ignored.v1";
+/// VECT-COT-8 — MemberIdentity payload carrying retired handle fields.
+pub const VECTOR_ID_MID_HANDLE_FIELD_FORBIDDEN: &str =
+    "cx.vector.member_identity.handle_field_forbidden.v1";
+
+/// Wire reason code a receiver MUST surface for VECT-COT-8.
+pub const REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN: &str =
+    "member_identity_handle_field_forbidden";
 
 pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_MID_UPDATE_INITIAL,
@@ -53,6 +73,7 @@ pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_MID_PROOF_INVALID,
     VECTOR_ID_MID_UNKNOWN_SEGMENT_REJECTED,
     VECTOR_ID_MID_CROSS_SUBJECT_REPLACEMENT_IGNORED,
+    VECTOR_ID_MID_HANDLE_FIELD_FORBIDDEN,
 ];
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
@@ -60,7 +81,6 @@ pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
 const STABLE_REALM_ID: &str = "cx:realm:01904100-0000-7000-8000-000000000001";
 const ALICE_ACTOR_DID: &str = "did:web:alice.acme.example";
 const ALICE_SUBJECT_DID: &str = "did:web:alice.principal.example";
-const ISSUER_DID: &str = "did:web:coauth.acme.example";
 
 fn fake_realm() -> Result<RealmId> {
     RealmId::new(STABLE_REALM_ID).map_err(|e| anyhow!("invalid stable realm id: {e}"))
@@ -100,6 +120,9 @@ fn sample_proof(signature: &str) -> Result<MemberIdentityProof> {
     })
 }
 
+/// Build a R3.2 MemberIdentity. It discloses only `subject_id` +
+/// `display_profile`; handle lifecycle has been fully removed from this
+/// object (no `primary_handle` / `handles[]`).
 fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberIdentity> {
     let mut identity = MemberIdentity::new(
         fake_realm()?,
@@ -109,24 +132,6 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
         pinned_asserted_at(),
         sample_proof(signature)?,
     );
-    // Attach one verified handle row so the vector exercises the
-    // `handles[]` shape, which downstream sync projections may carry.
-    identity.primary_handle = Some(
-        Handle::parse("alice:acme.example")
-            .map_err(|e| anyhow!("alice canonical handle: {e}"))?,
-    );
-    identity.handles = vec![VerifiedHandle {
-        handle: Handle::parse("alice:acme.example")
-            .map_err(|e| anyhow!("alice canonical handle: {e}"))?,
-        verified: true,
-        issuer: Did::new(ISSUER_DID.to_owned())?,
-        issuer_service_did: None,
-        audience: None,
-        claim_digest: zero_hash()?,
-        source_refs: vec![],
-        issued_at: pinned_asserted_at(),
-        expires_at: pinned_asserted_at() + chrono::Duration::days(30),
-    }];
     // Bind the proof.payload_digest to the canonical-bytes digest so
     // the on-the-wire vector mirrors a real producer.
     let canonical_digest = identity
@@ -141,7 +146,7 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
 
 /// VECT-MID-1 — first `cx.member.identity.update` event for an actor in a
 /// Realm: empty `replaces[]`, plaintext `identity_payload`,
-/// `identity_state_digest` matches the canonical digest of the payload
+/// `identity_payload_digest` matches the canonical digest of the payload
 /// carrier.
 pub fn run_member_identity_update_initial_vector() -> Result<()> {
     let identity = build_member_identity("Alice Initial", "AAAA")?;
@@ -150,7 +155,7 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
         .carrier_sha256()
         .map_err(|e| anyhow!("carrier_sha256: {e}"))?;
 
-    let state_digest_hash =
+    let payload_digest_hash =
         Hash::new(carrier_digest.clone()).map_err(|e| anyhow!("carrier digest as Hash: {e}"))?;
 
     let payload = MemberIdentityUpdatePayload {
@@ -159,12 +164,23 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
-        identity_state_digest: Some(state_digest_hash.clone()),
+        // R3.2 rename: `identity_state_digest` → `identity_payload_digest`.
+        identity_payload_digest: Some(payload_digest_hash.clone()),
         expected_state_digest: None,
     };
 
     if !payload.replaces.is_empty() {
         bail!("VECT-MID-1: initial update MUST carry empty replaces[]");
+    }
+
+    // The serialised payload MUST carry the new field name and NOT the
+    // retired one.
+    let wire = serde_json::to_value(&payload).map_err(|e| anyhow!("serialise payload: {e}"))?;
+    if wire.get("identity_payload_digest").is_none() {
+        bail!("VECT-MID-1: payload MUST carry `identity_payload_digest`");
+    }
+    if wire.get("identity_state_digest").is_some() {
+        bail!("VECT-MID-1: payload MUST NOT carry the retired `identity_state_digest` field");
     }
 
     // Effective set after applying the single event MUST contain the
@@ -182,21 +198,30 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
         bail!("VECT-MID-1: effective entry event_id drifted");
     }
 
-    // `identity_state_digest` projection over the single effective entry
-    // MUST match the carrier digest pinned on the payload.
+    // `expected_state_digest` projection over the single effective entry
+    // MUST be a sha256-prefixed digest. Per R3.2 it differs from the
+    // per-event `identity_payload_digest`.
     let entry = EffectiveIdentityEntry {
         event_id: event_a.clone(),
         segment: MemberIdentitySegment::MemberIdentity,
-        payload_digest: state_digest_hash,
+        payload_digest: payload_digest_hash,
     };
-    let projected = identity_state_digest(&fake_realm()?, &fake_actor()?, &[entry])
-        .map_err(|e| anyhow!("identity_state_digest: {e}"))?;
+    let projected = member_identity_effective_set_digest(
+        &fake_realm()?,
+        &fake_actor()?,
+        MemberIdentitySegment::MemberIdentity,
+        &[entry],
+    )
+    .map_err(|e| anyhow!("member_identity_effective_set_digest: {e}"))?;
     if !projected.starts_with("sha256:") {
-        bail!("VECT-MID-1: identity_state_digest must be sha256:<hex>; got {projected}");
+        bail!("VECT-MID-1: effective-set digest must be sha256:<hex>; got {projected}");
     }
-    // The carrier digest pinned in `identity_state_digest` is the
-    // per-event payload digest, not the projection digest — the two
-    // differ but both MUST be sha256-prefixed and hex.
+    if projected == carrier_digest {
+        bail!(
+            "VECT-MID-1: expected_state_digest MUST differ from identity_payload_digest \
+             (distinct R3.2 digests)"
+        );
+    }
     if !carrier_digest.starts_with("sha256:") {
         bail!("VECT-MID-1: carrier digest must be sha256-prefixed");
     }
@@ -230,7 +255,7 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier_a,
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let payload_b = MemberIdentityUpdatePayload {
@@ -242,7 +267,7 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
             payload_digest: digest_a,
         }],
         identity_payload: carrier_b,
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
 
@@ -286,7 +311,7 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: IdentityPayloadCarrier::MemberIdentity { member_identity: identity_v1 },
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let payload_b = MemberIdentityUpdatePayload {
@@ -298,7 +323,7 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
             payload_digest: wrong_digest,
         }],
         identity_payload: IdentityPayloadCarrier::MemberIdentity { member_identity: identity_v2 },
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
 
@@ -330,27 +355,52 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
 // ── VECT-MID-4 ──────────────────────────────────────────────────────────────
 
 /// VECT-MID-4 — concurrent writer with stale `expected_state_digest` is
-/// rejected with `member_identity_state_mismatch`.
+/// rejected with `member_identity_state_mismatch`. R3.2 pins the new
+/// `expected_state_digest` formula: the writer-observed effective-set
+/// digest from [`member_identity_effective_set_digest`].
 pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()> {
-    // The SDK-level vector pins (1) the canonical error-code spelling and
-    // (2) the optimistic-concurrency field shape: `expected_state_digest`
-    // is OPTIONAL on the payload but, when present, MUST match the
-    // server's effective-set digest. Construct a payload with a stale
-    // expected digest; in the reducer this MUST surface
-    // `ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH`.
     let identity = build_member_identity("Alice Concurrent", "AAAA")?;
     let carrier = IdentityPayloadCarrier::MemberIdentity { member_identity: identity };
+    let carrier_digest = Hash::new(
+        carrier
+            .carrier_sha256()
+            .map_err(|e| anyhow!("carrier_sha256: {e}"))?,
+    )
+    .map_err(|e| anyhow!("carrier digest as Hash: {e}"))?;
+
+    // The "fresh" effective-set digest a server would have computed over a
+    // single prior event.
+    let prior_event = fake_event(0xd11)?;
+    let fresh_entry = EffectiveIdentityEntry {
+        event_id: prior_event,
+        segment: MemberIdentitySegment::MemberIdentity,
+        payload_digest: carrier_digest,
+    };
+    let fresh_digest = member_identity_effective_set_digest(
+        &fake_realm()?,
+        &fake_actor()?,
+        MemberIdentitySegment::MemberIdentity,
+        &[fresh_entry],
+    )
+    .map_err(|e| anyhow!("member_identity_effective_set_digest: {e}"))?;
+
+    // A stale writer carries an effective-set digest that no longer matches
+    // the server-observed one. Use a deliberately-wrong pinned digest.
     let stale_digest = Hash::new(
         "sha256:dead000000000000000000000000000000000000000000000000000000000000",
     )
     .map_err(|e| anyhow!("stale digest as Hash: {e}"))?;
+    if stale_digest.as_str() == fresh_digest {
+        bail!("VECT-MID-4: vector setup error — stale digest equals fresh digest");
+    }
+
     let payload = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
         actor_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: Some(stale_digest.clone()),
     };
     if payload.expected_state_digest.as_ref() != Some(&stale_digest) {
@@ -362,9 +412,8 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
              `{ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH}`"
         );
     }
-    // Also assert: when expected_state_digest is None, this is treated as
-    // "no optimistic concurrency guard" — the vector pins that the field
-    // is `Option<Hash>`.
+    // When expected_state_digest is None, this is treated as "no optimistic
+    // concurrency guard" — the vector pins that the field is `Option<Hash>`.
     let payload_no_guard = MemberIdentityUpdatePayload {
         expected_state_digest: None,
         ..payload
@@ -432,7 +481,7 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let mut value =
@@ -472,19 +521,13 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
 /// `(realm_id, actor_id, segment)`; the edge is treated as a no-op
 /// because the candidate set is keyed by `(realm_id, actor_id, segment)`.
 pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<()> {
-    // Build two payloads — one for actor A in realm R, one for actor B
-    // in the same realm. The `effective_identity_events` helper expects
-    // the caller to have already filtered by `(realm_id, actor_id,
-    // segment)`. We verify that posture explicitly here by passing only
-    // actor B's event but with a `replaces[]` pointing at actor A's event
-    // — the edge MUST not collapse actor B's row because actor A's event
-    // isn't in the candidate set.
+    // Build a payload for actor B in realm R, with a `replaces[]` pointing
+    // at actor A's event — the edge MUST not collapse actor B's row because
+    // actor A's event isn't in the candidate set passed to the helper.
     let identity_b = build_member_identity("Bob v1", "BBBB")?;
-    let event_b = fake_event(0xd01)?;
-    let cross_subject_event = fake_event(0xd02)?;
+    let event_b = fake_event(0xe01)?;
+    let cross_subject_event = fake_event(0xe02)?;
 
-    // The forged replacement digest is irrelevant — the helper will only
-    // honour edges whose `event_id` appears in the candidate set.
     let bogus_digest = Hash::new(
         "sha256:badf000000000000000000000000000000000000000000000000000000000000",
     )
@@ -498,7 +541,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
             payload_digest: bogus_digest,
         }],
         identity_payload: IdentityPayloadCarrier::MemberIdentity { member_identity: identity_b },
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let effective = effective_identity_events([(&event_b, &payload_b)])
@@ -516,13 +559,82 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
     Ok(())
 }
 
+// ── VECT-COT-8 ──────────────────────────────────────────────────────────────
+
+/// VECT-COT-8 — `cx.vector.member_identity.handle_field_forbidden.v1`.
+///
+/// R3.2 removed `primary_handle` / `handles[]` from `MemberIdentity`.
+/// A payload that re-introduces either field MUST schema-reject. We pin
+/// the rejection at two layers:
+///   1. The typed SDK struct (`#[serde(deny_unknown_fields)]`).
+///   2. The artifact JSON Schema (`additionalProperties: false`), exercised
+///      by the schema-validation suite over `member-identity.schema.json`.
+///
+/// The wire reason code is `member_identity_handle_field_forbidden`.
+pub fn run_member_identity_handle_field_forbidden_vector() -> Result<()> {
+    // Start from a valid R3.2 MemberIdentity, then inject the retired
+    // fields back onto the wire object.
+    let identity = build_member_identity("Alice Handle Reject", "AAAA")?;
+    let mut wire =
+        serde_json::to_value(&identity).map_err(|e| anyhow!("serialise identity: {e}"))?;
+    let obj = wire
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("VECT-COT-8: MemberIdentity must serialise as an object"))?;
+
+    // Sanity: a clean R3.2 object MUST NOT already carry handle fields.
+    if obj.contains_key("primary_handle") || obj.contains_key("handles") {
+        bail!("VECT-COT-8: clean MemberIdentity unexpectedly carries handle fields");
+    }
+
+    // Each retired field, injected on its own, MUST be rejected by the
+    // typed struct's `deny_unknown_fields`.
+    for forbidden in ["primary_handle", "handles"] {
+        let mut tampered = obj.clone();
+        let injected = match forbidden {
+            "primary_handle" => json!("alice:acme.example"),
+            _ => json!([{ "handle": "alice:acme.example", "verified": true }]),
+        };
+        tampered.insert(forbidden.to_owned(), injected);
+        let parsed: std::result::Result<MemberIdentity, _> =
+            serde_json::from_value(Value::Object(tampered));
+        match parsed {
+            Ok(_) => bail!(
+                "VECT-COT-8: a MemberIdentity carrying retired `{forbidden}` was \
+                 accepted; reason `{REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN}` MUST fire"
+            ),
+            Err(e) => {
+                let msg = format!("{e}");
+                if !msg.contains("unknown field") && !msg.contains(forbidden) {
+                    bail!(
+                        "VECT-COT-8: `{forbidden}` rejection produced an unexpected \
+                         error `{msg}` — expected an unknown-field rejection"
+                    );
+                }
+            }
+        }
+    }
+
+    // Both fields together MUST also reject.
+    let mut both = obj.clone();
+    both.insert("primary_handle".to_owned(), json!("alice:acme.example"));
+    both.insert(
+        "handles".to_owned(),
+        json!([{ "handle": "alice:acme.example", "verified": true }]),
+    );
+    if serde_json::from_value::<MemberIdentity>(Value::Object(both)).is_ok() {
+        bail!("VECT-COT-8: MemberIdentity carrying both retired handle fields was accepted");
+    }
+    Ok(())
+}
+
 // ── Suite entry-point ──────────────────────────────────────────────────────
 
-/// Run the seven `cx.vector.member_identity.*` vectors.
+/// Run the eight `cx.vector.member_identity.*` vectors (VECT-MID-1..7 +
+/// VECT-COT-8).
 pub fn run_member_identity_vector_suite() -> Result<()> {
-    if ALL_MEMBER_IDENTITY_VECTOR_IDS.len() != 7 {
+    if ALL_MEMBER_IDENTITY_VECTOR_IDS.len() != 8 {
         bail!(
-            "expected 7 member-identity vector ids, got {}",
+            "expected 8 member-identity vector ids, got {}",
             ALL_MEMBER_IDENTITY_VECTOR_IDS.len()
         );
     }
@@ -533,6 +645,7 @@ pub fn run_member_identity_vector_suite() -> Result<()> {
     run_member_identity_proof_invalid_vector()?;
     run_member_identity_unknown_segment_rejected_vector()?;
     run_member_identity_cross_subject_replacement_ignored_vector()?;
+    run_member_identity_handle_field_forbidden_vector()?;
     Ok(())
 }
 

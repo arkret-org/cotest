@@ -26,6 +26,12 @@ chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["
 chrono = "0.4.42"
 contrix-http-client = { path = "../contrix-rust-sdk/crates/http-client" }
 contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
+# R3.2 (contrix-spec @ b56cab1) — the §3.2.1 primary-handle-selection,
+# `claim_digest`, and §3.8.2 mention-render helpers live in the high-level
+# `contrix` facade (`contrix::identity::*`). cotest's primary-handle /
+# mention vectors drive these directly so every implementation agrees on
+# the deterministic selection + canonical claim digest.
+contrix = { path = "../contrix-rust-sdk/crates/sdk" }
 # T5.3 (Round 22) — canonical hash convergence vectors in
 # `tests/canonical_hash_convergence.rs` exercise the high-level
 # `EventProofBuilder` facade alongside the low-level canonical helpers

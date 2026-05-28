@@ -200,6 +200,122 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
     }
 }
 
+// ─── R3.2 (contrix-spec @ b56cab1) — MemberIdentity / roster digests ──────
+//
+// VECT-COT-5: the R3.2 wire-breaking rename split the single
+// `identity_state_digest` into three distinct digests with distinct
+// formulas. This baseline pins each helper's `sha256:<hex>` output over a
+// fully-pinned fixture so a future formula drift in the SDK surfaces here
+// first (instead of as a cross-service cache mismatch).
+//
+// To regenerate after an intentional formula change:
+//   cargo test -p cotest --test canonical_hash_convergence \
+//     dump_r3_2_identity_digests -- --ignored --nocapture
+
+fn pinned_r3_2_inputs() -> (
+    contrix_core::RealmId,
+    contrix_core::Did,
+    Vec<contrix_core::model::EffectiveIdentityEntry>,
+    Vec<contrix_core::model::RosterHandleClaimDigestEntry>,
+) {
+    use contrix_core::model::{
+        EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
+        RosterHandleClaimDigestEntry,
+    };
+    use contrix_core::{Did, EventId, Hash, RealmId};
+
+    let realm = RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap();
+    let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
+    let events = vec![
+        EffectiveIdentityEntry {
+            event_id: EventId::new("cx:event:01904100-0000-7000-8000-000000000a01").unwrap(),
+            segment: MemberIdentitySegment::MemberIdentity,
+            payload_digest: Hash::new(
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            )
+            .unwrap(),
+        },
+        EffectiveIdentityEntry {
+            event_id: EventId::new("cx:event:01904100-0000-7000-8000-000000000a02").unwrap(),
+            segment: MemberIdentitySegment::MemberIdentity,
+            payload_digest: Hash::new(
+                "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            )
+            .unwrap(),
+        },
+    ];
+    let claims = vec![RosterHandleClaimDigestEntry {
+        claim_digest: Hash::new(
+            "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        )
+        .unwrap(),
+        binding_state: HandleBindingState::Verified,
+        expires_at: Some(
+            chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 6, 20, 0, 0, 0)
+                .single()
+                .unwrap(),
+        ),
+    }];
+    (realm, actor, events, claims)
+}
+
+#[test]
+fn r3_2_identity_digests_match_pinned_baseline() {
+    use contrix_core::model::{
+        member_display_state_digest, member_identity_effective_set_digest, MemberIdentitySegment,
+    };
+    let (realm, actor, events, claims) = pinned_r3_2_inputs();
+
+    // `expected_state_digest` — writer-observed effective-set guard.
+    let effective_set = member_identity_effective_set_digest(
+        &realm,
+        &actor,
+        MemberIdentitySegment::MemberIdentity,
+        &events,
+    )
+    .expect("effective-set digest");
+    assert_eq!(
+        effective_set,
+        "sha256:d9ea65535af71900678142cac05baa63edb10e63451cbc322a69dec0c6731372",
+        "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
+    );
+
+    // roster `member_display_state_digest` — folds visible handle claims.
+    let display_state =
+        member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
+    assert_eq!(
+        display_state,
+        "sha256:abc38bb7cfdd01535018bf8e7ec866f094657c48efa5b5a100689dc39f087cd3",
+        "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
+    );
+
+    // The two digests MUST be distinct (different formula + inputs).
+    assert_ne!(
+        effective_set, display_state,
+        "expected_state_digest and member_display_state_digest MUST differ"
+    );
+}
+
+#[test]
+#[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
+fn dump_r3_2_identity_digests() {
+    use contrix_core::model::{
+        member_display_state_digest, member_identity_effective_set_digest, MemberIdentitySegment,
+    };
+    let (realm, actor, events, claims) = pinned_r3_2_inputs();
+    let effective_set = member_identity_effective_set_digest(
+        &realm,
+        &actor,
+        MemberIdentitySegment::MemberIdentity,
+        &events,
+    )
+    .expect("effective-set digest");
+    let display_state =
+        member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
+    println!("member_identity_effective_set_digest => {effective_set}");
+    println!("member_display_state_digest         => {display_state}");
+}
+
 /// Walk a JSON value and reverse the key order of every object. Used
 /// to prove the SDK canonical encoder is insensitive to source order.
 fn scramble_object_keys(value: Value) -> Value {

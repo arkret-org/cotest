@@ -10,10 +10,14 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
 
 use cotest::conformance::{
-    ALL_AGENT_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
-    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
-    run_agent_vector_suite, run_cursor_vector_suite, run_media_binding_vector_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite, run_sidecar_vector_suite,
+    ALL_AGENT_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
+    ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
+    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, run_agent_vector_suite,
+    run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
+    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
+    run_member_identity_vector_suite, run_member_roster_vector_suite,
+    run_mention_rendering_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -67,7 +71,8 @@ fn cursor_vector_suite_runs_clean() {
 #[test]
 fn member_identity_vector_suite_runs_clean() {
     run_member_identity_vector_suite().expect("member-identity vectors must pass");
-    assert_eq!(ALL_MEMBER_IDENTITY_VECTOR_IDS.len(), 7);
+    // R3.2: VECT-MID-1..7 + VECT-COT-8 (handle_field_forbidden).
+    assert_eq!(ALL_MEMBER_IDENTITY_VECTOR_IDS.len(), 8);
 }
 
 // ─── R3.1 / VECT-ROST-1..3 — sync member roster vectors ───────────────────
@@ -75,7 +80,104 @@ fn member_identity_vector_suite_runs_clean() {
 #[test]
 fn member_roster_vector_suite_runs_clean() {
     run_member_roster_vector_suite().expect("member-roster vectors must pass");
-    assert_eq!(ALL_MEMBER_ROSTER_VECTOR_IDS.len(), 3);
+    // R3.2: VECT-ROST-1..3 + VECT-COT-4 roster v2 (4 cases).
+    assert_eq!(ALL_MEMBER_ROSTER_VECTOR_IDS.len(), 7);
+}
+
+// ─── R3.2 / VECT-COT-1 — §3.2.1 primary handle selection ──────────────────
+
+#[test]
+fn primary_handle_vector_suite_runs_clean() {
+    run_primary_handle_vector_suite().expect("primary-handle vectors must pass");
+    assert!(
+        ALL_PRIMARY_HANDLE_VECTOR_IDS.len() >= 10,
+        "VECT-COT-1 requires >= 10 §3.2.1 cases, got {}",
+        ALL_PRIMARY_HANDLE_VECTOR_IDS.len()
+    );
+}
+
+// ─── R3.2 / VECT-COT-2 — §3.8 mention rendering ───────────────────────────
+
+#[test]
+fn mention_rendering_vector_suite_runs_clean() {
+    run_mention_rendering_vector_suite().expect("mention-rendering vectors must pass");
+    assert!(
+        ALL_MENTION_RENDERING_VECTOR_IDS.len() >= 6,
+        "VECT-COT-2 requires >= 6 §3.8 cases, got {}",
+        ALL_MENTION_RENDERING_VECTOR_IDS.len()
+    );
+}
+
+// ─── R3.2 / VECT-COT-3 — cx.directory.list_handles_for_subject ────────────
+
+#[test]
+fn list_handles_for_subject_vector_suite_runs_clean() {
+    run_list_handles_for_subject_vector_suite().expect("list-handles-for-subject vectors must pass");
+    assert!(
+        ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS.len() >= 5,
+        "VECT-COT-3 requires >= 5 cases, got {}",
+        ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS.len()
+    );
+}
+
+// ─── R3.2 / VECT-COT-6/7 — handle-claim rejection vectors ─────────────────
+
+#[test]
+fn handle_claim_rejection_vector_suite_runs_clean() {
+    run_handle_claim_rejection_vector_suite().expect("handle-claim rejection vectors must pass");
+    assert_eq!(ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS.len(), 2);
+}
+
+// ─── R3.2 / TEST-COT-1 — live integration scenarios (shape-level only) ────
+//
+// These pin the full cross-service flows that the R3.2 wire changes enable.
+// The SDK-pure vector suites above already lock the wire shapes; the live
+// wiring (soland MID reducer + teabay list_handles_for_subject endpoint +
+// yougen §3.8.2 renderer transitions) lands as the upstream services finish
+// their R3.2 work, so the live legs stay `#[ignore]` with a reason string
+// (cotest CI enforces ignore-comment hygiene).
+
+#[test]
+#[ignore = "R3.2-followup: soland MID reducer + coauth issuer + yougen/floria refresh \
+            not yet wired for the end-to-end handle reassignment flow"]
+fn test_cot_1_handle_reassignment_full_flow_live() {
+    // Live integration (soland ↔ SDK ↔ yougen ↔ coauth):
+    //   1. coauth issues handle claim H1 for subject S (binding_state=verified).
+    //   2. All views (roster member_display_state_digest, list_handles_for_subject,
+    //      yougen mention render) reflect H1 as the §3.2.1 primary handle.
+    //   3. coauth revokes H1 and issues H2 for S.
+    //   4. roster member_display_state_digest changes (claim digest set folded);
+    //      list_handles_for_subject drops H1, surfaces H2; yougen re-renders the
+    //      mention to H2 with no `cx.member.identity.update` forged.
+    unreachable!("integration target gated on soland/coauth/yougen R3.2 P0 wiring");
+}
+
+#[test]
+#[ignore = "R3.2-followup: teabay POST /api/v1/directory/list-handles-for-subject \
+            endpoint not yet reachable end-to-end across services"]
+fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
+    // Live integration (teabay directory):
+    //   1. Seed teabay with two verified claims for subject S under distinct
+    //      audiences + issuers.
+    //   2. POST list-handles-for-subject with realm context R1 → only the
+    //      audience/issuer-trusted claim is visible; response.primary_handle =
+    //      select_primary_handle() output; claims[].subject == subject.
+    //   3. Paginate with limit=1 → has_more=true + opaque next_cursor; the
+    //      follow-up page terminates with has_more=false.
+    unreachable!("integration target gated on teabay DIR-TBY-1 P0 wiring");
+}
+
+#[test]
+#[ignore = "R3.2-followup: yougen §3.8.2 mention renderer fallback transitions \
+            (verified → cached → name-only → unresolved) not yet observable live"]
+fn test_cot_1_mention_render_fallback_transitions_live() {
+    // Live integration (yougen renderer):
+    //   1. Verified projection → render @localpart:domain (Verified tier).
+    //   2. Directory unreachable but local cache present → Cached tier badge.
+    //   3. Cache evicted, display_name_at_time present → NameOnly tier badge.
+    //   4. Nothing resolvable → Unresolved truncated-DID tier badge.
+    // Each transition MUST carry a distinct visual-degradation marker.
+    unreachable!("integration target gated on yougen YG-MENT-2 P0 wiring");
 }
 
 // ─── P0 / FIX-1 — fixture presence + shape ────────────────────────────────
@@ -332,7 +434,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
     use contrix_core::model::{
-        DisplayProfile, Handle, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
+        DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
         MemberIdentityUpdatePayload, effective_identity_events,
     };
@@ -343,16 +445,15 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     let alice = Did::new("did:web:alice.acme.example".to_owned())?;
     let subject = Did::new("did:web:alice.principal.example".to_owned())?;
 
+    // R3.2: MemberIdentity discloses subject_id + display_profile only;
+    // handle lifecycle (the retired `primary_handle` / `handles[]`) has
+    // moved to `cx.schema.handle_claim.v1`.
     let make_identity = |name: &str| -> Result<MemberIdentity> {
         Ok(MemberIdentity {
             schema: "cx.schema.member_identity.v1".to_owned(),
             realm_id: realm.clone(),
             actor_id: alice.clone(),
             subject_id: subject.clone(),
-            primary_handle: Some(
-                Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?,
-            ),
-            handles: vec![],
             display_profile: DisplayProfile { display_name: name.to_owned(), avatar_ref: None },
             asserted_at: chrono::Utc::now(),
             expires_at: None,
@@ -385,7 +486,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier_a,
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let payload_b = MemberIdentityUpdatePayload {
@@ -397,7 +498,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
             payload_digest: digest_a,
         }],
         identity_payload: carrier_b,
-        identity_state_digest: None,
+        identity_payload_digest: None,
         expected_state_digest: None,
     };
 
