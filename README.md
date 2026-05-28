@@ -1,6 +1,6 @@
 # cotest
 
-> **Spec target**: [contrix-spec @ b47ff6ec](../contrix-spec) (R3 sync 2026-05-27)
+> **Spec target**: [contrix-spec @ cced4b8](../contrix-spec) (R3.3 sync 2026-05-28)
 
 `cotest` is an out-of-repository black-box Contrix server test harness modeled
 after Complement. It starts real server processes or real server containers,

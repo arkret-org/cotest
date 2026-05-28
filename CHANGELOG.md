@@ -2,6 +2,20 @@
 
 All notable changes to **cotest** are documented here.
 
+## R3.3 — Spec sync 2026-05-28 (contrix-spec @ cced4b8)
+
+### CXP-0011 — object addressing + `cx.directory.resolve_target`
+
+- OA-COT-1..4: eleven `cx.vector.object_addressing.*` conformance vectors over the SDK's object-addressing surface (`contrix_core::model::*`), driven from `src/conformance/object_addressing_vectors.rs`:
+  - **OA-COT-1 (grammar, 4 cases)** — `web+contrix:` ⇄ HTTPS-fragment equivalence (both envelopes parse to the same `ParsedAddress`; built landing/scheme forms round-trip); realm-only / flow / message hierarchy forms; fail-closed on unknown keyword, wrong hierarchy order, and flow|message missing `via`; `<realm>` disambiguation (UUIDv7 → `RealmRef::RealmId`, dotted/domain → `RealmRef::Alias`).
+  - **OA-COT-2 (`target_digest` stability, 3 cases)** — adding/removing `via` / `action` / `tok` / `lt` on the same identity tuple does NOT change the digest; switching `flow_id` / `message_id` (or promoting realm→flow→message) DOES; the digest is computed over the OMITTED-key canonical shape, not a `null` shape.
+  - **OA-COT-3 (scope confusion, 2 cases)** — an object-A token fails `verify_token_target` against an object-B address (cross-object replay rejected); the token's `link_type` wins over a disagreeing URL `lt` hint via the `effective_link_type` argument (no reference→invite upgrade).
+  - **OA-COT-4 (`resolve_target` shape, 2 cases)** — `DirectoryResolveTargetResBody` deserializes the §9.1 common fields (`as_of`, `source_refs`, `via_services`) + `target_kind`; a realm target carries `realm_preview` (pure (de)serialization, no live server).
+- OA-COT-5: `test_oa_cot_5_share_resolve_open_live` scaffold — live share→resolve→open integration gated `#[ignore]` pending teabay's flow/message access-gate.
+- Consumes the base SDK at `../contrix-rust-sdk` @ cf6b640 via local path-deps (no SDK changes).
+
+> No version tag, no crates.io / Docker Hub / npm publish — git commit only.
+
 ## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
 
 - VECT-MB-1..9: nine `cx.vector.media_binding.*` conformance vectors covering oldest-membership focus selection, write-once `session_focus`, minimal token shape (`participant_binding.v1`, TTL `<=600s`), unauthorised issuer, missing / invalid binding, unknown focus type, MLS-Exporter-only E2EE key source, unrecognised participant identity, and recording artifacts via Contrix blob.

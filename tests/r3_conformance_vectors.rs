@@ -13,11 +13,12 @@ use cotest::conformance::{
     ALL_AGENT_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
     ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
     ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
-    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, run_agent_vector_suite,
-    run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
+    ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
+    run_agent_vector_suite, run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
     run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
     run_member_identity_vector_suite, run_member_roster_vector_suite,
-    run_mention_rendering_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    run_mention_rendering_vector_suite, run_object_addressing_vector_suite,
+    run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -126,6 +127,48 @@ fn list_handles_for_subject_vector_suite_runs_clean() {
 fn handle_claim_rejection_vector_suite_runs_clean() {
     run_handle_claim_rejection_vector_suite().expect("handle-claim rejection vectors must pass");
     assert_eq!(ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS.len(), 2);
+}
+
+// ─── R3.3 / OA-COT-1..4 — CXP-0011 object addressing + resolve_target ─────
+//
+// SDK-pure vectors over `contrix_core::model::*` object-addressing surface:
+//   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy
+//     forms, fail-closed keyword/order/missing-via, realm-id vs alias.
+//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks
+//     flow/message identity, omitted-key (not null) canonical shape.
+//   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected,
+//     token link_type wins over URL `lt` hint.
+//   * OA-COT-4 (2 cases) — resolve_target response shape: §9.1 common fields
+//     + target_kind; realm target carries realm_preview.
+
+#[test]
+fn object_addressing_vector_suite_runs_clean() {
+    run_object_addressing_vector_suite().expect("object-addressing vectors must pass");
+    assert_eq!(ALL_OBJECT_ADDRESSING_VECTOR_IDS.len(), 11);
+}
+
+// ─── R3.3 / OA-COT-5 — live share→resolve→open integration ────────────────
+//
+// The SDK-pure OA-COT-1..4 vectors above lock the wire grammar + token target
+// binding + resolve_target response shape. The full live leg (a client mints a
+// shareable link, teabay's resolve_target resolves it, and the recipient opens
+// the flow/message subject through the access gate) lands once teabay's
+// flow/message access-gate is reachable end-to-end.
+
+#[test]
+#[ignore = "R3.3-followup: needs teabay flow/message access-gate"]
+fn test_oa_cot_5_share_resolve_open_live() {
+    // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
+    //   1. Author shares a flow as `web+contrix:realm/<r>/flow/<f>?via=<teabay>
+    //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
+    //   2. Recipient POSTs `cx.directory.resolve_target { address, token }`.
+    //   3. teabay parses the address, verify_token_target() binds the token to
+    //      the resolved object (scope-confusion replay rejected), and returns
+    //      `DirectoryResolveTargetResBody { target_kind=flow, object_preview,
+    //      join_rule, as_of, source_refs, via_services }`.
+    //   4. Recipient opens the flow; soland's access gate honors the invite
+    //      link_type (NOT the URL `lt` hint) for the join decision.
+    unreachable!("integration target gated on teabay flow/message access-gate (R3.3)");
 }
 
 // ─── R3.2 / TEST-COT-1 — live integration scenarios (shape-level only) ────
