@@ -69,8 +69,7 @@ fn alice_subject() -> Result<Did> {
 }
 
 fn fake_realm() -> Result<RealmId> {
-    RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001")
-        .map_err(|e| anyhow!("realm: {e}"))
+    RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").map_err(|e| anyhow!("realm: {e}"))
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
@@ -130,7 +129,9 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
         handle_claims: None,
         handle_claims_limited: None,
     };
-    entry.validate().map_err(|e| anyhow!("VECT-ROST-1: validate: {e}"))?;
+    entry
+        .validate()
+        .map_err(|e| anyhow!("VECT-ROST-1: validate: {e}"))?;
 
     let value = serde_json::to_value(&entry).map_err(|e| anyhow!("serialise: {e}"))?;
     // Required wire fields.
@@ -222,9 +223,9 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
     let cursor = frame
         .get("members_next_cursor")
         .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!(
-            "VECT-ROST-2: a truncated roster MUST carry `members_next_cursor`"
-        ))?;
+        .ok_or_else(|| {
+            anyhow!("VECT-ROST-2: a truncated roster MUST carry `members_next_cursor`")
+        })?;
     if !cursor.starts_with("cx:cursor:") {
         bail!(
             "VECT-ROST-2: members_next_cursor MUST be a `cx:cursor:` opaque \
@@ -347,10 +348,16 @@ pub fn run_member_roster_subject_undisclosed_omits_gated_fields_vector() -> Resu
         handle_claims: None,
         handle_claims_limited: None,
     };
-    clean.validate().map_err(|e| anyhow!("VECT-COT-4a: clean entry MUST validate: {e}"))?;
+    clean
+        .validate()
+        .map_err(|e| anyhow!("VECT-COT-4a: clean entry MUST validate: {e}"))?;
     let wire = serde_json::to_value(&clean).map_err(|e| anyhow!("serialise: {e}"))?;
-    for gated in ["identity_events", "handle_claim_digests", "handle_claims", "handle_claims_limited"]
-    {
+    for gated in [
+        "identity_events",
+        "handle_claim_digests",
+        "handle_claims",
+        "handle_claims_limited",
+    ] {
         if wire.get(gated).is_some() {
             bail!("VECT-COT-4a: gated field `{gated}` MUST be omitted when subject_id is absent");
         }
@@ -399,7 +406,10 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
         member_display_state_digest: Some(pinned_state_digest()?),
         identity_events: vec![],
         handle_claim_digests: Some(vec![pinned_claim_digest("22")?]),
-        handle_claims: Some(vec![verified_claim_for_subject("alice:acme.example", &subject)?]),
+        handle_claims: Some(vec![verified_claim_for_subject(
+            "alice:acme.example",
+            &subject,
+        )?]),
         handle_claims_limited: Some(false),
     };
     aligned
@@ -504,7 +514,10 @@ pub fn run_member_roster_handle_claims_limited_semantics_vector() -> Result<()> 
         identity_events: vec![],
         handle_claim_digests: Some(vec![pinned_claim_digest("55")?, pinned_claim_digest("66")?]),
         // claims truncated — only one of the two digests is materialised.
-        handle_claims: Some(vec![verified_claim_for_subject("alice:acme.example", &subject)?]),
+        handle_claims: Some(vec![verified_claim_for_subject(
+            "alice:acme.example",
+            &subject,
+        )?]),
         handle_claims_limited: Some(true),
     };
     limited
@@ -520,7 +533,11 @@ pub fn run_member_roster_handle_claims_limited_semantics_vector() -> Result<()> 
     // Contract assertion: with limited=true, |handle_claims| < |handle_claim_digests|
     // is allowed and MUST NOT be read as "subject has fewer/no handles".
     let materialised = limited.handle_claims.as_ref().map(Vec::len).unwrap_or(0);
-    let hinted = limited.handle_claim_digests.as_ref().map(Vec::len).unwrap_or(0);
+    let hinted = limited
+        .handle_claim_digests
+        .as_ref()
+        .map(Vec::len)
+        .unwrap_or(0);
     if !(limited.handle_claims_limited == Some(true) && materialised < hinted) {
         bail!(
             "VECT-COT-4d: vector setup must demonstrate truncation \
@@ -532,7 +549,10 @@ pub fn run_member_roster_handle_claims_limited_semantics_vector() -> Result<()> 
     // the only case where a client may treat the inline set as complete.
     let complete = MemberRosterEntry {
         handle_claim_digests: Some(vec![pinned_claim_digest("55")?]),
-        handle_claims: Some(vec![verified_claim_for_subject("alice:acme.example", &subject)?]),
+        handle_claims: Some(vec![verified_claim_for_subject(
+            "alice:acme.example",
+            &subject,
+        )?]),
         handle_claims_limited: Some(false),
         ..limited.clone()
     };

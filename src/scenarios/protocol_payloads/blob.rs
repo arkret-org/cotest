@@ -22,7 +22,7 @@ async fn sha_mismatch_is_rejected(server: &ContrixServer, token: &str) -> Result
             .post(server.url("/api/v1/blob/upload"))
             .bearer_auth(token)
             .header(
-                "x-contrix-sha256",
+                "x-contrix-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .body("encrypted-bytes"),

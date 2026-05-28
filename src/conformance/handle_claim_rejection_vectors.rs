@@ -5,8 +5,8 @@
 //! `identity/identity-handles.md §3.2 / §17`.
 //!
 //! R3.2 wire-breaking cleanup:
-//!   * `claim_type` enum lost `service_handle` — only `handle_binding` /
-//!     `organization_handle` remain. A `claim_type=service_handle` envelope
+//!   * `claim_kind` enum lost `service_handle` — only `handle_binding` /
+//!     `organization_handle` remain. A `claim_kind=service_handle` envelope
 //!     MUST schema-reject (VECT-COT-6).
 //!   * `subject` MUST be a holder/principal DID. A `cx:actor:` / `cx:account:`
 //!     typed id or a non-DID resource id MUST reject (VECT-COT-7), enforced
@@ -18,14 +18,14 @@
 //! the typed `class` field fails.
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::model::{validate_handle_claim_subject, HandleClass};
 use contrix_core::Did;
+use contrix_core::model::{HandleClass, validate_handle_claim_subject};
 use jsonschema::{Registry, Resource};
 use serde_json::{Value, json};
 use std::ffi::OsStr;
 use std::fs;
 
-use super::{spec_artifacts_root, looks_like_sha256_digest};
+use super::{looks_like_sha256_digest, spec_artifacts_root};
 
 pub const VECTOR_ID_HC_SERVICE_HANDLE_REJECTED: &str =
     "cx.vector.handle_claim.service_handle_rejected.v1";
@@ -91,7 +91,7 @@ fn base_claim() -> Value {
         "subject": "did:web:alice.principal.example",
         "issuer": "did:web:coauth.acme.example",
         "binding_state": "verified",
-        "claim_type": "handle_binding",
+        "claim_kind": "handle_binding",
         "created_at": "2026-05-20T00:00:00Z",
         "expires_at": "2026-06-20T00:00:00Z",
         "proofs": [
@@ -108,7 +108,7 @@ fn base_claim() -> Value {
     })
 }
 
-// ── VECT-COT-6 — claim_type=service_handle rejected ─────────────────────────
+// ── VECT-COT-6 — claim_kind=service_handle rejected ─────────────────────────
 
 pub fn run_service_handle_rejected_vector() -> Result<()> {
     let validator = compile_handle_claim_schema()?;
@@ -119,22 +119,27 @@ pub fn run_service_handle_rejected_vector() -> Result<()> {
         bail!(
             "VECT-COT-6 control: a canonical handle_binding claim MUST validate; \
              errors: {:?}",
-            validator.iter_errors(&ok).map(|e| e.to_string()).collect::<Vec<_>>()
+            validator
+                .iter_errors(&ok)
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
         );
     }
     // Sanity: the proof digest in the fixture is well-formed.
     if !looks_like_sha256_digest(
-        ok["proofs"][0]["payload_digest"].as_str().unwrap_or_default(),
+        ok["proofs"][0]["payload_digest"]
+            .as_str()
+            .unwrap_or_default(),
     ) {
         bail!("VECT-COT-6 control: proof payload_digest must be a sha256 digest");
     }
 
     // The retired `service_handle` value MUST schema-reject.
     let mut service = base_claim();
-    service["claim_type"] = json!("service_handle");
+    service["claim_kind"] = json!("service_handle");
     if validator.is_valid(&service) {
         bail!(
-            "VECT-COT-6: claim_type=service_handle MUST schema-reject (enum is \
+            "VECT-COT-6: claim_kind=service_handle MUST schema-reject (enum is \
              [handle_binding, organization_handle])"
         );
     }

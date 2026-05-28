@@ -19,8 +19,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use contrix::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
-use contrix_core::model::{Handle, HandleBindingState, HandleClaim, Mention};
 use contrix_core::Did;
+use contrix_core::model::{Handle, HandleBindingState, HandleClaim, Mention};
 use serde_json::json;
 
 pub const VECTOR_ID_MENTION_LEGACY_REJECTED: &str =
@@ -82,7 +82,10 @@ fn verified_claim(handle: &str, subject: &Did, audience: Option<&str>) -> Result
     })
 }
 
-fn empty_selection<'a>(subject: &'a Did, snapshot: &'a [HandleClaim]) -> PrimaryHandleSelectInput<'a> {
+fn empty_selection<'a>(
+    subject: &'a Did,
+    snapshot: &'a [HandleClaim],
+) -> PrimaryHandleSelectInput<'a> {
     PrimaryHandleSelectInput {
         subject_id: subject,
         context: None,
@@ -186,7 +189,9 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     let render = render_mention(&s, &selection, None, Some("Alice Zhang"));
     match render {
         MentionRender::Verified { handle } if handle.canonical() == "alice:acme.example" => Ok(()),
-        other => bail!("multi-candidate live resolve MUST render the audience-matched Verified handle; got {other:?}"),
+        other => bail!(
+            "multi-candidate live resolve MUST render the audience-matched Verified handle; got {other:?}"
+        ),
     }
 }
 

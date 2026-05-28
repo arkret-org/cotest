@@ -12,13 +12,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     let scaffold = crate::fixtures::TestScaffold::fresh("space-permissions").await?;
     let server = scaffold.server();
     let alice = dev_login(server, "did:web:alice.example", "dev_alice").await?;
-    let bob = register_account(
-        server,
-        "did:web:bob-space.example",
-        "@bob-space",
-        "dev_bob",
-    )
-    .await?;
+    let bob =
+        register_account(server, "did:web:bob-space.example", "@bob-space", "dev_bob").await?;
 
     expect_api_error(
         server

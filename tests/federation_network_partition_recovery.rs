@@ -104,7 +104,8 @@ async fn federation_partition_then_heal_converges_on_canonical_frontier() -> Res
     sim.write("B", 2_002);
     let minority = sim
         .events
-        .iter().find(|e| e.hlc_physical_ms == 2_000 && e.server == "C")
+        .iter()
+        .find(|e| e.hlc_physical_ms == 2_000 && e.server == "C")
         .expect("phase 2 C write");
     assert!(
         !minority.accepted,
@@ -146,9 +147,9 @@ async fn federation_partition_then_heal_converges_on_canonical_frontier() -> Res
     // post-heal window (2000..3000ms physical HLC) — those would indicate a
     // false negative where the heal didn't actually propagate.
     assert!(
-        !sim.events.iter().any(|e| e.server == "C"
-            && !e.accepted
-            && (2_000..3_000).contains(&e.hlc_physical_ms)),
+        !sim.events
+            .iter()
+            .any(|e| e.server == "C" && !e.accepted && (2_000..3_000).contains(&e.hlc_physical_ms)),
         "no false negatives expected post-heal"
     );
 

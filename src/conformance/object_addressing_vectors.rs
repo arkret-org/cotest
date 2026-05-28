@@ -134,7 +134,8 @@ pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
 /// class (`is_realm` / `is_flow` / `is_message`) with the expected segments.
 pub fn run_realm_flow_message_forms_vector() -> Result<()> {
     // Realm-only: no `via` required, no flow/message.
-    let realm = parse_address(&format!("web+contrix:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
+    let realm =
+        parse_address(&format!("web+contrix:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
     if !realm.is_realm() || realm.is_flow() || realm.is_message() {
         bail!("realm-only form MUST classify as realm");
     }
@@ -156,8 +157,10 @@ pub fn run_realm_flow_message_forms_vector() -> Result<()> {
     }
 
     // Message: realm/<r>/flow/<f>/m/<msg> (+ via).
-    let msg = parse_address(&format!("web+contrix:realm/{R}/flow/{F}/m/{M}?via={VIA}&action=reply"))
-        .map_err(|e| anyhow!("message: {e}"))?;
+    let msg = parse_address(&format!(
+        "web+contrix:realm/{R}/flow/{F}/m/{M}?via={VIA}&action=reply"
+    ))
+    .map_err(|e| anyhow!("message: {e}"))?;
     if !msg.is_message() || msg.is_realm() || msg.is_flow() {
         bail!("message form MUST classify as message");
     }
@@ -219,8 +222,8 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
 /// segment classifies as [`RealmRef::RealmId`]; a dotted/domain-style segment
 /// classifies as [`RealmRef::Alias`].
 pub fn run_realm_id_vs_alias_vector() -> Result<()> {
-    let uuid_form = parse_address(&format!("web+contrix:realm/{R}"))
-        .map_err(|e| anyhow!("uuid realm: {e}"))?;
+    let uuid_form =
+        parse_address(&format!("web+contrix:realm/{R}")).map_err(|e| anyhow!("uuid realm: {e}"))?;
     match &uuid_form.realm {
         RealmRef::RealmId(id) if id == R => {}
         other => bail!("a UUIDv7 realm segment MUST be RealmRef::RealmId; got {other:?}"),
@@ -278,7 +281,9 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // link_type for both sides by parsing two reference forms that differ only
     // in their (ignored) hints. The invite/reference distinction is asserted
     // separately below.
-    let no_hints = digest_for(&format!("web+contrix:realm/{R}/flow/{F}?via={VIA}&action=view"))?;
+    let no_hints = digest_for(&format!(
+        "web+contrix:realm/{R}/flow/{F}?via={VIA}&action=view"
+    ))?;
     if base != no_hints {
         bail!("the default action=view hint MUST NOT change target_digest");
     }
@@ -332,14 +337,17 @@ pub fn run_target_digest_tracks_object_vector() -> Result<()> {
 /// `null`.
 pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // Realm-only target → flow_id / message_id absent.
-    let realm = parse_address(&format!("web+contrix:realm/{R}"))
-        .map_err(|e| anyhow!("realm: {e}"))?;
+    let realm =
+        parse_address(&format!("web+contrix:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
     let desc = TargetDescriptor::from_parsed(&realm);
     if desc.flow_id.is_some() || desc.message_id.is_some() {
         bail!("realm-only descriptor MUST have absent flow_id / message_id");
     }
     if desc.realm_id != format!("cx:realm:{R}") {
-        bail!("descriptor realm_id MUST be the typed canonical id; got {}", desc.realm_id);
+        bail!(
+            "descriptor realm_id MUST be the typed canonical id; got {}",
+            desc.realm_id
+        );
     }
 
     // The canonical serialized shape OMITS the absent keys (never `null`).

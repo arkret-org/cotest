@@ -242,7 +242,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .post(server.url("/api/v1/blob/upload"))
             .bearer_auth(&alice.token)
             .header(
-                "x-contrix-sha256",
+                "x-contrix-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .body("blob-bytes"),

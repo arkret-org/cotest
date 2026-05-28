@@ -101,8 +101,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_audience_mismatch().context("T3.5 negative — audience != target space")?;
     negative_case_service_not_allowed()
         .context("T3.5 negative — recipient_service_did not in Space allow-list")?;
-    negative_case_acct_canonical_rejected()
-        .context("T3.5 negative — acct: as canonical handle")?;
+    negative_case_acct_canonical_rejected().context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
 

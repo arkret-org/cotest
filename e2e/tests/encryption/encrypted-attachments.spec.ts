@@ -103,7 +103,7 @@ test.describe("encrypted attachments", () => {
         "x-contrix-space-id": spaceId,
         "x-contrix-blob-encrypted": "true",
         "x-contrix-attachment-envelope": JSON.stringify(envelope),
-        "x-contrix-sha256": ciphertextDigest,
+        "x-contrix-content-digest": ciphertextDigest,
       },
       data: ciphertext,
     });

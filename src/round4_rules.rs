@@ -455,10 +455,13 @@ fn count_top_level_args(group: &str) -> usize {
             ']' => depth_bracket -= 1,
             '<' => depth_angle += 1,
             '>' => depth_angle -= 1,
-            ','
-                if depth_paren == 0 && depth_brace == 0 && depth_bracket == 0 && depth_angle == 0 => {
-                    count += 1;
-                }
+            ',' if depth_paren == 0
+                && depth_brace == 0
+                && depth_bracket == 0
+                && depth_angle == 0 =>
+            {
+                count += 1;
+            }
             _ => {}
         }
         prev = Some(ch);

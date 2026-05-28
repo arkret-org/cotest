@@ -15,11 +15,11 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use contrix::identity::{PrimaryHandleSelectInput, select_primary_handle};
+use contrix_core::Did;
 use contrix_core::model::{
     DirectoryListHandlesForSubjectReqBody, DirectoryListHandlesForSubjectResBody, Handle,
     HandleBindingState, HandleClaim,
 };
-use contrix_core::Did;
 
 pub const VECTOR_ID_LH_HAPPY_SINGLE: &str =
     "cx.vector.directory.list_handles_for_subject.happy_path_single_claim.v1";
@@ -65,7 +65,12 @@ fn now_anchor() -> DateTime<Utc> {
     at(2026, 5, 27)
 }
 
-fn claim_for(handle: &str, subj: &Did, issuer: &str, audience: Option<&str>) -> Result<HandleClaim> {
+fn claim_for(
+    handle: &str,
+    subj: &Did,
+    issuer: &str,
+    audience: Option<&str>,
+) -> Result<HandleClaim> {
     Ok(HandleClaim {
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         subject: Some(subj.clone()),
@@ -107,7 +112,8 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
         next_cursor: None,
         has_more: false,
     };
-    res.validate().map_err(|e| anyhow!("happy path MUST validate: {e}"))?;
+    res.validate()
+        .map_err(|e| anyhow!("happy path MUST validate: {e}"))?;
     if res.claims.len() != 1 {
         bail!("happy path MUST return exactly one active claim");
     }
@@ -129,7 +135,12 @@ pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
     // A claim whose subject != response.subject MUST fail closed.
     let res = DirectoryListHandlesForSubjectResBody {
         subject: s.clone(),
-        claims: vec![claim_for("mallory:acme.example", &other, ACME_ISSUER, None)?],
+        claims: vec![claim_for(
+            "mallory:acme.example",
+            &other,
+            ACME_ISSUER,
+            None,
+        )?],
         primary_handle: None,
         as_of: now_anchor(),
         next_cursor: None,
@@ -181,7 +192,8 @@ pub fn run_audience_filter_applied_vector() -> Result<()> {
         next_cursor: None,
         has_more: false,
     };
-    res.validate().map_err(|e| anyhow!("audience-filtered response MUST validate: {e}"))?;
+    res.validate()
+        .map_err(|e| anyhow!("audience-filtered response MUST validate: {e}"))?;
     if res.claims[0].audience.as_deref() != Some(realm_ctx) {
         bail!("only the in-scope claim MAY remain");
     }
@@ -216,7 +228,8 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
         next_cursor: None,
         has_more: false,
     };
-    res.validate().map_err(|e| anyhow!("issuer-filtered response MUST validate: {e}"))?;
+    res.validate()
+        .map_err(|e| anyhow!("issuer-filtered response MUST validate: {e}"))?;
     Ok(())
 }
 
@@ -233,7 +246,9 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         next_cursor: Some("cx:cursor:eyJ2IjoiMSIsIngiOjF9".to_owned()),
         has_more: true,
     };
-    page1.validate().map_err(|e| anyhow!("page1 MUST validate: {e}"))?;
+    page1
+        .validate()
+        .map_err(|e| anyhow!("page1 MUST validate: {e}"))?;
     let cursor = page1
         .next_cursor
         .as_deref()
@@ -268,7 +283,9 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         next_cursor: None,
         has_more: false,
     };
-    page2.validate().map_err(|e| anyhow!("page2 MUST validate: {e}"))?;
+    page2
+        .validate()
+        .map_err(|e| anyhow!("page2 MUST validate: {e}"))?;
     if page2.has_more {
         bail!("terminal page MUST set has_more=false");
     }
@@ -314,7 +331,8 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
         next_cursor: None,
         has_more: false,
     };
-    res.validate().map_err(|e| anyhow!("aligned response MUST validate: {e}"))?;
+    res.validate()
+        .map_err(|e| anyhow!("aligned response MUST validate: {e}"))?;
     match &res.primary_handle {
         Some(h) if h.canonical() == selected_handle.canonical() => {}
         other => bail!(
@@ -362,7 +380,8 @@ pub fn run_as_of_historical_replay_vector() -> Result<()> {
         next_cursor: None,
         has_more: false,
     };
-    res.validate().map_err(|e| anyhow!("historical response MUST validate: {e}"))?;
+    res.validate()
+        .map_err(|e| anyhow!("historical response MUST validate: {e}"))?;
     if res.as_of != historical_as_of {
         bail!("historical response.as_of MUST reflect the replayed instant");
     }

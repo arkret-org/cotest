@@ -18,8 +18,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use contrix::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
-use contrix_core::model::{Handle, HandleBindingState, HandleClaim};
 use contrix_core::Did;
+use contrix_core::model::{Handle, HandleBindingState, HandleClaim};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
     "cx.vector.primary_handle_selection.empty_candidate_fallback.v1";
@@ -291,8 +291,8 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
-    let chosen = select_primary_handle(&input)
-        .ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
+    let chosen =
+        select_primary_handle(&input).ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
     if chosen_handle(&chosen)? != "alice:acme.example" {
         bail!("tie-break MUST prefer the earlier accepted_issuers position");
     }
@@ -316,8 +316,20 @@ pub fn run_tie_break_by_created_at_vector() -> Result<()> {
     let s = subject()?;
     let expires = at(2026, 6, 25);
     // Same issuer (same accepted_issuers position) → created_at decides.
-    let earlier = claim("alice:acme.example", ACME_ISSUER, at(2026, 5, 1), expires, None)?;
-    let later = claim("bob:acme.example", ACME_ISSUER, at(2026, 5, 20), expires, None)?;
+    let earlier = claim(
+        "alice:acme.example",
+        ACME_ISSUER,
+        at(2026, 5, 1),
+        expires,
+        None,
+    )?;
+    let later = claim(
+        "bob:acme.example",
+        ACME_ISSUER,
+        at(2026, 5, 20),
+        expires,
+        None,
+    )?;
     let snapshot = vec![earlier, later];
     let input = PrimaryHandleSelectInput {
         subject_id: &s,
@@ -327,8 +339,8 @@ pub fn run_tie_break_by_created_at_vector() -> Result<()> {
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
-    let chosen = select_primary_handle(&input)
-        .ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
+    let chosen =
+        select_primary_handle(&input).ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
     if chosen_handle(&chosen)? != "bob:acme.example" {
         bail!("tie-break MUST prefer the later created_at when issuer position is equal");
     }
@@ -364,8 +376,8 @@ pub fn run_tie_break_by_claim_digest_vector() -> Result<()> {
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
-    let chosen = select_primary_handle(&input)
-        .ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
+    let chosen =
+        select_primary_handle(&input).ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
     if chosen_handle(&chosen)? != smaller_handle {
         bail!(
             "tie-break MUST prefer the lexicographically smaller claim_digest; \
@@ -381,8 +393,20 @@ pub fn run_tie_break_by_claim_digest_vector() -> Result<()> {
 pub fn run_holder_primary_null_skips_layer_vector() -> Result<()> {
     let s = subject()?;
     let expires = at(2026, 6, 25);
-    let older = claim("alice:acme.example", ACME_ISSUER, at(2026, 5, 1), expires, None)?;
-    let newer = claim("bob:acme.example", ACME_ISSUER, at(2026, 5, 20), expires, None)?;
+    let older = claim(
+        "alice:acme.example",
+        ACME_ISSUER,
+        at(2026, 5, 1),
+        expires,
+        None,
+    )?;
+    let newer = claim(
+        "bob:acme.example",
+        ACME_ISSUER,
+        at(2026, 5, 20),
+        expires,
+        None,
+    )?;
     let snapshot = vec![older, newer];
     // With holder_primary=null the holder layer is empty, so selection
     // falls through to most-recent.
@@ -394,8 +418,8 @@ pub fn run_holder_primary_null_skips_layer_vector() -> Result<()> {
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
-    let chosen = select_primary_handle(&input)
-        .ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
+    let chosen =
+        select_primary_handle(&input).ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
     if chosen_handle(&chosen)? != "bob:acme.example" {
         bail!("holder_primary=null MUST skip the holder layer and use most-recent");
     }

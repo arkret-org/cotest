@@ -434,7 +434,11 @@ fn magic_allow_tokens(contents: &str) -> BTreeSet<String> {
             Some(rest.trim())
         } else if let Some(rest) = trimmed.strip_prefix("<!-- contrix-allow:") {
             Some(rest.trim().trim_end_matches("-->").trim())
-        } else { trimmed.strip_prefix("/* contrix-allow:").map(|rest| rest.trim().trim_end_matches("*/").trim()) };
+        } else {
+            trimmed
+                .strip_prefix("/* contrix-allow:")
+                .map(|rest| rest.trim().trim_end_matches("*/").trim())
+        };
         if let Some(payload) = payload {
             for tok in payload.split(',') {
                 let t = tok.trim();

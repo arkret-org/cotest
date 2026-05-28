@@ -7,13 +7,13 @@
 //! > `metadata_encryption_profile`, Circle `metadata_encryption_floor` if
 //! > present, Space `child_scope_policy.metadata_encryption_floor` if in
 //! > placement context, object profile requirement). 比较顺序为
-//! > `body_only < minimal_encrypted < full_encrypted`; 任何写入若低于
+//! > `content_only < minimal_encrypted < full_encrypted`; 任何写入若低于
 //! > effective profile MUST `failed_precondition`
 //! > (`reason="metadata_encryption_floor_violation"`).
 //!
-//! In other words, a Circle MAY raise the floor (e.g. Realm=`body_only`
+//! In other words, a Circle MAY raise the floor (e.g. Realm=`content_only`
 //! → Circle=`minimal_encrypted` is fine), but never lower it (Realm=
-//! `minimal_encrypted` + Circle=`body_only` MUST be rejected with
+//! `minimal_encrypted` + Circle=`content_only` MUST be rejected with
 //! `metadata_encryption_floor_violation`).
 //!
 //! The SDK exposes the [`CircleMetadataEncryptionFloor`] enum but no
@@ -28,7 +28,7 @@ use contrix_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
 /// Strictness rank for the three floor values: stricter → larger rank.
 fn rank(floor: CircleMetadataEncryptionFloor) -> u8 {
     match floor {
-        CircleMetadataEncryptionFloor::BodyOnly => 0,
+        CircleMetadataEncryptionFloor::ContentOnly => 0,
         CircleMetadataEncryptionFloor::MinimalEncrypted => 1,
         CircleMetadataEncryptionFloor::FullEncrypted => 2,
     }
@@ -76,11 +76,12 @@ fn effective_floor(
 pub async fn metadata_encryption_floor_run() -> Result<()> {
     use CircleMetadataEncryptionFloor::*;
 
-    // ── Strictness order MUST be body_only < minimal_encrypted < full_encrypted.
-    if !(rank(BodyOnly) < rank(MinimalEncrypted) && rank(MinimalEncrypted) < rank(FullEncrypted)) {
+    // ── Strictness order MUST be content_only < minimal_encrypted < full_encrypted.
+    if !(rank(ContentOnly) < rank(MinimalEncrypted) && rank(MinimalEncrypted) < rank(FullEncrypted))
+    {
         return Err(anyhow!(
-            "strictness order drifted: body_only={} minimal={} full={}",
-            rank(BodyOnly),
+            "strictness order drifted: content_only={} minimal={} full={}",
+            rank(ContentOnly),
             rank(MinimalEncrypted),
             rank(FullEncrypted)
         ));
@@ -89,7 +90,7 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
     // ── Wire shape: pin the snake_case literals against
     //    spec/v1/artifacts/schemas/circle.schema.json.
     for (variant, expected) in [
-        (BodyOnly, "body_only"),
+        (ContentOnly, "content_only"),
         (MinimalEncrypted, "minimal_encrypted"),
         (FullEncrypted, "full_encrypted"),
     ] {
@@ -113,21 +114,22 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
         }
     }
 
-    // ── Accept: Realm=body_only, Circle MAY pick any of the three.
-    for circle in [BodyOnly, MinimalEncrypted, FullEncrypted] {
-        validate_metadata_floor_tightens(BodyOnly, circle)
-            .map_err(|e| anyhow!("expected accept Realm=BodyOnly Circle={circle:?}; got: {e}"))?;
+    // ── Accept: Realm=content_only, Circle MAY pick any of the three.
+    for circle in [ContentOnly, MinimalEncrypted, FullEncrypted] {
+        validate_metadata_floor_tightens(ContentOnly, circle).map_err(|e| {
+            anyhow!("expected accept Realm=ContentOnly Circle={circle:?}; got: {e}")
+        })?;
     }
 
     // ── Accept: Realm=minimal_encrypted, Circle ∈ {minimal_encrypted, full_encrypted}.
     validate_metadata_floor_tightens(MinimalEncrypted, MinimalEncrypted)?;
     validate_metadata_floor_tightens(MinimalEncrypted, FullEncrypted)?;
 
-    // ── Reject: Realm=minimal_encrypted, Circle=body_only (laxer).
-    match validate_metadata_floor_tightens(MinimalEncrypted, BodyOnly) {
+    // ── Reject: Realm=minimal_encrypted, Circle=content_only (laxer).
+    match validate_metadata_floor_tightens(MinimalEncrypted, ContentOnly) {
         Ok(()) => {
             return Err(anyhow!(
-                "expected reject Realm=MinimalEncrypted Circle=BodyOnly; got accept"
+                "expected reject Realm=MinimalEncrypted Circle=ContentOnly; got accept"
             ));
         }
         Err(e) => {
@@ -140,8 +142,8 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
         }
     }
 
-    // ── Reject: Realm=full_encrypted, Circle ∈ {body_only, minimal_encrypted}.
-    for lax in [BodyOnly, MinimalEncrypted] {
+    // ── Reject: Realm=full_encrypted, Circle ∈ {content_only, minimal_encrypted}.
+    for lax in [ContentOnly, MinimalEncrypted] {
         match validate_metadata_floor_tightens(FullEncrypted, lax) {
             Ok(()) => {
                 return Err(anyhow!(
@@ -163,14 +165,19 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
     validate_metadata_floor_tightens(FullEncrypted, FullEncrypted)?;
 
     // ── effective_floor takes max across all four sources.
-    let effective = effective_floor(BodyOnly, Some(MinimalEncrypted), None, None);
+    let effective = effective_floor(ContentOnly, Some(MinimalEncrypted), None, None);
     if effective != MinimalEncrypted {
         return Err(anyhow!(
-            "effective_floor(BodyOnly, MinimalEncrypted, _, _) MUST be \
+            "effective_floor(ContentOnly, MinimalEncrypted, _, _) MUST be \
              MinimalEncrypted; got {effective:?}"
         ));
     }
-    let effective = effective_floor(BodyOnly, Some(MinimalEncrypted), Some(FullEncrypted), None);
+    let effective = effective_floor(
+        ContentOnly,
+        Some(MinimalEncrypted),
+        Some(FullEncrypted),
+        None,
+    );
     if effective != FullEncrypted {
         return Err(anyhow!(
             "effective_floor MUST take max across all sources; expected FullEncrypted, got {effective:?}"

@@ -740,8 +740,7 @@ fn validate_profile_requirements(
         .get("cx.profile.e2ee_client.v1")
         .ok_or_else(|| anyhow!("e2ee_client.v1 missing profile_requirements entry"))?;
     let inherits = string_array_field(e2ee_client, "inherits")?;
-    if !inherits.contains(&"cx.profile.mls_governance_binding.full.v1")
-    {
+    if !inherits.contains(&"cx.profile.mls_governance_binding.full.v1") {
         bail!(
             "e2ee_client.v1 must inherit cx.profile.mls_governance_binding.full.v1 (Phase 3 binding)"
         );
@@ -1002,13 +1001,13 @@ fn validate_value_refs(
             for (key, child) in map {
                 match (key.as_str(), child.as_str()) {
                     ("operation_id", Some(operation_id))
-                        if !operation_ids.contains(operation_id) => {
-                            bail!("{context} references unknown operation id {operation_id}");
-                        }
-                    ("event_kind", Some(event_kind))
-                        if !event_kinds.contains(event_kind) => {
-                            bail!("{context} references unknown event kind {event_kind}");
-                        }
+                        if !operation_ids.contains(operation_id) =>
+                    {
+                        bail!("{context} references unknown operation id {operation_id}");
+                    }
+                    ("event_kind", Some(event_kind)) if !event_kinds.contains(event_kind) => {
+                        bail!("{context} references unknown event kind {event_kind}");
+                    }
                     ("kind", Some(kind)) if kind.starts_with("cx.") => {
                         // The recursive walk hits `kind:` fields nested in
                         // payload content blocks (e.g. `payload.content.kind`
@@ -1028,10 +1027,9 @@ fn validate_value_refs(
                             bail!("{context} references unknown event kind {kind}");
                         }
                     }
-                    ("schema_id", Some(schema_id))
-                        if !schema_ids.contains(schema_id) => {
-                            bail!("{context} references unknown schema id {schema_id}");
-                        }
+                    ("schema_id", Some(schema_id)) if !schema_ids.contains(schema_id) => {
+                        bail!("{context} references unknown schema id {schema_id}");
+                    }
                     _ => {}
                 }
                 validate_value_refs(

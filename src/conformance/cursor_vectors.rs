@@ -46,7 +46,7 @@ pub fn run_cursor_opaque_core_vector() -> Result<()> {
         issuer_kid: None,
         mac: None,
         sig: None,
-        filter_hash: None,
+        filter_digest: None,
     };
     if cursor.h.is_none() {
         bail!("core cursor body missing handle `h`");
@@ -81,7 +81,7 @@ pub fn run_cursor_opaque_stateless_profile_vector() -> Result<()> {
         issuer_kid: Some("did:web:server.example#cursor-1".to_owned()),
         mac: Some("AAAAAAAAAAAAAAAAAAAAAA".to_owned()),
         sig: None,
-        filter_hash: None,
+        filter_digest: None,
     };
     if cursor.h.is_some() {
         bail!("stateless cursor body must not carry stateful handle `h`");

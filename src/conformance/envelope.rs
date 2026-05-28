@@ -624,9 +624,12 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
                 .iter()
                 .any(|field| content.get(*field).is_some());
             let has_nested_body = content
-                .get("content").map(|c| ["kind", "body", "parts"]
-                            .iter()
-                            .any(|field| c.get(*field).is_some()))
+                .get("content")
+                .map(|c| {
+                    ["kind", "body", "parts"]
+                        .iter()
+                        .any(|field| c.get(*field).is_some())
+                })
                 .unwrap_or(false);
             if !has_body && !has_nested_body {
                 return Some(

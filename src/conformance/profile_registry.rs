@@ -406,8 +406,7 @@ fn validate_deprecated_profile_drift(declared_impl_profiles: &BTreeSet<String>) 
             bail!("deprecated profile {profile_id} must be hard_reject, got {rejection_level}");
         }
         let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
-        if !allowed_contexts.contains(&"negative_test")
-        {
+        if !allowed_contexts.contains(&"negative_test") {
             bail!("deprecated profile {profile_id} must allow cotest negative_test context");
         }
         if declared_impl_profiles.contains(profile_id) {
@@ -437,8 +436,7 @@ fn validate_hard_reject_registry_entries(relative_path: &str, entry_label: &str)
         }
 
         let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
-        if !allowed_contexts.contains(&"negative_test")
-        {
+        if !allowed_contexts.contains(&"negative_test") {
             bail!("{entry_label} {id} must allow cotest negative_test context");
         }
 

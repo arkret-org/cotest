@@ -13,8 +13,9 @@
 
 use anyhow::{Result, anyhow};
 use contrix_core::{
-    Did, Discoverability, EncryptionProfile, FederationPolicy, HistoryVisibility, JoinRule,
-    SecurityClass, Space, SpaceId, TypedTrustDomainId,
+    CircleMetadataEncryptionFloor, ContentEncryptionFloor, Did, Discoverability, EncryptionProfile,
+    FederationPolicy, HistoryVisibility, JoinRule, SecurityClass, Space, SpaceId,
+    TypedTrustDomainId,
 };
 
 const REALM_ID: &str = "cx:space:01904100-0000-7000-8000-000000000aa1";
@@ -53,6 +54,8 @@ fn build_realm(
         default_join_rule: JoinRule::Invite,
         history_visibility: HistoryVisibility::Joined,
         encryption_profile: EncryptionProfile::None,
+        content_encryption_floor: Some(ContentEncryptionFloor::AllowPlaintext),
+        metadata_encryption_profile: Some(CircleMetadataEncryptionFloor::ContentOnly),
         federation_policy,
         retention_policy_id: None,
         avatar_blob_ref: None,

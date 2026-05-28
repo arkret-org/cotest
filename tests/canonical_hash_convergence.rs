@@ -262,7 +262,7 @@ fn pinned_r3_2_inputs() -> (
 #[test]
 fn r3_2_identity_digests_match_pinned_baseline() {
     use contrix_core::model::{
-        member_display_state_digest, member_identity_effective_set_digest, MemberIdentitySegment,
+        MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
 
@@ -275,8 +275,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set,
-        "sha256:d9ea65535af71900678142cac05baa63edb10e63451cbc322a69dec0c6731372",
+        effective_set, "sha256:d9ea65535af71900678142cac05baa63edb10e63451cbc322a69dec0c6731372",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -284,8 +283,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state,
-        "sha256:abc38bb7cfdd01535018bf8e7ec866f094657c48efa5b5a100689dc39f087cd3",
+        display_state, "sha256:abc38bb7cfdd01535018bf8e7ec866f094657c48efa5b5a100689dc39f087cd3",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -300,7 +298,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
 #[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
 fn dump_r3_2_identity_digests() {
     use contrix_core::model::{
-        member_display_state_digest, member_identity_effective_set_digest, MemberIdentitySegment,
+        MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
     let effective_set = member_identity_effective_set_digest(

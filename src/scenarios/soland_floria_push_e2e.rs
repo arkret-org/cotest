@@ -262,7 +262,8 @@ pub fn assert_blind_wakeup_invariants(notification: &Value) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("push body missing top-level `notification`"))?;
     if inner
         .get("push_target_id")
-        .and_then(Value::as_str).is_none_or(|value| value.is_empty())
+        .and_then(Value::as_str)
+        .is_none_or(|value| value.is_empty())
     {
         bail!("blind wakeup MUST carry a non-empty `notification.push_target_id`");
     }

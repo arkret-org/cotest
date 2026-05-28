@@ -1,11 +1,11 @@
 //! P2F.3 — every CXP-0007 reason code is reachable from `contrix-core`.
 //!
-//! Five of the six CXP-0007 error codes are `failed_precondition` /
-//! `schema_violation` sub-reasons; the sixth (`delivery_binding_handed_over`)
+//! Eight of the nine CXP-0007 error codes are `failed_precondition` /
+//! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)
 //! is a top-level wire error code introduced in CXP-0006 and re-used by the
 //! Circle delivery binding migration path. This scenario pins:
 //!
-//!   - the sub-reason set [`KNOWN_REASON_CODES_CXP_0007`] is exactly 5,
+//!   - the sub-reason set [`KNOWN_REASON_CODES_CXP_0007`] is exactly 8,
 //!   - each sub-reason string is non-empty, lowercase, snake_case, and
 //!     does not duplicate a known reason from another release,
 //!   - the top-level `ERROR_CODE_DELIVERY_BINDING_HANDED_OVER` is registered
@@ -17,9 +17,11 @@
 
 use anyhow::{Result, anyhow};
 use contrix_core::error::{
-    KNOWN_REASON_CODES_CXP_0007, REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER,
-    REASON_CIRCLE_NOT_ACTIVE, REASON_CIRCLE_REALM_MISMATCH,
-    REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION, REASON_SCOPE_REBIND_FORBIDDEN,
+    KNOWN_REASON_CODES_CXP_0007, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
+    REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER, REASON_CIRCLE_NOT_ACTIVE,
+    REASON_CIRCLE_REALM_MISMATCH, REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
+    REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED, REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
+    REASON_SCOPE_REBIND_FORBIDDEN,
 };
 use contrix_core::{
     ERROR_CODE_DELIVERY_BINDING_HANDED_OVER, error_code_http_status, is_known_error_code,
@@ -35,9 +37,9 @@ fn is_snake_case_lowercase(s: &str) -> bool {
 }
 
 pub async fn error_code_paths_run() -> Result<()> {
-    if KNOWN_REASON_CODES_CXP_0007.len() != 5 {
+    if KNOWN_REASON_CODES_CXP_0007.len() != 8 {
         return Err(anyhow!(
-            "CXP-0007 reason-code set MUST be exactly 5; got {} ({:?})",
+            "CXP-0007 reason-code set MUST be exactly 8; got {} ({:?})",
             KNOWN_REASON_CODES_CXP_0007.len(),
             KNOWN_REASON_CODES_CXP_0007
         ));
@@ -51,7 +53,19 @@ pub async fn error_code_paths_run() -> Result<()> {
             REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER,
             "circle_member_must_be_realm_member",
         ),
+        (
+            REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
+            "circle_encryption_below_realm_floor",
+        ),
+        (
+            REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
+            "content_encryption_floor_violation",
+        ),
         (REASON_SCOPE_REBIND_FORBIDDEN, "scope_rebind_forbidden"),
+        (
+            REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED,
+            "effective_scope_reducer_managed",
+        ),
         (
             REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
             "metadata_encryption_floor_violation",
@@ -73,7 +87,10 @@ pub async fn error_code_paths_run() -> Result<()> {
         REASON_CIRCLE_REALM_MISMATCH,
         REASON_CIRCLE_NOT_ACTIVE,
         REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER,
+        REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
+        REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
         REASON_SCOPE_REBIND_FORBIDDEN,
+        REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED,
         REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
     ] {
         if !KNOWN_REASON_CODES_CXP_0007.contains(&code) {

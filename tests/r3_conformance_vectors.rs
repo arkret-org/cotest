@@ -113,7 +113,8 @@ fn mention_rendering_vector_suite_runs_clean() {
 
 #[test]
 fn list_handles_for_subject_vector_suite_runs_clean() {
-    run_list_handles_for_subject_vector_suite().expect("list-handles-for-subject vectors must pass");
+    run_list_handles_for_subject_vector_suite()
+        .expect("list-handles-for-subject vectors must pass");
     assert!(
         ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS.len() >= 5,
         "VECT-COT-3 requires >= 5 cases, got {}",
@@ -361,7 +362,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
         issuer_kid: Some("did:web:server.example#cursor-1".to_owned()),
         mac: Some("AAAAAAAAAAAAAAAAAAAAAA".to_owned()),
         sig: None,
-        filter_hash: None,
+        filter_digest: None,
     };
     if stateless.h.is_some() {
         bail!("stateless cursor body must not carry stateful handle");
@@ -497,7 +498,10 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
             realm_id: realm.clone(),
             actor_id: alice.clone(),
             subject_id: subject.clone(),
-            display_profile: DisplayProfile { display_name: name.to_owned(), avatar_ref: None },
+            display_profile: DisplayProfile {
+                display_name: name.to_owned(),
+                avatar_blob_ref: None,
+            },
             asserted_at: chrono::Utc::now(),
             expires_at: None,
             proof: MemberIdentityProof {
@@ -515,8 +519,12 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     let v2 = make_identity("Alice v2 (display_name changed)")?;
     let event_a = EventId::new("cx:event:01904100-0000-7000-8000-000000007a01")?;
     let event_b = EventId::new("cx:event:01904100-0000-7000-8000-000000007a02")?;
-    let carrier_a = IdentityPayloadCarrier::MemberIdentity { member_identity: v1 };
-    let carrier_b = IdentityPayloadCarrier::MemberIdentity { member_identity: v2 };
+    let carrier_a = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: v1,
+    };
+    let carrier_b = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: v2,
+    };
     let digest_a = Hash::new(
         carrier_a
             .carrier_sha256()
@@ -552,7 +560,10 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
             "TEST-7: client MUST see only the replacing event in the effective \
              set (replaces[] semantics); got {} entries: {:?}",
             effective.len(),
-            effective.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>()
+            effective
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>()
         );
     }
     Ok(())

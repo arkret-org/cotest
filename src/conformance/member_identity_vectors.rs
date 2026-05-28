@@ -33,7 +33,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use contrix_core::error::{
-    ERROR_CODE_MEMBER_IDENTITY_PROOF_INVALID, ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
+    ERROR_CODE_MEMBER_IDENTITY_PROOF_INVALID,
+    ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
     ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH, ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
 };
 use contrix_core::model::{
@@ -128,7 +129,10 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
         fake_realm()?,
         fake_actor()?,
         fake_subject()?,
-        DisplayProfile { display_name: display_name.to_owned(), avatar_ref: None },
+        DisplayProfile {
+            display_name: display_name.to_owned(),
+            avatar_blob_ref: None,
+        },
         pinned_asserted_at(),
         sample_proof(signature)?,
     );
@@ -150,7 +154,9 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
 /// carrier.
 pub fn run_member_identity_update_initial_vector() -> Result<()> {
     let identity = build_member_identity("Alice Initial", "AAAA")?;
-    let carrier = IdentityPayloadCarrier::MemberIdentity { member_identity: identity };
+    let carrier = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: identity,
+    };
     let carrier_digest = carrier
         .carrier_sha256()
         .map_err(|e| anyhow!("carrier_sha256: {e}"))?;
@@ -239,8 +245,12 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
     let event_a = fake_event(0xb01)?;
     let event_b = fake_event(0xb02)?;
 
-    let carrier_a = IdentityPayloadCarrier::MemberIdentity { member_identity: identity_v1 };
-    let carrier_b = IdentityPayloadCarrier::MemberIdentity { member_identity: identity_v2 };
+    let carrier_a = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: identity_v1,
+    };
+    let carrier_b = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: identity_v2,
+    };
 
     let digest_a = Hash::new(
         carrier_a
@@ -271,9 +281,8 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
         expected_state_digest: None,
     };
 
-    let effective =
-        effective_identity_events([(&event_a, &payload_a), (&event_b, &payload_b)])
-            .map_err(|e| anyhow!("effective_identity_events: {e}"))?;
+    let effective = effective_identity_events([(&event_a, &payload_a), (&event_b, &payload_b)])
+        .map_err(|e| anyhow!("effective_identity_events: {e}"))?;
     if effective.len() != 1 {
         bail!(
             "VECT-MID-2: only the second event MUST remain after replacement, \
@@ -300,17 +309,18 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
     let identity_v2 = build_member_identity("Alice v2", "BBBB")?;
     let event_a = fake_event(0xc01)?;
     let event_b = fake_event(0xc02)?;
-    let wrong_digest = Hash::new(
-        "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-    )
-    .map_err(|e| anyhow!("wrong digest as Hash: {e}"))?;
+    let wrong_digest =
+        Hash::new("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+            .map_err(|e| anyhow!("wrong digest as Hash: {e}"))?;
 
     let payload_a = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
         actor_id: fake_actor()?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
-        identity_payload: IdentityPayloadCarrier::MemberIdentity { member_identity: identity_v1 },
+        identity_payload: IdentityPayloadCarrier::MemberIdentity {
+            member_identity: identity_v1,
+        },
         identity_payload_digest: None,
         expected_state_digest: None,
     };
@@ -322,14 +332,15 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
             event_id: event_a.clone(),
             payload_digest: wrong_digest,
         }],
-        identity_payload: IdentityPayloadCarrier::MemberIdentity { member_identity: identity_v2 },
+        identity_payload: IdentityPayloadCarrier::MemberIdentity {
+            member_identity: identity_v2,
+        },
         identity_payload_digest: None,
         expected_state_digest: None,
     };
 
-    let effective =
-        effective_identity_events([(&event_a, &payload_a), (&event_b, &payload_b)])
-            .map_err(|e| anyhow!("effective_identity_events: {e}"))?;
+    let effective = effective_identity_events([(&event_a, &payload_a), (&event_b, &payload_b)])
+        .map_err(|e| anyhow!("effective_identity_events: {e}"))?;
     if effective.len() != 2 {
         bail!(
             "VECT-MID-3: a replacement edge with the wrong digest MUST be \
@@ -360,7 +371,9 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
 /// digest from [`member_identity_effective_set_digest`].
 pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()> {
     let identity = build_member_identity("Alice Concurrent", "AAAA")?;
-    let carrier = IdentityPayloadCarrier::MemberIdentity { member_identity: identity };
+    let carrier = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: identity,
+    };
     let carrier_digest = Hash::new(
         carrier
             .carrier_sha256()
@@ -386,10 +399,9 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
 
     // A stale writer carries an effective-set digest that no longer matches
     // the server-observed one. Use a deliberately-wrong pinned digest.
-    let stale_digest = Hash::new(
-        "sha256:dead000000000000000000000000000000000000000000000000000000000000",
-    )
-    .map_err(|e| anyhow!("stale digest as Hash: {e}"))?;
+    let stale_digest =
+        Hash::new("sha256:dead000000000000000000000000000000000000000000000000000000000000")
+            .map_err(|e| anyhow!("stale digest as Hash: {e}"))?;
     if stale_digest.as_str() == fresh_digest {
         bail!("VECT-MID-4: vector setup error — stale digest equals fresh digest");
     }
@@ -474,7 +486,9 @@ pub fn run_member_identity_proof_invalid_vector() -> Result<()> {
 /// enum) is rejected at deserialisation.
 pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
     let identity = build_member_identity("Alice", "AAAA")?;
-    let carrier = IdentityPayloadCarrier::MemberIdentity { member_identity: identity };
+    let carrier = IdentityPayloadCarrier::MemberIdentity {
+        member_identity: identity,
+    };
     let payload = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
         actor_id: fake_actor()?,
@@ -487,8 +501,7 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
     let mut value =
         serde_json::to_value(&payload).map_err(|e| anyhow!("serialise payload: {e}"))?;
     value["segment"] = json!("display_profile");
-    let parsed: std::result::Result<MemberIdentityUpdatePayload, _> =
-        serde_json::from_value(value);
+    let parsed: std::result::Result<MemberIdentityUpdatePayload, _> = serde_json::from_value(value);
     match parsed {
         Err(e) => {
             let msg = format!("{e}");
@@ -528,10 +541,9 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
     let event_b = fake_event(0xe01)?;
     let cross_subject_event = fake_event(0xe02)?;
 
-    let bogus_digest = Hash::new(
-        "sha256:badf000000000000000000000000000000000000000000000000000000000000",
-    )
-    .map_err(|e| anyhow!("bogus digest as Hash: {e}"))?;
+    let bogus_digest =
+        Hash::new("sha256:badf000000000000000000000000000000000000000000000000000000000000")
+            .map_err(|e| anyhow!("bogus digest as Hash: {e}"))?;
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
         actor_id: Did::new("did:web:bob.acme.example".to_owned())?,
@@ -540,7 +552,9 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
             event_id: cross_subject_event,
             payload_digest: bogus_digest,
         }],
-        identity_payload: IdentityPayloadCarrier::MemberIdentity { member_identity: identity_b },
+        identity_payload: IdentityPayloadCarrier::MemberIdentity {
+            member_identity: identity_b,
+        },
         identity_payload_digest: None,
         expected_state_digest: None,
     };
