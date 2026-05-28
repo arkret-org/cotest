@@ -10,19 +10,60 @@
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/contrix.rs::server_describe`) already serve
 // `GET /api/v1/server/describe` with the claim-level partition layer in place, so the two
-// describe probes are LIVE today. Phases B (error envelope), C (pagination cursor),
-// D (idempotency key) and E (unsupported_feature fail-closed) stay pinned via test.fixme
-// until the matching wire paths are tightened end-to-end.
+// describe probes are LIVE today. Phase B (error envelope) is also live on
+// soland. Phases C (pagination cursor), D (idempotency key) and E
+// (unsupported_feature fail-closed) stay pinned via test.fixme until the
+// matching wire paths are tightened end-to-end.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
-// run under joint-smoke. Phase B/C/D/E live inside untagged describe blocks so they don't
-// block PR-level gating.
+// run under joint-smoke. The untagged service-surface block carries Phase B plus the
+// remaining fixme placeholders, so the extra live probe does not broaden PR-level gating.
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
+
+type ErrorEnvelope = {
+  ok?: boolean;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+  request_id?: string;
+};
+
+async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
+  const unknown = await request.get(
+    `${solandBaseUrl()}/api/v1/__definitely_does_not_exist__/probe`,
+  );
+  expect(unknown.status(), "unknown API path status").toBe(404);
+  expect(unknown.headers()["content-type"] ?? "", "unknown path content-type").toContain(
+    "application/json",
+  );
+  const unknownBody = (await unknown.json()) as ErrorEnvelope;
+  expect(unknownBody).toMatchObject({
+    ok: false,
+    error: { code: "unrecognized_endpoint" },
+  });
+  expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
+  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^cx:request:/);
+
+  const wrongMethod = await request.post(`${solandBaseUrl()}/api/v1/server/describe`);
+  expect(wrongMethod.status(), "known path wrong method status").toBe(405);
+  expect(wrongMethod.headers()["content-type"] ?? "", "wrong method content-type").toContain(
+    "application/json",
+  );
+  expect(wrongMethod.headers()["allow"] ?? "", "wrong method Allow header").toContain("GET");
+  const wrongMethodBody = (await wrongMethod.json()) as ErrorEnvelope;
+  expect(wrongMethodBody).toMatchObject({
+    ok: false,
+    error: { code: "method_not_allowed" },
+  });
+  expect(wrongMethodBody.error?.message, "wrong method error message").toBeTruthy();
+  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^cx:request:/);
+}
 
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
 
@@ -149,7 +190,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
   });
 });
 
-// ---------- FIXME: phases that need wire-level tightening before going live ----------
+// ---------- Mixed: live error-envelope probe plus remaining fixme phases ----------
 
 test.describe("service surface contract — error envelope, pagination, idempotency, fail-closed", () => {
   test.fixme(
@@ -175,30 +216,14 @@ test.describe("service surface contract — error envelope, pagination, idempote
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#sync-service-surface-contract-gap
-    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
-    // @expected-live-by: 2026Q3
+  test(
     "Phase B: unknown path returns 404 unrecognized_endpoint with standard error envelope",
-    async () => {
+    async ({ request }) => {
       // spec: api-conventions.md §5 (standard error envelope —
       //         { ok: false, error: { code, message, retry_after_ms?, details? }, request_id }),
       //       §5.2 (404 unrecognized_endpoint, MUST NOT return HTML / stack /
       //         framework error, MUST terminate at routing layer with no side effects).
-      //
-      // GET ${solandBaseUrl()}/api/v1/__definitely_does_not_exist__/probe
-      //   → status 404
-      //   → body.ok === false
-      //   → body.error.code === "unrecognized_endpoint"
-      //   → response Content-Type contains "application/json" (not text/html)
-      //   → POST same known path GET-only (e.g. /api/v1/server/describe)
-      //   → status 405, body.error.code === "method_not_allowed",
-      //     response header Allow contains "GET".
-      // Repeat for coauthBaseUrl() when configured (test.skip otherwise).
-      //
-      // Blocked on: current soland / coauth 404 path may still return framework
-      // error shape (Salvo default) instead of the §5 canonical envelope on every
-      // miss path. Pin until routing-layer wrapper is in place on both servers.
+      await expectCanonicalSolandErrorEnvelope(request);
     },
   );
 
