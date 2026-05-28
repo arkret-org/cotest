@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 
-#[path = "../../chime/src/push_rule_core.rs"]
+#[path = "../../chime/src/push/rule_core.rs"]
 mod chime_push_rule_core;
 #[path = "../../soland/src/push_rule_core.rs"]
 mod soland_push_rule_core;

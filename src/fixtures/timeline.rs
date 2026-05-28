@@ -191,8 +191,8 @@ impl Display for EventTimeline {
         }
         writeln!(
             f,
-            "{:>4}  {:<25}  {:<28}  {:<40}  {:<6}  {:<24}  {}",
-            "#", "timestamp", "sender", "op_id", "status", "kind", "depends_on / digest"
+            "{:>4}  {:<25}  {:<28}  {:<40}  {:<6}  {:<24}  depends_on / digest",
+            "#", "timestamp", "sender", "op_id", "status", "kind"
         )?;
         for entry in &self.events {
             let depends = if entry.depends_on.is_empty() {

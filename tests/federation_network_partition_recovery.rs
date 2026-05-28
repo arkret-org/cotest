@@ -104,9 +104,7 @@ async fn federation_partition_then_heal_converges_on_canonical_frontier() -> Res
     sim.write("B", 2_002);
     let minority = sim
         .events
-        .iter()
-        .filter(|e| e.hlc_physical_ms == 2_000 && e.server == "C")
-        .next()
+        .iter().find(|e| e.hlc_physical_ms == 2_000 && e.server == "C")
         .expect("phase 2 C write");
     assert!(
         !minority.accepted,
@@ -144,14 +142,13 @@ async fn federation_partition_then_heal_converges_on_canonical_frontier() -> Res
         "expected 8 accepted writes (3 pre, 2 during, 3 post); got {accepted_count}: {:?}",
         sim.events
     );
+    // Sanity belt: confirm there are no rejected writes from server C in the
+    // post-heal window (2000..3000ms physical HLC) — those would indicate a
+    // false negative where the heal didn't actually propagate.
     assert!(
-        !sim.events.iter().any(
-            |e| e.server == "C"
-                && !e.accepted
-                && e.hlc_physical_ms < 3_000
-                && e.hlc_physical_ms >= 2_000
-                && false /* we already filtered above; this is a sanity belt */
-        ),
+        !sim.events.iter().any(|e| e.server == "C"
+            && !e.accepted
+            && (2_000..3_000).contains(&e.hlc_physical_ms)),
         "no false negatives expected post-heal"
     );
 

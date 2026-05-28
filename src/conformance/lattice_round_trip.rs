@@ -168,9 +168,9 @@ fn or_set_basic_add_remove_commute() -> Result<()> {
     // the SAME op order MUST produce the SAME result (deterministic
     // associativity).
     let ops = vec![
-        AnchoredOp::new(m1.clone(), op_add("red")),
-        AnchoredOp::new(m2.clone(), op_add("blue")),
-        AnchoredOp::new(m3.clone(), op_remove("red")),
+        AnchoredOp::new(m1, op_add("red")),
+        AnchoredOp::new(m2, op_add("blue")),
+        AnchoredOp::new(m3, op_remove("red")),
     ];
     let resolved_first = lattice.join(&cref, &ops);
     let resolved_second = lattice.join(&cref, &ops);

@@ -24,7 +24,7 @@ pub async fn controller_deactivate_cascade_run() -> Result<()> {
             "AGENT_DEACTIVATE event-kind constant drifted from canonical spelling"
         ));
     }
-    if !CASCADE_KINDS.iter().any(|k| *k == AGENT_DEACTIVATE) {
+    if !CASCADE_KINDS.contains(&AGENT_DEACTIVATE) {
         return Err(anyhow!(
             "cascade list does not include AGENT_DEACTIVATE; reducer would skip step 1"
         ));

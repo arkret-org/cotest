@@ -434,11 +434,7 @@ fn magic_allow_tokens(contents: &str) -> BTreeSet<String> {
             Some(rest.trim())
         } else if let Some(rest) = trimmed.strip_prefix("<!-- contrix-allow:") {
             Some(rest.trim().trim_end_matches("-->").trim())
-        } else if let Some(rest) = trimmed.strip_prefix("/* contrix-allow:") {
-            Some(rest.trim().trim_end_matches("*/").trim())
-        } else {
-            None
-        };
+        } else { trimmed.strip_prefix("/* contrix-allow:").map(|rest| rest.trim().trim_end_matches("*/").trim()) };
         if let Some(payload) = payload {
             for tok in payload.split(',') {
                 let t = tok.trim();
@@ -670,21 +666,25 @@ impl ScanReport {
     }
 
     pub fn render_text(&self) -> String {
-        let mut out = String::new();
-        out.push_str(&format!(
-            "literal_scanner: root={} registry={} rules={} findings={}\n",
+        use std::fmt::Write as _;
+        // Header is small; each finding renders to ~128 bytes on average.
+        let mut out = String::with_capacity(128 + self.findings.len() * 128);
+        let _ = writeln!(
+            out,
+            "literal_scanner: root={} registry={} rules={} findings={}",
             self.root.display(),
             self.registry_dir.display(),
             self.rules_loaded,
             self.findings.len()
-        ));
+        );
         let mut violations = 0usize;
         let mut allowed = 0usize;
         for f in &self.findings {
             if f.allowed_context_match {
                 allowed += 1;
-                out.push_str(&format!(
-                    "  [allowed:{}] {}:{}:{} {} ({} :: {})\n",
+                let _ = writeln!(
+                    out,
+                    "  [allowed:{}] {}:{}:{} {} ({} :: {})",
                     f.allowed_context_reason.as_deref().unwrap_or("?"),
                     f.path.display(),
                     f.line,
@@ -692,26 +692,25 @@ impl ScanReport {
                     f.matched_token,
                     f.artifact_source,
                     f.rejection_level
-                ));
+                );
             } else {
                 violations += 1;
-                out.push_str(&format!(
-                    "  [VIOLATION:{}] {}:{}:{} {}{}\n",
+                let _ = write!(
+                    out,
+                    "  [VIOLATION:{}] {}:{}:{} {}",
                     f.rejection_level,
                     f.path.display(),
                     f.line,
                     f.column,
                     f.matched_token,
-                    f.replacement
-                        .as_ref()
-                        .map(|r| format!(" -> {r}"))
-                        .unwrap_or_default(),
-                ));
+                );
+                if let Some(r) = f.replacement.as_ref() {
+                    let _ = write!(out, " -> {r}");
+                }
+                out.push('\n');
             }
         }
-        out.push_str(&format!(
-            "summary: violations={violations} allowed={allowed}\n"
-        ));
+        let _ = writeln!(out, "summary: violations={violations} allowed={allowed}");
         out
     }
 

@@ -72,7 +72,7 @@ fn expected_outcome<'a>(vector: &'a Value, name: &str) -> Result<&'a str> {
         .ok_or_else(|| anyhow!("vector {name} missing expected.outcome"))
 }
 
-fn expected_reason<'a>(vector: &'a Value) -> Option<&'a str> {
+fn expected_reason(vector: &Value) -> Option<&str> {
     vector
         .pointer("/expected/reason_code")
         .and_then(Value::as_str)
@@ -1013,7 +1013,7 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
                             "negative vector {name} drift_compaction missing bottom_diagnostics"
                         )
                     })?;
-                if drift_diags.iter().count() >= leaf_diags.len() {
+                if drift_diags.len() >= leaf_diags.len() {
                     bail!(
                         "negative vector {name} expected dropped diagnostics but drift_compaction kept them all"
                     );
@@ -2861,10 +2861,8 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
         .get("event_kinds")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
-    let mut live_kind_meta: BTreeMap<
-        String,
-        (Option<String>, Option<String>, Option<String>, String),
-    > = BTreeMap::new();
+    type LiveKindMeta = (Option<String>, Option<String>, Option<String>, String);
+    let mut live_kind_meta: BTreeMap<String, LiveKindMeta> = BTreeMap::new();
     for entry in event_kinds {
         let kind = required_str(entry, "event_kind")?;
         let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
@@ -6037,15 +6035,15 @@ fn validate_ticket_state_transitions(transitions: &[&str]) -> bool {
         return false;
     }
     for window in transitions.windows(2) {
-        let legal = match (window[0], window[1]) {
-            ("issued", "executing") => true,
-            ("issued", "cancelled") => true,
-            ("issued", "expired") => true,
-            ("executing", "executed") => true,
-            ("executing", "failed") => true,
-            ("executing", "cancelled") => true,
-            _ => false,
-        };
+        let legal = matches!(
+            (window[0], window[1]),
+            ("issued", "executing")
+                | ("issued", "cancelled")
+                | ("issued", "expired")
+                | ("executing", "executed")
+                | ("executing", "failed")
+                | ("executing", "cancelled")
+        );
         if !legal {
             return false;
         }

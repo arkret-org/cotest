@@ -138,9 +138,11 @@ impl ParityReport {
         if failed.is_empty() {
             return Ok(());
         }
-        let mut summary = String::from("mock/live parity failures:\n");
+        use std::fmt::Write as _;
+        let mut summary = String::with_capacity(64 + failed.len() * 64);
+        summary.push_str("mock/live parity failures:\n");
         for (name, outcome) in failed {
-            summary.push_str(&format!("  - {name}: {outcome:?}\n"));
+            let _ = writeln!(summary, "  - {name}: {outcome:?}");
         }
         anyhow::bail!(summary);
     }
@@ -268,16 +270,19 @@ fn canonical_string(value: &Value) -> Result<String> {
 /// `mock:` vs `live:` so the CI failure log is readable. Scenarios that
 /// want richer diffs can render their own `Transcript` strings.
 fn diff_lines(mock: &str, live: &str) -> String {
+    use std::fmt::Write as _;
     let mock_lines: Vec<&str> = mock.lines().collect();
     let live_lines: Vec<&str> = live.lines().collect();
     let max = mock_lines.len().max(live_lines.len());
-    let mut out = String::new();
+    // Preallocate based on combined input size; diff output is bounded
+    // by mock+live with modest formatting overhead per line.
+    let mut out = String::with_capacity(mock.len() + live.len() + max * 16);
     for i in 0..max {
         let m = mock_lines.get(i).copied().unwrap_or("<missing>");
         let l = live_lines.get(i).copied().unwrap_or("<missing>");
         if m != l {
-            out.push_str(&format!("  mock[{i}]: {m}\n"));
-            out.push_str(&format!("  live[{i}]: {l}\n"));
+            let _ = writeln!(out, "  mock[{i}]: {m}");
+            let _ = writeln!(out, "  live[{i}]: {l}");
         }
     }
     if out.is_empty() {
@@ -285,7 +290,7 @@ fn diff_lines(mock: &str, live: &str) -> String {
         // — but fall back to showing the full bodies so the report stays
         // diagnostic even if the line splitter agrees while the strings
         // differ on the trailing newline.
-        out.push_str(&format!("  mock: {mock}\n  live: {live}\n"));
+        let _ = write!(out, "  mock: {mock}\n  live: {live}\n");
     }
     out
 }

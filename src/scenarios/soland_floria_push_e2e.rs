@@ -223,7 +223,7 @@ fn handle_request(mut stream: TcpStream, notifications: Arc<Mutex<Vec<Value>>>) 
     let response_body = json!({"rejected": []}).to_string();
     let response = format!(
         "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-        response_body.as_bytes().len(),
+        response_body.len(),
         response_body
     );
     let _ = stream.write_all(response.as_bytes());
@@ -260,10 +260,9 @@ pub fn assert_blind_wakeup_invariants(notification: &Value) -> Result<()> {
     let inner = notification
         .get("notification")
         .ok_or_else(|| anyhow::anyhow!("push body missing top-level `notification`"))?;
-    if !inner
+    if inner
         .get("push_target_id")
-        .and_then(Value::as_str)
-        .is_some_and(|value| !value.is_empty())
+        .and_then(Value::as_str).is_none_or(|value| value.is_empty())
     {
         bail!("blind wakeup MUST carry a non-empty `notification.push_target_id`");
     }

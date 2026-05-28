@@ -334,16 +334,18 @@ pub fn run_profile_registry_gate_suite() -> Result<()> {
 /// Markdown rendering of the gate report for inclusion in the certification
 /// rollup. One row per profile id with status.
 pub fn render_profile_gate_report_markdown(report: &ProfileGateReport) -> String {
-    let mut out =
-        String::from("| profile_id | category | status | reason |\n| --- | --- | --- | --- |\n");
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(128 + report.entries.len() * 96);
+    out.push_str("| profile_id | category | status | reason |\n| --- | --- | --- | --- |\n");
     for entry in &report.entries {
-        out.push_str(&format!(
-            "| {} | {} | {} | {} |\n",
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} |",
             entry.profile_id,
             entry.category,
             entry.status,
             entry.reason.as_deref().unwrap_or("")
-        ));
+        );
     }
     out
 }
@@ -404,9 +406,7 @@ fn validate_deprecated_profile_drift(declared_impl_profiles: &BTreeSet<String>) 
             bail!("deprecated profile {profile_id} must be hard_reject, got {rejection_level}");
         }
         let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
-        if !allowed_contexts
-            .iter()
-            .any(|context| *context == "negative_test")
+        if !allowed_contexts.contains(&"negative_test")
         {
             bail!("deprecated profile {profile_id} must allow cotest negative_test context");
         }
@@ -437,9 +437,7 @@ fn validate_hard_reject_registry_entries(relative_path: &str, entry_label: &str)
         }
 
         let allowed_contexts = string_array_field(entry, "allowed_contexts")?;
-        if !allowed_contexts
-            .iter()
-            .any(|context| *context == "negative_test")
+        if !allowed_contexts.contains(&"negative_test")
         {
             bail!("{entry_label} {id} must allow cotest negative_test context");
         }

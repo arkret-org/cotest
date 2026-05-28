@@ -71,11 +71,13 @@ proptest! {
         handle in arb_handle(),
         audience in prop::option::of("[a-z0-9.]{2,16}"),
     ) {
-        let mut claim = HandleClaim::default();
-        claim.handle = Some(Handle::parse(&handle).unwrap());
-        claim.member_delivery_binding = Some(member_delivery_binding());
-        claim.expires_at = Some(Utc::now() + Duration::minutes(5));
-        claim.audience = audience.clone().map(|a| format!("did:web:{a}.example"));
+        let claim = HandleClaim {
+            handle: Some(Handle::parse(&handle).unwrap()),
+            member_delivery_binding: Some(member_delivery_binding()),
+            expires_at: Some(Utc::now() + Duration::minutes(5)),
+            audience: audience.clone().map(|a| format!("did:web:{a}.example")),
+            ..Default::default()
+        };
         let outcome = claim.validate();
         if audience.is_some() {
             prop_assert!(outcome.is_ok(), "complete claim should validate");
@@ -92,16 +94,14 @@ proptest! {
         with_expiry in any::<bool>(),
         with_verified_at in any::<bool>(),
     ) {
-        let mut claim = HandleClaim::default();
-        claim.binding_state = Some(HandleBindingState::Verified);
-        claim.handle = Some(Handle::parse(&handle).unwrap());
-        claim.issuer = Some("did:web:issuer.example".to_owned());
-        if with_expiry {
-            claim.expires_at = Some(Utc::now() + Duration::minutes(5));
-        }
-        if with_verified_at {
-            claim.verified_at = Some(Utc::now());
-        }
+        let claim = HandleClaim {
+            binding_state: Some(HandleBindingState::Verified),
+            handle: Some(Handle::parse(&handle).unwrap()),
+            issuer: Some("did:web:issuer.example".to_owned()),
+            expires_at: with_expiry.then(|| Utc::now() + Duration::minutes(5)),
+            verified_at: with_verified_at.then(Utc::now),
+            ..Default::default()
+        };
         let outcome = claim.validate();
         if with_expiry {
             prop_assert!(outcome.is_ok());
@@ -117,9 +117,11 @@ proptest! {
         handle in arb_handle(),
         issuer in "[a-z0-9.:_\\-]{4,32}",
     ) {
-        let mut claim = HandleClaim::default();
-        claim.handle = Some(Handle::parse(&handle).unwrap());
-        claim.issuer = Some(issuer);
+        let claim = HandleClaim {
+            handle: Some(Handle::parse(&handle).unwrap()),
+            issuer: Some(issuer),
+            ..Default::default()
+        };
         // No binding_state, no recipient — should validate trivially.
         prop_assert!(claim.validate().is_ok());
     }

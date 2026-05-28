@@ -216,7 +216,7 @@ fn scan_legacy_did(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round
             }
             j += 1;
         }
-        if saw_terminator && violation_char.is_some() {
+        if let (true, Some(v_char)) = (saw_terminator, violation_char) {
             let method = std::str::from_utf8(&bytes[method_start..j]).unwrap_or("?");
             out.push(Round4Finding {
                 path: path.to_path_buf(),
@@ -228,7 +228,7 @@ fn scan_legacy_did(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round
                     "DID method-name segment `{method}` contains a forbidden char \
                      ({:?}); round-4 spec tightened the regex to `{DID_METHOD_SEGMENT_REGEX}` \
                      (method segment is lowercase-alphanumeric only).",
-                    violation_char.unwrap() as char,
+                    v_char as char,
                 ),
             });
             i = j + 1;
@@ -455,11 +455,10 @@ fn count_top_level_args(group: &str) -> usize {
             ']' => depth_bracket -= 1,
             '<' => depth_angle += 1,
             '>' => depth_angle -= 1,
-            ',' => {
-                if depth_paren == 0 && depth_brace == 0 && depth_bracket == 0 && depth_angle == 0 {
+            ','
+                if depth_paren == 0 && depth_brace == 0 && depth_bracket == 0 && depth_angle == 0 => {
                     count += 1;
                 }
-            }
             _ => {}
         }
         prev = Some(ch);

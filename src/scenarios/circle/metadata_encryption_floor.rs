@@ -93,7 +93,7 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
         (MinimalEncrypted, "minimal_encrypted"),
         (FullEncrypted, "full_encrypted"),
     ] {
-        let v = serde_json::to_value(&variant).map_err(|e| anyhow!("serialise: {e}"))?;
+        let v = serde_json::to_value(variant).map_err(|e| anyhow!("serialise: {e}"))?;
         let s = v
             .as_str()
             .ok_or_else(|| anyhow!("MUST serialise as JSON string"))?

@@ -81,9 +81,7 @@ const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
 ];
 
 fn known_backend_type(label: &str) -> bool {
-    KNOWN_MEDIA_BACKEND_TYPES
-        .iter()
-        .any(|known| *known == label)
+    KNOWN_MEDIA_BACKEND_TYPES.contains(&label)
 }
 
 // ─── VECT-MB-1 — focus_selection_oldest_membership ─────────────────────────
@@ -367,7 +365,7 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     // — clients MUST NOT trust them.
     let known: &[&str] = &["cx:rtcpart:01999999-0000-7000-8000-00000000abcd"];
     let unknown = "cx:rtcpart:01999999-0000-7000-8000-deadbeefdead";
-    if known.iter().any(|k| *k == unknown) {
+    if known.contains(&unknown) {
         bail!("participant identity leak: unknown id in known set");
     }
     // `rtcpart` id-kind MUST keep the canonical `cx:rtcpart:` prefix.

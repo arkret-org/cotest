@@ -138,6 +138,6 @@ mod tests {
             .await
             .expect("OOB three-strike pins must be registered");
         assert_eq!(OOB_LOOKUP_INVALIDATE_AFTER_STRIKES, 3);
-        assert!(OOB_RESPONSE_TIMING_BUDGET_MS <= 50);
+        const { assert!(OOB_RESPONSE_TIMING_BUDGET_MS <= 50) };
     }
 }

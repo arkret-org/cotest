@@ -25,8 +25,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     let space_id = alice.create_space("Backfill Recovery Space").await?;
     alice.add_member(&space_id, bob_client).await?;
 
-    let sent = vec![
-        alice
+    let sent = [alice
             .send_message(&space_id, "cx:thread:backfill", "first event before gap")
             .await?,
         alice
@@ -34,8 +33,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
             .await?,
         alice
             .send_message(&space_id, "cx:thread:backfill", "third event after gap")
-            .await?,
-    ];
+            .await?];
     let expected_message_ids = sent
         .iter()
         .map(|event| {

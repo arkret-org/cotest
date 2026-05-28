@@ -624,14 +624,9 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
                 .iter()
                 .any(|field| content.get(*field).is_some());
             let has_nested_body = content
-                .get("content")
-                .and_then(|c| {
-                    Some(
-                        ["kind", "body", "parts"]
+                .get("content").map(|c| ["kind", "body", "parts"]
                             .iter()
-                            .any(|field| c.get(*field).is_some()),
-                    )
-                })
+                            .any(|field| c.get(*field).is_some()))
                 .unwrap_or(false);
             if !has_body && !has_nested_body {
                 return Some(
@@ -749,7 +744,7 @@ pub(crate) fn event_feature_ids(event: &Value) -> Result<BTreeSet<String>> {
     // Check both top-level and requirements-level feature fields
     let sources: Vec<&Value> = vec![event]
         .into_iter()
-        .chain(event.get("requirements").into_iter())
+        .chain(event.get("requirements"))
         .collect();
     for source in &sources {
         for field in ["required_features", "critical_extensions"] {
@@ -894,7 +889,7 @@ fn assert_event_decision(
         );
     }
     if let Some(expected_error_code) = expected_error_code {
-        if actual.error_code.as_deref() != Some(expected_error_code) {
+        if actual.error_code != Some(expected_error_code) {
             bail!(
                 "event envelope {context} expected error {expected_error_code}, got {:?} ({})",
                 actual.error_code,

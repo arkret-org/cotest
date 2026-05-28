@@ -169,9 +169,9 @@ fn validate_runnable_harness<'a>(
         }
     }
 
-    Ok(harness
+    harness
         .get("certification")
-        .ok_or_else(|| anyhow!("{FIXTURE} runnable_harness missing certification"))?)
+        .ok_or_else(|| anyhow!("{FIXTURE} runnable_harness missing certification"))
 }
 
 fn validate_case_shape(

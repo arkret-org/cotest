@@ -510,6 +510,10 @@ impl TestServerGroup {
     pub fn len(&self) -> usize {
         self.servers.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.servers.is_empty()
+    }
 }
 
 impl Drop for TestServerGroup {

@@ -456,7 +456,7 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
                 "next_cursor_present": snapshot.body.get("next_cursor").is_some(),
             })
         }
-        other if matches!(other, "events_submit" | "realm_create" | "space_create") => {
+        "events_submit" | "realm_create" | "space_create" => {
             if snapshot.status == 200 || snapshot.status == 201 {
                 json!({
                     "status": snapshot.body.get("status").cloned().unwrap_or(Value::Null),

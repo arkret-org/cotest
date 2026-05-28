@@ -1,3 +1,4 @@
+#![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
 //! Live-stack integration test for CXP-0007 §Cross-Scope Relation
 //! Anti-Enumeration; defaults to ignored — set `COTEST_LIVE_STACK=1` to
 //! enable (or invoke with

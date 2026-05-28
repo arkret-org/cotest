@@ -100,21 +100,24 @@ pub fn render_stack_certification_report_json(report: &StackCertificationReport)
 }
 
 pub fn render_stack_certification_report_markdown(report: &StackCertificationReport) -> String {
-    let mut out = String::from(
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(256 + report.services.len() * 128);
+    out.push_str(
         "| service | status | certification | describe_url | reason |\n| --- | --- | --- | --- | --- |\n",
     );
     for service in &report.services {
-        out.push_str(&format!(
-            "| {} | {} | {} | {} | {} |\n",
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {} | {} |",
             service.service,
             service.status,
             service.certification,
             service.describe_url.as_deref().unwrap_or(""),
             service.reason.as_deref().unwrap_or("")
-        ));
+        );
     }
     if let Some(gate) = &report.profile_gate {
-        out.push_str("\n");
+        out.push('\n');
         out.push_str("### Profile gate\n\n");
         out.push_str(&render_profile_gate_report_markdown(gate));
     }

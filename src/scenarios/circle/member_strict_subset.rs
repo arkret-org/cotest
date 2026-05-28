@@ -24,10 +24,10 @@ pub async fn member_strict_subset_run() -> Result<()> {
     let carol = did("carol")?;
     let mallory = did("mallory")?;
 
-    let realm = vec![alice.clone(), bob.clone(), carol.clone()];
+    let realm = vec![alice.clone(), bob.clone(), carol];
 
     // Accept: Circle members ⊂ Realm members.
-    let circle_ok = vec![alice.clone(), bob.clone()];
+    let circle_ok = vec![alice.clone(), bob];
     Circle::assert_members_strict_subset(&circle_ok, &realm)
         .map_err(|e| anyhow!("strict-subset accept failed: {e}"))?;
 
@@ -38,7 +38,7 @@ pub async fn member_strict_subset_run() -> Result<()> {
         .map_err(|e| anyhow!("empty-realm-empty-circle accept failed: {e}"))?;
 
     // Reject: mallory is not in the Realm.
-    let circle_bad = vec![alice.clone(), mallory.clone()];
+    let circle_bad = vec![alice, mallory.clone()];
     match Circle::assert_members_strict_subset(&circle_bad, &realm) {
         Ok(()) => Err(anyhow!(
             "strict-subset MUST reject `mallory` ∉ realm; got Ok"

@@ -145,7 +145,7 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
 /// carrier.
 pub fn run_member_identity_update_initial_vector() -> Result<()> {
     let identity = build_member_identity("Alice Initial", "AAAA")?;
-    let carrier = IdentityPayloadCarrier::MemberIdentity { member_identity: identity.clone() };
+    let carrier = IdentityPayloadCarrier::MemberIdentity { member_identity: identity };
     let carrier_digest = carrier
         .carrier_sha256()
         .map_err(|e| anyhow!("carrier_sha256: {e}"))?;
@@ -389,7 +389,7 @@ pub fn run_member_identity_proof_invalid_vector() -> Result<()> {
     let tampered_digest =
         Hash::new("sha256:beef000000000000000000000000000000000000000000000000000000000000")
             .map_err(|e| anyhow!("tampered digest as Hash: {e}"))?;
-    identity.proof.payload_digest = tampered_digest.clone();
+    identity.proof.payload_digest = tampered_digest;
 
     // The canonical-bytes helper is stable: a second call returns the
     // same digest regardless of the proof carrier's mutated value.
@@ -541,7 +541,7 @@ pub fn run_member_identity_vector_suite() -> Result<()> {
 /// event payload.
 pub fn sample_member_identity_value(display_name: &str) -> Result<Value> {
     let identity = build_member_identity(display_name, "AAAA")?;
-    Ok(serde_json::to_value(&identity).map_err(|e| anyhow!("serialise MemberIdentity: {e}"))?)
+    serde_json::to_value(&identity).map_err(|e| anyhow!("serialise MemberIdentity: {e}"))
 }
 
 #[cfg(test)]

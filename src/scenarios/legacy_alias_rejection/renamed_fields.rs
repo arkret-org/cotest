@@ -29,11 +29,11 @@ const CANONICAL_REPLACEMENTS: &[&str] = &[
 ];
 
 fn is_legacy_alias(field: &str) -> bool {
-    LEGACY_ALIASES.iter().any(|alias| *alias == field)
+    LEGACY_ALIASES.contains(&field)
 }
 
 fn is_canonical_replacement(field: &str) -> bool {
-    CANONICAL_REPLACEMENTS.iter().any(|alias| *alias == field)
+    CANONICAL_REPLACEMENTS.contains(&field)
 }
 
 pub async fn renamed_fields_run() -> Result<()> {

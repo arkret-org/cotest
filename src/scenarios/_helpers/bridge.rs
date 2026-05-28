@@ -326,7 +326,7 @@ fn write_http_response(stream: &mut TcpStream, status: u16, body: Value) {
     let reason = if status == 200 { "OK" } else { "Unauthorized" };
     let response = format!(
         "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-        body.as_bytes().len()
+        body.len()
     );
     let _ = stream.write_all(response.as_bytes());
 }

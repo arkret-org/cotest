@@ -72,7 +72,7 @@ async fn list_backups(server: &ContrixServer, token: &str) -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(backup_list["backups"].as_array().unwrap().len() >= 1);
+    assert!(!backup_list["backups"].as_array().unwrap().is_empty());
     Ok(())
 }
 

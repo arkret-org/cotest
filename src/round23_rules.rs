@@ -221,9 +221,7 @@ fn scan_relaxed_window(path: &Path, line_idx: usize, line: &str, out: &mut Vec<R
             }
         } else if ch.is_ascii_digit() || ch == '_' {
             number.push(ch);
-        } else if !number.is_empty() {
-            break;
-        } else if !ch.is_ascii_whitespace() && ch != '"' {
+        } else if !number.is_empty() || (!ch.is_ascii_whitespace() && ch != '"') {
             break;
         }
     }

@@ -240,8 +240,8 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     let key_state_b = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     let initial_key = FederationCacheKey {
-        source_did: source_did.clone(),
-        dest_did: dest_did.clone(),
+        source_did,
+        dest_did,
         request_canonical_digest: request_canonical_digest.as_str().to_owned(),
         idempotency_key: "idem-c3-001".to_owned(),
         origin_key_state_digest: key_state_a.to_owned(),

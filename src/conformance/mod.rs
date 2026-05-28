@@ -416,7 +416,7 @@ pub(crate) fn validate_profile(value: &Value, expected: &str) -> Result<()> {
 }
 
 pub(crate) fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Vec<&'a str>> {
-    Ok(value
+    value
         .get(field)
         .and_then(Value::as_array)
         .into_iter()
@@ -425,7 +425,7 @@ pub(crate) fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Ve
             item.as_str()
                 .ok_or_else(|| anyhow!("{field} entry must be a string"))
         })
-        .collect::<Result<Vec<_>>>()?)
+        .collect::<Result<Vec<_>>>()
 }
 
 pub(crate) fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
@@ -491,11 +491,12 @@ pub(crate) fn canonical_json(value: &Value) -> Result<String> {
 }
 
 pub(crate) fn sha256_prefixed(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
     let digest = Sha256::digest(bytes);
     let mut out = String::with_capacity("sha256:".len() + digest.len() * 2);
     out.push_str("sha256:");
     for byte in digest {
-        out.push_str(&format!("{byte:02x}"));
+        let _ = write!(out, "{byte:02x}");
     }
     out
 }

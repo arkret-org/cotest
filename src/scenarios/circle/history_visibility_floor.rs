@@ -109,7 +109,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
     for window in ordered.windows(2) {
         let a = strictness_rank(&window[0]).unwrap();
         let b = strictness_rank(&window[1]).unwrap();
-        if !(a < b) {
+        if a >= b {
             return Err(anyhow!(
                 "strictness ordering broken: rank({:?})={a} should be < rank({:?})={b}",
                 window[0],
