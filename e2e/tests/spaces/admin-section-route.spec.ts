@@ -54,9 +54,7 @@ test.describe("admin section route @fully-implemented", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await expect(
-        alicePage.page.getByTestId("member-row").first(),
-      ).toBeVisible({
+      await expect(alicePage.page.getByTestId("member-table")).toBeVisible({
         timeout: 30_000,
       });
     } finally {
