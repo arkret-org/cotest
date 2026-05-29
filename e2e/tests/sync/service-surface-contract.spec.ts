@@ -48,7 +48,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
     error: { code: "unrecognized_endpoint" },
   });
   expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
-  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^cx:request:/);
+  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^cx:[a-z_]+:/);
 
   const wrongMethod = await request.post(`${solandBaseUrl()}/api/v1/server/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
@@ -62,7 +62,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
     error: { code: "method_not_allowed" },
   });
   expect(wrongMethodBody.error?.message, "wrong method error message").toBeTruthy();
-  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^cx:request:/);
+  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^cx:[a-z_]+:/);
 }
 
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
