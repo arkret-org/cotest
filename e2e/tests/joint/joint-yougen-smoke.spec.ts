@@ -4,6 +4,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "../../helpers/joint-fixture";
+import { listInvitesApi } from "../../helpers/soland-api";
+import {
+  ensureRegistered,
+  issueDevSession,
+  openUserPage,
+  uniqueUser,
+} from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -27,6 +34,70 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     await expect(jointRealm.alicePage.timelineEvent(aliceMessage)).toBeVisible({
       timeout: 30_000,
     });
+  });
+
+  test("admin invite remains visible to invitee without poisoning account subscribe cursor", async ({
+    browser,
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("joint-invite-alice");
+    const bob = uniqueUser("joint-invite-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const subscribeFailures: string[] = [];
+
+    alicePage.page.on("response", async (response) => {
+      if (!response.url().includes("/api/v1/account/subscribe") || response.status() < 400) {
+        return;
+      }
+      const body = await response.text().catch(() => "");
+      subscribeFailures.push(`${response.status()} ${response.url()} ${body}`);
+    });
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `joint invite ${stamp}`,
+        summary: "regression for write sync_token cursor poisoning",
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "none",
+      });
+      await alicePage.inviteFromAdmin(spaceId, bob.did);
+
+      await expect
+        .poll(async () => {
+          const invites = await listInvitesApi(request, bobToken);
+          return invites.some(
+            (invite) => invite.space_id === spaceId && invite.invitee === bob.did,
+          );
+        }, { timeout: 30_000 })
+        .toBe(true);
+
+      await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+      await expect(
+        bobPage.page.getByTestId("notification-item").filter({ hasText: spaceId }),
+      ).toBeVisible({ timeout: 30_000 });
+
+      await bobPage.acceptInvite(spaceId);
+      await alicePage.page.waitForTimeout(6_500);
+
+      expect(
+        subscribeFailures.filter((failure) =>
+          failure.includes("cursor_integrity_invalid") ||
+          failure.includes("cursor principal does not match request actor"),
+        ),
+        subscribeFailures.join("\n"),
+      ).toEqual([]);
+    } finally {
+      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+    }
   });
 });
 
