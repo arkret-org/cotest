@@ -19,10 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # MSRV (1.80) catches accidental use of newer std APIs; the
-        # current pinned toolchain (1.92) is what local devs and the
-        # release pipeline use. Both must stay green.
-        toolchain: ["1.80", "1.92"]
+        # The crate uses edition 2024 and the current SDK requires the
+        # release pipeline toolchain.
+        toolchain: ["1.92"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,10 +30,10 @@ jobs:
       # `cargo check` resolves crates/* under ../contrix-rust-sdk.
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/contrix-rust-sdk
           path: contrix-rust-sdk
-          ref: circle-rollout
-        continue-on-error: true
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -85,10 +84,10 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/contrix-rust-sdk
           path: contrix-rust-sdk
-          ref: circle-rollout
-        continue-on-error: true
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: cotest/Cargo.toml
@@ -104,10 +103,10 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/contrix-rust-sdk
           path: contrix-rust-sdk
-          ref: circle-rollout
-        continue-on-error: true
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -118,7 +117,11 @@ jobs:
         run: cargo install cargo-audit --locked
       - name: Run cargo audit
         working-directory: cotest
-        run: cargo audit --deny warnings
+        # Both ignored advisories are tracked release exceptions with no
+        # upstream upgrade path: `instant` is wasm-only via OpenMLS's timer
+        # dependency, and `libcrux-chacha20poly1305` is only present through
+        # hpke-rs's optional libcrux backend while the SDK uses RustCrypto HPKE.
+        run: cargo audit --deny warnings --ignore RUSTSEC-2024-0384 --ignore RUSTSEC-2026-0124
 
   fuzz:
     name: fuzz (envelope / snapshot / anchor, 60s each)
@@ -133,9 +136,10 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/contrix-rust-sdk
           path: contrix-rust-sdk
-          ref: circle-rollout
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
           # cargo-fuzz needs nightly for the libFuzzer integration.
@@ -170,14 +174,38 @@ jobs:
         browser: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: cotest
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/contrix-spec
+          path: contrix-spec
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/yougen
+          path: yougen
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
       - name: Install playwright
-        working-directory: e2e
+        working-directory: cotest/e2e
         run: |
           npm ci || npm install
           npx playwright install --with-deps ${{ matrix.browser }}
       - name: List spec files
-        working-directory: e2e
+        working-directory: cotest/e2e
         run: npx playwright test --list --project=${{ matrix.browser }}
