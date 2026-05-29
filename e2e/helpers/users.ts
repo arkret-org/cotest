@@ -10,7 +10,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
-import { signedEventEnvelope } from "./soland-api";
+import { sameRealmOrSpaceId, signedEventEnvelope } from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -197,7 +197,7 @@ export class JointUserPage {
   // Accept a pending invite for this user. Yougen's space-admin invite list
   // is session-local, so a fresh-context invitee can't see seed-member invites
   // via the UI. The old REST mutation endpoint was removed; acceptance now
-  // flows through the canonical event path as a null -> join member state.
+  // flows through the canonical event path as an invite -> join member state.
   async acceptInvite(spaceId: string) {
     const serverUrl = this.session.serverUrl;
     const token = this.session.sessionToken;
@@ -216,7 +216,7 @@ export class JointUserPage {
       invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
     };
     const invite = (body.invites ?? []).find(
-      (i) => i.space_id === spaceId && i.invitee === this.user.did,
+      (i) => sameRealmOrSpaceId(i.space_id, spaceId) && i.invitee === this.user.did,
     );
     if (!invite) {
       throw new Error(

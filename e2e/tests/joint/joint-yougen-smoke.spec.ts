@@ -52,13 +52,15 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
     const subscribeFailures: string[] = [];
 
-    alicePage.page.on("response", async (response) => {
-      if (!response.url().includes("/api/v1/account/subscribe") || response.status() < 400) {
-        return;
-      }
-      const body = await response.text().catch(() => "");
-      subscribeFailures.push(`${response.status()} ${response.url()} ${body}`);
-    });
+    for (const observedPage of [alicePage.page, bobPage.page]) {
+      observedPage.on("response", async (response) => {
+        if (!response.url().includes("/api/v1/account/subscribe") || response.status() < 400) {
+          return;
+        }
+        const body = await response.text().catch(() => "");
+        subscribeFailures.push(`${response.status()} ${response.url()} ${body}`);
+      });
+    }
 
     try {
       const spaceId = await alicePage.createSpace({
@@ -81,11 +83,23 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
         .toBe(true);
 
       await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
-      await expect(
-        bobPage.page.getByTestId("notification-item").filter({ hasText: spaceId }),
-      ).toBeVisible({ timeout: 30_000 });
+      const inviteCard = bobPage.page.getByTestId("notification-item").filter({
+        has: bobPage.page.locator(`[title="${spaceId}"]`),
+      });
+      await expect(inviteCard).toHaveCount(1, { timeout: 30_000 });
+      await expect(inviteCard).toContainText("Realm invite");
+      await expect(inviteCard).toContainText("You were invited to join");
+      await inviteCard.getByTestId("notification-action").click();
 
-      await bobPage.acceptInvite(spaceId);
+      await expect(bobPage.page.getByTestId("notifications-status")).toContainText(
+        /Joined Realm/,
+        { timeout: 30_000 },
+      );
+      await expect(inviteCard).toHaveCount(0, { timeout: 30_000 });
+      await expect(bobPage.page.getByTestId("space-list")).toContainText(
+        `joint invite ${stamp}`,
+        { timeout: 30_000 },
+      );
       await alicePage.page.waitForTimeout(6_500);
 
       expect(

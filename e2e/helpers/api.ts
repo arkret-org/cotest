@@ -2,6 +2,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceDid, type SolandKey } from "./env";
 import {
   canonicalTimestamp,
+  sameRealmOrSpaceId,
   singleDidAnchorer,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -132,7 +133,7 @@ export async function acceptInviteViaApi(
     invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
   };
   const invite = (body.invites ?? []).find(
-    (candidate) => candidate.space_id === spaceId && candidate.invitee === actorDid,
+    (candidate) => sameRealmOrSpaceId(candidate.space_id, spaceId) && candidate.invitee === actorDid,
   );
   expect(invite, `pending invite for ${actorDid} in ${spaceId}`).toBeTruthy();
 

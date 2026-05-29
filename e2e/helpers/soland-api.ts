@@ -395,6 +395,10 @@ export function flowIdFromRealmId(realmId: string): string {
   return `cx:flow:${suffix}`;
 }
 
+export function sameRealmOrSpaceId(left: string, right: string): boolean {
+  return left.replace(/^cx:space:/, "cx:realm:") === right.replace(/^cx:space:/, "cx:realm:");
+}
+
 export function canonicalTimestamp(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }

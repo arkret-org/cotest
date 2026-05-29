@@ -9,7 +9,7 @@
 // multi-card promote Backlog→Todo remains fixme'd until the move UI is
 // stable enough for the full scenario.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -149,6 +149,8 @@ test.describe("workflow: sprint planning", () => {
       `Story B: Payment gateway integration ${stamp}`,
       `Story C: Analytics dashboard ${stamp}`,
     ];
+    const detailDescription = `Remote description update from Mei ${stamp}`;
+    const synthesisNote = `Remote synthesis note from Mei ${stamp}`;
 
     try {
       const spaceId = await meiPage.createSpace({
@@ -181,8 +183,94 @@ test.describe("workflow: sprint planning", () => {
         ).toBeVisible({ timeout: 30_000 });
       }
 
+      await bobPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await expect(bobPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+      await expect(bobPage.page.getByTestId("board-space-select")).toHaveValue(boardId, {
+        timeout: 30_000,
+      });
+      await expect(
+        bobPage.page.getByTestId("kanban-column").filter({ hasText: backlog }),
+      ).toBeVisible({ timeout: 30_000 });
+
       const backlogColumn = meiPage.page.getByTestId("kanban-column").filter({ hasText: backlog });
-      for (const story of stories) {
+      const liveStory = stories[0];
+      await backlogColumn.getByTestId("add-card-button").click();
+      await backlogColumn.getByTestId("new-card-title-input").fill(liveStory);
+      await backlogColumn.getByTestId("save-card-button").click();
+      await expect(
+        backlogColumn.getByTestId("kanban-card").filter({ hasText: liveStory }),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(
+        bobPage.page
+          .getByTestId("kanban-column")
+          .filter({ hasText: backlog })
+          .getByTestId("kanban-card")
+          .filter({ hasText: liveStory }),
+      ).toBeVisible({ timeout: 45_000 });
+
+      const bobLiveCard = bobPage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: backlog })
+        .getByTestId("kanban-card")
+        .filter({ hasText: liveStory });
+      await bobLiveCard.click();
+      await expect(bobPage.page.getByTestId("card-detail-modal")).toBeVisible({
+        timeout: 30_000,
+      });
+
+      const meiLiveCard = backlogColumn.getByTestId("kanban-card").filter({ hasText: liveStory });
+      await meiLiveCard.click();
+      await expect(meiPage.page.getByTestId("card-detail-modal")).toBeVisible({
+        timeout: 30_000,
+      });
+      await meiPage.page.getByTestId("card-detail-add-description-button").click();
+      await setCardDetailEditorValue(meiPage.page, detailDescription);
+      await meiPage.page.getByTestId("card-detail-save-button").click();
+      await expect(meiPage.page.getByTestId("card-description-panel")).toContainText(
+        detailDescription,
+        { timeout: 30_000 },
+      );
+      await expect(bobPage.page.getByTestId("card-description-panel")).toContainText(
+        detailDescription,
+        { timeout: 60_000 },
+      );
+
+      await meiPage.page.getByTestId("card-detail-tab-synthesis").click();
+      await meiPage.page.getByTestId("card-detail-new-synthesis-button").click();
+      await setCardDetailEditorValue(meiPage.page, synthesisNote);
+      await meiPage.page.getByTestId("card-detail-save-button").click();
+      await expect(meiPage.page.getByTestId("card-synthesis-panel")).toContainText(synthesisNote, {
+        timeout: 30_000,
+      });
+      await bobPage.page.getByTestId("card-detail-tab-synthesis").click();
+      await expect(bobPage.page.getByTestId("card-synthesis-panel")).toContainText(synthesisNote, {
+        timeout: 60_000,
+      });
+
+      await bobPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await expect(bobPage.page.getByTestId("board-space-select")).toHaveValue(boardId, {
+        timeout: 30_000,
+      });
+      await bobPage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: backlog })
+        .getByTestId("kanban-card")
+        .filter({ hasText: liveStory })
+        .click();
+      await expect(bobPage.page.getByTestId("card-description-panel")).toContainText(
+        detailDescription,
+        { timeout: 60_000 },
+      );
+      await bobPage.page.getByTestId("card-detail-tab-synthesis").click();
+      await expect(bobPage.page.getByTestId("card-synthesis-panel")).toContainText(synthesisNote, {
+        timeout: 60_000,
+      });
+      await meiPage.page.getByTestId("card-detail-close-button").click();
+      await expect(meiPage.page.getByTestId("card-detail-modal")).toBeHidden({
+        timeout: 30_000,
+      });
+
+      for (const story of stories.slice(1)) {
         await backlogColumn.getByTestId("add-card-button").click();
         await backlogColumn.getByTestId("new-card-title-input").fill(story);
         await backlogColumn.getByTestId("save-card-button").click();
@@ -267,4 +355,20 @@ async function flowTitlesForBoard(
     .map((flow: { title?: string }) => flow.title)
     .filter((title: unknown): title is string => typeof title === "string")
     .sort();
+}
+
+async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
+  const input = page.getByTestId("card-detail-description-input");
+  await expect(input).toBeAttached({ timeout: 30_000 });
+  await input.evaluate((node, nextValue) => {
+    const textarea = node as HTMLTextAreaElement;
+    textarea.value = nextValue;
+    textarea.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: nextValue,
+      }),
+    );
+  }, value);
 }
