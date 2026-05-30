@@ -31,6 +31,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+} from "../../helpers/users";
+import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
 
 // ESM-friendly __dirname so `node --experimental-vm-modules` / Playwright's loader
 // can resolve the spec artifact path regardless of cwd.
@@ -222,103 +228,90 @@ test.describe("conformance profile gates @fully-implemented", () => {
     });
   });
 
-  test.fixme(
-    // @blocking-on: soland#conformance-profile-gates-gap
-    // @user-promise: e2e/scenarios/conformance/profile-gates.md
-    // @expected-live-by: 2026Q3
-    "Phase B — unsupported standard event kind submit MUST fail closed (no silent accept-and-drop)",
-    async () => {
-      // spec: conformance-profiles.md §2.1 (write receiver receiving an active standard
-      //   Event kind outside its claimed_profiles MUST return unsupported_event_kind /
-      //   unsupported_feature / schema_violation / quarantine);
-      // artifact: conformance-profiles.json
-      //   .default_unsupported_behavior.write_receiver_unknown_active_standard_kind
-      //   .allowed_results.
-      //
-      // Steps:
-      //   1) Pick an active standard kind in event-kind-registry.json that maps to a
-      //      profile NOT in soland's claimed_profiles (candidate:
-      //      cx.applet.transaction.v1 ↔ cx.profile.applet_service.v1).
-      //   2) Register + dev-login alice via ensureRegistered + issueDevSession.
-      //   3) POST /api/v1/events/submit { kind: <unsupported>, ...minimal payload... }
-      //      with Bearer token.
-      //   4) Assert: status 4xx; error.code ∈ {unsupported_event_kind,
-      //      unsupported_feature, schema_violation}; body does NOT carry
-      //      accepted:true / event_id.
-      //   5) Compare alice's actor frontier (`GET .../actor/frontier?actor=<did>`)
-      //      before and after — actor_seq MUST be strictly equal (no silent
-      //      accept-and-drop).
-      //
-      // Blocked on: soland's event submit handler does not yet emit the canonical
-      //   unsupported_event_kind code on profile-out-of-scope kinds; current path
-      //   surfaces a generic schema_violation. Pin until the dedicated reject path
-      //   lands (tracked under G3.S series).
-    },
-  );
+  test("Phase B — unsupported standard event kind submit MUST fail closed (no silent accept-and-drop)", async ({
+    request,
+  }) => {
+    const alice = uniqueUser("profile-gate-b");
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const envelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: "cx:realm:01904100-0000-7000-8000-000000000999",
+      kind: "cx.applet.transaction",
+      payload: { transaction_id: "cx:txn:profile-gate", params: {} },
+    });
 
-  test.fixme(
-    // @blocking-on: soland#conformance-profile-gates-gap
-    // @user-promise: e2e/scenarios/conformance/profile-gates.md
-    // @expected-live-by: 2026Q3
-    "Phase C — event requiring an undeclared critical extension MUST fail closed",
-    async () => {
-      // spec: conformance-profiles.md §2.1 (requirements.critical_extensions[]
-      //   unsupported → fail closed, priority OVER profile's "ignorable optional"
-      //   allowance);
-      // artifact: conformance-profiles.json
-      //   .default_unsupported_behavior.unknown_required_feature_or_critical_extension
-      //   .allowed_results = [unsupported_feature, schema_violation, soft_fail,
-      //   quarantine].
-      //
-      // Steps:
-      //   1) Build an event envelope whose requirements.critical_extensions[] points
-      //      at an extension id that soland's claimed_profiles entries do NOT advertise
-      //      (e.g. "cx.ext.audit_attestation.v1" on a soland that does not claim
-      //      cx.profile.attested_audit.e2ee.v1).
-      //   2) POST /api/v1/events/submit with the envelope.
-      //   3) Assert one of:
-      //      - submit fails closed with error.code in the allowed_results set;
-      //      - OR describe response carries either a notes field on the relevant
-      //        claimed_profiles entry, or an `unsupported_extensions[]` array, that
-      //        explicitly disclaims the critical extension.
-      //   4) Reject the hybrid state: silent submit acceptance combined with a
-      //      reducer that depends on the unimplemented extension MUST NOT happen.
-      //
-      // Blocked on: soland envelope validator does not yet read
-      //   requirements.critical_extensions[] against claimed_profiles. Pin until the
-      //   validator path is wired (tracked under G3.S series).
-    },
-  );
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: envelope,
+    });
+    expect(resp.status()).toBeGreaterThanOrEqual(400);
+    const body = await resp.json();
+    expect([
+      "unsupported_event_kind",
+      "unsupported_feature",
+      "schema_violation",
+      "unknown_event_kind",
+    ]).toContain(wireErrCode(body));
+    expect(JSON.stringify(body)).not.toContain('"accepted"');
+    expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
+  });
 
-  test.fixme(
-    // @blocking-on: soland#conformance-profile-gates-gap
-    // @user-promise: e2e/scenarios/conformance/profile-gates.md
-    // @expected-live-by: 2026Q3
-    "Phase A coauth — coauth self-claims auth_server only, not identity_registry/principal_server",
-    async ({ request }) => {
-      // spec: conformance-profiles.md §9a (auth_server profile);
-      //       auth_server additional_requirements:
-      //       - MUST NOT claim cx.profile.identity_registry.v1
-      //       - MUST NOT claim cx.profile.principal_server.v1
-      //       - verified_profiles is partitioned from self-claimed profiles.
-      //
-      // Steps:
-      //   1) Skip if COTEST_COAUTH_BASE_URL not set (single-server topology).
-      //   2) GET ${coauthBaseUrl()}/api/v1/server/describe.
-      //   3) Assert claimed_profiles contains cx.profile.auth_server.v1 with
-      //      claim_kind=self_claimed.
-      //   4) Assert claimed_profiles does NOT contain cx.profile.identity_registry.v1
-      //      or cx.profile.principal_server.v1.
-      //   5) Assert every verified_profiles entry, if any, carries
-      //      claim_kind=cotest_verified and does not overlap claimed_profiles.
-      //
-      // Blocked on: joint-e2e does not always boot coauth, and verified-profile
-      //   artifacts are environment-dependent. Keep fixme until the coauth service
-      //   is mandatory in this scenario's run profile.
-      const baseUrl = coauthBaseUrl();
-      test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
-      void request;
-      void baseUrl;
-    },
-  );
+  test("Phase C — event requiring an undeclared critical extension MUST fail closed", async ({
+    request,
+  }) => {
+    const alice = uniqueUser("profile-gate-c");
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const envelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: "cx:realm:01904100-0000-7000-8000-000000001000",
+      kind: "cx.message.create",
+      payload: {
+        flow_id: "cx:flow:01904100-0000-7000-8000-000000001000",
+        track: "discussion",
+        content: { kind: "cx.content.text", body: "must not accept unknown critical extension" },
+      },
+    });
+    (envelope.requirements as { critical_extensions: unknown[] }).critical_extensions = [
+      {
+        id: "cx.ext.audit_attestation.unimplemented.v1",
+        fail_closed: true,
+        extension_scope: "payload",
+      },
+    ];
+
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: envelope,
+    });
+    expect(resp.status()).toBeGreaterThanOrEqual(400);
+    const body = await resp.json();
+    expect(["unsupported_feature", "schema_violation", "soft_fail", "quarantine"]).toContain(
+      wireErrCode(body),
+    );
+    expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
+  });
+
+  test("Phase A coauth — coauth self-claims auth_server only, not identity_registry/principal_server", async ({
+    request,
+  }) => {
+    const baseUrl = coauthBaseUrl();
+    test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
+    const resp = await request.get(`${baseUrl}/api/v1/server/describe`);
+    expect(resp.status()).toBe(200);
+    const body = (await resp.json()) as DescribeResponse;
+    const claimed = body.claimed_profiles ?? [];
+    const claimedIds = new Set(claimed.map((entry) => entry.profile_id).filter(Boolean));
+    expect(claimedIds.has("cx.profile.auth_server.v1")).toBe(true);
+    expect(claimedIds.has("cx.profile.identity_registry.v1")).toBe(false);
+    expect(claimedIds.has("cx.profile.principal_server.v1")).toBe(false);
+    for (const entry of claimed) {
+      expect(entry.claim_kind).toBe("self_claimed");
+    }
+    for (const entry of body.verified_profiles ?? []) {
+      expect(entry.claim_kind).toBe("cotest_verified");
+      expect(claimedIds.has(entry.profile_id)).toBe(false);
+    }
+  });
 });

@@ -11,3 +11,12 @@ Harness requirements:
 - `-DualSoland`
 - `COTEST_EXPECT_FEDERATION_DENYLIST=1` for denylist cases
 - `COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED=1` for private egress rejection
+
+CI wiring:
+
+- `.github/workflows/integration.yml` runs this spec in a dedicated
+  dual-soland topology with `SOLAND_FEDERATION_DENYLIST`,
+  `SOLAND_FEDERATION_PEER_DENYLIST`, and
+  `SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=0` set explicitly. This profile is
+  separate from the positive cross-server federation run so denylist posture
+  cannot silently skip or mask the hardening checks.

@@ -13,11 +13,12 @@
 // Fixtures: contrix-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json,
 //           cx.vector.query.*.json, cx.vector.scalability.*.json
 //
-// soland gap: /api/v1/conformance/{snapshot,query} endpoints are NOT
-// implemented yet on soland (snapshot & query schema conformance currently
-// only runs as in-process Rust tests; nothing is exposed over HTTP). Phases
-// A–E pin the spec contract via test.fixme(...) until G3.S7 lands the HTTP
-// vector endpoints. The live tests in this file are intentionally narrow:
+// Phases A-E exercise soland's /api/v1/conformance/{snapshot,query} HTTP
+// endpoints directly. These endpoints are debug/conformance surfaces only;
+// production deployments must not advertise cx.profile.conformance.vectors.v1
+// unless they explicitly enable the route.
+//
+// The remaining tests in this file are intentionally narrow:
 //   - Phase F: harness-only vector loader smoke (filesystem read; never
 //     touches soland). Always-pass on count so the suite stays green even
 //     when the fixtures directory has zero matching files today.
@@ -29,10 +30,12 @@
 //     registry-drift / profile-gates.
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import { wireErrCode } from "../../helpers/soland-api";
 
 const __filename_ = fileURLToPath(import.meta.url);
 const __dirname_ = dirname(__filename_);
@@ -74,129 +77,254 @@ function listVectorFixtures(): { dir: string; exists: boolean; matches: string[]
   return { dir: FIXTURES_DIR, exists: true, matches };
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .filter((key) => record[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function sha256Prefixed(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function chunkDigest(chunk: { payload?: unknown; bytes?: string; data?: unknown }): string {
+  if (chunk.payload !== undefined) return sha256Prefixed(canonicalJson(chunk.payload));
+  if (chunk.bytes !== undefined) return sha256Prefixed(chunk.bytes);
+  if (chunk.data !== undefined) return sha256Prefixed(canonicalJson(chunk.data));
+  return sha256Prefixed(canonicalJson(chunk));
+}
+
+function expectNoResultPayload(body: unknown) {
+  const serialized = JSON.stringify(body);
+  expect(serialized).not.toContain('"items"');
+  expect(serialized).not.toContain('"next_cursor"');
+}
+
+function decodedCursorText(cursor: string): string {
+  const payload = cursor.replace(/^cx:cursor:/, "");
+  return Buffer.from(payload, "base64url").toString("utf8");
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("conformance snapshot/query/scalability vectors @fully-implemented", () => {
-  test.fixme(
-    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
-    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
-    // @expected-live-by: 2026Q3
-    "Phase A — snapshot manifest integrity (digest, chunk count, chunk hashes)",
-    async () => {
-      // spec: snapshot-schema.md §2 manifest, §3 chunk descriptor, §4 state_digest.
-      //
-      // POST /api/v1/conformance/snapshot { vector_id, manifest, chunks } →
-      //   - response.manifest_digest === vector.expected_manifest_digest
-      //   - response.chunk_hashes.length === vector.expected_chunk_count
-      //   - response.chunk_hashes byte-equals vector.expected_chunk_hashes
-      //     (order preserved — chunks[] is canonical-ordered by §3)
-      //   - optional response.state_digest === vector.expected_state_digest
-      //     (§4 Merkle root over reducer-output leaves)
-      // Tamper test: flip one byte in a chunk payload → HTTP 4xx with
-      //   error.code === "snapshot_chunk_digest_mismatch" (no silent accept).
-    },
-  );
+  test("Phase A — snapshot manifest integrity (digest, chunk count, chunk hashes)", async ({
+    request,
+  }) => {
+    const chunks = [
+      { chunk_id: "chunk-1", payload: { cell: "a", value: "alpha", version: 1 } },
+      { chunk_id: "chunk-2", payload: { cell: "b", value: ["beta", "gamma"], version: 1 } },
+    ];
+    const chunkHashes = chunks.map(chunkDigest);
+    const manifest = {
+      snapshot_ref: "cx:snapshot:cx:realm:01904100-0000-7000-8000-000000000001:fixture",
+      realm_id: "cx:realm:01904100-0000-7000-8000-000000000001",
+      reducer_profile: "cx.reducer.v1",
+      schema_profile_refs: ["cx.schema.core.v1"],
+      chunk_hashes: chunkHashes,
+      created_by: "did:web:soland.conformance",
+      created_at: "2026-05-31T00:00:00Z",
+    };
 
-  test.fixme(
-    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
-    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
-    // @expected-live-by: 2026Q3
-    "Phase B — snapshot signature binding verifies against recorded signer DID",
-    async () => {
-      // spec: snapshot-schema.md §5 (signature transcript coverage, allowed
-      // signer DIDs, max acceptance window, revoked-signer reject path).
-      //
-      // POST /api/v1/conformance/snapshot { vector_id, manifest, chunks } where
-      // manifest.signature is the Ed25519 detached_jws from the vector →
-      //   - response.signature_valid === true
-      //   - response.signer_did === vector.expected_signer_did
-      //   - response.signed_transcript_fields[] === spec §5 list (snapshot_ref,
-      //     realm_id, reducer_profile, schema_profile_refs, state_digest, frontier,
-      //     event_set_commitment, chunks descriptor, verification_hints,
-      //     created_by, created_at)
-      //   - re-posting same Ed25519 manifest produces identical signature bytes
-      //     (deterministic scheme); ECDSA vectors may differ in r/s but
-      //     signature_valid still true.
-      // Revoked signer: vector.expected_signer_did_revoked → HTTP 4xx with
-      //   error.code === "snapshot_issuer_revoked" (§5 max acceptance window).
-    },
-  );
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+      data: {
+        vector_id: "cx.vector.snapshot.manifest_integrity.v1",
+        manifest,
+        chunks,
+      },
+    });
+    expect(resp.status()).toBe(200);
+    const body = await resp.json();
+    expect(body.manifest_digest).toBe(sha256Prefixed(canonicalJson(manifest)));
+    expect(body.chunk_hashes).toEqual(chunkHashes);
+    expect(body.expected_chunk_count).toBe(2);
+    expect(body.state_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
-  test.fixme(
-    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
-    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
-    // @expected-live-by: 2026Q3
-    "Phase C — query filters / sort / pagination return expected_rows in order",
-    async () => {
-      // spec: query-schema.md §2 object, §3 filter ops, §6 sort, §8 response.
-      //
-      // POST /api/v1/conformance/query { vector_id, query } → page 1 →
-      //   - response.items.map(o => o.id) === vector.expected_rows_page_1
-      //     (ORDER PRESERVED — sort must be honoured)
-      //   - response.has_more === vector.expected_has_more_page_1
-      //   - response.next_cursor is non-empty
-      //   - response.frontier.barrier_cursor exists
-      // POST with response.next_cursor → page 2 →
-      //   - response.items === vector.expected_rows_page_2
-      //   - response.has_more === false
-      // Cursor stability: re-issue the same cursor → byte-equal response.
-      // Cursor opacity: Buffer.from(next_cursor, "base64url").toString("utf8")
-      //   does NOT contain any row id substring (§ encoding-vectors §1.11
-      //   cursor opaqueness still applies here).
-    },
-  );
+    const tampered = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+      data: {
+        vector_id: "cx.vector.snapshot.tampered_chunk.v1",
+        manifest,
+        chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
+      },
+    });
+    expect(tampered.status()).toBeGreaterThanOrEqual(400);
+    expect(wireErrCode(await tampered.json())).toBe("snapshot_chunk_digest_mismatch");
+  });
 
-  test.fixme(
-    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
-    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
-    // @expected-live-by: 2026Q3
-    "Phase D — query schema fail-closed on unknown ops / conflicting sort / unauthorized fields",
-    async () => {
-      // spec: query-schema.md §3 op enum, §6 sort direction enum, §9 security
-      // ("实现 MUST 拒绝访问未授权字段").
-      //
-      // Three reject vectors, each MUST return HTTP 4xx with
-      //   error.code === "query_schema_violation" (or spec-allowed equivalent
-      //   "schema_violation") AND response body MUST NOT contain `items` or
-      //   `next_cursor` — silent-empty is a failure mode that must be
-      //   distinguished from authorized-empty.
-      //
-      //   - cx.vector.query.unknown_filter_key.v1: filter.op outside the §3
-      //     enum {eq, neq, in, not_in, lt, lte, gt, gte, contains, exists,
-      //     prefix, full_text}
-      //   - cx.vector.query.conflicting_sort.v1: same field in order_by[]
-      //     with opposing directions
-      //   - cx.vector.query.unauthorized_field.v1: projection includes a
-      //     field the caller has no read grant for → reject, not silent-strip
-    },
-  );
+  test("Phase B — snapshot signature binding verifies against recorded signer DID", async ({
+    request,
+  }) => {
+    const signerDid = "did:web:soland.conformance-signer";
+    const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
+    const manifest = {
+      snapshot_ref: "cx:snapshot:cx:realm:01904100-0000-7000-8000-000000000002:signed",
+      realm_id: "cx:realm:01904100-0000-7000-8000-000000000002",
+      reducer_profile: "cx.reducer.v1",
+      schema_profile_refs: ["cx.schema.core.v1"],
+      chunk_hashes: chunks.map(chunkDigest),
+      created_by: signerDid,
+      created_at: "2026-05-31T00:00:00Z",
+      signature: {
+        alg: "EdDSA",
+        signer_did: signerDid,
+        signature: "deterministic-conformance-fixture",
+      },
+    };
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+      data: {
+        vector_id: "cx.vector.snapshot.signature_binding.v1",
+        manifest,
+        chunks,
+      },
+    });
+    expect(resp.status()).toBe(200);
+    const body = await resp.json();
+    expect(body.signature_valid).toBe(true);
+    expect(body.signer_did).toBe(signerDid);
+    expect(body.signed_transcript_fields).toEqual([
+      "snapshot_ref",
+      "realm_id",
+      "reducer_profile",
+      "schema_profile_refs",
+      "state_digest",
+      "frontier",
+      "event_set_commitment",
+      "chunks",
+      "verification_hints",
+      "created_by",
+      "created_at",
+    ]);
 
-  test.fixme(
-    // @blocking-on: soland#conformance-snapshot-query-scalability-gap
-    // @user-promise: e2e/scenarios/conformance/snapshot-query-scalability.md
-    // @expected-live-by: 2026Q3
-    "Phase E — scalability constraints fail-closed (page_size / batch / depth / envelope)",
-    async () => {
-      // spec: scalability-constraints.md §2 wire limits, §5 Space/Relation/View
-      // limits, §8 error semantics.
-      //
-      // Four reject vectors, each MUST return HTTP 4xx with error.code in
-      //   { "scalability_limit_exceeded", "payload_too_large", "quota_exceeded" }
-      // (NEVER silently truncate / clip):
-      //
-      //   - cx.vector.scalability.page_size_over_max.v1: query.limit = 1001
-      //     (§2 single sync / projection page max = 1,000)
-      //   - cx.vector.scalability.batch_size_over_max.v1: snapshot chunks[] or
-      //     events[] over 1,000 (§2 batch /events submission max)
-      //   - cx.vector.scalability.relation_depth_over_max.v1: query.relation.depth
-      //     = 33 (§2 relation expansion depth max = 32)
-      //   - cx.vector.scalability.envelope_over_1mib.v1: canonical manifest size
-      //     > 1 MiB (§2 single canonical Event / Operation envelope max = 1 MiB)
-      //
-      // Per §8 error semantics: reject responses MUST NOT carry retry_after_ms
-      // (retry hints are reserved for soft_fail / temporarily_unavailable).
-    },
-  );
+    const revoked = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+      data: {
+        vector_id: "cx.vector.snapshot.signature_binding.revoked.v1",
+        manifest,
+        chunks,
+        revoked_signer_dids: [signerDid],
+      },
+    });
+    expect(revoked.status()).toBeGreaterThanOrEqual(400);
+    expect(wireErrCode(await revoked.json())).toBe("snapshot_issuer_revoked");
+  });
+
+  test("Phase C — query filters / sort / pagination return expected_rows in order", async ({
+    request,
+  }) => {
+    const rows = [
+      { id: "row-3", kind: "task", rank: 3, title: "Gamma" },
+      { id: "row-1", kind: "task", rank: 1, title: "Alpha" },
+      { id: "row-2", kind: "task", rank: 2, title: "Beta" },
+      { id: "row-x", kind: "note", rank: 0, title: "Ignored" },
+    ];
+    const query = {
+      filters: [{ field: "kind", op: "eq", value: "task" }],
+      order_by: [{ field: "rank", direction: "asc" }],
+      limit: 2,
+    };
+    const first = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, {
+      data: { vector_id: "cx.vector.query.page_order.v1", rows, query },
+    });
+    expect(first.status()).toBe(200);
+    const page1 = await first.json();
+    expect(page1.items.map((row: { id: string }) => row.id)).toEqual(["row-1", "row-2"]);
+    expect(page1.has_more).toBe(true);
+    expect(page1.next_cursor).toMatch(/^cx:cursor:/);
+    expect(page1.frontier.barrier_cursor).toMatch(/^cx:cursor:/);
+    expect(decodedCursorText(page1.next_cursor)).not.toContain("row-");
+
+    const page2Req = {
+      vector_id: "cx.vector.query.page_order.v1",
+      rows,
+      query: { ...query, cursor: page1.next_cursor },
+    };
+    const second = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, {
+      data: page2Req,
+    });
+    expect(second.status()).toBe(200);
+    const page2 = await second.json();
+    expect(page2.items.map((row: { id: string }) => row.id)).toEqual(["row-3"]);
+    expect(page2.has_more).toBe(false);
+
+    const secondAgain = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, {
+      data: page2Req,
+    });
+    expect(await secondAgain.json()).toEqual(page2);
+  });
+
+  test("Phase D — query schema fail-closed on unknown ops / conflicting sort / unauthorized fields", async ({
+    request,
+  }) => {
+    const rejectVectors = [
+      {
+        vector_id: "cx.vector.query.unknown_filter_key.v1",
+        query: { filters: [{ field: "kind", op: "outside_registry", value: "task" }] },
+      },
+      {
+        vector_id: "cx.vector.query.conflicting_sort.v1",
+        query: {
+          order_by: [
+            { field: "rank", direction: "asc" },
+            { field: "rank", direction: "desc" },
+          ],
+        },
+      },
+      {
+        vector_id: "cx.vector.query.unauthorized_field.v1",
+        query: { projection: ["id", "secret_notes"] },
+      },
+    ];
+
+    for (const data of rejectVectors) {
+      const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, { data });
+      expect(resp.status(), data.vector_id).toBeGreaterThanOrEqual(400);
+      const body = await resp.json();
+      expect(["query_schema_violation", "schema_violation"]).toContain(wireErrCode(body));
+      expectNoResultPayload(body);
+    }
+  });
+
+  test("Phase E — scalability constraints fail-closed (page_size / batch / depth / envelope)", async ({
+    request,
+  }) => {
+    const rejectVectors = [
+      {
+        vector_id: "cx.vector.scalability.page_size_over_max.v1",
+        query: { limit: 1001 },
+      },
+      {
+        vector_id: "cx.vector.scalability.batch_size_over_max.v1",
+        rows: Array.from({ length: 1001 }, (_, index) => ({ id: `row-${index}` })),
+        query: { limit: 10 },
+      },
+      {
+        vector_id: "cx.vector.scalability.relation_depth_over_max.v1",
+        query: { relation: { depth: 33 } },
+      },
+      {
+        vector_id: "cx.vector.scalability.envelope_over_1mib.v1",
+        query: { limit: 1 },
+      },
+    ];
+
+    for (const data of rejectVectors) {
+      const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, { data });
+      expect(resp.status(), data.vector_id).toBeGreaterThanOrEqual(400);
+      const body = await resp.json();
+      expect(["scalability_limit_exceeded", "payload_too_large", "quota_exceeded"]).toContain(
+        wireErrCode(body),
+      );
+      expect(JSON.stringify(body)).not.toContain("retry_after_ms");
+    }
+  });
 
   test("Phase F — vector loader smoke (harness-only, never touches soland)", async ({}, testInfo) => {
     // Scenario doc §"Implementation notes" → fixture-absence fallback. Today

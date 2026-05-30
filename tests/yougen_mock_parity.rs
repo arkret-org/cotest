@@ -97,19 +97,9 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         space_id: "cx:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
 
-    let contract_path = root
-        .parent()
-        .ok_or_else(|| anyhow!("cotest root has no parent: {}", root.display()))?
-        .join("yougen")
-        .join("tests")
-        .join("e2e")
-        .join("mockContrixContract.ts");
-    if !contract_path.is_file() {
-        bail!(
-            "yougen mock contract missing at {}",
-            contract_path.display()
-        );
-    }
+    let contract_path = locate_yougen_contract(&root)?
+        .ok_or_else(|| anyhow!("yougen mock contract missing next to {}", root.display()))?;
+    assert_mock_contract_format(&contract_path, &fixture, &ctx)?;
 
     let mut results = Vec::new();
     for case in &fixture.cases {
@@ -149,6 +139,59 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn yougen_mock_contract_format_smoke() -> Result<()> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let Some(contract_path) = locate_yougen_contract(&root)? else {
+        if std::env::var_os("COTEST_REQUIRE_YOUGEN_CONTRACT").is_some() {
+            bail!("COTEST_REQUIRE_YOUGEN_CONTRACT is set but sibling yougen contract is missing");
+        }
+        eprintln!("skipping yougen mock contract smoke: sibling yougen checkout not found");
+        return Ok(());
+    };
+    let fixture = load_fixture(&root)?;
+    let ctx = TemplateContext {
+        alice_did: "did:web:alice-mock-parity.example".to_owned(),
+        alice_token: "cotest-format-smoke-token".to_owned(),
+        service_did: "did:web:soland.mock-parity-smoke.local".to_owned(),
+        realm_id: "cx:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "cx:space:01999999-0000-7000-8000-000000000451".to_owned(),
+    };
+    assert_mock_contract_format(&contract_path, &fixture, &ctx)
+}
+
+fn locate_yougen_contract(root: &Path) -> Result<Option<PathBuf>> {
+    let path = root
+        .parent()
+        .ok_or_else(|| anyhow!("cotest root has no parent: {}", root.display()))?
+        .join("yougen")
+        .join("tests")
+        .join("e2e")
+        .join("mockContrixContract.ts");
+    Ok(path.is_file().then_some(path))
+}
+
+fn assert_mock_contract_format(
+    contract_path: &Path,
+    fixture: &Fixture,
+    ctx: &TemplateContext,
+) -> Result<()> {
+    for case in &fixture.cases {
+        let rendered_path = render_str(&case.path, ctx);
+        let rendered_body = render_body(case, ctx);
+        let snapshot = call_mock_contract(contract_path, case, &rendered_path, rendered_body)
+            .with_context(|| format!("format smoke for {}", case.id))?;
+        if snapshot.status == 599 {
+            bail!(
+                "yougen mock contract returned undefined for fixture case `{}`; \
+                 update tests/fixtures/yougen_mock_parity.json or the contract branch",
+                case.id
+            );
+        }
+    }
     Ok(())
 }
 
@@ -353,7 +396,14 @@ const source = fs
   .replace(/\bexport\s+(?=(function|const|let|var|class))/g, "");
 const context = { __input: input, __result: undefined, console };
 vm.createContext(context);
-vm.runInContext(`${source}\n__result = mockContrixContract(__input);`, context, { filename: contractPath });
+vm.runInContext(`${source}
+if (typeof mockContrixContract !== "function") {
+  throw new Error("mockContrixContract export was not a function after stripping ESM exports");
+}
+if (typeof canonicalPath !== "function") {
+  throw new Error("canonicalPath export was not a function after stripping ESM exports");
+}
+__result = mockContrixContract(__input);`, context, { filename: contractPath });
 process.stdout.write(JSON.stringify(context.__result ?? null));
 "#;
     let mut child = Command::new("node")

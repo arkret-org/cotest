@@ -47,7 +47,9 @@ use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, try_spawn_with_extra_env};
+use crate::scenarios::_helpers::external_binary::{
+    SOLAND_SPEC, skip_reason, try_spawn_with_extra_env,
+};
 
 /// Soland production target MUST refuse the yougen dev-proof placeholder.
 pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
@@ -55,16 +57,25 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     // env entry takes precedence over `SOLAND_SPEC.extra_env` (which
     // hardcodes `=1` for the rest of the suite), so the same binary
     // boots in production posture for this scenario only.
-    let Some(proc) =
-        try_spawn_with_extra_env(&SOLAND_SPEC, &[("SOLAND_DEVELOPMENT_MODE", "false")])
-            .await
-            .context("spawn soland binary for production-mode placeholder-proof rejection test")?
+    let Some(proc) = try_spawn_with_extra_env(
+        &SOLAND_SPEC,
+        &[
+            ("SOLAND_DEVELOPMENT_MODE", "false"),
+            ("SOLAND_METRICS_BIND", "127.0.0.1:0"),
+        ],
+    )
+    .await
+    .context("spawn soland binary for production-mode placeholder-proof rejection test")?
     else {
-        // Silent skip: no SOLAND_BIN and no sibling-checkout binary —
-        // matches the convention used by every other scenario in
-        // `cotest/src/scenarios/` so CI without soland artifacts still
-        // loads the suite.
-        return Ok(());
+        let reason = skip_reason(&SOLAND_SPEC)
+            .map(|reason| reason.describe(SOLAND_SPEC.service))
+            .unwrap_or_else(|| "soland binary became unavailable after preflight".to_owned());
+        bail!(
+            "production placeholder-proof rejection was explicitly selected \
+             but soland could not be spawned: {reason}. Set SOLAND_BIN to the \
+             built soland binary in CI/local runs, or build the sibling soland \
+             checkout before running this ignored test."
+        );
     };
 
     let client = reqwest::Client::builder()

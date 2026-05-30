@@ -262,8 +262,25 @@ export class JointUserPage {
     if (!this.page.url().includes(`/timeline/${spaceId}`)) {
       await this.gotoTimelineSpace(spaceId);
     }
+    const writeResponse = this.page.waitForResponse(
+      (response) => {
+        const request = response.request();
+        return (
+          request.method() === "POST" &&
+          /\/api\/v1\/events(?:\?|$)/.test(response.url()) &&
+          (request.postData() ?? "").includes(body)
+        );
+      },
+      { timeout: 30_000 },
+    );
     await this.page.getByTestId("composer-input").fill(body);
     await this.page.getByTestId("send-button").click();
+    const persisted = await writeResponse;
+    if (![200, 201].includes(persisted.status())) {
+      throw new Error(
+        `sendTimelineMessage: /api/v1/events returned ${persisted.status()} for ${body}`,
+      );
+    }
     await expect(this.page.getByTestId("timeline")).toContainText(body, { timeout: 30_000 });
     await expect(this.page.getByTestId("write-status")).toContainText(/persisted/, {
       timeout: 30_000,

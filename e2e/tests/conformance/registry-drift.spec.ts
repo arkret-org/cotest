@@ -25,6 +25,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import {
+  ensureRegistered,
+  issueDevSession,
+  uniqueUser,
+} from "../../helpers/users";
+import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
 
 // ---------------------------------------------------------------------------
 // Artifact loader
@@ -143,6 +149,31 @@ function collectClaimedProfileIds(describe: unknown): Set<string> {
     if (key === "id" && path.some((p) => /profile/i.test(p))) found.add(value);
   }
   return found;
+}
+
+async function readJsonOrText(response: { json: () => Promise<unknown>; text: () => Promise<string> }) {
+  try {
+    return await response.json();
+  } catch {
+    return { text: await response.text() };
+  }
+}
+
+function* stringLeaves(node: unknown, path: string[] = []): Generator<{ path: string[]; value: string }> {
+  if (typeof node === "string") {
+    yield { path, value: node };
+    return;
+  }
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (let i = 0; i < node.length; i += 1) {
+      yield* stringLeaves(node[i], [...path, String(i)]);
+    }
+    return;
+  }
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    yield* stringLeaves(value, [...path, key]);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -289,89 +320,97 @@ test.describe("conformance registry drift @fully-implemented", () => {
   // Pinned fixme — depend on soland write-path / operation-invoke helpers
   // -------------------------------------------------------------------------
 
-  test.fixme(
-    // @blocking-on: soland#conformance-registry-drift-gap
-    // @user-promise: e2e/scenarios/conformance/registry-drift.md
-    // @expected-live-by: 2026Q3
-    "Phase A — POST event with removed kind is hard-rejected with schema_violation",
-    async ({ request }) => {
-      // spec: schema-registry.md §6 (未知 critical fail-closed) + entries[*]
-      //       .rejection_level === "hard_reject" in removed-event-kinds.json
-      //
-      // Acceptance criteria (once a register-and-submit helper lands):
-      //   1. For each entry with rejection_level === "hard_reject":
-      //        e.g. cx.field.position.move, cx.realm.lifecycle.set,
-      //             cx.space.policy, cx.message.send
-      //      POST /api/v1/events with body { kind: <removed_id>, payload: {} }
-      //      and a valid bearer token.
-      //   2. Expect HTTP 4xx (typically 400 or 422), and
-      //      error.code ∈ { schema_violation, unknown_event_kind,
-      //                     removed_event_kind, invalid_event_kind }.
-      //   3. Response body MUST NOT echo the submitted event back as
-      //      accepted; reducer must NOT silently drop (no 2xx with empty
-      //      accepted list either — that's still drift).
-      //   4. After all attempts, re-fetch /server/describe and assert that
-      //      describe.implemented_features.event_kinds is disjoint from the
-      //      removed set.
-      void request;
-      void removedEventKinds;
-    },
-  );
+  test("Phase A — POST event with removed kind is hard-rejected with schema_violation", async ({
+    request,
+  }) => {
+    const removed = removedEventKinds.entries.find((entry) => entry.rejection_level === "hard_reject");
+    expect(removed, "removed hard-reject event kind fixture").toBeTruthy();
+    const alice = uniqueUser("registry-drift-a");
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const envelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: "cx:realm:01904100-0000-7000-8000-000000000998",
+      kind: removed!.id,
+      payload: {},
+    });
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: envelope,
+    });
+    expect(resp.status()).toBeGreaterThanOrEqual(400);
+    const body = await resp.json();
+    expect(["schema_violation", "unknown_event_kind", "removed_event_kind", "invalid_event_kind"]).toContain(
+      wireErrCode(body),
+    );
+    expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
+  });
 
-  test.fixme(
-    // @blocking-on: soland#conformance-registry-drift-gap
-    // @user-promise: e2e/scenarios/conformance/registry-drift.md
-    // @expected-live-by: 2026Q3
-    "Phase B — calling a removed operation_id returns 410 / 4xx, never 2xx",
-    async ({ request }) => {
-      // spec: schema-registry.md §1 + removed-operation-ids.json entries
-      //       with rejection_level === "hard_reject" (for example
-      //       cx.flow.track.member.add, cx.realm.lifecycle.set.apply).
-      //
-      // Acceptance criteria (once an operation-invoke helper lands):
-      //   1. For each removed operation_id, attempt to invoke via:
-      //        POST /api/v1/operations/{operation_id} { } -- if exposed, or
-      //        POST /api/v1/server/operation/invoke { operation_id, input: {} }
-      //   2. Expect HTTP 4xx (prefer 410 Gone or 404 Not Found), and
-      //      error.code ∈ { unknown_operation, removed_operation,
-      //                     gone, operation_not_found }.
-      //   3. Response MUST NOT be a stubbed 2xx success — the operation must
-      //      have been fully removed from the routing table.
-      //   4. Re-fetch /server/describe and assert that its claimed
-      //      operations array is disjoint from the removed set.
-      void request;
-      void removedOperationIds;
-    },
-  );
+  test("Phase B — calling a removed operation_id returns 410 / 4xx, never 2xx", async ({
+    request,
+  }) => {
+    const removed = removedOperationIds.entries.find((entry) => entry.rejection_level === "hard_reject");
+    expect(removed, "removed hard-reject operation id fixture").toBeTruthy();
+    const endpoints = [
+      `${solandBaseUrl()}/api/v1/operations/${encodeURIComponent(removed!.id)}`,
+      `${solandBaseUrl()}/api/v1/server/operation/invoke`,
+    ];
+    for (const url of endpoints) {
+      const resp = await request.post(url, {
+        data: { operation_id: removed!.id, input: {} },
+      });
+      expect(resp.status(), `${url} should not accept removed operation ${removed!.id}`).toBeGreaterThanOrEqual(400);
+      const body = await readJsonOrText(resp);
+      const code = wireErrCode(body);
+      if (code) {
+        expect([
+          "unknown_operation",
+          "removed_operation",
+          "gone",
+          "operation_not_found",
+          "not_found",
+          "unrecognized_endpoint",
+        ]).toContain(code);
+      }
+      expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
+      expect(JSON.stringify(body)).not.toContain('"ok":true');
+    }
+  });
 
-  test.fixme(
-    // @blocking-on: soland#conformance-registry-drift-gap
-    // @user-promise: e2e/scenarios/conformance/registry-drift.md
-    // @expected-live-by: 2026Q3
-    "Phase F — server-managed audit / log surfaces don't leak forbidden model terms",
-    async ({ request }) => {
-      // spec: schema-registry.md §3 (extension naming) + forbidden-model-terms.json
-      //       entries (Room / Place / flow_branch / track members / Realm(kind=list) /
-      //       Room visibility).
-      //
-      // Pinned fixme because:
-      //   (a) word-boundary matching against arbitrary string values is
-      //       prone to false positives in user-generated content;
-      //   (b) the exact set of "server-managed" response fields (vs.
-      //       reflected client input) is not yet pinned by soland.
-      //
-      // Acceptance criteria once soland publishes a server-managed surface
-      // scope:
-      //   1. For each surface (e.g. /api/v1/server/describe, /api/v1/audit/recent,
-      //      a list operation), parse the JSON body and collect every string
-      //      value at server-managed paths only.
-      //   2. For each entry with rejection_level === "hard_reject" in
-      //      forbidden-model-terms.json, assert no collected string matches
-      //      /\b<term>\b/ (word-boundary, case-sensitive).
-      //   3. Exemptions (changelog / interop_module / negative_test) do NOT
-      //      apply at the wire level — those contexts are documentation only.
-      void request;
-      void forbiddenModelTerms;
-    },
-  );
+  test("Phase F — server-managed audit / log surfaces don't leak forbidden model terms", async ({
+    request,
+  }, testInfo) => {
+    const forbidden = forbiddenModelTerms.entries
+      .filter((entry) => entry.rejection_level === "hard_reject")
+      .map((entry) => entry.id)
+      .filter((term) => /^[A-Za-z_ -]+$/.test(term));
+    expect(forbidden.length).toBeGreaterThan(0);
+
+    const surfaces = [
+      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/api/v1/server/describe`) },
+      { name: "health", response: await request.get(`${solandBaseUrl()}/health`) },
+    ];
+    const violations: Array<{ surface: string; path: string; term: string; value: string }> = [];
+    for (const surface of surfaces) {
+      expect(surface.response.ok(), `${surface.name} responded ${surface.response.status()}`).toBeTruthy();
+      const body = await surface.response.json();
+      for (const leaf of stringLeaves(body)) {
+        for (const term of forbidden) {
+          if (new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(leaf.value)) {
+            violations.push({
+              surface: surface.name,
+              path: leaf.path.join("."),
+              term,
+              value: leaf.value,
+            });
+          }
+        }
+      }
+    }
+    await testInfo.attach("forbidden-model-term-scan", {
+      body: JSON.stringify({ forbidden, violations }, null, 2),
+      contentType: "application/json",
+    });
+    expect(violations).toEqual([]);
+  });
 });

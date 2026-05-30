@@ -327,10 +327,13 @@ function New-SummaryMarkdown {
     if (($Summary.PSObject.Properties.Name -contains "journey_coverage_rows") -and $Summary.journey_coverage_rows.Count -gt 0) {
         $lines.Add("## Journey Coverage")
         $lines.Add("")
-        $lines.Add("| Journey | Verified | Promised | Blocking |")
-        $lines.Add("|---|---:|---:|---:|")
+        $lines.Add("| Journey | Live verified | Promised | Domain-fallback promised | Rust-scenario promised | Blocking |")
+        $lines.Add("|---|---:|---:|---:|---:|---:|")
         foreach ($journey in $Summary.journey_coverage_rows) {
-            $lines.Add("| $($journey.id) | $($journey.verified) | $($journey.promised) | $($journey.blocking) |")
+            $fallbackPromised = if ($journey.PSObject.Properties.Name -contains "domain_fallback_promised") { $journey.domain_fallback_promised } else { "n/a" }
+            $rustScenarioPromised = if ($journey.PSObject.Properties.Name -contains "rust_scenario_promised") { $journey.rust_scenario_promised } else { "n/a" }
+            $liveVerified = if ($journey.PSObject.Properties.Name -contains "live_verified") { $journey.live_verified } else { $journey.verified }
+            $lines.Add("| $($journey.id) | $liveVerified | $($journey.promised) | $fallbackPromised | $rustScenarioPromised | $($journey.blocking) |")
         }
         $lines.Add("")
     }

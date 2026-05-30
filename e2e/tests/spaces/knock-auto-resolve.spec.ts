@@ -7,7 +7,7 @@ import { test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 test.describe("knock auto-resolve path", () => {
-  test(
+  test.fixme(
     // @blocking-on: soland#spaces-knock-auto-resolve-gap
     // @user-promise: e2e/scenarios/spaces/knock-auto-resolve.md
     // @expected-live-by: 2026Q3
@@ -18,7 +18,7 @@ test.describe("knock auto-resolve path", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#spaces-knock-auto-resolve-gap
     // @user-promise: e2e/scenarios/spaces/knock-auto-resolve.md
     // @expected-live-by: 2026Q3
@@ -26,7 +26,7 @@ test.describe("knock auto-resolve path", () => {
     async () => {},
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#spaces-knock-auto-resolve-gap
     // @user-promise: e2e/scenarios/spaces/knock-auto-resolve.md
     // @expected-live-by: 2026Q3
@@ -34,7 +34,7 @@ test.describe("knock auto-resolve path", () => {
     async () => {},
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#spaces-knock-auto-resolve-gap
     // @user-promise: e2e/scenarios/spaces/knock-auto-resolve.md
     // @expected-live-by: 2026Q3
@@ -44,7 +44,7 @@ test.describe("knock auto-resolve path", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#spaces-knock-auto-resolve-gap
     // @user-promise: e2e/scenarios/spaces/knock-auto-resolve.md
     // @expected-live-by: 2026Q3

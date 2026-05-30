@@ -12,16 +12,17 @@
 //!
 //!   cargo test --test production_rejects_placeholder_proof_e2e -- --ignored
 //!
-//! The scenario silently returns `Ok(())` when no soland binary is
-//! locatable (no `SOLAND_BIN` and no sibling-checkout debug build),
-//! matching the convention of the rest of the cotest scenario suite.
+//! The scenario fails loudly when no soland binary is locatable (no
+//! `SOLAND_BIN` and no sibling-checkout build). This test is the production
+//! guardrail for rejecting placeholder dev proofs, so an opted-in run must not
+//! become a silent pass.
 
 use anyhow::Result;
 use serial_test::serial;
 
 /// Gating: spawns a live soland binary; requires `SOLAND_BIN` or a
-/// sibling-checkout build. Silently returns `Ok(())` when no binary is
-/// locatable.
+/// sibling-checkout build. Missing binary is a hard failure when this ignored
+/// test is explicitly selected.
 /// Issue: T1.3 (production rejects placeholder proof)
 #[tokio::test]
 #[ignore = "T1.3 — spawns soland binary; run with --ignored when SOLAND_BIN or a sibling-checkout build is available."]

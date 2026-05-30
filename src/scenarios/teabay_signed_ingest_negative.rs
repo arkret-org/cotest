@@ -62,6 +62,23 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
     )
     .await?;
 
+    // This is the actual transport-signature fail-closed control: the request
+    // carries a fresh content-digest and a plausible service key id, but the
+    // Ed25519 signature bytes are all zeroes. There is no Event Envelope
+    // `dev-proof` in this path; accepting it would mean teabay bypassed HTTP
+    // Message Signatures verification for signed directory ingest.
+    let forged_signature =
+        fake_signed_headers(&url, now - 1, now + 300, "did:web:teabay.cotest.local#push");
+    assert_ingest_rejected(
+        signed_request(&client, &url, &body, forged_signature, true)
+            .send()
+            .await?,
+        StatusCode::UNAUTHORIZED,
+        "invalid_signature",
+        "forged signature bytes",
+    )
+    .await?;
+
     let expired = fake_signed_headers(&url, now - 60, now - 6, "did:web:unknown#push");
     assert_ingest_rejected(
         signed_request(&client, &url, &body, expired, true)

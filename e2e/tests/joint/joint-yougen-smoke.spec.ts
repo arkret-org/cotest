@@ -1,10 +1,10 @@
 // T-P0-05 joint harness smoke.
 // Contract: true yougen UI + true soland process create a realm and render messages.
 
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "../../helpers/joint-fixture";
-import { listInvitesApi } from "../../helpers/soland-api";
+import { eventProof, listInvitesApi } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -149,13 +149,7 @@ async function submitMessageEvent(
       critical_extensions: [],
     },
     payload,
-    proofs: [
-      {
-        type: "dev-proof",
-        verification_method: `${actorDid}#device`,
-        payload_digest: `sha256:${sha256CanonicalJson(payload)}`,
-      },
-    ],
+    proofs: [eventProof({ actorDid, payload })],
   };
 
   const response = await request.post(`${serverUrl}/api/v1/events`, {
@@ -169,24 +163,6 @@ async function submitMessageEvent(
 function flowIdFromSpaceId(spaceId: string): string {
   const suffix = spaceId.replace(/^cx:(realm|space):/, "");
   return `cx:flow:${suffix}`;
-}
-
-function sha256CanonicalJson(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
 }
 
 function uuidV7(): string {

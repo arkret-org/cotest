@@ -10,7 +10,7 @@ import { test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 test.describe("tsp bootstrap", () => {
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-tsp-bootstrap-gap
     // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
     // @expected-live-by: 2026Q3
@@ -52,7 +52,7 @@ test.describe("tsp bootstrap", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-tsp-bootstrap-gap
     // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
     // @expected-live-by: 2026Q3
@@ -68,7 +68,7 @@ test.describe("tsp bootstrap", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-tsp-bootstrap-gap
     // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
     // @expected-live-by: 2026Q3
@@ -87,7 +87,7 @@ test.describe("tsp bootstrap", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-tsp-bootstrap-gap
     // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
     // @expected-live-by: 2026Q3

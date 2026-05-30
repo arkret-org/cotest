@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // fixme-debt-report.mjs
 //
-// Builds a debt ledger for Playwright `test.fixme(...)` entries. Each fixme is
-// expected to carry three magic comments near the fixme body:
+// Builds a debt ledger for Playwright `test.fixme(...)` entries plus Rust
+// scenario `unimplemented!()` scaffolds. Each Playwright fixme is expected to
+// carry three magic comments near the fixme body:
 //   @blocking-on:
 //   @user-promise:
 //   @expected-live-by:
@@ -19,6 +20,8 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const E2E_ROOT = dirname(SCRIPT_DIR);
 const REPO_ROOT = dirname(E2E_ROOT);
 const TESTS_DIR = join(E2E_ROOT, 'tests');
+const RUST_SCENARIOS_DIR = join(REPO_ROOT, 'src', 'scenarios');
+const RUST_SCAFFOLD_EXPECTED_LIVE_BY = '2026Q3';
 
 function parseArgs(argv) {
   const out = {
@@ -107,10 +110,16 @@ function validateBlockingOn(value) {
 
 function validateUserPromise(value) {
   if (!value) return null;
+  if (value.startsWith('e2e/scenarios/') && value.endsWith('.md')) {
+    return existsSync(join(REPO_ROOT, value)) ? null : 'user-promise-missing-file';
+  }
+  if (value.startsWith('src/scenarios/') && value.endsWith('.rs')) {
+    return existsSync(join(REPO_ROOT, value)) ? null : 'user-promise-missing-file';
+  }
   if (!value.startsWith('e2e/scenarios/') || !value.endsWith('.md')) {
     return 'user-promise-not-scenario-ref';
   }
-  return existsSync(join(REPO_ROOT, value)) ? null : 'user-promise-missing-file';
+  return null;
 }
 
 function validateFixmeBody(block) {
@@ -145,7 +154,7 @@ function isExpired(value, now = new Date()) {
   return deadline ? deadline.getTime() < now.getTime() : false;
 }
 
-function analyzeFixmes() {
+function analyzePlaywrightFixmes() {
   const files = walk(TESTS_DIR, (_, name) => name.endsWith('.spec.ts')).sort();
   const items = [];
   for (const file of files) {
@@ -170,6 +179,7 @@ function analyzeFixmes() {
       const bodyError = validateFixmeBody(block);
       if (bodyError) invalid.push(bodyError);
       items.push({
+        kind: 'playwright-fixme',
         file: rel(REPO_ROOT, file),
         line: i + 1,
         title: extractTitle(lines, i),
@@ -179,9 +189,68 @@ function analyzeFixmes() {
         missing,
         invalid,
         expired: isExpired(expectedLiveBy),
+        call_sites: 1,
       });
     }
   }
+  return items;
+}
+
+function activeUnimplementedLineIndexes(lines) {
+  const indexes = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue;
+    if (/\bunimplemented!\s*\(/.test(line)) indexes.push(i);
+  }
+  return indexes;
+}
+
+function rustScenarioTitle(text, fallback) {
+  const runFn =
+    text.match(/\bpub\s+async\s+fn\s+([A-Za-z0-9_]+_run)\s*\(/) ??
+    text.match(/\bpub\s+fn\s+([A-Za-z0-9_]+_run)\s*\(/) ??
+    text.match(/\bpub\s+async\s+fn\s+([A-Za-z0-9_]+)\s*\(/) ??
+    text.match(/\bpub\s+fn\s+([A-Za-z0-9_]+)\s*\(/);
+  if (runFn) return `Rust scenario scaffold: ${runFn[1]}`;
+  return `Rust scenario scaffold: ${fallback.replace(/\.rs$/, '')}`;
+}
+
+function analyzeRustScaffolds() {
+  const files = walk(RUST_SCENARIOS_DIR, (_, name) => name.endsWith('.rs')).sort();
+  const items = [];
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    const lines = text.split(/\r?\n/);
+    const callIndexes = activeUnimplementedLineIndexes(lines);
+    if (callIndexes.length === 0) continue;
+    const userPromise = rel(REPO_ROOT, file);
+    const blockingOn = 'cotest#rust-scenario-scaffold';
+    const expectedLiveBy = RUST_SCAFFOLD_EXPECTED_LIVE_BY;
+    const invalid = [];
+    const blockingOnError = validateBlockingOn(blockingOn);
+    if (blockingOnError) invalid.push(blockingOnError);
+    const userPromiseError = validateUserPromise(userPromise);
+    if (userPromiseError) invalid.push(userPromiseError);
+    items.push({
+      kind: 'rust-unimplemented-scaffold',
+      file: userPromise,
+      line: callIndexes[0] + 1,
+      title: `${rustScenarioTitle(text, file.split(/[\\/]/).pop())} (${callIndexes.length} unimplemented! call sites)`,
+      blocking_on: blockingOn,
+      user_promise: userPromise,
+      expected_live_by: expectedLiveBy,
+      missing: [],
+      invalid,
+      expired: isExpired(expectedLiveBy),
+      call_sites: callIndexes.length,
+    });
+  }
+  return items;
+}
+
+function analyzeDebtItems() {
+  const items = [...analyzePlaywrightFixmes(), ...analyzeRustScaffolds()];
   items.sort((a, b) => {
     const group = (a.blocking_on ?? '(missing)').localeCompare(b.blocking_on ?? '(missing)');
     if (group !== 0) return group;
@@ -201,6 +270,11 @@ function renderMarkdown(items) {
   const missingCount = items.filter((i) => i.missing.length > 0).length;
   const expiredCount = items.filter((i) => i.expired).length;
   const invalidCount = items.filter((i) => i.invalid.length > 0).length;
+  const playwrightCount = items.filter((i) => i.kind === 'playwright-fixme').length;
+  const rustScaffoldCount = items.filter((i) => i.kind === 'rust-unimplemented-scaffold').length;
+  const rustScaffoldCallSites = items
+    .filter((i) => i.kind === 'rust-unimplemented-scaffold')
+    .reduce((sum, item) => sum + (item.call_sites ?? 1), 0);
   const groups = new Map();
   for (const item of items) {
     const key = item.blocking_on ?? '(missing @blocking-on)';
@@ -215,7 +289,10 @@ function renderMarkdown(items) {
   lines.push('');
   lines.push('| metric | count |');
   lines.push('|---|---:|');
-  lines.push(`| total fixme | ${items.length} |`);
+  lines.push(`| total debt entries | ${items.length} |`);
+  lines.push(`| playwright fixme | ${playwrightCount} |`);
+  lines.push(`| rust unimplemented scaffold files | ${rustScaffoldCount} |`);
+  lines.push(`| rust unimplemented call sites | ${rustScaffoldCallSites} |`);
   lines.push(`| missing metadata | ${missingCount} |`);
   lines.push(`| invalid metadata/body | ${invalidCount} |`);
   lines.push(`| expired expected_live_by | ${expiredCount} |`);
@@ -223,8 +300,8 @@ function renderMarkdown(items) {
   for (const [blockingOn, groupItems] of groups) {
     lines.push(`## ${blockingOn}`);
     lines.push('');
-    lines.push('| expected_live_by | status | file:line | title | user_promise | missing | invalid |');
-    lines.push('|---|---|---|---|---|---|---|');
+    lines.push('| kind | expected_live_by | status | file:line | title | user_promise | missing | invalid | call_sites |');
+    lines.push('|---|---|---|---|---|---|---|---|---:|');
     for (const item of groupItems) {
       const status = item.expired
         ? 'expired'
@@ -234,7 +311,7 @@ function renderMarkdown(items) {
             ? 'invalid'
             : 'tracked';
       lines.push(
-        `| ${escapeCell(item.expected_live_by)} | ${status} | ${escapeCell(`${item.file}:${item.line}`)} | ${escapeCell(item.title)} | ${escapeCell(item.user_promise)} | ${escapeCell(item.missing.join(', '))} | ${escapeCell(item.invalid.join(', '))} |`,
+        `| ${escapeCell(item.kind)} | ${escapeCell(item.expected_live_by)} | ${status} | ${escapeCell(`${item.file}:${item.line}`)} | ${escapeCell(item.title)} | ${escapeCell(item.user_promise)} | ${escapeCell(item.missing.join(', '))} | ${escapeCell(item.invalid.join(', '))} | ${item.call_sites ?? 1} |`,
       );
     }
     lines.push('');
@@ -256,7 +333,7 @@ function main() {
     return 0;
   }
 
-  const items = analyzeFixmes();
+  const items = analyzeDebtItems();
   const markdown = renderMarkdown(items);
   mkdirSync(dirname(args.output), { recursive: true });
   writeFileSync(args.output, markdown, 'utf8');
@@ -264,9 +341,17 @@ function main() {
   const missingCount = items.filter((i) => i.missing.length > 0).length;
   const expiredCount = items.filter((i) => i.expired).length;
   const invalidCount = items.filter((i) => i.invalid.length > 0).length;
+  const playwrightCount = items.filter((i) => i.kind === 'playwright-fixme').length;
+  const rustScaffoldCount = items.filter((i) => i.kind === 'rust-unimplemented-scaffold').length;
+  const rustScaffoldCallSites = items
+    .filter((i) => i.kind === 'rust-unimplemented-scaffold')
+    .reduce((sum, item) => sum + (item.call_sites ?? 1), 0);
   const summary = {
     output: args.output,
-    total_fixme: items.length,
+    total_debt: items.length,
+    total_fixme: playwrightCount,
+    rust_unimplemented_scaffolds: rustScaffoldCount,
+    rust_unimplemented_call_sites: rustScaffoldCallSites,
     missing_metadata: missingCount,
     invalid_metadata_or_body: invalidCount,
     expired_expected_live_by: expiredCount,

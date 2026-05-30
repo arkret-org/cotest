@@ -58,13 +58,53 @@ const JOURNEYS = [
   {
     id: 'UJ-I',
     title: 'Circle lifecycle and anti-enumeration (CXP-0007)',
-    // Covered by SDK-pure Rust scenarios under src/scenarios/circle/* and
-    // src/scenarios/directory/* (entrypoints tests/circle_scenarios.rs +
-    // tests/directory_scenarios.rs). The matrix script scans Playwright .spec.ts
-    // files, so UJ-I shows 0 e2e specs here; see journey-coverage.md for the
-    // hand-written summary that includes the Rust evidence.
     patterns: ['circle/*', 'directory/anti-enumeration'],
   },
+  {
+    id: 'UJ-J',
+    title: 'Personal agent + sidecar (CXP-0008 / CXP-0009)',
+    patterns: ['profile/*', 'spec-section-11/*', 'legacy-alias/*', 'did/format-normalization'],
+  },
+];
+
+const RUST_SCENARIO_EVIDENCE = [
+  {
+    journey: 'UJ-D',
+    key: 'encryption/key-backup-tri-state',
+    verified: 6,
+    promised: 6,
+    note: 'SDK-pure key-backup tri-state scenarios under src/scenarios/key_backup.',
+  },
+  { journey: 'UJ-F', key: 'circle/flow-scope-visibility', verified: 1, promised: 1 },
+  { journey: 'UJ-F', key: 'circle/effective-scope-mismatch', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/create-circle', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/member-strict-subset', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/flow-scope-visibility', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/effective-scope-mismatch', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/confidential-discussion-relation', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/cap-action-grant', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'circle/error-code-paths', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'directory/anti-enumeration-buckets', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'directory/latency-jitter', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'directory/takedown-audit-log', verified: 1, promised: 1 },
+  { journey: 'UJ-I', key: 'directory/circle-not-indexed', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'profile/personal-agent-provisioning.v1', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'profile/agent-auth.v1', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'profile/agent-delegation-policy.v1', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'profile/agent-sidecar-thread.v1', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/provisioning-pairing-grant-order', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/pairing-expiry-auto-revoke', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/session-grant-replay-guard', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/controller-deactivate-cascade', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/act-on-behalf-attribution', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/sidecar-circle-idempotent-ensure', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/existence-privacy', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/eligibility-tristate-and-revocation', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'spec-section-11/multi-agent-publish-attribution', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'legacy-alias/renamed-fields', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'legacy-alias/legacy-secret-storage-wire', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'legacy-alias/ann-announce-id', verified: 1, promised: 1 },
+  { journey: 'UJ-J', key: 'did/format-normalization', verified: 1, promised: 1 },
 ];
 
 function parseArgs(argv) {
@@ -130,7 +170,7 @@ function fallbackJourneysFor(key) {
 
 function explicitJourneyTags(source) {
   const tags = new Set();
-  for (const match of source.matchAll(/@UJ-[A-H]\b/g)) tags.add(match[0].slice(1));
+  for (const match of source.matchAll(/@UJ-[A-J]\b/g)) tags.add(match[0].slice(1));
   return [...tags].sort();
 }
 
@@ -161,8 +201,15 @@ function buildMatrix() {
       id: journey.id,
       title: journey.title,
       verified: 0,
+      live_verified: 0,
       promised: 0,
       blocking: 0,
+      explicit_tag_promised: 0,
+      explicit_tag_live_verified: 0,
+      domain_fallback_promised: 0,
+      domain_fallback_live_verified: 0,
+      rust_scenario_promised: 0,
+      rust_scenario_live_verified: 0,
       specs: [],
     });
   }
@@ -174,26 +221,67 @@ function buildMatrix() {
     const explicit = explicitJourneyTags(source);
     const journeyIds = explicit.length > 0 ? explicit : fallbackJourneysFor(key);
     const counts = countSpec(source);
+    const mapping = explicit.length > 0 ? 'explicit-tag' : 'domain-fallback';
     for (const id of journeyIds) {
       const row = rows.get(id);
       if (!row) continue;
-      row.verified += counts.verified;
-      row.promised += counts.promised;
-      row.blocking += counts.blocking;
-      row.specs.push({
-        key,
-        mapping: explicit.length > 0 ? 'explicit-tag' : 'domain-fallback',
-        ...counts,
-      });
+      addEvidence(row, key, mapping, counts);
     }
+  }
+
+  for (const evidence of RUST_SCENARIO_EVIDENCE) {
+    const row = rows.get(evidence.journey);
+    if (!row) continue;
+    addEvidence(row, evidence.key, 'rust-scenario', {
+      verified: evidence.verified,
+      promised: evidence.promised,
+      blocking: evidence.blocking ?? 0,
+    });
   }
 
   const generatedAt = new Date().toISOString();
   const matrix = [...rows.values()].map((row) => ({
     ...row,
     verified_ratio: row.promised === 0 ? 1 : row.verified / row.promised,
+    live_verified_ratio: row.promised === 0 ? 1 : row.live_verified / row.promised,
+    explicit_tag_ratio:
+      row.explicit_tag_promised === 0 ? 1 : row.explicit_tag_live_verified / row.explicit_tag_promised,
+    domain_fallback_ratio:
+      row.domain_fallback_promised === 0
+        ? 1
+        : row.domain_fallback_live_verified / row.domain_fallback_promised,
+    rust_scenario_ratio:
+      row.rust_scenario_promised === 0 ? 1 : row.rust_scenario_live_verified / row.rust_scenario_promised,
   }));
   return { generated_at: generatedAt, journeys: matrix };
+}
+
+function addEvidence(row, key, mapping, counts) {
+  row.verified += counts.verified;
+  row.live_verified += counts.verified;
+  row.promised += counts.promised;
+  row.blocking += counts.blocking;
+  if (mapping === 'explicit-tag') {
+    row.explicit_tag_promised += counts.promised;
+    row.explicit_tag_live_verified += counts.verified;
+  } else if (mapping === 'rust-scenario') {
+    row.rust_scenario_promised += counts.promised;
+    row.rust_scenario_live_verified += counts.verified;
+  } else {
+    row.domain_fallback_promised += counts.promised;
+    row.domain_fallback_live_verified += counts.verified;
+  }
+  row.specs.push({
+    key,
+    mapping,
+    domain_fallback_promised: mapping === 'domain-fallback' ? counts.promised : 0,
+    domain_fallback_live_verified: mapping === 'domain-fallback' ? counts.verified : 0,
+    explicit_tag_promised: mapping === 'explicit-tag' ? counts.promised : 0,
+    explicit_tag_live_verified: mapping === 'explicit-tag' ? counts.verified : 0,
+    rust_scenario_promised: mapping === 'rust-scenario' ? counts.promised : 0,
+    rust_scenario_live_verified: mapping === 'rust-scenario' ? counts.verified : 0,
+    ...counts,
+  });
 }
 
 function pct(value) {
@@ -206,21 +294,23 @@ function renderMarkdown(report) {
   lines.push('');
   lines.push(`Generated: ${report.generated_at}`);
   lines.push('');
-  lines.push('| Journey | Verified | Promised | Coverage | Blocking fixme |');
-  lines.push('|---|---:|---:|---:|---:|');
+  lines.push('Domain-fallback rows come from journey-domain mapping, not explicit journey tags. Rust-scenario rows are executable SDK-pure coverage.');
+  lines.push('');
+  lines.push('| Journey | Live verified | Promised | Live coverage | Domain-fallback promised | Explicit-tag promised | Rust-scenario promised | Blocking fixme |');
+  lines.push('|---|---:|---:|---:|---:|---:|---:|---:|');
   for (const row of report.journeys) {
-    lines.push(`| ${row.id} - ${row.title} | ${row.verified} | ${row.promised} | ${pct(row.verified_ratio)} | ${row.blocking} |`);
+    lines.push(`| ${row.id} - ${row.title} | ${row.live_verified} | ${row.promised} | ${pct(row.live_verified_ratio)} | ${row.domain_fallback_promised} | ${row.explicit_tag_promised} | ${row.rust_scenario_promised} | ${row.blocking} |`);
   }
   lines.push('');
   for (const row of report.journeys) {
     lines.push(`## ${row.id} - ${row.title}`);
     lines.push('');
-    lines.push('| spec | mapping | verified | promised | blocking |');
-    lines.push('|---|---|---:|---:|---:|');
+    lines.push('| spec | mapping | live verified | promised | domain-fallback promised | rust-scenario promised | blocking |');
+    lines.push('|---|---|---:|---:|---:|---:|---:|');
     for (const spec of row.specs.sort((a, b) => a.key.localeCompare(b.key))) {
-      lines.push(`| ${spec.key} | ${spec.mapping} | ${spec.verified} | ${spec.promised} | ${spec.blocking} |`);
+      lines.push(`| ${spec.key} | ${spec.mapping} | ${spec.verified} | ${spec.promised} | ${spec.domain_fallback_promised} | ${spec.rust_scenario_promised} | ${spec.blocking} |`);
     }
-    if (row.specs.length === 0) lines.push('| - | - | 0 | 0 | 0 |');
+    if (row.specs.length === 0) lines.push('| - | - | 0 | 0 | 0 | 0 | 0 |');
     lines.push('');
   }
   return lines.join('\n');

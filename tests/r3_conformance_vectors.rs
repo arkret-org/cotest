@@ -3,8 +3,7 @@
 //! suites run unconditionally; integration-target scenarios are
 //! `#[ignore]`-gated on R3.1 reducer / signing wiring.
 
-use std::fs;
-use std::path::PathBuf;
+use std::{collections::BTreeSet, fs, path::PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::Value;
@@ -128,6 +127,60 @@ fn list_handles_for_subject_vector_suite_runs_clean() {
 fn handle_claim_rejection_vector_suite_runs_clean() {
     run_handle_claim_rejection_vector_suite().expect("handle-claim rejection vectors must pass");
     assert_eq!(ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS.len(), 2);
+}
+
+#[test]
+fn vect_cot_vector_registry_is_mechanically_complete() {
+    let groups = [
+        (
+            "VECT-COT-1 primary handle",
+            ALL_PRIMARY_HANDLE_VECTOR_IDS,
+            10usize,
+        ),
+        (
+            "VECT-COT-2 mention rendering",
+            ALL_MENTION_RENDERING_VECTOR_IDS,
+            6usize,
+        ),
+        (
+            "VECT-COT-3 list handles for subject",
+            ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
+            5usize,
+        ),
+        ("VECT-COT-4 roster v2", ALL_MEMBER_ROSTER_VECTOR_IDS, 7usize),
+        (
+            "VECT-COT-6/7 handle claim rejection",
+            ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
+            2usize,
+        ),
+        (
+            "VECT-COT-8 member identity",
+            ALL_MEMBER_IDENTITY_VECTOR_IDS,
+            8usize,
+        ),
+    ];
+
+    let mut seen = BTreeSet::new();
+    for (label, ids, min_count) in groups {
+        assert!(
+            ids.len() >= min_count,
+            "{label} expected at least {min_count} vector ids, got {}",
+            ids.len()
+        );
+        for id in ids {
+            assert!(
+                id.starts_with("cx.vector."),
+                "{label} id must live in cx.vector registry namespace: {id}"
+            );
+            assert!(seen.insert(*id), "duplicate conformance vector id: {id}");
+        }
+    }
+    assert!(
+        ALL_MEMBER_IDENTITY_VECTOR_IDS
+            .iter()
+            .any(|id| id.contains("handle_field_forbidden")),
+        "VECT-COT-8 handle_field_forbidden id must remain registered"
+    );
 }
 
 // ─── R3.3 / OA-COT-1..4 — CXP-0011 object addressing + resolve_target ─────

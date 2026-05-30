@@ -162,20 +162,26 @@ jobs:
         run: cargo fuzz run anchor_fuzz -- -max_total_time=60
 
   e2e:
-    name: e2e (playwright / ${{ matrix.browser }})
+    name: e2e (playwright / ${{ matrix.project }})
     runs-on: ubuntu-latest
-    # The Playwright suite requires live soland / coauth / floria bring-up
-    # (covered by integration.yml). Here we only verify the suite *parses*
-    # — i.e. that the discussion-upgrade rewrite (P2F.1) and any future
-    # e2e churn keep the spec list resolvable across browsers.
+    # PR gate: run a real Playwright probe against a live soland instead of
+    # list-only discovery. Broader cross-service Playwright runs stay in
+    # integration.yml where the nightly budget can absorb them.
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox, webkit]
+        project: [chromium]
     steps:
       - uses: actions/checkout@v4
         with:
           path: cotest
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/contrix-rust-sdk
+          path: contrix-rust-sdk
+          ref: main
+          token: ${{ secrets.CI_REPO_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
@@ -201,11 +207,52 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.92"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            cotest
+            soland
+      - name: Build live soland
+        run: cargo build --release --locked --manifest-path soland/Cargo.toml
       - name: Install playwright
         working-directory: cotest/e2e
         run: |
           npm ci || npm install
-          npx playwright install --with-deps ${{ matrix.browser }}
-      - name: List spec files
+          npx playwright install --with-deps ${{ matrix.project }}
+      - name: e2e debt gates
         working-directory: cotest/e2e
-        run: npx playwright test --list --project=${{ matrix.browser }}
+        run: npm run gate
+      - name: Run live Playwright smoke
+        working-directory: cotest/e2e
+        env:
+          COTEST_SOLAND_BASE_URL: http://127.0.0.1:8008
+          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/pr-playwright
+          SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/soland-objects"
+          SOLAND_DEVELOPMENT_MODE=1 \
+          SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
+          SOLAND_SERVICE_DID="did:web:soland.pr-ci.local" \
+          SOLAND_METRICS_BIND="127.0.0.1:9008" \
+          SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+          SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
+          "$SOLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/soland-playwright.log" 2>&1 &
+          soland_pid=$!
+          cleanup() {
+            set +e
+            kill "$soland_pid" 2>/dev/null
+            wait "$soland_pid" 2>/dev/null
+          }
+          trap cleanup EXIT
+          for _ in {1..40}; do
+            if curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
+          npx playwright test --config playwright.config.ts --project=${{ matrix.project }} tests/sync/service-surface-contract.spec.ts --grep "soland /api/v1/server/describe"

@@ -55,7 +55,7 @@ test.describe("multi-device pairing + revocation", () => {
     }
   });
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
@@ -67,7 +67,7 @@ test.describe("multi-device pairing + revocation", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
@@ -77,7 +77,7 @@ test.describe("multi-device pairing + revocation", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
@@ -87,7 +87,7 @@ test.describe("multi-device pairing + revocation", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
@@ -97,7 +97,7 @@ test.describe("multi-device pairing + revocation", () => {
     },
   );
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
@@ -127,7 +127,7 @@ test.describe("multi-device pairing + revocation", () => {
     expect(wireErrCode(body)).toBe("cannot_self_revoke");
   });
 
-  test(
+  test.fixme(
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3

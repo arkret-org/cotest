@@ -23,6 +23,10 @@ jobs:
     name: bringup soland + coauth + floria + cotest
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
+      COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
+      FLORIA_BIN: ${{ github.workspace }}/floria/target/release/floria
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,6 +65,9 @@ jobs:
             soland
             coauth
             floria
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: build upstream services
         # P5.1 — upstream checkouts now hard-fail (see above) so the missing-svc
         # warning branch is removed; the build step also no longer swallows
@@ -72,20 +79,146 @@ jobs:
             (cd "$svc" && cargo build --release --locked)
             echo "::endgroup::"
           done
+      - name: install playwright
+        working-directory: cotest/e2e
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+      - name: e2e debt gates
+        working-directory: cotest/e2e
+        run: npm run gate
       - name: run cotest harness
         working-directory: cotest
-        # `--ignored` flips on the bringup-dependent scenarios under
-        # tests/_bootstrap_smoke.rs / tests/full_stack_e2e.rs. The
-        # circle / directory scenarios already run in ci.yml; this job
-        # adds the live cross-service exercises.
+        # Default tests must pass before any live opt-in gates run.
+        run: cargo test --workspace --locked
+      - name: production placeholder-proof rejection sentinel
+        working-directory: cotest
+        # This is the only reverse guard for "production soland rejects the
+        # yougen dev-proof placeholder", so CI wires SOLAND_BIN explicitly and
+        # treats missing binary / test failure as red.
+        run: cargo test --locked --features test-with-containers --test production_rejects_placeholder_proof_e2e -- --ignored production_rejects_placeholder_proof_e2e
+      - name: run live Playwright smoke
+        working-directory: cotest/e2e
+        env:
+          COTEST_SOLAND_BASE_URL: http://127.0.0.1:8008
+          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/integration-playwright
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/soland-objects"
+          SOLAND_DEVELOPMENT_MODE=1 \
+          SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
+          SOLAND_SERVICE_DID="did:web:soland.integration-ci.local" \
+          SOLAND_METRICS_BIND="127.0.0.1:9008" \
+          SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+          SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
+          "$SOLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/soland-playwright.log" 2>&1 &
+          soland_pid=$!
+          cleanup() {
+            set +e
+            kill "$soland_pid" 2>/dev/null
+            wait "$soland_pid" 2>/dev/null
+          }
+          trap cleanup EXIT
+          for _ in {1..40}; do
+            if curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
+          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /api/v1/server/describe"
+      - name: run federation security hardening Playwright
+        working-directory: cotest/e2e
+        env:
+          COTEST_SOLAND_ALPHA_BASE_URL: http://127.0.0.1:8011
+          COTEST_SOLAND_ALPHA_SERVICE_DID: did:web:soland-alpha.security-ci.local
+          COTEST_SOLAND_BETA_BASE_URL: http://127.0.0.1:8012
+          COTEST_SOLAND_BETA_SERVICE_DID: did:web:soland-beta.security-ci.local
+          COTEST_EXPECT_FEDERATION_DENYLIST: "1"
+          COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED: "1"
+          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/federation-security-hardening
+        run: |
+          set -euo pipefail
+
+          start_soland() {
+            local name="$1"
+            local bind="$2"
+            local metrics_bind="$3"
+            local base_url="$4"
+            local service_did="$5"
+            local peer_url="$6"
+            local peer_did="$7"
+            local objects_root="$RUNNER_TEMP/${name}-objects"
+            mkdir -p "$objects_root"
+            SOLAND_DEVELOPMENT_MODE=1 \
+            SOLAND_PUBLIC_BASE_URL="$base_url" \
+            SOLAND_SERVICE_DID="$service_did" \
+            SOLAND_METRICS_BIND="$metrics_bind" \
+            SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
+            SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$objects_root" \
+            SOLAND_FEDERATION_POLICY="Mesh" \
+            SOLAND_FEDERATION_PEERS="${peer_url}|${peer_did}" \
+            SOLAND_FEDERATION_DENYLIST="${peer_did}" \
+            SOLAND_FEDERATION_PEER_DENYLIST="${peer_did}" \
+            SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=0 \
+            "$SOLAND_BIN" --bind "$bind" > "$RUNNER_TEMP/${name}.log" 2>&1 &
+            echo "$!"
+          }
+
+          alpha_pid=$(start_soland \
+            "soland-alpha-security" \
+            "127.0.0.1:8011" \
+            "127.0.0.1:9011" \
+            "$COTEST_SOLAND_ALPHA_BASE_URL" \
+            "$COTEST_SOLAND_ALPHA_SERVICE_DID" \
+            "$COTEST_SOLAND_BETA_BASE_URL" \
+            "$COTEST_SOLAND_BETA_SERVICE_DID")
+          beta_pid=$(start_soland \
+            "soland-beta-security" \
+            "127.0.0.1:8012" \
+            "127.0.0.1:9012" \
+            "$COTEST_SOLAND_BETA_BASE_URL" \
+            "$COTEST_SOLAND_BETA_SERVICE_DID" \
+            "$COTEST_SOLAND_ALPHA_BASE_URL" \
+            "$COTEST_SOLAND_ALPHA_SERVICE_DID")
+          cleanup() {
+            set +e
+            kill "$alpha_pid" "$beta_pid" 2>/dev/null
+            wait "$alpha_pid" "$beta_pid" 2>/dev/null
+          }
+          trap cleanup EXIT
+
+          for url in "$COTEST_SOLAND_ALPHA_BASE_URL/health" "$COTEST_SOLAND_BETA_BASE_URL/health"; do
+            for _ in {1..40}; do
+              if curl -fsS "$url" >/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+            curl -fsS "$url" >/dev/null
+          done
+
+          npx playwright test --config playwright.config.ts --project=chromium tests/federation/security-hardening.spec.ts
+      - name: refresh journey coverage
+        working-directory: cotest
+        run: node e2e/scripts/journey-coverage-matrix.mjs --output journey-coverage.md --json-output journey-coverage.json
+      - name: run selected ignored live harness probes
+        working-directory: cotest
+        # Keep this list explicit. A workspace-wide `cargo test -- --ignored`
+        # also runs tracked scaffold/manual debt (for example the Rust
+        # `unimplemented!()` scenarios reported in fixme-debt.md). Nightly
+        # should fail on selected live probe failures, not on known debt.
         #
         # The `test-with-containers` feature is Linux-only (see
         # `src/scenarios/_helpers/coauth_bootstrap.rs`). We enable it
         # here so the Ubuntu job exercises the testcontainers bring-up
         # alongside the docker-CLI path.
         run: |
-          cargo test --workspace --locked
-          cargo test --workspace --locked --features test-with-containers -- --ignored || true
+          set -euo pipefail
+          cargo test --locked --features test-with-containers --test _bootstrap_smoke ephemeral_postgres_starts_and_stops -- --ignored
+          cargo test --locked --features test-with-containers --test _bootstrap_smoke coauth_can_be_spawned_with_ephemeral_postgres -- --ignored
+          cargo test --locked --features test-with-containers --test _bootstrap_smoke floria_can_be_spawned_with_rendered_config -- --ignored
+          cargo test --locked --features test-with-containers --test chaos_inject_smoke testcontainers_postgres_bringup_smoke -- --ignored
       - name: upload journey-coverage
         uses: actions/upload-artifact@v4
         if: always()
@@ -94,3 +227,4 @@ jobs:
           path: |
             cotest/journey-coverage.json
             cotest/journey-coverage.md
+            cotest/artifacts/integration-playwright

@@ -31,6 +31,8 @@ export type SignedEventEnvelopeArgs = {
   refs?: Array<Record<string, unknown>>;
 };
 
+export type EventProofMode = "dev-proof" | "detached-jws";
+
 export function authHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
@@ -359,13 +361,45 @@ export function signedEventEnvelope(
         args.operationId ?? typedId("operation"),
     },
     proofs: [
-      {
-        type: "dev-proof",
-        verification_method:
-          args.proofVerificationMethod ?? `${args.actorDid}#device`,
-        payload_digest: `sha256:${sha256CanonicalJson(payload)}`,
-      },
+      eventProof({
+        actorDid: args.actorDid,
+        payload,
+        verificationMethod: args.proofVerificationMethod,
+      }),
     ],
+  };
+}
+
+export function eventProof(args: {
+  actorDid: string;
+  payload: Record<string, unknown>;
+  verificationMethod?: string;
+}): Record<string, unknown> {
+  const mode = eventProofMode();
+  const verificationMethod =
+    args.verificationMethod ?? `${args.actorDid}#device`;
+  const payloadDigest = `sha256:${sha256CanonicalJson(args.payload)}`;
+
+  if (mode === "dev-proof") {
+    return {
+      type: "dev-proof",
+      verification_method: verificationMethod,
+      payload_digest: payloadDigest,
+    };
+  }
+
+  return {
+    kind: "detached_jws",
+    alg: "EdDSA",
+    verification_method: verificationMethod,
+    payload_digest: payloadDigest,
+    created_at: canonicalTimestamp(),
+    signing_profile: "cotest.detached_jws.fixture.v1",
+    jws: detachedJwsFixture({
+      actorDid: args.actorDid,
+      verificationMethod,
+      payloadDigest,
+    }),
   };
 }
 
@@ -592,6 +626,48 @@ function signedFederationPushHeaders(
     "signature-input": `sig1=${signatureParams}`,
     signature: `sig1=:${signature.toString("base64")}:`,
   };
+}
+
+function eventProofMode(): EventProofMode {
+  const mode = process.env.COTEST_EVENT_PROOF_MODE ?? "dev-proof";
+  if (mode !== "dev-proof" && mode !== "detached-jws") {
+    throw new Error(
+      `unsupported COTEST_EVENT_PROOF_MODE=${JSON.stringify(mode)}; expected dev-proof or detached-jws`,
+    );
+  }
+  if (mode === "dev-proof" && process.env.COTEST_FORBID_DEV_PROOF === "1") {
+    throw new Error(
+      "COTEST_FORBID_DEV_PROOF=1 forbids the legacy dev-proof fixture; set COTEST_EVENT_PROOF_MODE=detached-jws",
+    );
+  }
+  return mode;
+}
+
+function detachedJwsFixture(args: {
+  actorDid: string;
+  verificationMethod: string;
+  payloadDigest: string;
+}): string {
+  const protectedHeader = base64urlJson({
+    alg: "EdDSA",
+    kid: args.verificationMethod,
+    typ: "cx-event-proof+jws",
+  });
+  const payload = base64urlJson({
+    proof_kind: "event_payload",
+    payload_digest: args.payloadDigest,
+    verification_method: args.verificationMethod,
+  });
+  const signature = sign(
+    null,
+    Buffer.from(`${protectedHeader}.${payload}`, "utf8"),
+    developmentServicePrivateKey(args.actorDid),
+  );
+  return `${protectedHeader}..${signature.toString("base64url")}`;
+}
+
+function base64urlJson(value: unknown): string {
+  return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
 }
 
 function developmentServicePrivateKey(serviceDid: string) {

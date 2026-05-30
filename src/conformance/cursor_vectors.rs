@@ -30,7 +30,7 @@ pub const ALL_CURSOR_VECTOR_IDS: &[&str] = &[
 /// present; stateless integrity material (`_mac`, `_sig`, `issuer_kid`)
 /// MUST be absent.
 pub fn run_cursor_opaque_core_vector() -> Result<()> {
-    let handle = generate_cursor_handle();
+    let handle = generate_cursor_handle().map_err(|e| anyhow!("cursor handle generation: {e}"))?;
     if handle.len() < CURSOR_HANDLE_MIN_LEN {
         bail!("cursor handle entropy below {CURSOR_HANDLE_MIN_LEN} chars: {handle}");
     }

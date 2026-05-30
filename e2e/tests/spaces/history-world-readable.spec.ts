@@ -4,11 +4,11 @@
 //        §3.1.3 (mls_rfc9420 + world_readable incompatible)
 // E2E-WORLD-READ-1 — soland/_todos.md.
 
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { request as playwrightRequest } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { singleDidAnchorer, wireErrCode } from "../../helpers/soland-api";
+import { eventProof, singleDidAnchorer, wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -196,18 +196,8 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       critical_extensions: [],
     },
     payload,
-    proofs: [
-      {
-        type: "dev-proof",
-        verification_method: `${actorDid}#device`,
-        payload_digest: `sha256:${sha256CanonicalJson(payload)}`,
-      },
-    ],
+    proofs: [eventProof({ actorDid, payload })],
   };
-}
-
-function sha256CanonicalJson(value: unknown): string {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
 function canonicalTimestamp(): string {
@@ -225,18 +215,4 @@ function uuidV7(): string {
     `${variant}${random.slice(3, 6)}`,
     random.slice(6, 18),
   ].join("-");
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
 }

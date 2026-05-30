@@ -333,6 +333,8 @@ impl ContrixServer {
     }
 
     pub fn sdk(&self) -> Result<SdkClient> {
+        // Harness-only: cotest SUTs bind to loopback/self-signed local
+        // endpoints. Do not copy this into non-local service clients.
         Ok(SdkClient::builder(self.base_url())
             .allow_insecure_localhost()
             .build()?)
@@ -390,6 +392,8 @@ impl ContrixServer {
     }
 
     fn actor_client(&self, actor: &str, device_id: &str, token: String) -> Result<TestActorClient> {
+        // Harness-only: actor clients talk to the same loopback SUT created
+        // above, so insecure localhost TLS is acceptable for test traffic.
         let sdk = SdkClient::builder(self.base_url())
             .allow_insecure_localhost()
             .auth(Auth::Bearer(token.clone()))
