@@ -97,10 +97,10 @@ fn verified_claim_for_subject(handle: &str, subject: &Did) -> Result<HandleClaim
         subject: Some(subject.clone()),
         issuer: Some("did:web:coauth.acme.example".to_owned()),
         binding_state: Some(HandleBindingState::Verified),
-        issued_at: Some(
+        created_at: Some(
             Utc.with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
                 .single()
-                .expect("pinned issued_at"),
+                .expect("pinned created_at"),
         ),
         expires_at: Some(
             Utc.with_ymd_and_hms(2026, 6, 20, 0, 0, 0)

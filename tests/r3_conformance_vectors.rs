@@ -677,7 +677,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: None,
-            policy_ref: None,
+            policy_event_ref: None,
         },
         issuer_service_did: principal,
         audience: "cx:realm:01904100-0000-7000-8000-test8audience".to_owned(),

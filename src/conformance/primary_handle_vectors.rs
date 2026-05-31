@@ -95,7 +95,7 @@ fn claim(
         issuer: Some(issuer.to_owned()),
         binding_state: Some(HandleBindingState::Verified),
         audience: audience.map(str::to_owned),
-        issued_at: Some(created),
+        created_at: Some(created),
         expires_at: Some(expires),
         ..Default::default()
     })

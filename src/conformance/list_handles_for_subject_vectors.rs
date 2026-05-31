@@ -77,7 +77,7 @@ fn claim_for(
         issuer: Some(issuer.to_owned()),
         binding_state: Some(HandleBindingState::Verified),
         audience: audience.map(str::to_owned),
-        issued_at: Some(at(2026, 5, 1)),
+        created_at: Some(at(2026, 5, 1)),
         expires_at: Some(at(2026, 7, 1)),
         ..Default::default()
     })

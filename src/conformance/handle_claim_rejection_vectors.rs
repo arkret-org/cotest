@@ -13,13 +13,13 @@
 //!     by [`contrix_core::model::validate_handle_claim_subject`] and by the
 //!     schema `subject` pattern.
 //!
-//! VECT-COT-6 also pins that the SDK `HandleClass` enum no longer carries a
+//! VECT-COT-6 also pins that the SDK `HandleClaimKind` enum no longer carries a
 //! `ServiceHandle` variant, so any attempt to parse `service_handle` into
-//! the typed `class` field fails.
+//! the typed `claim_kind` field fails.
 
 use anyhow::{Result, anyhow, bail};
 use contrix_core::Did;
-use contrix_core::model::{HandleClass, validate_handle_claim_subject};
+use contrix_core::model::{HandleClaimKind, validate_handle_claim_subject};
 use jsonschema::{Registry, Resource};
 use serde_json::{Value, json};
 use std::ffi::OsStr;
@@ -144,16 +144,16 @@ pub fn run_service_handle_rejected_vector() -> Result<()> {
         );
     }
 
-    // The SDK typed `HandleClass` enum MUST NOT deserialise `service_handle`.
-    let parsed: std::result::Result<HandleClass, _> =
+    // The SDK typed `HandleClaimKind` enum MUST NOT deserialise `service_handle`.
+    let parsed: std::result::Result<HandleClaimKind, _> =
         serde_json::from_value(json!("service_handle"));
     if parsed.is_ok() {
-        bail!("VECT-COT-6: HandleClass MUST NOT accept the retired `service_handle` variant");
+        bail!("VECT-COT-6: HandleClaimKind MUST NOT accept the retired `service_handle` variant");
     }
     // It MUST still accept the two surviving values.
-    for ok_value in ["user_handle", "organization_handle"] {
-        if serde_json::from_value::<HandleClass>(json!(ok_value)).is_err() {
-            bail!("VECT-COT-6: HandleClass MUST accept `{ok_value}`");
+    for ok_value in ["handle_binding", "organization_handle"] {
+        if serde_json::from_value::<HandleClaimKind>(json!(ok_value)).is_err() {
+            bail!("VECT-COT-6: HandleClaimKind MUST accept `{ok_value}`");
         }
     }
     Ok(())

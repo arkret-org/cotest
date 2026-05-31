@@ -136,6 +136,6 @@ fn member_delivery_binding() -> DeliveryBindingHint {
         binding_source: HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: modes,
         service_acceptance_ref: None,
-        policy_ref: None,
+        policy_event_ref: None,
     }
 }

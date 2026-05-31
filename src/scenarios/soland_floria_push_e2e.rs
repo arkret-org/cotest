@@ -271,13 +271,7 @@ pub fn assert_blind_wakeup_invariants(notification: &Value) -> Result<()> {
         .get("wakeup_kind")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("blind wakeup MUST carry `notification.wakeup_kind`"))?;
-    let allowed = [
-        "message",
-        "mention",
-        "reaction",
-        "call_invite",
-        "incoming_call",
-    ];
+    let allowed = ["message", "mention", "reaction", "call_invite"];
     if !allowed.contains(&wakeup_kind) {
         bail!(
             "wakeup_kind `{wakeup_kind}` is outside the §2.2 closed enum {:?}",

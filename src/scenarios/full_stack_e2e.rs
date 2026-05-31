@@ -663,7 +663,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             service_acceptance_ref: Some(
                 "cx:event:0196419b-0000-7000-8000-acceptance01".to_owned(),
             ),
-            policy_ref: Some("cx:event:0196419b-0000-7000-8000-policyref001".to_owned()),
+            policy_event_ref: Some("cx:event:0196419b-0000-7000-8000-policyref001".to_owned()),
         },
         issuer_service_did: principal,
         audience: TARGET_SPACE_ID.to_owned(),
