@@ -59,6 +59,46 @@
       }
     },
     {
+      "name": "broadcast_mention_controls_authorized_audience_delivers",
+      "vector_id": "cx.vector.push.broadcast_mention_controls.v1",
+      "watch_level": "mentions_only",
+      "event": {
+        "mentions_actor": true
+      },
+      "expected": {
+        "deliver": true,
+        "blind_wakeup": false,
+        "reason_code": "watch_allows",
+        "yougen": {
+          "should_notify": true,
+          "watch_suppressed": false,
+          "muted_short_circuit": false,
+          "blind_wakeup_required": false,
+          "unresolved_client_evaluation": false
+        }
+      }
+    },
+    {
+      "name": "flow_engaged_here_maps_to_receiver_side_mention",
+      "vector_id": "cx.vector.push.flow_engaged_mention.v1",
+      "watch_level": "mentions_only",
+      "event": {
+        "mentions_actor": true
+      },
+      "expected": {
+        "deliver": true,
+        "blind_wakeup": false,
+        "reason_code": "watch_allows",
+        "yougen": {
+          "should_notify": true,
+          "watch_suppressed": false,
+          "muted_short_circuit": false,
+          "blind_wakeup_required": false,
+          "unresolved_client_evaluation": false
+        }
+      }
+    },
+    {
       "name": "participating_plain_non_participant_is_filtered",
       "watch_level": "participating",
       "event": {},
