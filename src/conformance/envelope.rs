@@ -371,7 +371,7 @@ fn validate_event_envelope(
         ));
     }
 
-    // Spec event-schema.json required fields:
+    // Spec event-envelope.schema.json required fields:
     //   event_id, kind, realm_id, actor_id, actor_seq, created_at,
     //   prev_refs, refs, payload, proofs
     // `refs` MUST be present per spec — negative fixture

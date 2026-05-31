@@ -180,7 +180,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     ownerDid: alice.did,
     audit_disclosure_policy: {
       enabled: true,
-      agent_did: agentDid,
+      agent_id: agentDid,
       agent_url: agentBaseUrl,
       trigger: "report_filed",
       assurance: "mock_attested",

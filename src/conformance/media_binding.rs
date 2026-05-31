@@ -363,14 +363,14 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     // The backend MUST signal only identities that match an entry in
     // `cx.call.state.participants[]`. Unknown identities fail closed
     // — clients MUST NOT trust them.
-    let known: &[&str] = &["cx:rtcpart:01999999-0000-7000-8000-00000000abcd"];
-    let unknown = "cx:rtcpart:01999999-0000-7000-8000-deadbeefdead";
+    let known: &[&str] = &["cx:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
+    let unknown = "cx:rtc_participant:01999999-0000-7000-8000-deadbeefdead";
     if known.contains(&unknown) {
         bail!("participant identity leak: unknown id in known set");
     }
-    // `rtcpart` id-kind MUST keep the canonical `cx:rtcpart:` prefix.
+    // `rtc_participant` id-kind MUST keep the canonical `cx:rtc_participant:` prefix.
     for id in known {
-        if !id.starts_with("cx:rtcpart:") {
+        if !id.starts_with("cx:rtc_participant:") {
             bail!("rtcpart id lost canonical prefix: {id}");
         }
     }

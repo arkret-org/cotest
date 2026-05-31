@@ -1029,7 +1029,7 @@ try {
     if ($StartMockAuditAgent) {
         $auditEnv = "`$env:MOCK_AUDIT_AGENT_PORT='$mockAuditAgentPort'"
         if ($MockAuditAgentDid) {
-            $auditEnv = "$auditEnv; `$env:MOCK_AUDIT_AGENT_DID=" + (Quote-PsLiteral $MockAuditAgentDid)
+            $auditEnv = "$auditEnv; `$env:MOCK_audit_agent_principal_id=" + (Quote-PsLiteral $MockAuditAgentDid)
         }
         $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
@@ -1438,13 +1438,13 @@ try {
     if ($mockAuditAgentBaseUrl) {
         $env:COTEST_MOCK_AUDIT_AGENT_BASE_URL = $mockAuditAgentBaseUrl
         if ($MockAuditAgentDid) {
-            $env:COTEST_MOCK_AUDIT_AGENT_DID = $MockAuditAgentDid
+            $env:COTEST_MOCK_audit_agent_principal_id = $MockAuditAgentDid
         } else {
-            Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
+            Remove-Item Env:COTEST_MOCK_audit_agent_principal_id -ErrorAction SilentlyContinue
         }
     } else {
         Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_audit_agent_principal_id -ErrorAction SilentlyContinue
     }
     if ($mockPolicyServerBaseUrl) {
         $env:COTEST_MOCK_POLICY_SERVER_BASE_URL = $mockPolicyServerBaseUrl
@@ -2009,7 +2009,7 @@ $summary = [pscustomobject]@{
     mock_witness_quorum_base_urls = if ($mockWitnessBaseUrl) { $mockWitnessQuorumBaseUrls } else { @() }
     mock_witness_quorum_dids = if ($mockWitnessBaseUrl) { $mockWitnessQuorumDids } else { @() }
     mock_audit_agent_base_url = $mockAuditAgentBaseUrl
-    mock_audit_agent_did = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
+    mock_audit_agent_principal_id = if ($mockAuditAgentBaseUrl -and $MockAuditAgentDid) { $MockAuditAgentDid } else { $null }
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
     yougen_base_url = $YougenBaseUrl
@@ -2069,7 +2069,7 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_witness_quorum_base_urls: $($mockWitnessQuorumBaseUrls -join ",")
 - mock_witness_quorum_dids: $($mockWitnessQuorumDids -join ",")
 - mock_audit_agent_base_url: $($summary.mock_audit_agent_base_url)
-- mock_audit_agent_did: $($summary.mock_audit_agent_did)
+- mock_audit_agent_principal_id: $($summary.mock_audit_agent_principal_id)
 - mock_mimi_facade_base_url: $($summary.mock_mimi_facade_base_url)
 - mock_mimi_facade_did: $($summary.mock_mimi_facade_did)
 - yougen_base_url: $($summary.yougen_base_url)

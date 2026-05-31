@@ -126,7 +126,7 @@ test.describe("agent protocol interop", () => {
       //   //      mock-agent-runtime base URL (spec §6 step 4 host pinning).
       //
       //   // 3. localAgent token: POST /api/v1/agents/discover
-      //   //    { agent_did: remoteAgent.did }
+      //   //    { agent_id: remoteAgent.did }
       //   //    → expect 200 with { supported_protocols: ["a2a","acp"], ... }
       //   //      where supported_protocols ⊆ {"a2a","acp","mcp_bridge",
       //   //      "http_custom"} (spec §11).

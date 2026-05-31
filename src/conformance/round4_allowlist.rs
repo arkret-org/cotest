@@ -131,7 +131,7 @@ fn check_id_kinds_present(required: &[&str]) -> Result<()> {
 
 fn check_schema_defs_present(required: &[&str]) -> Result<()> {
     // The new $defs live under `event-payload.schema.json#/$defs` (most),
-    // `event-schema.json#/$defs` (some), or as standalone schemas. We
+    // `event-envelope.schema.json#/$defs` (some), or as standalone schemas. We
     // search every schema file's `$defs` map plus the top-level `$id`s.
     let registry = load_artifact_json("registry/schema-registry.json")?;
     let mut found = BTreeSet::<String>::new();

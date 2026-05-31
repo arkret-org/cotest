@@ -205,7 +205,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(invite.status()).toBe(200);
     const inviteBody = await invite.json();
-    expect(inviteBody.agent_did).toBe(identity.did);
+    expect(inviteBody.agent_id).toBe(identity.did);
     expect(inviteBody.emitted.type).toBe("cx.audit.accessed");
     expect(inviteBody.emitted.space_id).toBe(spaceId);
     expect(typeof inviteBody.emitted.binding_proof).toBe("string");

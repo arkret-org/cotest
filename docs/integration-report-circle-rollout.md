@@ -166,7 +166,7 @@ follow-on round on top of `97d9dc8`.
 
 | file:line | marker | disposition |
 |---|---|---|
-| `src/kinds.rs:218` | `TODO(circle-rollout-P2A.4)` — cross-Realm `allowed_circle_refs` | [deferred to P6 or later] |
+| `src/kinds.rs:218` | `TODO(circle-rollout-P2A.4)` — cross-Realm `allowed_circle_ids` | [deferred to P6 or later] |
 | `src/routing/circles.rs:23,343,368` | `TODO(circle-rollout-P2A.4)` — MLS group rotation on Circle membership change | [deferred to P6 or later] |
 
 #### coauth (53a95ad)

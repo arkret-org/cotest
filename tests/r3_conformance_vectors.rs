@@ -377,15 +377,15 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
     unreachable!("integration target gated on soland / floria P2-impl");
 }
 
-// ─── P0 / TEST-3 — `accountable_to.strict_reject` profile toggle ───────────
+// ─── P0 / TEST-3 — `accountable_principals.strict_reject` profile toggle ───
 
 #[test]
 #[ignore = "R3.1: soland strict_reject reducer branch not yet implemented"]
-fn test_3_accountable_to_strict_reject_profile_toggle() {
+fn test_3_accountable_principals_strict_reject_profile_toggle() {
     // Live integration:
-    //   1. With `cx.profile.accountable_to.strict_reject.v1` NOT
+    //   1. With `cx.profile.accountable_principals.strict_reject.v1` NOT
     //      advertised: actor-profile create with unverified
-    //      `accountable_to[]` → 200, server strips + audit logs.
+    //      `accountable_principal_ids[]` → 200, server strips + audit logs.
     //   2. With the profile advertised: same envelope → 412
     //      failed_precondition reason=accountability_grant_missing.
     unreachable!("integration target gated on soland P2-impl profile branch");

@@ -347,7 +347,7 @@ fn scan_effective_scope_circle(
         },
         message: format!(
             "`EffectiveScope::Circle` requires both `realm_id` and \
-             `circle_id` (schemas/event-schema.json `$defs.effective_scope`); \
+             `circle_id` (schemas/event-envelope.schema.json `$defs.effective_scope`); \
              this line names the Circle variant but does not visibly bind \
              `circle_id`. Suppress with `{CIRCLE_ALLOW_MARKER}` if the \
              binding lives on an adjacent line."

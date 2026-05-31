@@ -29,7 +29,7 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 
 ### Phase A — 启用 audited E2EE
 
-1. alice createSpace,`encryption_profile=mls_rfc9420` + `audit_disclosure_policy = { agent_did: "did:web:audit.example.com", trigger: "report_filed" }`
+1. alice createSpace,`encryption_profile=mls_rfc9420` + `audit_disclosure_policy = { agent_id: "did:web:audit.example.com", trigger: "report_filed" }`
 2. alice 邀请 bob、reporter,both 接受
 
 ### Phase B — bob 发消息,franking 自动生成
@@ -50,7 +50,7 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 ### Phase D — audit-agent 进入 + 解密
 
 10. audit-agent 收到 request → 调 `GET /api/v1/spaces/<S>/events/<M1.event_id>/audit-access`
-11. soland 校验 audit-agent 是 audit_disclosure_policy.agent_did → 允许
+11. soland 校验 audit-agent 是 audit_disclosure_policy.agent_id → 允许
 12. audit-agent 调 MLS KeyPackage / out-of-band 拿到 epoch key(spec 留 mechanism;可能需要群组重新加 audit-agent 进 MLS)
 13. audit-agent 解密 `M1` 得到 plaintext
 14. **关键**:audit-agent 必须写 `cx.audit.accessed { auditor_did, target_ref, accessed_at, reason: "moderation_report" }`

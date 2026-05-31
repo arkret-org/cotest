@@ -58,7 +58,7 @@
 2. **alice** 通过 `agent-register-form` 录入 `remote_agent.did` + `protocol = "a2a"` + `capabilities = "flow.read,flow.publish"`,点 `agent-register-submit-button`;
 3. 断言 `agent-register-status` 文本包含 `event_id`,且 `agent-endpoint-row` 出现一条以 `remote_agent.did` 为 head 的记录;
 4. **harness** 调 `GET /api/v1/identity/${remote_agent.did}/did-document` 拉 DID Document,断言其中 `service[].serviceEndpoint` 与 mock-agent-runtime base URL 字节级相等 (spec §6 步骤 4 的 host pinning 前置条件);
-5. **local_agent** (通过 harness HTTP) 调 `POST /api/v1/agents/discover` (gap),传 `{ agent_did: remote_agent.did }`;断言返回 `{ supported_protocols: ["a2a", "acp"], agent_card_url, metadata_url }`,且 protocol 列表与 §11 adapter registry 合法 ID 子集一致 (`a2a` / `acp` / `mcp_bridge` / `http_custom`)。
+5. **local_agent** (通过 harness HTTP) 调 `POST /api/v1/agents/discover` (gap),传 `{ agent_id: remote_agent.did }`;断言返回 `{ supported_protocols: ["a2a", "acp"], agent_card_url, metadata_url }`,且 protocol 列表与 §11 adapter registry 合法 ID 子集一致 (`a2a` / `acp` / `mcp_bridge` / `http_custom`)。
 
 ### Phase B — Capability approval (§4 / §7 capability constraint / §8 启动前检查)
 
@@ -79,7 +79,7 @@
 ### Phase D — Publish-to-source (§5.4 / §6 步骤 8-9)
 
 16. **mock-agent-runtime** 模拟终态,向 soland 回写 `cx.agent.protocol_session.result` 事件 body:`{ session_id, status: "completed", result_objects: [{ object_type: "flow", object_ref: "cx:flow:<uuid>", track: "synthesis", role: "primary_result" }], artifacts: [{ artifact_type: "text", object_ref: "cx:morph:<uuid>", hash: "sha256:..." }], external_transcript_digest: "sha256:...", completed_at: "<iso>" }`;
-17. soland 用 `REFERENCE_AGENT_AUDIT_ED25519_SEED` 给 `audit_binding` 块签 Ed25519,canonical subject 形如 `{session_id, agent_did, result.echo, actor}`,断言响应里 `audit_binding.binding_kind === "ed25519_v1"` 且 `audit_binding.key_id === "soland.reference.agent_echo.ed25519_v1"`;
+17. soland 用 `REFERENCE_AGENT_AUDIT_ED25519_SEED` 给 `audit_binding` 块签 Ed25519,canonical subject 形如 `{session_id, agent_id, result.echo, actor}`,断言响应里 `audit_binding.binding_kind === "ed25519_v1"` 且 `audit_binding.key_id === "soland.reference.agent_echo.ed25519_v1"`;
 18. **alice** 在 yougen `/agents` 的 `agent-incoming-results` 看到一条 `agent-incoming-result-row`,`agent-audit-verify-badge` 文本严格等于 `audit valid` (绿色徽章);
 19. **alice** 在 `/agents` 的对应 protocol session detail 区确认 result artifact;保留 remote_agent attribution,点 `publish-modal-confirm`;
 20. 断言 source space 里出现一条新 Flow,其 `fields.workflow_type` 包含 `synthesis`,且 `relation` 指向 `cx:morph:<uuid>` artifact;Flow 创建事件的 `actor_id` 是 `alice.did`,但 `attribution` 字段保留 `remote_agent.did` (spec §5.4 关于 publish 的语义)。

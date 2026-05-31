@@ -459,7 +459,7 @@ gap-coverage gaps deferred to R4.
 | **§11 media binding** — focus/session commit invariants | `session_focus_already_committed` reject; `e2ee_key_source_unauthorised` reject | `e2e/call_media/session_focus_already_committed.rs`, `e2e/call_media/e2ee_key_source_unauthorised.rs` | Active (some stubbed — see below) |
 | **§13 recovery** — policy + receipt | Policy version monotonicity; receipt completeness; proof_kinds dispatch | `e2e/recovery/policy_round_trip.rs`, `e2e/recovery/receipt_emitted_on_complete.rs`, `e2e/recovery/policy_version_monotone.rs` | Active |
 | **§13 recovery** — witness freshness | `recovery_witness_revoke_lagging` reject; per-arm proof verifier | `e2e/recovery/witness_revoke_lagging.rs` (basic shape), `e2e/recovery/per_arm_proof_verifier.rs` (stubbed) | Stubbed |
-| **§14 errors** — strict-reject profile | `accountable_to.strict_reject` toggle + reject behavior | `e2e/profile/strict_reject_toggle.rs`, `e2e/profile/strict_reject_audit_row.rs` | Active |
+| **§14 errors** — strict-reject profile | `accountable_principals.strict_reject` toggle + reject behavior | `e2e/profile/strict_reject_toggle.rs`, `e2e/profile/strict_reject_audit_row.rs` | Active |
 
 ### Coverage gaps (deferred)
 

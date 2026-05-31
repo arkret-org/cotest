@@ -2,14 +2,14 @@
 // audit_disclosure_policy.trigger, acks invite, emits cx.audit.accessed).
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
-// harness configures soland's audit_disclosure_policy.audit_agent_did to
+// harness configures soland's audit_disclosure_policy.audit_agent_principal_id to
 // match the mock's DID; soland then federates invites to the mock and
 // surfaces emitted `cx.audit.accessed` events back to admin views.
 //
 // Endpoints:
 //   GET  /api/v1/audit-agent/identity
 //     Returns { did, public_jwk, key_package? }. Soland reads this to
-//     bind audit_disclosure_policy.audit_agent_did.
+//     bind audit_disclosure_policy.audit_agent_principal_id.
 //   POST /api/v1/audit-agent/events  { kind, event }
 //     Forward `cx.moderation.franking_proof` / `cx.audit.report` events to the
 //     mock. Auto-acknowledges by recording a generated `cx.audit.accessed`
@@ -41,7 +41,7 @@ const audienceDefault = process.env.MOCK_AUDIT_AGENT_AUDIENCE ?? "soland";
 // unique audit-agent identity (preventing test cross-contamination across
 // runs that share a persistent backing store).
 const agentDid =
-  process.env.MOCK_AUDIT_AGENT_DID ??
+  process.env.MOCK_audit_agent_principal_id ??
   `did:web:audit-agent.joint-e2e.local#${randomUUID().slice(0, 8)}`;
 
 const { privateKey, publicKey, jwks } = createEd25519KeyPair("mock-audit-agent-key-1");
@@ -93,7 +93,7 @@ function makeAccessedEnvelope({ space_id, source_event_id, reason }) {
     actor_did: agentDid,
     occurred_at: new Date().toISOString(),
     payload: {
-      audit_agent_did: agentDid,
+      audit_agent_principal_id: agentDid,
       source_event_id: source_event_id ?? null,
       reason: reason ?? "audit_disclosure_policy.trigger",
     },
@@ -125,7 +125,7 @@ const server = createServer(async (req, res) => {
     const handled = handleInspect(req, res, {
       service: "mock-audit-agent",
       logs: [inboxLog, inviteLog, accessedLog],
-      extra: { agent_did: agentDid, public_jwk: publicJwk },
+      extra: { agent_id: agentDid, public_jwk: publicJwk },
     });
     if (handled) return;
   }
@@ -183,7 +183,7 @@ const server = createServer(async (req, res) => {
     res.end(
       JSON.stringify({
         ok: true,
-        agent_did: agentDid,
+        agent_id: agentDid,
         mls_key_package: mlsKeyPackage,
         emitted: accessed,
       }),
