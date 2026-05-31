@@ -152,10 +152,11 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
     assert_eq!(exported["schema"], "cx.export.space.v1");
-    let sent_operation_id = sent["event_id"]
-        .as_str()
-        .unwrap()
-        .replacen("cx:event:", "cx:operation:", 1);
+    let sent_operation_id =
+        sent["event_id"]
+            .as_str()
+            .unwrap()
+            .replacen("cx:event:", "cx:operation:", 1);
     assert!(
         exported["operations"]
             .as_array()

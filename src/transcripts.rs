@@ -208,14 +208,23 @@ pub fn record_vector_event(kind: &str, payload: &Value, expected: &Value, actual
     let scenario = ACTIVE_SCENARIO
         .with(|cell| cell.borrow().clone())
         .unwrap_or_default();
-    tracing::info!(
-        scenario = scenario.as_str(),
-        kind = kind,
-        payload = payload.to_string().as_str(),
-        expected = expected.to_string().as_str(),
-        actual = actual.to_string().as_str(),
-        "vector",
-    );
+    let entry = serde_json::json!({
+        "level": "INFO",
+        "fields": {
+            "message": "vector",
+            "scenario": scenario,
+            "kind": kind,
+            "payload": payload.to_string(),
+            "expected": expected.to_string(),
+            "actual": actual.to_string(),
+        }
+    });
+    if let Ok(mut guard) = registry().lock()
+        && let Some(file) = guard.get_mut(&scenario)
+    {
+        let _ = serde_json::to_writer(&mut *file, &entry);
+        let _ = file.write_all(b"\n");
+    }
 }
 
 /// Returns true when the calling thread has an active transcript writer bound.

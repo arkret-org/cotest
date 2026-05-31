@@ -56,12 +56,7 @@ fn with_signed_federation_request(
         .query()
         .map(|query| format!("{}?{query}", parsed_url.path()))
         .unwrap_or_else(|| parsed_url.path().to_owned());
-    let target_uri = format!(
-        "{}://{}{}",
-        parsed_url.scheme(),
-        authority,
-        path_and_query
-    );
+    let target_uri = format!("{}://{}{}", parsed_url.scheme(), authority, path_and_query);
 
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;
@@ -352,7 +347,10 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     });
     let invalid_push = expect_json(
         with_signed_federation_request(
-            server.http().post(&invalid_push_url).json(&invalid_push_body),
+            server
+                .http()
+                .post(&invalid_push_url)
+                .json(&invalid_push_body),
             "POST",
             &invalid_push_url,
             &server,
@@ -384,7 +382,10 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     });
     let redaction_push = expect_json(
         with_signed_federation_request(
-            server.http().post(&redaction_push_url).json(&redaction_push_body),
+            server
+                .http()
+                .post(&redaction_push_url)
+                .json(&redaction_push_body),
             "POST",
             &redaction_push_url,
             &server,

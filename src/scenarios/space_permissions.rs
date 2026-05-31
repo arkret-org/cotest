@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::harness::{
     ContrixServer, add_member, create_space, dev_login, event_envelope, expect_api_error,
-    expect_json, register_account, send_message,
+    expect_json, register_account, send_message, submit_event,
 };
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
@@ -20,28 +20,53 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
             .http()
             .post(server.url("/api/v1/spaces"))
             .json(&json!({"title": "No Auth"})),
+        StatusCode::NOT_FOUND,
+        "unrecognized_endpoint",
+    )
+    .await?;
+
+    let unauth_realm_id = "cx:realm:01904100-0000-7000-8000-5pace0000001";
+    expect_api_error(
+        server
+            .http()
+            .post(server.url("/api/v1/events"))
+            .json(&event_envelope(
+                "did:web:alice.example",
+                unauth_realm_id,
+                "cx.realm.create",
+                json!({
+                    "object": {
+                        "id": unauth_realm_id,
+                        "schema": "cx.schema.realm.v1",
+                        "title": "No Auth",
+                        "summary": "No Auth",
+                        "created_by": "did:web:alice.example",
+                        "trust_domain": "cx:trust_domain:soland.local",
+                        "schema_refs": ["cx.schema.realm.v1"],
+                        "default_discoverability": "invite_only",
+                        "default_join_rule": "invite",
+                        "history_visibility": "shared",
+                        "encryption_profile": "none",
+                        "plaintext_visible_services": [server.service_did()],
+                        "security_class": "standard",
+                        "federation_policy": "restricted",
+                        "anchor_profile": "single_did",
+                        "digest_algorithm": "sha256",
+                        "anchorer": {
+                            "type": "single_did",
+                            "did": "did:web:alice.example",
+                            "recovery_members": ["did:web:recovery.soland.local"],
+                            "controller_organization": "did:web:organization.primary.soland.local",
+                            "recovery_controller_organizations": [
+                                "did:web:organization.recovery.soland.local"
+                            ]
+                        },
+                        "created_at": "2026-05-02T00:00:00Z"
+                    }
+                }),
+            )),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
-    )
-    .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/api/v1/spaces"))
-            .bearer_auth(&alice)
-            .json(&json!({"title": "   "})),
-        StatusCode::BAD_REQUEST,
-        "missing_param",
-    )
-    .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/api/v1/spaces"))
-            .bearer_auth(&alice)
-            .json(&json!({"title": "Bad Invitee", "invitees": ["not-a-did"]})),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
     )
     .await?;
 
@@ -50,31 +75,29 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url(&format!("/api/v1/spaces/{space_id}/members")))
+            .post(server.url("/api/v1/events"))
             .bearer_auth(&bob)
-            .json(&json!({"member": "did:web:bob-space.example"})),
+            .json(&event_envelope(
+                "did:web:bob-space.example",
+                &space_id,
+                "cx.member.state",
+                json!({
+                    "actor_id": "did:web:bob-space.example",
+                    "membership": "join",
+                    "delivery_status": "unroutable"
+                }),
+            )),
         StatusCode::FORBIDDEN,
         "capability_denied",
-    )
-    .await?;
-    expect_api_error(
-        server
-            .http()
-            .delete(server.url(&format!(
-                "/api/v1/spaces/{space_id}/members/did:web:alice.example"
-            )))
-            .bearer_auth(&alice),
-        StatusCode::CONFLICT,
-        "conflict",
     )
     .await?;
     expect_api_error(
         server
             .http()
             .delete(server.url(&format!("/api/v1/spaces/{space_id}")))
-            .bearer_auth(&bob),
-        StatusCode::FORBIDDEN,
-        "capability_denied",
+            .bearer_auth(&alice),
+        StatusCode::METHOD_NOT_ALLOWED,
+        "method_not_allowed",
     )
     .await?;
 
@@ -83,15 +106,22 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
     let server = ContrixServer::spawn("space-visibility").await?;
-    let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
-    let bob = register_account(
-        &server,
-        "did:web:bob-visible.example",
-        "@bob-visible",
-        "dev_bob",
-    )
-    .await?;
-    let space_id = create_space(&server, &alice, "did:web:alice.example", "Private Space").await?;
+    let alice = server
+        .demo_client("did:web:alice.example", "dev_alice")
+        .await?;
+    let bob = server
+        .register_client("did:web:bob-visible.example", "@bob-visible", "dev_bob")
+        .await?;
+    let created = alice
+        .create_space_with(json!({
+            "title": "Private Space",
+            "summary": "Private Space",
+            "discoverability": "invite_only",
+            "history_visibility": "shared",
+            "plaintext_visible_services": [server.service_did()]
+        }))
+        .await?;
+    let space_id = created["space_id"].as_str().unwrap().to_owned();
 
     let anonymous_search = expect_json(
         server
@@ -107,7 +137,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         server
             .http()
             .post(server.url("/api/v1/events"))
-            .bearer_auth(&bob)
+            .bearer_auth(&bob.token)
             .json(&event_envelope(
                 "did:web:bob-visible.example",
                 &space_id,
@@ -119,13 +149,13 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                 }),
             )),
         StatusCode::FORBIDDEN,
-        "policy_denied",
+        "capability_denied",
     )
     .await?;
 
     add_member(
         &server,
-        &alice,
+        &alice.token,
         "did:web:alice.example",
         &space_id,
         "did:web:bob-visible.example",
@@ -133,7 +163,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     .await?;
     send_message(
         &server,
-        &bob,
+        &bob.token,
         "did:web:bob-visible.example",
         &space_id,
         "cx:thread:space",
@@ -141,11 +171,13 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
-    expect_json(
-        server
-            .http()
-            .delete(server.url(&format!("/api/v1/spaces/{space_id}")))
-            .bearer_auth(&alice),
+    submit_event(
+        &server,
+        &alice.token,
+        "did:web:alice.example",
+        &space_id,
+        "cx.realm.destroy",
+        json!({"reason": "owner_requested"}),
         StatusCode::OK,
     )
     .await?;
@@ -153,7 +185,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         server
             .http()
             .post(server.url("/api/v1/events"))
-            .bearer_auth(&alice)
+            .bearer_auth(&alice.token)
             .json(&event_envelope(
                 "did:web:alice.example",
                 &space_id,
@@ -164,8 +196,8 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                     "thread_id": "cx:thread:space",
                 }),
             )),
-        StatusCode::FORBIDDEN,
-        "policy_denied",
+        StatusCode::CONFLICT,
+        "realm_terminal_state",
     )
     .await?;
 

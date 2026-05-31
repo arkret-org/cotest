@@ -62,10 +62,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let verify_bob_url = server_a.url("/api/v1/federation/verify-actor");
     let verify_bob = expect_json(
         with_round4_federation_headers(
-            server_a
-                .http()
-                .post(&verify_bob_url)
-                .json(&verify_bob_body),
+            server_a.http().post(&verify_bob_url).json(&verify_bob_body),
             "POST",
             &verify_bob_url,
             server_b,
@@ -120,10 +117,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let a_to_b_url = server_b.url("/api/v1/federation/transactions/federation-a-to-b-01");
     let pushed_to_b = expect_json(
         with_round4_federation_headers(
-            server_b
-                .http()
-                .put(&a_to_b_url)
-                .json(&a_to_b_body),
+            server_b.http().put(&a_to_b_url).json(&a_to_b_body),
             "PUT",
             &a_to_b_url,
             server_a,
@@ -198,10 +192,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let b_to_a_url = server_a.url("/api/v1/federation/transactions/federation-b-to-a-01");
     let txn = expect_json(
         with_round4_federation_headers(
-            server_a
-                .http()
-                .put(&b_to_a_url)
-                .json(&b_to_a_body),
+            server_a.http().put(&b_to_a_url).json(&b_to_a_body),
             "PUT",
             &b_to_a_url,
             server_b,
@@ -409,12 +400,7 @@ fn with_round4_federation_headers(
         .query()
         .map(|query| format!("{}?{query}", parsed_url.path()))
         .unwrap_or_else(|| parsed_url.path().to_owned());
-    let target_uri = format!(
-        "{}://{}{}",
-        parsed_url.scheme(),
-        authority,
-        path_and_query
-    );
+    let target_uri = format!("{}://{}{}", parsed_url.scheme(), authority, path_and_query);
 
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;

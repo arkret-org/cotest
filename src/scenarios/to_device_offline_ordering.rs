@@ -45,16 +45,16 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let server = ContrixServer::spawn("to-device-offline-ordering").await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
-    let alice_token =
-        register_account(&server, "did:web:alice.example", "@alice", "dev_alice").await?;
-    let bob_token = register_account(&server, "did:web:bob.example", "@bob", "dev_bob_a").await?;
+    let alice_token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let bob_did = "did:web:bob-offline-ordering.example";
+    let bob_token =
+        register_account(&server, bob_did, "@bob-offline-ordering", "dev_bob_a").await?;
     // Sanity: alice can also log in on a separate device id so the
     // sender's session is a separate row from the recipient's. (Not
     // strictly required by the scenario, but mirrors the implementor's
     // hint of "two devices for alice and one for bob".)
     let _alice_token_b = dev_login(&server, "did:web:alice.example", "dev_alice_b").await?;
 
-    let bob_did = "did:web:bob.example";
     let bob_device = "dev_bob_a";
 
     // ── Step 2: alice sends msg 1 to bob's device.
