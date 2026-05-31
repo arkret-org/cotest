@@ -49,22 +49,20 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
             .json(&json!({
                 "did": "did:web:alice.example",
                 "seq": 1,
-                "patch": {
-                    "did_document": {
-                        "id": "did:web:alice.example",
-                        "verification_method": [{
-                            "id": "did:web:alice.example#key-1",
-                            "type": "JsonWebKey2020",
-                            "controller": "did:web:alice.example",
-                            "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": "dev"}
-                        }],
-                        "authentication": ["did:web:alice.example#key-1"],
-                        "service": [{
-                            "id": "#soland",
-                            "type": "ContrixPrincipalServer",
-                            "serviceEndpoint": "https://alice.example"
-                        }]
-                    }
+                "did_document": {
+                    "id": "did:web:alice.example",
+                    "verification_method": [{
+                        "id": "did:web:alice.example#key-1",
+                        "type": "JsonWebKey2020",
+                        "controller": "did:web:alice.example",
+                        "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": "dev"}
+                    }],
+                    "authentication": ["did:web:alice.example#key-1"],
+                    "service": [{
+                        "id": "#soland",
+                        "type": "ContrixPrincipalServer",
+                        "serviceEndpoint": "https://alice.example"
+                    }]
                 },
                 "proofs": [{"kid": "did:web:alice.example#key-1", "sig": "dev"}]
             })),

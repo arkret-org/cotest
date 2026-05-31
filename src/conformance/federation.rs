@@ -16,11 +16,24 @@ pub fn run_federation_fixture_suite() -> Result<()> {
 
     for case in fixture.cases {
         match case.name.as_str() {
-            "http_message_signature_hash" => {
+            "http_message_signature_hash" | "http_message_signature_digest" => {
+                let input = case.input.as_ref();
+                let method = input
+                    .and_then(|value| value.get("method"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("PUT");
+                let target = input
+                    .and_then(|value| value.get("target_uri"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("/api/v1/federation/transactions/demo");
+                let body = input
+                    .and_then(|value| value.get("body"))
+                    .cloned()
+                    .unwrap_or_else(|| json!({"txn_id": "demo"}));
                 let request = SignedFederationRequest {
-                    method: "PUT".to_owned(),
-                    target: "/api/v1/federation/transactions/demo".to_owned(),
-                    body: json!({"txn_id": "demo"}),
+                    method: method.to_owned(),
+                    target: target.to_owned(),
+                    body,
                 };
                 let signature_input = request.signature_input_hash()?;
                 let canonical = request.canonical_request_hash()?;
@@ -28,7 +41,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     bail!("federation fixture {} hash mismatch", case.name);
                 }
                 record_vector_event(
-                    "federation.http_message_signature_hash",
+                    &format!("federation.{}", case.name),
                     &json!({
                         "method": request.method.clone(),
                         "target": request.target.clone(),

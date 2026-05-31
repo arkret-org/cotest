@@ -37,7 +37,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let manage_grant = expect_json(
         alice.post("/api/v1/authz/grants").json(&json!({
-            "realm_id": space_id,
+            "space_id": space_id,
             "subject": bob.actor,
             "resource": "*",
             "actions": ["manage_space"],
@@ -54,7 +54,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .get(server.url("/api/v1/authz/effective-grants"))
             .query(&[
                 ("subject", bob.actor.as_str()),
-                ("realm_id", space_id.as_str()),
+                ("space_id", space_id.as_str()),
             ]),
         StatusCode::OK,
     )
@@ -97,11 +97,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let deny_send_grant = expect_json(
         alice.post("/api/v1/authz/grants").json(&json!({
-            "realm_id": space_id,
+            "space_id": space_id,
             "subject": bob.actor,
             "resource": "*",
             "actions": ["send"],
-            "constraints": [{"type": "decision", "decision": "deny"}]
+            "constraints": [{"constraint_type": "decision", "decision": "deny"}]
         })),
         StatusCode::OK,
     )
@@ -221,14 +221,11 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(push_registration["ok"], true);
 
     let push_unregister = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/push/unregister-device"))
-            .json(&json!({
-                "device_id": alice.device_id.as_str(),
-                "push_key": "opaque",
-                "app_id": "yougen"
-            })),
+        alice.post("/api/v1/push/unregister-device").json(&json!({
+            "device_id": alice.device_id.as_str(),
+            "push_key": "opaque",
+            "app_id": "yougen"
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -237,7 +234,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let allow_policy = expect_json(
         server
             .http()
-            .post(server.url("/contrix/v1/check"))
+            .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "req-allow",
                 "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
@@ -255,7 +252,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let review_policy = expect_json(
         server
             .http()
-            .post(server.url("/contrix/v1/check"))
+            .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "req-review",
                 "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
@@ -273,7 +270,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/contrix/v1/check"))
+            .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "req-invalid",
                 "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",

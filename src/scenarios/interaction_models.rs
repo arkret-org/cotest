@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
-use crate::harness::{ContrixServer, expect_json, expect_status};
+use crate::harness::{ContrixServer, expect_json, expect_response, expect_status};
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
     let server = ContrixServer::spawn("interaction-messages").await?;
@@ -52,17 +52,16 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     )
     .await?;
 
-    let subscribe = expect_json(
+    let subscribe_response = expect_response(
         alice.get(&format!(
             "/api/v1/events/subscribe?spaces={space_id}&limit=10"
         )),
         StatusCode::OK,
     )
     .await?;
+    let subscribe_frames = ndjson_frames(&subscribe_response.text())?;
     assert!(
-        subscribe["frames"]
-            .as_array()
-            .unwrap()
+        subscribe_frames
             .iter()
             .any(|frame| frame["payload"]["event_id"] == sent["event_id"])
     );
@@ -72,22 +71,20 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             &space_id,
             "cx.reaction.add",
             json!({
-            "actor": bob.actor,
-            "event_id": sent["event_id"],
-            "key": "like"
+                "target_ref": sent["event_id"],
+                "key": "like"
             }),
         )
         .await?;
-    assert_eq!(reaction["event_id"], sent["event_id"]);
+    assert_eq!(reaction["status"], "accepted");
 
     let removed_reaction = carol
         .submit_event(
             &space_id,
             "cx.reaction.remove",
             json!({
-            "actor": carol.actor,
-            "event_id": sent["event_id"],
-            "key": "like"
+                "target_ref": sent["event_id"],
+                "key": "like"
             }),
         )
         .await?;
@@ -149,4 +146,15 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(redacted["status"], "accepted");
 
     Ok(())
+}
+
+fn ndjson_frames(body: &str) -> Result<Vec<Value>> {
+    let mut frames = Vec::new();
+    for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        frames.push(serde_json::from_str(line)?);
+    }
+    if frames.is_empty() {
+        return Err(anyhow!("events subscribe response did not include frames"));
+    }
+    Ok(frames)
 }

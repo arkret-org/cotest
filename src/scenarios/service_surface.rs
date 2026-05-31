@@ -37,6 +37,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
         "cx.account.subscribe",
         "cx.directory.search_realms",
         "cx.authz.check",
+        "cx.ephemeral.send",
         "cx.push.register_device",
         "cx.policy.check",
         "cx.moderation.report",
@@ -54,9 +55,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
             .as_array()
             .expect("local extension operation list");
     for extension in [
-        "cx.extension.soland.sync.typing",
         "cx.extension.soland.index.query",
-        "cx.extension.soland.schemas.register",
         "cx.extension.soland.push.rules",
         "cx.extension.soland.webrtc.create_session",
     ] {

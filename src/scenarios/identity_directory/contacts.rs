@@ -35,20 +35,39 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let contacts = expect_json(bob.get("/api/v1/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
-    let invite_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+    let invite_space = alice
+        .create_space_with(json!({
             "title": "Invite Token Space",
             "discoverability": "invite_only",
             "invitees": [bob.actor.clone()]
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
+        }))
+        .await?;
     let invite_space_id = invite_space["realm_id"].as_str().unwrap().to_owned();
+    let invite_event = alice
+        .submit_event(
+            &invite_space_id,
+            "cx.invite.create",
+            json!({
+                "invitee": bob.actor,
+                "expires_at": "2026-12-31T00:00:00Z"
+            }),
+        )
+        .await?;
+    assert_eq!(
+        invite_event["status"],
+        "accepted",
+        "invite event was not accepted: {}",
+        serde_json::to_string_pretty(&invite_event)?
+    );
 
     let invites = expect_json(bob.get("/api/v1/authz/invites"), StatusCode::OK).await?;
-    assert_eq!(invites["invites"].as_array().unwrap().len(), 1);
-    assert_eq!(invites["invites"][0]["realm_id"], invite_space_id);
+    assert_eq!(
+        invites["invites"].as_array().unwrap().len(),
+        1,
+        "expected one invite for bob: {}",
+        serde_json::to_string_pretty(&invites)?
+    );
+    assert_eq!(invites["invites"][0]["space_id"], invite_space_id);
     let invite_token = invites["invites"][0]["invite_token"].as_str().unwrap();
 
     expect_status(
@@ -70,14 +89,12 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     .await?;
     assert_eq!(invite_resolve["space_preview"]["realm_id"], invite_space_id);
 
-    let listed_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+    let listed_space = alice
+        .create_space_with(json!({
             "title": "Listed Directory Space",
             "discoverability": "listed"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
+        }))
+        .await?;
     let listed_space_id = listed_space["realm_id"].as_str().unwrap().to_owned();
     let listed_search = expect_json(
         server
@@ -89,14 +106,12 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     .await?;
     assert_eq!(listed_search["results"][0]["realm_id"], listed_space_id);
 
-    let unlisted_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+    let unlisted_space = alice
+        .create_space_with(json!({
             "title": "Unlisted Directory Space",
             "discoverability": "unlisted"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
+        }))
+        .await?;
     let unlisted_space_id = unlisted_space["realm_id"].as_str().unwrap().to_owned();
     let unlisted_search = expect_json(
         server
@@ -137,12 +152,16 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
     assert_eq!(exported["schema"], "cx.export.space.v1");
+    let sent_operation_id = sent["event_id"]
+        .as_str()
+        .unwrap()
+        .replacen("cx:event:", "cx:operation:", 1);
     assert!(
         exported["operations"]
             .as_array()
             .unwrap()
             .iter()
-            .any(|operation| operation["operation_id"] == sent["operation_id"])
+            .any(|operation| operation["operation_id"] == sent_operation_id)
     );
 
     let waited_sync = expect_response(
@@ -161,9 +180,14 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         Some("true")
     );
     let waited_sync = account_subscribe_delta_from_text(&waited_sync.text())?;
-    assert_eq!(
-        waited_sync["spaces"][&shared_space_id]["timeline"]["events"][0]["event_id"],
-        sent["event_id"]
+    let waited_events = waited_sync["realms"][&shared_space_id]["timeline"]["events"]
+        .as_array()
+        .unwrap();
+    assert!(
+        waited_events
+            .iter()
+            .any(|event| event["event_id"] == sent["event_id"]),
+        "waited sync did not include submitted message event: {waited_sync}"
     );
 
     expect_status(
@@ -177,7 +201,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let audit_events =
         expect_json(alice.get("/api/v1/audit/events?limit=20"), StatusCode::OK).await?;
-    let _ = expect_audit_action(&audit_events, "space.create")?;
+    let _ = expect_audit_action(&audit_events, "events.submit")?;
 
     expect_status(
         alice.get(&format!("/api/v1/audit/events?actor={}", bob.actor)),

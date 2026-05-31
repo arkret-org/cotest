@@ -1,7 +1,15 @@
 use anyhow::{Context, Result, anyhow};
-use contrix_core::{Operation, OperationId, RealmId, canonical::canonical_sha256};
+use contrix::http_signature::{
+    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
+};
+use contrix_core::{
+    Operation, OperationId, RealmId,
+    canonical::{canonical_json_bytes, canonical_sha256},
+};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use url::Url;
 
 use crate::harness::{ContrixServer, dev_login, expect_api_error, expect_json, expect_response};
 
@@ -11,14 +19,105 @@ fn with_round4_federation_headers(
     body: &Value,
 ) -> Result<reqwest::RequestBuilder> {
     let request_canonical_digest = canonical_sha256(body)?;
-    let destination_trust_domain = format!(
-        "cx:trust_domain:{}",
-        server.service_did().trim_start_matches("did:web:")
-    );
     Ok(builder
-        .header("Source-Trust-Domain", "cx:trust_domain:peer.example")
-        .header("Destination-Trust-Domain", destination_trust_domain)
+        .header(
+            "Source-Trust-Domain",
+            trust_domain_from_service_did("did:web:remote.example"),
+        )
+        .header(
+            "Destination-Trust-Domain",
+            trust_domain_from_service_did(server.service_did()),
+        )
         .header("Request-Canonical-Digest", request_canonical_digest))
+}
+
+fn with_signed_federation_request(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    destination: &ContrixServer,
+    source_service_did: &str,
+    body: &Value,
+) -> Result<reqwest::RequestBuilder> {
+    let body_bytes = canonical_json_bytes(body)?;
+    let content_digest =
+        ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = canonical_sha256(body)?;
+    let source_trust_domain = trust_domain_from_service_did(source_service_did);
+    let destination_service_did = destination.service_did();
+    let destination_trust_domain = trust_domain_from_service_did(destination_service_did);
+
+    let parsed_url = Url::parse(target_url)?;
+    let authority = parsed_url
+        .port()
+        .map(|port| format!("{}:{port}", parsed_url.host_str().unwrap_or("server")))
+        .unwrap_or_else(|| parsed_url.host_str().unwrap_or("server").to_owned());
+    let path_and_query = parsed_url
+        .query()
+        .map(|query| format!("{}?{query}", parsed_url.path()))
+        .unwrap_or_else(|| parsed_url.path().to_owned());
+    let target_uri = format!(
+        "{}://{}{}",
+        parsed_url.scheme(),
+        authority,
+        path_and_query
+    );
+
+    let created = chrono::Utc::now().timestamp();
+    let expires = created + 300;
+    let keyid = format!("{source_service_did}#federation-fanout-key");
+    let signature_params = format!(
+        "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
+         \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+         \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
+         expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
+    );
+    let signature_base = format!(
+        "\"@method\": {}\n\
+         \"@target-uri\": {target_uri}\n\
+         \"@authority\": {authority}\n\
+         \"content-digest\": {content_digest}\n\
+         \"source-service-did\": {source_service_did}\n\
+         \"destination-service-did\": {destination_service_did}\n\
+         \"source-trust-domain\": {source_trust_domain}\n\
+         \"destination-trust-domain\": {destination_trust_domain}\n\
+         \"request-canonical-digest\": {request_canonical_digest}\n\
+         \"@signature-params\": {signature_params}",
+        method.to_ascii_uppercase()
+    );
+    let signing_key = development_service_signing_key(source_service_did);
+    let signature = sign_message(signature_base.as_bytes(), &signing_key);
+
+    Ok(builder
+        .header("Content-Digest", content_digest)
+        .header("Source-Service-DID", source_service_did)
+        .header("Destination-Service-DID", destination_service_did)
+        .header("Source-Trust-Domain", source_trust_domain)
+        .header("Destination-Trust-Domain", destination_trust_domain)
+        .header("Request-Canonical-Digest", request_canonical_digest)
+        .header("Signature-Input", format!("sig1={signature_params}"))
+        .header("Signature", format!("sig1=:{signature}:")))
+}
+
+fn trust_domain_from_service_did(service_did: &str) -> String {
+    let scope = service_did
+        .strip_prefix("did:web:")
+        .or_else(|| service_did.strip_prefix("did:key:"))
+        .or_else(|| service_did.strip_prefix("did:webvh:"))
+        .unwrap_or(service_did)
+        .to_ascii_lowercase()
+        .replace(':', ".");
+    format!("cx:trust_domain:{scope}")
+}
+
+fn development_service_signing_key(
+    service_did: &str,
+) -> contrix::http_signature::Ed25519SigningKey {
+    let mut hasher = Sha256::new();
+    hasher.update(b"soland:anchorer-ephemeral:");
+    hasher.update(service_did.as_bytes());
+    let seed: [u8; 32] = hasher.finalize().into();
+    signing_key_from_seed(&seed)
 }
 
 fn account_delta_from_text(ndjson: &str) -> Result<Value> {
@@ -140,17 +239,23 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         }),
     );
 
+    let first_push_url = server.url("/api/v1/federation/push-operations");
+    let first_push_body = json!({
+        "origin": "did:web:remote.example",
+        "destination": server.service_did(),
+        "space_id": space_id,
+        "service_binding_ref": "did:web:remote.example#soland",
+        "operations": [operation.clone()]
+    });
     let first_push = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/federation/push-operations"))
-            .json(&json!({
-                "origin": "did:web:remote.example",
-                "destination": server.service_did(),
-                "space_id": space_id,
-                "service_binding_ref": "did:web:remote.example#soland",
-                "operations": [operation.clone()]
-            })),
+        with_signed_federation_request(
+            server.http().post(&first_push_url).json(&first_push_body),
+            "POST",
+            &first_push_url,
+            &server,
+            "did:web:remote.example",
+            &first_push_body,
+        )?,
         StatusCode::OK,
     )
     .await?;
@@ -184,23 +289,47 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             .starts_with("sha256:")
     );
 
+    let replay_url = server.url("/api/v1/federation/push-operations");
+    let replay_body = json!({
+        "origin": "did:web:remote.example",
+        "destination": server.service_did(),
+        "space_id": space_id,
+        "service_binding_ref": "did:web:remote.example#soland",
+        "operations": [operation]
+    });
     let replay = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/federation/push-operations"))
-            .json(&json!({
-                "origin": "did:web:remote.example",
-                "destination": server.service_did(),
-                "space_id": space_id,
-                "service_binding_ref": "did:web:remote.example#soland",
-                "operations": [operation]
-            })),
+        with_signed_federation_request(
+            server.http().post(&replay_url).json(&replay_body),
+            "POST",
+            &replay_url,
+            &server,
+            "did:web:remote.example",
+            &replay_body,
+        )?,
         StatusCode::OK,
     )
     .await?;
-    assert!(replay["accepted"].as_array().unwrap().is_empty());
-    assert_eq!(replay["rejected"][0]["operation_id"], replay_operation_id);
-    assert_eq!(replay["rejected"][0]["reason"], "replay");
+    assert_eq!(replay["accepted"][0], replay_operation_id);
+    assert!(replay["rejected"].as_array().unwrap().is_empty());
+
+    let after_replay_pull = expect_json(
+        server.http().get(server.url(&format!(
+            "/api/v1/federation/pull-operations?space_id={space_id}"
+        ))),
+        StatusCode::OK,
+    )
+    .await?;
+    let after_replay_operations = after_replay_pull["operations"].as_array().unwrap();
+    assert_eq!(
+        after_replay_operations.len(),
+        1,
+        "idempotent federation replay must not duplicate persisted operations: {}",
+        serde_json::to_string_pretty(&after_replay_pull)?
+    );
+    assert_eq!(
+        after_replay_operations[0]["operation_id"],
+        replay_operation_id
+    );
 
     let invalid_operation = Operation::create(
         OperationId::new(invalid_operation_id)?,
@@ -213,17 +342,23 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "content": {"ciphertext": "missing-envelope-fields"}
         }),
     );
+    let invalid_push_url = server.url("/api/v1/federation/push-operations");
+    let invalid_push_body = json!({
+        "origin": "did:web:remote.example",
+        "destination": server.service_did(),
+        "space_id": space_id,
+        "service_binding_ref": "did:web:remote.example#soland",
+        "operations": [invalid_operation]
+    });
     let invalid_push = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/federation/push-operations"))
-            .json(&json!({
-                "origin": "did:web:remote.example",
-                "destination": server.service_did(),
-                "space_id": space_id,
-                "service_binding_ref": "did:web:remote.example#soland",
-                "operations": [invalid_operation]
-            })),
+        with_signed_federation_request(
+            server.http().post(&invalid_push_url).json(&invalid_push_body),
+            "POST",
+            &invalid_push_url,
+            &server,
+            "did:web:remote.example",
+            &invalid_push_body,
+        )?,
         StatusCode::OK,
     )
     .await?;
@@ -239,17 +374,23 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "target_event_id": replay_event_id
         }),
     );
+    let redaction_push_url = server.url("/api/v1/federation/push-operations");
+    let redaction_push_body = json!({
+        "origin": "did:web:remote.example",
+        "destination": server.service_did(),
+        "space_id": space_id,
+        "service_binding_ref": "did:web:remote.example#soland",
+        "operations": [redaction]
+    });
     let redaction_push = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/federation/push-operations"))
-            .json(&json!({
-                "origin": "did:web:remote.example",
-                "destination": server.service_did(),
-                "space_id": space_id,
-                "service_binding_ref": "did:web:remote.example#soland",
-                "operations": [redaction]
-            })),
+        with_signed_federation_request(
+            server.http().post(&redaction_push_url).json(&redaction_push_body),
+            "POST",
+            &redaction_push_url,
+            &server,
+            "did:web:remote.example",
+            &redaction_push_body,
+        )?,
         StatusCode::OK,
     )
     .await?;
@@ -297,16 +438,22 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         }),
     );
 
+    let txn_url = server.url("/api/v1/federation/transactions/federation-project-txn");
+    let txn_body = json!({
+        "origin": "did:web:remote-server.example",
+        "destination": server.service_did(),
+        "service_binding_ref": "cotest",
+        "operations": [operation]
+    });
     let txn = expect_json(
-        server
-            .http()
-            .put(server.url("/api/v1/federation/transactions/federation-project-txn"))
-            .json(&json!({
-                "origin": "did:web:remote-server.example",
-                "destination": server.service_did(),
-                "service_binding_ref": "cotest",
-                "operations": [operation]
-            })),
+        with_signed_federation_request(
+            server.http().put(&txn_url).json(&txn_body),
+            "PUT",
+            &txn_url,
+            &server,
+            "did:web:remote-server.example",
+            &txn_body,
+        )?,
         StatusCode::OK,
     )
     .await?;

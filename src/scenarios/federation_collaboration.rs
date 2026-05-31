@@ -1,7 +1,15 @@
 use anyhow::Result;
-use contrix_core::{Operation, OperationId, RealmId, canonical::canonical_sha256};
+use contrix::http_signature::{
+    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
+};
+use contrix_core::{
+    Operation, OperationId, RealmId,
+    canonical::{canonical_json_bytes, canonical_sha256},
+};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use url::Url;
 
 use crate::harness::{
     ContrixServer, TestServerGroup, encrypted_envelope, expect_account_subscribe_delta,
@@ -51,12 +59,15 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "signature": {"alg": "none"},
         "purpose": "cross-server-invite"
     });
+    let verify_bob_url = server_a.url("/api/v1/federation/verify-actor");
     let verify_bob = expect_json(
         with_round4_federation_headers(
             server_a
                 .http()
-                .post(server_a.url("/api/v1/federation/verify-actor"))
+                .post(&verify_bob_url)
                 .json(&verify_bob_body),
+            "POST",
+            &verify_bob_url,
             server_b,
             server_a,
             &verify_bob_body,
@@ -96,7 +107,6 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "cx.member.state",
         json!({
             "actor_id": BOB_DID,
-            "member": BOB_DID,
             "membership": "join",
             "delivery_status": "unroutable"
         }),
@@ -107,12 +117,15 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "service_binding_ref": "cotest",
         "operations": [alice_message, bob_join]
     });
+    let a_to_b_url = server_b.url("/api/v1/federation/transactions/federation-a-to-b-01");
     let pushed_to_b = expect_json(
         with_round4_federation_headers(
             server_b
                 .http()
-                .put(server_b.url("/api/v1/federation/transactions/federation-a-to-b-01"))
+                .put(&a_to_b_url)
                 .json(&a_to_b_body),
+            "PUT",
+            &a_to_b_url,
             server_a,
             server_b,
             &a_to_b_body,
@@ -182,12 +195,15 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "service_binding_ref": "cotest",
         "operations": [bob_reply]
     });
+    let b_to_a_url = server_a.url("/api/v1/federation/transactions/federation-b-to-a-01");
     let txn = expect_json(
         with_round4_federation_headers(
             server_a
                 .http()
-                .put(server_a.url("/api/v1/federation/transactions/federation-b-to-a-01"))
+                .put(&b_to_a_url)
                 .json(&b_to_a_body),
+            "PUT",
+            &b_to_a_url,
             server_b,
             server_a,
             &b_to_a_body,
@@ -369,21 +385,88 @@ async fn create_federated_realm(server: &ContrixServer, alice: &str) -> Result<S
 
 fn with_round4_federation_headers(
     builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
     source: &ContrixServer,
     destination: &ContrixServer,
     body: &Value,
 ) -> Result<reqwest::RequestBuilder> {
+    let body_bytes = canonical_json_bytes(body)?;
+    let content_digest =
+        ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = canonical_sha256(body)?;
+    let source_service_did = source.service_did();
+    let destination_service_did = destination.service_did();
+    let source_trust_domain = trust_domain_for(source_service_did);
+    let destination_trust_domain = trust_domain_for(destination_service_did);
+
+    let parsed_url = Url::parse(target_url)?;
+    let authority = parsed_url
+        .port()
+        .map(|port| format!("{}:{port}", parsed_url.host_str().unwrap_or("server")))
+        .unwrap_or_else(|| parsed_url.host_str().unwrap_or("server").to_owned());
+    let path_and_query = parsed_url
+        .query()
+        .map(|query| format!("{}?{query}", parsed_url.path()))
+        .unwrap_or_else(|| parsed_url.path().to_owned());
+    let target_uri = format!(
+        "{}://{}{}",
+        parsed_url.scheme(),
+        authority,
+        path_and_query
+    );
+
+    let created = chrono::Utc::now().timestamp();
+    let expires = created + 300;
+    let keyid = format!("{source_service_did}#federation-fanout-key");
+    let signature_params = format!(
+        "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
+         \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+         \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
+         expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
+    );
+    let signature_base = format!(
+        "\"@method\": {}\n\
+         \"@target-uri\": {target_uri}\n\
+         \"@authority\": {authority}\n\
+         \"content-digest\": {content_digest}\n\
+         \"source-service-did\": {source_service_did}\n\
+         \"destination-service-did\": {destination_service_did}\n\
+         \"source-trust-domain\": {source_trust_domain}\n\
+         \"destination-trust-domain\": {destination_trust_domain}\n\
+         \"request-canonical-digest\": {request_canonical_digest}\n\
+         \"@signature-params\": {signature_params}",
+        method.to_ascii_uppercase()
+    );
+    let signing_key = development_service_signing_key(source_service_did);
+    let signature = sign_message(signature_base.as_bytes(), &signing_key);
+
     Ok(builder
-        .header("Source-Trust-Domain", trust_domain_for(source))
-        .header("Destination-Trust-Domain", trust_domain_for(destination))
-        .header("Request-Canonical-Digest", canonical_sha256(body)?))
+        .header("Content-Digest", content_digest)
+        .header("Source-Service-DID", source_service_did)
+        .header("Destination-Service-DID", destination_service_did)
+        .header("Source-Trust-Domain", source_trust_domain)
+        .header("Destination-Trust-Domain", destination_trust_domain)
+        .header("Request-Canonical-Digest", request_canonical_digest)
+        .header("Signature-Input", format!("sig1={signature_params}"))
+        .header("Signature", format!("sig1=:{signature}:")))
 }
 
-fn trust_domain_for(server: &ContrixServer) -> String {
+fn trust_domain_for(service_did: &str) -> String {
     format!(
         "cx:trust_domain:{}",
-        server.service_did().trim_start_matches("did:web:")
+        service_did.trim_start_matches("did:web:").replace(':', ".")
     )
+}
+
+fn development_service_signing_key(
+    service_did: &str,
+) -> contrix::http_signature::Ed25519SigningKey {
+    let mut hasher = Sha256::new();
+    hasher.update(b"soland:anchorer-ephemeral:");
+    hasher.update(service_did.as_bytes());
+    let seed: [u8; 32] = hasher.finalize().into();
+    signing_key_from_seed(&seed)
 }
 
 fn sync_timeline_events<'a>(delta: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>> {

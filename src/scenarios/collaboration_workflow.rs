@@ -112,7 +112,6 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             "cx.member.state",
             json!({
                 "actor_id": BOB_DID,
-                "member": BOB_DID,
                 "membership": "join",
                 "delivery_status": "unroutable"
             }),
@@ -206,7 +205,6 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             "cx.member.state",
             json!({
                 "actor_id": BOB_DID,
-                "member": BOB_DID,
                 "membership": "ban",
                 "delivery_status": "unroutable"
             }),

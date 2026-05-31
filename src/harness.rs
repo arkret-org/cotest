@@ -581,14 +581,32 @@ impl TestActorClient {
     }
 
     pub async fn create_space_with(&self, body: Value) -> Result<Value> {
-        expect_json(self.post("/api/v1/spaces").json(&body), StatusCode::CREATED).await
+        let space_id = body
+            .get("space_id")
+            .or_else(|| body.get("realm_id"))
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| next_typed_id("realm"));
+        let payload = realm_create_payload(&self.actor, &self.service_did, &space_id, &body);
+        let event_response = self
+            .submit_event(&space_id, "cx.realm.create", payload)
+            .await?;
+        Ok(json!({
+            "space_id": space_id,
+            "realm_id": space_id,
+            "event_response": event_response,
+        }))
     }
 
     pub async fn add_member(&self, space_id: &str, member: &TestActorClient) -> Result<Value> {
-        expect_json(
-            self.post(&format!("/api/v1/spaces/{space_id}/members"))
-                .json(&json!({"member": member.actor})),
-            StatusCode::OK,
+        self.submit_event(
+            space_id,
+            "cx.member.state",
+            json!({
+                "actor_id": member.actor,
+                "membership": "join",
+                "delivery_status": "unroutable"
+            }),
         )
         .await
     }
@@ -803,39 +821,55 @@ where
     }
 }
 
-pub async fn create_space(server: &ContrixServer, token: &str, title: &str) -> Result<String> {
-    let created = expect_json(
-        server
-            .http()
-            .post(server.url("/api/v1/spaces"))
-            .bearer_auth(token)
-            .json(&json!({
-                "title": title,
-                "summary": title,
-                "public": false,
-                "plaintext_visible_services": [server.service_did()]
-            })),
-        StatusCode::CREATED,
+pub async fn create_space(
+    server: &ContrixServer,
+    token: &str,
+    actor: &str,
+    title: &str,
+) -> Result<String> {
+    let space_id = next_typed_id("realm");
+    let payload = realm_create_payload(
+        actor,
+        server.service_did(),
+        &space_id,
+        &json!({
+            "title": title,
+            "summary": title,
+            "public": false,
+            "plaintext_visible_services": [server.service_did()]
+        }),
+    );
+    submit_event(
+        server,
+        token,
+        actor,
+        &space_id,
+        "cx.realm.create",
+        payload,
+        StatusCode::OK,
     )
     .await?;
-    created["space_id"]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("create space response did not include space_id: {created}"))
+    Ok(space_id)
 }
 
 pub async fn add_member(
     server: &ContrixServer,
     token: &str,
+    actor: &str,
     space_id: &str,
     member: &str,
 ) -> Result<()> {
-    expect_json(
-        server
-            .http()
-            .post(server.url(&format!("/api/v1/spaces/{space_id}/members")))
-            .bearer_auth(token)
-            .json(&json!({"member": member})),
+    submit_event(
+        server,
+        token,
+        actor,
+        space_id,
+        "cx.member.state",
+        json!({
+            "actor_id": member,
+            "membership": "join",
+            "delivery_status": "unroutable"
+        }),
         StatusCode::OK,
     )
     .await?;
@@ -913,6 +947,7 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Valu
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{actor}#cotest"),
+            "event_digest": "",
             "payload_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
@@ -922,24 +957,139 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Valu
     event
 }
 
+fn next_typed_id(kind: &str) -> String {
+    let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("cx:{kind}:01999999-0000-7000-8000-{seq:012x}")
+}
+
+fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &Value) -> Value {
+    let title = input
+        .get("title")
+        .and_then(Value::as_str)
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or("Cotest Realm");
+    let summary = input
+        .get("summary")
+        .and_then(Value::as_str)
+        .unwrap_or(title);
+    let public = input
+        .get("public")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let discoverability = input
+        .get("discoverability")
+        .and_then(Value::as_str)
+        .unwrap_or(if public { "public" } else { "listed" });
+    let join_rule = input
+        .get("join_rule")
+        .and_then(Value::as_str)
+        .unwrap_or("invite");
+    let history_visibility = input
+        .get("history_visibility")
+        .and_then(Value::as_str)
+        .unwrap_or("shared");
+    let encryption_profile = input
+        .get("encryption_profile")
+        .and_then(Value::as_str)
+        .unwrap_or("none");
+    let plaintext_visible_services = input
+        .get("plaintext_visible_services")
+        .cloned()
+        .filter(Value::is_array)
+        .unwrap_or_else(|| json!([service_did]));
+
+    json!({
+        "object": {
+            "id": realm_id,
+            "schema": "cx.schema.realm.v1",
+            "title": title,
+            "summary": summary,
+            "created_by": actor,
+            "trust_domain": "cx:trust_domain:soland.local",
+            "schema_refs": ["cx.schema.realm.v1"],
+            "default_discoverability": discoverability,
+            "default_join_rule": join_rule,
+            "history_visibility": history_visibility,
+            "encryption_profile": encryption_profile,
+            "plaintext_visible_services": plaintext_visible_services,
+            "security_class": "standard",
+            "federation_policy": "restricted",
+            "anchor_profile": "single_did",
+            "digest_algorithm": "sha256",
+            "anchorer": {
+                "type": "single_did",
+                "did": actor,
+                "recovery_members": ["did:web:recovery.soland.local"],
+                "controller_organization": "did:web:organization.primary.soland.local",
+                "recovery_controller_organizations": [
+                    "did:web:organization.recovery.soland.local"
+                ],
+            },
+            "created_at": "2026-05-02T00:00:00Z",
+        },
+    })
+}
+
 fn normalize_message_payload(kind: &str, space_id: &str, payload: &mut Value) {
-    if kind != "cx.message.create" {
-        return;
-    }
-    let flow_id = space_id
-        .strip_prefix("cx:realm:")
-        .or_else(|| space_id.strip_prefix("cx:space:"))
-        .map(|suffix| format!("cx:flow:{suffix}"))
-        .unwrap_or_else(|| "cx:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
     let Some(object) = payload.as_object_mut() else {
         return;
     };
-    object
-        .entry("flow_id".to_owned())
-        .or_insert_with(|| Value::String(flow_id));
-    object
-        .entry("track".to_owned())
-        .or_insert_with(|| Value::String("discussion".to_owned()));
+
+    match kind {
+        "cx.message.create" => {
+            let flow_id = space_id
+                .strip_prefix("cx:realm:")
+                .or_else(|| space_id.strip_prefix("cx:space:"))
+                .map(|suffix| format!("cx:flow:{suffix}"))
+                .unwrap_or_else(|| "cx:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
+            object
+                .entry("flow_id".to_owned())
+                .or_insert_with(|| Value::String(flow_id));
+            object
+                .entry("track".to_owned())
+                .or_insert_with(|| Value::String("discussion".to_owned()));
+            object.remove("thread_id");
+            normalize_message_content(object);
+        }
+        "cx.message.revise" => {
+            if let Some(target_event_id) = object.remove("target_event_id")
+                && !object.contains_key("target_ref")
+                && !object.contains_key("message_id")
+                && !object.contains_key("revision_of")
+            {
+                object.insert(
+                    "target_ref".to_owned(),
+                    message_ref_from_event_ref(target_event_id),
+                );
+            }
+            object.remove("thread_id");
+            normalize_message_content(object);
+        }
+        "cx.message.redact" => {
+            if !object.contains_key("target_event_id") {
+                if let Some(event_id) = object.get("event_id").cloned() {
+                    object.insert("target_event_id".to_owned(), event_id);
+                } else if let Some(target_ref) = object.get("target_ref").and_then(Value::as_str) {
+                    if target_ref.starts_with("cx:event:") {
+                        object.insert(
+                            "target_event_id".to_owned(),
+                            Value::String(target_ref.to_owned()),
+                        );
+                    } else if let Some(suffix) = target_ref.strip_prefix("cx:message:") {
+                        object.insert(
+                            "target_event_id".to_owned(),
+                            Value::String(format!("cx:event:{suffix}")),
+                        );
+                    }
+                }
+            }
+            object.remove("thread_id");
+        }
+        _ => {}
+    }
+}
+
+fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
     let body = object.remove("body");
     if !object.contains_key("content")
         && let Some(body) = body
@@ -963,6 +1113,15 @@ fn normalize_message_payload(kind: &str, space_id: &str, payload: &mut Value) {
     }
 }
 
+fn message_ref_from_event_ref(value: Value) -> Value {
+    if let Some(event_id) = value.as_str()
+        && let Some(suffix) = event_id.strip_prefix("cx:event:")
+    {
+        return Value::String(format!("cx:message:{suffix}"));
+    }
+    value
+}
+
 fn canonical_event_digest(event: &Value) -> String {
     let mut canonical = event.clone();
     if let Value::Object(object) = &mut canonical {
@@ -974,6 +1133,7 @@ fn canonical_event_digest(event: &Value) -> String {
 
 fn refresh_event_proof(event: &mut Value) {
     let digest = canonical_event_digest(event);
+    event["proofs"][0]["event_digest"] = Value::String(digest.clone());
     event["proofs"][0]["payload_digest"] = Value::String(digest);
 }
 

@@ -63,7 +63,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let denied = expect_json(
         server
             .http()
-            .post(server.url("/contrix/v1/check"))
+            .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "cx:request:policy-deny",
                 "request_canonical_digest": REQUEST_HASH,
@@ -99,7 +99,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let allowed = expect_json(
         server
             .http()
-            .post(server.url("/contrix/v1/check"))
+            .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "cx:request:policy-allow",
                 "request_canonical_digest": REQUEST_HASH,

@@ -37,7 +37,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
                 "manifest": {"name": "Board"}
             })),
         StatusCode::NOT_FOUND,
-        "not_found",
+        "unrecognized_endpoint",
     )
     .await?;
 
@@ -77,7 +77,7 @@ pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() ->
                 "display_name": "Planner"
             })),
         StatusCode::NOT_FOUND,
-        "not_found",
+        "unrecognized_endpoint",
     )
     .await?;
 

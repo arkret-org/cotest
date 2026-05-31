@@ -1,5 +1,6 @@
 use anyhow::Result;
 use cotest::transcripts::{TranscriptGuard, init_transcript_writer};
+use serial_test::serial;
 
 /// Bind a per-test transcript writer that materialises
 /// `target/conformance-transcripts/<scenario>.jsonl`. Used by every
@@ -20,6 +21,7 @@ macro_rules! conformance_test {
     ($(#[$attr:meta])* $name:ident, $scenario:literal, $suite:path $(,)?) => {
         $(#[$attr])*
         #[test]
+        #[serial(conformance_fixtures)]
         fn $name() -> Result<()> {
             let _guard = enter_scenario($scenario);
             $suite()

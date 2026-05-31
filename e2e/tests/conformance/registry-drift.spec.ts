@@ -15,10 +15,9 @@
 // are pure artifact-vs-describe diffs and need no fixme — they are tagged
 // @fully-implemented so they run under the joint-smoke profile.
 //
-// Phase A / B / F are pinned as test.fixme: they require either writing a
-// removed event kind or calling a gone operation_id, and the wire path for
-// that depends on soland helpers that this scenario intentionally does not
-// pull in.
+// Phase A / B / F now run live as negative probes: they submit a removed event
+// kind, call removed operation surfaces, and scan server-managed responses for
+// forbidden model terms.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

@@ -336,6 +336,8 @@ pub(crate) struct PrivacySecurityFixture {
 pub(crate) struct NamedCase {
     pub(crate) name: String,
     pub(crate) operation_id: Option<String>,
+    pub(crate) operation_ids: Option<Vec<String>>,
+    pub(crate) covers_vectors: Option<Vec<String>>,
     pub(crate) input: Option<Value>,
     pub(crate) expected: Option<Value>,
 }

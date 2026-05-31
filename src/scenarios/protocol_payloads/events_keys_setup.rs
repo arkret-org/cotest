@@ -142,25 +142,22 @@ fn signed_message_event(
     space_id: &str,
     actor_id: &str,
     _device_id: &str,
-    thread_id: &str,
+    _thread_id: &str,
     body: &str,
 ) -> Result<Value> {
     let payload = json!({
-        "event_id": event_id,
-        "sender": actor_id,
         "flow_id": "cx:flow:0196419b-0000-7000-8000-000000000001",
         "track": "discussion",
-        "thread_id": thread_id,
         "content": {
             "kind": "cx.content.text",
             "body": body,
             "format": "plain"
-        },
-        "encrypted": false
+        }
     });
     let mut event = json!({
         "event_id": event_id,
         "kind": "cx.message.create",
+        "schema_id": "cx.schema.event.v1",
         "actor_id": actor_id,
         "actor_seq": actor_seq,
         "realm_id": space_id,
@@ -169,6 +166,12 @@ fn signed_message_event(
         "prev_refs": [],
         "refs": [],
         "payload": payload,
+        "unsigned": {
+            "local_operation_idempotency_alias": format!(
+                "cx:operation:{}",
+                event_id.trim_start_matches("cx:event:")
+            )
+        },
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
@@ -193,6 +196,7 @@ fn canonical_event_digest(event: &Value) -> Result<String> {
 
 fn refresh_event_proof(event: &mut Value) -> Result<()> {
     let digest = canonical_event_digest(event)?;
+    event["proofs"][0]["event_digest"] = Value::String(digest.clone());
     event["proofs"][0]["payload_digest"] = Value::String(digest);
     Ok(())
 }

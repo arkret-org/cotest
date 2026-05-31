@@ -21,6 +21,7 @@
       "realtime_media",
       "authz_policy",
       "moderation_reports",
+      "agent_runtime",
       "device_and_keys",
       "push",
       "projection_lifecycle"

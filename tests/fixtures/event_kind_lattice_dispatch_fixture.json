@@ -16,8 +16,9 @@
       "cx.component.capability.delegate.v1",
       "cx.component.capability.derived.v1",
       "cx.component.session.grant.v1",
-      "cx.component.device.authorized.v1",
-      "cx.component.device.list_update.v1"
+      "cx.component.device.authorization.v1",
+      "cx.component.device.list_update.v1",
+      "cx.component.agent.key.v1"
     ],
     "cas_register_families": [
       "cx.component.realm.policy.v1",
@@ -25,6 +26,7 @@
       "cx.component.realm.history_visibility.v1",
       "cx.component.realm.join_rule.v1",
       "cx.component.realm.discovery.v1",
+      "cx.component.realm.preview_policy.v1",
       "cx.component.realm.organization.v1",
       "cx.component.realm.upgrade.v1",
       "cx.component.realm.archive.v1",
@@ -41,22 +43,29 @@
       "cx.component.realm.media_service.v1",
       "cx.component.realm.schema.v1",
       "cx.component.realm.inheritance_policy.v1",
+      "cx.component.circle.member.v1",
+      "cx.component.circle.tombstone.v1",
       "cx.component.flow.fields.v1",
       "cx.component.flow.position.v1",
+      "cx.component.flow.stage.v1",
       "cx.component.flow.tracks.v1",
       "cx.component.flow.watch.v1",
+      "cx.component.morph.stage.v1",
       "cx.component.space.parent.v1",
       "cx.component.cross_signing.publish.v1"
     ],
     "fsm_families": [
-      "cx.component.member.state.v1"
+      "cx.component.member.state.v1",
+      "cx.component.agent.status.v1"
     ],
     "ordered_log_families": [
       "cx.component.realm.create.v1",
       "cx.component.realm.link.v1",
       "cx.component.account.status.v1",
       "cx.component.policy.rule.v1",
-      "cx.component.cross_signing.reset.v1"
+      "cx.component.cross_signing.reset.v1",
+      "cx.component.circle.create.v1",
+      "cx.component.member.identity.v1"
     ],
     "mv_register_families": [
       "cx.component.profile.create.v1",

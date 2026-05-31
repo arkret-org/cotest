@@ -29,20 +29,14 @@ async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
                 "backup_id": BACKUP_ID,
                 "actor_id": "did:web:alice.example",
                 "device_id": "cx:device:01964137-0000-7000-8000-000000000000",
+                "series_id": "cx:backup_series:01964137-0000-7000-8000-000000000000",
+                "series_seq": 0,
                 "backup_class": "mls_history",
                 "backup_version": "kb_1",
                 "created_at": "2026-04-26T00:00:00Z",
                 "encryption": {
-                    "recipient_method": "passphrase_kdf",
-                    "kdf": {
-                        "name": "argon2id",
-                        "salt": "salt",
-                        "params": {
-                            "memory_kib": 65536,
-                            "iterations": 3,
-                            "parallelism": 1
-                        }
-                    },
+                    "recipient_method": "device_snapshot_secret",
+                    "recipient_key_ref": "cx:device:01964137-0000-7000-8000-000000000000",
                     "aead": {"name": "xchacha20_poly1305", "nonce": "nonce"}
                 },
                 "contents": [

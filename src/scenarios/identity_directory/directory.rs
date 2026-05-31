@@ -15,55 +15,43 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .register_client("did:web:bob-privacy.example", "@bob-privacy", "dev_bob")
         .await?;
 
-    let public_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+    let public_space = alice
+        .create_space_with(json!({
             "title": "Visibility Matrix Public",
             "discoverability": "public"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
-    let listed_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+        }))
+        .await?;
+    let listed_space = alice
+        .create_space_with(json!({
             "title": "Visibility Matrix Listed",
             "discoverability": "listed"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
-    let restricted_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+        }))
+        .await?;
+    let restricted_space = alice
+        .create_space_with(json!({
             "title": "Visibility Matrix Restricted",
             "discoverability": "restricted"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
-    let unlisted_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+        }))
+        .await?;
+    let unlisted_space = alice
+        .create_space_with(json!({
             "title": "Visibility Matrix Unlisted",
             "discoverability": "unlisted"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
-    let invite_only_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+        }))
+        .await?;
+    let invite_only_space = alice
+        .create_space_with(json!({
             "title": "Visibility Matrix Invite Only",
             "discoverability": "invite_only",
             "invitees": [bob.actor.clone()]
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
-    let secret_space = expect_json(
-        alice.post("/api/v1/spaces").json(&json!({
+        }))
+        .await?;
+    let secret_space = alice
+        .create_space_with(json!({
             "title": "Visibility Matrix Secret",
             "discoverability": "secret"
-        })),
-        StatusCode::CREATED,
-    )
-    .await?;
+        }))
+        .await?;
 
     let public_space_id = public_space["realm_id"].as_str().unwrap().to_owned();
     let listed_space_id = listed_space["realm_id"].as_str().unwrap().to_owned();
@@ -71,6 +59,23 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let unlisted_space_id = unlisted_space["realm_id"].as_str().unwrap().to_owned();
     let invite_only_space_id = invite_only_space["realm_id"].as_str().unwrap().to_owned();
     let secret_space_id = secret_space["realm_id"].as_str().unwrap().to_owned();
+
+    let invite_event = alice
+        .submit_event(
+            &invite_only_space_id,
+            "cx.invite.create",
+            json!({
+                "invitee": bob.actor,
+                "expires_at": "2026-12-31T00:00:00Z"
+            }),
+        )
+        .await?;
+    assert_eq!(
+        invite_event["status"],
+        "accepted",
+        "invite event was not accepted: {}",
+        serde_json::to_string_pretty(&invite_event)?
+    );
 
     let anonymous_search = expect_json(
         server
@@ -139,9 +144,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .as_array()
         .unwrap()
         .iter()
-        .find(|invite| invite["realm_id"].as_str() == Some(invite_only_space_id.as_str()))
+        .find(|invite| invite["space_id"].as_str() == Some(invite_only_space_id.as_str()))
         .and_then(|invite| invite["invite_token"].as_str())
-        .ok_or_else(|| anyhow!("missing invite token for invite-only space"))?;
+        .ok_or_else(|| anyhow!("missing invite token for invite-only space: {invites}"))?;
     let invite_only_resolved = expect_json(
         server
             .http()
@@ -193,7 +198,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/directory/search-users"))
-            .json(&json!({"q": "bob-privacy"})),
+            .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
     .await?;
@@ -267,13 +272,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let alice_user_after_contact = expect_json(
         alice
             .post("/api/v1/directory/search-users")
-            .json(&json!({"q": "bob-privacy"})),
+            .json(&json!({"query": "bob-privacy"})),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
         alice_user_after_contact["results"][0]["handle"],
-        "@bob-privacy"
+        "bob-privacy:directory-privacy.cotest.local"
     );
 
     let anonymous_after_contact = expect_json(

@@ -9,22 +9,17 @@
 //   already emits `claimed_profiles[]` (4 self_claimed entries) + `verified_profiles=[]`
 //   (hard `Vec::new()` under dev mode, guarded by validate_v2). Phase A / D / E run live
 //   against this surface. Phase B (unsupported standard event kind reject) and Phase C
-//   (critical extension fail-closed at submit time) need the event-submit reject path
-//   to emit canonical `unsupported_event_kind` / `unsupported_feature` codes, which
-//   soland's submit handler does not yet do — those phases stay pinned via test.fixme.
+//   (critical extension fail-closed at submit time) now run live against soland's
+//   submit reject path.
 //
 // coauth note: `coauth/crates/backend/src/handlers/contrix.rs` now self-claims
 //   `cx.profile.auth_server.v1` and intentionally does NOT claim
 //   `cx.profile.identity_registry.v1` / `cx.profile.principal_server.v1`. The
-//   coauth-specific partition test remains fixme because coauth is optional in
-//   single-server topologies and the verified-profile write path is deployment
-//   dependent, but the pinned expectation below reflects the current auth-server
-//   contract rather than the older empty-claims placeholder.
+//   coauth-specific partition test runs live when COTEST_COAUTH_BASE_URL is
+//   configured and skips cleanly in single-server topologies.
 //
-// The describe block is tagged @fully-implemented so that the 3 live tests (Phase A,
-// Phase D, Phase E) run under the default `joint-smoke` profile. The fixme tests
-// are kept inside the same block on purpose — Playwright's fixme marker keeps them
-// visible in reports without failing the run.
+// The describe block is tagged @fully-implemented so these live tests run under
+// the default `joint-smoke` profile.
 
 import fs from "node:fs";
 import path from "node:path";

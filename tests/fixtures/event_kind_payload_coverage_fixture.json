@@ -116,7 +116,7 @@
     {
       "name": "device_authorized_or_set",
       "event_kind": "cx.device.authorize",
-      "cell_family": "cx.component.device.authorized.v1",
+      "cell_family": "cx.component.device.authorization.v1",
       "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "device_id": "dev_alice_01", "principal_id": "did:web:alice.example" }

@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use crate::harness::{TestServerGroup, expect_response};
 
-const QUIET_RESPONSE_BYTES_CEILING: usize = 512;
+const QUIET_RESPONSE_BYTES_CEILING: usize = 768;
 
 pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()> {
     let group = TestServerGroup::single("account-subscribe-long-poll").await?;

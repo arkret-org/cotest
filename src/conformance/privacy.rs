@@ -118,6 +118,88 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "directory_query_and_ingest_vector_closure" => {
+                let operation_ids = case.operation_ids.as_ref().ok_or_else(|| {
+                    anyhow!("privacy fixture {} missing operation_ids", case.name)
+                })?;
+                for required in [
+                    "cx.directory.search_realms",
+                    "cx.directory.resolve_realm",
+                    "cx.directory.resolve_target",
+                    "cx.directory.announce",
+                    "cx.directory.withdraw",
+                    "cx.directory.private_contact_discovery",
+                ] {
+                    if !operation_ids.iter().any(|operation| operation == required) {
+                        bail!(
+                            "privacy fixture {} missing operation id {required}",
+                            case.name
+                        );
+                    }
+                }
+                let covers_vectors = case.covers_vectors.as_ref().ok_or_else(|| {
+                    anyhow!("privacy fixture {} missing covers_vectors", case.name)
+                })?;
+                if covers_vectors.len() < 20 {
+                    bail!(
+                        "privacy fixture {} no longer closes the directory/PSI vector set",
+                        case.name
+                    );
+                }
+                let expected = case
+                    .expected
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+                let common_fields = expected
+                    .get("query_results_require_common_fields")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing common fields", case.name)
+                    })?;
+                for required in ["as_of", "source_refs", "policy_revision"] {
+                    if !common_fields
+                        .iter()
+                        .any(|field| field.as_str() == Some(required))
+                    {
+                        bail!(
+                            "privacy fixture {} missing common result field {required}",
+                            case.name
+                        );
+                    }
+                }
+                for required_flag in [
+                    "resolve_target_hidden_targets_are_indistinguishable",
+                    "ingest_requires_resource_directory_opt_in",
+                    "ingest_rejects_bad_signature_and_stale_signature",
+                    "withdraw_and_takedown_have_blinded_external_responses",
+                    "psi_is_set_membership_only",
+                    "psi_denials_are_padded_and_timing_blinded",
+                ] {
+                    if expected.get(required_flag).and_then(Value::as_bool) != Some(true) {
+                        bail!(
+                            "privacy fixture {} flag {required_flag} is not true",
+                            case.name
+                        );
+                    }
+                }
+                record_vector_event(
+                    "privacy.directory_query_and_ingest_vector_closure",
+                    &json!({
+                        "operation_ids": operation_ids,
+                        "covers_vectors": covers_vectors.len(),
+                    }),
+                    &json!({
+                        "required_operation_ids_present": true,
+                        "common_fields_present": true,
+                        "directory_and_psi_guards_true": true,
+                    }),
+                    &json!({
+                        "operation_ids": operation_ids,
+                        "covers_vectors": covers_vectors.len(),
+                        "common_fields": common_fields,
+                    }),
+                );
+            }
             "plaintext_visible_service_required_for_private_body_processing" => {
                 let expected = case
                     .expected

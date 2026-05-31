@@ -43,7 +43,7 @@ async fn upload_then_range_get(server: &ContrixServer, token: &str) -> Result<()
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(blob["size"], 15);
+    assert_eq!(blob["size_bytes"], 15);
     assert!(
         blob["blob_ref"]
             .as_str()

@@ -51,9 +51,9 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     for _ in 0..12 {
         let path = match cursor.as_deref() {
             Some(cursor) => {
-                format!("/api/v1/events?spaces={space_id}&limit=1&from={cursor}")
+                format!("/api/v1/events?realms={space_id}&limit=1&after={cursor}")
             }
-            None => format!("/api/v1/events?spaces={space_id}&limit=1"),
+            None => format!("/api/v1/events?realms={space_id}&limit=1"),
         };
         let page = expect_json(alice.get(&path), StatusCode::OK).await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());
@@ -65,13 +65,16 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let recovered_message_ids = collected
         .iter()
-        .filter(|event| event["event_type"] == "cx.message.create")
+        .filter(|event| event["event_kind"] == "cx.message.create")
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();
-    assert_eq!(recovered_message_ids, expected_message_ids);
+    assert_eq!(
+        recovered_message_ids, expected_message_ids,
+        "events backfill did not recover projected messages from collected pages: {collected:#?}"
+    );
 
     let bob_sync = bob_client.sync().await?;
-    let synced_message_ids = json_array(&bob_sync["spaces"][&space_id]["timeline"], "events")?
+    let synced_message_ids = json_array(&bob_sync["realms"][&space_id]["timeline"], "events")?
         .iter()
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();

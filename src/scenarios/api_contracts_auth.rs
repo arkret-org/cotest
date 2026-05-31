@@ -13,10 +13,10 @@ pub async fn framework_errors_and_invalid_json_use_contrix_envelopes() -> Result
     let missing = expect_api_error(
         server.http().get(server.url("/api/v1/missing")),
         StatusCode::NOT_FOUND,
-        "not_found",
+        "unrecognized_endpoint",
     )
     .await?;
-    assert!(missing["error"]["request_id"].as_str().is_some());
+    assert!(missing["request_id"].as_str().is_some());
 
     expect_api_error(
         server.http().post(server.url("/api/v1/server/describe")),
@@ -31,7 +31,7 @@ pub async fn framework_errors_and_invalid_json_use_contrix_envelopes() -> Result
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "bad_request",
     )
     .await?;
 
@@ -212,16 +212,18 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     .await?;
     assert_eq!(requested["status"], "pending");
 
-    expect_api_error(
+    let duplicate = expect_json(
         server
             .http()
             .post(server.url("/api/v1/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:bob-contact.example"})),
-        StatusCode::CONFLICT,
-        "duplicate_conflict",
+        StatusCode::OK,
     )
     .await?;
+    assert_eq!(duplicate["status"], "pending");
+    assert_eq!(duplicate["requester"], "did:web:alice-contact.example");
+    assert_eq!(duplicate["target"], "did:web:bob-contact.example");
 
     Ok(())
 }

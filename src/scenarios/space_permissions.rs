@@ -45,7 +45,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let space_id = create_space(server, &alice, "Permission Space").await?;
+    let space_id =
+        create_space(server, &alice, "did:web:alice.example", "Permission Space").await?;
     expect_api_error(
         server
             .http()
@@ -90,7 +91,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         "dev_bob",
     )
     .await?;
-    let space_id = create_space(&server, &alice, "Private Space").await?;
+    let space_id = create_space(&server, &alice, "did:web:alice.example", "Private Space").await?;
 
     let anonymous_search = expect_json(
         server
@@ -122,7 +123,14 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
-    add_member(&server, &alice, &space_id, "did:web:bob-visible.example").await?;
+    add_member(
+        &server,
+        &alice,
+        "did:web:alice.example",
+        &space_id,
+        "did:web:bob-visible.example",
+    )
+    .await?;
     send_message(
         &server,
         &bob,

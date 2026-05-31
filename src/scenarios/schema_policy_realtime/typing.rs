@@ -1,6 +1,7 @@
 use anyhow::Result;
+use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::harness::{ContrixServer, expect_api_error, expect_json};
 
@@ -20,30 +21,25 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     alice.add_member(&space_id, &bob).await?;
 
     expect_api_error(
-        carol.post("/api/v1/sync/typing").json(&json!({
-            "realm_id": space_id,
-            "typing": true
-        })),
+        carol
+            .post("/api/v1/ephemeral")
+            .json(&typing_envelope(&carol.actor, &space_id, true)),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
     let typing = expect_json(
-        bob.post("/api/v1/sync/typing").json(&json!({
-            "realm_id": space_id,
-            "scope_id": "cx:thread:typing",
-            "typing": true,
-            "timeout_ms": 4000
-        })),
+        bob.post("/api/v1/ephemeral")
+            .json(&typing_envelope(&bob.actor, &space_id, true)),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(typing["ok"], true);
-    assert_eq!(typing["typing"], true);
+    assert_eq!(typing["accepted"], true);
+    assert_eq!(typing["kind"], "cx.typing");
 
     let sync_with_typing = alice.sync().await?;
-    let ephemeral = sync_with_typing["spaces"][&space_id]["ephemeral"]
+    let ephemeral = sync_with_typing["realms"][&space_id]["ephemeral"]
         .as_array()
         .unwrap();
     assert_eq!(ephemeral.len(), 1);
@@ -58,19 +54,16 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     );
 
     let stopped = expect_json(
-        bob.post("/api/v1/sync/typing").json(&json!({
-            "realm_id": space_id,
-            "scope_id": "cx:thread:typing",
-            "typing": false
-        })),
+        bob.post("/api/v1/ephemeral")
+            .json(&typing_envelope(&bob.actor, &space_id, false)),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(stopped["typing"], false);
+    assert_eq!(stopped["accepted"], true);
 
     let sync_without_typing = alice.sync().await?;
     assert!(
-        sync_without_typing["spaces"][&space_id]["ephemeral"]
+        sync_without_typing["realms"][&space_id]["ephemeral"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -92,7 +85,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
         bob.post("/api/v1/push/rules").json(&json!({
             "rule_id": "global.mute.messages",
             "actions": ["dont_notify"],
-            "conditions": {"notification.type": "message"}
+            "conditions": [{"field": "notification.type", "equals": "message"}]
         })),
         StatusCode::OK,
     )
@@ -130,4 +123,20 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     assert!(final_rules["rules"].as_array().unwrap().is_empty());
 
     Ok(())
+}
+
+fn typing_envelope(actor_id: &str, realm_id: &str, typing: bool) -> Value {
+    let sent_at = Utc::now();
+    let expires_at = sent_at + ChronoDuration::seconds(30);
+    json!({
+        "kind": "cx.typing",
+        "realm_id": realm_id,
+        "actor_id": actor_id,
+        "sent_at": sent_at,
+        "expires_at": expires_at,
+        "payload": {
+            "scope_id": "cx:thread:typing",
+            "typing": typing
+        }
+    })
 }

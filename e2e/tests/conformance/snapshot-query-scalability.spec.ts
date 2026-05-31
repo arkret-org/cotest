@@ -335,8 +335,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const { dir, exists, matches } = listVectorFixtures();
 
     // Always-pass count assertion — the goal is to surface the count, not
-    // to gate the build on fixture presence (the gating happens via the
-    // Phase A–E fixme tests once endpoints land).
+    // to gate the build on fixture presence. Phase A-E now exercise the
+    // live conformance endpoints directly.
     expect(matches.length).toBeGreaterThanOrEqual(0);
 
     // Report what we found (or didn't find) into the run log + JUnit attach.

@@ -141,12 +141,14 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
         "backup_id": backup_id,
         "actor_id": actor,
         "device_id": device_id,
+        "series_id": backup_id.replacen("cx:backup:", "cx:backup_series:", 1),
+        "series_seq": 0,
         "backup_class": "mls_history",
         "backup_version": "kb_1",
         "created_at": "2026-05-18T00:00:00Z",
         "encryption": {
-            "recipient_method": "passphrase_kdf",
-            "kdf": {"name": "argon2id", "salt": "cotest-d3-salt"},
+            "recipient_method": "device_snapshot_secret",
+            "recipient_key_ref": device_id,
             "aead": {"name": "xchacha20_poly1305", "nonce": "cotest-d3-nonce"}
         },
         "contents": [

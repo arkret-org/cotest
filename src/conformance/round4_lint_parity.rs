@@ -200,16 +200,14 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
             continue;
         }
         let raw = fs::read_to_string(&path)?;
-        for vector_id in extract_vector_tokens(&raw) {
+        let fixture_vectors = extract_vector_tokens(&raw);
+        // Mirror contrix-spec's Python lint: any cx.vector.* token appearing
+        // in a fixture JSON is part of the known-vector definition set. Some
+        // fixture suites declare vectors in top-level arrays such as
+        // `conformance_vectors`, not only in object-level `vector_id` fields.
+        declared.extend(fixture_vectors.iter().cloned());
+        for vector_id in fixture_vectors {
             referenced.insert(vector_id.clone());
-            // A vector is "declared" if it appears under a top-level
-            // `security_closure_vectors[].vector_id` or `vector_id`
-            // field in any fixture.
-            if raw.contains(&format!("\"vector_id\": \"{vector_id}\""))
-                || raw.contains(&format!("\"vector_id\":\"{vector_id}\""))
-            {
-                declared.insert(vector_id);
-            }
         }
     }
     if declared.is_empty() {
