@@ -221,47 +221,30 @@ pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
 #[derive(Debug, Arbitrary)]
 pub struct FuzzAnchorInput {
     pub id: String,
-    pub space_id: String,
+    pub realm_id: String,
     pub predecessor_refs: Vec<String>,
     pub frontier: Vec<String>,
     pub state_root: String,
+    pub anchored_at: String,
     pub hlc_physical_ms: u64,
     pub hlc_logical: u32,
-    pub kind: ArbAnchorKind,
-    pub anchorer_sig: ArbValue,
-}
-
-#[derive(Debug, Arbitrary)]
-pub enum ArbAnchorKind {
-    Normal,
-    Compaction,
-    Junk,
-}
-
-impl ArbAnchorKind {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Normal => "normal",
-            Self::Compaction => "compaction",
-            Self::Junk => "wat",
-        }
-    }
+    pub anchorer_signature: ArbValue,
 }
 
 impl FuzzAnchorInput {
     fn to_json(&self) -> Value {
         json!({
             "id": self.id,
-            "space_id": self.space_id,
+            "realm_id": self.realm_id,
             "predecessor_refs": self.predecessor_refs,
             "frontier": self.frontier,
             "state_root": self.state_root,
-            "anchorer_sig": self.anchorer_sig.0,
+            "anchorer_signature": self.anchorer_signature.0,
+            "anchored_at": self.anchored_at,
             "hlc": {
                 "physical_ms": self.hlc_physical_ms,
                 "logical": self.hlc_logical,
             },
-            "kind": self.kind.as_str(),
         })
     }
 }

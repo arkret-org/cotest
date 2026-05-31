@@ -49,11 +49,11 @@ const MAX_FRONTIER: usize = 16;
 #[derive(Debug, Arbitrary)]
 pub struct FuzzAnchorDeepInput {
     pub id: String,
-    pub space_id: String,
+    pub realm_id: String,
     pub state_root: String,
+    pub anchored_at: String,
     pub hlc_physical_ms: u64,
     pub hlc_logical: u32,
-    pub kind: ArbAnchorKind,
     pub include_signature: bool,
     pub sig_alg: ArbSigAlg,
     pub sig_value: String,
@@ -73,6 +73,7 @@ pub enum ArbAnchorKind {
     Junk,
 }
 
+#[allow(dead_code)]
 impl ArbAnchorKind {
     fn as_str(&self) -> &'static str {
         match self {
@@ -117,18 +118,18 @@ impl FuzzAnchorDeepInput {
             .collect();
         let mut envelope = json!({
             "id": self.id,
-            "space_id": self.space_id,
+            "realm_id": self.realm_id,
             "predecessor_refs": predecessor_refs,
             "frontier": frontier,
             "state_root": self.state_root,
-            "kind": self.kind.as_str(),
+            "anchored_at": self.anchored_at,
             "hlc": {
                 "physical_ms": self.hlc_physical_ms,
                 "logical": self.hlc_logical,
             },
         });
         if self.include_signature {
-            envelope["anchorer_sig"] = json!({
+            envelope["anchorer_signature"] = json!({
                 "alg": self.sig_alg.as_str(),
                 "value": self.sig_value,
                 "key": self.sig_key,

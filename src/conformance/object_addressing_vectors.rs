@@ -15,19 +15,19 @@
 //! Grammar invariants pinned here:
 //!   * `web+contrix:` ⇄ HTTPS-fragment forms parse to the SAME ParsedAddress.
 //!   * realm-only / flow / message hierarchy forms.
-//!   * unknown keyword, wrong hierarchy order, and flow|message missing `via`
-//!     all fail closed (`parse_address` returns Err).
+//!   * unknown keyword and wrong hierarchy order fail closed
+//!     (`parse_address` returns Err); retired `via` hints are ignored.
 //!   * `<realm>` disambiguation: UUIDv7 → RealmRef::RealmId, dotted/domain →
 //!     RealmRef::Alias.
 //!   * `target_digest` covers ONLY the identity tuple + link_type — adding /
-//!     removing via/action/tok/lt does NOT change it; switching flow/message
+//!     removing action/tok/lt does NOT change it; switching flow/message
 //!     DOES; absent hierarchy fields are OMITTED (not `null`) in the canonical
 //!     shape.
 //!   * scope-confusion: an A-object token fails `verify_token_target` against a
 //!     B-object address; the token's link_type wins over a disagreeing URL `lt`
 //!     hint (modeled via the `effective_link_type` argument).
 //!   * `DirectoryResolveTargetResBody` deserializes the §9.1 common fields
-//!     (`as_of`, `source_refs`, `via_services`) + `target_kind`; a realm target
+//!     (`as_of`, `source_refs`, `join_candidates`) + `target_kind`; a realm target
 //!     carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
@@ -133,7 +133,7 @@ pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
 /// OA-COT-1.2 — realm-only / flow / message hierarchy forms parse to the right
 /// class (`is_realm` / `is_flow` / `is_message`) with the expected segments.
 pub fn run_realm_flow_message_forms_vector() -> Result<()> {
-    // Realm-only: no `via` required, no flow/message.
+    // Realm-only: no flow/message.
     let realm =
         parse_address(&format!("web+contrix:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
     if !realm.is_realm() || realm.is_flow() || realm.is_message() {
@@ -146,7 +146,7 @@ pub fn run_realm_flow_message_forms_vector() -> Result<()> {
         bail!("realm-only realm segment MUST be a RealmId");
     }
 
-    // Flow: realm/<r>/flow/<f> (+ via).
+    // Flow: realm/<r>/flow/<f>. Retired `via` is ignored if present.
     let flow = parse_address(&format!("web+contrix:realm/{R}/flow/{F}?via={VIA}"))
         .map_err(|e| anyhow!("flow: {e}"))?;
     if !flow.is_flow() || flow.is_realm() || flow.is_message() {
@@ -156,7 +156,7 @@ pub fn run_realm_flow_message_forms_vector() -> Result<()> {
         bail!("flow form segments drifted");
     }
 
-    // Message: realm/<r>/flow/<f>/m/<msg> (+ via).
+    // Message: realm/<r>/flow/<f>/m/<msg>. Retired `via` is ignored if present.
     let msg = parse_address(&format!(
         "web+contrix:realm/{R}/flow/{F}/m/{M}?via={VIA}&action=reply"
     ))
@@ -174,8 +174,7 @@ pub fn run_realm_flow_message_forms_vector() -> Result<()> {
 }
 
 /// OA-COT-1.3 — fail-closed grammar: an unknown path keyword, a wrong
-/// hierarchy order, and a flow|message address missing every `via` all MUST
-/// make `parse_address` return `Err`.
+/// hierarchy order MUST make `parse_address` return `Err`.
 pub fn run_grammar_fail_closed_vector() -> Result<()> {
     // Unknown keyword (not in the v1 legal set realm/flow/m) — forward-compat
     // fail-closed, never a fork.
@@ -200,21 +199,12 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
         }
     }
 
-    // Flow / message missing every `via` hint (a global flow_id is never
-    // guessed).
-    for missing_via in [
-        format!("web+contrix:realm/{R}/flow/{F}"),
-        format!("web+contrix:realm/{R}/flow/{F}/m/{M}"),
-    ] {
-        if parse_address(&missing_via).is_ok() {
-            bail!("flow/message address missing `via` MUST fail closed: {missing_via}");
-        }
-    }
-
-    // Control: a realm-only address with no `via` MUST still parse (the
-    // `via` requirement is flow/message-only).
-    parse_address(&format!("web+contrix:realm/{R}"))
-        .map_err(|e| anyhow!("control: realm-only without via MUST parse: {e}"))?;
+    // Control: flow/message addresses without `via` now parse; join routing
+    // comes from Directory `join_candidates[]`.
+    parse_address(&format!("web+contrix:realm/{R}/flow/{F}"))
+        .map_err(|e| anyhow!("control: flow without via MUST parse: {e}"))?;
+    parse_address(&format!("web+contrix:realm/{R}/flow/{F}/m/{M}"))
+        .map_err(|e| anyhow!("control: message without via MUST parse: {e}"))?;
     Ok(())
 }
 
@@ -504,7 +494,7 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
 // ════════════════════════════════════════════════════════════════════════════
 
 /// OA-COT-4.1 — `DirectoryResolveTargetResBody` deserializes the §9.1 common
-/// directory fields (`as_of`, `source_refs`, `via_services`) and `target_kind`.
+/// directory fields (`as_of`, `source_refs`, `join_candidates`) and `target_kind`.
 pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let wire = json!({
         "target_kind": "flow",
@@ -515,7 +505,34 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             "cx:event:01904100-0000-7000-8000-0000000000e1",
             "cx:event:01904100-0000-7000-8000-0000000000e2"
         ],
-        "via_services": ["did:web:relay.example", "did:web:teabay.example"],
+        "join_candidates": [
+            {
+                "realm_id": format!("cx:realm:{R}"),
+                "service_did": "did:web:relay.example",
+                "service_type": "principal_server",
+                "role": "primary",
+                "operations": ["cx.events.submit"],
+                "join_methods": ["invite_accept", "member_join", "knock"],
+                "priority": 0,
+                "source": "directory_ingest",
+                "source_refs": ["cx:event:01904100-0000-7000-8000-0000000000e1"],
+                "as_of": "2026-05-27T00:00:00Z",
+                "expires_at": "2026-05-27T00:15:00Z"
+            },
+            {
+                "realm_id": format!("cx:realm:{R}"),
+                "service_did": "did:web:teabay.example",
+                "service_type": "principal_server",
+                "role": "mirror",
+                "operations": ["cx.events.submit"],
+                "join_methods": ["invite_accept", "member_join", "knock"],
+                "priority": 1,
+                "source": "directory_ingest",
+                "source_refs": ["cx:event:01904100-0000-7000-8000-0000000000e2"],
+                "as_of": "2026-05-27T00:00:00Z",
+                "expires_at": "2026-05-27T00:15:00Z"
+            }
+        ],
         "policy_revision": "rev-7",
         "stale": false
     });
@@ -536,8 +553,13 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     if body.source_refs.len() != 2 {
         bail!("source_refs §9.1 field MUST carry both source events");
     }
-    if body.via_services != vec!["did:web:relay.example", "did:web:teabay.example"] {
-        bail!("via_services §9.1 field MUST round-trip in order");
+    let candidate_services: Vec<&str> = body
+        .join_candidates
+        .iter()
+        .map(|candidate| candidate.service_did.as_str())
+        .collect();
+    if candidate_services != vec!["did:web:relay.example", "did:web:teabay.example"] {
+        bail!("join_candidates common field MUST round-trip in order");
     }
     // A flow target carries object_preview (opaque), not realm_preview.
     if body.realm_preview.is_some() {
@@ -571,7 +593,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         "join_rule": "invite",
         "as_of": "2026-05-27T00:00:00Z",
         "source_refs": ["cx:event:01904100-0000-7000-8000-0000000000e1"],
-        "via_services": ["did:web:teabay.example"]
+        "join_candidates": []
     });
     let body: DirectoryResolveTargetResBody =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise realm res: {e}"))?;

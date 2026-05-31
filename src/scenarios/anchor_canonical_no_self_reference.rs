@@ -2,19 +2,19 @@
 //!
 //! Spec (round 2+3 cleanup, T01):
 //!
-//! `anchor.schema.json` now explicitly excludes `id` and `anchorer_sig`
+//! `anchor.schema.json` now explicitly excludes `id` and `anchorer_signature`
 //! from the canonical bytes used to compute the Anchor id and the
 //! anchorer signature. The receiver MUST:
 //!
 //!   (a) recompute `H = sha256(canonical_bytes)`; the embedded `id`
 //!       MUST satisfy `id == "cx:anchor:" || base32(H)` (form per
 //!       deployment), and
-//!   (b) verify `anchorer_sig` covers exactly `canonical_bytes` (i.e.
-//!       the byte stream with `id` / `anchorer_sig` removed).
+//!   (b) verify `anchorer_signature` covers exactly `canonical_bytes` (i.e.
+//!       the byte stream with `id` / `anchorer_signature` removed).
 //!
-//! Any attempt to embed `id` or `anchorer_sig` into the canonical bytes
+//! Any attempt to embed `id` or `anchorer_signature` into the canonical bytes
 //! (self-reference) MUST cause verification to fail. This pins that an
-//! Anchor whose canonical bytes leak `id` or `anchorer_sig` is rejected.
+//! Anchor whose canonical bytes leak `id` or `anchorer_signature` is rejected.
 
 use anyhow::{Result, anyhow};
 use chrono::TimeZone;
@@ -59,11 +59,14 @@ fn build_anchor() -> Result<Anchor> {
         .map_err(|e| anyhow!("anchorer did: {e}"))?;
     let mut a = Anchor {
         id: anchor_id(0x00)?,
-        space_id: space()?,
+        realm_id: space()?,
         predecessor_refs: vec![anchor_id(0xaa)?],
         frontier: vec![move_id(0x11)?, move_id(0x22)?],
         state_root: hash(0x77)?,
-        anchorer_sig: AnchorerSig::Single(signature()),
+        previous_state_root: None,
+        previous_digest_algorithm: None,
+        anchorer_signature: AnchorerSig::Single(signature()),
+        anchored_at: chrono::Utc.with_ymd_and_hms(2026, 5, 8, 0, 0, 0).unwrap(),
         hlc,
         kind: AnchorKind::Normal,
     };
@@ -72,7 +75,7 @@ fn build_anchor() -> Result<Anchor> {
 }
 
 /// T01 — assert canonical bytes used for Anchor id / signature derivation
-/// exclude both `id` and `anchorer_sig` (so injecting them is structurally
+/// exclude both `id` and `anchorer_signature` (so injecting them is structurally
 /// impossible — the canonical encoder strips them).
 pub async fn anchor_canonical_no_self_reference_run() -> Result<()> {
     let a = build_anchor()?;
@@ -83,9 +86,9 @@ pub async fn anchor_canonical_no_self_reference_run() -> Result<()> {
             "Anchor canonical bytes include `\"id\":` — T01 violated (self-reference leak)"
         ));
     }
-    if s.contains("\"anchorer_sig\"") {
+    if s.contains("\"anchorer_signature\"") {
         return Err(anyhow!(
-            "Anchor canonical bytes include `\"anchorer_sig\"` — T01 violated (self-reference leak)"
+            "Anchor canonical bytes include `\"anchorer_signature\"` -- T01 violated (self-reference leak)"
         ));
     }
     if s.contains("\"jws\"") {
@@ -112,6 +115,6 @@ mod tests {
     async fn anchor_canonical_bytes_exclude_self_reference() {
         anchor_canonical_no_self_reference_run()
             .await
-            .expect("Anchor canonical bytes MUST NOT leak id / anchorer_sig (T01)");
+            .expect("Anchor canonical bytes MUST NOT leak id / anchorer_signature (T01)");
     }
 }
