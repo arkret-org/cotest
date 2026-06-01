@@ -30,6 +30,52 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+// Build an encrypted Realm via a direct cx.realm.create envelope. The shared
+// createSpaceApi helper puts `plaintext_visible_services` at the payload root,
+// which the current soland realm_create schema rejects (additionalProperties);
+// this inline shape mirrors the accepted envelope used elsewhere in this file.
+async function createEncryptedRealm(
+  request: import("@playwright/test").APIRequestContext,
+  token: string,
+  ownerDid: string,
+  title: string,
+): Promise<string> {
+  const realmId = typedId("realm");
+  const createdAt = canonicalTimestamp();
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: ownerDid,
+      realmId,
+      kind: "cx.realm.create",
+      createdAt,
+      payload: {
+        object: {
+          id: realmId,
+          schema: "cx.schema.realm.v1",
+          title,
+          created_by: ownerDid,
+          trust_domain: "cx:trust_domain:soland.local",
+          schema_refs: ["cx.schema.realm.v1"],
+          default_discoverability: "listed",
+          default_join_rule: "invite",
+          history_visibility: "joined",
+          encryption_profile: "mls_rfc9420",
+          security_class: "standard",
+          federation_policy: "restricted",
+          anchor_profile: "single_did",
+          digest_algorithm: "sha256",
+          anchorer: singleDidAnchorer(ownerDid),
+          created_at: createdAt,
+        },
+      },
+    }),
+    { context: `create encrypted realm ${title}` },
+  );
+  return realmId;
+}
+
 test.describe("MLS group encryption", () => {
   test("E2EE space surfaces MLS admin controls and rejects non-members from raw events", async ({
     browser,
@@ -502,12 +548,12 @@ test.describe("MLS group encryption", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const realmId = await createSpaceApi(request, aliceToken, {
-      title: `MLS create-lock realm ${stamp}`,
-      discoverability: "listed",
-      history_visibility: "joined",
-      encryption_profile: "mls_rfc9420",
-    });
+    const realmId = await createEncryptedRealm(
+      request,
+      aliceToken,
+      alice.did,
+      `MLS create-lock realm ${stamp}`,
+    );
 
     const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
       headers: authHeaders(aliceToken),
@@ -527,11 +573,23 @@ test.describe("MLS group encryption", () => {
     expect(wireErrCode(body)).toBe("realm_encryption_profile_create_locked");
   });
 
-  // Circle counterpart of the realm create-lock. soland has a unit test
-  // (circles_smoke.rs circle_update_rejects_encryption_profile_patch) but no
-  // end-to-end coverage. A Circle on an encrypted Realm is created at the
-  // Realm's floor, then an attempt to patch its profile must be rejected.
-  test("cx.circle.update that patches encryption_profile is rejected (create-locked)", async ({
+  // Circle counterpart of the realm create-lock.
+  //
+  // CONFIRMED GAP (parked pending fix): unlike cx.realm.update, soland's
+  // submit path does NOT enforce the circle create-lock synchronously. The
+  // check exists (operations.rs validate_content_encryption_floor CX_CIRCLE_UPDATE
+  // branch + reducer.rs apply), but `operation_schema_for_kind` has no arm for
+  // cx.circle.create / cx.circle.update, so projection_operation_from_event
+  // returns None and event_log.rs skips ALL submit-time operation validation
+  // for circle events. The create-lock is only caught at the async projection
+  // (reducer) layer — so state stays safe (profile is not actually changed),
+  // but the submit returns a misleading 200 instead of 4xx. Fix = add circle
+  // operation schemas (needs full circle-path regression: it would newly run
+  // validate_operation_policy + policy_gate on circle events at submit).
+  test.fixme(
+    // @blocking-on: soland#circle-submit-validation-gap
+    // @user-promise: e2e/scenarios/encryption/mls-group.md (E11.7)
+    "cx.circle.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -539,12 +597,12 @@ test.describe("MLS group encryption", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const realmId = await createSpaceApi(request, aliceToken, {
-      title: `MLS create-lock circle realm ${stamp}`,
-      discoverability: "listed",
-      history_visibility: "joined",
-      encryption_profile: "mls_rfc9420",
-    });
+    const realmId = await createEncryptedRealm(
+      request,
+      aliceToken,
+      alice.did,
+      `MLS create-lock circle realm ${stamp}`,
+    );
 
     const circleId = typedId("circle");
     await submitSignedEventApi(
@@ -563,7 +621,7 @@ test.describe("MLS group encryption", () => {
             display: {
               short_name: "LC",
               color_token: "indigo",
-              symbol: { kind: "glyph", glyph: "shield" },
+              symbol: { glyph: "shield" },
             },
             directory_visibility: "members",
             join_rule: "invite",

@@ -25,11 +25,11 @@
 | key backup 链/单调/前驱 | ✅ active | `tests/key_backup_three_class_scenarios.rs` |
 | cross-signing reset 时钟偏移/重放 | ✅ active(soland 单测) | `soland/tests/http_api/events.rs` |
 | e2ee relaxed window / metadata floor 收紧 | ✅ active | `scenarios/circle/metadata_encryption_floor.rs`、`e2ee_relaxed_window_negative.rs` |
-| **创建者本机加密写入 flow body(description)** | ✅ 本轮补(active,当前红=复现 bug) | `e2e/tests/kanban/end-to-end.spec.ts` E15.7 |
-| **创建者本机加密 synthesis** | ✅ 本轮补(active,当前红) | kanban E15.8 |
-| **创建者本机加密 discussion comment** | ✅ 本轮补(active,当前红) | kanban E15.9 |
-| **realm encryption_profile create-locked** | ✅ 本轮补(active,应绿) | mls-group E11.6 |
-| **circle encryption_profile create-locked** | ✅ 本轮补(active,应绿) | mls-group E11.7 |
+| **创建者本机加密写入 flow body(description)** | ✅ active **绿(实测真加密)** | `e2e/tests/kanban/end-to-end.spec.ts` E15.7 |
+| **创建者本机加密 synthesis** | ✅ active **绿(实测真加密)** | kanban E15.8 |
+| **创建者本机加密 discussion comment** | 🔴→fixme **确认 bug**(chat wasm 不加密,见 5.A) | kanban E15.9 |
+| **realm encryption_profile create-locked** | ✅ active **绿** | mls-group E11.6 |
+| **circle encryption_profile create-locked** | 🔴→fixme **确认 gap**(soland 提交不强制,见 5.B) | mls-group E11.7 |
 | **MLS 未就绪时不得静默降级明文** | ⏸️ 本轮补(fixme) | mls-group E11.8 |
 | 加密附件上传/下载/缩略图分离 | ✅ active(API/blob 层) | `encrypted-attachments.spec.ts` |
 | QR 配对 / MLS Remove 级联 / 设备撤销轮换 | ⏸️ 多数 fixme/ignore | `multi_device_qr_pairing.rs` 等 |
@@ -52,51 +52,44 @@
 **P1 — 未就绪守卫(fixme)**:
 - E11.8 未收 welcome / 未恢复的同账户新设备写私有内容 → 必须呈现可恢复的"MLS 未就绪"并拒绝,绝不静默降级明文。parked 原因:需第二设备 rig + 实跑确认未就绪 UX。
 
-> 预期红绿:P0 三个当前**红**(复现客户端 bug);P1 create-locked 当前应**绿**(soland 已强制,仅补覆盖)。第一次实跑请重点确认 create-locked 真绿——若红,说明服务端强制也回归了。
+> 实测结果(见第 4 节):description / synthesis / realm-lock 三个 **active 绿**;discussion(E15.9)与 circle-lock(E11.7)实测**红 → 已转 test.fixme**,各自 `@blocking-on` 一个确认的 bug(第 5 节)。原报告的 description floor-violation bug **不复现、已解决**。
 
 ---
 
-## 4. 根因链:为什么加密 Realm 下添加描述会 412
+## 4. 实测结论(joint-e2e 全栈,2026-06-01,跑了 3 轮)
 
-客户端是否对私有内容加密,取决于 `selected_scope_security_encrypted`,它**纯粹**由本地 `state.space_projections[realm_id]` 经 `realm_projection_is_encrypted` 推导:
+| 用例 | 结果 | 结论 |
+|---|---|---|
+| description 加密写入(含"提交体不得含明文"硬断言)| ✅ 真绿 | **原报告 bug 已解决**:flow body 在创建者本机真加密、服务端接受 |
+| synthesis 加密写入 | ✅ 真绿 | 同上 |
+| realm encryption_profile create-locked | ✅ 绿 | 服务端提交时强制生效 |
+| circle encryption_profile create-locked | 🔴 → fixme | **确认 soland 提交时不强制(见 B)** |
+| discussion comment 加密 | 🔴 → fixme | **确认 chat 在 wasm 上无法加密(见 A)** |
 
-```
-yougen/src/views/kanban.rs:2671-2687
-  security_projection_for_scope_id(space_projections, realm_id)
-    .map(realm_projection_is_encrypted)
-    .unwrap_or(false)          // ← 危险默认:状态未知 = 当作明文
-```
+> **原报告 bug(加密 Realm 加 Description → `content_encryption_floor_violation`)在当前代码 + 干净全栈上不复现、已解决。** 先前怀疑的"客户端 `unwrap_or(false)`(kanban.rs:2686)+ sync 用 `none` 覆盖投影(sync.rs:531 / sync_engine.rs:374)"时序竞态**没有触发**——UI 向导建 realm 时投影已就位、MLS 已就绪,description/synthesis 都正确加密。那两处"未知即明文"默认仍在、是潜在隐患(见第 6 节),但不是这条 happy-path 的实际故障原因。
 
-数据流与缺陷:
+## 5. 实测挖出的两个确认 bug(已 park 为 test.fixme,待修)
 
-1. **建 Realm 时写了正确的乐观投影**(`views/setup.rs:1132`,body 带 `encryption_profile = mls_rfc9420`,顶层 + `summary` 双写)。判定函数本身没问题。
-2. **account-sync 全量覆盖乐观投影**:`sync_engine.rs:374` 与 `app.rs:10477` 都是 `save_space_projection(id, body)` 直接覆盖,不 merge。
-3. **服务端 sync body 在 meta 未就绪时回退 `"none"`**:`soland/src/routing/events/sync.rs:528-531` —
-   ```
-   let encryption_profile = meta.and_then(|r| r.encryption_profile.clone())
-       .unwrap_or_else(|| "none".to_owned());   // ← 同样的危险默认
-   ```
-   realm 刚创建、`realm_meta` 投影尚未 settle 时,sync 发出 `encryption_profile: "none"`,**盖掉**客户端正确的乐观投影。
-4. 用户随即打开看板加描述 → 客户端读到 `"none"` → 判定明文 → 跳过 MLS 加密 → 提交明文 `body`。
-5. 此时服务端 `realm_meta` 已 settle(floor 检查能拒绝就证明写入时 meta 已带 profile)→ `validate_content_encryption_floor` 返回 412 `content_encryption_floor_violation`。
+### A. 加密 discussion/chat 消息在 yougen 端从未端到端可用(yougen + SDK)
+尝试修复时发现是**两层**问题(2026-06-01 实跑确认):
+1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `cx.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `cx.flow.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
+2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `cx.schema.encrypted_envelope.v1 requires field 'version'`。yougen 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban flow 内容"能加密"只因 flow patch 值不走该 envelope schema 校验;消息走,故被拒。**yougen 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `contrix-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
+- **修**(sizable):把 yougen chat 消息加密改用 SDK 的 `MessageCrypto::encrypt_with_aad` 合规路径(构造 aad、aad_digest、version、整合 commit),跨 SDK+yougen、需多轮重建。`@blocking-on: yougen#chat-encrypted-message-envelope-nonconforming`。
+- 本轮已尝试"去 wasm 门 + 默认 Send 走加密"并实跑:明文泄漏被堵(不再泄漏),但暴露第 2 层后**已 `git checkout` 回退 chat.rs**,避免留下"加密频道发不出消息"的回归。
 
-**两处"未知即明文"的危险默认叠加**:客户端 `unwrap_or(false)`(kanban.rs:2686)+ 服务端 `unwrap_or("none")`(sync.rs:531)。两者都把"我还不知道"误当成"明文 OK"。
-
-## 5. 修复建议(让 P0 三个用例转绿)
-
-按性价比排序:
-
-1. **客户端 fail-safe(首选)**:加密状态未知/投影缺失时,**不得**默认明文。要么把写私有内容的入口置为"加载中/不可写",要么默认按加密处理并等投影确认。即移除 kanban.rs:2686 的 `unwrap_or(false)` 危险默认。
-2. **sync 不要用 `"none"` 覆盖已知的加密 profile**:`save_space_projection` 在合并 realm body 时,若新 body 的 `encryption_profile` 是缺省/`"none"` 而旧投影是加密,应保留旧值(create-locked 字段本就不可变,绝不应被"降级覆盖")。
-3. **服务端 sync.rs:528 不要在 meta 缺失时回退 `"none"`**:meta 未就绪时应省略该字段(让客户端走 fail-safe)或阻塞 sync 直到 meta settle,而非主动报"明文"。
-
-> 注:realm `encryption_profile` 是 create-locked、永不可变(E11.6 守卫),因此任何把它"覆盖/降级为 none"的代码路径都是错的——这是上面 #2/#3 的硬依据。
+### B. circle 事件在 soland 提交时跳过全部操作校验(soland)
+- `cx.circle.update` patch `encryption_profile` 在提交时被**接受**(realm 同结构却被拒)。
+- 根因:`operations.rs` `operation_schema_for_kind`(soland/src/routing/events/operations.rs:897)**没有 `cx.circle.create` / `cx.circle.update` 的 arm** → `projection_operation_from_event`(event_log.rs:3549)返回 `None` → event_log.rs:1174 整段提交时校验(semantics / content_encryption_floor / operation_policy / policy_gate)被跳过。
+- create-lock / below-floor 只在异步 reducer 层(reducer.rs:7173 等)兜底 → **状态安全(profile 实际改不了),但提交返回误导性 200**,且 circle 的提交时校验全是死代码。
+- **修**:给 `operation_schema_for_kind` 补 circle 两条 arm。需 circle 全量回归(补后 circle 事件会新走 `validate_operation_policy` + `policy_gate`,可能拒掉合法 circle 创建)。`@blocking-on: soland#circle-submit-validation-gap`。
 
 ---
 
 ## 6. 仍开放的缺口
 
-- **metadata_encryption_floor 服务端是否真强制**(`reducer.rs` ~7102):子审计称"字段存了未强制",若属实是真实安全洞,需单独核实并补强制 + 测试。
+- **潜在隐患(未触发但应修)**:客户端 `unwrap_or(false)`(kanban.rs:2686)+ 服务端 sync `unwrap_or("none")`(sync.rs:531)两处"未知即明文"默认 + sync 全量覆盖乐观投影(sync_engine.rs:374 / app.rs:10477)。当前 happy-path 未触发,但投影滞后/竞态下仍可能误判明文。建议 fail-safe(未知不得默认明文;sync 不得用 none 覆盖已知加密 profile,该字段 create-locked 永不可变)。
+- **createSpaceApi 与 soland schema 漂移**:`cotest/e2e/helpers/soland-api.ts:132` 在 realm_create payload 根部放 `plaintext_visible_services`,被现行 schema 拒(波及所有用该 helper 的 e2e)。本审计 create-lock 用例已改用内联 realm 创建绕开,但 helper 本身应修。
+- **metadata_encryption_floor 服务端是否真强制**(`reducer.rs` ~7102):子审计称"字段存了未强制",待核实。
 - **welcome 部分失败的 UI 上报**:当前 `WelcomeApplyOutcome.first_error` 只打日志,用户可能误以为已就绪。
 - **多设备**:QR 配对 / MLS Remove 级联 / 设备撤销后 account-secret 轮换持久化,多数仍 fixme/ignore,等 soland MLS 状态机。
 - **commit / flow 两阶段提交原子性**(推断,未逐行核实):MLS commit 事件与业务 `cx.flow.update` 分两次提交,网络中断可能导致 epoch 推进但业务补丁丢失。

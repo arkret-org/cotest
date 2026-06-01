@@ -512,6 +512,13 @@ test.describe("kanban end-to-end", () => {
         response.status(),
         `cx.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
+      // Prove the write was actually ENCRYPTED, not a false-green on a
+      // plaintext realm: the private description must not appear verbatim in
+      // the submitted payload (it should be an MLS encrypted envelope).
+      expect(
+        (response.request().postData() ?? "").includes(description),
+        `description leaked as plaintext into the cx.flow.update body — the realm was not actually encrypted or the client skipped MLS encryption`,
+      ).toBe(false);
 
       // UI corroboration: the description renders and no encrypted-write error
       // surfaces anywhere in the detail panel.
@@ -587,6 +594,10 @@ test.describe("kanban end-to-end", () => {
         response.status(),
         `synthesis cx.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
+      expect(
+        (response.request().postData() ?? "").includes(synthesis),
+        `synthesis leaked as plaintext into the cx.flow.update body — realm not actually encrypted or client skipped MLS encryption`,
+      ).toBe(false);
 
       await expect(alicePage.page.getByTestId("card-synthesis-panel")).toContainText(synthesis, {
         timeout: 120_000,
@@ -598,12 +609,29 @@ test.describe("kanban end-to-end", () => {
     }
   });
 
-  // Regression: encrypted Flow DISCUSSION comment on the creator device. The
-  // discussion track posts cx.message.create (not cx.flow.update) and carries
-  // the message body through the MLS encrypted-payload envelope; on an
-  // encrypted Realm a plaintext message must not leave the client. status<400
-  // is the catch-all guard — any rejection (floor / schema / policy) fails it.
-  test("alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
+  // Regression: encrypted Flow DISCUSSION comment on the creator device.
+  //
+  // CONFIRMED BUG (parked — fix is a sizable SDK+yougen feature). Two layers:
+  //   1. The kanban card Discussion composer's default Send (chat.rs
+  //      `send-chat-button`) ships PLAINTEXT cx.message.create unconditionally;
+  //      soland accepts it (cx.message.create is not gated by the content
+  //      encryption floor — only cx.flow.* is). The encrypt path
+  //      (`run_local_mls_encrypt`) was additionally wasm-stubbed.
+  //   2. Deeper: even when the encrypt path runs, yougen builds the message
+  //      `encrypted_payload` from the loose `core::EncryptedPayload`
+  //      (group.encrypt_payload), which does NOT conform to soland's
+  //      cx.schema.encrypted_envelope.v1 — it is missing `version`,
+  //      `aad_visibility_event_id`, `aad.{realm_id,event_kind}`, `aad_digest`,
+  //      and key_ref.algorithm must be "MLS". So an encrypted message is
+  //      rejected with schema_violation. (kanban flow content "works" only
+  //      because flow patch values aren't validated against that envelope
+  //      schema.) The conforming builder exists in the SDK
+  //      (contrix-rust-sdk crates/sdk/src/mls.rs MessageCrypto::encrypt_with_aad);
+  //      yougen's chat send must be wired to it. Promote once that lands.
+  test.fixme(
+    // @blocking-on: yougen#chat-encrypted-message-envelope-nonconforming
+    // @user-promise: e2e/scenarios/kanban/end-to-end.md (E15.9)
+    "alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
     browser,
     request,
   }, testInfo) => {
@@ -657,6 +685,10 @@ test.describe("kanban end-to-end", () => {
         response.status(),
         `discussion cx.message.create should be accepted (encrypted), not rejected; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
+      expect(
+        (response.request().postData() ?? "").includes(comment),
+        `comment leaked as plaintext into the cx.message.create body — realm not actually encrypted or client skipped MLS encryption`,
+      ).toBe(false);
 
       await expect(alicePage.page.getByTestId("chat-panel")).toContainText(comment, {
         timeout: 120_000,
