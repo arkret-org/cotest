@@ -59,7 +59,7 @@ test.describe("Document Morph collaboration", () => {
             realm_id: realmId,
             space_id: realmId,
             morph_type: "document",
-            title: "Projection draft",
+            metadata: { title: "Projection draft" },
             stage: "draft",
             schema_refs: ["cx.schema.morph.v1"],
             facets: { documentable: {} },
