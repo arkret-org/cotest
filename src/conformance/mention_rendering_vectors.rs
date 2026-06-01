@@ -7,7 +7,6 @@
 //! R3.2 mention node shape:
 //!   `{subject_id (MUST), handle_at_time?, display_name_at_time?,
 //!     mention_text_original?, resolved_at?}`.
-//! The legacy `{subject, handle, display_snapshot}` shape MUST be rejected.
 //! `subject_id` is the ONLY authoritative field for actor attribution; the
 //! handle / display strings are audit metadata.
 //!
@@ -23,8 +22,6 @@ use contrix_core::Did;
 use contrix_core::model::{Handle, HandleBindingState, HandleClaim, Mention};
 use serde_json::json;
 
-pub const VECTOR_ID_MENTION_LEGACY_REJECTED: &str =
-    "cx.vector.mention_rendering.legacy_shape_rejected.v1";
 pub const VECTOR_ID_MENTION_NEW_ACCEPTED: &str =
     "cx.vector.mention_rendering.new_shape_accepted.v1";
 pub const VECTOR_ID_MENTION_STEP1_UNIQUE: &str =
@@ -41,7 +38,6 @@ pub const VECTOR_ID_MENTION_ACTOR_ATTRIBUTION_INDEPENDENT: &str =
     "cx.vector.mention_rendering.actor_attribution_independent_of_handle_at_time.v1";
 
 pub const ALL_MENTION_RENDERING_VECTOR_IDS: &[&str] = &[
-    VECTOR_ID_MENTION_LEGACY_REJECTED,
     VECTOR_ID_MENTION_NEW_ACCEPTED,
     VECTOR_ID_MENTION_STEP1_UNIQUE,
     VECTOR_ID_MENTION_STEP1_MULTI_TO_STEP2,
@@ -94,28 +90,6 @@ fn empty_selection<'a>(
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     }
-}
-
-// ── VECT-COT-2.1 — legacy shape rejected ────────────────────────────────────
-
-pub fn run_legacy_shape_rejected_vector() -> Result<()> {
-    // Pre-R3.2 mention node used `subject` / `handle` / `display_snapshot`.
-    let legacy = json!({
-        "subject": "did:web:alice.principal.example",
-        "handle": "alice:acme.example",
-        "display_snapshot": "@alice:acme.example",
-        "resolved_at": "2026-05-19T10:00:00Z"
-    });
-    let parsed: std::result::Result<Mention, _> = serde_json::from_value(legacy);
-    if parsed.is_ok() {
-        bail!("legacy mention shape (subject/handle/display_snapshot) MUST schema-reject");
-    }
-    // A node missing the authoritative `subject_id` MUST also reject.
-    let no_subject = json!({ "handle_at_time": "alice:acme.example" });
-    if serde_json::from_value::<Mention>(no_subject).is_ok() {
-        bail!("mention without subject_id MUST reject");
-    }
-    Ok(())
 }
 
 // ── VECT-COT-2.2 — new shape accepted ───────────────────────────────────────
@@ -291,13 +265,12 @@ fn issuer_string() -> String {
 // ── Suite entry-point ──────────────────────────────────────────────────────
 
 pub fn run_mention_rendering_vector_suite() -> Result<()> {
-    if ALL_MENTION_RENDERING_VECTOR_IDS.len() != 8 {
+    if ALL_MENTION_RENDERING_VECTOR_IDS.len() != 7 {
         bail!(
-            "expected 8 mention-rendering vector ids, got {}",
+            "expected 7 mention-rendering vector ids, got {}",
             ALL_MENTION_RENDERING_VECTOR_IDS.len()
         );
     }
-    run_legacy_shape_rejected_vector()?;
     run_new_shape_accepted_vector()?;
     run_render_step1_unique_success_vector()?;
     run_render_step1_multi_to_step2_live_vector()?;

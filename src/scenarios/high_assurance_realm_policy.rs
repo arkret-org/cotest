@@ -50,7 +50,7 @@ fn build_realm(
         created_by: principal,
         owning_organizations: Vec::new(),
         schema_refs: vec!["cx.profile.realm.v1".to_owned()],
-        policy_ref: None,
+        policy_id: None,
         default_discoverability: Discoverability::InviteOnly,
         default_join_rule: JoinRule::Invite,
         history_visibility: HistoryVisibility::Joined,

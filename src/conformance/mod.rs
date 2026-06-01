@@ -115,10 +115,10 @@ pub use member_roster_vectors::{
 };
 pub use mention_rendering_vectors::{
     ALL_MENTION_RENDERING_VECTOR_IDS, run_actor_attribution_independent_of_handle_at_time_vector,
-    run_legacy_shape_rejected_vector, run_mention_rendering_vector_suite,
-    run_new_shape_accepted_vector, run_render_fallback_cached_vector,
-    run_render_fallback_name_only_vector, run_render_fallback_unresolved_vector,
-    run_render_step1_multi_to_step2_live_vector, run_render_step1_unique_success_vector,
+    run_mention_rendering_vector_suite, run_new_shape_accepted_vector,
+    run_render_fallback_cached_vector, run_render_fallback_name_only_vector,
+    run_render_fallback_unresolved_vector, run_render_step1_multi_to_step2_live_vector,
+    run_render_step1_unique_success_vector,
 };
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,

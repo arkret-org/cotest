@@ -109,8 +109,7 @@ conformance_test!(
 conformance_test!(
     /// Round 4 / A2 — lint parity: /policy/check POST references
     /// PolicyCheckRequest / PolicyCheckResponse, PolicyCheckRequest
-    /// requires `realm_id`, PolicyCheckResponse requires `bound_to`,
-    /// legacy `/contrix/v1/check` path is absent.
+    /// requires `realm_id`, PolicyCheckResponse requires `bound_to`.
     round4_policy_check_alignment_check_matches_python_lint,
     "round4_policy_check_alignment",
     cotest::conformance::run_policy_check_alignment_check,

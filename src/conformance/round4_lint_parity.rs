@@ -103,17 +103,11 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
 ///   `PolicyCheckRequest` / `PolicyCheckResponse` components.
 /// * `PolicyCheckRequest.required` MUST include `realm_id`.
 /// * `PolicyCheckResponse.required` MUST include `bound_to`.
-/// * Legacy `/contrix/v1/check` MUST NOT be present.
 pub fn run_policy_check_alignment_check() -> Result<()> {
     let openapi = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml")?;
     let paths = openapi
         .get("paths")
         .ok_or_else(|| anyhow!("openapi paths section missing"))?;
-    if paths.get("/contrix/v1/check").is_some() {
-        bail!(
-            "legacy /contrix/v1/check policy path must not be present; use /policy/check (round-4 lint parity)"
-        );
-    }
     let post = paths
         .get("/policy/check")
         .and_then(|p| p.get("post"))

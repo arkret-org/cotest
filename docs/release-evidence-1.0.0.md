@@ -59,8 +59,7 @@ Generated: 2026-05-27 — bundle for the CXP-0007 circle-rollout milestone.
 
 4. **Coverage + fixme bookkeeping**
    - Regenerated `journey-coverage.json` / `.md` to absorb the P4
-     scenarios (4 agent profiles + 9 §11 vectors + key-backup +
-     legacy-alias-rejection).
+     scenarios (4 agent profiles + 9 §11 vectors + key-backup).
    - Swept `fixme-debt.md` — the 224 deferred entries all remain
      `deferred-p5` (gated on the live-stack joint-bringup, not on P5
      work).

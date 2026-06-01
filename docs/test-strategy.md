@@ -450,7 +450,7 @@ gap-coverage gaps deferred to R4.
 
 | Spec section | Subject | cotest vector(s) | Stage |
 |---|---|---|---|
-| **§7 media binding** — `cx.realm.media_service.foci[]` shape | Realm declares a foci array; legacy `sfu_endpoint` shape rejected | `e2e/realm/media_service_foci_round_trip.rs`, `e2e/realm/legacy_sfu_endpoint_rejects.rs` | Active |
+| **§7 media binding** — `cx.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
 | **§8 handles** — NFC normalization + UTS#39 confusable skeleton | Confusable handle rejected before rate-limit; mixed-script rejected | `e2e/handle/homograph_forbidden.rs`, `e2e/handle/mixed_script_rejects.rs`, `e2e/handle/nfc_round_trip.rs` | Active |
 | **§9 agent** — FSM (Active/Paused/Deactivated) + pairing | Pause/resume/deactivate transitions; pairing window expiry; proof verification | `e2e/agent/fsm_transitions.rs`, `e2e/agent/pairing_window_expires.rs`, `e2e/agent/pairing_proof_invalid.rs`, `e2e/agent/verification_method_principal_mismatch.rs` | Active |
 | **§9 agent** — actor-private event kinds | `cx.agent.draft.propose`, `cx.agent.action_request`, `cx.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
@@ -500,7 +500,6 @@ For each new error code introduced in R3, the canonical vector is:
 | `session_focus_already_committed` | `e2e/call_media/session_focus_already_committed.rs` |
 | `e2ee_key_source_unauthorised` | `e2e/call_media/e2ee_key_source_unauthorised.rs` |
 | `recording_artifact_pipeline_bypassed` | `e2e/call_media/recording_pipeline_bypassed.rs` |
-| `legacy_single_endpoint_media_service` | `e2e/realm/legacy_sfu_endpoint_rejects.rs` |
 | `focus_unavailable_for_client` | `e2e/call_media/focus_unavailable_for_client.rs` |
 | `recovery_witness_revoke_lagging` | `e2e/recovery/witness_revoke_lagging.rs` |
 | `handle_homograph_forbidden` | `e2e/handle/homograph_forbidden.rs` |

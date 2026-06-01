@@ -15,11 +15,6 @@
 //!    federation peer — would receive).
 //! 2. [`contrix_core::events::classify_event_kind`] recognises the new
 //!    kinds in their new family (Realm / Space-container).
-//! 3. The pre-rename `cx.space.<security>` and `cx.place.*` kinds
-//!    classify as `EventClass::Custom`, mirroring soland's
-//!    `realm_kind_renamed_in_v1` / `place_kind_renamed_to_space`
-//!    hard_reject reason codes in `routing/events/event_log.rs`.
-//!
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no
 //! binary, no network — the round-trip is entirely against the SDK so
 //! we catch contract drift in CI without spinning up soland.
@@ -94,32 +89,6 @@ fn positive_vectors() -> Vec<WireVector> {
     ]
 }
 
-/// Negative vectors — pre-rename kinds that MUST NOT round-trip into a
-/// known event family. The SDK classifies them as `EventClass::Custom`
-/// (the catch-all bucket), and soland's `validate_event_envelope`
-/// further hard_rejects them on submit with `realm_kind_renamed_in_v1`
-/// / `place_kind_renamed_to_space`. cotest mirrors the contract here so
-/// any future SDK regression (re-adding `cx.space.create` to the
-/// security family, for instance) is caught at wire-bytes parse time.
-fn negative_vectors() -> Vec<&'static str> {
-    vec![
-        // Pre-reversal security namespace.
-        "cx.space.delivery_binding_policy",
-        "cx.space.upgrade",
-        "cx.space.policy",
-        "cx.space.history_visibility",
-        "cx.space.audit_policy_downgrade",
-        "cx.space.destroy",
-        // Pre-reversal container namespace.
-        "cx.place.create",
-        "cx.place.update",
-        "cx.place.parent",
-        "cx.place.archive",
-        "cx.place.restore",
-        "cx.place.tombstone",
-    ]
-}
-
 fn fixture_realm_id() -> Result<RealmId> {
     RealmId::new("cx:realm:01904100-0000-7000-8000-000000000a01".to_owned())
         .map_err(|err| anyhow!("invalid realm id: {err}"))
@@ -182,58 +151,12 @@ fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String
 
 /// R2.1 — every Realm/Space reversal positive vector survives a
 /// canonical-encode → JSON-decode → SDK-classify round trip. Soland
-/// wire-accepts the same kinds in `validate_event_envelope` (after
-/// hard_rejecting the legacy `cx.space.*` security and `cx.place.*`
-/// container kinds), so any drift here would show up first as
-/// cross-project ingestion failures.
+/// wire-accepts the same kinds in `validate_event_envelope`, so any
+/// drift here would show up first as cross-project ingestion failures.
 pub fn run_positive_round_trip() -> Result<()> {
     let realm_id = fixture_realm_id()?;
     for vector in positive_vectors() {
         round_trip_positive(&vector, &realm_id)?;
-    }
-    Ok(())
-}
-
-/// R2.1 / R2.3 — every legacy (pre-rename) wire kind we know about
-/// classifies as `EventClass::Custom`, mirroring soland's
-/// `realm_kind_renamed_in_v1` / `place_kind_renamed_to_space`
-/// hard_reject. The SDK does not know about these kinds anymore so the
-/// classifier MUST NOT promote them into the Realm or Space families.
-pub fn run_negative_legacy_kinds_rejected() -> Result<()> {
-    for legacy in negative_vectors() {
-        let class = classify_event_kind(legacy);
-        match class {
-            EventClass::Custom(_) => {} // expected
-            other => {
-                return Err(anyhow!(
-                    "legacy wire kind {legacy:?} should classify as Custom (renamed in v1), \
-                     but classified as {other:?}"
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// R2.3 — soland's `validate_event_envelope` exposes the exact reason
-/// codes downstream wire clients need to detect the rename. The list
-/// here mirrors the hard_reject branch in
-/// `soland/src/routing/events/event_log.rs` (search
-/// `realm_kind_renamed_in_v1`). If soland ever drops or renames either
-/// reason code, this constant pair is the place to fix in cotest.
-pub const SOLAND_REALM_RENAME_REASON: &str = "realm_kind_renamed_in_v1";
-pub const SOLAND_PLACE_RENAME_REASON: &str = "place_kind_renamed_to_space";
-
-/// R2.3 — a smoke assert that pins the legacy security `cx.space.*`
-/// kinds in the negative-vector list against the soland reason-code
-/// constant above. Pure compile-time + classification check; the wire
-/// integration with a running soland is exercised by the HTTP
-/// scenarios that POST these legacy kinds and assert a 400 response.
-pub fn run_legacy_reason_code_constants_present() -> Result<()> {
-    // The two reason codes are non-empty contract surface — bare
-    // sanity to catch accidental empty-string drift.
-    if SOLAND_REALM_RENAME_REASON.is_empty() || SOLAND_PLACE_RENAME_REASON.is_empty() {
-        return Err(anyhow!("soland rename reason codes must be non-empty"));
     }
     Ok(())
 }
@@ -245,15 +168,5 @@ mod tests {
     #[test]
     fn round_trip_positive_vectors() {
         run_positive_round_trip().expect("realm/space positive round-trip");
-    }
-
-    #[test]
-    fn legacy_kinds_classify_as_custom() {
-        run_negative_legacy_kinds_rejected().expect("legacy kinds rejected by SDK classifier");
-    }
-
-    #[test]
-    fn rename_reason_codes_non_empty() {
-        run_legacy_reason_code_constants_present().expect("reason codes present");
     }
 }

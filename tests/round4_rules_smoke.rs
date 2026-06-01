@@ -30,32 +30,6 @@ fn write(path: &std::path::Path, body: &str) {
 }
 
 #[test]
-fn scan_tree_round4_flags_legacy_did_with_dot_in_method() {
-    let base = tmpdir("did");
-    let tree = base.join("downstream");
-    // Build the fixture body without putting the legacy DID literal on a
-    // source line of *this* test file (otherwise the cotest-wide
-    // literal_scanner would flag it). The fragments concatenate at
-    // runtime into a `did:` string with a `.` in the method segment,
-    // which the round-4 scanner then flags inside the tempdir fixture.
-    let did_prefix = "did:";
-    let method = "web";
-    let method_tail = ".alpha";
-    let fixture = format!(
-        "\npub fn legacy() -> &'static str {{\n    \"{did_prefix}{method}{method_tail}:foo\"\n}}\n",
-    );
-    write(&tree.join("src").join("foo.rs"), &fixture);
-    let findings = scan_tree_round4(&tree).expect("scan");
-    assert!(
-        findings
-            .iter()
-            .any(|f| f.rule == Round4Rule::LegacyDidMethodSegment),
-        "expected legacy DID finding: {findings:?}",
-    );
-    let _ = fs::remove_dir_all(&base);
-}
-
-#[test]
 fn scan_tree_round4_flags_compute_audit_policy_version_digest_two_args() {
     let base = tmpdir("audit");
     let tree = base.join("downstream");

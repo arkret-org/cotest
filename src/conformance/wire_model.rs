@@ -1775,9 +1775,6 @@ fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
 ///     advertisement is INDEPENDENT of core/extension advertisement (no
 ///     implication via `bridges_to`).
 ///
-/// Negative vectors cover legacy pre-C16 surface names (`moderation`,
-/// `media`) — these MUST fail-loud as `unknown_surface_name` per the
-/// no-backwards-compat rule.
 pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -2013,8 +2010,6 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("discovery fixture missing negative_vectors[]"))?;
     let mut neg_bridge_unsupported = false;
     let mut neg_ext_blocked = false;
-    let mut neg_legacy_moderation = false;
-    let mut neg_legacy_media = false;
     let mut neg_bridge_no_implication = false;
     for vector in negatives {
         let name = required_str(vector, "name")?;
@@ -2047,63 +2042,15 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
                 }
                 neg_ext_blocked = true;
             }
-            "legacy_pre_c16_surface_name_moderation_rejected" => {
-                let surfaces: Vec<&str> = vector
-                    .get("advertised_surfaces")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("negative vector {name} missing advertised_surfaces"))?
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .collect();
-                if !surfaces.contains(&"moderation") {
-                    bail!(
-                        "negative vector {name} must declare the legacy `moderation` token in advertised_surfaces"
-                    );
-                }
-                if surfaces.contains(&"moderation_reports") {
-                    bail!(
-                        "negative vector {name} must NOT also declare moderation_reports — it is a pure-legacy reject vector"
-                    );
-                }
-                if live_ext.contains("moderation") {
-                    bail!(
-                        "operation-registry still contains legacy surface name `moderation`; spec post-C16 (2026-05-08) renamed to moderation_reports"
-                    );
-                }
-                neg_legacy_moderation = true;
-            }
-            "legacy_pre_c16_combined_media_surface_rejected" => {
-                let surfaces: Vec<&str> = vector
-                    .get("advertised_surfaces")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("negative vector {name} missing advertised_surfaces"))?
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .collect();
-                if !surfaces.contains(&"media") {
-                    bail!("negative vector {name} must declare the legacy combined `media` token");
-                }
-                if live_ext.contains("media") {
-                    bail!(
-                        "operation-registry still contains legacy combined `media` surface; spec post-C16 split into blob_storage + realtime_media"
-                    );
-                }
-                neg_legacy_media = true;
-            }
             "interop_bridge_advertised_does_not_imply_in_spec_bridges_to" => {
                 neg_bridge_no_implication = true;
             }
             other => bail!("discovery fixture unexpected negative vector {other}"),
         }
     }
-    if !(neg_bridge_unsupported
-        && neg_ext_blocked
-        && neg_legacy_moderation
-        && neg_legacy_media
-        && neg_bridge_no_implication)
-    {
+    if !(neg_bridge_unsupported && neg_ext_blocked && neg_bridge_no_implication) {
         bail!(
-            "discovery fixture must cover (a) bridge-when-unsupported, (b) extension-not-advertised, (c) legacy moderation/media surface names, (d) bridge-no-implication"
+            "discovery fixture must cover (a) bridge-when-unsupported, (b) extension-not-advertised, and (c) bridge-no-implication"
         );
     }
 

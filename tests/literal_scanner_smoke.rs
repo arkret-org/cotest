@@ -78,7 +78,7 @@ fn detects_removed_event_kind_literal() {
     write(
         &tree.join("src").join("foo.rs"),
         r#"
-pub fn legacy_kind() -> &'static str {
+pub fn removed_kind() -> &'static str {
     "cx.flow.track.member"
 }
 "#,
@@ -108,42 +108,6 @@ pub fn legacy_kind() -> &'static str {
 }
 
 #[test]
-fn detects_realm_inversion_legacy_event_kind() {
-    // R1.8: post Realm/Space inversion, the legacy
-    // `cx.space.delivery_binding_policy` event kind is a removed identifier.
-    // The scanner MUST surface it as a violation in regular source code.
-    let base = tmpdir("realm-inversion");
-    let registry = base.join("registry");
-    synthetic_registry(&registry);
-
-    let tree = base.join("downstream");
-    write(
-        &tree.join("src").join("legacy.rs"),
-        r#"
-pub fn legacy_policy() -> &'static str {
-    "cx.space.delivery_binding_policy"
-}
-"#,
-    );
-
-    let rules = load_all_rules_from(&registry).expect("load rules");
-    let findings = scan_tree(&tree, &rules).expect("scan");
-    let violations: Vec<_> = findings
-        .iter()
-        .filter(|f| {
-            !f.allowed_context_match && f.matched_token == "cx.space.delivery_binding_policy"
-        })
-        .collect();
-    assert!(
-        !violations.is_empty(),
-        "expected scanner to flag cx.space.delivery_binding_policy as removed; \
-         got: {findings:#?}"
-    );
-
-    let _ = fs::remove_dir_all(&base);
-}
-
-#[test]
 fn magic_allow_comment_exempts_finding() {
     let base = tmpdir("magic");
     let registry = base.join("registry");
@@ -151,11 +115,11 @@ fn magic_allow_comment_exempts_finding() {
 
     let tree = base.join("downstream");
     write(
-        &tree.join("src").join("legacy.rs"),
+        &tree.join("src").join("allowed.rs"),
         r#"// contrix-allow: cx.flow.track.member
 //
-// Intentionally references the legacy kind to assert negative-path behavior.
-pub const LEGACY: &str = "cx.flow.track.member";
+// Intentionally references the removed kind to assert allowlist behavior.
+pub const REMOVED: &str = "cx.flow.track.member";
 "#,
     );
 

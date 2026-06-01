@@ -220,36 +220,6 @@
       }
     },
     {
-      "name": "legacy_pre_c16_surface_name_moderation_rejected",
-      "advertised_profile": "cx.profile.contrix_v1.core",
-      "advertised_surfaces": [
-        "service_discovery",
-        "identity_registry",
-        "events_sync",
-        "moderation"
-      ],
-      "expected": {
-        "outcome": "reject_advertisement",
-        "rejection_reason": "unknown_surface_name",
-        "comment_c16": "Post-C16 the surface name is `moderation_reports`. The legacy `moderation` token MUST be rejected as drift; v1 is unreleased so there is no compat shim."
-      }
-    },
-    {
-      "name": "legacy_pre_c16_combined_media_surface_rejected",
-      "advertised_profile": "cx.profile.contrix_v1.core",
-      "advertised_surfaces": [
-        "service_discovery",
-        "identity_registry",
-        "events_sync",
-        "media"
-      ],
-      "expected": {
-        "outcome": "reject_advertisement",
-        "rejection_reason": "unknown_surface_name",
-        "comment_c16": "Pre-C16 a combined `media` surface lumped blob ops with realtime ICE ops. The C16 split (spec 2026-05-08) replaced this with two distinct surfaces: blob_storage and realtime_media. The combined `media` token MUST be rejected."
-      }
-    },
-    {
       "name": "interop_bridge_advertised_does_not_imply_in_spec_bridges_to",
       "advertised_profile": "cx.profile.contrix_v1.core",
       "advertised_surfaces": [

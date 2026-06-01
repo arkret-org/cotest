@@ -40,7 +40,6 @@ pub mod key_backup_negative;
 pub mod key_backup_restore_mls_replay;
 pub mod knock_cooldown_matrix;
 pub mod late_key_recovery_removed_actor;
-pub mod legacy_alias_rejection;
 pub mod media_plaintext_downgrade_no_governance_binding;
 pub mod moderation_appeal_flow_end_to_end;
 pub mod multi_device_qr_pairing;

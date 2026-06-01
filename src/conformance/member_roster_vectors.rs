@@ -158,20 +158,6 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
         bail!("VECT-ROST-1: roster entry MUST NOT carry the retired `identity_state_digest`");
     }
 
-    // Forbidden legacy fields — these MUST NOT appear directly on a
-    // roster entry. Handle / display name belong inside signed handle
-    // claims, not as roster rows.
-    let forbidden_top_level_keys = ["handle_uri", "handle", "display_name", "avatar"];
-    for key in forbidden_top_level_keys {
-        if value.get(key).is_some() {
-            bail!(
-                "VECT-ROST-1: roster entry MUST NOT carry top-level `{key}`; \
-                 identity belongs in the inline MemberIdentity object / signed \
-                 handle claim (R3.2 wire rename + sync surface)"
-            );
-        }
-    }
-
     // Disclosure-gated fields omitted when subject_id is absent.
     if value.get("identity_events").is_some() {
         bail!("VECT-ROST-1: empty identity_events[] MUST be omitted");

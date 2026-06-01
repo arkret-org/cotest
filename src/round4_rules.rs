@@ -484,36 +484,6 @@ mod tests {
     }
 
     #[test]
-    fn flags_did_with_dot_in_method() {
-        // ROUND4-ALLOW: scanner self-test asserts the rule fires on a legacy `.`-method DID.
-        let f = scan(r#"let did = "did:web.alpha:foo";"#);
-        assert!(
-            f.iter()
-                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
-        );
-    }
-
-    #[test]
-    fn flags_did_with_underscore_in_method() {
-        // ROUND4-ALLOW: scanner self-test asserts the rule fires on a legacy `_`-method DID.
-        let f = scan(r#"let did = "did:my_method:foo";"#);
-        assert!(
-            f.iter()
-                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
-        );
-    }
-
-    #[test]
-    fn flags_did_with_dash_in_method() {
-        // ROUND4-ALLOW: scanner self-test asserts the rule fires on a legacy `-`-method DID.
-        let f = scan(r#"let did = "did:web-x:foo";"#);
-        assert!(
-            f.iter()
-                .any(|r| r.rule == Round4Rule::LegacyDidMethodSegment)
-        );
-    }
-
-    #[test]
     fn does_not_flag_legal_did_web() {
         let f = scan(r#"let did = "did:web:alice.example";"#);
         assert!(

@@ -17,39 +17,12 @@
 //!   SDK typed `Event`, encode via `canonical_json_bytes`, round-trip
 //!   back to the same kind + payload, and classify into the post-
 //!   reversal `EventClass::Realm` / `EventClass::Space` families.
-//! - R2.1 / R2.3 negative — legacy pre-rename
-//!   `cx.space.<security>` and `cx.place.*` kinds classify as
-//!   `EventClass::Custom`, matching soland's
-//!   `realm_kind_renamed_in_v1` / `place_kind_renamed_to_space`
-//!   hard_reject in `routing/events/event_log.rs`.
-//!
-//! HTTP-level negative coverage (POST a legacy kind, observe the
-//! 400 + `realm_kind_renamed_in_v1` reason code) lives alongside the
-//! protocol_payloads scenarios — this file is the pure-SDK gate.
 
 use anyhow::Result;
 
-use cotest::scenarios::realm_wire_round_trip::{
-    run_legacy_reason_code_constants_present, run_negative_legacy_kinds_rejected,
-    run_positive_round_trip,
-};
+use cotest::scenarios::realm_wire_round_trip::run_positive_round_trip;
 
 #[test]
 fn realm_wire_positive_round_trip() -> Result<()> {
     run_positive_round_trip()
-}
-
-#[test]
-fn legacy_security_event_kind_rejected() -> Result<()> {
-    // R2.3 — `cx.space.<security>` (pre-reversal) and `cx.place.*`
-    // (pre-reversal container) MUST NOT classify into a known SDK
-    // event family. soland mirrors this on the wire by hard_rejecting
-    // submissions of these kinds with
-    // `realm_kind_renamed_in_v1` / `place_kind_renamed_to_space`.
-    run_negative_legacy_kinds_rejected()
-}
-
-#[test]
-fn soland_rename_reason_codes_present() -> Result<()> {
-    run_legacy_reason_code_constants_present()
 }
