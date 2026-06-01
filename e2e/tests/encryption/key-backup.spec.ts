@@ -171,7 +171,7 @@ test.describe("key backup + restore", () => {
   );
 
   test(
-    "A2 restored fresh browser saves encrypted Kanban card details without MissingWelcome",
+    "A2 restored fresh browser saves encrypted Kanban card details without MLS bootstrap or schema errors",
     async ({ browser, request }) => {
       test.setTimeout(300_000);
       const stamp = Date.now();
@@ -256,7 +256,7 @@ test.describe("key backup + restore", () => {
         ).toBeVisible({ timeout: 90_000 });
 
         await updateCardDescription(deviceB.page, cardTitle, restoredDescription);
-        await expectMissingWelcomeAbsent(deviceB.page);
+        await expectEncryptedKanbanSaveErrorsAbsent(deviceB.page);
 
         await deviceA.page.goto(`/kanban/${spaceId}/board/${boardId}`, {
           waitUntil: "domcontentloaded",
@@ -273,12 +273,10 @@ test.describe("key backup + restore", () => {
           { timeout: 90_000 },
         );
 
+        const fatalProtocolPattern =
+          /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|MLS commit event failed|\/api\/v1\/(account\/subscribe|subscribe|describe|events)/;
         expect(
-          protocolFailures.filter((line) =>
-            /MLS runtime|SnapshotDecryptFailed|MissingWelcome|\/api\/v1\/(account\/subscribe|subscribe|describe|events)/.test(
-              line,
-            ),
-          ),
+          protocolFailures.filter((line) => fatalProtocolPattern.test(line)),
           protocolFailures.join("\n"),
         ).toEqual([]);
       } finally {
@@ -381,7 +379,18 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
       response.status() >= 400 &&
       /\/api\/v1\/(account\/subscribe|subscribe|describe|events)/.test(url)
     ) {
-      failures.push(`http:${response.status()} ${response.request().method()} ${url}`);
+      const entry = `http:${response.status()} ${response.request().method()} ${url}`;
+      failures.push(entry);
+      if (/\/api\/v1\/events/.test(url)) {
+        void response
+          .text()
+          .then((body) => {
+            if (body) {
+              failures.push(`${entry} ${body.slice(0, 1000)}`);
+            }
+          })
+          .catch(() => {});
+      }
     }
   });
 }
@@ -470,8 +479,12 @@ async function setCardDetailEditorValue(page: Page, value: string): Promise<void
   }, value);
 }
 
-async function expectMissingWelcomeAbsent(page: Page) {
+async function expectEncryptedKanbanSaveErrorsAbsent(page: Page) {
   await expect(page.getByText(/MLS state is not ready on this device yet/i)).toHaveCount(0);
+  await expect(
+    page.getByText(/schema_violation|payload violates registered payload schema/i),
+  ).toHaveCount(0);
+  await expect(page.getByText(/MLS commit event failed/i)).toHaveCount(0);
 }
 
 function sameActorFreshDevice(user: JointUser, label: string): JointUser {
