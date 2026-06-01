@@ -231,7 +231,7 @@ export async function acceptInviteApi(
         actor_id: actorDid,
         membership: "join",
         reason: "invite_accept",
-        invite_id: inviteId,
+        invite_ref: inviteId,
         delivery_status: "unroutable",
       },
     }),

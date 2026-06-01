@@ -148,7 +148,7 @@ export async function acceptInviteViaApi(
         actor_id: actorDid,
         membership: "join",
         reason: "invite_accept",
-        invite_id: invite!.invite_id,
+        invite_ref: invite!.invite_id,
         delivery_status: "unroutable",
       },
     }),

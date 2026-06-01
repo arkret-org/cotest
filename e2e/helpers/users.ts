@@ -241,7 +241,7 @@ export class JointUserPage {
         actor_id: this.user.did,
         membership: "join",
         reason: "invite_accept",
-        invite_id: inviteId,
+        invite_ref: inviteId,
         delivery_status: "unroutable",
       },
     });
