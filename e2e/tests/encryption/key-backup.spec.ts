@@ -170,6 +170,123 @@ test.describe("key backup + restore", () => {
     },
   );
 
+  test(
+    "A2 restored fresh browser saves encrypted Kanban card details without MissingWelcome",
+    async ({ browser, request }) => {
+      test.setTimeout(300_000);
+      const stamp = Date.now();
+      const passphrase = `A2 cotest MLS kanban restore ${stamp} passphrase with enough entropy`;
+      const alice = uniqueUser("a2-mls-kanban-alice");
+      await ensureRegistered(request, alice);
+      const deviceAToken = await issueDevSession(request, alice);
+      const deviceA = await openUserPage(browser, alice, { sessionToken: deviceAToken });
+      const sessionsToClose: JointUserPage[] = [deviceA];
+      const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
+      const protocolFailures: string[] = [];
+      collectA1ProtocolFailures(deviceA.page, protocolFailures);
+
+      const boardTitle = `A2 Board ${stamp}`;
+      const listTitle = `A2 Todos ${stamp}`;
+      const cardTitle = `A2 encrypted kanban card ${stamp}`;
+      const restoredDescription = `A2 restored-device encrypted detail ${stamp}`;
+
+      try {
+        const spaceId = await deviceA.createSpace({
+          title: `A2 MLS Kanban ${stamp}`,
+          summary: "kanban encrypted detail MLS restore acceptance",
+          discoverability: "unlisted",
+          joinRule: "invite",
+          historyVisibility: "joined",
+          encryptionProfile: "mls_rfc9420",
+        });
+        const boardId = await createKanbanBoardListAndCard(
+          deviceA.page,
+          spaceId,
+          boardTitle,
+          listTitle,
+          cardTitle,
+        );
+        await expect
+          .poll(
+            () =>
+              keyBackupPuts.some(
+                (hit) =>
+                  hit.status === 200 &&
+                  /"backup_class"\s*:\s*"mls_history"/.test(hit.postData),
+              ),
+            { timeout: 120_000 },
+          )
+          .toBe(true);
+
+        await setupRecoveryVaultPassphrase(deviceA.page, passphrase);
+        await expect
+          .poll(
+            () =>
+              keyBackupPuts.some(
+                (hit) =>
+                  hit.status === 200 &&
+                  /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
+              ),
+            { timeout: 120_000 },
+          )
+          .toBe(true);
+
+        const deviceBUser = sameActorFreshDevice(alice, "device-b");
+        const deviceBToken = await issueDevSession(request, deviceBUser);
+        const deviceB = await openUserPage(browser, deviceBUser, { sessionToken: deviceBToken });
+        sessionsToClose.push(deviceB);
+        collectA1ProtocolFailures(deviceB.page, protocolFailures);
+
+        await deviceB.gotoHome();
+        await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
+          timeout: 90_000,
+        });
+        await unlockMlsAccountSecret(deviceB.page, passphrase);
+        await deviceB.page.goto(`/kanban/${spaceId}/board/${boardId}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(deviceB.page.getByTestId("board-space-select")).toHaveValue(boardId, {
+          timeout: 45_000,
+        });
+        await expect(
+          deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+        ).toBeVisible({ timeout: 90_000 });
+
+        await updateCardDescription(deviceB.page, cardTitle, restoredDescription);
+        await expectMissingWelcomeAbsent(deviceB.page);
+
+        await deviceA.page.goto(`/kanban/${spaceId}/board/${boardId}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await expect(deviceA.page.getByTestId("kanban-panel")).toBeVisible({
+          timeout: 120_000,
+        });
+        await deviceA.page
+          .getByTestId("kanban-card")
+          .filter({ hasText: cardTitle })
+          .click();
+        await expect(deviceA.page.getByTestId("card-description-panel")).toContainText(
+          restoredDescription,
+          { timeout: 90_000 },
+        );
+
+        expect(
+          protocolFailures.filter((line) =>
+            /MLS runtime|SnapshotDecryptFailed|MissingWelcome|\/api\/v1\/(account\/subscribe|subscribe|describe|events)/.test(
+              line,
+            ),
+          ),
+          protocolFailures.join("\n"),
+        ).toEqual([]);
+      } finally {
+        await Promise.allSettled(sessionsToClose.map((session) => session.close()));
+      }
+    },
+  );
+
   test.fixme(
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
@@ -286,6 +403,75 @@ async function unlockMlsAccountSecret(page: Page, passphrase: string) {
   await expect(page.getByTestId("mls-unlock-status")).toContainText(/restored/i, {
     timeout: 120_000,
   });
+}
+
+async function createKanbanBoardListAndCard(
+  page: Page,
+  spaceId: string,
+  boardTitle: string,
+  listTitle: string,
+  cardTitle: string,
+): Promise<string> {
+  await page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+  await page.getByTestId("new-board-toggle").click();
+  await page.getByTestId("new-board-title-input").fill(boardTitle);
+  await page.getByTestId("create-board-space-button").click();
+  await expect(page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+    timeout: 45_000,
+  });
+  const boardId = await page
+    .getByTestId("board-space-select")
+    .evaluate((node) => (node as HTMLSelectElement).value);
+  expect(boardId).toMatch(/^cx:space:/);
+
+  await page.getByTestId("new-column-input").fill(listTitle);
+  await page.getByTestId("add-column-button").click();
+  const column = page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+  await expect(column).toBeVisible({ timeout: 45_000 });
+  await column.getByTestId("add-card-button").click();
+  await column.getByTestId("new-card-title-input").fill(cardTitle);
+  await column.getByTestId("save-card-button").click();
+  await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
+    timeout: 45_000,
+  });
+  return boardId;
+}
+
+async function updateCardDescription(page: Page, cardTitle: string, description: string) {
+  await page.getByTestId("kanban-card").filter({ hasText: cardTitle }).first().click();
+  await expect(page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+  const add = page.getByTestId("card-detail-add-description-button");
+  if ((await add.count()) > 0 && (await add.first().isVisible())) {
+    await add.first().click();
+  } else {
+    await page.getByTestId("card-detail-edit-description-button").click();
+  }
+  await setCardDetailEditorValue(page, description);
+  await page.getByTestId("card-detail-save-button").click();
+  await expect(page.getByTestId("card-description-panel")).toContainText(description, {
+    timeout: 120_000,
+  });
+}
+
+async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
+  const input = page.getByTestId("card-detail-description-input");
+  await expect(input).toBeAttached({ timeout: 45_000 });
+  await input.evaluate((node, nextValue) => {
+    const textarea = node as HTMLTextAreaElement;
+    textarea.value = nextValue;
+    textarea.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: nextValue,
+      }),
+    );
+  }, value);
+}
+
+async function expectMissingWelcomeAbsent(page: Page) {
+  await expect(page.getByText(/MLS state is not ready on this device yet/i)).toHaveCount(0);
 }
 
 function sameActorFreshDevice(user: JointUser, label: string): JointUser {
