@@ -628,10 +628,7 @@ test.describe("kanban end-to-end", () => {
   //      schema.) The conforming builder exists in the SDK
   //      (contrix-rust-sdk crates/sdk/src/mls.rs MessageCrypto::encrypt_with_aad);
   //      yougen's chat send must be wired to it. Promote once that lands.
-  test.fixme(
-    // @blocking-on: yougen#chat-encrypted-message-envelope-nonconforming
-    // @user-promise: e2e/scenarios/kanban/end-to-end.md (E15.9)
-    "alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
+  test("alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
     browser,
     request,
   }, testInfo) => {

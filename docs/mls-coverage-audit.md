@@ -27,7 +27,7 @@
 | e2ee relaxed window / metadata floor 收紧 | ✅ active | `scenarios/circle/metadata_encryption_floor.rs`、`e2ee_relaxed_window_negative.rs` |
 | **创建者本机加密写入 flow body(description)** | ✅ active **绿(实测真加密)** | `e2e/tests/kanban/end-to-end.spec.ts` E15.7 |
 | **创建者本机加密 synthesis** | ✅ active **绿(实测真加密)** | kanban E15.8 |
-| **创建者本机加密 discussion comment** | 🔴→fixme **确认 bug**(chat wasm 不加密,见 5.A) | kanban E15.9 |
+| **创建者本机加密 discussion comment** | ✅ active **绿(已修复,见 5.A)** | kanban E15.9 |
 | **realm encryption_profile create-locked** | ✅ active **绿** | mls-group E11.6 |
 | **circle encryption_profile create-locked** | 🔴→fixme **确认 gap**(soland 提交不强制,见 5.B) | mls-group E11.7 |
 | **MLS 未就绪时不得静默降级明文** | ⏸️ 本轮补(fixme) | mls-group E11.8 |
@@ -70,7 +70,15 @@
 
 ## 5. 实测挖出的两个确认 bug(已 park 为 test.fixme,待修)
 
-### A. 加密 discussion/chat 消息在 yougen 端从未端到端可用(yougen + SDK)
+### A. 加密 discussion/chat 消息在 yougen 端从未端到端可用 —— ✅ 已修复(2026-06-01,E15.9 实测真绿)
+> 修复方案与执行记录见 `cotask/tasks/encrypt_fix.md` / `encrypt_fix_todos.md`。要点:
+> SDK 新增唯一权威合规类型 `EncryptedEnvelopeV1`(精确匹配 `cx.schema.encrypted_envelope.v1`,单测绿);
+> soland 移除手写 `validate_encrypted_payload_envelope` 对消息的校验、改由注册 spec schema 唯一把关
+> (464+ 测试零回归);yougen 新增 `encrypt_message_with_device_snapshot`(带 aad)+ chat 用
+> `EncryptedEnvelopeV1::from_payload` 产出合规 envelope(key_ref 绑 commit 事件 id)+ 去 wasm 门 +
+> 加密 channel 默认 Send 自动 MLS 加密(隐藏明文 Send)+ 乐观回显。E15.9 端到端真绿(提交体不含明文 +
+> status<400 + 评论解密渲染)。**以下为原始诊断记录:**
+
 尝试修复时发现是**两层**问题(2026-06-01 实跑确认):
 1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `cx.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `cx.flow.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
 2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `cx.schema.encrypted_envelope.v1 requires field 'version'`。yougen 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban flow 内容"能加密"只因 flow patch 值不走该 envelope schema 校验;消息走,故被拒。**yougen 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `contrix-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
