@@ -2,10 +2,8 @@ use anyhow::{Context, Result, anyhow};
 use contrix::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use contrix_core::{
-    Operation, OperationId, RealmId,
-    canonical::{canonical_json_bytes, canonical_sha256},
-};
+use contrix_core::canonical::{canonical_json_bytes, canonical_sha256};
+use contrix_core::{Operation, OperationId, RealmId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

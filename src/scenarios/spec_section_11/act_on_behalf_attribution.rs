@@ -10,7 +10,6 @@
 //! `actor_kind_self_stamped`.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::{AccountabilityGrantId, Did, EnvelopeActorKind};
 
 pub async fn act_on_behalf_attribution_run() -> Result<()> {

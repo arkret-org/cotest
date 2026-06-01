@@ -8,22 +8,20 @@
 //! a literal appears, *which kind* it is, or *what range* a numeric value
 //! falls into. Those are handled here:
 //!
-//! * **Receipt object/event split (T23)**: `cx.event_batch_receipt` is an
-//!   object-only kind. If it appears as `Event.kind` (i.e. in the
-//!   `cx.events.submit` payload), report a violation.
+//! * **Receipt object/event split (T23)**: `cx.event_batch_receipt` is an object-only kind. If it
+//!   appears as `Event.kind` (i.e. in the `cx.events.submit` payload), report a violation.
 //!
-//! * **Durable/ephemeral envelope split (T02)**: 12 `wire_scope=ephemeral_event`
-//!   kinds (`cx.call.signal`, `cx.presence`, `cx.typing`, `cx.receipt.read`,
-//!   `cx.key.verification.*`) MUST NOT be durable events. If any appears in
-//!   a `cx.events.submit` payload literal, report a violation.
+//! * **Durable/ephemeral envelope split (T02)**: 12 `wire_scope=ephemeral_event` kinds
+//!   (`cx.call.signal`, `cx.presence`, `cx.typing`, `cx.receipt.read`, `cx.key.verification.*`)
+//!   MUST NOT be durable events. If any appears in a `cx.events.submit` payload literal, report a
+//!   violation.
 //!
-//! * **`relaxed_window_max_ms` hard ceiling (T09)**: the absolute hard
-//!   ceiling is 300_000 ms. Any literal `relaxed_window_max_ms` assignment
-//!   above 300_000 in `policy_components` is a violation.
+//! * **`relaxed_window_max_ms` hard ceiling (T09)**: the absolute hard ceiling is 300_000 ms. Any
+//!   literal `relaxed_window_max_ms` assignment above 300_000 in `policy_components` is a
+//!   violation.
 //!
-//! * **Cursor handle entropy floor (T03)**: `h.minLength` is now 22. Any
-//!   cursor handle literal `h: "..."` shorter than 22 chars matching the
-//!   base64url-ish pattern is a violation.
+//! * **Cursor handle entropy floor (T03)**: `h.minLength` is now 22. Any cursor handle literal `h:
+//!   "..."` shorter than 22 chars matching the base64url-ish pattern is a violation.
 //!
 //! These rules don't drive `cx.events.submit` semantics directly — they're
 //! lint-style protections against drift in downstream code that copies the

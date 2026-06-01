@@ -15,11 +15,11 @@ use super::{load_artifact_json, load_artifact_yaml};
 
 /// Mirror of `lint_artifacts.py::check_service_describe_alignment`.
 ///
-/// * ServiceDescribe schema and the OpenAPI component MUST both declare
-///   `service_did` + `trust_domain` in `required`.
-/// * Every `/server/describe`, `/events/describe`, `/identity/describe`,
-///   `/sync/describe`, `/directory/describe`, `/applet/describe` 200
-///   response MUST reference `#/components/schemas/ServiceDescribe`.
+/// * ServiceDescribe schema and the OpenAPI component MUST both declare `service_did` +
+///   `trust_domain` in `required`.
+/// * Every `/server/describe`, `/events/describe`, `/identity/describe`, `/sync/describe`,
+///   `/directory/describe`, `/applet/describe` 200 response MUST reference
+///   `#/components/schemas/ServiceDescribe`.
 pub fn run_service_describe_alignment_check() -> Result<()> {
     let openapi = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml")?;
     let schema = load_artifact_json("schemas/service-describe.schema.json")?;
@@ -99,8 +99,8 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
 
 /// Mirror of `lint_artifacts.py::check_policy_check_alignment`.
 ///
-/// * `/policy/check` POST request/response MUST reference
-///   `PolicyCheckRequest` / `PolicyCheckResponse` components.
+/// * `/policy/check` POST request/response MUST reference `PolicyCheckRequest` /
+///   `PolicyCheckResponse` components.
 /// * `PolicyCheckRequest.required` MUST include `realm_id`.
 /// * `PolicyCheckResponse.required` MUST include `bound_to`.
 pub fn run_policy_check_alignment_check() -> Result<()> {

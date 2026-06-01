@@ -3,11 +3,11 @@
 //! suites run unconditionally; integration-target scenarios are
 //! `#[ignore]`-gated on R3.1 reducer / signing wiring.
 
-use std::{collections::BTreeSet, fs, path::PathBuf};
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::PathBuf;
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::Value;
-
 use cotest::conformance::{
     ALL_AGENT_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
     ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
@@ -19,6 +19,7 @@ use cotest::conformance::{
     run_mention_rendering_vector_suite, run_object_addressing_vector_suite,
     run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
+use serde_json::Value;
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -186,12 +187,12 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 // ─── R3.3 / OA-COT-1..4 — CXP-0011 object addressing + resolve_target ─────
 //
 // SDK-pure vectors over `contrix_core::model::*` object-addressing surface:
-//   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy
-//     forms, fail-closed keyword/order/missing-via, realm-id vs alias.
-//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks
-//     flow/message identity, omitted-key (not null) canonical shape.
-//   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected,
-//     token link_type wins over URL `lt` hint.
+//   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
+//     keyword/order/missing-via, realm-id vs alias.
+//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks flow/message identity,
+//     omitted-key (not null) canonical shape.
+//   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected, token link_type wins over
+//     URL `lt` hint.
 //   * OA-COT-4 (2 cases) — resolve_target response shape: §9.1 common fields
 //     + target_kind; realm target carries realm_preview.
 
@@ -216,12 +217,11 @@ fn test_oa_cot_5_share_resolve_open_live() {
     //   1. Author shares a flow as `web+contrix:realm/<r>/flow/<f>?via=<teabay>
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
     //   2. Recipient POSTs `cx.directory.resolve_target { address, token }`.
-    //   3. teabay parses the address, verify_token_target() binds the token to
-    //      the resolved object (scope-confusion replay rejected), and returns
-    //      `DirectoryResolveTargetResBody { target_kind=flow, object_preview,
-    //      join_rule, as_of, source_refs, via_services }`.
-    //   4. Recipient opens the flow; soland's access gate honors the invite
-    //      link_type (NOT the URL `lt` hint) for the join decision.
+    //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
+    //      (scope-confusion replay rejected), and returns `DirectoryResolveTargetResBody {
+    //      target_kind=flow, object_preview, join_rule, as_of, source_refs, via_services }`.
+    //   4. Recipient opens the flow; soland's access gate honors the invite link_type (NOT the URL
+    //      `lt` hint) for the join decision.
     unreachable!("integration target gated on teabay flow/message access-gate (R3.3)");
 }
 
@@ -240,12 +240,12 @@ fn test_oa_cot_5_share_resolve_open_live() {
 fn test_cot_1_handle_reassignment_full_flow_live() {
     // Live integration (soland ↔ SDK ↔ yougen ↔ coauth):
     //   1. coauth issues handle claim H1 for subject S (binding_state=verified).
-    //   2. All views (roster member_display_state_digest, list_handles_for_subject,
-    //      yougen mention render) reflect H1 as the §3.2.1 primary handle.
+    //   2. All views (roster member_display_state_digest, list_handles_for_subject, yougen mention
+    //      render) reflect H1 as the §3.2.1 primary handle.
     //   3. coauth revokes H1 and issues H2 for S.
     //   4. roster member_display_state_digest changes (claim digest set folded);
-    //      list_handles_for_subject drops H1, surfaces H2; yougen re-renders the
-    //      mention to H2 with no `cx.member.identity.update` forged.
+    //      list_handles_for_subject drops H1, surfaces H2; yougen re-renders the mention to H2 with
+    //      no `cx.member.identity.update` forged.
     unreachable!("integration target gated on soland/coauth/yougen R3.2 P0 wiring");
 }
 
@@ -254,13 +254,12 @@ fn test_cot_1_handle_reassignment_full_flow_live() {
             endpoint not yet reachable end-to-end across services"]
 fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
     // Live integration (teabay directory):
-    //   1. Seed teabay with two verified claims for subject S under distinct
-    //      audiences + issuers.
-    //   2. POST list-handles-for-subject with realm context R1 → only the
-    //      audience/issuer-trusted claim is visible; response.primary_handle =
-    //      select_primary_handle() output; claims[].subject == subject.
-    //   3. Paginate with limit=1 → has_more=true + opaque next_cursor; the
-    //      follow-up page terminates with has_more=false.
+    //   1. Seed teabay with two verified claims for subject S under distinct audiences + issuers.
+    //   2. POST list-handles-for-subject with realm context R1 → only the audience/issuer-trusted
+    //      claim is visible; response.primary_handle = select_primary_handle() output;
+    //      claims[].subject == subject.
+    //   3. Paginate with limit=1 → has_more=true + opaque next_cursor; the follow-up page
+    //      terminates with has_more=false.
     unreachable!("integration target gated on teabay DIR-TBY-1 P0 wiring");
 }
 
@@ -365,15 +364,12 @@ fn test_1_agent_fsm_active_paused_active_deactivated_terminal() {
 fn test_2_media_token_exchange_happy_path_plus_negatives() {
     // Negative-path matrix pinned at the SDK constant layer by
     // VECT-MB-3 / VECT-MB-4 / VECT-MB-5. Live integration:
-    //   - happy: 200 with backend_token + participant_binding,
-    //     TTL ≤ 600s, issuer_kid anchored to current
-    //     `cx.realm.media_service.service_id`.
+    //   - happy: 200 with backend_token + participant_binding, TTL ≤ 600s, issuer_kid anchored to
+    //     current `cx.realm.media_service.service_id`.
     //   - neg-issuer: rogue issuer kid → 401 token_issuer_unauthorised.
     //   - neg-focus:  off-focus token request → 422 focus_mismatch.
-    //   - neg-ttl:    server-issued TTL > 600s → 422
-    //                 participant_binding_invalid.
-    //   - neg-binding: malformed participant_binding scheme → 422
-    //                  participant_binding_invalid.
+    //   - neg-ttl:    server-issued TTL > 600s → 422 participant_binding_invalid.
+    //   - neg-binding: malformed participant_binding scheme → 422 participant_binding_invalid.
     unreachable!("integration target gated on soland / floria P2-impl");
 }
 
@@ -383,11 +379,10 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
 #[ignore = "R3.1: soland strict_reject reducer branch not yet implemented"]
 fn test_3_accountable_principals_strict_reject_profile_toggle() {
     // Live integration:
-    //   1. With `cx.profile.accountable_principals.strict_reject.v1` NOT
-    //      advertised: actor-profile create with unverified
-    //      `accountable_principal_ids[]` → 200, server strips + audit logs.
-    //   2. With the profile advertised: same envelope → 412
-    //      failed_precondition reason=accountability_grant_missing.
+    //   1. With `cx.profile.accountable_principals.strict_reject.v1` NOT advertised: actor-profile
+    //      create with unverified `accountable_principal_ids[]` → 200, server strips + audit logs.
+    //   2. With the profile advertised: same envelope → 412 failed_precondition
+    //      reason=accountability_grant_missing.
     unreachable!("integration target gated on soland P2-impl profile branch");
 }
 
@@ -401,8 +396,9 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // SDK struct but a server with no `cx.profile.stateless_cursor.v1`
     // declaration MUST reject it. We pin both at the wire layer; the
     // server-side acceptance gate lands under soland P2-impl.
-    use contrix_core::cursor::{Cursor, CursorPurpose};
     use std::collections::BTreeMap;
+
+    use contrix_core::cursor::{Cursor, CursorPurpose};
     let stateless = Cursor {
         v: "1".to_owned(),
         purpose: CursorPurpose::Stream,
@@ -502,8 +498,8 @@ fn test_5_recovery_policy_state_machine_live() {
     //   1. POST recovery-policy (epoch=1) → 200.
     //   2. POST recovery-policy (same epoch) → 409 / recovery_policy_mismatch.
     //   3. POST recovery-receipt with policy_epoch=1 → 200.
-    //   4. POST recovery-receipt where witness has not yet revoked →
-    //      409 recovery_witness_revoke_lagging.
+    //   4. POST recovery-receipt where witness has not yet revoked → 409
+    //      recovery_witness_revoke_lagging.
     unreachable!("integration target gated on soland P2-impl recovery reducer");
 }
 
@@ -513,12 +509,11 @@ fn test_5_recovery_policy_state_machine_live() {
 #[ignore = "R3.1: soland / starid / teabay wire-level homograph reject not yet implemented"]
 fn test_6_handle_homograph_script_mix_or_nfc_variant_reject() {
     // Live integration:
-    //   1. POST handle claim `аlice` (Cyrillic а + Latin lice) →
-    //      412 handle_homograph_forbidden.
-    //   2. POST handle claim with NFC-variant that folds onto an
-    //      existing claim → 412 handle_homograph_forbidden.
-    //   3. Display-layer mitigation MUST still surface a confusable
-    //      hint when the canonical compare passes.
+    //   1. POST handle claim `аlice` (Cyrillic а + Latin lice) → 412 handle_homograph_forbidden.
+    //   2. POST handle claim with NFC-variant that folds onto an existing claim → 412
+    //      handle_homograph_forbidden.
+    //   3. Display-layer mitigation MUST still surface a confusable hint when the canonical compare
+    //      passes.
     unreachable!("integration target gated on starid / teabay P2-impl");
 }
 
@@ -626,17 +621,15 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 #[ignore = "R3.1: soland MID reducer + cx.profile.update field-level delta wiring not yet implemented"]
 fn test_7_cx_member_identity_update_live() {
     // Live integration:
-    //   1. Actor publishes initial `cx.member.identity.update` event
-    //      with MemberIdentity v1 (display_name="Alice").
-    //   2. Actor publishes second event with `replaces[]` pointing at
-    //      the first; payload carries MemberIdentity v2 with
-    //      display_name="Alice (work)".
-    //   3. Client `account.subscribe` frame surfaces a roster with only
-    //      the second event in `identity_event_ids[]`.
-    //   4. `cx.profile.update` field-level delta MUST drive the v2
-    //      display_name onto the projected profile; the
-    //      `cx.profile.space_override` profile MUST take precedence
-    //      when set per-Space.
+    //   1. Actor publishes initial `cx.member.identity.update` event with MemberIdentity v1
+    //      (display_name="Alice").
+    //   2. Actor publishes second event with `replaces[]` pointing at the first; payload carries
+    //      MemberIdentity v2 with display_name="Alice (work)".
+    //   3. Client `account.subscribe` frame surfaces a roster with only the second event in
+    //      `identity_event_ids[]`.
+    //   4. `cx.profile.update` field-level delta MUST drive the v2 display_name onto the projected
+    //      profile; the `cx.profile.space_override` profile MUST take precedence when set
+    //      per-Space.
     unreachable!("integration target gated on soland MID reducer (R3.1)");
 }
 
@@ -650,11 +643,12 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // `resolve_handle` response surface MUST round-trip the same wire
     // form. The full wire round-trip across coauth/soland/teabay is the
     // live `#[ignore]` companion below.
+    use std::collections::BTreeSet;
+
     use contrix_core::{
         CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle, HandleHintBindingSource,
         MemberDeliveryBindingCandidate, RecipientServiceType,
     };
-    use std::collections::BTreeSet;
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {
@@ -729,12 +723,12 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
 fn test_8_handle_rename_round_trip_live() {
     // Live integration:
     //   1. Client builds invite for canonical handle `alice:acme.example`.
-    //   2. soland reducer accepts member-add with `payload.handle =
-    //      "alice:acme.example"` (NO `handle_uri` field).
-    //   3. teabay's `cx.directory.resolve_handle(handle=...)` accepts the
-    //      canonical handle string in the request body and returns a
-    //      candidate whose `handle` field is the same canonical wire form.
-    //   4. coauth's handle-claim issuance + sync surface MUST NOT emit
-    //      `handle_uri` anywhere on a fresh R3.1 wire shape.
+    //   2. soland reducer accepts member-add with `payload.handle = "alice:acme.example"` (NO
+    //      `handle_uri` field).
+    //   3. teabay's `cx.directory.resolve_handle(handle=...)` accepts the canonical handle string
+    //      in the request body and returns a candidate whose `handle` field is the same canonical
+    //      wire form.
+    //   4. coauth's handle-claim issuance + sync surface MUST NOT emit `handle_uri` anywhere on a
+    //      fresh R3.1 wire shape.
     unreachable!("integration target gated on coauth+soland+teabay R3.1 rename");
 }

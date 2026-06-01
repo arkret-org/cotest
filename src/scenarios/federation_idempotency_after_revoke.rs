@@ -13,8 +13,7 @@
 //! replays of an old request MUST:
 //!   * still be deduplicated (return the cached response), but
 //!   * tag the response with a `historical_only=true` marker, AND
-//!   * NOT trigger any new side effects (e.g. push fanout, directory
-//!     publish, indexing).
+//!   * NOT trigger any new side effects (e.g. push fanout, directory publish, indexing).
 //!
 //! Additionally, every cache hit MUST re-run the capability check —
 //! caching the response body does not waive authorization.

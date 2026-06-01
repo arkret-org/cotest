@@ -15,20 +15,17 @@
 //! Grammar invariants pinned here:
 //!   * `web+contrix:` ⇄ HTTPS-fragment forms parse to the SAME ParsedAddress.
 //!   * realm-only / flow / message hierarchy forms.
-//!   * unknown keyword and wrong hierarchy order fail closed
-//!     (`parse_address` returns Err); retired `via` hints are ignored.
-//!   * `<realm>` disambiguation: UUIDv7 → RealmRef::RealmId, dotted/domain →
-//!     RealmRef::Alias.
-//!   * `target_digest` covers ONLY the identity tuple + link_type — adding /
-//!     removing action/tok/lt does NOT change it; switching flow/message
-//!     DOES; absent hierarchy fields are OMITTED (not `null`) in the canonical
-//!     shape.
-//!   * scope-confusion: an A-object token fails `verify_token_target` against a
-//!     B-object address; the token's link_type wins over a disagreeing URL `lt`
-//!     hint (modeled via the `effective_link_type` argument).
-//!   * `DirectoryResolveTargetResBody` deserializes the §9.1 common fields
-//!     (`as_of`, `source_refs`, `join_candidates`) + `target_kind`; a realm target
-//!     carries `realm_preview`.
+//!   * unknown keyword and wrong hierarchy order fail closed (`parse_address` returns Err); retired
+//!     `via` hints are ignored.
+//!   * `<realm>` disambiguation: UUIDv7 → RealmRef::RealmId, dotted/domain → RealmRef::Alias.
+//!   * `target_digest` covers ONLY the identity tuple + link_type — adding / removing action/tok/lt
+//!     does NOT change it; switching flow/message DOES; absent hierarchy fields are OMITTED (not
+//!     `null`) in the canonical shape.
+//!   * scope-confusion: an A-object token fails `verify_token_target` against a B-object address;
+//!     the token's link_type wins over a disagreeing URL `lt` hint (modeled via the
+//!     `effective_link_type` argument).
+//!   * `DirectoryResolveTargetResBody` deserializes the §9.1 common fields (`as_of`, `source_refs`,
+//!     `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};

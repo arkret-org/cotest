@@ -1,66 +1,55 @@
 //! CT-5 — `did:webvh` witness offline >24h + emergency recovery.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/identity/identity-did.md` §4.2.1 —
-//!     `did:webvh` health states (`healthy`, `degraded_no_witness`,
-//!     `stale_history`, `write_unavailable`, `untrusted`). 24h hard cap
-//!     for `degraded_no_witness`; past it resolver MUST fail closed for
-//!     new high-risk writes.
-//!   - `contrix-spec/spec/v1/zh/identity/identity-did.md` §8.2
-//!     (numbered in the spec under §5+, key-management threshold path) —
-//!     emergency recovery when remaining quorum < threshold.
-//!   - `contrix-spec/spec/v1/zh/identity/key-management.md` §3.3 —
-//!     rotation kinds (`scheduled` / `emergency`) and the requirement
-//!     that emergency rotations are tagged and audited distinctly.
+//!   - `contrix-spec/spec/v1/zh/identity/identity-did.md` §4.2.1 — `did:webvh` health states
+//!     (`healthy`, `degraded_no_witness`, `stale_history`, `write_unavailable`, `untrusted`). 24h
+//!     hard cap for `degraded_no_witness`; past it resolver MUST fail closed for new high-risk
+//!     writes.
+//!   - `contrix-spec/spec/v1/zh/identity/identity-did.md` §8.2 (numbered in the spec under §5+,
+//!     key-management threshold path) — emergency recovery when remaining quorum < threshold.
+//!   - `contrix-spec/spec/v1/zh/identity/key-management.md` §3.3 — rotation kinds (`scheduled` /
+//!     `emergency`) and the requirement that emergency rotations are tagged and audited distinctly.
 //!
 //! Scenario walk-through (when fully wired):
-//!   1. Boot the mock-witness harness
-//!      (`cotest/e2e/mocks/mock-witness.mjs`) in `healthy` state.
-//!   2. Boot `starid` with the mock witness configured as a required
-//!      witness (witness DID `did:web:witness.joint-e2e.local`).
-//!   3. Resolve a `did:webvh` and assert the resolver reports
-//!      `health="healthy"` with a fresh witness signature.
-//!   4. Flip witness via `POST /api/v1/witness/health {state:"down"}`.
-//!      Per `mock-witness.mjs`, subsequent `/witness/sign` calls return
-//!      503 `witness_unavailable`.
-//!   5. Within 24h: resolver SHOULD report `degraded_no_witness` (read
-//!      ok, write disallowed for new high-risk DID ops).
-//!   6. Simulate stale-by-clock by either (a) advancing test clock if
-//!      starid supports a `STARID_CLOCK_NOW` env override, or (b)
-//!      setting witness state to `down` long enough plus a starid
-//!      `--max-witness-evidence-age` flag if available.
-//!   7. After 24h window elapsed: resolver MUST enter `stale_history` /
-//!      `untrusted` and `unresolvable` for new writes.
-//!   8. Recovery: submit an emergency rotation that intentionally skips
-//!      the prev-key signature requirement (because prev-key is the one
-//!      that's gone offline / compromised). Resolver/registrar MUST tag
-//!      the resulting DID log entry with `rotation_kind="emergency"`
-//!      (key-management §3.3). Read back the DID document and assert
-//!      the rotation entry carries the emergency marker.
+//!   1. Boot the mock-witness harness (`cotest/e2e/mocks/mock-witness.mjs`) in `healthy` state.
+//!   2. Boot `starid` with the mock witness configured as a required witness (witness DID
+//!      `did:web:witness.joint-e2e.local`).
+//!   3. Resolve a `did:webvh` and assert the resolver reports `health="healthy"` with a fresh
+//!      witness signature.
+//!   4. Flip witness via `POST /api/v1/witness/health {state:"down"}`. Per `mock-witness.mjs`,
+//!      subsequent `/witness/sign` calls return 503 `witness_unavailable`.
+//!   5. Within 24h: resolver SHOULD report `degraded_no_witness` (read ok, write disallowed for new
+//!      high-risk DID ops).
+//!   6. Simulate stale-by-clock by either (a) advancing test clock if starid supports a
+//!      `STARID_CLOCK_NOW` env override, or (b) setting witness state to `down` long enough plus a
+//!      starid `--max-witness-evidence-age` flag if available.
+//!   7. After 24h window elapsed: resolver MUST enter `stale_history` / `untrusted` and
+//!      `unresolvable` for new writes.
+//!   8. Recovery: submit an emergency rotation that intentionally skips the prev-key signature
+//!      requirement (because prev-key is the one that's gone offline / compromised).
+//!      Resolver/registrar MUST tag the resulting DID log entry with `rotation_kind="emergency"`
+//!      (key-management §3.3). Read back the DID document and assert the rotation entry carries the
+//!      emergency marker.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: scaffolded as `#[ignore]`.
 //!
 //! Prerequisite blockers:
-//!   * `mock-witness.mjs` exists (per `cotest/e2e/mocks/mock-witness.mjs`)
-//!     and supports the `POST /api/v1/witness/health {state:"down"}` hook
-//!     verified above. But the Rust harness has no helper yet to spawn it
-//!     standalone — currently it's launched by `scripts/run-joint-e2e.ps1`.
-//!     Need a `spawn_mock_witness()` helper analogous to
-//!     `external_binary::spawn_required` that exec's `node mock-witness.mjs`
-//!     with `MOCK_WITNESS_PORT` and returns a `SpawnedExternalProcess`-ish
-//!     handle.
-//!   * `starid` resolver health-state surfacing: the in-process resolver
-//!     would need to expose `degraded_no_witness` / `stale_history` via a
-//!     diagnostic endpoint (e.g. `GET /api/v1/identity/health/{did}`).
-//!     Not yet present in `starid/src/`.
-//!   * Test-clock injection or short-window override: the 24h hard cap is
-//!     a real wall-clock window in production. The test needs either a
-//!     `STARID_WITNESS_MAX_EVIDENCE_AGE` env that we can set to a few
-//!     seconds, or a fake-clock harness. Neither exists today.
-//!   * `rotation_kind="emergency"` tagging on the resolver side: the
-//!     registrar must accept a `kind=emergency` query/body field on
-//!     rotation submit and store it on the entry. Not yet implemented.
+//!   * `mock-witness.mjs` exists (per `cotest/e2e/mocks/mock-witness.mjs`) and supports the `POST
+//!     /api/v1/witness/health {state:"down"}` hook verified above. But the Rust harness has no
+//!     helper yet to spawn it standalone — currently it's launched by `scripts/run-joint-e2e.ps1`.
+//!     Need a `spawn_mock_witness()` helper analogous to `external_binary::spawn_required` that
+//!     exec's `node mock-witness.mjs` with `MOCK_WITNESS_PORT` and returns a
+//!     `SpawnedExternalProcess`-ish handle.
+//!   * `starid` resolver health-state surfacing: the in-process resolver would need to expose
+//!     `degraded_no_witness` / `stale_history` via a diagnostic endpoint (e.g. `GET
+//!     /api/v1/identity/health/{did}`). Not yet present in `starid/src/`.
+//!   * Test-clock injection or short-window override: the 24h hard cap is a real wall-clock window
+//!     in production. The test needs either a `STARID_WITNESS_MAX_EVIDENCE_AGE` env that we can set
+//!     to a few seconds, or a fake-clock harness. Neither exists today.
+//!   * `rotation_kind="emergency"` tagging on the resolver side: the registrar must accept a
+//!     `kind=emergency` query/body field on rotation submit and store it on the entry. Not yet
+//!     implemented.
 //!
 //! Track: `_claude_todos.md` row CT-5. Unblock requires the four pieces
 //! above; once the mock-witness Rust spawner lands (see CT-15 mock

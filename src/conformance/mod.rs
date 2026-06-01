@@ -37,11 +37,9 @@ mod sync;
 mod wire_model;
 mod yougen_client;
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -61,16 +59,18 @@ pub use agent_vectors::{
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
 };
-pub use capability::run_capability_boundary_fixture_suite;
-pub use capability::run_capability_facet_fixture_suite;
-pub use capability::run_capability_fixture_suite;
+pub use capability::{
+    run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
+    run_capability_fixture_suite,
+};
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector,
     run_cursor_opaque_stateless_profile_vector, run_cursor_vector_suite,
 };
-pub use encoding::run_encoding_fixture_suite;
-pub use encoding::run_projection_position_discriminator_fixture_suite;
+pub use encoding::{
+    run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
+};
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
 pub use handle_claim_rejection_vectors::{
@@ -185,48 +185,29 @@ pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };
 pub use sync::run_sync_fixture_suite;
-pub use wire_model::run_anchor_view_compaction_fixture_suite;
-pub use wire_model::run_anchorer_cell_fixture_suite;
-pub use wire_model::run_composite_state_key_encoding_fixture_suite;
-pub use wire_model::run_composite_state_subject_fixture_suite;
-pub use wire_model::run_conflict_repair_fixture_suite;
-pub use wire_model::run_consent_fixture_suite;
-pub use wire_model::run_constraint_evaluation_class_fixture_suite;
-pub use wire_model::run_constraint_family_fixture_suite;
-pub use wire_model::run_cross_signing_reset_fixture_suite;
-pub use wire_model::run_device_cross_signing_trust_fixture_suite;
-pub use wire_model::run_device_message_negative_fixture_suite;
-pub use wire_model::run_device_verification_fixture_suite;
-pub use wire_model::run_discovery_profile_fixture_suite;
-pub use wire_model::run_error_code_registry_coverage_fixture_suite;
-pub use wire_model::run_event_kind_lattice_dispatch_fixture_suite;
-pub use wire_model::run_event_kind_payload_coverage_fixture_suite;
-pub use wire_model::run_facet_renderer_query_fixture_suite;
-pub use wire_model::run_frontier_conflict_resolution_fixture_suite;
-pub use wire_model::run_history_visibility_fixture_suite;
-pub use wire_model::run_history_visibility_projection_matrix_check;
-pub use wire_model::run_key_backup_aead_round_trip_check;
-pub use wire_model::run_key_backup_encryption_fixture_suite;
-pub use wire_model::run_late_arriving_anchor_fixture_suite;
-pub use wire_model::run_late_arriving_anchor_idempotency_check;
-pub use wire_model::run_megolm_ratchet_kdf_chain_check;
-pub use wire_model::run_megolm_ratcheting_fixture_suite;
-pub use wire_model::run_membership_fsm_fixture_suite;
-pub use wire_model::run_mimi_components_fixture_suite;
-pub use wire_model::run_mls_e2ee_basic_fixture_suite;
-pub use wire_model::run_mls_move_covered_frontier_fixture_suite;
-pub use wire_model::run_multi_admin_distinct_approver_gate_check;
-pub use wire_model::run_multi_space_federation_fixture_suite;
-pub use wire_model::run_operation_registry_coverage_fixture_suite;
-pub use wire_model::run_production_signing_fixture_suite;
-pub use wire_model::run_read_receipt_policy_fixture_suite;
-pub use wire_model::run_recovery_bridge_full_chain_fixture_suite;
-pub use wire_model::run_recovery_ticket_state_machine_check;
-pub use wire_model::run_redacted_cross_server_fixture_suite;
-pub use wire_model::run_redaction_history_visibility_fixture_suite;
-pub use wire_model::run_restore_full_workflows_fixture_suite;
-pub use wire_model::run_state_resolution_quarantine_fixture_suite;
-pub use wire_model::run_threshold_multisig_fixture_suite;
+pub use wire_model::{
+    run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
+    run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
+    run_conflict_repair_fixture_suite, run_consent_fixture_suite,
+    run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
+    run_cross_signing_reset_fixture_suite, run_device_cross_signing_trust_fixture_suite,
+    run_device_message_negative_fixture_suite, run_device_verification_fixture_suite,
+    run_discovery_profile_fixture_suite, run_error_code_registry_coverage_fixture_suite,
+    run_event_kind_lattice_dispatch_fixture_suite, run_event_kind_payload_coverage_fixture_suite,
+    run_facet_renderer_query_fixture_suite, run_frontier_conflict_resolution_fixture_suite,
+    run_history_visibility_fixture_suite, run_history_visibility_projection_matrix_check,
+    run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,
+    run_late_arriving_anchor_fixture_suite, run_late_arriving_anchor_idempotency_check,
+    run_megolm_ratchet_kdf_chain_check, run_megolm_ratcheting_fixture_suite,
+    run_membership_fsm_fixture_suite, run_mimi_components_fixture_suite,
+    run_mls_e2ee_basic_fixture_suite, run_mls_move_covered_frontier_fixture_suite,
+    run_multi_admin_distinct_approver_gate_check, run_multi_space_federation_fixture_suite,
+    run_operation_registry_coverage_fixture_suite, run_production_signing_fixture_suite,
+    run_read_receipt_policy_fixture_suite, run_recovery_bridge_full_chain_fixture_suite,
+    run_recovery_ticket_state_machine_check, run_redacted_cross_server_fixture_suite,
+    run_redaction_history_visibility_fixture_suite, run_restore_full_workflows_fixture_suite,
+    run_state_resolution_quarantine_fixture_suite, run_threshold_multisig_fixture_suite,
+};
 pub use yougen_client::run_yougen_client_profile_manifest_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────

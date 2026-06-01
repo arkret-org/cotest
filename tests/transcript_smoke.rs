@@ -6,15 +6,14 @@
 //! 1. exists at `<target_dir>/<scenario>.jsonl`,
 //! 2. contains at least one line per instrumented vector site,
 //! 3. each line is valid JSON,
-//! 4. each line carries the structured `kind` / `payload` / `expected` /
-//!    `actual` / `scenario` fields the consumer contract requires.
+//! 4. each line carries the structured `kind` / `payload` / `expected` / `actual` / `scenario`
+//!    fields the consumer contract requires.
 
 use std::fs;
 
 use anyhow::Result;
-use serde_json::Value;
-
 use cotest::transcripts::{init_transcript_writer, record_vector_event};
+use serde_json::Value;
 
 #[test]
 fn transcript_writer_emits_jsonl_per_vector() -> Result<()> {

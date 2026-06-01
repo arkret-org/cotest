@@ -6,7 +6,6 @@
 //! DID + agent_principal_id + an HKDF salt.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::SidecarCircleId;
 use hkdf::Hkdf;
 use sha2::Sha256;

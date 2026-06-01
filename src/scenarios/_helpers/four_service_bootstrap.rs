@@ -1,18 +1,16 @@
 //! CT-6 — 4-service joint bootstrap (soland + coauth + starid + teabay).
 //!
 //! Provides a single [`FourServiceStack`] entry point that:
-//!   1. Spawns `soland` (via the existing [`ContrixServer::spawn_with_env`]
-//!      machinery, which honours the pre-built sibling binary fast path).
-//!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`]
-//!      (docker-postgres + generated config). Wires soland → coauth
-//!      introspection URLs via the soland env (`SOLAND_OAUTH_INTROSPECTION_URL`
-//!      / `SOLAND_SESSION_GRANT_INTROSPECTION_URL`).
-//!   3. Optionally spawns `starid` via the [`external_binary::STARID_SPEC`]
-//!      (no external deps in development mode). Wires soland → starid via
-//!      `SOLAND_STARID_WEBVH_RESOLVER_URL` + `SOLAND_DID_RESOLVER_ALLOW_METHODS`.
-//!   4. Optionally spawns `teabay` via [`external_binary::TEABAY_SPEC`] —
-//!      requires `DATABASE_URL` in the caller's env (see
-//!      `TEABAY_SPEC.required_env_vars`).
+//!   1. Spawns `soland` (via the existing [`ContrixServer::spawn_with_env`] machinery, which
+//!      honours the pre-built sibling binary fast path).
+//!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
+//!      + generated config). Wires soland → coauth introspection URLs via the soland env
+//!      (`SOLAND_OAUTH_INTROSPECTION_URL` / `SOLAND_SESSION_GRANT_INTROSPECTION_URL`).
+//!   3. Optionally spawns `starid` via the [`external_binary::STARID_SPEC`] (no external deps in
+//!      development mode). Wires soland → starid via `SOLAND_STARID_WEBVH_RESOLVER_URL` +
+//!      `SOLAND_DID_RESOLVER_ALLOW_METHODS`.
+//!   4. Optionally spawns `teabay` via [`external_binary::TEABAY_SPEC`] — requires `DATABASE_URL`
+//!      in the caller's env (see `TEABAY_SPEC.required_env_vars`).
 //!
 //! `try_bootstrap` is fail-soft: services that can't start (missing binary,
 //! missing DATABASE_URL, docker unreachable) are returned as `None` slots so
@@ -172,11 +170,10 @@ async fn probe(client: &reqwest::Client, name: &str, url: &str) -> Result<()> {
 /// spawn, the whole bootstrap returns `Err` (every other test in cotest
 /// assumes a working soland).
 pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack> {
-    // 1. coauth first — we need its base URL + introspection bearer to wire
-    //    soland's env vars on spawn. We MUST resolve those before
-    //    `ContrixServer::spawn_with_env` is called, otherwise the principal
-    //    server boots without the auth wiring and any test that uses
-    //    `dev_login` outside of `SOLAND_DEVELOPMENT_MODE=1` would 401.
+    // 1. coauth first — we need its base URL + introspection bearer to wire soland's env vars on
+    //    spawn. We MUST resolve those before `ContrixServer::spawn_with_env` is called, otherwise
+    //    the principal server boots without the auth wiring and any test that uses `dev_login`
+    //    outside of `SOLAND_DEVELOPMENT_MODE=1` would 401.
     //
     //    `spawn_coauth_with_db` is fail-soft and returns Ok(None) when
     //    docker / postgres / the coauth binary are missing. We treat that as
@@ -184,8 +181,7 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
     //    to handle a missing `coauth` field.
     let coauth = spawn_coauth_with_db().await?;
 
-    // 2. starid — env-driven, no external deps. Soft-skip if the binary
-    //    can't be located.
+    // 2. starid — env-driven, no external deps. Soft-skip if the binary can't be located.
     let starid = match skip_reason(&STARID_SPEC) {
         Some(_) => None,
         None => try_spawn(&STARID_SPEC).await?,
@@ -197,9 +193,8 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         None => try_spawn(&TEABAY_SPEC).await?,
     };
 
-    // 4. Build the soland env from the resolved upstream URLs. Empty/absent
-    //    keys are simply not exported (soland's config keeps the
-    //    production-safe default when the env var is unset).
+    // 4. Build the soland env from the resolved upstream URLs. Empty/absent keys are simply not
+    //    exported (soland's config keeps the production-safe default when the env var is unset).
     let mut soland_env: Vec<(String, String)> = Vec::new();
 
     if let Some(coauth) = &coauth {

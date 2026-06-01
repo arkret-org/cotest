@@ -23,11 +23,9 @@
 //! yet ready stay behind `#[ignore]` in `tests/security_closure_vectors.rs`
 //! as active local runner-contract checks in `tests/security_closure_vectors.rs`.
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -225,9 +223,8 @@ impl SecurityClosureStep {
 /// * profile equals `cx.profile.privacy_security_vectors.v1`
 /// * every required vector_id is present
 /// * every step exposes the full 6-field `runner{}` contract
-/// * `expected_state_transition.outcome` (when set) matches
-///   `expected.outcome` (mirrors the spec-side lint
-///   `check_security_closure_vectors`)
+/// * `expected_state_transition.outcome` (when set) matches `expected.outcome` (mirrors the
+///   spec-side lint `check_security_closure_vectors`)
 pub fn run_security_closure_vectors_suite() -> Result<()> {
     let fixture = SecurityClosureFixture::load()?;
     validate_security_closure_fixture(&fixture)

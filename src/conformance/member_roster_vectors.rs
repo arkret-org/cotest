@@ -2,8 +2,7 @@
 //! conformance vectors (VECT-ROST-1..3 + VECT-COT-4 roster v2).
 //!
 //! Source artefact:
-//!   * `artifacts/schemas/account-subscribe-frame.schema.json`
-//!     (`$defs/member_roster_entry`).
+//!   * `artifacts/schemas/account-subscribe-frame.schema.json` (`$defs/member_roster_entry`).
 //!
 //! R3.2 roster v2 shape:
 //!   `{actor_id, membership, subject_id?, identity_event_ids?,
@@ -11,14 +10,11 @@
 //!     handle_claims?, handle_claims_limited?}`.
 //!
 //! Field renames + new disclosure-gated fields:
-//!   * `identity_state_digest` → `member_display_state_digest` (now folds
-//!     the visible handle-claim digest set; see
-//!     [`member_display_state_digest`]).
-//!   * `subject_id` discloses the principal/holder DID. The four gated
-//!     fields (`identity_events`, `handle_claim_digests`, `handle_claims`,
-//!     `handle_claims_limited`) MUST be omitted unless `subject_id` is
-//!     disclosed (dependentRequired), enforced by
-//!     [`MemberRosterEntry::validate`].
+//!   * `identity_state_digest` → `member_display_state_digest` (now folds the visible handle-claim
+//!     digest set; see [`member_display_state_digest`]).
+//!   * `subject_id` discloses the principal/holder DID. The four gated fields (`identity_events`,
+//!     `handle_claim_digests`, `handle_claims`, `handle_claims_limited`) MUST be omitted unless
+//!     `subject_id` is disclosed (dependentRequired), enforced by [`MemberRosterEntry::validate`].
 //!   * inline `handle_claims[].subject` MUST equal the entry's `subject_id`.
 //!
 //! Entries MUST NOT carry raw handle / display fields directly; handle

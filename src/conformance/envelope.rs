@@ -526,7 +526,8 @@ fn validate_event_envelope(
         }
     }
 
-    // Check critical_extensions in both event.critical_extensions and event.requirements.critical_extensions
+    // Check critical_extensions in both event.critical_extensions and
+    // event.requirements.critical_extensions
     let critical_extensions_iter = event
         .get("critical_extensions")
         .and_then(Value::as_array)
@@ -560,10 +561,9 @@ fn validate_event_envelope(
     // canonical_hash(envelope_without_proofs_unsigned). Two acceptable
     // proof shapes coexist post-2026-05-08:
     //   1. Direct: proof.payload_digest == canonical event payload hash.
-    //   2. Binding-object: proof signs a separate `binding_object`
-    //      (`{actor_id, created_at, domain, payload_digest, verification_method}`)
-    //      and proof.payload_digest is the hash of that binding payload. The
-    //      proof carries `domain` to signal the binding-object shape.
+    //   2. Binding-object: proof signs a separate `binding_object` (`{actor_id, created_at, domain,
+    //      payload_digest, verification_method}`) and proof.payload_digest is the hash of that
+    //      binding payload. The proof carries `domain` to signal the binding-object shape.
     //
     // Direct-shape proofs MUST match the canonical event hash exactly.
     // Binding-object proofs are accepted as long as `payload_digest` is a

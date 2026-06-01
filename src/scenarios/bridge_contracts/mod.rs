@@ -2,8 +2,8 @@
 //! `bridge_contracts.rs` during the round 28 Q1 refactor.
 //!
 //! Each submodule is single-responsibility:
-//! - [`discovery`] — `/api/v1/auth/bridge/describe` + `/api/v1/push/outbound/bridge/describe`
-//!   smoke check (`principal_bridge_contracts_are_discoverable`).
+//! - [`discovery`] — `/api/v1/auth/bridge/describe` + `/api/v1/push/outbound/bridge/describe` smoke
+//!   check (`principal_bridge_contracts_are_discoverable`).
 //! - [`session_grant`] — coauth-backed `/api/v1/auth/session-grant/exchange` flow
 //!   (`session_grant_exchange_uses_configured_coauth_introspection`).
 //! - [`starid`] — optional `did:webvh` resolver profile discoverability

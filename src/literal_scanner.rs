@@ -13,24 +13,21 @@
 //! be marked `allowed_context_match=true` if it falls under one of the
 //! supported allowlist mechanisms:
 //!
-//! * **Path glob** — file path matches one of `**/compat/**`,
-//!   `**/interop_matrix/**`, `**/legacy_negative/**`, `**/legacy_migration/**`,
-//!   `**/changelog/**`, `**/CHANGELOG*`, `**/migrations/**`.
-//! * **Magic comment** — anywhere in the file, a line
-//!   `// contrix-allow: <artifact_id>` (or `# contrix-allow: ...` /
-//!   `<!-- contrix-allow: ... -->`) exempts that specific id.
-//! * **Wildcard magic comment** — `// contrix-allow: *` exempts every artifact
-//!   inside that file (use sparingly; only for whole-file legacy fixtures).
+//! * **Path glob** — file path matches one of `**/compat/**`, `**/interop_matrix/**`,
+//!   `**/legacy_negative/**`, `**/legacy_migration/**`, `**/changelog/**`, `**/CHANGELOG*`,
+//!   `**/migrations/**`.
+//! * **Magic comment** — anywhere in the file, a line `// contrix-allow: <artifact_id>` (or `#
+//!   contrix-allow: ...` / `<!-- contrix-allow: ... -->`) exempts that specific id.
+//! * **Wildcard magic comment** — `// contrix-allow: *` exempts every artifact inside that file
+//!   (use sparingly; only for whole-file legacy fixtures).
 //!
 //! The scanner is intentionally a single-crate module so the binary
 //! [`literal_scanner`] and integration smoke tests can both reach it through
 //! `cotest::literal_scanner`.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -572,11 +569,10 @@ fn decide_allowlist(
 ///
 /// Token matching rules:
 ///
-/// * For tokens beginning with `cx.` we require either start-of-line, or that
-///   the preceding character is not an ASCII identifier character (so
-///   `mycx.flow.track.member` does not match).
-/// * For multi-word tokens that contain a space (e.g. `track members`) we do
-///   case-insensitive substring search.
+/// * For tokens beginning with `cx.` we require either start-of-line, or that the preceding
+///   character is not an ASCII identifier character (so `mycx.flow.track.member` does not match).
+/// * For multi-word tokens that contain a space (e.g. `track members`) we do case-insensitive
+///   substring search.
 /// * For everything else we do a strict substring search.
 fn find_token(line: &str, token: &str, _kind: FileKind) -> Option<usize> {
     if token.is_empty() {

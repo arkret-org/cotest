@@ -2,8 +2,7 @@
 //!
 //! teabay MUST defend its `lookup` and `search` endpoints against
 //! oracle / timing-channel enumeration by:
-//!   - delaying every response to at least a normative floor
-//!     (`LATENCY_FLOOR_MS`), and
+//!   - delaying every response to at least a normative floor (`LATENCY_FLOOR_MS`), and
 //!   - adding uniform jitter from `[0, JITTER_MAX_MS]` on top.
 //!
 //! The combined observed latency `t` for any single query MUST therefore

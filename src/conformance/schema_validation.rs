@@ -1,4 +1,6 @@
-use std::{collections::BTreeSet, ffi::OsStr, fs};
+use std::collections::BTreeSet;
+use std::ffi::OsStr;
+use std::fs;
 
 use anyhow::{Result, anyhow, bail};
 use jsonschema::{Registry, Resource};

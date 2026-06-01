@@ -4,22 +4,18 @@
 //! at runtime and produces a per-profile gate report. Two profile classes are
 //! handled:
 //!
-//! - **Vector profiles** — every `required_cotest_suites[].suite` is looked
-//!   up in the local cotest suite registry. Known suites resolve to a wired
-//!   runner function. Unknown suites are reported as
-//!   `skipped(suite_not_implemented)` rather than being silently treated as
-//!   passing.
+//! - **Vector profiles** — every `required_cotest_suites[].suite` is looked up in the local cotest
+//!   suite registry. Known suites resolve to a wired runner function. Unknown suites are reported
+//!   as `skipped(suite_not_implemented)` rather than being silently treated as passing.
 //!
-//! - **Implementation profiles** — the harness cannot drive every required
-//!   event_kind / operation through a live server in offline mode, so each
-//!   entry is reported with the spec's default unsupported behavior
-//!   (`unsupported(profile_id=...)`). The list is explicit so a profile is
+//! - **Implementation profiles** — the harness cannot drive every required event_kind / operation
+//!   through a live server in offline mode, so each entry is reported with the spec's default
+//!   unsupported behavior (`unsupported(profile_id=...)`). The list is explicit so a profile is
 //!   never silently skipped from the rollup.
 //!
-//! - **Deprecated hard-reject profiles** — removed profile ids are validated
-//!   against the drift registry and must not reappear in implementation
-//!   profile catalogs. They are negative-test context only, not rollup
-//!   implementation entries.
+//! - **Deprecated hard-reject profiles** — removed profile ids are validated against the drift
+//!   registry and must not reappear in implementation profile catalogs. They are negative-test
+//!   context only, not rollup implementation entries.
 //!
 //! The resulting [`ProfileGateReport`] is consumed by
 //! `cotest/tests/conformance_fixtures.rs::profile_registry_gate_suite_...` and

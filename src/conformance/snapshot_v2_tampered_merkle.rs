@@ -6,11 +6,10 @@
 //! recompute is internally consistent against the mutation.
 //!
 //! Spec authority:
-//!   * `contrix-spec/spec/v1/zh/conformance/snapshot-schema.md`
-//!     §3 (chunk descriptor.sha256 covers chunk payload canonical JSON
-//!     bytes), §4 (state_digest MUST be the canonical Merkle root over
-//!     reducer output leaves), §5 (signature covers manifest payload),
-//!     §6 (event_set_commitment.root + merkle_branch inclusion proofs).
+//!   * `contrix-spec/spec/v1/zh/conformance/snapshot-schema.md` §3 (chunk descriptor.sha256 covers
+//!     chunk payload canonical JSON bytes), §4 (state_digest MUST be the canonical Merkle root over
+//!     reducer output leaves), §5 (signature covers manifest payload), §6
+//!     (event_set_commitment.root + merkle_branch inclusion proofs).
 //!
 //! The signed manifest pins state_digest, event_set_commitment.root, and
 //! each chunk.sha256 — recomputing a local Merkle branch from a mutated

@@ -14,9 +14,8 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use serde_json::{Value, json};
-
 use contrix_core::{SNAPSHOT_SCHEMA, schema};
+use serde_json::{Value, json};
 
 fn registry() -> contrix_core::ProtocolSchemaRegistry {
     schema::schema_registry_from_default_spec_artifacts()

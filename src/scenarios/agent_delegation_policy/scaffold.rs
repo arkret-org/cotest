@@ -4,16 +4,13 @@
 //! capability surface a controller binds to an `accountability_grant`.
 //! The sub-test here pins:
 //!   1. all 14 actions are present in `AGENT_CAPABILITY_ACTIONS`.
-//!   2. every action is well-formed (snake_case, no whitespace, dot-
-//!      delimited, prefixed `cx.agent.`).
-//!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish})
-//!      are syntactically distinguishable from the 8 base lifecycle/
-//!      runtime actions.
-//!   4. an `accountability_grant` typed-id round-trips through the
-//!      SDK validator.
+//!   2. every action is well-formed (snake_case, no whitespace, dot- delimited, prefixed
+//!      `cx.agent.`).
+//!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
+//!      distinguishable from the 8 base lifecycle/ runtime actions.
+//!   4. an `accountability_grant` typed-id round-trips through the SDK validator.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::{
     AGENT_CAPABILITY_ACTIONS, AccountabilityGrantId, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,

@@ -3,12 +3,12 @@
 //! This scenario now exercises the real process boundary:
 //!
 //! 1. boot soland against a persistent Postgres database;
-//! 2. submit one canonical event while soland is paused at the
-//!    `post_commit_pre_response` chaos breakpoint;
+//! 2. submit one canonical event while soland is paused at the `post_commit_pre_response` chaos
+//!    breakpoint;
 //! 3. terminate the child process before the HTTP response can flush;
 //! 4. restart soland against the same database;
-//! 5. compare the durable canonical event row, projection event row, and a
-//!    retry under the same operation id.
+//! 5. compare the durable canonical event row, projection event row, and a retry under the same
+//!    operation id.
 //!
 //! If Postgres is not available locally the scenario returns `Ok(())`. The
 //! test entrypoint remains opt-in because it deliberately kills a child

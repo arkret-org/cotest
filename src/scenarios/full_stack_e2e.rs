@@ -3,41 +3,36 @@
 //! Stitches the cross-project pieces shipped across T1–T7 into one black-box
 //! flow. The scenario covers:
 //!
-//!   1. **starid mint** — Alice's DID is resolvable against starid (live HTTP
-//!      probe when STARID_BIN is set; otherwise an SDK-level Did::new gate so
-//!      the canonical-form rejection still runs).
-//!   2. **coauth issues a handle_claim** — exercised through the
-//!      `MemberDeliveryBindingCandidate` builder (matching T3.5's pattern;
-//!      coauth's wire surface needs a real DB so we drive the SDK candidate
-//!      that the live coauth would mint).
-//!   3. **teabay directory resolve_handle (intent="member_add")** — best-
-//!      effort live POST against the teabay binary; falls back to the
-//!      schema-level validator otherwise.
-//!   4. **soland member_add candidate validation** — the
-//!      `member_add_with_candidate` audience/now invariants from T3.5.
-//!   5. **yougen mock client send_message** — SDK-only: builds a
-//!      `cx.message.create` Event Envelope payload (no Dioxus app required).
-//!   6. **floria notify gateway blind-wakeup payload** — verifies the
-//!      sanitizer rejects all forbidden fields per `push-notifications.md`
-//!      §4.5.
-//!   7. **chime mock receives blind wakeup** — in-process HTTPS sink modelled
-//!      on the `soland_floria_push_e2e` mock receiver; verifies it can
-//!      accept a sanitized payload.
-//!   8. **rebind handover** — model T3.3 reducer state by mutating the
-//!      candidate's `member_delivery_binding.recipient_service_did` and
-//!      asserting the local allow-list model rejects it.
-//!   9. **revocation** — model a `cx.handle.revoke` event by expiring the
-//!      candidate; the validator MUST refuse subsequent operations.
+//!   1. **starid mint** — Alice's DID is resolvable against starid (live HTTP probe when STARID_BIN
+//!      is set; otherwise an SDK-level Did::new gate so the canonical-form rejection still runs).
+//!   2. **coauth issues a handle_claim** — exercised through the `MemberDeliveryBindingCandidate`
+//!      builder (matching T3.5's pattern; coauth's wire surface needs a real DB so we drive the SDK
+//!      candidate that the live coauth would mint).
+//!   3. **teabay directory resolve_handle (intent="member_add")** — best- effort live POST against
+//!      the teabay binary; falls back to the schema-level validator otherwise.
+//!   4. **soland member_add candidate validation** — the `member_add_with_candidate` audience/now
+//!      invariants from T3.5.
+//!   5. **yougen mock client send_message** — SDK-only: builds a `cx.message.create` Event Envelope
+//!      payload (no Dioxus app required).
+//!   6. **floria notify gateway blind-wakeup payload** — verifies the sanitizer rejects all
+//!      forbidden fields per `push-notifications.md` §4.5.
+//!   7. **chime mock receives blind wakeup** — in-process HTTPS sink modelled on the
+//!      `soland_floria_push_e2e` mock receiver; verifies it can accept a sanitized payload.
+//!   8. **rebind handover** — model T3.3 reducer state by mutating the candidate's
+//!      `member_delivery_binding.recipient_service_did` and asserting the local allow-list model
+//!      rejects it.
+//!   9. **revocation** — model a `cx.handle.revoke` event by expiring the candidate; the validator
+//!      MUST refuse subsequent operations.
 //!
 //! ## Negative cases
 //!
 //! Always run:
-//!  - DID Document fallback: `binding_source = did_document_default` is
-//!    rejected even when no Space policy is wired.
-//!  - Stable push id leak: a blind payload that smuggles `space_id` /
-//!    `flow_id` / `event_id` MUST be rejected by the sanitizer.
-//!  - Placeholder proof: production-mode soland rejects the yougen
-//!    `jws="a..b"` placeholder (T1.3 surface — best-effort live probe).
+//!  - DID Document fallback: `binding_source = did_document_default` is rejected even when no Space
+//!    policy is wired.
+//!  - Stable push id leak: a blind payload that smuggles `space_id` / `flow_id` / `event_id` MUST
+//!    be rejected by the sanitizer.
+//!  - Placeholder proof: production-mode soland rejects the yougen `jws="a..b"` placeholder (T1.3
+//!    surface — best-effort live probe).
 //!
 //! ## Live-stack gating
 //!
@@ -548,9 +543,8 @@ async fn live_stack_probe() -> Result<()> {
     let stack = try_bootstrap(FourServiceConfig::new("t8-1-full-stack-e2e")).await?;
     stack.assert_healthy().await?;
 
-    // 2. Probe teabay's `resolve-handle` surface; same gating as T3.5 —
-    //    we don't seed a real row, so blinded `not_found` is the
-    //    spec-correct shape.
+    // 2. Probe teabay's `resolve-handle` surface; same gating as T3.5 — we don't seed a real row,
+    //    so blinded `not_found` is the spec-correct shape.
     let teabay = stack
         .teabay
         .as_ref()
@@ -583,9 +577,9 @@ async fn live_stack_probe() -> Result<()> {
         );
     }
 
-    // 3. Production-mode placeholder rejection — spawn an additional
-    //    soland in production posture (separate handle so this does not
-    //    interfere with the dev-mode soland inside the bootstrap).
+    // 3. Production-mode placeholder rejection — spawn an additional soland in production posture
+    //    (separate handle so this does not interfere with the dev-mode soland inside the
+    //    bootstrap).
     if let Some(prod_soland) =
         try_spawn_with_extra_env(&SOLAND_SPEC, &[("SOLAND_DEVELOPMENT_MODE", "false")])
             .await
@@ -629,12 +623,10 @@ async fn live_stack_probe() -> Result<()> {
         }
     }
 
-    // 4. TODO(T8.1 live wire): once floria's `notify` surface is wired with
-    //    a soland → floria → mock receiver path that does not require a
-    //    rendered FLORIA_CONFIG dependency, drive a full blind-wakeup
-    //    round-trip here. The SDK contract surface already covers the
-    //    payload shape; this hook is left for when the bridge gets a
-    //    test-mode wiring.
+    // 4. TODO(T8.1 live wire): once floria's `notify` surface is wired with a soland → floria →
+    //    mock receiver path that does not require a rendered FLORIA_CONFIG dependency, drive a full
+    //    blind-wakeup round-trip here. The SDK contract surface already covers the payload shape;
+    //    this hook is left for when the bridge gets a test-mode wiring.
 
     Ok(())
 }

@@ -4,27 +4,22 @@
 //! `cargo test --test live_circle_mls_group_isolation -- --ignored`).
 //!
 //! Scenario (Phase B scaffold):
-//!   1. Boot soland (via `FourServiceStack`; coauth/starid/teabay are
-//!      best-effort optional but soland is required).
-//!   2. Create a Realm — soland MUST bind a Realm-default MLS group at
-//!      creation time (CXP-0007 §Realm.encryption_profile=mls_rfc9420).
-//!   3. Create a Circle in that Realm. Soland MUST bind a NEW MLS group
-//!      to the Circle whose `group_id` is distinct from the Realm's
-//!      default group.
-//!   4. Assert isolation:
-//!        a) `Circle.mls_group_ref != Realm.default_mls_group_ref` (group
-//!           identifiers differ),
-//!        b) rotating the Circle's key (or driving a Circle-member-add
-//!           commit) MUST NOT change the Realm-default group's epoch,
-//!        c) adding a member to the Circle triggers exactly one MLS
-//!           commit on the Circle's group (epoch += 1) and zero commits
-//!           on the Realm-default group.
-//!   5. Cryptographic isolation: spin up two distinct client instances
-//!      (`SdkClient` with the same actor's bearer but separate keystores
-//!      / device IDs). Client A joins the Realm-default group; client B
-//!      joins the Circle's group. Each client SHOULD only be able to
-//!      decrypt traffic from the group it joined; the Circle-only client
-//!      MUST NOT decrypt a Realm-default-encrypted plaintext probe.
+//!   1. Boot soland (via `FourServiceStack`; coauth/starid/teabay are best-effort optional but
+//!      soland is required).
+//!   2. Create a Realm — soland MUST bind a Realm-default MLS group at creation time (CXP-0007
+//!      §Realm.encryption_profile=mls_rfc9420).
+//!   3. Create a Circle in that Realm. Soland MUST bind a NEW MLS group to the Circle whose
+//!      `group_id` is distinct from the Realm's default group.
+//!   4. Assert isolation: a) `Circle.mls_group_ref != Realm.default_mls_group_ref` (group
+//!      identifiers differ), b) rotating the Circle's key (or driving a Circle-member-add commit)
+//!      MUST NOT change the Realm-default group's epoch, c) adding a member to the Circle triggers
+//!      exactly one MLS commit on the Circle's group (epoch += 1) and zero commits on the
+//!      Realm-default group.
+//!   5. Cryptographic isolation: spin up two distinct client instances (`SdkClient` with the same
+//!      actor's bearer but separate keystores / device IDs). Client A joins the Realm-default
+//!      group; client B joins the Circle's group. Each client SHOULD only be able to decrypt
+//!      traffic from the group it joined; the Circle-only client MUST NOT decrypt a
+//!      Realm-default-encrypted plaintext probe.
 //!
 //! Gating mirrors the other `live_circle_*` tests: `#[ignore]` + soft
 //! `bail!` when the bootstrap can't bring up the stack.
@@ -34,10 +29,9 @@ use contrix_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleSymbol, Did,
     EncryptionProfile, RealmId,
 };
+use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 use serde_json::json;
 use serial_test::serial;
-
-use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 /// Gating: live soland stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.

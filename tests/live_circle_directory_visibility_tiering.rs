@@ -4,41 +4,29 @@
 //! `cargo test --test live_circle_directory_visibility_tiering -- --ignored`).
 //!
 //! `Circle.directory_visibility` is a two-value enum (CXP-0007):
-//!   - `Members`        — only Circle members see the Circle in any
-//!                        directory output; non-members must NOT receive
-//!                        a redacted-present entry (anti-enumeration).
-//!   - `RealmMembers`   — any active Realm member sees an *opaque
-//!                        commitment* (no `title` / `display` / member
-//!                        count); only Circle members see the full
-//!                        metadata.
+//!   - `Members`        — only Circle members see the Circle in any directory output; non-members
+//!     must NOT receive a redacted-present entry (anti-enumeration).
+//!   - `RealmMembers`   — any active Realm member sees an *opaque commitment* (no `title` /
+//!     `display` / member count); only Circle members see the full metadata.
 //! The spec does NOT define a third value; the SDK default is `Members`
 //! (most-restrictive).
 //!
 //! Scenario (Phase B scaffold):
-//!   1. Boot soland + teabay (teabay is hard-required for the projection
-//!      assertion).
-//!   2. Create a Realm. Create three Circles with `directory_visibility`
-//!      set to `Members`, `RealmMembers`, and the SDK default (=
-//!      `Members`). All three live in the same Realm.
+//!   1. Boot soland + teabay (teabay is hard-required for the projection assertion).
+//!   2. Create a Realm. Create three Circles with `directory_visibility` set to `Members`,
+//!      `RealmMembers`, and the SDK default (= `Members`). All three live in the same Realm.
 //!   3. Identities used to probe teabay's directory:
 //!        - `outsider`        — NOT a Realm member,
 //!        - `realm_only`      — Realm member, NOT in any Circle,
 //!        - `circle_member`   — Realm member AND in all three Circles.
-//!   4. Probe teabay's `GET /api/v1/directory/circles?realm_id=<rid>`
-//!      (or equivalent listing endpoint) and assert:
-//!        a) `outsider`     — empty result for all three Circles (the
-//!                            Realm membership is itself the entry
-//!                            gate; non-Realm-members see nothing),
-//!        b) `realm_only`   — sees ONLY the `RealmMembers` Circle, and
-//!                            its projection contains the opaque
-//!                            commitment fields ONLY (no `title`,
-//!                            `display`, `member_count`,
-//!                            `mls_group_ref`); the two `Members`
-//!                            Circles are absent (anti-enumeration —
-//!                            NOT redacted-present),
-//!        c) `circle_member`— sees ALL three Circles with the full
-//!                            metadata projection (title, display,
-//!                            member_count, summary if set).
+//!   4. Probe teabay's `GET /api/v1/directory/circles?realm_id=<rid>` (or equivalent listing
+//!      endpoint) and assert: a) `outsider`     — empty result for all three Circles (the Realm
+//!      membership is itself the entry gate; non-Realm-members see nothing), b) `realm_only`   —
+//!      sees ONLY the `RealmMembers` Circle, and its projection contains the opaque commitment
+//!      fields ONLY (no `title`, `display`, `member_count`, `mls_group_ref`); the two `Members`
+//!      Circles are absent (anti-enumeration — NOT redacted-present), c) `circle_member`— sees ALL
+//!      three Circles with the full metadata projection (title, display, member_count, summary if
+//!      set).
 //!
 //! Gating mirrors the other `live_circle_*` tests: `#[ignore]` + soft
 //! `bail!` when the stack cannot be bootstrapped.
@@ -48,10 +36,9 @@ use contrix_core::{
     Circle, CircleColorToken, CircleDirectoryVisibility, CircleDisplay, CircleGlyph, CircleId,
     CircleSymbol, Did, RealmId,
 };
+use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 use serde_json::json;
 use serial_test::serial;
-
-use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 /// Gating: live soland + teabay stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
@@ -183,21 +170,18 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     //       `soland_teabay_directory_sync.rs`):
     //         (a) outsider:
     //             - empty list (NO entries for any of the three Circles),
-    //             - no 4xx (just empty), to avoid an oracle for Realm
-    //               existence (anti-enumeration on the Realm gate),
+    //             - no 4xx (just empty), to avoid an oracle for Realm existence (anti-enumeration
+    //               on the Realm gate),
     //         (b) realm_only:
     //             - list length == 1, the entry's `id` matches `cid_realm`,
-    //             - the entry MUST NOT contain `title`, `display`,
-    //               `member_count`, `mls_group_ref`, `summary`, or any
-    //               other identity-leaking field — only `id`, `realm_id`,
-    //               and the opaque-commitment fields (`commitment` /
-    //               `directory_visibility=realm_members`),
-    //             - cid_members and cid_default MUST NOT appear in the
-    //               response at all (NOT as redacted-present entries),
+    //             - the entry MUST NOT contain `title`, `display`, `member_count`, `mls_group_ref`,
+    //               `summary`, or any other identity-leaking field — only `id`, `realm_id`, and the
+    //               opaque-commitment fields (`commitment` / `directory_visibility=realm_members`),
+    //             - cid_members and cid_default MUST NOT appear in the response at all (NOT as
+    //               redacted-present entries),
     //         (c) circle_member:
-    //             - list length == 3, every entry contains the full
-    //               metadata projection (`title`, `display`,
-    //               `member_count`, `directory_visibility`, etc.).
+    //             - list length == 3, every entry contains the full metadata projection (`title`,
+    //               `display`, `member_count`, `directory_visibility`, etc.).
     let _ = admin
         .post("/api/v1/realms")
         .json(&json!({

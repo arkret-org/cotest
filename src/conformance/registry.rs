@@ -1,7 +1,5 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    fs,
-};
+use std::collections::{BTreeSet, HashMap};
+use std::fs;
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::Value;

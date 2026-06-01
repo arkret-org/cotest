@@ -1,30 +1,27 @@
 //! CT-10 — To-device queue offline ordering.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device`
-//!     cursor / position progresses monotonically per (actor, device).
-//!   - `contrix-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued
-//!     to-device messages preserve send order across disconnect /
-//!     reconnect; cursor-acked eviction ensures no replay or skip.
+//!   - `contrix-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device` cursor / position progresses
+//!     monotonically per (actor, device).
+//!   - `contrix-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued to-device messages preserve
+//!     send order across disconnect / reconnect; cursor-acked eviction ensures no replay or skip.
 //!
 //! Scenario walk-through:
 //!   1. Alice registers (dev_alice) and Bob registers (dev_bob_a).
-//!   2. Alice sends message 1 to dev_bob_a (POST /api/v1/device_messages
-//!      with `Idempotency-Key: msg-1`).
-//!   3. Bob's device polls (GET /api/v1/device_messages) — receives msg 1.
-//!      We retain the returned `next_cursor` cursor.
+//!   2. Alice sends message 1 to dev_bob_a (POST /api/v1/device_messages with `Idempotency-Key:
+//!      msg-1`).
+//!   3. Bob's device polls (GET /api/v1/device_messages) — receives msg 1. We retain the returned
+//!      `next_cursor` cursor.
 //!   4. "Disconnect": bob does NOT poll between steps 4 and 7.
 //!   5. Alice sends message 2 (Idempotency-Key: msg-2).
 //!   6. Alice sends message 3 (Idempotency-Key: msg-3).
-//!   7. Bob "reconnects" by polling GET /api/v1/device_messages without
-//!      acking the cursor from step 3 — should still see msg 2 and msg 3
-//!      in send order (positions strictly increasing).
+//!   7. Bob "reconnects" by polling GET /api/v1/device_messages without acking the cursor from step
+//!      3 — should still see msg 2 and msg 3 in send order (positions strictly increasing).
 //!   8. Bob acks the latest cursor → next poll returns no events.
-//!   9. Assert: msg 1 position < msg 2 position < msg 3 position
-//!      (HLC / `to_device_position` monotonic).
-//!   10. Also assert idempotency: re-sending msg-2 with the same
-//!       Idempotency-Key delivers nothing new (defends against
-//!       reconnect-time duplicate-fan-out at the sender side).
+//!   9. Assert: msg 1 position < msg 2 position < msg 3 position (HLC / `to_device_position`
+//!      monotonic).
+//!   10. Also assert idempotency: re-sending msg-2 with the same Idempotency-Key delivers nothing
+//!       new (defends against reconnect-time duplicate-fan-out at the sender side).
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: real test, runs against the in-process soland harness.

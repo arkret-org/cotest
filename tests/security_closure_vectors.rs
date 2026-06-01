@@ -2,16 +2,14 @@
 //!
 //! Two layers:
 //!
-//! 1. The **wire-shape gate** (always-runs): loads
-//!    `security-closure-vectors.json` and confirms every one of the 12
-//!    `cx.vector.*` ids the round-4 spec promotes is present and exposes
-//!    the typed `runner{}` contract introduced by spec commit
-//!    `892c5d7 test: add security closure runner contract`.
+//! 1. The **wire-shape gate** (always-runs): loads `security-closure-vectors.json` and confirms
+//!    every one of the 12 `cx.vector.*` ids the round-4 spec promotes is present and exposes the
+//!    typed `runner{}` contract introduced by spec commit `892c5d7 test: add security closure
+//!    runner contract`.
 //!
-//! 2. The **per-vector local runner-contract gates**: one slot per vector,
-//!    always active. Each test validates that the canonical runner contract
-//!    round-trips through cotest's typed comparison layer without requiring a
-//!    live downstream SUT.
+//! 2. The **per-vector local runner-contract gates**: one slot per vector, always active. Each test
+//!    validates that the canonical runner contract round-trips through cotest's typed comparison
+//!    layer without requiring a live downstream SUT.
 //!
 //! All 12 per-vector tests reach `assert_vector_present` first, then run the
 //! local contract comparison, so cotest gates against fixture drift and
@@ -307,8 +305,8 @@ fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
 //
 // 1. The cotest fixture loader picks up the C3 vector by id,
 // 2. The cotest scenario module pins the same vector id literal,
-// 3. The in-memory multi-server driver round-trips: fresh accept → strict
-//    replay (no historical_only) → post-key-rotation replay (historical_only
+// 3. The in-memory multi-server driver round-trips: fresh accept → strict replay (no
+//    historical_only) → post-key-rotation replay (historical_only
 //    + zero new side effects).
 //
 // The full live e2e (docker / live processes / real key rotation) stays

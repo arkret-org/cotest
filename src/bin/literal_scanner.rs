@@ -12,13 +12,13 @@
 //! `CONTRIX_SPEC_DIR` env var), walks `--root`, and emits findings.
 //!
 //! Exit codes:
-//! * `0` — scan completed; no unallowed violations (or `--fail-on-violation`
-//!   was not supplied).
-//! * `1` — scan completed but unallowed violations were found and
-//!   `--fail-on-violation` was supplied.
+//! * `0` — scan completed; no unallowed violations (or `--fail-on-violation` was not supplied).
+//! * `1` — scan completed but unallowed violations were found and `--fail-on-violation` was
+//!   supplied.
 //! * `2` — scanner itself failed (bad path, malformed registry, etc.).
 
-use std::{path::PathBuf, process::ExitCode};
+use std::path::PathBuf;
+use std::process::ExitCode;
 
 use cotest::literal_scanner::{
     self, ScanReport, load_all_rules_from, resolve_registry_dir, scan_tree,

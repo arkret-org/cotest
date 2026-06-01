@@ -4,7 +4,8 @@
 //! them with a synthetic registry dir, and assert violation / allowlist
 //! behavior end-to-end (no contrix-spec fetch required).
 
-use std::{fs, path::PathBuf};
+use std::fs;
+use std::path::PathBuf;
 
 use cotest::literal_scanner::{load_all_rules_from, scan_tree};
 

@@ -5,17 +5,16 @@
 //!
 //! Invariants pinned (post R3.1 wire rename — contrix-spec @ 7157ee8):
 //!
-//!  1. **Canonical round-trip.** Any valid `<localpart>:<domain>` handle
-//!     survives parse → canonical without re-shape.
-//!  2. **alias canonicalisation.** `acct:` interop form maps to the
-//!     same canonical handle regardless of localpart casing.
-//!  3. **audience mismatch is fatal.** When `member_delivery_binding`
-//!     is set, the claim MUST also carry `audience` + `handle` +
-//!     `expires_at` or `validate()` rejects.
-//!  4. **expiry boundary.** `binding_state=verified` MUST require
-//!     `expires_at` regardless of whether `verified_at` is set.
-//!  5. **issuer is opaque.** Random issuer strings (no schema effect)
-//!     never change validation outcome on their own.
+//!  1. **Canonical round-trip.** Any valid `<localpart>:<domain>` handle survives parse → canonical
+//!     without re-shape.
+//!  2. **alias canonicalisation.** `acct:` interop form maps to the same canonical handle
+//!     regardless of localpart casing.
+//!  3. **audience mismatch is fatal.** When `member_delivery_binding` is set, the claim MUST also
+//!     carry `audience` + `handle` + `expires_at` or `validate()` rejects.
+//!  4. **expiry boundary.** `binding_state=verified` MUST require `expires_at` regardless of
+//!     whether `verified_at` is set.
+//!  5. **issuer is opaque.** Random issuer strings (no schema effect) never change validation
+//!     outcome on their own.
 
 use std::collections::BTreeSet;
 

@@ -2,25 +2,19 @@
 //! contract matrix and other live black-box scenarios.
 //!
 //! What this module does, end-to-end:
-//!   1. Boot an ephemeral Postgres in a throw-away docker container
-//!      (`spawn_ephemeral_postgres`). The container's lifetime is bound to
-//!      the returned [`EphemeralPg`] handle — `Drop` removes the container
-//!      with `docker rm -fv` so a cargo-test panic / early-return cannot leak
-//!      it.
-//!   2. Generate a fresh coauth config YAML by shelling out to
-//!      `coauth config generate` (which produces real signing/encryption
-//!      keys), then patch the `database.uri`, `http.public_base`, `issuer`,
-//!      and the listener bind addresses so the spawned server points at our
-//!      pinned ports + the docker postgres
-//!      (`bootstrap_coauth_config`).
-//!   3. Run `coauth database migrate` against the generated config so the
-//!      schema is applied before the server boots
-//!      (`run_coauth_migrations`).
+//!   1. Boot an ephemeral Postgres in a throw-away docker container (`spawn_ephemeral_postgres`).
+//!      The container's lifetime is bound to the returned [`EphemeralPg`] handle — `Drop` removes
+//!      the container with `docker rm -fv` so a cargo-test panic / early-return cannot leak it.
+//!   2. Generate a fresh coauth config YAML by shelling out to `coauth config generate` (which
+//!      produces real signing/encryption keys), then patch the `database.uri`, `http.public_base`,
+//!      `issuer`, and the listener bind addresses so the spawned server points at our pinned ports
+//!      + the docker postgres (`bootstrap_coauth_config`).
+//!   3. Run `coauth database migrate` against the generated config so the schema is applied before
+//!      the server boots (`run_coauth_migrations`).
 //!   4. Spawn `coauth server --config <generated>` directly (bypassing the
-//!      `external_binary::try_spawn` helper because we have a pre-bound
-//!      address from the patched YAML rather than one allocated at spawn
-//!      time) and bundle the postgres + config + server handles into a
-//!      single [`SpawnedCoauth`] value (`spawn_coauth_with_db`).
+//!      `external_binary::try_spawn` helper because we have a pre-bound address from the patched
+//!      YAML rather than one allocated at spawn time) and bundle the postgres + config + server
+//!      handles into a single [`SpawnedCoauth`] value (`spawn_coauth_with_db`).
 //!
 //! Every step is fail-soft: if `docker` is missing, the coauth binary cannot
 //! be located, or any command exits non-zero, we return `Ok(None)` rather
@@ -41,14 +35,12 @@
 //! docker CLI isn't available. The CI matrix wires this on for the
 //! Ubuntu job only — see `.github/workflows/integration.yml`.
 
-use std::{
-    io::Write,
-    net::TcpListener,
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-    thread,
-    time::{Duration, Instant},
-};
+use std::io::Write;
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
@@ -236,9 +228,8 @@ pub fn bootstrap_coauth_config(
     //    - database.uri → ephemeral postgres
     //    - http.public_base / http.issuer → http://<bind_addr>/
     //    - listener bind address `[::]:7080` → bind_addr
-    //    - internal listener `localhost:8091` → 127.0.0.1:<free port>
-    //      (we don't use it but it must be free so `coauth server` doesn't
-    //      collide with another concurrent test instance)
+    //    - internal listener `localhost:8091` → 127.0.0.1:<free port> (we don't use it but it must
+    //      be free so `coauth server` doesn't collide with another concurrent test instance)
     let internal_port = free_port().unwrap_or(0);
     let public_base = format!("http://{bind_addr}/");
     let mut patched = String::with_capacity(raw.len());
@@ -449,8 +440,8 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         };
     }
     step!("locating coauth binary");
-    // 1. Locate the binary first — cheaper than spinning up postgres if
-    //    the operator has no coauth checkout on disk.
+    // 1. Locate the binary first — cheaper than spinning up postgres if the operator has no coauth
+    //    checkout on disk.
     let probe_spec = ExternalBinarySpec {
         service: "coauth",
         bin_env: "COAUTH_BIN",
@@ -519,9 +510,9 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     }
     step!("migrations applied");
 
-    // 6. Spawn coauth server directly (we already have a pre-bound bind
-    //    address baked into the config YAML, so the standard try_spawn
-    //    helper that allocates its own port is the wrong tool here).
+    // 6. Spawn coauth server directly (we already have a pre-bound bind address baked into the
+    //    config YAML, so the standard try_spawn helper that allocates its own port is the wrong
+    //    tool here).
     step!("spawning coauth server bound to {bind_addr}");
     let mut command = Command::new(&coauth_bin);
     command
@@ -617,7 +608,9 @@ fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
 // which backend produced the handle.
 #[cfg(all(not(target_os = "windows"), feature = "test-with-containers"))]
 pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> {
-    use testcontainers::{GenericImage, clients::Cli, core::WaitFor};
+    use testcontainers::GenericImage;
+    use testcontainers::clients::Cli;
+    use testcontainers::core::WaitFor;
 
     // testcontainers' default client holds a leaked CLI handle, which is
     // exactly what we want for the duration of a single `cargo test`

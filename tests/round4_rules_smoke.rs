@@ -5,7 +5,8 @@
 //! analogous to `tests/round23_tree_scan.rs` but covering only round-4
 //! rules. Marked `#[ignore]` so it does not run on regular `cargo test`.
 
-use std::{fs, path::PathBuf};
+use std::fs;
+use std::path::PathBuf;
 
 use cotest::literal_scanner::scan_tree_round4;
 use cotest::round4_rules::Round4Rule;

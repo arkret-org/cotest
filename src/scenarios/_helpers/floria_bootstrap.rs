@@ -11,13 +11,11 @@
 //! coauth bootstrap's contract so the bridge matrix can fall back to the
 //! synthetic placeholder rows on stripped-down CI runners.
 
-use std::{
-    io::Write,
-    net::TcpListener,
-    path::PathBuf,
-    process::{Command, Stdio},
-    time::{Duration, Instant},
-};
+use std::io::Write;
+use std::net::TcpListener;
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;

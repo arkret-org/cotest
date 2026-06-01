@@ -12,8 +12,8 @@
 //!
 //!   * Realm-scoped event → projected.
 //!   * Circle-scoped event → DROPPED with `reason="circle_scoped"`.
-//!   * Realm event with `directory_visibility=members` AND the querying
-//!     actor is not a Realm member → projected as `hidden`.
+//!   * Realm event with `directory_visibility=members` AND the querying actor is not a Realm member
+//!     → projected as `hidden`.
 //!
 //! Returns `Ok(())` when the filter behaviour matches the contract.
 

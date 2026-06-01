@@ -10,15 +10,13 @@
 //! phase).
 //!
 //! Submodules — each is a single async helper representing one protocol phase:
-//! - [`events_keys_setup`] — `/api/v1/events` plus
-//!   `/api/v1/keys/{upload,query,claim}` flow.
-//! - [`device_messages`] — `/api/v1/device_messages` send / duplicate / list /
-//!   describe + the verification-event side path.
+//! - [`events_keys_setup`] — `/api/v1/events` plus `/api/v1/keys/{upload,query,claim}` flow.
+//! - [`device_messages`] — `/api/v1/device_messages` send / duplicate / list / describe + the
+//!   verification-event side path.
 //! - [`key_backups`] — `/api/v1/keys/backups/*` PUT / list / describe / GET.
 //! - [`backup_delete`] — terminal `DELETE /api/v1/keys/backups/{id}`.
 //! - [`blob`] — `/api/v1/blob/{upload,get}` (sha mismatch + happy-path range).
-//! - [`push`] — `/api/v1/push/{register-device,notify}` happy + missing-device
-//!   rejection.
+//! - [`push`] — `/api/v1/push/{register-device,notify}` happy + missing-device rejection.
 //! - [`moderation`] — `/api/v1/moderation/report` queueing.
 //!
 //! No private cross-phase helpers exist — every phase function takes only

@@ -10,7 +10,6 @@
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`.
 
 use anyhow::Result;
-
 use cotest::scenarios::high_assurance_realm_policy::{
     run_high_assurance_accepts_closed_restricted_quarantine,
     run_high_assurance_rejects_open_federation, run_standard_realm_accepts_open_federation,

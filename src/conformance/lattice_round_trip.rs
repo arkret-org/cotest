@@ -8,15 +8,15 @@
 //! lattice's `join`, and asserts that:
 //!
 //! - **OrSet**: deterministic add / remove / commute / idempotence.
-//! - **CasRegister**: concurrent distinct `set` ops produce a `Bottom`
-//!   with `kind = Conflict` and both move_ids in `Bottom.move_ids`.
+//! - **CasRegister**: concurrent distinct `set` ops produce a `Bottom` with `kind = Conflict` and
+//!   both move_ids in `Bottom.move_ids`.
 //! - **Counter**: PN counter sums increments and decrements deterministically.
-//! - **Fsm**: legal transitions advance state; illegal transitions produce
-//!   `Bottom` with `kind = InvalidTransition`.
-//! - **MvRegister**: concurrent `set` ops surface multiple values without
-//!   choosing a winner (vs. CasRegister which produces Bottom).
-//! - **OrderedLog**: per-issuer monotonic `append` produces a deterministic
-//!   linearization; gaps are tolerated.
+//! - **Fsm**: legal transitions advance state; illegal transitions produce `Bottom` with `kind =
+//!   InvalidTransition`.
+//! - **MvRegister**: concurrent `set` ops surface multiple values without choosing a winner (vs.
+//!   CasRegister which produces Bottom).
+//! - **OrderedLog**: per-issuer monotonic `append` produces a deterministic linearization; gaps are
+//!   tolerated.
 //!
 //! Each test constructs the minimal `LatticeOp` shape the implementation
 //! needs (no full Move signing required — `Lattice::join` reads the op

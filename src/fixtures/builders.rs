@@ -26,17 +26,15 @@
 //!
 //! ## Design notes
 //!
-//! - The builder accepts a borrowed [`ContrixServer`] rather than a higher
-//!   `TestHarness` wrapper (which the cotest crate does not currently
-//!   define). When a wrapper type is introduced the builder can be retargeted
-//!   without changing call sites — only the type bound moves.
-//! - `with_key_package(n)` is reserved for future KeyPackage publication. The
-//!   server currently does not expose a KeyPackage publish endpoint in the
-//!   dev-login fast path; storing the requested count lets scenarios assert
-//!   the value once the wire surface exists, without having to revisit the
-//!   builder shape.
-//! - The builder is intentionally `async`-free until `create()` so callers can
-//!   inspect / mutate the spec without holding a future.
+//! - The builder accepts a borrowed [`ContrixServer`] rather than a higher `TestHarness` wrapper
+//!   (which the cotest crate does not currently define). When a wrapper type is introduced the
+//!   builder can be retargeted without changing call sites — only the type bound moves.
+//! - `with_key_package(n)` is reserved for future KeyPackage publication. The server currently does
+//!   not expose a KeyPackage publish endpoint in the dev-login fast path; storing the requested
+//!   count lets scenarios assert the value once the wire surface exists, without having to revisit
+//!   the builder shape.
+//! - The builder is intentionally `async`-free until `create()` so callers can inspect / mutate the
+//!   spec without holding a future.
 
 use std::fmt;
 

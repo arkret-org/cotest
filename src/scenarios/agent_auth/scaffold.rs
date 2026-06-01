@@ -1,13 +1,12 @@
 //! SDK-pure agent_auth profile scaffold.
 //!
 //! - `runtime_attestation.kind = "self_asserted"` is accepted.
-//! - Any other `runtime_attestation.kind` MUST fail-closed at the
-//!   wire-validation stage (mirrors soland's 4xx + `schema_violation`).
-//! - The agent_key_proof branch carries a distinct `verification_method`
-//!   that resolves to the agent_principal DID, NOT the controller DID.
+//! - Any other `runtime_attestation.kind` MUST fail-closed at the wire-validation stage (mirrors
+//!   soland's 4xx + `schema_violation`).
+//! - The agent_key_proof branch carries a distinct `verification_method` that resolves to the
+//!   agent_principal DID, NOT the controller DID.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::{
     AgentKeyId, CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
     CAP_ACTION_AGENT_ACTION_REQUEST, CAP_ACTION_AGENT_DRAFT_PROPOSE, Did,

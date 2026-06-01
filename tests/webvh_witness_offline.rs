@@ -1,9 +1,8 @@
 //! CT-5 — `did:webvh` witness offline >24h + emergency recovery (entrypoint).
 //!
 //! Marked `#[ignore]` because the test depends on:
-//!   * a Rust-side mock-witness spawner (the JS mock at
-//!     `cotest/e2e/mocks/mock-witness.mjs` supports the `/health` flip
-//!     hook, but there's no Rust helper to spawn it yet);
+//!   * a Rust-side mock-witness spawner (the JS mock at `cotest/e2e/mocks/mock-witness.mjs`
+//!     supports the `/health` flip hook, but there's no Rust helper to spawn it yet);
 //!   * a starid health-state diagnostic endpoint;
 //!   * a max-evidence-age short-window override for the test;
 //!   * `rotation_kind="emergency"` tagging on the registrar.

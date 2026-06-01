@@ -11,14 +11,12 @@
 //! dev-feature yougen build at a *production* soland, that placeholder
 //! would leak onto the wire. T1.3 closes the hole on both sides:
 //!
-//! - **yougen** (`yougen/src/operation.rs`) — feature-gates the
-//!   placeholder attach on `dev_proof`; production builds default to
-//!   `ProofMode::Production`, and `api.rs::submit_event_envelope` runs a
-//!   pre-submit guard that fails closed when no real signer is wired.
-//! - **soland** (`soland/src/routing/events/event_log.rs`) — even when a
-//!   client claims `type="dev-proof"` or carries the `"a..b"`
-//!   placeholder JWS, production mode rejects the request with
-//!   `dev_proof_in_production` (`401 Unauthorized`).
+//! - **yougen** (`yougen/src/operation.rs`) — feature-gates the placeholder attach on `dev_proof`;
+//!   production builds default to `ProofMode::Production`, and `api.rs::submit_event_envelope` runs
+//!   a pre-submit guard that fails closed when no real signer is wired.
+//! - **soland** (`soland/src/routing/events/event_log.rs`) — even when a client claims
+//!   `type="dev-proof"` or carries the `"a..b"` placeholder JWS, production mode rejects the
+//!   request with `dev_proof_in_production` (`401 Unauthorized`).
 //!
 //! ## What this scenario asserts
 //!
@@ -30,13 +28,12 @@
 //! Two paths can produce the rejection, and both are acceptable signals
 //! that the production stance is healthy:
 //!
-//! 1. The proof check fires (`dev_proof_in_production`) — preferred,
-//!    since it directly proves the T1.3 soland guard is wired.
-//! 2. The auth wall fires first (`unauthenticated`) — also acceptable.
-//!    Production-mode soland does not expose `POST /api/v1/auth/dev-login`,
-//!    so without a real OAuth bearer the request never makes it to the
-//!    proof check. That itself is the production safety posture working
-//!    as intended.
+//! 1. The proof check fires (`dev_proof_in_production`) — preferred, since it directly proves the
+//!    T1.3 soland guard is wired.
+//! 2. The auth wall fires first (`unauthenticated`) — also acceptable. Production-mode soland does
+//!    not expose `POST /api/v1/auth/dev-login`, so without a real OAuth bearer the request never
+//!    makes it to the proof check. That itself is the production safety posture working as
+//!    intended.
 //!
 //! Either way, a 2xx here would mean a production soland accepted a
 //! dev-proof event — a hard security regression.

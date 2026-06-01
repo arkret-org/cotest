@@ -17,7 +17,10 @@
 //! negative cases (`expect_valid: false`) MUST fail. Any drift is a hard
 //! cotest failure.
 
-use std::{collections::HashMap, ffi::OsStr, fs, path::PathBuf};
+use std::collections::HashMap;
+use std::ffi::OsStr;
+use std::fs;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use jsonschema::{Registry, Resource};

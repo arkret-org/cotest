@@ -6,12 +6,10 @@
 //! chime mock receive, rebind handover, and revocation.
 //!
 //! The scenario in `cotest::scenarios::full_stack_e2e`:
-//!  - Always exercises the SDK contract surface (happy path + every
-//!    negative case).
-//!  - Best-effort drives the live five-binary stack (coauth + starid +
-//!    soland + teabay + floria) when **all** of COAUTH_BIN, STARID_BIN,
-//!    SOLAND_BIN, TEABAY_BIN, and FLORIA_BIN — plus their declared
-//!    `required_env_vars` — are present.
+//!  - Always exercises the SDK contract surface (happy path + every negative case).
+//!  - Best-effort drives the live five-binary stack (coauth + starid + soland + teabay + floria)
+//!    when **all** of COAUTH_BIN, STARID_BIN, SOLAND_BIN, TEABAY_BIN, and FLORIA_BIN — plus their
+//!    declared `required_env_vars` — are present.
 //!
 //! Marked `#[ignore]` because the live leg spawns real sibling binaries
 //! and an ephemeral Postgres docker container. The opt-in invocation is:

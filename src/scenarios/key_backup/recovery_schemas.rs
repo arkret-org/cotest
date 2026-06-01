@@ -6,7 +6,6 @@
 //! shape.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::{RECOVERY_POLICY_SCHEMA, RECOVERY_RECEIPT_SCHEMA, RecoverySessionId};
 
 pub async fn recovery_schemas_run() -> Result<()> {

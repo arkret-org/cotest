@@ -5,25 +5,24 @@
 //! `identity/identity-handles.md §3.2 / §17`.
 //!
 //! R3.2 wire-breaking cleanup:
-//!   * `claim_kind` enum lost `service_handle` — only `handle_binding` /
-//!     `organization_handle` remain. A `claim_kind=service_handle` envelope
-//!     MUST schema-reject (VECT-COT-6).
-//!   * `subject` MUST be a holder/principal DID. A `cx:actor:` / `cx:account:`
-//!     typed id or a non-DID resource id MUST reject (VECT-COT-7), enforced
-//!     by [`contrix_core::model::validate_handle_claim_subject`] and by the
-//!     schema `subject` pattern.
+//!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
+//!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
+//!   * `subject` MUST be a holder/principal DID. A `cx:actor:` / `cx:account:` typed id or a
+//!     non-DID resource id MUST reject (VECT-COT-7), enforced by
+//!     [`contrix_core::model::validate_handle_claim_subject`] and by the schema `subject` pattern.
 //!
 //! VECT-COT-6 also pins that the SDK `HandleClaimKind` enum no longer carries a
 //! `ServiceHandle` variant, so any attempt to parse `service_handle` into
 //! the typed `claim_kind` field fails.
+
+use std::ffi::OsStr;
+use std::fs;
 
 use anyhow::{Result, anyhow, bail};
 use contrix_core::Did;
 use contrix_core::model::{HandleClaimKind, validate_handle_claim_subject};
 use jsonschema::{Registry, Resource};
 use serde_json::{Value, json};
-use std::ffi::OsStr;
-use std::fs;
 
 use super::{looks_like_sha256_digest, spec_artifacts_root};
 

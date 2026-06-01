@@ -3,15 +3,13 @@
 //! CT-12 (2026-05-18): audit established that `ContrixServer::spawn*` already
 //! gives each scenario complete isolation:
 //!
-//! - a brand-new SUT process (or docker container) on a freshly-allocated
-//!   `free_port()`,
-//! - a unique blob root at `temp_dir().join("cotest-{name}-{port}-blobs")`
-//!   (the port is system-unique while the listener is held, so two parallel
-//!   spawns cannot collide on the path),
+//! - a brand-new SUT process (or docker container) on a freshly-allocated `free_port()`,
+//! - a unique blob root at `temp_dir().join("cotest-{name}-{port}-blobs")` (the port is
+//!   system-unique while the listener is held, so two parallel spawns cannot collide on the path),
 //! - a unique `did:web:{name}.cotest.local` service DID,
-//! - in-memory persistence inside `soland` so all `AccountRecord` /
-//!   `SpaceMetaRecord` / `ProjectionState` lives inside the spawned process
-//!   and is destroyed by `Drop for ContrixServer`.
+//! - in-memory persistence inside `soland` so all `AccountRecord` / `SpaceMetaRecord` /
+//!   `ProjectionState` lives inside the spawned process and is destroyed by `Drop for
+//!   ContrixServer`.
 //!
 //! That means AccountRecord / SpaceMetaRecord / ProjectionState **already**
 //! cannot leak between tests; there is no shared database or filesystem
@@ -19,28 +17,23 @@
 //!
 //! The only process-global state cotest itself owns is:
 //!
-//! - `NEXT_EVENT_SEQ` — a monotonic `AtomicU64`. Each call returns a unique
-//!   value; correctness is unaffected by parallelism, only event-id ordering
-//!   becomes interleaved.
-//! - The tracing subscriber (`OnceLock`) and the per-thread `ACTIVE_SCENARIO`
-//!   transcript binding in `transcripts.rs`. The thread-local design is
-//!   parallel-safe; only the global subscriber is shared (one-time init).
-//! - The artifact `transcript.ndjson` referenced by `COTEST_TRANSCRIPT_PATH`
-//!   / `COTEST_ARTIFACT_DIR`. NDJSON appends are line-atomic at the OS level,
-//!   but readers consuming the file by-scenario will see interleaved lines
-//!   when `--test-threads > 1`.
+//! - `NEXT_EVENT_SEQ` — a monotonic `AtomicU64`. Each call returns a unique value; correctness is
+//!   unaffected by parallelism, only event-id ordering becomes interleaved.
+//! - The tracing subscriber (`OnceLock`) and the per-thread `ACTIVE_SCENARIO` transcript binding in
+//!   `transcripts.rs`. The thread-local design is parallel-safe; only the global subscriber is
+//!   shared (one-time init).
+//! - The artifact `transcript.ndjson` referenced by `COTEST_TRANSCRIPT_PATH` /
+//!   `COTEST_ARTIFACT_DIR`. NDJSON appends are line-atomic at the OS level, but readers consuming
+//!   the file by-scenario will see interleaved lines when `--test-threads > 1`.
 //!
 //! `TestScaffold::fresh(label)` is the recommended entry point for new
 //! scenarios. It:
 //!
-//! 1. derives a per-call unique scenario name (`label-<seq>`) so transcript
-//!    and per-service log files do not collide when several tests run in
-//!    parallel,
-//! 2. spawns a fresh `ContrixServer` (single-node) — already isolated as
-//!    described above,
-//! 3. returns the server inside a guard that the scenario can keep on the
-//!    stack; when the scenario returns, the `Drop` impl on `ContrixServer`
-//!    tears the process and blob root down.
+//! 1. derives a per-call unique scenario name (`label-<seq>`) so transcript and per-service log
+//!    files do not collide when several tests run in parallel,
+//! 2. spawns a fresh `ContrixServer` (single-node) — already isolated as described above,
+//! 3. returns the server inside a guard that the scenario can keep on the stack; when the scenario
+//!    returns, the `Drop` impl on `ContrixServer` tears the process and blob root down.
 //!
 //! Existing scenarios that call `ContrixServer::spawn(label)` directly
 //! remain valid — the harness contract already isolates them. The scaffold

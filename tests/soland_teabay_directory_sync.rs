@@ -4,8 +4,8 @@
 //! bootstrap. Test entrypoint is still `#[ignore]` because the stack
 //! requires:
 //!   - docker (for coauth's ephemeral Postgres),
-//!   - sibling `coauth.exe` + `starid.exe` + `teabay.exe` binaries
-//!     (or matching `*_BIN` env overrides),
+//!   - sibling `coauth.exe` + `starid.exe` + `teabay.exe` binaries (or matching `*_BIN` env
+//!     overrides),
 //!   - a reachable `DATABASE_URL` for teabay.
 //!
 //! When those prereqs are in place, run with:

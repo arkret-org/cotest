@@ -2,15 +2,14 @@
 //!
 //! Spec §3.4.2 normative rules:
 //!
-//! - `allow_any` — no additional constraint on the child's
-//!   `effective_scope` / `scope_circle_id`.
-//! - `require_e2ee` — child's `effective_scope` MUST be MLS-backed: it
-//!   MUST be a Circle scope, or the Realm-default MLS scope when the
-//!   parent Realm declares `Realm.encryption_profile=mls_rfc9420`.
-//! - `require_same_scope` — child's `scope_circle_id` MUST equal the
-//!   parent Space's `scope_circle_id` (including both being `None`).
-//! - `require_scope_circle_id` — child's `scope_circle_id` MUST equal the
-//!   named Circle in the policy.
+//! - `allow_any` — no additional constraint on the child's `effective_scope` / `scope_circle_id`.
+//! - `require_e2ee` — child's `effective_scope` MUST be MLS-backed: it MUST be a Circle scope, or
+//!   the Realm-default MLS scope when the parent Realm declares
+//!   `Realm.encryption_profile=mls_rfc9420`.
+//! - `require_same_scope` — child's `scope_circle_id` MUST equal the parent Space's
+//!   `scope_circle_id` (including both being `None`).
+//! - `require_scope_circle_id` — child's `scope_circle_id` MUST equal the named Circle in the
+//!   policy.
 //!
 //! The SDK exposes the [`ChildScopePolicy`] enum but no reducer-pure
 //! `enforce_child_scope_policy` helper; this scenario defines the

@@ -11,29 +11,26 @@
 //!
 //! ## Wiring
 //!
-//! - Call [`init_transcript_writer`] once per scenario; the returned
-//!   [`TranscriptGuard`] flushes + closes the per-scenario file on drop.
-//! - The first call also initialises the global tracing subscriber with the
-//!   JSON formatter + `RUST_LOG`-honouring env filter (default `info`).
-//! - Subsequent calls reuse the global subscriber and just register a new
-//!   per-scenario file + bind the active scenario for the calling thread.
-//! - Inside instrumented call sites, use [`record_vector_event`] to emit
-//!   `kind` / `payload` / `expected` / `actual` as JSON-encoded fields.
+//! - Call [`init_transcript_writer`] once per scenario; the returned [`TranscriptGuard`] flushes +
+//!   closes the per-scenario file on drop.
+//! - The first call also initialises the global tracing subscriber with the JSON formatter +
+//!   `RUST_LOG`-honouring env filter (default `info`).
+//! - Subsequent calls reuse the global subscriber and just register a new per-scenario file + bind
+//!   the active scenario for the calling thread.
+//! - Inside instrumented call sites, use [`record_vector_event`] to emit `kind` / `payload` /
+//!   `expected` / `actual` as JSON-encoded fields.
 
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    fs::{self, File, OpenOptions},
-    io::{self, BufWriter, Write},
-    path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
-};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufWriter, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use serde_json::Value;
-use tracing_subscriber::{
-    EnvFilter,
-    fmt::{MakeWriter, format::FmtSpan},
-};
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::format::FmtSpan;
 
 const DEFAULT_TARGET_SUBDIR: &str = "target/conformance-transcripts";
 const ENV_FILTER_FALLBACK: &str = "info";

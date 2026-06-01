@@ -13,9 +13,10 @@
 //! shim) stays on the existing `federation_three_server_fork_quarantine`
 //! track; this entrypoint pins the protocol invariants.
 
+use std::collections::BTreeSet;
+
 use anyhow::Result;
 use serial_test::serial;
-use std::collections::BTreeSet;
 
 /// One simulated frontier event — the minimum a partition-recovery
 /// observation needs: who wrote what at which HLC, and whether the

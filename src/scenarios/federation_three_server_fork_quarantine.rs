@@ -1,89 +1,74 @@
 //! CT-1 — Three-server federation fork quarantine.
 //!
 //! Spec references:
-//!   - `contrix-spec/spec/v1/zh/sync/federation.md` §4.5
-//!     "Fork Detection / Frontier Exchange":
-//!       * federation peers periodically exchange `{space_id, heads[],
-//!         max_hlc, witness_receipts[]}` frontier digests.
-//!       * "若两端历史包含相同 `event_id` 但不同 hash，接收方 MUST
-//!         quarantine 并以 `duplicate_conflict` 报告。"
-//!       * "可疑 remote 输入 MAY 在 quarantine 队列中暂存，直到签名、
-//!         schema、capability、fork resolution 与 operator policy 全部
-//!         通过。"
-//!   - `contrix-spec/spec/v1/zh/models/space-and-place.md` (Space cell-
-//!     family lattice rules — concurrent cas-register / mv-register Moves
-//!     on the same `cell_subject` MUST converge via the lattice merge
-//!     rule, and conflicting "winning" branches are determined by the
+//!   - `contrix-spec/spec/v1/zh/sync/federation.md` §4.5 "Fork Detection / Frontier Exchange":
+//!       * federation peers periodically exchange `{space_id, heads[], max_hlc,
+//!         witness_receipts[]}` frontier digests.
+//!       * "若两端历史包含相同 `event_id` 但不同 hash，接收方 MUST quarantine 并以
+//!         `duplicate_conflict` 报告。"
+//!       * "可疑 remote 输入 MAY 在 quarantine 队列中暂存，直到签名、 schema、capability、fork
+//!         resolution 与 operator policy 全部 通过。"
+//!   - `contrix-spec/spec/v1/zh/models/space-and-place.md` (Space cell- family lattice rules —
+//!     concurrent cas-register / mv-register Moves on the same `cell_subject` MUST converge via the
+//!     lattice merge rule, and conflicting "winning" branches are determined by the
 //!     `state_resolution` profile, not by acceptance order).
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Scenario walk-through (3 instances: alpha, beta, gamma)
 //!
-//! 1.  Spawn three real soland binaries via the
-//!     `TestServerGroup::try_multi_external` fast-path (mirrors the
-//!     existing 2-server `federation_two_node_e1.rs`, extended to 3).
-//!     Each instance gets a distinct `service_did`.
+//! 1. Spawn three real soland binaries via the `TestServerGroup::try_multi_external` fast-path
+//!    (mirrors the existing 2-server `federation_two_node_e1.rs`, extended to 3). Each instance
+//!    gets a distinct `service_did`.
 //!
-//! 2.  Wire pairwise federation peer trust:
-//!         alpha ↔ beta, alpha ↔ gamma, beta ↔ gamma.
-//!     For now this is "they can address each other by URL"; once soland
-//!     ships outbound HTTP federation (E2E-FED-1) this step becomes a
-//!     POST to `/api/v1/federation/peers` on each pair.
+//! 2. Wire pairwise federation peer trust: alpha ↔ beta, alpha ↔ gamma, beta ↔ gamma. For now this
+//!    is "they can address each other by URL"; once soland ships outbound HTTP federation
+//!    (E2E-FED-1) this step becomes a POST to `/api/v1/federation/peers` on each pair.
 //!
-//! 3.  Alice creates space `S` on alpha. The space is pushed to beta and
-//!     gamma so all three reach the same initial frontier.
+//! 3. Alice creates space `S` on alpha. The space is pushed to beta and gamma so all three reach
+//!    the same initial frontier.
 //!
-//! 4.  Concurrent conflicting Moves on the **same `cell_subject`**:
-//!       * alice from alpha submits a `cx.flow.move` (or `cx.space.title`
-//!         cas-register Move) targeting `S/cell:title`.
-//!       * bob's anchor request races on beta (independent actor, same
-//!         cell, conflicting value).
+//! 4. Concurrent conflicting Moves on the **same `cell_subject`**:
+//!       * alice from alpha submits a `cx.flow.move` (or `cx.space.title` cas-register Move)
+//!         targeting `S/cell:title`.
+//!       * bob's anchor request races on beta (independent actor, same cell, conflicting value).
 //!       * charlie's on gamma (third independent value).
 //!     Each server initially accepts its own Move into its local frontier
 //!     because none has yet seen the others. This yields three diverged
 //!     heads.
 //!
-//! 5.  Drive forced sync via federation push: each server pushes its
-//!     anchored leaves to the other two. On receipt of a Move that shares
-//!     an `event_id` (or a `cell_subject` causal slot) with a
-//!     differently-hashed local Move, soland MUST quarantine the
-//!     conflicting branch per spec §4.5 and emit `duplicate_conflict` in
-//!     the rejected[] / quarantine[] response field.
+//! 5. Drive forced sync via federation push: each server pushes its anchored leaves to the other
+//!    two. On receipt of a Move that shares an `event_id` (or a `cell_subject` causal slot) with a
+//!    differently-hashed local Move, soland MUST quarantine the conflicting branch per spec §4.5
+//!    and emit `duplicate_conflict` in the rejected[] / quarantine[] response field.
 //!
-//! 6.  After all three have exchanged frontiers, the cell's cas-register
-//!     reducer + the state-resolution profile picks **one** canonical
-//!     winner. The other two values remain quarantined (visible via the
-//!     server's quarantine endpoint) until an operator reconciles them.
+//! 6. After all three have exchanged frontiers, the cell's cas-register reducer + the
+//!    state-resolution profile picks **one** canonical winner. The other two values remain
+//!    quarantined (visible via the server's quarantine endpoint) until an operator reconciles them.
 //!
-//! 7.  Asserts (when fully wired):
-//!       * All three servers report the same `heads[]` for `S` (modulo
-//!         witness-receipt ordering).
-//!       * The minority two branches are present in each server's
-//!         quarantine queue with `reason_code=duplicate_conflict` (or
-//!         the spec-equivalent code in soland's wire vocabulary).
-//!       * No server's `accepted[]` includes more than one of the three
-//!         conflicting Moves.
+//! 7. Asserts (when fully wired):
+//!       * All three servers report the same `heads[]` for `S` (modulo witness-receipt ordering).
+//!       * The minority two branches are present in each server's quarantine queue with
+//!         `reason_code=duplicate_conflict` (or the spec-equivalent code in soland's wire
+//!         vocabulary).
+//!       * No server's `accepted[]` includes more than one of the three conflicting Moves.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Status — `#[ignore]`'d
 //!
 //! Prerequisite blockers (soland-side):
-//!   * **E2E-FED-1**: federation outbound push is currently a stub. Until
-//!     `broadcast_move_to_peers` does real `POST /api/v1/federation/push-
-//!     operations` with RFC 9421 signatures, the three nodes will not
-//!     actually exchange their concurrent Moves and the "fork detected"
-//!     branch is unreachable.
-//!   * **E2E-FED-2**: inbound RFC 9421 signature verification — required
-//!     for each receiving server to trust the pushed Moves before
-//!     quarantining vs. accepting.
-//!   * **Fork quarantine surface**: soland does not yet expose a
-//!     `GET /api/v1/federation/quarantine` (or `quarantine[]` field on
-//!     `/api/v1/federation/push-operations` responses). The §4.5
-//!     `duplicate_conflict` taxonomy is spec-only today.
-//!   * **State-resolution profile selection**: 3-way merge of conflicting
-//!     cas-register Moves needs the `state_resolution` profile to be
-//!     deterministic across nodes; current soland only exposes the
-//!     lattice merge at single-node level.
+//!   * **E2E-FED-1**: federation outbound push is currently a stub. Until `broadcast_move_to_peers`
+//!     does real `POST /api/v1/federation/push- operations` with RFC 9421 signatures, the three
+//!     nodes will not actually exchange their concurrent Moves and the "fork detected" branch is
+//!     unreachable.
+//!   * **E2E-FED-2**: inbound RFC 9421 signature verification — required for each receiving server
+//!     to trust the pushed Moves before quarantining vs. accepting.
+//!   * **Fork quarantine surface**: soland does not yet expose a `GET
+//!     /api/v1/federation/quarantine` (or `quarantine[]` field on
+//!     `/api/v1/federation/push-operations` responses). The §4.5 `duplicate_conflict` taxonomy is
+//!     spec-only today.
+//!   * **State-resolution profile selection**: 3-way merge of conflicting cas-register Moves needs
+//!     the `state_resolution` profile to be deterministic across nodes; current soland only exposes
+//!     the lattice merge at single-node level.
 //!
 //! This file scaffolds the full test body with `unimplemented!()` once
 //! the three-node spawn succeeds, so an implementer landing E2E-FED-1

@@ -4,18 +4,14 @@
 //! device registration) and §4 (push rule engine + blind wakeup invariants).
 //!
 //! Goal:
-//!   1. Alice's chime-like client registers a push device with soland (the
-//!      principal server) using the standard `cx.push.register_device`
-//!      operation. soland forwards the registration to floria (the push
-//!      gateway) per the principal/push bridge contract.
-//!   2. A message-creation event in a Space alice is in triggers soland's
-//!      notify rule.
-//!   3. Soland calls floria's `POST /api/v1/push/notify` with a blind-wakeup
-//!      envelope (no sender DID, no message body, no Space id — only
-//!      `push_target_id`, `wakeup_kind`, and `devices[]`).
-//!   4. Floria's `custom` pushkin dispatches to a mock HTTPS receiver we
-//!      stand up in-process; the receiver MUST observe exactly one POST
-//!      whose body satisfies §4.5 blind-wakeup invariants.
+//!   1. Alice's chime-like client registers a push device with soland (the principal server) using
+//!      the standard `cx.push.register_device` operation. soland forwards the registration to
+//!      floria (the push gateway) per the principal/push bridge contract.
+//!   2. A message-creation event in a Space alice is in triggers soland's notify rule.
+//!   3. Soland calls floria's `POST /api/v1/push/notify` with a blind-wakeup envelope (no sender
+//!      DID, no message body, no Space id — only `push_target_id`, `wakeup_kind`, and `devices[]`).
+//!   4. Floria's `custom` pushkin dispatches to a mock HTTPS receiver we stand up in-process; the
+//!      receiver MUST observe exactly one POST whose body satisfies §4.5 blind-wakeup invariants.
 //!
 //! Why `#[ignore]`-only:
 //!
@@ -33,16 +29,12 @@
 //! [`crate::scenarios::_helpers::external_binary::skip_reason`] so a missing
 //! binary surfaces as a descriptive `bail!` rather than a hang.
 
-use std::{
-    io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread,
-    time::{Duration, Instant},
-};
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
@@ -61,17 +53,16 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
         bail!(reason.describe("soland"));
     }
 
-    // 1. Mock HTTPS receiver — floria's `custom` pushkin will POST blind
-    //    wakeups to this URL. We run it on plain HTTP (127.0.0.1:<port>) and
-    //    rely on `custom` pushkin's allow-http branch (configured via the
-    //    rendered floria config below) so we don't need a TLS cert just to
+    // 1. Mock HTTPS receiver — floria's `custom` pushkin will POST blind wakeups to this URL. We
+    //    run it on plain HTTP (127.0.0.1:<port>) and rely on `custom` pushkin's allow-http branch
+    //    (configured via the rendered floria config below) so we don't need a TLS cert just to
     //    exercise the wire shape.
     let receiver = MockPushReceiver::spawn().context("spawn mock push receiver")?;
     let receiver_url = receiver.url().to_owned();
 
-    // 2. Spawn floria with a config whose `custom` pushkin points at
-    //    `receiver_url`, so a live floria process will fan out into our
-    //    in-process sink instead of the placeholder health-only URL.
+    // 2. Spawn floria with a config whose `custom` pushkin points at `receiver_url`, so a live
+    //    floria process will fan out into our in-process sink instead of the placeholder
+    //    health-only URL.
     let floria = match spawn_floria_with_custom_pushkin_url(Some(&receiver_url)).await? {
         Some(handle) => handle,
         None => bail!(
@@ -81,10 +72,9 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     };
     let floria_gateway_url = floria.base_url().to_owned();
 
-    // 3. Spawn soland configured with floria as its outbound push gateway.
-    //    Soland reads `SOLAND_PUSH_GATEWAY_URL` to learn where to forward
-    //    `cx.push.notify` calls. The helper keeps SOLAND_SPEC.extra_env and
-    //    layers this per-run URL on top.
+    // 3. Spawn soland configured with floria as its outbound push gateway. Soland reads
+    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `cx.push.notify` calls. The helper
+    //    keeps SOLAND_SPEC.extra_env and layers this per-run URL on top.
     let _soland = match try_spawn_with_extra_env(
         &SOLAND_SPEC,
         &[("SOLAND_PUSH_GATEWAY_URL", floria_gateway_url.as_str())],
@@ -98,10 +88,9 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
         ),
     };
 
-    // 4. The process-level wiring is now live: mock receiver URL is injected
-    //    into floria config, and soland receives SOLAND_PUSH_GATEWAY_URL.
-    //    The remaining unblock requires soland's public test API for device
-    //    registration/message creation to be finalized.
+    // 4. The process-level wiring is now live: mock receiver URL is injected into floria config,
+    //    and soland receives SOLAND_PUSH_GATEWAY_URL. The remaining unblock requires soland's
+    //    public test API for device registration/message creation to be finalized.
     //
     bail!(
         "TODO(CT-7): helper-level wiring is unblocked and live services were spawned \

@@ -10,16 +10,13 @@
 //!   cargo test --test soak_test -- --ignored
 //!
 //! Beyond the time cost, the test depends on:
-//!   * the shared persistent-storage harness hook (also blocking CT-16
-//!     and CT-17);
-//!   * per-process memory introspection (cross-platform RSS reading, or
-//!     a soland Prometheus `/metrics` endpoint);
-//!   * the `hdrhistogram` crate for latency percentile sampling (not
-//!     yet a cotest dep);
-//!   * an anchor-store row-count probe (admin endpoint or Pg query
-//!     helper);
-//!   * dedicated CI capacity (self-hosted runner or nightly cron — not
-//!     a shared GitHub Actions micro-VM).
+//!   * the shared persistent-storage harness hook (also blocking CT-16 and CT-17);
+//!   * per-process memory introspection (cross-platform RSS reading, or a soland Prometheus
+//!     `/metrics` endpoint);
+//!   * the `hdrhistogram` crate for latency percentile sampling (not yet a cotest dep);
+//!   * an anchor-store row-count probe (admin endpoint or Pg query helper);
+//!   * dedicated CI capacity (self-hosted runner or nightly cron — not a shared GitHub Actions
+//!     micro-VM).
 //!
 //! See `cotest::scenarios::soak_test` for the full sketch + threshold
 //! constant calibration plan.

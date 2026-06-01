@@ -5,7 +5,6 @@
 //! `series_seq_not_monotonic`.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::error::ERROR_CODE_SERIES_SEQ_NOT_MONOTONIC;
 
 fn is_monotonic_advance(tip: u64, candidate: u64) -> bool {

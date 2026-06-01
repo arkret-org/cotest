@@ -7,17 +7,14 @@
 //!   * `artifacts/schemas/account-subscribe-frame.schema.json`
 //!
 //! R3.2 wire-breaking changes pinned here:
-//!   * `MemberIdentity` no longer carries `primary_handle` / `handles[]`;
-//!     handle lifecycle is governed solely by `cx.schema.handle_claim.v1`.
-//!     A payload that re-introduces those fields MUST schema-reject
-//!     (VECT-COT-8 — reason `member_identity_handle_field_forbidden`).
-//!   * Payload field `identity_state_digest` is renamed to
-//!     `identity_payload_digest` (carrier cache key,
-//!     [`IdentityPayloadCarrier::carrier_sha256`]).
-//!   * `expected_state_digest` is the writer-observed effective-set guard
-//!     computed by [`member_identity_effective_set_digest`] — it is NOT the
-//!     `identity_payload_digest` and NOT the roster
-//!     `member_display_state_digest`.
+//!   * `MemberIdentity` no longer carries `primary_handle` / `handles[]`; handle lifecycle is
+//!     governed solely by `cx.schema.handle_claim.v1`. A payload that re-introduces those fields
+//!     MUST schema-reject (VECT-COT-8 — reason `member_identity_handle_field_forbidden`).
+//!   * Payload field `identity_state_digest` is renamed to `identity_payload_digest` (carrier cache
+//!     key, [`IdentityPayloadCarrier::carrier_sha256`]).
+//!   * `expected_state_digest` is the writer-observed effective-set guard computed by
+//!     [`member_identity_effective_set_digest`] — it is NOT the `identity_payload_digest` and NOT
+//!     the roster `member_display_state_digest`.
 //!
 //! Each vector pins one wire-level invariant of the
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
@@ -581,8 +578,8 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
 /// A payload that re-introduces either field MUST schema-reject. We pin
 /// the rejection at two layers:
 ///   1. The typed SDK struct (`#[serde(deny_unknown_fields)]`).
-///   2. The artifact JSON Schema (`additionalProperties: false`), exercised
-///      by the schema-validation suite over `member-identity.schema.json`.
+///   2. The artifact JSON Schema (`additionalProperties: false`), exercised by the
+///      schema-validation suite over `member-identity.schema.json`.
 ///
 /// The wire reason code is `member_identity_handle_field_forbidden`.
 pub fn run_member_identity_handle_field_forbidden_vector() -> Result<()> {

@@ -1,34 +1,27 @@
 //! CT-8 — Soland + Teabay directory sync latency.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/discovery/discovery-directory.md` §2 —
-//!     Directory Service ingest contract; principal servers push actor /
-//!     space announces, directory indexes them, search queries return
-//!     fresh fields within the ingest latency budget.
-//!   - `contrix-spec/spec/v1/zh/discovery/profiles-presence.md` §2 —
-//!     `cx.profile.update` (display_name / bio / avatar_url) writes
-//!     actor projection on the principal; the directory MUST observe the
-//!     new fields within the publish-to-search latency budget (target
-//!     ≤ 30s for the canonical "edit profile, then friend finds you"
-//!     UX flow).
+//!   - `contrix-spec/spec/v1/zh/discovery/discovery-directory.md` §2 — Directory Service ingest
+//!     contract; principal servers push actor / space announces, directory indexes them, search
+//!     queries return fresh fields within the ingest latency budget.
+//!   - `contrix-spec/spec/v1/zh/discovery/profiles-presence.md` §2 — `cx.profile.update`
+//!     (display_name / bio / avatar_url) writes actor projection on the principal; the directory
+//!     MUST observe the new fields within the publish-to-search latency budget (target ≤ 30s for
+//!     the canonical "edit profile, then friend finds you" UX flow).
 //!
 //! Scenario walk-through (when fully wired):
-//!   1. Boot soland (principal server) and teabay (directory) with
-//!      teabay's discovery ingest subscribed to soland's announce
-//!      stream (push mode per directory describe).
-//!   2. Register alice on soland; alice updates her profile via
-//!      `POST /api/v1/account/profile` with new `display_name` and
-//!      `bio` (the soland endpoint exists today —
+//!   1. Boot soland (principal server) and teabay (directory) with teabay's discovery ingest
+//!      subscribed to soland's announce stream (push mode per directory describe).
+//!   2. Register alice on soland; alice updates her profile via `POST /api/v1/account/profile` with
+//!      new `display_name` and `bio` (the soland endpoint exists today —
 //!      `soland/src/routing/identity/account.rs::update_profile`).
-//!   3. Soland persists the update and emits the announce event;
-//!      teabay's ingest worker picks it up.
-//!   4. Within 30s (use `eventually` from the harness with a 30s
-//!      timeout + 500ms poll), `POST /api/v1/directory/search-actors`
-//!      on the *teabay* base URL with `{"query": "<new display_name>"}`
-//!      returns alice with the new display_name and bio fields.
-//!   5. Repeat for a profile update to a different field (avatar_url) —
-//!      asserts that re-indexing handles partial updates, not just
-//!      first-write.
+//!   3. Soland persists the update and emits the announce event; teabay's ingest worker picks it
+//!      up.
+//!   4. Within 30s (use `eventually` from the harness with a 30s timeout + 500ms poll), `POST
+//!      /api/v1/directory/search-actors` on the *teabay* base URL with `{"query": "<new
+//!      display_name>"}` returns alice with the new display_name and bio fields.
+//!   5. Repeat for a profile update to a different field (avatar_url) — asserts that re-indexing
+//!      handles partial updates, not just first-write.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: scenario body wired to CT-6's `FourServiceStack`. Test entrypoint

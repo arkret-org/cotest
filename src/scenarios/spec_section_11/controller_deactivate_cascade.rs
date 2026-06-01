@@ -8,7 +8,6 @@
 //!     4. runtime endpoint revocation (DID Document service entry removal)
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::events::kinds::AGENT_DEACTIVATE;
 
 /// Canonical fan-out chain for controller deactivate.

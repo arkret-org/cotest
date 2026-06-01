@@ -1,20 +1,15 @@
 //! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
 //! and `session_grant_exchange_uses_configured_coauth_introspection`.
-//!
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration as StdDuration;
+use std::{env, thread};
+
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
-use std::{
-    env,
-    io::{Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread,
-    time::Duration as StdDuration,
-};
 
 use crate::harness::expect_json;
 

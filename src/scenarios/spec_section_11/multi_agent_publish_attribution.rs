@@ -5,8 +5,9 @@
 //! reducer MUST NOT collapse two agents owned by the same controller
 //! into a single author projection.
 
-use anyhow::{Result, anyhow};
 use std::collections::HashSet;
+
+use anyhow::{Result, anyhow};
 
 #[derive(Clone, Debug)]
 struct PublishedEvent {

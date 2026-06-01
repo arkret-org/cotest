@@ -9,55 +9,44 @@
 //!
 //! Spec: there is no dedicated soak-test spec; the relevant invariants
 //! are operational, not protocol:
-//!   - heap growth MUST be sub-linear in event count once the steady
-//!     state is reached (a small per-actor and per-space working set is
-//!     expected, but a linear-in-N leak is a bug);
-//!   - p50 / p95 read latency for `GET /api/v1/messages?space_id=...`
-//!     MUST stay within a constant factor of the empty-store latency
-//!     as the log grows (index-backed read, not full scan);
-//!   - anchor-store row growth MUST be linear in event count (no
-//!     pathological write amplification), but the rate MUST be stable
-//!     (no super-linear gc-then-rebuild storms).
+//!   - heap growth MUST be sub-linear in event count once the steady state is reached (a small
+//!     per-actor and per-space working set is expected, but a linear-in-N leak is a bug);
+//!   - p50 / p95 read latency for `GET /api/v1/messages?space_id=...` MUST stay within a constant
+//!     factor of the empty-store latency as the log grows (index-backed read, not full scan);
+//!   - anchor-store row growth MUST be linear in event count (no pathological write amplification),
+//!     but the rate MUST be stable (no super-linear gc-then-rebuild storms).
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Scenario walk-through (when fully wired):
 //!
-//!   1. Spawn soland with persistent storage (Postgres preferred, for
-//!      index analysis). Set `SOLAND_PROFILING=1` if/when soland grows
-//!      that hook, otherwise rely on external `/proc/.../status` or
-//!      `wmic process get` polling.
+//!   1. Spawn soland with persistent storage (Postgres preferred, for index analysis). Set
+//!      `SOLAND_PROFILING=1` if/when soland grows that hook, otherwise rely on external
+//!      `/proc/.../status` or `wmic process get` polling.
 //!   2. Setup phase (not counted toward soak timing):
 //!        - Register 100 actors (`@soak0` … `@soak99`).
 //!        - alice creates a "soak" space, invites all 100.
 //!        - All 100 accept; membership steady state reached.
 //!   3. Soak phase:
 //!        - 100 concurrent worker tasks (tokio task per actor).
-//!        - Each task sends 10k messages over a compressed timeline
-//!          (e.g. one message per 10 ms per actor = 100 s total wall
-//!          time at full throttle, simulating a peak-hour conversation).
+//!        - Each task sends 10k messages over a compressed timeline (e.g. one message per 10 ms per
+//!          actor = 100 s total wall time at full throttle, simulating a peak-hour conversation).
 //!        - Total: 1,000,000 events.
 //!   4. Sampling (concurrent with step 3, runs at 1 Hz):
-//!        - Heap: read `RSS` from
-//!          `/proc/<pid>/status` on Linux,
-//!          `wmic process where ProcessId=<pid> get WorkingSetSize` on
-//!          Windows,
-//!          `task_info` via libproc on macOS.
-//!        - Latency: every 5 s, fire 10 `GET /api/v1/messages?space_id=
-//!          <space>&limit=50` requests, record p50 / p95.
-//!        - Anchor store: every 30 s, query
-//!          `SELECT count(*) FROM anchor_store` (or equivalent).
-//!   5. Steady-state window: drop the first 10% of samples (warm-up) and
-//!      the last 10% (drain). On the middle 80%:
-//!        - heap RSS slope (linear regression) MUST satisfy
-//!          `slope_bytes_per_event < THRESHOLD` (e.g. 64 bytes/event,
-//!          tunable);
+//!        - Heap: read `RSS` from `/proc/<pid>/status` on Linux, `wmic process where
+//!          ProcessId=<pid> get WorkingSetSize` on Windows, `task_info` via libproc on macOS.
+//!        - Latency: every 5 s, fire 10 `GET /api/v1/messages?space_id= <space>&limit=50` requests,
+//!          record p50 / p95.
+//!        - Anchor store: every 30 s, query `SELECT count(*) FROM anchor_store` (or equivalent).
+//!   5. Steady-state window: drop the first 10% of samples (warm-up) and the last 10% (drain). On
+//!      the middle 80%:
+//!        - heap RSS slope (linear regression) MUST satisfy `slope_bytes_per_event < THRESHOLD`
+//!          (e.g. 64 bytes/event, tunable);
 //!        - p50 latency slope MUST be near-zero (allow 10% drift);
-//!        - p95 latency slope MUST satisfy
-//!          `slope_ms_per_kevents < THRESHOLD_P95` (e.g. 0.5
+//!        - p95 latency slope MUST satisfy `slope_ms_per_kevents < THRESHOLD_P95` (e.g. 0.5
 //!          ms/k-events);
 //!        - anchor-store growth MUST be ≈1 row/event ±5%.
-//!   6. Cooldown: drain the worker queue, send 100 final reads, assert
-//!      they all return without error and within 2× the steady-state p95.
+//!   6. Cooldown: drain the worker queue, send 100 final reads, assert they all return without
+//!      error and within 2× the steady-state p95.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: scaffolded as `#[ignore]`. Opt-in only via `--profile soak`
@@ -67,54 +56,39 @@
 //!
 //! Prerequisite blockers:
 //!
-//!   * **Persistent storage harness hook.** Same blocker as CT-16 and
-//!     CT-17: `ContrixServer::spawn` doesn't plumb `DATABASE_URL` today.
-//!     Without persistence, the soak data evaporates between samples
-//!     and the test measures only the in-memory hashmap, which has
-//!     fundamentally different scaling behaviour than the Pg-backed
-//!     production path.
-//!   * **Per-process memory introspection.** Cross-platform RSS
-//!     reading is fiddly (Linux `/proc`, Windows WMIC / PERF_NT,
-//!     macOS `task_info`). Options:
-//!       (a) inline platform-specific code in the test (~80 LOC + cfg
-//!           gates),
-//!       (b) depend on a crate like `sysinfo` or `memory-stats`,
-//!       (c) require soland to expose a `/metrics` endpoint with
-//!           `process_resident_memory_bytes` (Prometheus convention)
-//!           and just scrape it.
-//!     Option (c) is cleanest but adds a soland feature; (b) is the
-//!     pragmatic default for the harness.
-//!   * **Latency probe instrumentation.** The test needs reliable
-//!     timing for the latency probe (warmup, percentile reservoir,
-//!     no-allocation hot path). The `hdrhistogram` crate is the
+//!   * **Persistent storage harness hook.** Same blocker as CT-16 and CT-17: `ContrixServer::spawn`
+//!     doesn't plumb `DATABASE_URL` today. Without persistence, the soak data evaporates between
+//!     samples and the test measures only the in-memory hashmap, which has fundamentally different
+//!     scaling behaviour than the Pg-backed production path.
+//!   * **Per-process memory introspection.** Cross-platform RSS reading is fiddly (Linux `/proc`,
+//!     Windows WMIC / PERF_NT, macOS `task_info`). Options: (a) inline platform-specific code in
+//!     the test (~80 LOC + cfg gates), (b) depend on a crate like `sysinfo` or `memory-stats`, (c)
+//!     require soland to expose a `/metrics` endpoint with `process_resident_memory_bytes`
+//!     (Prometheus convention) and just scrape it. Option (c) is cleanest but adds a soland
+//!     feature; (b) is the pragmatic default for the harness.
+//!   * **Latency probe instrumentation.** The test needs reliable timing for the latency probe
+//!     (warmup, percentile reservoir, no-allocation hot path). The `hdrhistogram` crate is the
 //!     standard choice; not yet a cotest dep.
-//!   * **Anchor-store row-count diagnostic.** Need either an admin
-//!     endpoint that returns it, or a Pg query helper (acceptable but
-//!     couples test to Pg schema, same caveat as CT-16).
-//!   * **CI capacity.** A 100 s wall-clock test that runs ~100k
-//!     events / sec needs an isolated runner — not your shared GitHub
-//!     Actions micro-VM. Either:
+//!   * **Anchor-store row-count diagnostic.** Need either an admin endpoint that returns it, or a
+//!     Pg query helper (acceptable but couples test to Pg schema, same caveat as CT-16).
+//!   * **CI capacity.** A 100 s wall-clock test that runs ~100k events / sec needs an isolated
+//!     runner — not your shared GitHub Actions micro-VM. Either:
 //!       - dedicated self-hosted runner with the `soak` label,
 //!       - nightly cron job rather than per-PR,
-//!       - or local-only with an explicit `cargo test -- --ignored
-//!         soak_100x10k`.
+//!       - or local-only with an explicit `cargo test -- --ignored soak_100x10k`.
 //!     This test SHOULD NOT run on every push.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! `--profile soak` is wired into `cotest/scripts/run-cotest.ps1` and
 //! the cargo filter is the test fn name below
 //! (`soak_100_actors_10k_messages`). Future implementer's checklist:
-//!   1. Add `spawn_with_postgres` to the harness (shared with CT-16 /
-//!      CT-17).
-//!   2. Pick a memory-probe strategy (sysinfo crate is the lowest-cost
-//!      path).
+//!   1. Add `spawn_with_postgres` to the harness (shared with CT-16 / CT-17).
+//!   2. Pick a memory-probe strategy (sysinfo crate is the lowest-cost path).
 //!   3. Add `hdrhistogram = "7.5"` to cotest dev-dependencies.
-//!   4. Add an anchor-store row-count probe (admin endpoint or Pg
-//!      query helper).
-//!   5. Replace each `unimplemented!("step N: …")` below with the real
-//!      call.
-//!   6. Tune the four THRESHOLD_* constants (heap slope, p50 slope,
-//!      p95 slope, anchor growth) once you have a clean reference run.
+//!   4. Add an anchor-store row-count probe (admin endpoint or Pg query helper).
+//!   5. Replace each `unimplemented!("step N: …")` below with the real call.
+//!   6. Tune the four THRESHOLD_* constants (heap slope, p50 slope, p95 slope, anchor growth) once
+//!      you have a clean reference run.
 //!
 //! Track: `_claude_todos.md` row CT-18.
 

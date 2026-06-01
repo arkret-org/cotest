@@ -2,16 +2,15 @@
 //!
 //! Spec (B-C, head 37ce729) hardens the user key-backup wire:
 //!
-//!   - **series_chain_broken** — PUT with a `supersedes_digest` that
-//!     does not match the on-server `supersedes` envelope's digest.
+//!   - **series_chain_broken** — PUT with a `supersedes_digest` that does not match the on-server
+//!     `supersedes` envelope's digest.
 //!   - **series_seq_not_monotonic** — out-of-order `series_seq`.
-//!   - **series_predecessor_not_found** — PUT references a `supersedes`
-//!     envelope id that does not exist on the server.
-//!   - **first_backup_gate** — inception key retire is rejected unless
-//!     a `backup_class=did_recovery` envelope has been published first.
-//!   - **post_reset_stale** — cross-signing reset accepted ↦ existing
-//!     `secret_storage` envelopes have 24h to publish a successor, else
-//!     recovery flow rejects with `backup_post_reset_stale`.
+//!   - **series_predecessor_not_found** — PUT references a `supersedes` envelope id that does not
+//!     exist on the server.
+//!   - **first_backup_gate** — inception key retire is rejected unless a
+//!     `backup_class=did_recovery` envelope has been published first.
+//!   - **post_reset_stale** — cross-signing reset accepted ↦ existing `secret_storage` envelopes
+//!     have 24h to publish a successor, else recovery flow rejects with `backup_post_reset_stale`.
 //!
 //! Also: `recovery_policy` + `recovery_receipt` schema id acceptance.
 //!

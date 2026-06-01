@@ -10,7 +10,6 @@
 //! agrees with the SDK validator on every input.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::Did;
 
 const LEGAL: &[&str] = &[

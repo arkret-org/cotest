@@ -12,14 +12,12 @@
 //! kill / timeout / disk-full simulation against `std::process::Child`
 //! or `std::io::Error::other`. Three problems:
 //!
-//! * No shared graceful-shutdown helper, so a scenario that forgot to
-//!   wait for SIGTERM-with-timeout would leave a zombie process between
-//!   `cargo test --test-threads=1` invocations.
-//! * Errors were shaped inconsistently (`ErrorKind::Other` vs
-//!   `StorageFull` vs a hand-rolled `anyhow!`), making the "did we
-//!   actually trigger the failure mode" assertion fuzzy.
-//! * No place to register new chaos kinds — every new fault type meant
-//!   another bespoke helper module.
+//! * No shared graceful-shutdown helper, so a scenario that forgot to wait for SIGTERM-with-timeout
+//!   would leave a zombie process between `cargo test --test-threads=1` invocations.
+//! * Errors were shaped inconsistently (`ErrorKind::Other` vs `StorageFull` vs a hand-rolled
+//!   `anyhow!`), making the "did we actually trigger the failure mode" assertion fuzzy.
+//! * No place to register new chaos kinds — every new fault type meant another bespoke helper
+//!   module.
 //!
 //! ## How to use it
 //!
@@ -181,14 +179,12 @@ impl ShutdownOutcome {
 ///
 /// The sequence is:
 ///
-/// 1. Send a graceful termination signal (SIGTERM on Unix, gentle
-///    `Child::kill` on Windows — the platform doesn't expose anything
-///    softer for an arbitrary subprocess that we didn't create with
-///    a job-object).
-/// 2. Wait up to `timeout` for the child to exit, polling every 50ms
-///    so a fast graceful shutdown returns promptly.
-/// 3. If the wait deadline elapses, escalate to `Child::kill` and
-///    wait for the SIGKILL path.
+/// 1. Send a graceful termination signal (SIGTERM on Unix, gentle `Child::kill` on Windows — the
+///    platform doesn't expose anything softer for an arbitrary subprocess that we didn't create
+///    with a job-object).
+/// 2. Wait up to `timeout` for the child to exit, polling every 50ms so a fast graceful shutdown
+///    returns promptly.
+/// 3. If the wait deadline elapses, escalate to `Child::kill` and wait for the SIGKILL path.
 pub fn graceful_shutdown_test(child: &mut Child, timeout: Duration) -> ShutdownOutcome {
     kill_with_term(child);
     match wait_with_timeout(child, timeout) {
@@ -254,8 +250,9 @@ pub fn assert_clean_exit(outcome: &ShutdownOutcome) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::process::Command;
+
+    use super::*;
 
     #[test]
     fn chaos_kind_labels_are_stable_and_distinct() {

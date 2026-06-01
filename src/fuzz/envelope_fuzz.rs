@@ -15,11 +15,9 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
+use contrix_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, ProtocolSchemaRegistry, SNAPSHOT_SCHEMA, schema};
 use serde::Serialize;
 use serde_json::{Value, json};
-
-use contrix_core::schema;
-use contrix_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, ProtocolSchemaRegistry, SNAPSHOT_SCHEMA};
 
 /// Reusable schema registry. The artifact-backed registry is preferred (it
 /// has the published schemas mounted) but falls back to the empty default
@@ -115,14 +113,13 @@ impl FuzzEventInput {
 ///
 /// Three sub-paths are exercised back-to-back so a panic in any of them is
 /// caught:
-///   1. Raw `serde_json::from_slice` over the random bytes (catches panics
-///      in the wire deserializer).
-///   2. `serde_json::from_value::<EventEnvelope>` over the `Arbitrary`-shaped
-///      JSON (catches `From<Value>` / `TryFrom` panics, e.g. ID parsers
-///      that `unwrap()` on malformed inputs).
-///   3. `ProtocolSchemaRegistry::validate_value(EVENT_SCHEMA, ...)` over the
-///      same JSON value (catches schema-validator panics on pathological
-///      shapes — recursive arrays, deeply nested objects, etc.).
+///   1. Raw `serde_json::from_slice` over the random bytes (catches panics in the wire
+///      deserializer).
+///   2. `serde_json::from_value::<EventEnvelope>` over the `Arbitrary`-shaped JSON (catches
+///      `From<Value>` / `TryFrom` panics, e.g. ID parsers that `unwrap()` on malformed inputs).
+///   3. `ProtocolSchemaRegistry::validate_value(EVENT_SCHEMA, ...)` over the same JSON value
+///      (catches schema-validator panics on pathological shapes — recursive arrays, deeply nested
+///      objects, etc.).
 pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
         let _ = serde_json::from_slice::<contrix_core::EventEnvelope>(data);

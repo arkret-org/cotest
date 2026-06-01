@@ -4,24 +4,19 @@
 //! `cargo test --test live_circle_tombstone_cascade -- --ignored`).
 //!
 //! Scenario (Phase B scaffold):
-//!   1. Boot soland (+ coauth) via the existing CT-6 `FourServiceStack`
-//!      bootstrap helper.
+//!   1. Boot soland (+ coauth) via the existing CT-6 `FourServiceStack` bootstrap helper.
 //!   2. Create a Realm and a Circle inside that Realm.
 //!   3. Add two members to the Circle (strict subset of the Realm).
 //!   4. Create N child Flows whose `scope_circle_id` references the Circle.
-//!   5. Issue `cx.circle.tombstone` against the Circle. Assert:
-//!        a) `Circle.state == Tombstoned` in the projection,
-//!        b) any further write into the Circle is rejected with
-//!           `failed_precondition` / sub-reason `circle_not_active`,
-//!        c) child Flow projections surface as unavailable through the
-//!           sync API (`history_visibility` clamped, deliverability flag
-//!           cleared) per CXP-0007 cascade rules,
-//!        d) Circle members see the Circle in their client-side list as
-//!           `tombstoned` (not silently disappeared).
-//!   6. Repeat the exercise one level up: tombstone the parent Realm with
-//!      a *fresh* Realm + Circle and assert every Circle in that Realm is
-//!      cascade-tombstoned (CXP-0007: Realm tombstone implies Circle
-//!      tombstone for every Circle whose `realm_id` matches).
+//!   5. Issue `cx.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
+//!      the projection, b) any further write into the Circle is rejected with `failed_precondition`
+//!      / sub-reason `circle_not_active`, c) child Flow projections surface as unavailable through
+//!      the sync API (`history_visibility` clamped, deliverability flag cleared) per CXP-0007
+//!      cascade rules, d) Circle members see the Circle in their client-side list as `tombstoned`
+//!      (not silently disappeared).
+//!   6. Repeat the exercise one level up: tombstone the parent Realm with a *fresh* Realm + Circle
+//!      and assert every Circle in that Realm is cascade-tombstoned (CXP-0007: Realm tombstone
+//!      implies Circle tombstone for every Circle whose `realm_id` matches).
 //!
 //! Gating mirrors `tests/soland_teabay_directory_sync.rs` / `full_stack_e2e.rs`:
 //! the test is `#[ignore]` AND silently `bail!`s with a descriptive message
@@ -36,10 +31,9 @@ use contrix_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleState, CircleSymbol, Did,
     RealmId,
 };
+use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 use serde_json::{Value, json};
 use serial_test::serial;
-
-use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.

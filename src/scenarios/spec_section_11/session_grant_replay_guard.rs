@@ -4,8 +4,9 @@
 //! `nonce` MUST be rejected. The replay guard MUST NOT silently treat
 //! the duplicate as a no-op.
 
-use anyhow::{Result, anyhow};
 use std::collections::HashSet;
+
+use anyhow::{Result, anyhow};
 
 /// Simulate the reducer's nonce store. The guard MUST flag a duplicate
 /// on second insert.

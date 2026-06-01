@@ -15,8 +15,7 @@
 //! first place it surfaces (instead of inscrutable cross-service signature
 //! failures in federation / replication tests).
 
-use contrix_core::canonical::canonical_json_bytes;
-use contrix_core::canonical::canonical_sha256;
+use contrix_core::canonical::{canonical_json_bytes, canonical_sha256};
 use serde_json::{Value, json};
 
 /// A canonical-hash test vector: the input payload shape, the wire

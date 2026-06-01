@@ -2,18 +2,18 @@
 //! (§0.11 of `_before_todos.md`).
 //!
 //! 2 vectors:
-//!   - `cx.vector.encoding.cursor_opaque.core.v1` — default stateful body
-//!     `{v, purpose, t, x, h}`.
-//!   - `cx.vector.encoding.cursor_opaque.stateless_profile.v1` —
-//!     stateless body gated by `cx.profile.stateless_cursor.v1`.
+//!   - `cx.vector.encoding.cursor_opaque.core.v1` — default stateful body `{v, purpose, t, x, h}`.
+//!   - `cx.vector.encoding.cursor_opaque.stateless_profile.v1` — stateless body gated by
+//!     `cx.profile.stateless_cursor.v1`.
 //!
 //! Core cursor schema MUST reject stateless bodies; stateless body MUST
 //! only be accepted when the server has advertised
 //! `cx.profile.stateless_cursor.v1`.
 
+use std::collections::BTreeMap;
+
 use anyhow::{Result, anyhow, bail};
 use contrix_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
-use std::collections::BTreeMap;
 
 pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "cx.vector.encoding.cursor_opaque.core.v1";
 pub const VECTOR_ID_CURSOR_OPAQUE_STATELESS_PROFILE: &str =

@@ -13,32 +13,28 @@
 //!    - `Destination-Trust-Domain = cx:trust_domain:b`
 //!    - `Request-Canonical-Digest = sha256:<hash>`
 //!    - request body `X`, carrying `idempotency_key=idem-c3-001`
-//! 2. **Server B** receives the request, runs the cache key composition
-//!    (`source_did + dest_did + request_canonical_digest + idempotency_key
+//! 2. **Server B** receives the request, runs the cache key composition (`source_did + dest_did +
+//!    request_canonical_digest + idempotency_key
 //!     + origin_key_state_digest`), and caches the response under both the
 //!    *strict key* (with `origin_key_state_digest`) and the
 //!    *canonical-replay key* (without it).
-//! 3. **Server A** revokes its service key — simulated by flipping the
-//!    `origin_key_state_digest` from `state-A` to `state-B`.
-//! 4. **Server A** replays the same idempotency key. The strict-key
-//!    lookup misses (key state advanced) but the canonical-replay key
-//!    hits → the receiver returns the cached body marked with
-//!    `reason_code=historical_only`, `historical_only=true`, AND records
-//!    zero new reducer side effects.
+//! 3. **Server A** revokes its service key — simulated by flipping the `origin_key_state_digest`
+//!    from `state-A` to `state-B`.
+//! 4. **Server A** replays the same idempotency key. The strict-key lookup misses (key state
+//!    advanced) but the canonical-replay key hits → the receiver returns the cached body marked
+//!    with `reason_code=historical_only`, `historical_only=true`, AND records zero new reducer side
+//!    effects.
 //!
 //! Assertions (non-`#[ignore]`, wire-shape gates):
 //!
-//! - cache key composition includes `origin_key_state_digest` (strict key
-//!   diverges across key-state rotation while the canonical-replay key
-//!   stays stable).
-//! - the signing-transcript fragment built via
-//!   [`federation_trust_domain_transcript_fragment`] is byte-stable
-//!   across calls and contains the three header names in lowercase
-//!   quoted form plus the source/destination/canonical-hash values.
-//! - the cached body returned on canonical-replay carries
-//!   `reason_code=historical_only` AND `historical_only=true`, and the
-//!   recorded "new reducer side effect" counter stays at the original
-//!   value (zero increment on replay).
+//! - cache key composition includes `origin_key_state_digest` (strict key diverges across key-state
+//!   rotation while the canonical-replay key stays stable).
+//! - the signing-transcript fragment built via [`federation_trust_domain_transcript_fragment`] is
+//!   byte-stable across calls and contains the three header names in lowercase quoted form plus the
+//!   source/destination/canonical-hash values.
+//! - the cached body returned on canonical-replay carries `reason_code=historical_only` AND
+//!   `historical_only=true`, and the recorded "new reducer side effect" counter stays at the
+//!   original value (zero increment on replay).
 //!
 //! The full live multi-server e2e (docker / live soland + teabay
 //! processes, network HTTP, real key rotation) stays `#[ignore]` with
@@ -51,11 +47,11 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow};
+use contrix_core::canonical::canonical_json_bytes;
 use contrix_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_HISTORICAL_ONLY,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
-    Hash, TypedTrustDomainId, canonical::canonical_json_bytes,
-    federation_trust_domain_transcript_fragment,
+    Hash, TypedTrustDomainId, federation_trust_domain_transcript_fragment,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -126,8 +122,8 @@ impl FederationCacheKey {
 /// Minimal in-memory federation receiver. Tracks:
 /// - strict-key → cached response,
 /// - canonical-replay-key → cached response,
-/// - a "reducer side-effects fired" counter so the scenario can assert
-///   the historical_only replay path does NOT fire fresh side effects.
+/// - a "reducer side-effects fired" counter so the scenario can assert the historical_only replay
+///   path does NOT fire fresh side effects.
 #[derive(Debug, Default)]
 pub struct SimulatedFederationReceiver {
     /// This receiver's configured trust domain. Inbound requests whose
@@ -151,13 +147,11 @@ impl SimulatedFederationReceiver {
     /// body and increments `side_effects_fired` on a fresh accept.
     ///
     /// Outcomes:
-    /// - strict-key cache hit → return cached body unchanged (no new
-    ///   side effects),
-    /// - canonical-replay-key cache hit (different `origin_key_state_digest`)
-    ///   → return cached body marked `reason_code=historical_only`,
-    ///   `historical_only=true` (no new side effects),
-    /// - cache miss → mint a fresh response, populate both cache slots,
-    ///   increment `side_effects_fired`.
+    /// - strict-key cache hit → return cached body unchanged (no new side effects),
+    /// - canonical-replay-key cache hit (different `origin_key_state_digest`) → return cached body
+    ///   marked `reason_code=historical_only`, `historical_only=true` (no new side effects),
+    /// - cache miss → mint a fresh response, populate both cache slots, increment
+    ///   `side_effects_fired`.
     ///
     /// The receiver also enforces the
     /// `cross_domain_replay_rejected` guard if `destination_trust_domain`
@@ -329,8 +323,8 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
         ));
     }
 
-    // 2) Replay with the SAME key state — strict cache hit; same body,
-    //    no new side effects, no historical_only marker.
+    // 2) Replay with the SAME key state — strict cache hit; same body, no new side effects, no
+    //    historical_only marker.
     let same_state_replay = server_b.receive(
         &initial_key,
         dest_td.as_str(),
@@ -348,8 +342,8 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
         ));
     }
 
-    // 3) Server A revokes its service key (origin_key_state_digest flips
-    //    from state-A to state-B) and replays the same idempotency key.
+    // 3) Server A revokes its service key (origin_key_state_digest flips from state-A to state-B)
+    //    and replays the same idempotency key.
     let historical_replay = server_b.receive(
         &post_rotation_key,
         dest_td.as_str(),
@@ -380,8 +374,8 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
         ));
     }
 
-    // 4) Cross-trust-domain replay (wrong destination) — MUST reject
-    //    with cross_domain_replay_rejected.
+    // 4) Cross-trust-domain replay (wrong destination) — MUST reject with
+    //    cross_domain_replay_rejected.
     let wrong_dest = server_b.receive(
         &post_rotation_key,
         "cx:trust_domain:wrong",
@@ -518,19 +512,17 @@ mod tests {
     #[test]
     #[ignore = "TODO(round4-federation-e2e-docker): needs live soland + teabay + key rotation harness"]
     fn live_multi_server_federation_historical_only_docker_e2e() {
-        // 1. Boot a 2-service test rig (soland-A + teabay-B) with
-        //    `cx:trust_domain:a` and `cx:trust_domain:b` respectively.
-        // 2. soland-A signs and POSTs a federation_transaction request
-        //    to teabay-B carrying Source-/Destination-Trust-Domain
-        //    headers + Request-Canonical-Digest + Idempotency-Key.
-        // 3. Confirm teabay-B caches the response (200 accepted),
-        //    side effects fire (directory row inserted, etc.).
+        // 1. Boot a 2-service test rig (soland-A + teabay-B) with `cx:trust_domain:a` and
+        //    `cx:trust_domain:b` respectively.
+        // 2. soland-A signs and POSTs a federation_transaction request to teabay-B carrying
+        //    Source-/Destination-Trust-Domain headers + Request-Canonical-Digest + Idempotency-Key.
+        // 3. Confirm teabay-B caches the response (200 accepted), side effects fire (directory row
+        //    inserted, etc.).
         // 4. Rotate soland-A's service key (origin_key_state_digest flips).
         // 5. Replay the same request bytes.
-        // 6. Assert teabay-B returns the cached body with
-        //    `reason_code=historical_only` AND no new directory rows /
-        //    push fan-out / index updates.
-        // 7. Assert the recorded message-signature transcript includes
-        //    the three trust-domain headers (lowercase, RFC 9421 §2.2).
+        // 6. Assert teabay-B returns the cached body with `reason_code=historical_only` AND no new
+        //    directory rows / push fan-out / index updates.
+        // 7. Assert the recorded message-signature transcript includes the three trust-domain
+        //    headers (lowercase, RFC 9421 §2.2).
     }
 }

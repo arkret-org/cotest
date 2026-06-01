@@ -10,12 +10,9 @@
 //! Three claim provenances are supported:
 //!
 //! * [`ClaimKind::SelfClaimed`]    — implementor self-attests.
-//! * [`ClaimKind::CotestVerified`] — claim was produced by a successful
-//!                                   `cotest` suite run.
-//! * [`ClaimKind::Experimental`]   — claim is intentionally outside the v1
-//!                                   conformance catalogue; role partitioning
-//!                                   still applies when the id is in the
-//!                                   spec.
+//! * [`ClaimKind::CotestVerified`] — claim was produced by a successful `cotest` suite run.
+//! * [`ClaimKind::Experimental`]   — claim is intentionally outside the v1 conformance catalogue;
+//!   role partitioning still applies when the id is in the spec.
 //!
 //! ## Example
 //!

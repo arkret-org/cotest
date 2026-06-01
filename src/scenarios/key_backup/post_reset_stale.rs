@@ -8,7 +8,6 @@
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Duration, Utc};
-
 use contrix_core::error::ERROR_CODE_BACKUP_POST_RESET_STALE;
 
 /// Returns true when an existing envelope is "stale" relative to the

@@ -8,21 +8,17 @@
 //!
 //! ## Wiring
 //!
-//! - The harness writes to `$COTEST_TRANSCRIPT_PATH` (or
-//!   `$COTEST_ARTIFACT_DIR/transcript.ndjson`) if those env vars are set.
-//! - On panic the panic hook installed by [`install_failure_dump_hook`]
-//!   reads back the transcript and writes a pretty-printed timeline to
-//!   stderr before re-raising via the original hook.
-//! - The unit test below covers the parse + format path against an
-//!   inline ndjson buffer, so the failure path is exercised without
-//!   depending on a real server.
+//! - The harness writes to `$COTEST_TRANSCRIPT_PATH` (or `$COTEST_ARTIFACT_DIR/transcript.ndjson`)
+//!   if those env vars are set.
+//! - On panic the panic hook installed by [`install_failure_dump_hook`] reads back the transcript
+//!   and writes a pretty-printed timeline to stderr before re-raising via the original hook.
+//! - The unit test below covers the parse + format path against an inline ndjson buffer, so the
+//!   failure path is exercised without depending on a real server.
 
-use std::{
-    fmt::{self, Display, Formatter},
-    fs,
-    path::{Path, PathBuf},
-    sync::Once,
-};
+use std::fmt::{self, Display, Formatter};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Once;
 
 use anyhow::{Context, Result};
 use serde_json::Value;

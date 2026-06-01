@@ -1,24 +1,20 @@
-use std::{
-    collections::BTreeMap,
-    fs,
-    fs::OpenOptions,
-    future::Future,
-    mem,
-    net::TcpListener,
-    path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, Instant},
-};
+use std::collections::BTreeMap;
+use std::fs::OpenOptions;
+use std::future::Future;
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
 use contrix_http_client::{Auth, Client as SdkClient};
-use reqwest::{
-    Client as HttpClient, Request, RequestBuilder, StatusCode,
-    header::{HeaderMap, HeaderValue},
-};
+use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::{Client as HttpClient, Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;

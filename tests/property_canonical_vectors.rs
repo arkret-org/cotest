@@ -3,17 +3,16 @@
 //! Complements the deterministic `canonical_hash_convergence.rs` KAT
 //! suite by generating *random* JSON objects and asserting:
 //!
-//!  1. **Key order independence.** Encoding the same logical object in
-//!     two distinct key orders MUST yield byte-identical canonical
-//!     bytes.
-//!  2. **Idempotency.** Two consecutive `canonical_json_bytes` calls
-//!     on the same value MUST agree byte-for-byte.
-//!  3. **Hash convergence.** `canonical_sha256` is a function of the
-//!     logical value alone, not its representation order.
-//!  4. **Unicode invariance.** Strings containing emoji and CJK
-//!     characters survive the encode → decode round-trip.
-//!  5. **Unknown-field preservation.** Canonicalisation is encoding,
-//!     not schema-filtering — extra/unknown fields stay in the bytes.
+//!  1. **Key order independence.** Encoding the same logical object in two distinct key orders MUST
+//!     yield byte-identical canonical bytes.
+//!  2. **Idempotency.** Two consecutive `canonical_json_bytes` calls on the same value MUST agree
+//!     byte-for-byte.
+//!  3. **Hash convergence.** `canonical_sha256` is a function of the logical value alone, not its
+//!     representation order.
+//!  4. **Unicode invariance.** Strings containing emoji and CJK characters survive the encode →
+//!     decode round-trip.
+//!  5. **Unknown-field preservation.** Canonicalisation is encoding, not schema-filtering —
+//!     extra/unknown fields stay in the bytes.
 //!
 //! Cases per property are capped at 64.
 

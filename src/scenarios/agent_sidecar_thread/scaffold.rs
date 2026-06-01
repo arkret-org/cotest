@@ -1,16 +1,14 @@
 //! SDK-pure agent_sidecar_thread profile scaffold.
 //!
 //! Pins:
-//!   1. `PROFILE_AGENT_SIDECAR_THREAD` is spelled exactly per
-//!      registry (`cx.profile.agent_sidecar_thread.v1`).
-//!   2. The home-policy constant carries the canonical value
-//!      `context_realm_preferred` (B-F).
+//!   1. `PROFILE_AGENT_SIDECAR_THREAD` is spelled exactly per registry
+//!      (`cx.profile.agent_sidecar_thread.v1`).
+//!   2. The home-policy constant carries the canonical value `context_realm_preferred` (B-F).
 //!   3. `SidecarCircleId` round-trips through the SDK validator.
-//!   4. The 3 sidecar capability actions are all present and form a
-//!      cohesive ensure / write / publish fan-out group.
+//!   4. The 3 sidecar capability actions are all present and form a cohesive ensure / write /
+//!      publish fan-out group.
 
 use anyhow::{Result, anyhow};
-
 use contrix_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,

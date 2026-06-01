@@ -103,7 +103,8 @@ pub fn run_high_assurance_rejects_open_federation() -> Result<()> {
 
 /// R3.4 — the three other `federation_policy` values are accepted on a
 /// high_assurance Realm. These mirror the reducer-side positive cases
-/// in `soland/tests/high_assurance_policy.rs::high_assurance_accepts_closed_restricted_and_quarantine`.
+/// in `soland/tests/high_assurance_policy.
+/// rs::high_assurance_accepts_closed_restricted_and_quarantine`.
 pub fn run_high_assurance_accepts_closed_restricted_quarantine() -> Result<()> {
     for fp in [
         FederationPolicy::Closed,

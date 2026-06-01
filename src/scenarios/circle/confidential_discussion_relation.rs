@@ -4,8 +4,7 @@
 //! the narrow-discussion Flow that lives in a Circle scope. This
 //! scenario pins:
 //!   - the `RelationKind::ConfidentialDiscussionOf` variant exists,
-//!   - it serialises to the canonical `confidential_discussion_of`
-//!     snake_case literal,
+//!   - it serialises to the canonical `confidential_discussion_of` snake_case literal,
 //!   - it round-trips through `serde_json`.
 
 use anyhow::{Result, anyhow};

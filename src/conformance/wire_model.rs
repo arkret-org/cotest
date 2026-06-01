@@ -91,11 +91,10 @@ fn expected_reason(vector: &Value) -> Option<&str> {
 /// the or-set's active tags by their op_ids (Move ids). It enforces:
 ///   * grant ops add `(peer, scope)` tagged by Move id
 ///   * revoke ops remove the referenced op_ids causally
-///   * `consent_active` preconditions on downstream Moves resolve against
-///     the cell's join, with `scope=any` acting as a peer-scoped wildcard
+///   * `consent_active` preconditions on downstream Moves resolve against the cell's join, with
+///     `scope=any` acting as a peer-scoped wildcard
 ///   * `accept` preconditioned Moves always have an active matching tag
-///   * `reject` Moves carry `reason_code=consent_required` and always have
-///     no matching active tag
+///   * `reject` Moves carry `reason_code=consent_required` and always have no matching active tag
 pub fn run_consent_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("consent_fixture.json")?;
     validate_profile(&fixture, "cx.profile.consent_vectors.v1")?;
@@ -808,21 +807,18 @@ fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Re
 /// effective_anchor_view, signed compaction). The validator pins these
 /// invariants per vector:
 ///
-/// * **multi-leaf effective_anchor_view is a pure function of the input
-///   leaves** — `expected_effective_anchor_view.leaves` MUST equal the
-///   set of input Anchor ids; `frontier` MUST equal the leaves whenever
-///   the leaves are concurrent (no Anchor in the input list is an
+/// * **multi-leaf effective_anchor_view is a pure function of the input leaves** —
+///   `expected_effective_anchor_view.leaves` MUST equal the set of input Anchor ids; `frontier`
+///   MUST equal the leaves whenever the leaves are concurrent (no Anchor in the input list is an
 ///   ancestor of another in the same input list).
-/// * **signed compaction is join-equivalent** — when a `signed_compaction`
-///   is present, its `frontier` and `state_root` MUST exactly match the
-///   `expected_effective_anchor_view`.
+/// * **signed compaction is join-equivalent** — when a `signed_compaction` is present, its
+///   `frontier` and `state_root` MUST exactly match the `expected_effective_anchor_view`.
 /// * **bottom diagnostics are preserved across compaction** —
 ///   `signed_compaction.bottom_diagnostics` MUST be a superset of
-///   `expected_effective_anchor_view.bottom_diagnostics` (compaction is
-///   information-preserving for ⊥ cells; dropping one is a structural
-///   error).
-/// * **compaction Anchor id is content-addressed** — id starts with
-///   `cx:anchor:sha256:` and the digest is 64 lowercase hex chars.
+///   `expected_effective_anchor_view.bottom_diagnostics` (compaction is information-preserving for
+///   ⊥ cells; dropping one is a structural error).
+/// * **compaction Anchor id is content-addressed** — id starts with `cx:anchor:sha256:` and the
+///   digest is 64 lowercase hex chars.
 ///
 /// Negative vectors carry a `drift_compaction` with `expected_rejection_reason`
 /// — the validator computes the actual drift (state_root or
@@ -1068,15 +1064,13 @@ fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
 /// black-box JSON form a SUT can consume and validate against. The validator
 /// pins these structural invariants:
 ///
-/// * each happy-path vector declares one of the spec's four normative
-///   `AnchorerValue` shapes (`single_did` / `threshold` / `open_set` /
-///   `mixed`) with the matching shape-keyed payload;
+/// * each happy-path vector declares one of the spec's four normative `AnchorerValue` shapes
+///   (`single_did` / `threshold` / `open_set` / `mixed`) with the matching shape-keyed payload;
 /// * the threshold vector carries `k <= n` and a members[] of length n;
-/// * the concurrent-reconfig vector declares ≥ 2 distinct anchored ops and
-///   `expected.outcome = bottom` with `bottom_kind = Conflict`;
-/// * negative vectors carry one of the spec's recognised admission rejection
-///   reasons (signature mismatch / threshold below quorum / k>n geometry /
-///   registry drift).
+/// * the concurrent-reconfig vector declares ≥ 2 distinct anchored ops and `expected.outcome =
+///   bottom` with `bottom_kind = Conflict`;
+/// * negative vectors carry one of the spec's recognised admission rejection reasons (signature
+///   mismatch / threshold below quorum / k>n geometry / registry drift).
 ///
 /// All four happy-path shapes + the concurrent-reconfig + the four negative
 /// admission failures MUST be covered.
@@ -1294,10 +1288,10 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
 /// / manual-repair semantics described in `event-auth-state-resolution.md` §5.7.
 /// Validator pins:
 ///
-/// * happy-path repair Move declares `head_in` matching the prior_bottom
-///   move_ids (no drift) and a `recovery_capability` ref;
-/// * self-authorising-winner vector declares ≥ 2 concurrent ops and
-///   `outcome = bottom` (lattice MUST NOT pick winner from payload);
+/// * happy-path repair Move declares `head_in` matching the prior_bottom move_ids (no drift) and a
+///   `recovery_capability` ref;
+/// * self-authorising-winner vector declares ≥ 2 concurrent ops and `outcome = bottom` (lattice
+///   MUST NOT pick winner from payload);
 /// * manual repair vector carries an `anchorer_endorsement` ref;
 /// * negative vectors cover missing-recovery-capability and head_in drift.
 pub fn run_conflict_repair_fixture_suite() -> Result<()> {
@@ -1465,18 +1459,16 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
 /// validating the or-set behaviour of `cx.component.mls.covered_frontier.v1`
 /// across MLS commit Moves, governance Moves, and rotation. Pins:
 ///
-/// * accumulate vector adds three ops where two share the same tag (idempotent
-///   re-add); `expected.active_tags` MUST be the unique-tag set;
-/// * rotation vector adds two distinct tags then removes one; remaining
-///   active_tag MUST equal the un-removed tag;
-/// * governance Move vector declares zero preconditions (governance Moves are
-///   NOT blocked on covered_frontier);
-/// * mls_commit_three_cells declares three distinct cells in `effects[]` with
-///   one shared move_id;
-/// * E2EE missing-precondition negative declares no `covered_frontier`
-///   precondition + reason_code `fail_precondition`;
-/// * E2EE stale-attestation negative declares an attests_to that's NOT in
-///   active_tags_at_send_time.
+/// * accumulate vector adds three ops where two share the same tag (idempotent re-add);
+///   `expected.active_tags` MUST be the unique-tag set;
+/// * rotation vector adds two distinct tags then removes one; remaining active_tag MUST equal the
+///   un-removed tag;
+/// * governance Move vector declares zero preconditions (governance Moves are NOT blocked on
+///   covered_frontier);
+/// * mls_commit_three_cells declares three distinct cells in `effects[]` with one shared move_id;
+/// * E2EE missing-precondition negative declares no `covered_frontier` precondition + reason_code
+///   `fail_precondition`;
+/// * E2EE stale-attestation negative declares an attests_to that's NOT in active_tags_at_send_time.
 pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("mls_move_covered_frontier_fixture.json")?;
     validate_profile(&fixture, "cx.profile.mls_covered_frontier_vectors.v1")?;
@@ -1763,18 +1755,15 @@ fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
 ///
 /// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
 /// `capability_tiers`. The fixture asserts:
-///   * core surfaces are implied by claiming `cx.profile.contrix_v1.core` —
-///     events_sync / identity_registry / service_discovery MUST appear and
-///     the discovery client MAY call ops in those surfaces;
-///   * extension surfaces (post-C16 split: blob_storage, realtime_media,
-///     moderation_reports) MUST be advertised explicitly — a core-only SUT
-///     MUST NOT auto-imply them, and discovery clients MUST gate extension
-///     calls on the advertised set;
-///   * `interop_bridge` tier surfaces (applet, mimi_interop) MUST be
-///     advertised only when the external protocol is supported, and bridge
-///     advertisement is INDEPENDENT of core/extension advertisement (no
-///     implication via `bridges_to`).
-///
+///   * core surfaces are implied by claiming `cx.profile.contrix_v1.core` — events_sync /
+///     identity_registry / service_discovery MUST appear and the discovery client MAY call ops in
+///     those surfaces;
+///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST
+///     be advertised explicitly — a core-only SUT MUST NOT auto-imply them, and discovery clients
+///     MUST gate extension calls on the advertised set;
+///   * `interop_bridge` tier surfaces (applet, mimi_interop) MUST be advertised only when the
+///     external protocol is supported, and bridge advertisement is INDEPENDENT of core/extension
+///     advertisement (no implication via `bridges_to`).
 pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -2067,11 +2056,10 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
 /// per-partial verification, duplicate signer dedup, threshold-met gate).
 ///
 /// Validator pins:
-/// * positive vectors declare `partials.len() >= k` and outcome=aggregate_ok
-///   with `aggregated_signatures_len == partials.len()`;
-/// * negative vectors cover (a) `threshold_below_quorum` (k-1 partials),
-///   (b) zero partials below k=1, (c) `partial_signer_not_in_anchorer_set`,
-///   (d) `duplicate_signer`;
+/// * positive vectors declare `partials.len() >= k` and outcome=aggregate_ok with
+///   `aggregated_signatures_len == partials.len()`;
+/// * negative vectors cover (a) `threshold_below_quorum` (k-1 partials), (b) zero partials below
+///   k=1, (c) `partial_signer_not_in_anchorer_set`, (d) `duplicate_signer`;
 /// * every partial declares non-empty `signer_did` + `kid` + `signature_b64`;
 /// * threshold geometry valid (1 <= k <= n) and members.len() == n.
 pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
@@ -2321,11 +2309,10 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
 /// invariant) + the soland `service_admin_signer` derivation.
 ///
 /// Validator pins:
-/// * positive vectors declare `seed_source` ∈ {configured, ephemeral,
-///   service_did_derived};
+/// * positive vectors declare `seed_source` ∈ {configured, ephemeral, service_did_derived};
 /// * canonical_body_sha256 is `sha256:<64-hex>` shape;
-/// * deterministic vectors declare outcome=deterministic_signature OR
-///   verify_ok / payload_digest_matches / different_signatures;
+/// * deterministic vectors declare outcome=deterministic_signature OR verify_ok /
+///   payload_digest_matches / different_signatures;
 /// * ephemeral vector declares outcome=non_deterministic_signature;
 /// * negative vectors cover wrong-verifying-key + tampered-canonical-body.
 pub fn run_production_signing_fixture_suite() -> Result<()> {
@@ -2501,17 +2488,14 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
 /// operation-registry.surface_groups.
 ///
 /// Validator pins:
-/// * every active+reducer_input+durable_event kind that declares
-///   `cell_family` declares a `lattice` in the core set
-///   {or-set, mv-register, cas-register, fsm, counter, ordered-log};
+/// * every active+reducer_input+durable_event kind that declares `cell_family` declares a `lattice`
+///   in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log};
 /// * cell_family namespace prefix is `cx.component.`;
-/// * a single cell_family is bound to exactly one lattice across all kinds
-///   that declare it;
+/// * a single cell_family is bound to exactly one lattice across all kinds that declare it;
 /// * bottom mode ∈ {reject, expose};
-/// * every family in `expected_cell_family_lattice_bindings.<lattice>` MUST
-///   resolve to that lattice in the live registry; conversely, every live
-///   cell_family that appears in the registry MUST be listed under the
-///   correct lattice in the expected bindings.
+/// * every family in `expected_cell_family_lattice_bindings.<lattice>` MUST resolve to that lattice
+///   in the live registry; conversely, every live cell_family that appears in the registry MUST be
+///   listed under the correct lattice in the expected bindings.
 pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -2930,7 +2914,7 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
             "cell_family_mismatch" => {
                 let claimed = required_str(v, "claimed_cell_family")?;
                 let kind = required_str(v, "event_kind")?;
-                let (live_family, _, _, _) = live_kind_meta
+                let (live_family, ..) = live_kind_meta
                     .get(kind)
                     .ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
                 if live_family.as_deref() == Some(claimed) {
@@ -2941,7 +2925,7 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
             "lattice_mismatch" => {
                 let claimed = required_str(v, "claimed_lattice")?;
                 let kind = required_str(v, "event_kind")?;
-                let (_, live_lattice, _, _) = live_kind_meta
+                let (_, live_lattice, ..) = live_kind_meta
                     .get(kind)
                     .ok_or_else(|| anyhow!("negative {name} event_kind {kind} not in registry"))?;
                 if live_lattice.as_deref() == Some(claimed) {
@@ -5057,10 +5041,9 @@ fn project_history_visibility(
 /// validator re-derives the chain keys from each vector's seed material and
 /// asserts:
 ///   * advance(prior_index→advance_index) increments by exactly 1
-///   * forward derivation: key_at_(N+1) = HKDF(key_at_N, info=...) is one-way
-///     (we re-derive forward from the seed and assert the result is not the
-///     same as the seed bytes — backward-derivation impossibility is
-///     structural since HKDF is a one-way KDF)
+///   * forward derivation: key_at_(N+1) = HKDF(key_at_N, info=...) is one-way (we re-derive forward
+///     from the seed and assert the result is not the same as the seed bytes — backward-derivation
+///     impossibility is structural since HKDF is a one-way KDF)
 ///   * rotation MUST mint a new chain_id; reuse is rejected
 pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
     use hkdf::Hkdf;
@@ -5284,10 +5267,9 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
 /// payload to confirm encrypt/decrypt with the correct key succeeds and
 /// decrypt with a wrong key fails (auth-tag rejection).
 pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
-    use chacha20poly1305::{
-        ChaCha20Poly1305, KeyInit,
-        aead::{Aead, generic_array::GenericArray},
-    };
+    use chacha20poly1305::aead::Aead;
+    use chacha20poly1305::aead::generic_array::GenericArray;
+    use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
     use pbkdf2::pbkdf2_hmac;
     use sha2::Sha512 as KdfSha512;
 
@@ -5829,10 +5811,9 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
 /// fixture so an environment without the fixture file still exercises the
 /// crypto round-trip used by D4 key backup encryption.
 pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
-    use chacha20poly1305::{
-        ChaCha20Poly1305, KeyInit,
-        aead::{Aead, generic_array::GenericArray},
-    };
+    use chacha20poly1305::aead::Aead;
+    use chacha20poly1305::aead::generic_array::GenericArray;
+    use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
     use pbkdf2::pbkdf2_hmac;
     use sha2::Sha512 as KdfSha512;
 

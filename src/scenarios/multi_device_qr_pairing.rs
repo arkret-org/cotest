@@ -1,84 +1,66 @@
 //! CT-9 — Multi-device QR pairing + cross-signing + MLS Remove on revoke.
 //!
 //! Spec references:
-//!   - `contrix-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1
-//!     "配对流程 (无密码登录)" — QR pairing handshake:
-//!       * new device generates local Ed25519 device key + displays QR
-//!         containing public key + challenge nonce.
-//!       * primary device scans QR, verifies pairing challenge, and
-//!         issues a `cx.device.authorize` event that binds the new
-//!         device's `verify_key` to the principal via the SSK
+//!   - `contrix-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 "配对流程 (无密码登录)" — QR
+//!     pairing handshake:
+//!       * new device generates local Ed25519 device key + displays QR containing public key +
+//!         challenge nonce.
+//!       * primary device scans QR, verifies pairing challenge, and issues a `cx.device.authorize`
+//!         event that binds the new device's `verify_key` to the principal via the SSK
 //!         (`cross_signing_binding`).
-//!   - §5.2 "Device Trust Chain" — every `cx.device.authorize` event
-//!     MUST carry a `cross_signing_binding` field signed by the SSK over
-//!     the canonical `(principal_id, device_id, device_public_key,
-//!     ssk_generation)` tuple. Devices without a valid binding MUST be
-//!     reported as `unverified`.
-//!   - §6 "Device List Sync" — any device add / revoke / signature
-//!     update MUST produce a `cx.device.list_update` event in the
-//!     principal control stream. Clients MUST expose the device list
-//!     delta via sync.
+//!   - §5.2 "Device Trust Chain" — every `cx.device.authorize` event MUST carry a
+//!     `cross_signing_binding` field signed by the SSK over the canonical `(principal_id,
+//!     device_id, device_public_key, ssk_generation)` tuple. Devices without a valid binding MUST
+//!     be reported as `unverified`.
+//!   - §6 "Device List Sync" — any device add / revoke / signature update MUST produce a
+//!     `cx.device.list_update` event in the principal control stream. Clients MUST expose the
+//!     device list delta via sync.
 //!   - §9 / `key-management.md` §5.2 "设备吊销" — revocation:
-//!       * publish `cx.device.revoke` (or call `POST /api/v1/devices/
-//!         {device_id}/revoke` which mints the event).
-//!       * for every MLS group the revoked device participated in,
-//!         issue an MLS `Remove` proposal + commit so the device's
-//!         epoch keys no longer decrypt new content.
+//!       * publish `cx.device.revoke` (or call `POST /api/v1/devices/ {device_id}/revoke` which
+//!         mints the event).
+//!       * for every MLS group the revoked device participated in, issue an MLS `Remove` proposal +
+//!         commit so the device's epoch keys no longer decrypt new content.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Scenario walk-through
 //!
-//! 1.  Create alice on a single soland with device-A. (The
-//!     `TestActorBuilder` from CT-13 would make this DRY across the
-//!     three new scenarios; until it lands we use the existing
-//!     `ContrixServer::register_client` helper.)
+//! 1. Create alice on a single soland with device-A. (The `TestActorBuilder` from CT-13 would make
+//!    this DRY across the three new scenarios; until it lands we use the existing
+//!    `ContrixServer::register_client` helper.)
 //!
-//! 2.  Generate a fresh `cx:device:<uuidv7>` for device-B and a
-//!     dedicated Ed25519 keypair for it. The QR payload itself is a
-//!     yougen-side UI concern (`verify-device` flow); cotest synthesizes
-//!     the equivalent API calls without driving the QR code itself —
-//!     this matches the spec note that "QR is the transport, not the
-//!     trust primitive".
+//! 2. Generate a fresh `cx:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
+//!    The QR payload itself is a yougen-side UI concern (`verify-device` flow); cotest synthesizes
+//!    the equivalent API calls without driving the QR code itself — this matches the spec note that
+//!    "QR is the transport, not the trust primitive".
 //!
-//! 3.  From device-A, generate the cross-signing key (SSK) if alice
-//!     hasn't published one already, then submit:
-//!       a. `cx.cross_signing.publish` (if needed) — binds PSK → SSK.
-//!       b. `cx.device.cross_signing_binding` — the SSK signature over
-//!          device-B's `verify_key`, packaged per §5.1 canonical input.
-//!       c. `cx.device.authorize` for device-B with the
-//!          `cross_signing_binding` field carrying the §5.2 signature.
+//! 3. From device-A, generate the cross-signing key (SSK) if alice hasn't published one already,
+//!    then submit: a. `cx.cross_signing.publish` (if needed) — binds PSK → SSK. b.
+//!    `cx.device.cross_signing_binding` — the SSK signature over device-B's `verify_key`, packaged
+//!    per §5.1 canonical input. c. `cx.device.authorize` for device-B with the
+//!    `cross_signing_binding` field carrying the §5.2 signature.
 //!
 //!     Today soland accepts these via `POST /api/v1/devices/authorize-
 //!     pairing` (current `device::device_authorize_pairing`); the
 //!     cross-signing field is NOT yet validated end-to-end.
 //!
-//! 4.  Assert `GET /api/v1/devices` returns both device-A and device-B
-//!     with `verification_state="verified"` (or `"cross_signed"` once
-//!     soland exposes the §5.2 trust state distinction). NB: soland
-//!     does not currently surface a `GET /api/v1/devices` route — the
-//!     existing inventory is only readable via the per-device admin
-//!     surfaces. This is one of the prerequisite gaps.
+//! 4. Assert `GET /api/v1/devices` returns both device-A and device-B with
+//!    `verification_state="verified"` (or `"cross_signed"` once soland exposes the §5.2 trust state
+//!    distinction). NB: soland does not currently surface a `GET /api/v1/devices` route — the
+//!    existing inventory is only readable via the per-device admin surfaces. This is one of the
+//!    prerequisite gaps.
 //!
-//! 5.  Wrap alice + a second principal (`bob`) into an E2EE space `S`
-//!     so that "MLS Remove fanout" has a non-trivial member set.
-//!     device-B joins `S` via a Welcome → Commit roundtrip (today this
-//!     is also stubbed out in soland; MLS group state is not durable
-//!     server-side per the `mls` grep showing no `cx.mls.*` handlers).
+//! 5. Wrap alice + a second principal (`bob`) into an E2EE space `S` so that "MLS Remove fanout"
+//!    has a non-trivial member set. device-B joins `S` via a Welcome → Commit roundtrip (today this
+//!    is also stubbed out in soland; MLS group state is not durable server-side per the `mls` grep
+//!    showing no `cx.mls.*` handlers).
 //!
-//! 6.  From device-A, revoke device-B:
-//!         `POST /api/v1/devices/{device-B}/revoke`
-//!     Assert:
-//!       a. response 200 with `revoked_device_id == device-B` and a
-//!          `revoked_at` timestamp.
-//!       b. device-A still works (its session is unaffected).
-//!       c. device-B's bearer token returns 401 on `GET /api/v1/
-//!          account/me` (the post-round-23 `cannot_self_revoke` +
-//!          revoke surface; verified via the existing
-//!          `device::device_revoke` handler).
-//!       d. For the E2EE space `S` that alice + device-B were in: a
-//!          `cx.mls.commit` event with a `Remove` proposal MUST appear
-//!          in the space timeline within a bounded delay (per §9 + §6
-//!          device list sync). Alice's sync should observe both:
+//! 6. From device-A, revoke device-B: `POST /api/v1/devices/{device-B}/revoke` Assert: a. response
+//!    200 with `revoked_device_id == device-B` and a `revoked_at` timestamp. b. device-A still
+//!    works (its session is unaffected). c. device-B's bearer token returns 401 on `GET /api/v1/
+//!    account/me` (the post-round-23 `cannot_self_revoke` + revoke surface; verified via the
+//!    existing `device::device_revoke` handler). d. For the E2EE space `S` that alice + device-B
+//!    were in: a `cx.mls.commit` event with a `Remove` proposal MUST appear in the space timeline
+//!    within a bounded delay (per §9 + §6 device list sync). Alice's sync should observe both:
 //!             * `cx.device.list_update` with device-B in `left[]`,
 //!             * `cx.mls.commit` with `proposals[].type == "remove"`.
 //!
@@ -86,23 +68,19 @@
 //! ## Status — `#[ignore]`'d
 //!
 //! Prerequisite blockers (soland-side):
-//!   * **`GET /api/v1/devices`** — soland has `POST /devices/pairing-
-//!     challenge`, `POST /devices/authorize-pairing`, and `POST
-//!     /devices/{device_id}/revoke` but no list/index endpoint. Step 4
-//!     blocks here.
-//!   * **`cross_signing_binding` validation** — `device::device_
-//!     authorize_pairing` stores the pairing record but does NOT verify
-//!     the §5.2 SSK signature, the PSK → SSK chain, or the canonical
-//!     signing input. Step 3c can be SUBMITTED today but is not yet
-//!     enforced as a `cross_signed` vs. `unverified` distinction.
+//!   * **`GET /api/v1/devices`** — soland has `POST /devices/pairing- challenge`, `POST
+//!     /devices/authorize-pairing`, and `POST /devices/{device_id}/revoke` but no list/index
+//!     endpoint. Step 4 blocks here.
+//!   * **`cross_signing_binding` validation** — `device::device_ authorize_pairing` stores the
+//!     pairing record but does NOT verify the §5.2 SSK signature, the PSK → SSK chain, or the
+//!     canonical signing input. Step 3c can be SUBMITTED today but is not yet enforced as a
+//!     `cross_signed` vs. `unverified` distinction.
 //!   * **MLS state machine** — `grep mls` in soland turns up only
-//!     `routing/federation/move_anchor.rs` (anchor frontier) and
-//!     `routing/interop/mimi.rs` (interop shim). There is no
-//!     server-side `cx.mls.commit` reducer, no MLS group state, and no
-//!     Remove-proposal fanout on device revoke. Step 6d is fully
-//!     unimplemented soland-side.
-//!   * **E2E-MULTI-DEV-1** (soland `_todos.md`) is the umbrella task
-//!     that, when completed, unblocks this scenario end-to-end.
+//!     `routing/federation/move_anchor.rs` (anchor frontier) and `routing/interop/mimi.rs` (interop
+//!     shim). There is no server-side `cx.mls.commit` reducer, no MLS group state, and no
+//!     Remove-proposal fanout on device revoke. Step 6d is fully unimplemented soland-side.
+//!   * **E2E-MULTI-DEV-1** (soland `_todos.md`) is the umbrella task that, when completed, unblocks
+//!     this scenario end-to-end.
 //!
 //! Track: `_claude_todos.md` row CT-9 + soland `_todos.md` E2E-MULTI-DEV-1.
 

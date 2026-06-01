@@ -1,89 +1,68 @@
 //! CT-11 — Key backup restore + MLS history replay.
 //!
 //! Spec references:
-//!   - `contrix-spec/spec/v1/zh/identity/key-management.md` §7.1
-//!     "备份内容" — three backup domains MUST be isolated:
+//!   - `contrix-spec/spec/v1/zh/identity/key-management.md` §7.1 "备份内容" — three backup domains
+//!     MUST be isolated:
 //!       * `did_recovery` — DID control / recovery key shares.
-//!       * `secret_storage` — `self_signing_key`, `user_signing_key`,
-//!         recovery secret, MLS group secrets backup key.
-//!       * `mls_history` — historical MLS group state, epoch key
-//!         material, pending Welcome.
+//!       * `secret_storage` — `self_signing_key`, `user_signing_key`, recovery secret, MLS group
+//!         secrets backup key.
+//!       * `mls_history` — historical MLS group state, epoch key material, pending Welcome.
 //!     Cross-domain key reuse is FORBIDDEN; each domain has its own
 //!     salt + HKDF info + AEAD AAD.
 //!   - §7.2 "Backup Envelope" — `cx.schema.key_backup.v1`:
-//!       * `encryption.kdf = argon2id` (memory_kib≥65536, iterations≥3,
-//!         parallelism≥1 per soland `_todos.md` E2E-KEY-BACKUP-1).
+//!       * `encryption.kdf = argon2id` (memory_kib≥65536, iterations≥3, parallelism≥1 per soland
+//!         `_todos.md` E2E-KEY-BACKUP-1).
 //!       * `encryption.aead = xchacha20_poly1305`.
-//!       * `key_commitment` MUST be present so clients can verify the
-//!         passphrase locally before downloading ciphertext.
-//!       * Service-side MUST NOT store passphrase / derived key / KDF
-//!         output.
+//!       * `key_commitment` MUST be present so clients can verify the passphrase locally before
+//!         downloading ciphertext.
+//!       * Service-side MUST NOT store passphrase / derived key / KDF output.
 //!   - §7.3 "恢复流程" — restore steps:
 //!       1. new device generates fresh device key.
 //!       2. user enters passphrase / collects recovery shares.
 //!       3. client decrypts backup envelope.
 //!       4. client verifies key commitment.
 //!       5. client publishes `recover` or `cx.device.authorize`.
-//!       6. for E2EE spaces: pull MLS state, replay historical
-//!          `cx.mls.commit` events with the recovered
-//!          `mls_history_backup_key` to decrypt pre-loss epoch content.
-//!   - §7.4 "所有权证明与解密证明" — SSK proof binding fields:
-//!       `challenge / audience / origin / service_did / principal_id
-//!        / key_id / expires_at / nonce`.
+//!       6. for E2EE spaces: pull MLS state, replay historical `cx.mls.commit` events with the
+//!          recovered `mls_history_backup_key` to decrypt pre-loss epoch content.
+//!   - §7.4 "所有权证明与解密证明" — SSK proof binding fields: `challenge / audience / origin /
+//!     service_did / principal_id / key_id / expires_at / nonce`.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! ## Scenario walk-through
 //!
-//! 1.  Boot soland; register alice with device-A.
-//! 2.  Create an E2EE space `S` containing alice (+ optionally bob, to
-//!     give Commit events non-trivial proposals); send N=3 messages.
-//!     Each message triggers a `cx.mls.commit` envelope on the
-//!     timeline; encrypted body is opaque to the server.
-//! 3.  Mint a key backup envelope client-side:
+//! 1. Boot soland; register alice with device-A.
+//! 2. Create an E2EE space `S` containing alice (+ optionally bob, to give Commit events
+//!    non-trivial proposals); send N=3 messages. Each message triggers a `cx.mls.commit` envelope
+//!    on the timeline; encrypted body is opaque to the server.
+//! 3. Mint a key backup envelope client-side:
 //!       * derive `kdf_key = argon2id(passphrase, salt, params)`.
-//!       * derive `commitment_key = HKDF(kdf_key,
-//!                                       info="contrix-key-backup-
-//!                                       commitment-v1")`.
+//!       * derive `commitment_key = HKDF(kdf_key, info="contrix-key-backup- commitment-v1")`.
 //!       * compute `key_commitment = sha256(commitment_key)`.
-//!       * pack `secret_storage` plaintext = `{self_signing_key,
-//!         user_signing_key}`; pack `mls_history` plaintext =
-//!         `{mls_history_backup_key, epoch_key_material[*]}`.
-//!       * encrypt each domain's plaintext under its own subdomain key
-//!         (HKDF info = `"contrix-key-backup/<class>/<sub>/v1"`) with
-//!         XChaCha20-Poly1305; AAD covers `actor_id, device_id,
-//!         backup_class, backup_version, item_type, created_at,
-//!         schema_id`.
-//!       * upload via
-//!         `PUT /api/v1/keys/backups/{backup_id}`
-//!         (current soland surface; see
+//!       * pack `secret_storage` plaintext = `{self_signing_key, user_signing_key}`; pack
+//!         `mls_history` plaintext = `{mls_history_backup_key, epoch_key_material[*]}`.
+//!       * encrypt each domain's plaintext under its own subdomain key (HKDF info =
+//!         `"contrix-key-backup/<class>/<sub>/v1"`) with XChaCha20-Poly1305; AAD covers `actor_id,
+//!         device_id, backup_class, backup_version, item_type, created_at, schema_id`.
+//!       * upload via `PUT /api/v1/keys/backups/{backup_id}` (current soland surface; see
 //!         `routing/identity/key_backup.rs`).
 //!     Validate the response is 200 with `ok=true`.
-//! 4.  "Lose" device-A: revoke it via
-//!         `POST /api/v1/devices/{device-A}/revoke`
-//!     issued from a sibling device (per CT-9
-//!     `cannot_self_revoke` invariant). Today we'd need a second
-//!     authorized device to drive the revoke; the scaffold uses an
-//!     alternative `cx.device.revoke` direct-event submission as a
-//!     stand-in.
-//! 5.  Onboard new device-B:
+//! 4. "Lose" device-A: revoke it via `POST /api/v1/devices/{device-A}/revoke` issued from a sibling
+//!    device (per CT-9 `cannot_self_revoke` invariant). Today we'd need a second authorized device
+//!    to drive the revoke; the scaffold uses an alternative `cx.device.revoke` direct-event
+//!    submission as a stand-in.
+//! 5. Onboard new device-B:
 //!       * generate a fresh `cx:device:<uuidv7>` and Ed25519 keypair.
-//!       * dev-login (or full recovery via SSK proof — see §7.4) to
-//!         get a bearer.
-//!       * `GET /api/v1/keys/backups/{backup_id}` returns the full
-//!         envelope (per soland E2E-KEY-BACKUP-2; today this is
-//!         implemented).
-//!       * derive the passphrase keys; verify `key_commitment`;
-//!         decrypt the two domains.
-//!       * mint a SSK proof per §7.4 canonical fields and POST it back
-//!         (recovery confirmation); today no soland endpoint binds
-//!         this — the SSK proof is consumed only by the §7.4 attest-
+//!       * dev-login (or full recovery via SSK proof — see §7.4) to get a bearer.
+//!       * `GET /api/v1/keys/backups/{backup_id}` returns the full envelope (per soland
+//!         E2E-KEY-BACKUP-2; today this is implemented).
+//!       * derive the passphrase keys; verify `key_commitment`; decrypt the two domains.
+//!       * mint a SSK proof per §7.4 canonical fields and POST it back (recovery confirmation);
+//!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
 //!         ownership flow which is not yet wired.
-//! 6.  device-B replays MLS history:
-//!       * `GET /api/v1/spaces/{S}/timeline?since=...` pulls all
-//!         `cx.mls.commit` events.
-//!       * with the recovered `mls_history_backup_key`, device-B
-//!         derives the pre-loss epoch secret and decrypts each
-//!         message's ciphertext.
+//! 6. device-B replays MLS history:
+//!       * `GET /api/v1/spaces/{S}/timeline?since=...` pulls all `cx.mls.commit` events.
+//!       * with the recovered `mls_history_backup_key`, device-B derives the pre-loss epoch secret
+//!         and decrypts each message's ciphertext.
 //!     Assert: device-B reconstructs all 3 plaintexts that device-A
 //!     originally sent.
 //!
@@ -91,30 +70,23 @@
 //! ## Status — `#[ignore]`'d
 //!
 //! Prerequisite status (soland-side):
-//!   * **`PUT /api/v1/keys/backups/{backup_id}`** — IMPLEMENTED today
-//!     (see `routing/identity/key_backup.rs::put_key_backup`). Validates
-//!     `REQUIRED_KEY_BACKUP_FIELDS` and stores opaque ciphertext.
-//!     Steps 3 and 5b work today.
-//!   * **`GET /api/v1/keys/backups/{backup_id}`** — IMPLEMENTED
-//!     (same module, `get_key_backup`).
-//!   * **`DELETE /api/v1/keys/backups/{backup_id}` with SSK proof** —
-//!     soland `_todos.md` E2E-KEY-BACKUP-2 status is "needs SSK
-//!     `payload=delete:backup_id:nonce` signature"; today only session-
-//!     token DELETE is enforced. Step 5e is partially blocked.
-//!   * **`mls_history_backup_key` semantics + `cx.mls.commit` reducer**
-//!     — soland has NO MLS state machine. The `grep mls` in src returns
-//!     only anchor/interop modules; there is no `cx.mls.commit`
-//!     reducer, no epoch tracking, and no historical commit chain a
-//!     replayer could walk. Step 2 (send 3 messages via MLS) and
-//!     step 6 (replay) are blocked end-to-end.
-//!   * **SSK proof endpoint per §7.4** — soland does not yet expose a
-//!     recovery-attestation surface (E2E-KEY-BACKUP-2 still open). The
-//!     `recovery_attestation` field flagged in E2E-KEY-BACKUP-3 is
-//!     scoped to threshold recovery, not single-passphrase restore.
-//!   * **Argon2id + XChaCha20 client crypto** — cotest's `Cargo.toml`
-//!     already pulls `chacha20poly1305`, `pbkdf2`, `hkdf`, `sha2`, but
-//!     NOT `argon2`. Adding argon2 is a one-line dep bump (kept out of
-//!     this PR to avoid lockfile churn; the scaffold uses pbkdf2 as a
+//!   * **`PUT /api/v1/keys/backups/{backup_id}`** — IMPLEMENTED today (see
+//!     `routing/identity/key_backup.rs::put_key_backup`). Validates `REQUIRED_KEY_BACKUP_FIELDS`
+//!     and stores opaque ciphertext. Steps 3 and 5b work today.
+//!   * **`GET /api/v1/keys/backups/{backup_id}`** — IMPLEMENTED (same module, `get_key_backup`).
+//!   * **`DELETE /api/v1/keys/backups/{backup_id}` with SSK proof** — soland `_todos.md`
+//!     E2E-KEY-BACKUP-2 status is "needs SSK `payload=delete:backup_id:nonce` signature"; today
+//!     only session- token DELETE is enforced. Step 5e is partially blocked.
+//!   * **`mls_history_backup_key` semantics + `cx.mls.commit` reducer** — soland has NO MLS state
+//!     machine. The `grep mls` in src returns only anchor/interop modules; there is no
+//!     `cx.mls.commit` reducer, no epoch tracking, and no historical commit chain a replayer could
+//!     walk. Step 2 (send 3 messages via MLS) and step 6 (replay) are blocked end-to-end.
+//!   * **SSK proof endpoint per §7.4** — soland does not yet expose a recovery-attestation surface
+//!     (E2E-KEY-BACKUP-2 still open). The `recovery_attestation` field flagged in E2E-KEY-BACKUP-3
+//!     is scoped to threshold recovery, not single-passphrase restore.
+//!   * **Argon2id + XChaCha20 client crypto** — cotest's `Cargo.toml` already pulls
+//!     `chacha20poly1305`, `pbkdf2`, `hkdf`, `sha2`, but NOT `argon2`. Adding argon2 is a one-line
+//!     dep bump (kept out of this PR to avoid lockfile churn; the scaffold uses pbkdf2 as a
 //!     placeholder so the build stays clean).
 //!
 //! Track: `_claude_todos.md` row CT-11 + soland `_todos.md`

@@ -4,25 +4,20 @@
 //! `cargo test --test live_circle_realm_member_removal_cascade -- --ignored`).
 //!
 //! Scenario (Phase B scaffold):
-//!   1. Boot soland (+ coauth) via the existing CT-6 `FourServiceStack`
-//!      bootstrap helper.
-//!   2. Create a Realm and two Circles under it (`circle_alpha`,
-//!      `circle_beta`). Both Circles share the same Realm.
-//!   3. Register actor `X` and add X as a Realm member; also add X to both
-//!      Circles (`cx.circle.member.state → active`).
-//!   4. Admin issues `cx.realm.cx.member.state → left` for actor X. Assert:
-//!        a) X's Realm membership flips to `left` in soland's projection,
-//!        b) X's membership in BOTH `circle_alpha` AND `circle_beta` is
-//!           auto-flipped to `left` (CXP-0007 strict-subset cascade: any
-//!           Circle membership is invalid when the actor leaves the parent
-//!           Realm, so the reducer MUST emit synthetic
-//!           `cx.circle.member.state → left` events),
-//!        c) each Circle's MLS group emits a *remove proposal* + commit
-//!           pair: verify the Circle's `mls_group_ref` epoch advanced (the
-//!           projection exposes the epoch number on `Circle.mls_group_ref`
-//!           or via a sibling field once P5 finalises),
-//!        d) a sync request from an actor that IS still in the Circle no
-//!           longer sees X in the Circle's `cx.circle.members` projection.
+//!   1. Boot soland (+ coauth) via the existing CT-6 `FourServiceStack` bootstrap helper.
+//!   2. Create a Realm and two Circles under it (`circle_alpha`, `circle_beta`). Both Circles share
+//!      the same Realm.
+//!   3. Register actor `X` and add X as a Realm member; also add X to both Circles
+//!      (`cx.circle.member.state → active`).
+//!   4. Admin issues `cx.realm.cx.member.state → left` for actor X. Assert: a) X's Realm membership
+//!      flips to `left` in soland's projection, b) X's membership in BOTH `circle_alpha` AND
+//!      `circle_beta` is auto-flipped to `left` (CXP-0007 strict-subset cascade: any Circle
+//!      membership is invalid when the actor leaves the parent Realm, so the reducer MUST emit
+//!      synthetic `cx.circle.member.state → left` events), c) each Circle's MLS group emits a
+//!      *remove proposal* + commit pair: verify the Circle's `mls_group_ref` epoch advanced (the
+//!      projection exposes the epoch number on `Circle.mls_group_ref` or via a sibling field once
+//!      P5 finalises), d) a sync request from an actor that IS still in the Circle no longer sees X
+//!      in the Circle's `cx.circle.members` projection.
 //!
 //! Gating mirrors the existing `#[ignore]` live tests; the bootstrap is
 //! soft-skipped via a descriptive `bail!` when the stack cannot start.
@@ -32,10 +27,9 @@ use contrix_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleScopeError, CircleSymbol,
     Did, RealmId,
 };
+use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 use serde_json::json;
 use serial_test::serial;
-
-use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or pass `--ignored`) once the P5 stack is up.

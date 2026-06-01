@@ -11,9 +11,9 @@
 //! behaviour:
 //!
 //!   * `space_id` lookup — happy path; a seeded resource_id is found.
-//!   * `alias` lookup — same code path; the alias string is matched against
-//!     `resource_id`. So an alias that doesn't equal the resource_id returns
-//!     `not_found` (blinded). This is the documented gap.
+//!   * `alias` lookup — same code path; the alias string is matched against `resource_id`. So an
+//!     alias that doesn't equal the resource_id returns `not_found` (blinded). This is the
+//!     documented gap.
 //!   * `invite_token` lookup — same code path; same observation.
 //!
 //! When the implementation grows real alias / invite-token tables this

@@ -3,9 +3,8 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{ContrixServer, expect_json};
-
 use super::key_backups::BACKUP_ID;
+use crate::harness::{ContrixServer, expect_json};
 
 pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
     let backup_delete = expect_json(

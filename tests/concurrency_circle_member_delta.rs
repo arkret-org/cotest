@@ -17,12 +17,13 @@
 //! happy path, but the full add/remove/update interleaving needs a real
 //! reducer to surface scheduling-dependent regressions.
 
-use anyhow::Result;
-use contrix_core::Did;
-use serial_test::serial;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+use anyhow::Result;
+use contrix_core::Did;
+use serial_test::serial;
 use tokio::sync::Mutex;
 
 /// Gating: live soland + coauth stack required to observe membership

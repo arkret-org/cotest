@@ -13,20 +13,17 @@
 //!
 //! Scenario (Phase B scaffold):
 //!   1. Boot soland + coauth (coauth issues the cap grant).
-//!   2. Create a Realm + Circle. Actor Y is a Realm member but NOT a
-//!      Circle member.
+//!   2. Create a Realm + Circle. Actor Y is a Realm member but NOT a Circle member.
 //!   3. Grant Y `cx.circle.manage` via coauth's session-grant surface.
-//!   4. Y attempts `cx.circle.update` (e.g. patch the title) →
-//!        MUST be rejected (`permission_denied` / membership half failed)
-//!        despite the grant being present.
-//!   5. Add Y to the Circle (`cx.circle.member.state → active`); retry the
-//!      update → MUST succeed (both halves satisfied).
-//!   6. Revoke Y's `cx.circle.manage` grant while Y is still a Circle
-//!      member; retry the update → MUST be rejected
-//!      (`permission_denied` / grant half failed).
-//!   7. Cross-check: `cx.circle.audit` (a strictly read-only cap) follows
-//!      the same two-tier evaluation — a member without the cap MUST be
-//!      rejected; a non-member with the cap MUST be rejected too.
+//!   4. Y attempts `cx.circle.update` (e.g. patch the title) → MUST be rejected
+//!      (`permission_denied` / membership half failed) despite the grant being present.
+//!   5. Add Y to the Circle (`cx.circle.member.state → active`); retry the update → MUST succeed
+//!      (both halves satisfied).
+//!   6. Revoke Y's `cx.circle.manage` grant while Y is still a Circle member; retry the update →
+//!      MUST be rejected (`permission_denied` / grant half failed).
+//!   7. Cross-check: `cx.circle.audit` (a strictly read-only cap) follows the same two-tier
+//!      evaluation — a member without the cap MUST be rejected; a non-member with the cap MUST be
+//!      rejected too.
 //!
 //! Gating mirrors the other `live_circle_*` tests: `#[ignore]` + soft
 //! `bail!` when the stack cannot be bootstrapped.
@@ -36,10 +33,9 @@ use contrix_core::{
     CAP_ACTION_CIRCLE_AUDIT, CAP_ACTION_CIRCLE_MANAGE, Circle, CircleColorToken, CircleDisplay,
     CircleGlyph, CircleId, CircleSymbol, Did, RealmId,
 };
+use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 use serde_json::json;
 use serial_test::serial;
-
-use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.

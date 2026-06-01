@@ -8,21 +8,18 @@
 //!   * `reset_event_id: TypedEventId` (`cx:event:<uuidv7>`)
 //!
 //! The receiver MUST validate in this strict order:
-//!   1. `trust_domain` matches the receiver's deployment trust domain →
-//!      otherwise `cross_domain_replay_rejected`
-//!   2. `reset_event_id` equals the enclosing `Event.id` → otherwise
-//!      `reset_event_id_mismatch`
+//!   1. `trust_domain` matches the receiver's deployment trust domain → otherwise
+//!      `cross_domain_replay_rejected`
+//!   2. `reset_event_id` equals the enclosing `Event.id` → otherwise `reset_event_id_mismatch`
 //!   3. Signature verification (existing) → otherwise `invalid_signature`
 //!
 //! This module covers two scenarios:
 //!
-//! * `cross_signing_reset_cross_domain_run` — proof minted against
-//!   `cx:trust_domain:A` replayed against deployment `cx:trust_domain:B`;
-//!   MUST be rejected with `cross_domain_replay_rejected`.
+//! * `cross_signing_reset_cross_domain_run` — proof minted against `cx:trust_domain:A` replayed
+//!   against deployment `cx:trust_domain:B`; MUST be rejected with `cross_domain_replay_rejected`.
 //!
-//! * `cross_signing_reset_event_id_mismatch_run` — payload carries
-//!   `reset_event_id != Event.id`; MUST be rejected with
-//!   `reset_event_id_mismatch`.
+//! * `cross_signing_reset_event_id_mismatch_run` — payload carries `reset_event_id != Event.id`;
+//!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
 use contrix_core::{

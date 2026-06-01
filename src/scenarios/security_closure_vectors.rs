@@ -5,11 +5,10 @@
 //! one we:
 //!
 //! * pin the canonical `vector_id` string,
-//! * expose a wire-shape sanity check that confirms the fixture loads,
-//!   carries the expected `vector_id`, and that every step exposes the
-//!   typed `runner{}` contract,
-//! * expose a deterministic local runner-contract round-trip for each
-//!   vector so the suite can run without live downstream services.
+//! * expose a wire-shape sanity check that confirms the fixture loads, carries the expected
+//!   `vector_id`, and that every step exposes the typed `runner{}` contract,
+//! * expose a deterministic local runner-contract round-trip for each vector so the suite can run
+//!   without live downstream services.
 //!
 //! The actual end-to-end SUT wiring lives in implementer projects
 //! (soland / coauth / teabay / yougen). Cotest keeps these vector gates

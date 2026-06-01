@@ -9,19 +9,14 @@
 //! Surfaces refreshed:
 //!
 //! * **capability action allowlist**: `cx.morph.create`
-//! * **error code allowlist**: `delivery_binding_stale`,
-//!   `delivery_binding_handed_over`, `historical_only`
-//! * **id_kind allowlist** for `object_ref` context: `cx:space:` joins
-//!   the accepted set
-//! * **schema $defs / OpenAPI component allowlist**:
-//!   `EventsSubscribeFrame`, `SnapshotBootstrap`,
-//!   `EventsFrontierAccountClientResponse`,
-//!   `EventsFrontierFederationPeerResponse`,
-//!   `EventsFrontierAnonymousHealthResponse`,
-//!   `PolicyCheckRequest`, `PolicyCheckResponse`,
-//!   `FederationServiceBindingRef`, `EventsSubmitBatchRequest`,
-//!   `EventsSubmitFederationRequest`, `third_party_invite`,
-//!   `space_state_transition_payload`, `space_object_tombstone_payload`
+//! * **error code allowlist**: `delivery_binding_stale`, `delivery_binding_handed_over`,
+//!   `historical_only`
+//! * **id_kind allowlist** for `object_ref` context: `cx:space:` joins the accepted set
+//! * **schema $defs / OpenAPI component allowlist**: `EventsSubscribeFrame`, `SnapshotBootstrap`,
+//!   `EventsFrontierAccountClientResponse`, `EventsFrontierFederationPeerResponse`,
+//!   `EventsFrontierAnonymousHealthResponse`, `PolicyCheckRequest`, `PolicyCheckResponse`,
+//!   `FederationServiceBindingRef`, `EventsSubmitBatchRequest`, `EventsSubmitFederationRequest`,
+//!   `third_party_invite`, `space_state_transition_payload`, `space_object_tombstone_payload`
 
 use std::collections::BTreeSet;
 

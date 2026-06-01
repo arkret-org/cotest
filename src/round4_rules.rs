@@ -8,24 +8,24 @@
 //! remain rare). Spec-side counterparts live in
 //! `contrix-spec/tools/lint_artifacts.py::check_*`.
 //!
-//! 1. **`LegacyDidMethodSegment`** — DID strings whose method-name segment
-//!    (between `did:` and the next `:`) contains any of `.`, `-`, `_`,
-//!    `:`. Spec tightened the regex to `^did:[a-z0-9]+:[^\s]+$`.
+//! 1. **`LegacyDidMethodSegment`** — DID strings whose method-name segment (between `did:` and the
+//!    next `:`) contains any of `.`, `-`, `_`, `:`. Spec tightened the regex to
+//!    `^did:[a-z0-9]+:[^\s]+$`.
 //!
-//! 2. **`EventsSubscribeStringPayload`** — the payload of
-//!    `cx.events.subscribe` is now the typed `EventsSubscribeFrame`
-//!    object; any literal where the payload is declared as / typed as
+//! 2. **`EventsSubscribeStringPayload`** — the payload of `cx.events.subscribe` is now the typed
+//!    `EventsSubscribeFrame` object; any literal where the payload is declared as / typed as
 //!    `string` (or `String` / `&str`) is a violation.
 //!
-//! 3. **`CrossSigningPublishWithoutExpectedPreviousGeneration`** — a
-//!    `cx.cross_signing.publish` payload constructed inline without a  ROUND4-ALLOW: docstring describes the rule itself.
-//!    visible `expected_previous_generation` field. The new CAS contract
-//!    requires it (round-4 7fae9ba).
+//! 3. **`CrossSigningPublishWithoutExpectedPreviousGeneration`** — a `cx.cross_signing.publish`
+//!    payload constructed inline without a  ROUND4-ALLOW: docstring describes the rule itself.
+//!    visible `expected_previous_generation` field. The new CAS contract requires it (round-4
+//!    7fae9ba).
 //!
 //! 4. **`AuditPolicyVersionHashFewerThanFourArguments`** — calls to
-//!    `compute_audit_policy_version_digest(...)` whose argument list has  ROUND4-ALLOW: docstring describes the rule, the `(...)` is a placeholder not a real call.
-//!    fewer than 4 arguments. Spec tightened the function signature to
-//!    `(realm_id, trust_domain, audit_disclosure, audit_assurance)`.
+//!    `compute_audit_policy_version_digest(...)` whose argument list has  ROUND4-ALLOW: docstring
+//!    describes the rule, the `(...)` is a placeholder not a real call. fewer than 4 arguments.
+//!    Spec tightened the function signature to `(realm_id, trust_domain, audit_disclosure,
+//!    audit_assurance)`.
 
 use std::path::{Path, PathBuf};
 
@@ -238,7 +238,8 @@ fn scan_legacy_did(path: &Path, line_idx: usize, line: &str, out: &mut Vec<Round
     }
 }
 
-// ── Rule 2: cx.events.subscribe payload typed as string ───────────────────── ROUND4-ALLOW: section header comment
+// ── Rule 2: cx.events.subscribe payload typed as string ───────────────────── ROUND4-ALLOW:
+// section header comment
 
 fn scan_events_subscribe_string_payload(
     path: &Path,
@@ -504,7 +505,8 @@ mod tests {
 
     #[test]
     fn flags_events_subscribe_with_string_type() {
-        // ROUND4-ALLOW: scanner self-test asserts the rule fires on a pre-round-4 stringly subscribe.
+        // ROUND4-ALLOW: scanner self-test asserts the rule fires on a pre-round-4 stringly
+        // subscribe.
         let f = scan("fn handle_cx_events_subscribe(payload: String) {} // cx.events.subscribe");
         assert!(
             f.iter()

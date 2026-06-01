@@ -4,13 +4,12 @@
 //! Spec (round 2+3 cleanup, T15):
 //!
 //! Exactly two legal OOB code forms:
-//!   1. **Offline-verifiable** — ≥128-bit entropy, base32-style (so
-//!      handing it out anywhere keeps it unguessable). The minimum
-//!      length corresponds to 22+ chars base32 (≥110 bits effective)
+//!   1. **Offline-verifiable** — ≥128-bit entropy, base32-style (so handing it out anywhere keeps
+//!      it unguessable). The minimum length corresponds to 22+ chars base32 (≥110 bits effective)
 //!      with disambiguated alphabet (no `IL01O`).
-//!   2. **Lookup short code** — server-side HMAC over `(code, pepper)`,
-//!      rate-limited, `oob_code_kind="lookup"`, and **3 wrong attempts
-//!      invalidate the code** (server burns the binding).
+//!   2. **Lookup short code** — server-side HMAC over `(code, pepper)`, rate-limited,
+//!      `oob_code_kind="lookup"`, and **3 wrong attempts invalidate the code** (server burns the
+//!      binding).
 //!
 //! Failure mode: 7 distinct triggers (wrong code, expired, invalidated,
 //! actor-not-bound, kind-mismatch, peer-not-authorised, replay) MUST
@@ -19,14 +18,12 @@
 //!
 //! This module covers:
 //!
-//! * `oob_code_low_entropy_run` — caller submits a code below the
-//!   minimum length / wrong alphabet → MUST reject with
-//!   `schema_violation` (offline form) or the unified non-enumerable
-//!   response (lookup form).
+//! * `oob_code_low_entropy_run` — caller submits a code below the minimum length / wrong alphabet →
+//!   MUST reject with `schema_violation` (offline form) or the unified non-enumerable response
+//!   (lookup form).
 //!
-//! * `oob_code_lookup_three_strike_invalidate_run` — caller submits
-//!   three wrong lookup codes → the binding is invalidated and the
-//!   fourth (correct or wrong) attempt MUST receive the same unified
+//! * `oob_code_lookup_three_strike_invalidate_run` — caller submits three wrong lookup codes → the
+//!   binding is invalidated and the fourth (correct or wrong) attempt MUST receive the same unified
 //!   non-enumerable response as a never-existed code.
 
 use anyhow::{Result, anyhow};

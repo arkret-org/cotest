@@ -14,13 +14,11 @@
 //!   `none → submitted → under_review → decided → closed`
 //!
 //! Normative invariants:
-//!   * reviewer DID MUST differ from the original decision issuer
-//!     (`appeal_self_review_forbidden`)
-//!   * an `overturn` decision MUST be paired with a
-//!     `cx.moderation.decision.lift` in the **same** Anchor batch
-//!     (`appeal_overturn_missing_lift`)
-//!   * close fires automatically after the 30-day cool-off or when the
-//!     submitter (or reviewer) issues an explicit close
+//!   * reviewer DID MUST differ from the original decision issuer (`appeal_self_review_forbidden`)
+//!   * an `overturn` decision MUST be paired with a `cx.moderation.decision.lift` in the **same**
+//!     Anchor batch (`appeal_overturn_missing_lift`)
+//!   * close fires automatically after the 30-day cool-off or when the submitter (or reviewer)
+//!     issues an explicit close
 //!
 //! This scenario walks the full happy path of an `overturn`: submit →
 //! review → decision (overturn) → assert paired `lift` in the same

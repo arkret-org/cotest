@@ -5,30 +5,23 @@
 //! `cargo test --test live_circle_cross_scope_relation_anti_enumeration -- --ignored`).
 //!
 //! Scenario (Phase B scaffold):
-//!   1. Boot soland + teabay (teabay is hard-required for the directory
-//!      projection assertion).
+//!   1. Boot soland + teabay (teabay is hard-required for the directory projection assertion).
 //!   2. Create a Realm. Create:
 //!        - F1: Realm-scoped *public* Flow (`scope_circle_id` unset).
-//!        - F2: Circle-scoped *private* Flow whose `scope_circle_id`
-//!              binds to a Circle inside the same Realm.
-//!   3. Establish `Relation::ConfidentialDiscussionOf` (F1 → F2). Per
-//!      CXP-0007 spec, this is the canonical cross-scope edge.
-//!   4. Query F1 from two client identities:
-//!        a) `circle_member` — actor in the Circle:
-//!              MUST see the F1 → F2 edge with the `confidential_discussion_of`
-//!              kind AND a presence hint (e.g. `circle_member_count`)
-//!              proving F2 exists,
-//!        b) `realm_member_not_in_circle` — Realm member but NOT in the
-//!              Circle:
-//!              MUST NOT see the F1 → F2 edge at all (anti-enumeration —
-//!              the existence of F2 is itself confidential to Circle
-//!              members; even a redacted edge would leak the Circle's
-//!              activity), and a directory query for F2 against teabay
-//!              MUST 404 (NOT 403 — anti-enumeration; 403 would confirm
-//!              existence).
-//!   5. teabay projection cross-check: the directory's `directory/spaces`
-//!      / `directory/flows` query as a Realm-but-not-Circle member MUST
-//!      return F1 only; F2 MUST be absent (NOT redacted-present).
+//!        - F2: Circle-scoped *private* Flow whose `scope_circle_id` binds to a Circle inside the
+//!          same Realm.
+//!   3. Establish `Relation::ConfidentialDiscussionOf` (F1 → F2). Per CXP-0007 spec, this is the
+//!      canonical cross-scope edge.
+//!   4. Query F1 from two client identities: a) `circle_member` — actor in the Circle: MUST see the
+//!      F1 → F2 edge with the `confidential_discussion_of` kind AND a presence hint (e.g.
+//!      `circle_member_count`) proving F2 exists, b) `realm_member_not_in_circle` — Realm member
+//!      but NOT in the Circle: MUST NOT see the F1 → F2 edge at all (anti-enumeration — the
+//!      existence of F2 is itself confidential to Circle members; even a redacted edge would leak
+//!      the Circle's activity), and a directory query for F2 against teabay MUST 404 (NOT 403 —
+//!      anti-enumeration; 403 would confirm existence).
+//!   5. teabay projection cross-check: the directory's `directory/spaces` / `directory/flows` query
+//!      as a Realm-but-not-Circle member MUST return F1 only; F2 MUST be absent (NOT
+//!      redacted-present).
 //!
 //! Gating mirrors the other `live_circle_*` tests: `#[ignore]` + soft
 //! `bail!` when the stack cannot be bootstrapped.
@@ -38,10 +31,9 @@ use contrix_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleSymbol, Did, RealmId,
     RelationKind,
 };
+use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 use serde_json::json;
 use serial_test::serial;
-
-use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 /// Gating: live soland + teabay stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
@@ -130,12 +122,13 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     //         POST /api/v1/realms/<rid>/members                   add incircle + realm-only
     //         POST /api/v1/circles/<cid>/members                  add incircle only
     //         POST /api/v1/realms/<rid>/flows                     create F1 (scope_circle_id: null)
-    //         POST /api/v1/realms/<rid>/flows                     create F2 (scope_circle_id: <cid>)
-    //         POST /api/v1/relations                              kind=confidential_discussion_of, from=F1, to=F2
-    //         GET  /api/v1/flows/<F1>/relations as incircle       expect edge present + F2 hint
-    //         GET  /api/v1/flows/<F1>/relations as realm-only     expect F2 edge OMITTED
-    //         GET  /api/v1/flows/<F2> as realm-only               expect 404 (NOT 403)
-    //         (teabay) POST /api/v1/directory/search-flows        as realm-only → F2 absent
+    //         POST /api/v1/realms/<rid>/flows                     create F2 (scope_circle_id:
+    // <cid>)         POST /api/v1/relations
+    // kind=confidential_discussion_of, from=F1, to=F2         GET  /api/v1/flows/<F1>/relations
+    // as incircle       expect edge present + F2 hint         GET  /api/v1/flows/<F1>/relations
+    // as realm-only     expect F2 edge OMITTED         GET  /api/v1/flows/<F2> as realm-only
+    // expect 404 (NOT 403)         (teabay) POST /api/v1/directory/search-flows        as
+    // realm-only → F2 absent
     //
     //       Assertions:
     //         (a) circle_member's view: edge present, points at F2,

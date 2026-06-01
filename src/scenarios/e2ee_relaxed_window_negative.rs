@@ -7,8 +7,8 @@
 //! 300000` (5 minutes). The reducer MUST refuse:
 //!
 //!   * `relaxed_window_max_ms > 300000` → `relaxed_window_exceeds_ceiling`
-//!   * enabling `e2ee_relaxed.v1` while any of these compliance profiles
-//!     are active on the same Realm:
+//!   * enabling `e2ee_relaxed.v1` while any of these compliance profiles are active on the same
+//!     Realm:
 //!       - `cx.profile.attested_audit.e2ee.v1`
 //!       - `cx.profile.disclosed_audit.e2ee.v1`
 //!     → `e2ee_relaxed_disallowed_in_compliance_profile`

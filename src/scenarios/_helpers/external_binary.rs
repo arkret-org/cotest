@@ -2,25 +2,20 @@
 //! (`starid`, `soland`, `coauth`, `floria`, ...) used by black-box scenarios.
 //!
 //! The helper:
-//!   1. Resolves the binary path from an explicit env var override (e.g.
-//!      `STARID_BIN`) **first**, then falls back to a sibling-checkout
-//!      convention path (`../<crate>/target/debug/<bin>[.exe]` relative to the
-//!      cotest workspace root).
-//!   2. Optionally checks `required_env_vars` (e.g. `COAUTH_DATABASE_URI`)
-//!      are present in the caller's env before attempting to spawn — when a
-//!      required dependency env var is missing we treat the binary as
-//!      unavailable (returns `Ok(None)` from `try_spawn`). This is how coauth
-//!      / floria gate themselves until a DB / config is wired into the test
-//!      run.
-//!   3. Allocates a free local port and exports it back to the caller via the
-//!      configured bind env var (e.g. `STARID_BIND`) and / or `--bind` CLI
-//!      arg if `bind_arg` is set.
-//!   4. Spawns the child with `stdout` / `stderr` swallowed (Stdio::null) so
-//!      cargo test output stays readable; long-form troubleshooting can re-run
-//!      with the binary directly.
-//!   5. Waits for `/health` (or any caller-supplied liveness path) to return
-//!      2xx, with a deadline; returns a `SpawnedExternalProcess` whose `Drop`
-//!      kills the child + reaps it so tokio test threads can't leak orphans.
+//!   1. Resolves the binary path from an explicit env var override (e.g. `STARID_BIN`) **first**,
+//!      then falls back to a sibling-checkout convention path
+//!      (`../<crate>/target/debug/<bin>[.exe]` relative to the cotest workspace root).
+//!   2. Optionally checks `required_env_vars` (e.g. `COAUTH_DATABASE_URI`) are present in the
+//!      caller's env before attempting to spawn — when a required dependency env var is missing we
+//!      treat the binary as unavailable (returns `Ok(None)` from `try_spawn`). This is how coauth /
+//!      floria gate themselves until a DB / config is wired into the test run.
+//!   3. Allocates a free local port and exports it back to the caller via the configured bind env
+//!      var (e.g. `STARID_BIND`) and / or `--bind` CLI arg if `bind_arg` is set.
+//!   4. Spawns the child with `stdout` / `stderr` swallowed (Stdio::null) so cargo test output
+//!      stays readable; long-form troubleshooting can re-run with the binary directly.
+//!   5. Waits for `/health` (or any caller-supplied liveness path) to return 2xx, with a deadline;
+//!      returns a `SpawnedExternalProcess` whose `Drop` kills the child + reaps it so tokio test
+//!      threads can't leak orphans.
 //!
 //! `try_spawn` returns `Ok(None)` when the binary cannot be located **or**
 //! when any `required_env_vars` are missing. Callers that want a hard failure
@@ -29,12 +24,10 @@
 //! that want a soft skip path (e.g. a baseline conformance row) can early-
 //! return on `None`.
 
-use std::{
-    net::TcpListener,
-    path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
-    time::{Duration, Instant},
-};
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::Client;

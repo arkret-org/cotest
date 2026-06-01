@@ -5,20 +5,19 @@
 //! hard-removes [`Flow.discussion_realm_ref`] and a handful of `_ref` /
 //! `_id` naming legacies in favour of:
 //!
-//! * `scope_circle_id` (and `default_scope_circle_id`) on Flow / Space /
-//!   Morph / GrantConstraint, typed `cx:circle:<uuidv7>`.
-//! * `EffectiveScope { kind: realm | circle, realm_id, circle_id? }` on
-//!   every v1 event envelope (`$defs.effective_scope`).
-//! * A new `confidential_discussion_of` Relation between two `cx:flow:`
-//!   identifiers (broad-composition + narrow-discussion duo).
-//! * 7 new event kinds (`cx.circle.create`, `cx.circle.update`,
-//!   `cx.circle.archive`, `cx.circle.restore`, `cx.circle.tombstone`,
-//!   `cx.circle.member.state`, `cx.circle.anchor_commit`).
-//! * 6 new capability actions (`cx.circle.create`, `cx.circle.manage`,
-//!   `cx.circle.member.add`, `cx.circle.member.manage`,
-//!   `cx.circle.member.add.others`, `cx.circle.audit`).
-//! * 6 new reason / error codes (5 CXP-0007 sub-reasons plus
-//!   `delivery_binding_handed_over` registered in CXP-0006).
+//! * `scope_circle_id` (and `default_scope_circle_id`) on Flow / Space / Morph / GrantConstraint,
+//!   typed `cx:circle:<uuidv7>`.
+//! * `EffectiveScope { kind: realm | circle, realm_id, circle_id? }` on every v1 event envelope
+//!   (`$defs.effective_scope`).
+//! * A new `confidential_discussion_of` Relation between two `cx:flow:` identifiers
+//!   (broad-composition + narrow-discussion duo).
+//! * 7 new event kinds (`cx.circle.create`, `cx.circle.update`, `cx.circle.archive`,
+//!   `cx.circle.restore`, `cx.circle.tombstone`, `cx.circle.member.state`,
+//!   `cx.circle.anchor_commit`).
+//! * 6 new capability actions (`cx.circle.create`, `cx.circle.manage`, `cx.circle.member.add`,
+//!   `cx.circle.member.manage`, `cx.circle.member.add.others`, `cx.circle.audit`).
+//! * 6 new reason / error codes (5 CXP-0007 sub-reasons plus `delivery_binding_handed_over`
+//!   registered in CXP-0006).
 //!
 //! This module hosts the **literal-scanner** counterparts that protect the
 //! downstream tree from silently regressing on those wire-shape decisions.
@@ -28,16 +27,15 @@
 //!
 //! Rules emitted here:
 //!
-//! 1. **`DiscussionRealmRef`** — any occurrence of the deleted
-//!    `discussion_realm_ref` field as a Rust / TS / JSON identifier or
-//!    string literal. Spec status: hard-removed (CXP-0007). Replacement:
-//!    `scope_circle_id`.
-//! 2. **`UnknownCircleEventKind`** — any string literal beginning with
-//!    `cx.circle.` whose tail is **not** on the canonical allowlist (7
-//!    event kinds + 6 capability actions registered by CXP-0007).
-//! 3. **`UnknownCircleErrorCode`** — any string literal whose value is one
-//!    of the CXP-0007 reason code names (we still want the canonical
-//!    spelling to be the only spelling). Unknown variants surface here.
+//! 1. **`DiscussionRealmRef`** — any occurrence of the deleted `discussion_realm_ref` field as a
+//!    Rust / TS / JSON identifier or string literal. Spec status: hard-removed (CXP-0007).
+//!    Replacement: `scope_circle_id`.
+//! 2. **`UnknownCircleEventKind`** — any string literal beginning with `cx.circle.` whose tail is
+//!    **not** on the canonical allowlist (7 event kinds + 6 capability actions registered by
+//!    CXP-0007).
+//! 3. **`UnknownCircleErrorCode`** — any string literal whose value is one of the CXP-0007 reason
+//!    code names (we still want the canonical spelling to be the only spelling). Unknown variants
+//!    surface here.
 //!
 //! Wired into the harness through [`crate::literal_scanner::scan_tree_circle`].
 

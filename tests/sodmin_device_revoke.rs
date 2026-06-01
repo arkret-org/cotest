@@ -4,10 +4,9 @@
 //!   * A Rust-side spawner for sodmin (Dioxus admin UI);
 //!   * A joint soland+coauth+sodmin bootstrap helper (no equivalent in
 //!     `_helpers/coauth_bootstrap.rs` today);
-//!   * Playwright integration from inside `cargo test` (playwright
-//!     scaffolding currently only exists in `cotest/e2e/` TypeScript);
-//!   * Soland session-invalidation-on-device-revoke cascade in soland's
-//!     auth middleware.
+//!   * Playwright integration from inside `cargo test` (playwright scaffolding currently only
+//!     exists in `cotest/e2e/` TypeScript);
+//!   * Soland session-invalidation-on-device-revoke cascade in soland's auth middleware.
 //!
 //! See `cotest::scenarios::sodmin_device_revoke` for the full
 //! prerequisite list.

@@ -8,28 +8,26 @@
 //!   - §3.6.5 — accepted-after-review → `cx.invite.create` + `cx.invite.accept`
 //!   - §3.8  — membership state machine (knock → invite → join, reject → leave)
 //!   - §3.11 — anti-abuse defaults (application_ttl=168h, cooldown=72h,
-//!             max_open_applications_per_actor=1)
+//!     max_open_applications_per_actor=1)
 //!
 //! Scenario walk-through (when fully wired):
-//!   1. Alice creates a Space with `join_rule="knock"` and `manual_review`
-//!      gate (`auto_resolve=false`); short test-only `application_ttl=10s`
-//!      and `cooldown_after_reject=2s` so the matrix exercises in seconds.
-//!   2. Bob (non-member) submits `cx.member.state{membership=knock}` →
-//!      reducer accepts, projects bob into `members_in_state("knock")`.
-//!   3. Bob submits `member.application` (in same batch SHOULD be allowed
-//!      per §3.6.1); reducer accepts, projects `application_pending`.
-//!   4. Reviewer alice submits `member.application.review{decision=reject,
-//!      reason_code=other}` → bob's membership transitions back to
-//!      `leave` with `cooldown_until` projection.
-//!   5. Bob immediately re-submits `member.application` → expect
-//!      `failed_precondition` errcode (cooldown active, §3.11).
-//!   6. Wait > `cooldown_after_reject` (test-shortened to 2s) → re-submit
-//!      knock + application succeeds.
-//!   7. `max_open_applications_per_actor` cap: bob with one pending
-//!      application submits a second → `failed_precondition`.
-//!   8. `application_ttl` expiry: leave an application pending past the
-//!      shortened ttl, then sync — application is auto-rejected
-//!      (`rejected_reason="ttl_expired"`); does NOT engage cooldown.
+//!   1. Alice creates a Space with `join_rule="knock"` and `manual_review` gate
+//!      (`auto_resolve=false`); short test-only `application_ttl=10s` and
+//!      `cooldown_after_reject=2s` so the matrix exercises in seconds.
+//!   2. Bob (non-member) submits `cx.member.state{membership=knock}` → reducer accepts, projects
+//!      bob into `members_in_state("knock")`.
+//!   3. Bob submits `member.application` (in same batch SHOULD be allowed per §3.6.1); reducer
+//!      accepts, projects `application_pending`.
+//!   4. Reviewer alice submits `member.application.review{decision=reject, reason_code=other}` →
+//!      bob's membership transitions back to `leave` with `cooldown_until` projection.
+//!   5. Bob immediately re-submits `member.application` → expect `failed_precondition` errcode
+//!      (cooldown active, §3.11).
+//!   6. Wait > `cooldown_after_reject` (test-shortened to 2s) → re-submit knock + application
+//!      succeeds.
+//!   7. `max_open_applications_per_actor` cap: bob with one pending application submits a second →
+//!      `failed_precondition`.
+//!   8. `application_ttl` expiry: leave an application pending past the shortened ttl, then sync —
+//!      application is auto-rejected (`rejected_reason="ttl_expired"`); does NOT engage cooldown.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: scaffolded as `#[ignore]`.
@@ -38,17 +36,14 @@
 //! dev-mode reducer, despite the bare `knock` membership state being
 //! supported per `soland/src/reducer.rs::knock_state_visible_in_members_in_state_query`):
 //!
-//!   * `cx.realm.join_rule` event kind not yet enforced by reducer (Space
-//!     create only stores `public: bool`, no enum); no path to set
-//!     `join_rule="knock"`.
-//!   * `member.application` / `.review` / `.cancel` event kinds not in
-//!     the soland event kind registry (`soland/src/routing/events/operations.rs`
-//!     dispatcher table).
-//!   * `cooldown_after_reject` / `application_ttl` /
-//!     `max_open_applications_per_actor` reducer enforcement absent.
-//!   * Test-only short-TTL injection: harness has no way to set
-//!     `cooldown_after_reject=2s` (would need a soland test-mode env var
-//!     or admin override route).
+//!   * `cx.realm.join_rule` event kind not yet enforced by reducer (Space create only stores
+//!     `public: bool`, no enum); no path to set `join_rule="knock"`.
+//!   * `member.application` / `.review` / `.cancel` event kinds not in the soland event kind
+//!     registry (`soland/src/routing/events/operations.rs` dispatcher table).
+//!   * `cooldown_after_reject` / `application_ttl` / `max_open_applications_per_actor` reducer
+//!     enforcement absent.
+//!   * Test-only short-TTL injection: harness has no way to set `cooldown_after_reject=2s` (would
+//!     need a soland test-mode env var or admin override route).
 //!
 //! Track: `_claude_todos.md` row CT-4. Unblock requires soland join-rule +
 //! application machinery; once available, drop the `#[ignore]` and tighten

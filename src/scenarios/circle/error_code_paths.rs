@@ -6,11 +6,10 @@
 //! Circle delivery binding migration path. This scenario pins:
 //!
 //!   - the sub-reason set [`KNOWN_REASON_CODES_CXP_0007`] is exactly 8,
-//!   - each sub-reason string is non-empty, lowercase, snake_case, and
-//!     does not duplicate a known reason from another release,
-//!   - the top-level `ERROR_CODE_DELIVERY_BINDING_HANDED_OVER` is registered
-//!     via [`is_known_error_code`] and resolves to a non-`None`
-//!     HTTP status binding.
+//!   - each sub-reason string is non-empty, lowercase, snake_case, and does not duplicate a known
+//!     reason from another release,
+//!   - the top-level `ERROR_CODE_DELIVERY_BINDING_HANDED_OVER` is registered via
+//!     [`is_known_error_code`] and resolves to a non-`None` HTTP status binding.
 //!
 //! Together this protects the wire-error surface the moderation /
 //! anti-enumeration scenarios will fire in P2F.4.

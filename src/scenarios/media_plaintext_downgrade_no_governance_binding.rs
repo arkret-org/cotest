@@ -4,19 +4,18 @@
 //! Spec (round 2+3 cleanup, T12):
 //!
 //! `media_service_decrypts=true` MUST be bound in three places:
-//!   1. `cx.realm.policy_components` write covering this service +
-//!      `policy_root` digest covers the current epoch's policy
-//!   2. SFU service DID appears in `plaintext_visible_services[]` with
-//!      `purpose=media_plaintext`
-//!   3. MLS epoch governance binding records `policy_root` so receivers
-//!      can verify the SFU's plaintext role is current
+//!   1. `cx.realm.policy_components` write covering this service + `policy_root` digest covers the
+//!      current epoch's policy
+//!   2. SFU service DID appears in `plaintext_visible_services[]` with `purpose=media_plaintext`
+//!   3. MLS epoch governance binding records `policy_root` so receivers can verify the SFU's
+//!      plaintext role is current
 //!
 //! If any of the three is missing or stale, the SFU MUST refuse to
 //! handle plaintext media and the reducer MUST surface either:
-//!   * `mls_governance_binding_stale` — when MLS epoch governance
-//!     binding does not cover the current policy_root
-//!   * `media_plaintext_service_not_authorised` — when the SFU service
-//!     DID is not in `plaintext_visible_services[]`
+//!   * `mls_governance_binding_stale` — when MLS epoch governance binding does not cover the
+//!     current policy_root
+//!   * `media_plaintext_service_not_authorised` — when the SFU service DID is not in
+//!     `plaintext_visible_services[]`
 //!
 //! This scenario covers the missing-policy_root path.
 

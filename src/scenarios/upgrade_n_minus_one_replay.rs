@@ -10,13 +10,12 @@
 //! on replay is a release-blocker bug.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/state/event-log.md` — event log is the
-//!     source of truth; projections are derived and disposable.
-//!   - `contrix-spec/spec/v1/zh/conformance/event-schemas.md` —
-//!     event-kind versioning + forward-compat reducer rules.
-//!   - `contrix-spec/spec/v1/zh/state/snapshot-schema.md` — when a
-//!     snapshot from N-1 is restored under N, the snapshot schema must
-//!     either be exactly compatible OR auto-migrate.
+//!   - `contrix-spec/spec/v1/zh/state/event-log.md` — event log is the source of truth; projections
+//!     are derived and disposable.
+//!   - `contrix-spec/spec/v1/zh/conformance/event-schemas.md` — event-kind versioning +
+//!     forward-compat reducer rules.
+//!   - `contrix-spec/spec/v1/zh/state/snapshot-schema.md` — when a snapshot from N-1 is restored
+//!     under N, the snapshot schema must either be exactly compatible OR auto-migrate.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Scenario walk-through (when fully wired):
@@ -24,44 +23,37 @@
 //!   1. Resolve "previous release" of soland.
 //!        - Read `../soland/Cargo.toml` for the current version.
 //!        - `git -C ../soland tag --list "v*"` to get released tags.
-//!        - Pick the highest tag strictly less than the current version
-//!          (this is N-1). If no tag exists, the test must skip with a
-//!          clear "no previous release tagged" message (the current
-//!          repo state today!).
+//!        - Pick the highest tag strictly less than the current version (this is N-1). If no tag
+//!          exists, the test must skip with a clear "no previous release tagged" message (the
+//!          current repo state today!).
 //!   2. Build the N-1 binary in an isolated target dir.
-//!        - `git -C ../soland worktree add /tmp/soland-n-1 <tag>` to
-//!          avoid disturbing the live tree.
-//!        - `cargo build --manifest-path /tmp/soland-n-1/Cargo.toml
-//!           --bin soland --release --target-dir /tmp/soland-n-1/target`.
+//!        - `git -C ../soland worktree add /tmp/soland-n-1 <tag>` to avoid disturbing the live
+//!          tree.
+//!        - `cargo build --manifest-path /tmp/soland-n-1/Cargo.toml --bin soland --release
+//!          --target-dir /tmp/soland-n-1/target`.
 //!        - Cache by tag hash so repeated CT-17 runs don't rebuild.
 //!   3. Write fixture data with the N-1 binary against a fresh data dir.
 //!        - Spawn N-1 soland, point at a tempdir DB / Pg schema.
-//!        - alice creates a space, sends N messages, knocks/joins,
-//!          uploads a blob — exercise enough event kinds that the
-//!          replay matrix is non-trivial.
-//!        - Capture the projection state via the public API: list of
-//!          messages, member roster, blob refs.
-//!   4. Cleanly shut down N-1 soland (graceful, no chaos here — this
-//!      isolates the upgrade variable from the recovery variable
-//!      covered by CT-16).
+//!        - alice creates a space, sends N messages, knocks/joins, uploads a blob — exercise enough
+//!          event kinds that the replay matrix is non-trivial.
+//!        - Capture the projection state via the public API: list of messages, member roster, blob
+//!          refs.
+//!   4. Cleanly shut down N-1 soland (graceful, no chaos here — this isolates the upgrade variable
+//!      from the recovery variable covered by CT-16).
 //!   5. Spawn current-build soland against the same data dir / DB.
 //!        - On startup, soland MUST replay the log without error.
 //!        - `/health` reports `ready` (not `replay_error`).
 //!   6. Verify equivalence:
 //!        - Re-fetch the same projection state via the public API.
-//!        - For each event kind that didn't change schema between N-1
-//!          and N: projection must be byte-identical to the N-1
-//!          capture.
-//!        - For each event kind that DID change schema (recorded in a
-//!          migration manifest): projection must match the documented
-//!          post-migration shape.
-//!        - No events MAY silently disappear from the log; the log
-//!          row count MUST be unchanged (migrations append, never
-//!          delete).
-//!   7. Bonus: write one new event under N (e.g. send another
-//!      message). The new event must persist + replay cleanly on a
-//!      subsequent N restart — proving the upgraded state is itself
-//!      durable, not just readable.
+//!        - For each event kind that didn't change schema between N-1 and N: projection must be
+//!          byte-identical to the N-1 capture.
+//!        - For each event kind that DID change schema (recorded in a migration manifest):
+//!          projection must match the documented post-migration shape.
+//!        - No events MAY silently disappear from the log; the log row count MUST be unchanged
+//!          (migrations append, never delete).
+//!   7. Bonus: write one new event under N (e.g. send another message). The new event must persist
+//!      + replay cleanly on a subsequent N restart — proving the upgraded state is itself durable,
+//!      not just readable.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Status: scaffolded as `#[ignore]`.
@@ -70,56 +62,42 @@
 //! infrastructure-heavy scenario in Lane D — these are real, not
 //! aspirational):
 //!
-//!   * **No tagged releases.** `git -C ../soland tag --list` returns
-//!     empty today. Without at least one `v*` tag, "N-1" is undefined
-//!     and the test can't even pick a baseline. Either:
-//!       - the soland project starts tagging cuts (semver discipline),
-//!         OR
-//!       - the test is parameterised by an arbitrary commit hash via
-//!         env (`COTEST_UPGRADE_BASE_REV=<sha>`), trading "release
-//!         compat" for "any-two-commits compat".
-//!   * **No cross-version build helper in the cotest harness.** Today
-//!     `ContrixServer::spawn` builds the live tree's binary on demand
-//!     (via `cargo run` under the hood) and doesn't know how to build
-//!     a different revision. Need a `BuildSpec { rev, target_dir,
-//!     features }` helper that:
-//!       1. Creates / reuses a `git worktree` under `cotest/.cache/`
-//!          for the requested rev.
+//!   * **No tagged releases.** `git -C ../soland tag --list` returns empty today. Without at least
+//!     one `v*` tag, "N-1" is undefined and the test can't even pick a baseline. Either:
+//!       - the soland project starts tagging cuts (semver discipline), OR
+//!       - the test is parameterised by an arbitrary commit hash via env
+//!         (`COTEST_UPGRADE_BASE_REV=<sha>`), trading "release compat" for "any-two-commits
+//!         compat".
+//!   * **No cross-version build helper in the cotest harness.** Today `ContrixServer::spawn` builds
+//!     the live tree's binary on demand (via `cargo run` under the hood) and doesn't know how to
+//!     build a different revision. Need a `BuildSpec { rev, target_dir, features }` helper that:
+//!       1. Creates / reuses a `git worktree` under `cotest/.cache/` for the requested rev.
 //!       2. Runs `cargo build --release` with a per-rev `--target-dir`.
 //!       3. Returns the path to the built binary.
 //!     This is ~150 LOC of new harness code; not zero, but bounded.
-//!   * **No schema-migration manifest.** Today there is no
-//!     machine-readable list of "event kind X changed shape between
-//!     v0.4.0 and v0.5.0; here's the migrator". Without one, step 6
-//!     can only do a strict byte-equality check, which makes the test
-//!     fail every time any reducer touches the projection shape —
-//!     defeating the point. A `contrix-spec/state/migrations/*.json`
-//!     manifest (or a Rust `inventory!`-style registry) would close
-//!     this.
-//!   * **Per-rev data dir / DB schema isolation.** The N-1 binary and
-//!     the N binary MUST share the same on-disk state, but two
-//!     concurrent CT-17 invocations MUST NOT share. Need a
-//!     `Pg schema-per-test` or a unique tempdir hand-off, with the
-//!     N-1 process's lock file released before the N process starts.
-//!   * **N-1 binary network compatibility.** If the test driver uses
-//!     the current SDK's HTTP client against the N-1 server, any
-//!     wire-protocol change between versions will surface as "test
-//!     can't even talk to the old server". Mitigation: drive the
-//!     fixture step via raw HTTP + JSON, not the SDK; the SDK can
-//!     come back for the post-upgrade verification step.
+//!   * **No schema-migration manifest.** Today there is no machine-readable list of "event kind X
+//!     changed shape between v0.4.0 and v0.5.0; here's the migrator". Without one, step 6 can only
+//!     do a strict byte-equality check, which makes the test fail every time any reducer touches
+//!     the projection shape — defeating the point. A `contrix-spec/state/migrations/*.json`
+//!     manifest (or a Rust `inventory!`-style registry) would close this.
+//!   * **Per-rev data dir / DB schema isolation.** The N-1 binary and the N binary MUST share the
+//!     same on-disk state, but two concurrent CT-17 invocations MUST NOT share. Need a `Pg
+//!     schema-per-test` or a unique tempdir hand-off, with the N-1 process's lock file released
+//!     before the N process starts.
+//!   * **N-1 binary network compatibility.** If the test driver uses the current SDK's HTTP client
+//!     against the N-1 server, any wire-protocol change between versions will surface as "test
+//!     can't even talk to the old server". Mitigation: drive the fixture step via raw HTTP + JSON,
+//!     not the SDK; the SDK can come back for the post-upgrade verification step.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
 //! Future implementer's checklist (drop the `#[ignore]` once these land):
-//!   1. Tag a soland release (any `v*` tag — even `v0.0.1-baseline`
-//!      satisfies the test, though semantically meaningful tags are
-//!      preferred).
-//!   2. Add `cotest::scenarios::_helpers::cross_version_build` with
-//!      worktree management + caching.
-//!   3. Add a migration manifest schema + at least an empty manifest
-//!      under `contrix-spec/state/migrations/`.
+//!   1. Tag a soland release (any `v*` tag — even `v0.0.1-baseline` satisfies the test, though
+//!      semantically meaningful tags are preferred).
+//!   2. Add `cotest::scenarios::_helpers::cross_version_build` with worktree management + caching.
+//!   3. Add a migration manifest schema + at least an empty manifest under
+//!      `contrix-spec/state/migrations/`.
 //!   4. Add `spawn_with_postgres` to the harness (shared with CT-16).
-//!   5. Replace each `unimplemented!("step N: …")` below with the real
-//!      call.
+//!   5. Replace each `unimplemented!("step N: …")` below with the real call.
 //!
 //! Track: `_claude_todos.md` row CT-17.
 
