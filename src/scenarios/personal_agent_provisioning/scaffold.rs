@@ -1,16 +1,16 @@
 //! SDK-pure scaffold for the personal-agent provisioning profile.
 //!
 //! Asserts the wire-shape baseline so a downstream regression on any of
-//! the new typed-ids / capability actions / operation IDs / event kinds
+//! the DID + typed-ids / capability actions / operation IDs / event kinds
 //! fails this test before reaching the live soland surface.
 
 use anyhow::{Result, anyhow};
 
 use contrix_core::{
-    AccountabilityGrantId, AgentKeyId, AgentPrincipalId, AgentSessionId,
-    CAP_ACTION_AGENT_PROVISION, OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_DEACTIVATE, OP_AGENT_GET,
-    OP_AGENT_GRANT_ATTACH, OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE,
-    OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY, OP_AGENT_SIDECAR_THREAD_ENSURE,
+    AccountabilityGrantId, AgentKeyId, AgentSessionId, CAP_ACTION_AGENT_PROVISION, Did,
+    OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH,
+    OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME,
+    OP_AGENT_ROTATE_KEY, OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
 
 /// The 11 personal-agent endpoint operation IDs registered in
@@ -64,10 +64,10 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
         ));
     }
 
-    // (c) The typed-ids that a provisioning round materializes are
-    //     well-formed under the SDK validator.
-    AgentPrincipalId::new("cx:agent_principal:01999999-0000-7000-8000-000000000001".to_owned())
-        .map_err(|e| anyhow!("AgentPrincipalId construction: {e}"))?;
+    // (c) The principal DID and auxiliary typed-ids that a provisioning
+    //     round materializes are well-formed under the SDK validators.
+    Did::new("did:web:agent.example".to_owned())
+        .map_err(|e| anyhow!("agent principal DID construction: {e}"))?;
     AgentKeyId::new("cx:agent_key:01999999-0000-7000-8000-000000000002".to_owned())
         .map_err(|e| anyhow!("AgentKeyId construction: {e}"))?;
     AgentSessionId::new("cx:agent_session:01999999-0000-7000-8000-000000000003".to_owned())
@@ -77,12 +77,12 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
     )
     .map_err(|e| anyhow!("AccountabilityGrantId construction: {e}"))?;
 
-    // (d) ill-formed typed-ids MUST be rejected. This is the
+    // (d) ill-formed DID / typed-ids MUST be rejected. This is the
     //     wire-form fail-closed gate for downstream parsers.
-    let bad_principal = AgentPrincipalId::new("cx:agent:not-a-uuidv7".to_owned());
+    let bad_principal = Did::new("cx:agent:not-a-uuidv7".to_owned());
     if bad_principal.is_ok() {
         return Err(anyhow!(
-            "AgentPrincipalId accepted ill-formed value `cx:agent:not-a-uuidv7`"
+            "Did accepted ill-formed agent principal value `cx:agent:not-a-uuidv7`"
         ));
     }
 

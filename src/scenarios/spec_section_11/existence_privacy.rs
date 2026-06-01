@@ -16,8 +16,8 @@ fn blinded_not_found_body(_probe_id: &str) -> &'static str {
 }
 
 pub async fn existence_privacy_run() -> Result<()> {
-    let existent = "cx:agent_principal:01999999-0000-7000-8000-0000000ep001";
-    let absent = "cx:agent_principal:01999999-0000-7000-8000-0000000ep999";
+    let existent = "did:web:agent-existent.example.com";
+    let absent = "did:web:agent-absent.example.com";
 
     let a = blinded_not_found_body(existent);
     let b = blinded_not_found_body(absent);

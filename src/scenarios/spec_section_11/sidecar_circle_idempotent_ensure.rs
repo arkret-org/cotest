@@ -37,7 +37,7 @@ fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<S
 
 pub async fn sidecar_circle_idempotent_ensure_run() -> Result<()> {
     let controller_did = "did:web:controller.example.com";
-    let agent_principal_id = "cx:agent_principal:01999999-0000-7000-8000-0000000ce001";
+    let agent_principal_id = "did:web:agent-one.example.com";
 
     let first = derive_sidecar_id(controller_did, agent_principal_id)?;
     let second = derive_sidecar_id(controller_did, agent_principal_id)?;
@@ -50,7 +50,7 @@ pub async fn sidecar_circle_idempotent_ensure_run() -> Result<()> {
         .map_err(|e| anyhow!("derived sidecar id is not a well-formed SidecarCircleId: {e}"))?;
 
     // Different agent → different sidecar.
-    let other_agent = "cx:agent_principal:01999999-0000-7000-8000-0000000ce002";
+    let other_agent = "did:web:agent-two.example.com";
     let other = derive_sidecar_id(controller_did, other_agent)?;
     if other == first {
         return Err(anyhow!(

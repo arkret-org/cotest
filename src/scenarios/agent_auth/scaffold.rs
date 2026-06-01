@@ -9,8 +9,8 @@
 use anyhow::{Result, anyhow};
 
 use contrix_core::{
-    AgentKeyId, AgentPrincipalId, CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
-    CAP_ACTION_AGENT_ACTION_REQUEST, CAP_ACTION_AGENT_DRAFT_PROPOSE,
+    AgentKeyId, CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
+    CAP_ACTION_AGENT_ACTION_REQUEST, CAP_ACTION_AGENT_DRAFT_PROPOSE, Did,
 };
 
 /// Validate a `runtime_attestation` envelope per §1.2 — unknown kinds
@@ -40,9 +40,8 @@ pub async fn agent_auth_run() -> Result<()> {
     // (c) agent_key_proof verification_method targets the agent
     //     principal — NOT the controller — so a single round-trip pinned
     //     here protects against the smuggle-controller-DID exploit.
-    let agent_principal_id =
-        AgentPrincipalId::new("cx:agent_principal:01999999-0000-7000-8000-00000000a001".to_owned())
-            .map_err(|e| anyhow!("agent_principal_id: {e}"))?;
+    let agent_principal_id = Did::new("did:web:agent.example".to_owned())
+        .map_err(|e| anyhow!("agent_principal_id: {e}"))?;
     let agent_key_id =
         AgentKeyId::new("cx:agent_key:01999999-0000-7000-8000-00000000a002".to_owned())
             .map_err(|e| anyhow!("agent_key_id: {e}"))?;
@@ -56,12 +55,9 @@ pub async fn agent_auth_run() -> Result<()> {
             "verification_method must be a DID URL fragment, got `{verification_method}`"
         ));
     }
-    if !agent_principal_id
-        .as_str()
-        .starts_with("cx:agent_principal:")
-    {
+    if verification_method.split('#').next() != Some(agent_principal_id.as_str()) {
         return Err(anyhow!(
-            "agent_principal_id MUST keep the `cx:agent_principal:` prefix"
+            "verification_method DID must match agent_principal_id"
         ));
     }
 

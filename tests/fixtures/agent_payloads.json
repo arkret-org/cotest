@@ -10,9 +10,15 @@
       "event_kind": "cx.agent.pause",
       "payload_def_ref": "agent_pause_payload",
       "payload": {
-        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
-        "reason": "controller_initiated",
-        "at": "2026-05-27T05:00:00Z"
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
+        "transition": "pause",
+        "previous_status": "active",
+        "status_changed_at": "2026-05-27T05:00:00Z",
+        "freshness_frontier": {
+          "captured_at": "2026-05-27T05:00:00Z"
+        },
+        "reason": "controller_initiated"
       },
       "expect": "pass"
     },
@@ -21,8 +27,14 @@
       "event_kind": "cx.agent.resume",
       "payload_def_ref": "agent_resume_payload",
       "payload": {
-        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
-        "at": "2026-05-27T05:05:00Z"
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
+        "transition": "resume",
+        "previous_status": "paused",
+        "status_changed_at": "2026-05-27T05:05:00Z",
+        "freshness_frontier": {
+          "captured_at": "2026-05-27T05:05:00Z"
+        }
       },
       "expect": "pass"
     },
@@ -31,10 +43,15 @@
       "event_kind": "cx.agent.deactivate",
       "payload_def_ref": "agent_deactivate_payload",
       "payload": {
-        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
-        "reason": "controller_revoked",
-        "at": "2026-05-27T06:00:00Z",
-        "terminal": true
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
+        "transition": "deactivate",
+        "previous_status": "active",
+        "status_changed_at": "2026-05-27T06:00:00Z",
+        "revocation_frontier": {
+          "captured_at": "2026-05-27T06:00:00Z"
+        },
+        "reason": "controller_revoked"
       },
       "expect": "pass"
     },
@@ -44,11 +61,17 @@
       "payload_def_ref": "agent_draft_propose_payload",
       "reducer_input": false,
       "payload": {
-        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
         "draft_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c001",
-        "target_realm_id": "cx:realm:01999999-0000-7000-8000-000000000001",
-        "body_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "proposed_at": "2026-05-27T07:00:00Z"
+        "proposed_action": "cx.message.create",
+        "target": {
+          "kind": "realm",
+          "realm_id": "cx:realm:01999999-0000-7000-8000-000000000001"
+        },
+        "content_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "created_at": "2026-05-27T07:00:00Z",
+        "expires_at": "2026-05-27T07:10:00Z"
       },
       "expect": "pass"
     },
@@ -58,10 +81,17 @@
       "payload_def_ref": "agent_action_request_payload",
       "reducer_input": false,
       "payload": {
-        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
         "request_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c002",
-        "action_kind": "cx.message.create",
-        "requested_at": "2026-05-27T07:01:00Z"
+        "proposed_action": "cx.message.create",
+        "target": {
+          "kind": "realm",
+          "realm_id": "cx:realm:01999999-0000-7000-8000-000000000001"
+        },
+        "request_canonical_digest": "sha256:1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "created_at": "2026-05-27T07:01:00Z",
+        "expires_at": "2026-05-27T07:11:00Z"
       },
       "expect": "pass"
     },
@@ -71,9 +101,19 @@
       "payload_def_ref": "agent_action_approve_payload",
       "reducer_input": false,
       "payload": {
+        "approval_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c004",
         "request_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c002",
-        "approver_did": "did:web:controller.example",
-        "approved_at": "2026-05-27T07:02:00Z"
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
+        "proposed_action": "cx.message.create",
+        "target": {
+          "kind": "realm",
+          "realm_id": "cx:realm:01999999-0000-7000-8000-000000000001"
+        },
+        "approved_payload_digest": "sha256:2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "approval_nonce": "agent-approval-nonce-1",
+        "approved_at": "2026-05-27T07:02:00Z",
+        "expires_at": "2026-05-27T07:12:00Z"
       },
       "expect": "pass"
     },
@@ -83,9 +123,11 @@
       "payload_def_ref": "agent_action_reject_payload",
       "reducer_input": false,
       "payload": {
+        "rejection_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c005",
         "request_id": "cx:agent_draft:01999999-0000-7000-8000-00000000c003",
-        "approver_did": "did:web:controller.example",
-        "reject_reason": "policy_violation",
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
+        "reason": "policy_violation",
         "rejected_at": "2026-05-27T07:03:00Z"
       },
       "expect": "pass"
@@ -96,9 +138,15 @@
       "payload_def_ref": "agent_pause_payload",
       "reason": "actor_kind_reducer_managed",
       "payload": {
-        "agent_principal_id": "cx:agent_principal:01999999-0000-7000-8000-00000000a001",
-        "actor_kind": "agent",
-        "at": "2026-05-27T08:00:00Z"
+        "agent_principal_id": "did:web:agent.example",
+        "controller_principal_id": "did:web:controller.example",
+        "transition": "pause",
+        "previous_status": "active",
+        "status_changed_at": "2026-05-27T08:00:00Z",
+        "freshness_frontier": {
+          "captured_at": "2026-05-27T08:00:00Z"
+        },
+        "actor_kind": "agent"
       },
       "expect": "fail"
     }
