@@ -219,7 +219,8 @@ async function createRealm(
       kind: "cx.realm.create",
       createdAt: createdAtValue,
       payload: {
-        plaintext_visible_services: plaintextVisibleServices,
+        // realm_create_payload root is additionalProperties:false; the field
+        // lives on the realm object (additionalProperties:true) below.
         object: {
           id: realmId,
           schema: "cx.schema.realm.v1",

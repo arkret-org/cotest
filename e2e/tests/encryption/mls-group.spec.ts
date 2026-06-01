@@ -586,10 +586,7 @@ test.describe("MLS group encryption", () => {
   // but the submit returns a misleading 200 instead of 4xx. Fix = add circle
   // operation schemas (needs full circle-path regression: it would newly run
   // validate_operation_policy + policy_gate on circle events at submit).
-  test.fixme(
-    // @blocking-on: soland#circle-submit-validation-gap
-    // @user-promise: e2e/scenarios/encryption/mls-group.md (E11.7)
-    "cx.circle.update that patches encryption_profile is rejected (create-locked)", async ({
+  test("cx.circle.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {
     const stamp = Date.now();

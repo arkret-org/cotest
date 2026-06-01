@@ -129,7 +129,9 @@ export async function createSpaceApi(
       kind: "cx.realm.create",
       createdAt,
       payload: {
-        plaintext_visible_services: plaintextVisibleServices,
+        // `plaintext_visible_services` lives on the realm object only — the
+        // realm_create_payload root is additionalProperties:false and rejects
+        // it (it stays inside `object` below, which is additionalProperties:true).
         object: {
           id: realmId,
           schema: "cx.schema.realm.v1",
