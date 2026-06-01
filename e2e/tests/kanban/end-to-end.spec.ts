@@ -5,7 +5,7 @@
 //   - models/flow-and-message.md §2-§3 (Flow), §4.3 (discussion track)
 //   - models/relation.md §3.2 (contains)
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -16,6 +16,83 @@ import {
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
+
+// ---------------------------------------------------------------------------
+// Shared rig for the "creator device, encrypted Realm" regression trio
+// (description / synthesis / discussion comment). Each guards that a private
+// Flow content path round-trips as an ENCRYPTED write on the SAME device that
+// just created the Realm. The plaintext happy-paths above never arm the
+// content-encryption floor (createSpace defaults encryption_profile to
+// "none"), and encryption/key-backup.spec.ts A2 only reaches the encrypted
+// kanban write on a RESTORED second device — never on the original creator
+// device, which is the path this trio covers.
+// ---------------------------------------------------------------------------
+
+// The plaintext-vs-encrypted decision is client-side and the optimistic UI
+// still renders typed text even when the server bounced the write, so any
+// content_encryption_floor_violation on the wire is the source of truth.
+function recordFloorViolations(page: Page): string[] {
+  const hits: string[] = [];
+  page.on("response", (response) => {
+    if (
+      !response.url().includes("/api/v1/events") ||
+      response.request().method() !== "POST"
+    ) {
+      return;
+    }
+    void response
+      .text()
+      .then((body) => {
+        if (body.includes("content_encryption_floor_violation")) {
+          hits.push(`${response.status()} ${body.slice(0, 500)}`);
+        }
+      })
+      .catch(() => {});
+  });
+  return hits;
+}
+
+async function buildEncryptedBoardAndCard(
+  page: Page,
+  spaceId: string,
+  stamp: number,
+  cardTitle: string,
+): Promise<void> {
+  await page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+  await page.getByTestId("new-board-toggle").click();
+  await page.getByTestId("new-board-title-input").fill(`Enc Board ${stamp}`);
+  await page.getByTestId("create-board-space-button").click();
+  await expect(page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+    timeout: 45_000,
+  });
+  const columnName = `Todo-${stamp}`;
+  await page.getByTestId("new-column-input").fill(columnName);
+  await page.getByTestId("add-column-button").click();
+  const column = page.getByTestId("kanban-column").filter({ hasText: columnName }).first();
+  await expect(column).toBeVisible({ timeout: 45_000 });
+  await column.getByTestId("add-card-button").click();
+  await column.getByTestId("new-card-title-input").fill(cardTitle);
+  await column.getByTestId("save-card-button").click();
+  await expect(column.getByTestId("kanban-card").filter({ hasText: cardTitle })).toBeVisible({
+    timeout: 45_000,
+  });
+}
+
+// The card-detail rich editor renders its fallback <textarea> under a fixed
+// testid regardless of slot (description vs synthesis), so both editors are
+// driven the same way. Only one edit form is mounted at a time.
+async function setCardDetailEditorValue(page: Page, value: string): Promise<void> {
+  const input = page.getByTestId("card-detail-description-input");
+  await expect(input).toBeAttached({ timeout: 45_000 });
+  await input.evaluate((node, nextValue) => {
+    const textarea = node as HTMLTextAreaElement;
+    textarea.value = nextValue;
+    textarea.dispatchEvent(
+      new InputEvent("input", { bubbles: true, inputType: "insertText", data: nextValue }),
+    );
+  }, value);
+}
 
 test.describe("kanban end-to-end", () => {
   test("alice opens kanban, adds 3 columns, adds 2 cards in Todo, archives Card A, restores it", async ({
@@ -297,6 +374,295 @@ test.describe("kanban end-to-end", () => {
           { timeout: 30_000 },
         )
         .toBe(true);
+    } finally {
+      await alicePage.close();
+    }
+  });
+
+  // Regression: creator-device "add description on a fresh encrypted Realm".
+  //
+  // The happy-path kanban tests above build PLAINTEXT spaces — createSpace
+  // leaves encryption_profile unset, which defaults to "none" (see
+  // helpers/users.ts + soland-api.ts), so soland's content-encryption floor
+  // (operations.rs validate_content_encryption_floor) is never armed and the
+  // card detail only ever carries a `title`, never a private `body`. The
+  // yougen setup wizard, however, defaults new Realms to `mls_rfc9420` (the
+  // "Encrypted" badge). Adding a Flow description writes the private `body`
+  // patch path, so on an encrypted Realm the client MUST encrypt it before
+  // submit; if it ships plaintext, soland rejects the cx.flow.update with 412
+  // `content_encryption_floor_violation` (exactly the failure reported from
+  // the UI). encryption/key-backup.spec.ts A2 exercises this only on a
+  // RESTORED second device — never on the original creator device, which is
+  // the path this guards.
+  test("alice adds a flow description on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.flow.update (no content_encryption_floor_violation)", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-enc-desc-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    const cardTitle = `Encrypted Card ${stamp}`;
+    const description = `Encrypted description body ${stamp}`;
+
+    // The plaintext-vs-encrypted decision is client-side, and on the buggy
+    // path the optimistic UI still renders the typed text even though the
+    // server bounced the write — so the network verdict, not the rendered
+    // DOM, is the source of truth. Record any events submit that soland
+    // rejects with the content-encryption floor reason.
+    const floorViolations: string[] = [];
+    alicePage.page.on("response", (response) => {
+      if (
+        !response.url().includes("/api/v1/events") ||
+        response.request().method() !== "POST"
+      ) {
+        return;
+      }
+      void response
+        .text()
+        .then((body) => {
+          if (body.includes("content_encryption_floor_violation")) {
+            floorViolations.push(`${response.status()} ${body.slice(0, 500)}`);
+          }
+        })
+        .catch(() => {});
+    });
+
+    try {
+      // Encrypted Realm — mirrors the yougen setup-wizard default. This is the
+      // single line that distinguishes this case from the plaintext happy
+      // paths above and arms the content-encryption floor.
+      const spaceId = await alicePage.createSpace({
+        title: `Encrypted Kanban ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+      });
+
+      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+
+      // Board + one column + one card (title only).
+      await alicePage.page.getByTestId("new-board-toggle").click();
+      await alicePage.page.getByTestId("new-board-title-input").fill(`Enc Board ${stamp}`);
+      await alicePage.page.getByTestId("create-board-space-button").click();
+      await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
+        timeout: 45_000,
+      });
+
+      const todoColumnName = `Todo-${stamp}`;
+      await alicePage.page.getByTestId("new-column-input").fill(todoColumnName);
+      await alicePage.page.getByTestId("add-column-button").click();
+      const todoColumn = alicePage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: todoColumnName })
+        .first();
+      await expect(todoColumn).toBeVisible({ timeout: 45_000 });
+
+      await todoColumn.getByTestId("add-card-button").click();
+      await todoColumn.getByTestId("new-card-title-input").fill(cardTitle);
+      await todoColumn.getByTestId("save-card-button").click();
+      const cardLocator = todoColumn
+        .getByTestId("kanban-card")
+        .filter({ hasText: cardTitle })
+        .first();
+      await expect(cardLocator).toBeVisible({ timeout: 45_000 });
+      await stepShot(alicePage.page, testInfo, "A-encrypted-card-created");
+
+      // Open the card → Description tab → add a description through the UI.
+      // The Description editor binds to the Flow's private `body` field, which
+      // is exactly what the content-encryption floor inspects.
+      await cardLocator.click();
+      await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+      await alicePage.page.getByTestId("card-detail-tab-description").click();
+      await alicePage.page.getByTestId("card-detail-add-description-button").click();
+
+      const editor = alicePage.page.getByTestId("card-detail-description-input");
+      await expect(editor).toBeAttached({ timeout: 45_000 });
+      await editor.evaluate((node, value) => {
+        const textarea = node as HTMLTextAreaElement;
+        textarea.value = value;
+        textarea.dispatchEvent(
+          new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }),
+        );
+      }, description);
+
+      // The encrypted cx.flow.update submit must reach soland and be accepted,
+      // not bounced by the content-encryption floor.
+      const flowUpdate = alicePage.page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v1/events") &&
+          response.request().method() === "POST" &&
+          (response.request().postData() ?? "").includes("cx.flow.update"),
+        { timeout: 60_000 },
+      );
+      await alicePage.page.getByTestId("card-detail-save-button").click();
+
+      const response = await flowUpdate;
+      const responseBody = await response.text();
+      expect(
+        responseBody.includes("content_encryption_floor_violation"),
+        `cx.flow.update for the description hit the content-encryption floor — the client shipped plaintext body to an encrypted Realm: ${response.status()} ${responseBody.slice(0, 500)}`,
+      ).toBe(false);
+      expect(
+        response.status(),
+        `cx.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
+      ).toBeLessThan(400);
+
+      // UI corroboration: the description renders and no encrypted-write error
+      // surfaces anywhere in the detail panel.
+      await expect(alicePage.page.getByTestId("card-description-panel")).toContainText(description, {
+        timeout: 120_000,
+      });
+      await expect(
+        alicePage.page.getByText(/content_encryption_floor_violation|blocks plaintext/i),
+      ).toHaveCount(0);
+      expect(floorViolations, floorViolations.join("\n")).toEqual([]);
+      await stepShot(alicePage.page, testInfo, "B-encrypted-description-saved");
+    } finally {
+      await alicePage.close();
+    }
+  });
+
+  // Regression: encrypted Flow SYNTHESIS on the creator device. `synthesis` is
+  // a distinct private content path from `body` (see soland operations.rs
+  // flow_operation_carries_plaintext_private_content / yougen
+  // KANBAN_PRIVATE_FLOW_PATCH_PATHS) and rides its own client encryption +
+  // commit code path, so it needs its own guard.
+  test("alice adds a flow synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.flow.update", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-enc-synth-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    const cardTitle = `Synthesis Card ${stamp}`;
+    const synthesis = `Encrypted synthesis note ${stamp}`;
+    const floorViolations = recordFloorViolations(alicePage.page);
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `Encrypted Kanban Synthesis ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+      });
+      await buildEncryptedBoardAndCard(alicePage.page, spaceId, stamp, cardTitle);
+
+      await alicePage.page
+        .getByTestId("kanban-card")
+        .filter({ hasText: cardTitle })
+        .first()
+        .click();
+      await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+      await alicePage.page.getByTestId("card-detail-tab-synthesis").click();
+      await alicePage.page.getByTestId("card-detail-new-synthesis-button").click();
+      await setCardDetailEditorValue(alicePage.page, synthesis);
+
+      const flowUpdate = alicePage.page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v1/events") &&
+          response.request().method() === "POST" &&
+          (response.request().postData() ?? "").includes("cx.flow.update"),
+        { timeout: 60_000 },
+      );
+      await alicePage.page.getByTestId("card-detail-save-button").click();
+
+      const response = await flowUpdate;
+      const responseBody = await response.text();
+      expect(
+        responseBody.includes("content_encryption_floor_violation"),
+        `synthesis cx.flow.update hit the content-encryption floor — client shipped plaintext synthesis: ${response.status()} ${responseBody.slice(0, 500)}`,
+      ).toBe(false);
+      expect(
+        response.status(),
+        `synthesis cx.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
+      ).toBeLessThan(400);
+
+      await expect(alicePage.page.getByTestId("card-synthesis-panel")).toContainText(synthesis, {
+        timeout: 120_000,
+      });
+      expect(floorViolations, floorViolations.join("\n")).toEqual([]);
+      await stepShot(alicePage.page, testInfo, "encrypted-synthesis-saved");
+    } finally {
+      await alicePage.close();
+    }
+  });
+
+  // Regression: encrypted Flow DISCUSSION comment on the creator device. The
+  // discussion track posts cx.message.create (not cx.flow.update) and carries
+  // the message body through the MLS encrypted-payload envelope; on an
+  // encrypted Realm a plaintext message must not leave the client. status<400
+  // is the catch-all guard — any rejection (floor / schema / policy) fails it.
+  test("alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-enc-disc-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    const cardTitle = `Discussion Card ${stamp}`;
+    const comment = `Encrypted discussion comment ${stamp}`;
+    const floorViolations = recordFloorViolations(alicePage.page);
+
+    try {
+      const spaceId = await alicePage.createSpace({
+        title: `Encrypted Kanban Discussion ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+      });
+      await buildEncryptedBoardAndCard(alicePage.page, spaceId, stamp, cardTitle);
+
+      await alicePage.page
+        .getByTestId("kanban-card")
+        .filter({ hasText: cardTitle })
+        .first()
+        .click();
+      await expect(alicePage.page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+      await alicePage.page.getByTestId("card-detail-tab-discussion").click();
+      await expect(alicePage.page.getByTestId("chat-panel")).toBeVisible({ timeout: 45_000 });
+
+      const messageCreate = alicePage.page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v1/events") &&
+          response.request().method() === "POST" &&
+          (response.request().postData() ?? "").includes("cx.message.create"),
+        { timeout: 60_000 },
+      );
+      await alicePage.page.getByTestId("chat-input").fill(comment);
+      await alicePage.page.getByTestId("send-chat-button").click();
+
+      const response = await messageCreate;
+      const responseBody = await response.text();
+      expect(
+        responseBody.includes("content_encryption_floor_violation"),
+        `discussion comment hit the content-encryption floor: ${response.status()} ${responseBody.slice(0, 500)}`,
+      ).toBe(false);
+      expect(
+        response.status(),
+        `discussion cx.message.create should be accepted (encrypted), not rejected; body=${responseBody.slice(0, 500)}`,
+      ).toBeLessThan(400);
+
+      await expect(alicePage.page.getByTestId("chat-panel")).toContainText(comment, {
+        timeout: 120_000,
+      });
+      expect(floorViolations, floorViolations.join("\n")).toEqual([]);
+      await stepShot(alicePage.page, testInfo, "encrypted-discussion-comment");
     } finally {
       await alicePage.close();
     }

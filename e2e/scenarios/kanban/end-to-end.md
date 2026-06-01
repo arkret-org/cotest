@@ -105,6 +105,9 @@
 - **E15.4 delete board**:有 cards / lists → cascade delete 应当按 spec §4.4 的 lifecycle/cascade 规则;测试 alice 删 board,断言所有 children 都失效(`is_deleted` 状态)
 - **E15.5 Discussion in archived flow**:Phase G 之后再尝试发 comment → reducer 拒绝;客户端 UI 显示 "Card archived, cannot comment"
 - **E15.6 Drag 自己回原列**:alice drag Card A 从 Todo 拖出再放回 Todo → Move 应当是 no-op 或返回当前位置,不报错
+- **E15.7 加密 Realm 创建者本机加描述**:alice 用 `encryption_profile = mls_rfc9420`(yougen setup 向导默认值)建 Realm,在**刚建完的本机**(无 MLS 恢复、无第二设备)建 Board/List/Card 后,在 Card 详情 Description 区添加描述 → 客户端必须先 MLS 加密私有 `body` 再提交 `cx.flow.update`;soland 必须接受该加密写入,**不得**返回 412 `content_encryption_floor_violation`(soland `operations.rs` `validate_content_encryption_floor`)。上面的 happy-path 用例建的都是明文 Space(`createSpace` 默认 `encryption_profile = none`)、且只填 card title 从不写私有 `body`,因此从未武装该 floor;`encryption/key-backup.spec.ts` A2 只在**恢复后的第二设备**上覆盖了加密加描述,never 在创建者本机覆盖——本子测试补这个洞
+- **E15.8 加密 Realm 创建者本机加 synthesis**:同 E15.7 的 rig,但写的是 Card 详情 Synthesis 区。`synthesis` 是与 `body` 不同的私有内容路径,走独立的客户端加密 + commit 代码路径,故单独守卫 → 断言 `cx.flow.update` 被接受、synthesis 渲染、无 floor violation
+- **E15.9 加密 Realm 创建者本机发 discussion 评论**:同 rig,在 Card 详情 Discussion 区发评论 → 走 `cx.message.create`(非 flow.update),消息体经 MLS encrypted-payload envelope;加密 Realm 下明文消息不得离开客户端 → 断言响应 status<400(任何拒绝即失败)、消息渲染、无 floor violation
 
 ## Implementation notes
 

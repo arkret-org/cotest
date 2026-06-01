@@ -487,4 +487,143 @@ test.describe("MLS group encryption", () => {
   "E11.2 governance_binding.space_policy_hash mismatch causes federation push to reject with governance_binding_mismatch", async () => {
     // spec: encryption-and-audit.md §2.5.1
   });
+
+  // encryption_profile is a create-locked Realm field (spec
+  // realm-and-space.md §2.3). soland enforces this in operations.rs
+  // (operation_touches_encryption_profile → realm_encryption_profile_create_locked)
+  // but no soland unit test or cotest case exercises it. This pins the wire
+  // rejection so a regression that lets the profile be patched after creation
+  // — silently downgrading an Encrypted Realm to plaintext — is caught.
+  test("cx.realm.update that patches encryption_profile is rejected (create-locked)", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("mls-lock-realm-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmId = await createSpaceApi(request, aliceToken, {
+      title: `MLS create-lock realm ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      headers: authHeaders(aliceToken),
+      data: signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.realm.update",
+        payload: {
+          target_ref: realmId,
+          patch: { encryption_profile: { $op: "set", value: "none" } },
+        },
+      }),
+    });
+
+    const body = await resp.json();
+    expect([400, 409, 412, 422], JSON.stringify(body)).toContain(resp.status());
+    expect(wireErrCode(body)).toBe("realm_encryption_profile_create_locked");
+  });
+
+  // Circle counterpart of the realm create-lock. soland has a unit test
+  // (circles_smoke.rs circle_update_rejects_encryption_profile_patch) but no
+  // end-to-end coverage. A Circle on an encrypted Realm is created at the
+  // Realm's floor, then an attempt to patch its profile must be rejected.
+  test("cx.circle.update that patches encryption_profile is rejected (create-locked)", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("mls-lock-circle-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmId = await createSpaceApi(request, aliceToken, {
+      title: `MLS create-lock circle realm ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+
+    const circleId = typedId("circle");
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.circle.create",
+        payload: {
+          object: {
+            id: circleId,
+            schema: "cx.schema.circle.v1",
+            realm_id: realmId,
+            title: `lock circle ${stamp}`,
+            display: {
+              short_name: "LC",
+              color_token: "indigo",
+              symbol: { kind: "glyph", glyph: "shield" },
+            },
+            directory_visibility: "members",
+            join_rule: "invite",
+            history_visibility: "joined",
+            encryption_profile: "mls_rfc9420",
+            state: "active",
+            created_by: alice.did,
+            created_at: canonicalTimestamp(),
+          },
+        },
+      }),
+      { context: `create circle ${circleId}` },
+    );
+
+    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      headers: authHeaders(aliceToken),
+      data: signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "cx.circle.update",
+        payload: {
+          target_ref: circleId,
+          patch: { encryption_profile: { $op: "set", value: "none" } },
+        },
+      }),
+    });
+
+    const body = await resp.json();
+    expect([400, 409, 412, 422], JSON.stringify(body)).toContain(resp.status());
+    expect(wireErrCode(body)).toBe("circle_encryption_profile_create_locked");
+  });
+
+  // Not-ready guard: a fresh device of the SAME account that has NOT received
+  // an MLS Welcome and has NOT restored its account secret must NOT silently
+  // downgrade an encrypted private write to plaintext. The client should
+  // surface a recoverable "MLS state not ready" affordance and refuse to
+  // submit; it must never POST a plaintext cx.flow.update that the server
+  // accepts (or bounces with content_encryption_floor_violation).
+  //
+  // Parked as fixme: deterministically reaching the "fresh device, no
+  // backup, no welcome" state requires a second-device rig (sameActorFreshDevice
+  // + openUserPage), and the exact not-ready UX surface (mls-unlock-banner vs
+  // board_status text) must be confirmed against a live stack before the
+  // assertions can be pinned without flake. Promote to an active test once the
+  // first stack run confirms the surfaced affordance.
+  test.fixme(
+    // @blocking-on: yougen#mls-not-ready-write-guard
+    // @user-promise: e2e/scenarios/encryption/mls-group.md
+    // @expected-live-by: 2026Q3
+    "fresh device without MLS welcome/restore refuses encrypted private writes instead of silently downgrading to plaintext",
+    async () => {
+      // 1) deviceA: createSpace(encryption_profile=mls_rfc9420) + board + list + card.
+      // 2) deviceB = sameActorFreshDevice(alice): fresh session, NO passphrase
+      //    vault set up, NO welcome applied.
+      // 3) deviceB opens the board, opens the card (title is plaintext metadata),
+      //    tries to add a description.
+      // 4) Assert: NO /api/v1/events POST carrying a plaintext private `body`
+      //    is accepted (and none is bounced with content_encryption_floor_violation),
+      //    AND a not-ready affordance (mls-unlock-banner / "MLS state is not
+      //    ready" board status) is shown.
+    },
+  );
 });
