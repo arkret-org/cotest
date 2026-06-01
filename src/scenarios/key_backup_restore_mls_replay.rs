@@ -28,7 +28,7 @@
 //!          `cx.mls.commit` events with the recovered
 //!          `mls_history_backup_key` to decrypt pre-loss epoch content.
 //!   - §7.4 "所有权证明与解密证明" — SSK proof binding fields:
-//!       `challenge / audience / origin / service_did / principal_did
+//!       `challenge / audience / origin / service_did / principal_id
 //!        / key_id / expires_at / nonce`.
 //!
 //! ──────────────────────────────────────────────────────────────────────────

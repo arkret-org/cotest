@@ -24,8 +24,9 @@ fn realm_id() -> Result<SpaceId> {
     SpaceId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 
-fn principal_did() -> Result<Did> {
-    Did::new("did:web:alice.example".to_owned()).map_err(|err| anyhow!("invalid did: {err}"))
+fn principal_id() -> Result<Did> {
+    Did::new("did:web:alice.example".to_owned())
+        .map_err(|err| anyhow!("invalid principal id: {err}"))
 }
 
 fn build_realm(
@@ -33,7 +34,7 @@ fn build_realm(
     federation_policy: Option<FederationPolicy>,
 ) -> Result<Space> {
     let id = realm_id()?;
-    let principal = principal_did()?;
+    let principal = principal_id()?;
     // TODO(round4-sdk-dep): A1 added required `trust_domain` to Space.
     // Cotest uses a fixed canonical trust domain id here so the high-assurance
     // policy scenario stays representative.

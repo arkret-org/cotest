@@ -63,7 +63,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         "/api/v1/push/register-device"
     );
     assert_eq!(
-        auth_bridge["examples"]["session_grant_exchange_request"]["principal_did"],
+        auth_bridge["examples"]["session_grant_exchange_request"]["principal_id"],
         "did:web:alice.example"
     );
     assert_eq!(

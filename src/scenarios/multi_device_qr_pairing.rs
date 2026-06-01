@@ -156,7 +156,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //               "kid": <SSK kid>, "alg": "EdDSA",
     //               "public_key": <SSK pub>,
     //               "binding": {
-    //                   "signed_by": <PSK kid>,
+    //                   "verification_method": <PSK verification method>,
     //                   "alg": "EdDSA",
     //                   "signature": <PSK sig over §5.1 canonical input>,
     //               }
@@ -191,7 +191,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //               "display_name": "Alice iPad",
     //               "verify_key": base64url(device_b_verify_key),
     //               "cross_signing_binding": {
-    //                   "signed_by": <SSK kid>,
+    //                   "verification_method": <SSK verification method>,
     //                   "alg": "EdDSA",
     //                   "ssk_generation": 1,
     //                   "signature": base64url(ssk_sig),

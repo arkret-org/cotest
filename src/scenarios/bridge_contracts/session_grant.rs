@@ -6,9 +6,9 @@ use crate::harness::{ContrixServer, expect_json};
 use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
 
 pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Result<()> {
-    let principal_did = "did:web:alice-session-grant.example";
+    let principal_id = "did:web:alice-session-grant.example";
     let device_id = "cx:device:0196419b-0000-7000-8000-000000000501";
-    let coauth = MockCoauthIntrospectionServer::spawn(principal_did, device_id)?;
+    let coauth = MockCoauthIntrospectionServer::spawn(principal_id, device_id)?;
     let _env = EnvOverride::set(&[
         ("SOLAND_SESSION_GRANT_INTROSPECTION_URL", Some(coauth.url())),
         (
@@ -23,7 +23,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
             .http()
             .post(server.url("/api/v1/account/register"))
             .json(&json!({
-                "did": principal_did,
+                "did": principal_id,
                 "handle": "@alice-session-grant",
                 "display_name": "Alice Session Grant",
                 "device_id": device_id
@@ -38,7 +38,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
             .post(server.url("/api/v1/auth/session-grant/exchange"))
             .json(&json!({
                 "grant_jwt": "coauth.session.jwt",
-                "principal_did": principal_did,
+                "principal_id": principal_id,
                 "device_id": device_id,
                 "display_name": "yougen session-grant bridge",
                 "introspection_proof": {
@@ -49,7 +49,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(exchange["actor"], principal_did);
+    assert_eq!(exchange["actor"], principal_id);
     assert_eq!(exchange["device_id"], device_id);
     assert_eq!(exchange["token_type"], "Bearer");
     assert!(
@@ -66,7 +66,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(authenticated["did"], principal_did);
+    assert_eq!(authenticated["did"], principal_id);
 
     let push = expect_json(
         server
@@ -80,7 +80,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
             )
             .json(&json!({
                 "operation_id": "cx.push.register_device",
-                "principal_did": principal_did,
+                "principal_id": principal_id,
                 "device_id": device_id,
                 "push_gateway": "https://floria.example/api/v1/push/notify",
                 "push_key": "webpush:opaque-token",
