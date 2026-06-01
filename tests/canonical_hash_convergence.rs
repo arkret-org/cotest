@@ -83,11 +83,11 @@ fn vectors() -> Vec<CanonicalVector> {
                         "body": "hello"
                     },
                     "flow_id": "cx:flow:01904100-0000-7000-8000-6c663fa0205f",
-                    "track": "discussion",
+                    "track_name": "discussion",
                 },
                 "schema_version": 1,
             }),
-            expected_digest: "sha256:457191964259bebeb272aa36ba6a78603696836a68e79c416326860685286c78",
+            expected_digest: "sha256:c6ac8d2252b00d8185070dcd700bfadc5109d871d6ad4a9c74386790740e7fa0",
         },
         CanonicalVector {
             label: "starid did:webvh update entry (proofless)",

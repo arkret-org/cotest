@@ -127,7 +127,7 @@ async function submitMessageEvent(
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const payload = {
     flow_id: flowIdFromSpaceId(spaceId),
-    track: "discussion",
+    track_name: "discussion",
     content: {
       kind: "cx.content.text",
       body,

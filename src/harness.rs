@@ -1046,7 +1046,7 @@ fn normalize_message_payload(kind: &str, space_id: &str, payload: &mut Value) {
                 .entry("flow_id".to_owned())
                 .or_insert_with(|| Value::String(flow_id));
             object
-                .entry("track".to_owned())
+                .entry("track_name".to_owned())
                 .or_insert_with(|| Value::String("discussion".to_owned()));
             object.remove("thread_id");
             normalize_message_content(object);

@@ -41,7 +41,8 @@ export type ReadMarker = {
   read_scope: {
     kind: string;
     ref?: string;
-    track?: string;
+    track_name?: string;
+    track_scope?: "all";
   };
   position: {
     event_id: string;
@@ -214,7 +215,7 @@ export async function sendPlaintextMessageViaApi(
     kind: "cx.message.create",
     payload: {
       flow_id: `cx:flow:${spaceId.replace(/^cx:(realm|space):/, "")}`,
-      track: "discussion",
+      track_name: "discussion",
       content: {
         kind: "cx.content.text",
         body,

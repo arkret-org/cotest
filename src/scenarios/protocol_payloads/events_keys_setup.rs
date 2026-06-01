@@ -147,7 +147,7 @@ fn signed_message_event(
 ) -> Result<Value> {
     let payload = json!({
         "flow_id": "cx:flow:0196419b-0000-7000-8000-000000000001",
-        "track": "discussion",
+        "track_name": "discussion",
         "content": {
             "kind": "cx.content.text",
             "body": body,

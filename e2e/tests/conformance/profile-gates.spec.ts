@@ -264,7 +264,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       kind: "cx.message.create",
       payload: {
         flow_id: "cx:flow:01904100-0000-7000-8000-000000001000",
-        track: "discussion",
+        track_name: "discussion",
         content: { kind: "cx.content.text", body: "must not accept unknown critical extension" },
       },
     });

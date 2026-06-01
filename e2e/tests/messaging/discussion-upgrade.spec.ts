@@ -47,7 +47,7 @@ test.describe("discussion upgrade to child space", () => {
         kind: "cx.message.create",
         payload: {
           flow_id: flowIdFromRealmId(fixture.parentId),
-          track: "discussion",
+          track_name: "discussion",
           thread_id: "discussion",
           content: { kind: "cx.content.text", body },
           encrypted: false,
@@ -66,7 +66,7 @@ test.describe("discussion upgrade to child space", () => {
     );
     expect(message?.payload).toMatchObject({
       flow_id: flowIdFromRealmId(fixture.parentId),
-      track: "discussion",
+      track_name: "discussion",
       thread_id: "discussion",
     });
   });
@@ -266,7 +266,7 @@ test.describe("discussion upgrade to child space", () => {
     for (const id of [aliceMessage.event_id, bobMessage.event_id]) {
       expect(
         events.find((event) => event.event_id === id)?.payload,
-      ).toMatchObject({ flow_id: flowId, track: "discussion" });
+      ).toMatchObject({ flow_id: flowId, track_name: "discussion" });
     }
   });
 
@@ -723,7 +723,7 @@ async function createDiscussionMessageViaApi(
     kind: "cx.message.create",
     payload: {
       flow_id: flowId,
-      track: "discussion",
+      track_name: "discussion",
       thread_id: "discussion",
       content: { kind: "cx.content.text", body: `${body} ${Date.now()}` },
       encrypted: false,

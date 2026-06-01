@@ -100,7 +100,7 @@ test.describe("Document Morph collaboration", () => {
         payload: {
           flow_id: flowIdFromRealmId(realmId),
           thread_id: morphId,
-          track: "discussion",
+          track_name: "discussion",
           content: {
             kind: "cx.content.text",
             morph_id: morphId,

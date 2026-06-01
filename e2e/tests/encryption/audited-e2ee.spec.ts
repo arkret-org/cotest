@@ -198,9 +198,9 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     kind: "cx.message.create",
     payload: {
       flow_id: flowIdFromRealmId(spaceId),
-      track: "discussion",
+      track_name: "discussion",
       encrypted: true,
-      encrypted_payload: encryptedEnvelope("cx.message.v1", ciphertext, spaceId, ciphertextDigest),
+      encrypted_content: encryptedEnvelope("cx.message.v1", ciphertext, spaceId, ciphertextDigest),
     },
   });
   await submitSignedEventApi(request, bobToken, message, {

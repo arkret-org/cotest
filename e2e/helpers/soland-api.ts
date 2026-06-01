@@ -279,7 +279,7 @@ export async function sendMessageApi(
     createdAt: opts.createdAt,
     payload: {
       flow_id: flowIdFromRealmId(spaceId),
-      track: "discussion",
+      track_name: "discussion",
       content: {
         kind: "cx.content.text",
         body,

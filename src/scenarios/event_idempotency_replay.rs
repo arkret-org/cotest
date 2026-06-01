@@ -22,7 +22,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         "cx.message.create",
         json!({
             "flow_id": "cx:flow:01999999-0000-7000-8000-00000000feed",
-            "track": "discussion",
+            "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",
                 "body": "idempotent replay body",
@@ -82,7 +82,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         "cx.message.create",
         json!({
             "flow_id": "cx:flow:01999999-0000-7000-8000-00000000feed",
-            "track": "discussion",
+            "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",
                 "body": "message before edit/redact replay",

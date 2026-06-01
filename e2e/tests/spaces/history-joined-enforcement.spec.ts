@@ -264,7 +264,7 @@ async function createMessage(
       createdAt: createdAtValue,
       payload: {
         flow_id: flowIdFromRealmId(realmId),
-        track: "discussion",
+        track_name: "discussion",
         content: {
           kind: "cx.content.text",
           body,

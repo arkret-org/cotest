@@ -279,10 +279,10 @@ test.describe("notifications", () => {
         kind: "cx.message.create",
         payload: {
           flow_id: flowIdFromRealmId(spaceId),
-          track: "discussion",
+          track_name: "discussion",
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],
-          encrypted_payload: encryptedEnvelope(
+          encrypted_content: encryptedEnvelope(
             "cx.message.v1",
             "opaque-ciphertext-for-sealed-keyword",
             spaceId,

@@ -139,7 +139,7 @@ test.describe("chat advanced", () => {
       kind: "cx.message.create",
       payload: {
         flow_id: flowIdFromRealmId(fixture.spaceId),
-        track: "discussion",
+        track_name: "discussion",
         thread_id: "discussion",
         reply_to: rootMessageRef,
         content: { kind: "cx.content.text", body: replyBody },
@@ -172,7 +172,7 @@ test.describe("chat advanced", () => {
         kind: "cx.message.create",
         payload: {
           flow_id: flowIdFromRealmId(fixture.spaceId),
-          track: "discussion",
+          track_name: "discussion",
           content: {
             kind: "cx.content.text",
             body,
@@ -212,7 +212,7 @@ test.describe("chat advanced", () => {
       kind: "cx.message.create",
       payload: {
         flow_id: flowIdFromRealmId(fixture.spaceId),
-        track: "discussion",
+        track_name: "discussion",
         thread_id: "discussion",
         content: {
           kind: "cx.content.text",
@@ -234,7 +234,7 @@ test.describe("chat advanced", () => {
       kind: "cx.message.create",
       payload: {
         flow_id: flowIdFromRealmId(fixture.spaceId),
-        track: "discussion",
+        track_name: "discussion",
         thread_id: "discussion",
         reply_to: rootMessageRef,
         content: { kind: "cx.content.text", body: `reply ${Date.now()}` },
@@ -691,10 +691,10 @@ test.describe("chat advanced", () => {
         kind: "cx.message.create",
         payload: {
           flow_id: flowIdFromRealmId(spaceId),
-          track: "discussion",
+          track_name: "discussion",
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],
-          encrypted_payload: encryptedEnvelope("cx.message.v1", "opaque-e2ee-mention", spaceId),
+          encrypted_content: encryptedEnvelope("cx.message.v1", "opaque-e2ee-mention", spaceId),
         },
       });
       await submitSignedEventApi(request, aliceToken, envelope, {

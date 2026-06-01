@@ -524,7 +524,7 @@ test.describe("cross-server federation", () => {
         event_id: typedId("event"),
         sender: alice.did,
         flow_id: typedId("flow"),
-        track: "discussion",
+        track_name: "discussion",
         content: {
           kind: "cx.content.text",
           body: missingBody,
@@ -610,7 +610,7 @@ test.describe("cross-server federation", () => {
         event_id: typedId("event"),
         sender: "did:web:alice-rfc9421.example",
         flow_id: typedId("flow"),
-        track: "discussion",
+        track_name: "discussion",
         content: {
           kind: "cx.content.text",
           body: `tampered signature ${Date.now()}`,

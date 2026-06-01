@@ -620,7 +620,7 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
                 return Some("message create content missing flow_id".to_owned());
             }
             // Check for v1 message body/encryption fields at the payload level.
-            let has_body = ["content", "encrypted_payload", "blob_refs"]
+            let has_body = ["content", "encrypted_content", "blob_refs"]
                 .iter()
                 .any(|field| content.get(*field).is_some());
             let has_nested_body = content
@@ -633,7 +633,7 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
                 .unwrap_or(false);
             if !has_body && !has_nested_body {
                 return Some(
-                    "message create content missing content/encrypted_payload/blob_refs".to_owned(),
+                    "message create content missing content/encrypted_content/blob_refs".to_owned(),
                 );
             }
             None

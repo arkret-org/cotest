@@ -145,7 +145,7 @@ test.describe("single-server triad collaboration", () => {
       createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
         flow_id: flowIdFromRealmId(spaceId),
-        track: "discussion",
+        track_name: "discussion",
         content: { kind: "cx.content.text", body: `triad pre ${stamp}` },
         encrypted: false,
       },
@@ -177,7 +177,7 @@ test.describe("single-server triad collaboration", () => {
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
         flow_id: flowIdFromRealmId(spaceId),
-        track: "discussion",
+        track_name: "discussion",
         content: { kind: "cx.content.text", body: `triad post ${stamp}` },
         encrypted: false,
       },
