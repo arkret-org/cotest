@@ -158,7 +158,7 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
 - **soland 现状**:`apply_claim_level_partition` 已经实现 T6.1 partition;
   `claimed_profiles` 4 条 `cx.profile.{core_event_store, principal_server,
   principal_server_events_api, mimi_interop}.v1`(最后一条带 `notes`),
-  `verified_profiles` dev mode 下 `Vec::new()` 由 `validate_v2` 硬性约束 — Phase A /
+  `verified_profiles` dev mode 下 `Vec::new()` 由 `validate` 硬性约束 — Phase A /
   D / E 可立即 live
 - **soland 缺口**:event submit handler 对超出声明 profile 范围的 kind 还没有
   `unsupported_event_kind` 出口,Phase B / C fail-closed 路径先 fixme

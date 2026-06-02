@@ -610,14 +610,14 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// CT-3 — snapshot v2 tampered Merkle vectors. A snapshot whose chunk
+    /// CT-3 — snapshot v1 tampered Merkle vectors. A snapshot whose chunk
     /// payload or inclusion-proof branch has been mutated MUST be rejected
     /// with `digest_mismatch`, even when a local Merkle recompute is
     /// internally consistent against the mutation. Spec:
     /// conformance/snapshot-schema.md §3 / §4 / §5 / §6.
-    snapshot_v2_tampered_merkle_suite_matches_reference_semantics,
-    "snapshot_v2_tampered_merkle",
-    cotest::conformance::run_snapshot_v2_tampered_merkle_suite,
+    snapshot_v1_tampered_merkle_suite_matches_reference_semantics,
+    "snapshot_v1_tampered_merkle",
+    cotest::conformance::run_snapshot_v1_tampered_merkle_suite,
 );
 
 conformance_test!(

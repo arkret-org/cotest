@@ -31,7 +31,7 @@ mod schema_validation_fixture;
 mod security_closure;
 mod security_negative;
 mod sidecar_vectors;
-mod snapshot_v2_tampered_merkle;
+mod snapshot_v1_tampered_merkle;
 mod state_resolution;
 mod sync;
 mod wire_model;
@@ -180,7 +180,7 @@ pub use sidecar_vectors::{
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
     run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
 };
-pub use snapshot_v2_tampered_merkle::run_snapshot_v2_tampered_merkle_suite;
+pub use snapshot_v1_tampered_merkle::run_snapshot_v1_tampered_merkle_suite;
 pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };

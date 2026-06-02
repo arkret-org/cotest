@@ -1,6 +1,6 @@
-//! CT-3 — Snapshot v2 tampered Merkle conformance suite.
+//! CT-3 — Snapshot v1 tampered Merkle conformance suite.
 //!
-//! Validates `tests/fixtures/snapshot_v2_tampered_merkle.json`, which
+//! Validates `tests/fixtures/snapshot_v1_tampered_merkle.json`, which
 //! exercises the rejection of a snapshot whose chunk content or
 //! inclusion-proof branch has been mutated, even when a local Merkle
 //! recompute is internally consistent against the mutation.
@@ -27,19 +27,19 @@ use serde_json::Value;
 
 use super::{load_local_fixture_value, required_str, validate_profile};
 
-const PROFILE_ID: &str = "cx.profile.snapshot_v2_tampered_merkle_vectors.v1";
+const PROFILE_ID: &str = "cx.profile.snapshot_v1_tampered_merkle_vectors.v1";
 const EXPECTED_ERRCODE: &str = "digest_mismatch";
 
-pub fn run_snapshot_v2_tampered_merkle_suite() -> Result<()> {
-    let fixture = load_local_fixture_value("snapshot_v2_tampered_merkle.json")?;
+pub fn run_snapshot_v1_tampered_merkle_suite() -> Result<()> {
+    let fixture = load_local_fixture_value("snapshot_v1_tampered_merkle.json")?;
     validate_profile(&fixture, PROFILE_ID)?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("snapshot_v2_tampered_merkle fixture missing vectors[]"))?;
+        .ok_or_else(|| anyhow!("snapshot_v1_tampered_merkle fixture missing vectors[]"))?;
     if vectors.len() < 3 {
         bail!(
-            "snapshot_v2_tampered_merkle requires >= 3 vectors, got {}",
+            "snapshot_v1_tampered_merkle requires >= 3 vectors, got {}",
             vectors.len()
         );
     }
@@ -174,13 +174,13 @@ pub fn run_snapshot_v2_tampered_merkle_suite() -> Result<()> {
                 }
                 saw_chunk_count = true;
             }
-            other => bail!("snapshot_v2_tampered_merkle unexpected vector: {other}"),
+            other => bail!("snapshot_v1_tampered_merkle unexpected vector: {other}"),
         }
     }
 
     if !(saw_chunk_byte_flip && saw_branch_byte_flip && saw_chunk_count) {
         bail!(
-            "snapshot_v2_tampered_merkle must cover all three vectors \
+            "snapshot_v1_tampered_merkle must cover all three vectors \
              (byte_flip_in_chunk_audit_path_recomputed_still_rejected + \
               byte_flip_in_audit_path_only + chunk_count_mismatch)"
         );
@@ -194,6 +194,6 @@ mod tests {
 
     #[test]
     fn suite_passes_against_local_fixture() -> Result<()> {
-        run_snapshot_v2_tampered_merkle_suite()
+        run_snapshot_v1_tampered_merkle_suite()
     }
 }

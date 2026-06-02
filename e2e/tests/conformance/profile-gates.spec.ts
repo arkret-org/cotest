@@ -7,7 +7,7 @@
 //
 // soland gap: `soland/src/routing/system/describe.rs::apply_claim_level_partition`
 //   already emits `claimed_profiles[]` (4 self_claimed entries) + `verified_profiles=[]`
-//   (hard `Vec::new()` under dev mode, guarded by validate_v2). Phase A / D / E run live
+//   (hard `Vec::new()` under dev mode, guarded by validate). Phase A / D / E run live
 //   against this surface. Phase B (unsupported standard event kind reject) and Phase C
 //   (critical extension fail-closed at submit time) now run live against soland's
 //   submit reject path.
@@ -149,7 +149,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
   }) => {
     // spec: service-surface.md §3.0 — when development_mode=true, verified_profiles
     //   MUST be []; never null, never a placeholder stub. soland enforces this with
-    //   validate_v2 (`describe.rs::server_describe`).
+    //   validate (`describe.rs::server_describe`).
     const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;

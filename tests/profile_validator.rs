@@ -155,11 +155,11 @@ fn experimental_unknown_id_is_surfaced_separately() {
     let table = ProfileRoleTable::load().expect("artifact loads");
     let claims = vec![
         (
-            "cx.profile.totally_made_up.v999".to_owned(),
+            "cx.profile.totally_made_up.v1".to_owned(),
             ClaimKind::Experimental,
         ),
         (
-            "cx.profile.totally_made_up_v2.v999".to_owned(),
+            "cx.profile.totally_made_up_other.v1".to_owned(),
             ClaimKind::SelfClaimed,
         ),
     ];
@@ -168,7 +168,7 @@ fn experimental_unknown_id_is_surfaced_separately() {
     assert_eq!(outcome.failures.len(), 1);
     match &outcome.failures[0] {
         ProfileClaimFailure::UnknownProfile { profile_id } => {
-            assert_eq!(profile_id, "cx.profile.totally_made_up_v2.v999");
+            assert_eq!(profile_id, "cx.profile.totally_made_up_other.v1");
         }
         other => panic!("expected UnknownProfile, got {other:?}"),
     }
