@@ -147,9 +147,9 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
         "backup_version": "kb_1",
         "created_at": "2026-05-18T00:00:00Z",
         "encryption": {
-            "recipient_method": "device_snapshot_secret",
-            "recipient_key_ref": device_id,
-            "aead": {"name": "xchacha20_poly1305", "nonce": "cotest-d3-nonce"}
+            "recipient_method": "secret_storage_key",
+            "recipient_key_ref": "mls_group_secrets_backup_key",
+            "aead": {"name": "xchacha20_poly1305", "aead_profile": "cx.aead.xchacha20_poly1305.v1", "nonce": "cotest-d3-nonce"}
         },
         "contents": [
             {

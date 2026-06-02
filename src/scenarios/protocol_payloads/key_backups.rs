@@ -35,9 +35,9 @@ async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
                 "backup_version": "kb_1",
                 "created_at": "2026-04-26T00:00:00Z",
                 "encryption": {
-                    "recipient_method": "device_snapshot_secret",
-                    "recipient_key_ref": "cx:device:01964137-0000-7000-8000-000000000000",
-                    "aead": {"name": "xchacha20_poly1305", "nonce": "nonce"}
+                    "recipient_method": "secret_storage_key",
+                    "recipient_key_ref": "mls_group_secrets_backup_key",
+                    "aead": {"name": "xchacha20_poly1305", "aead_profile": "cx.aead.xchacha20_poly1305.v1", "nonce": "nonce"}
                 },
                 "contents": [
                     {
