@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t06_moderation_appeal_contract() {
+    async fn t06_moderation_appeal_contract() {
         moderation_appeal_flow_end_to_end_run()
             .await
             .expect("appeal error codes + TypedAppealId must stay registered");

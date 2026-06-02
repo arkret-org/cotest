@@ -1,4 +1,4 @@
-//! Round 4 / C3 — multi-server federation idempotency + historical_only
+//! C3 — multi-server federation idempotency + historical_only
 //! scenario.
 //!
 //! Spec: `contrix-spec` `2a4d39b..a77b995` — commit `f9bd7eb`
@@ -38,9 +38,9 @@
 //!
 //! The full live multi-server e2e (docker / live soland + teabay
 //! processes, network HTTP, real key rotation) stays `#[ignore]` with
-//! `TODO(round4-federation-e2e-docker)`.
+//! `TODO(federation-idempotency-e2e-docker)`.
 //!
-//! Cotest does NOT depend on `soland` or `teabay` — the SDK round4
+//! Cotest does NOT depend on `soland` or `teabay` — the SDK federation
 //! surface and a small in-memory cache reproduce the wire shape both
 //! services implement.
 
@@ -60,8 +60,8 @@ use sha2::{Digest, Sha256};
 
 /// The security-closure vector id this scenario exercises. Same literal
 /// as `cotest::scenarios::security_closure_vectors::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE`,
-/// repeated here so a grep on `round4_federation_historical_only` finds
-/// the binding directly.
+/// repeated here so a grep on `federation_idempotency_historical_only`
+/// finds the binding directly.
 pub const VECTOR_ID: &str = "cx.vector.federation.idempotency_after_key_revoke.v1";
 
 /// Canonical `reason_code` carried on a cache-replay-after-key-revoke
@@ -69,10 +69,10 @@ pub const VECTOR_ID: &str = "cx.vector.federation.idempotency_after_key_revoke.v
 /// guards drift between the SDK and the cotest scenario.
 pub const HISTORICAL_ONLY_REASON: &str = "historical_only";
 
-// ── In-memory composite idempotency key (mirrors soland::round4) ────────
+// ── In-memory composite idempotency key (mirrors soland federation) ─────
 
 /// In-memory composite idempotency key. Mirrors
-/// `soland::round4::FederationIdempotencyKey` byte-for-byte (`strict()`
+/// `soland::routing::federation::federation::FederationIdempotencyKey` byte-for-byte (`strict()`
 /// + `canonical_replay()` produce the same digests) but stays inside
 /// cotest so the harness does not depend on the soland crate.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -193,7 +193,7 @@ impl SimulatedFederationReceiver {
 }
 
 /// Add `reason_code=historical_only` + `historical_only=true` to a
-/// JSON body. Mirrors soland::round4::mark_response_historical_only.
+/// JSON body. Mirrors soland::routing::federation::federation::mark_response_historical_only.
 fn mark_historical_only(mut response: Value) -> Value {
     if let Some(object) = response.as_object_mut() {
         object.insert(
@@ -209,7 +209,7 @@ fn mark_historical_only(mut response: Value) -> Value {
 
 /// Run the C3 scenario end-to-end against the in-memory simulated
 /// receiver. Returns `Ok(())` when every assertion passes.
-pub fn run_round4_federation_historical_only() -> Result<()> {
+pub fn run_federation_idempotency_historical_only() -> Result<()> {
     // Server A → Server B identifiers.
     let source_did = "did:web:server-a.example".to_owned();
     let dest_did = "did:web:server-b.example".to_owned();
@@ -221,7 +221,7 @@ pub fn run_round4_federation_historical_only() -> Result<()> {
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
         "operation": "cx.events.submit",
-        "envelopes": [{"kind": "cx.message.text", "payload": {"body": "round4-c3"}}],
+        "envelopes": [{"kind": "cx.message.text", "payload": {"body": "federation-c3"}}],
         "idempotency_key": "idem-c3-001",
     });
     let body_x_bytes = canonical_json_bytes(&body_x)
@@ -408,7 +408,7 @@ mod tests {
     use super::*;
 
     /// Wire-shape gate (non-ignored) — build a `FederationTrustHeaders`-
-    /// equivalent triple via the SDK round4 surface, call the transcript
+    /// equivalent triple via the SDK federation surface, call the transcript
     /// fragment helper, and assert the bytes contain the three header
     /// names in lowercase + the carried values.
     ///
@@ -461,9 +461,9 @@ mod tests {
 
     /// Non-ignored — drive the full in-memory multi-server scenario.
     #[test]
-    fn scenario_round4_federation_historical_only_in_memory() {
-        run_round4_federation_historical_only()
-            .expect("round4 federation historical_only scenario must pass against in-memory rig");
+    fn scenario_federation_idempotency_historical_only_in_memory() {
+        run_federation_idempotency_historical_only()
+            .expect("federation idempotency historical_only scenario must pass against in-memory rig");
     }
 
     /// Non-ignored — cache key composition pin. Strict key diverges
@@ -508,9 +508,9 @@ mod tests {
     /// Gating: needs live soland + teabay binaries via docker plus a key-
     /// rotation harness so the idempotency cache replay can be observed end-
     /// to-end.
-    /// Issue: round4-federation-e2e-docker
+    /// Issue: federation-idempotency-e2e-docker
     #[test]
-    #[ignore = "TODO(round4-federation-e2e-docker): needs live soland + teabay + key rotation harness"]
+    #[ignore = "TODO(federation-idempotency-e2e-docker): needs live soland + teabay + key rotation harness"]
     fn live_multi_server_federation_historical_only_docker_e2e() {
         // 1. Boot a 2-service test rig (soland-A + teabay-B) with `cx:trust_domain:a` and
         //    `cx:trust_domain:b` respectively.

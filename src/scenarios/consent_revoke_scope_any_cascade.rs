@@ -24,7 +24,8 @@ use anyhow::{Result, anyhow};
 pub const SUPERSEDED_MARKER: &str = "superseded_by_any_revoke";
 
 /// Five cache-invalidation channels that an `any`-revoke MUST broadcast
-/// per spec T17. Cross-pinned with `soland::round23::ConsentRevokeInvalidationChannel::ALL`.
+/// per spec T17. Cross-pinned with
+/// `soland::routing::identity::consent::ConsentRevokeInvalidationChannel::ALL`.
 pub const EXPECTED_INVALIDATION_CHANNELS: &[&str] = &[
     "directory_reachability",
     "mimi_consent",
@@ -74,7 +75,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t17_consent_cascade_contract() {
+    async fn t17_consent_cascade_contract() {
         consent_revoke_scope_any_cascade_run()
             .await
             .expect("consent cascade marker + channel pins must stay registered");

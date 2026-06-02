@@ -11,7 +11,7 @@ use url::Url;
 
 use crate::harness::{ContrixServer, dev_login, expect_api_error, expect_json, expect_response};
 
-fn with_round4_federation_headers(
+fn with_federation_trust_headers(
     builder: reqwest::RequestBuilder,
     server: &ContrixServer,
     body: &Value,
@@ -193,7 +193,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
         "purpose": "federation-contract"
     });
     let verified = expect_json(
-        with_round4_federation_headers(
+        with_federation_trust_headers(
             server
                 .http()
                 .post(server.url("/api/v1/federation/verify-actor"))

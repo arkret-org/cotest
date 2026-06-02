@@ -127,7 +127,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t15_oob_three_strike_lockout_contract() {
+    async fn t15_oob_three_strike_lockout_contract() {
         oob_code_low_entropy_run()
             .await
             .expect("OOB low-entropy pins must be registered");

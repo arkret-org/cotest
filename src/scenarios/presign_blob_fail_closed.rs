@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t11_presign_fail_closed_contract() {
+    async fn t11_presign_fail_closed_contract() {
         presign_blob_legal_hold_run()
             .await
             .expect("legal_hold_active pin must be registered");

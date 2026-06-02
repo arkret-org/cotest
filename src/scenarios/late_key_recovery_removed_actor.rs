@@ -64,7 +64,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t16_late_recovery_removed_actor_contract() {
+    async fn t16_late_recovery_removed_actor_contract() {
         late_key_recovery_removed_actor_run()
             .await
             .expect("late recovery rejected-membership pin must be registered");

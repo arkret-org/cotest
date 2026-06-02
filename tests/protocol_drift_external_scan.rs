@@ -1,31 +1,30 @@
-//! One-shot scan driver for the round-4 structural-drift rules across
-//! the 10 implementer projects.
+//! One-shot scan driver for the structural protocol-drift rules across
+//! the implementer projects.
 //!
-//! Task C2 in `_todos.md`: run the literal scanner over the 10 sibling
-//! project roots, surface every violation, drive them to zero (or
-//! `ROUND4-ALLOW`-tagged with justification).
+//! Runs the literal scanner over the sibling project roots, surfaces every
+//! violation, and drives them to zero (or `DRIFT-ALLOW`-tagged with
+//! justification).
 //!
 //! Invoked manually via:
 //!
 //! ```text
-//! cargo test --test round4_external_scan -- --ignored --nocapture
+//! cargo test --test protocol_drift_external_scan -- --ignored --nocapture
 //! ```
 //!
 //! Marked `#[ignore]` so it does not run on regular `cargo test`. Lives
 //! under `tests/` so it can reach the public scanner via
-//! `cotest::literal_scanner::scan_tree_round4` without a separate binary
-//! target.
+//! `cotest::literal_scanner::scan_tree_protocol_drift` without a separate
+//! binary target.
 
 use std::path::PathBuf;
 
-use cotest::literal_scanner::scan_tree_round4;
+use cotest::literal_scanner::scan_tree_protocol_drift;
 
 /// Gating: manual operator scan over sibling project trees — uses
 /// `CONTRIX_DEV_ROOT` (default `D:\Works\contrix-dev`); not a CI gate.
-/// Issue: Round-4 (external literal scan)
 #[test]
-#[ignore = "manual: cargo test --test round4_external_scan -- --ignored --nocapture"]
-fn round4_external_scan_all_projects() {
+#[ignore = "manual: cargo test --test protocol_drift_external_scan -- --ignored --nocapture"]
+fn protocol_drift_external_scan_all_projects() {
     let dev_root = std::env::var("CONTRIX_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
@@ -36,8 +35,6 @@ fn round4_external_scan_all_projects() {
         dev_root.display()
     );
 
-    // The 10 implementer projects covered by Round 4. Order matches the
-    // C2 task listing in `_todos.md`.
     let projects = [
         "contrix-rust-sdk",
         "soland",
@@ -60,7 +57,7 @@ fn round4_external_scan_all_projects() {
             per_project.push((proj.to_string(), 0));
             continue;
         }
-        let findings = scan_tree_round4(&root).expect("scan must not fail");
+        let findings = scan_tree_protocol_drift(&root).expect("scan must not fail");
         if findings.is_empty() {
             println!("[clean] {proj}");
         } else {
@@ -82,14 +79,14 @@ fn round4_external_scan_all_projects() {
     }
 
     println!();
-    println!("ROUND-4 PER-PROJECT SUMMARY:");
+    println!("PROTOCOL-DRIFT PER-PROJECT SUMMARY:");
     for (proj, count) in &per_project {
         println!("  {proj:>20} : {count}");
     }
-    println!("ROUND-4 SCAN TOTAL FINDINGS={total_findings}");
+    println!("PROTOCOL-DRIFT SCAN TOTAL FINDINGS={total_findings}");
 
     assert_eq!(
         total_findings, 0,
-        "round-4 scan must finish with zero violations; see per-project listing above",
+        "protocol-drift scan must finish with zero violations; see per-project listing above",
     );
 }

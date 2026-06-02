@@ -1,4 +1,4 @@
-//! Round 4 / A2 — Python lint parity (cotest-side mirrors of the
+//! OpenAPI / vector lint parity (cotest-side mirrors of the
 //! straightforward `check_service_describe_alignment`,
 //! `check_policy_check_alignment`, and `check_vector_reference_closure`
 //! rules from `contrix-spec/tools/lint_artifacts.py`).

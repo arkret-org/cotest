@@ -21,10 +21,10 @@ mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
 mod profile_registry;
+mod openapi_lint_parity;
+mod protocol_artifact_allowlist;
 mod redaction;
 mod registry;
-mod round4_allowlist;
-mod round4_lint_parity;
 mod scaffold_gate;
 mod schema_validation;
 mod schema_validation_fixture;
@@ -151,13 +151,13 @@ pub use profile_registry::{
 };
 pub use redaction::run_redaction_fixture_suite;
 pub use registry::run_artifact_registry_suite;
-pub use round4_allowlist::{
-    ROUND4_NEW_CAPABILITY_ACTIONS, ROUND4_NEW_ERROR_CODES, ROUND4_NEW_OBJECT_REF_ID_KINDS,
-    ROUND4_NEW_OPENAPI_COMPONENTS, ROUND4_NEW_SCHEMA_DEFS, run_round4_drift_allowlist_suite,
-};
-pub use round4_lint_parity::{
+pub use openapi_lint_parity::{
     run_policy_check_alignment_check, run_service_describe_alignment_check,
     run_vector_reference_closure_check,
+};
+pub use protocol_artifact_allowlist::{
+    NEW_CAPABILITY_ACTIONS, NEW_ERROR_CODES, NEW_OBJECT_REF_ID_KINDS, NEW_OPENAPI_COMPONENTS,
+    NEW_SCHEMA_DEFS, run_protocol_artifact_allowlist_suite,
 };
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,

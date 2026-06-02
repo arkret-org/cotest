@@ -186,7 +186,7 @@ fn is_allowed_path(path: &Path) -> bool {
         }
         // Other drift scanners discuss the forbidden field name in their
         // own rule messages.
-        if lower == "round23_rules.rs" || lower == "literal_scanner.rs" {
+        if lower == "protocol_drift_rules.rs" || lower == "literal_scanner.rs" {
             return true;
         }
     }

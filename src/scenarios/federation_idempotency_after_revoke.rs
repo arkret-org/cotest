@@ -29,12 +29,12 @@ pub const HISTORICAL_ONLY_MARKER: &str = "historical_only";
 /// Wire-level executable check: confirm the `historical_only` marker
 /// constant is what cotest expects, and that the spelling matches the
 /// soland-side constant (which lives at
-/// `soland::round23::HISTORICAL_ONLY_MARKER`).
+/// `soland::routing::federation::federation::HISTORICAL_ONLY_MARKER`).
 ///
 /// We can't import from soland into cotest (cotest does not depend on
 /// soland — it's the implementer-agnostic harness). The pin here keeps
-/// the literal in cotest in sync with the spec; the soland round23.rs
-/// has its own pin against the same literal, and the spec registry pins
+/// the literal in cotest in sync with the spec; the soland federation
+/// module has its own pin against the same literal, and the spec registry pins
 /// it a third time. Drift between the three is what this assertion
 /// guards against.
 pub async fn federation_idempotency_after_revoke_run() -> Result<()> {
@@ -67,7 +67,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t14_federation_replay_after_key_revoke_contract() {
+    async fn t14_federation_replay_after_key_revoke_contract() {
         federation_idempotency_after_revoke_run()
             .await
             .expect("historical_only marker must match spec literal");

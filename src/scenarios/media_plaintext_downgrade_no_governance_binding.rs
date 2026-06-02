@@ -74,7 +74,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn round23_t12_media_plaintext_binding_contract() {
+    async fn t12_media_plaintext_binding_contract() {
         media_plaintext_downgrade_no_governance_binding_run()
             .await
             .expect("media plaintext error-code pins must be registered");

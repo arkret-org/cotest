@@ -261,10 +261,16 @@ pub fn scan_tree(root: &Path, rules: &[ArtifactRule]) -> Result<Vec<Finding>> {
     Ok(out)
 }
 
-/// Walk `root` and scan for round 2+3 structural drift rules (see
-/// [`crate::round23_rules`]). Independent of the artifact-registry-driven
-/// path; both can be invoked by callers that want full coverage.
-pub fn scan_tree_round23(root: &Path) -> Result<Vec<crate::round23_rules::Round23Finding>> {
+/// Walk `root` and scan for structural protocol-drift rules (see
+/// [`crate::protocol_drift_rules`]). Covers DID method-segment tightening,
+/// EventsSubscribe payload typing, cross_signing.publish CAS,
+/// audit_policy_version_digest arity, object/ephemeral event-kind split,
+/// relaxed_window ceiling, cursor handle entropy, and forbidden wire
+/// fields. Independent of the artifact-registry-driven path; both can be
+/// invoked by callers that want full coverage.
+pub fn scan_tree_protocol_drift(
+    root: &Path,
+) -> Result<Vec<crate::protocol_drift_rules::ProtocolDriftFinding>> {
     let mut out = Vec::new();
     walk(root, &mut |file_path| {
         let file_kind = FileKind::from_path(file_path);
@@ -275,27 +281,7 @@ pub fn scan_tree_round23(root: &Path) -> Result<Vec<crate::round23_rules::Round2
             Ok(s) => s,
             Err(_) => return Ok(()),
         };
-        crate::round23_rules::scan_round23(file_path, &raw, &mut out);
-        Ok(())
-    })?;
-    Ok(out)
-}
-
-/// Walk `root` and scan for round-4 structural drift rules (see
-/// [`crate::round4_rules`]). DID method-segment tightening, EventsSubscribe
-/// type, cross_signing.publish CAS, audit_policy_version_digest arity.
-pub fn scan_tree_round4(root: &Path) -> Result<Vec<crate::round4_rules::Round4Finding>> {
-    let mut out = Vec::new();
-    walk(root, &mut |file_path| {
-        let file_kind = FileKind::from_path(file_path);
-        if matches!(file_kind, FileKind::Other) {
-            return Ok(());
-        }
-        let raw = match fs::read_to_string(file_path) {
-            Ok(s) => s,
-            Err(_) => return Ok(()),
-        };
-        crate::round4_rules::scan_round4(file_path, &raw, &mut out);
+        crate::protocol_drift_rules::scan_protocol_drift(file_path, &raw, &mut out);
         Ok(())
     })?;
     Ok(out)

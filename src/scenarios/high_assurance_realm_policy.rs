@@ -35,7 +35,7 @@ fn build_realm(
 ) -> Result<Space> {
     let id = realm_id()?;
     let principal = principal_id()?;
-    // TODO(round4-sdk-dep): A1 added required `trust_domain` to Space.
+    // TODO(sdk-trust-domain-dep): A1 added required `trust_domain` to Space.
     // Cotest uses a fixed canonical trust domain id here so the high-assurance
     // policy scenario stays representative.
     let trust_domain = TypedTrustDomainId::new("cx:trust_domain:example.net".to_owned())

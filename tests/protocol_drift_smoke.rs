@@ -1,15 +1,14 @@
-//! Round 4 — literal-scanner unit smoke for the four new rules. These
-//! tests build synthetic tiny fixture trees in `tempdir`, scan them, and
-//! assert the right findings appear. The walk-the-tree driver
-//! (`scan_tree_round4`) is also exercised via a one-shot manual test
-//! analogous to `tests/round23_tree_scan.rs` but covering only round-4
-//! rules. Marked `#[ignore]` so it does not run on regular `cargo test`.
+//! Protocol-drift literal-scanner unit smoke. These tests build synthetic
+//! tiny fixture trees in `tempdir`, scan them, and assert the right
+//! findings appear. The walk-the-tree driver (`scan_tree_protocol_drift`)
+//! is also exercised via a one-shot manual cross-project scan, marked
+//! `#[ignore]` so it does not run on regular `cargo test`.
 
 use std::fs;
 use std::path::PathBuf;
 
-use cotest::literal_scanner::scan_tree_round4;
-use cotest::round4_rules::Round4Rule;
+use cotest::literal_scanner::scan_tree_protocol_drift;
+use cotest::protocol_drift_rules::ProtocolDriftRule;
 
 fn tmpdir(label: &str) -> PathBuf {
     let mut path = std::env::temp_dir();
@@ -18,7 +17,7 @@ fn tmpdir(label: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    path.push(format!("cotest-r4-{label}-{pid}-{nanos}"));
+    path.push(format!("cotest-drift-{label}-{pid}-{nanos}"));
     fs::create_dir_all(&path).expect("mktmp");
     path
 }
@@ -31,7 +30,7 @@ fn write(path: &std::path::Path, body: &str) {
 }
 
 #[test]
-fn scan_tree_round4_flags_compute_audit_policy_version_digest_two_args() {
+fn scan_tree_flags_compute_audit_policy_version_digest_two_args() {
     let base = tmpdir("audit");
     let tree = base.join("downstream");
     // Construct the synthetic fixture text at runtime so the source line
@@ -40,29 +39,29 @@ fn scan_tree_round4_flags_compute_audit_policy_version_digest_two_args() {
     let fn_name = "compute_audit_policy_version_digest";
     let fixture = format!("fn x() {{ {fn_name}(disclosure, assurance); }}");
     write(&tree.join("src").join("audit.rs"), &fixture);
-    let findings = scan_tree_round4(&tree).expect("scan");
+    let findings = scan_tree_protocol_drift(&tree).expect("scan");
     assert!(
         findings
             .iter()
-            .any(|f| f.rule == Round4Rule::AuditPolicyVersionHashFewerThanFourArguments),
+            .any(|f| f.rule == ProtocolDriftRule::AuditPolicyVersionHashFewerThanFourArguments),
         "expected audit_policy_version_digest arity finding: {findings:?}",
     );
     let _ = fs::remove_dir_all(&base);
 }
 
 #[test]
-fn scan_tree_round4_does_not_flag_legal_did_web() {
+fn scan_tree_does_not_flag_legal_did_web() {
     let base = tmpdir("did-ok");
     let tree = base.join("downstream");
     write(
         &tree.join("src").join("foo.rs"),
         r#"pub const ALICE: &str = "did:web:alice.example";"#,
     );
-    let findings = scan_tree_round4(&tree).expect("scan");
+    let findings = scan_tree_protocol_drift(&tree).expect("scan");
     assert!(
         !findings
             .iter()
-            .any(|f| f.rule == Round4Rule::LegacyDidMethodSegment),
+            .any(|f| f.rule == ProtocolDriftRule::LegacyDidMethodSegment),
         "legal did:web must not be flagged: {findings:?}",
     );
     let _ = fs::remove_dir_all(&base);
@@ -70,10 +69,9 @@ fn scan_tree_round4_does_not_flag_legal_did_web() {
 
 /// Gating: manual operator scan over sibling project trees — needs
 /// `CONTRIX_DEV_ROOT` set; not a CI gate.
-/// Issue: Round-4 (cross-project rule scan)
 #[test]
-#[ignore = "manual: cargo test --test round4_rules_smoke -- --ignored round4_tree_scan_other_projects --nocapture"]
-fn round4_tree_scan_other_projects() {
+#[ignore = "manual: cargo test --test protocol_drift_smoke -- --ignored protocol_drift_tree_scan_other_projects --nocapture"]
+fn protocol_drift_tree_scan_other_projects() {
     let dev_root = std::env::var("CONTRIX_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
@@ -100,7 +98,7 @@ fn round4_tree_scan_other_projects() {
             eprintln!("[skip] {proj}: not present");
             continue;
         }
-        let findings = scan_tree_round4(&root).expect("scan must not fail");
+        let findings = scan_tree_protocol_drift(&root).expect("scan must not fail");
         if findings.is_empty() {
             println!("[clean] {proj}");
         } else {
@@ -118,5 +116,5 @@ fn round4_tree_scan_other_projects() {
             total += findings.len();
         }
     }
-    println!("ROUND-4 SCAN TOTAL FINDINGS={total}");
+    println!("PROTOCOL-DRIFT SCAN TOTAL FINDINGS={total}");
 }

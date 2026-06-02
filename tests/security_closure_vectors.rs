@@ -19,9 +19,9 @@ use cotest::conformance::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
     SecurityClosureFixture, run_security_closure_vectors_suite,
 };
-use cotest::scenarios::round4_federation_historical_only::{
-    HISTORICAL_ONLY_REASON, VECTOR_ID as ROUND4_HISTORICAL_VECTOR_ID,
-    run_round4_federation_historical_only,
+use cotest::scenarios::federation_idempotency_historical_only::{
+    HISTORICAL_ONLY_REASON, VECTOR_ID as FEDERATION_HISTORICAL_VECTOR_ID,
+    run_federation_idempotency_historical_only,
 };
 use cotest::scenarios::security_closure_vectors::{
     VECTOR_CONSENT_CACHE_INVALIDATION, VECTOR_CONSENT_SCOPE_CASCADE,
@@ -311,18 +311,18 @@ fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
 //
 // The full live e2e (docker / live processes / real key rotation) stays
 // `#[ignore]`d inside the scenario module with
-// `TODO(round4-federation-e2e-docker)`.
+// `TODO(federation-idempotency-e2e-docker)`.
 
 #[test]
-fn round4_c3_vector_loads_from_security_closure_fixture() {
+fn federation_c3_vector_loads_from_security_closure_fixture() {
     // The cotest scenario module's pin must match the security-closure
     // pin AND the fixture must surface the vector via the existing
     // wire-shape gate.
     assert_eq!(
-        ROUND4_HISTORICAL_VECTOR_ID, VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
-        "round4_federation_historical_only::VECTOR_ID drifted from security_closure_vectors pin",
+        FEDERATION_HISTORICAL_VECTOR_ID, VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
+        "federation_idempotency_historical_only::VECTOR_ID drifted from security_closure_vectors pin",
     );
-    assert_vector_present(ROUND4_HISTORICAL_VECTOR_ID)
+    assert_vector_present(FEDERATION_HISTORICAL_VECTOR_ID)
         .expect("C3 vector must parse out of security-closure-vectors.json");
 
     // The fixture's first step expectation MUST include the historical_only
@@ -330,7 +330,7 @@ fn round4_c3_vector_loads_from_security_closure_fixture() {
     // edit that re-labels the marker cannot pass silently.
     let fixture = SecurityClosureFixture::load().expect("fixture loads");
     let vector = fixture
-        .vector(ROUND4_HISTORICAL_VECTOR_ID)
+        .vector(FEDERATION_HISTORICAL_VECTOR_ID)
         .expect("C3 vector present");
     let replay_step = vector
         .steps
@@ -344,12 +344,12 @@ fn round4_c3_vector_loads_from_security_closure_fixture() {
 }
 
 #[test]
-fn round4_c3_multi_server_in_memory_driver_round_trips() {
+fn federation_c3_multi_server_in_memory_driver_round_trips() {
     // Non-ignored: runs entirely against the cotest in-memory simulated
     // federation receiver. Asserts cache-key composition includes
     // `origin_key_state_digest`, the transcript fragment carries the three
     // lowercase header names + values, post-rotation replay sets
     // `reason_code=historical_only`, and side-effects fire exactly once.
-    run_round4_federation_historical_only()
+    run_federation_idempotency_historical_only()
         .expect("C3 in-memory multi-server scenario must pass without live soland/teabay");
 }

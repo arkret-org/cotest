@@ -1,7 +1,7 @@
-//! Round 4 — drift validator allowlist refresh.
+//! Protocol-artifact drift validator allowlist refresh.
 //!
-//! Each constant lists the **new** identifiers introduced by the round-4
-//! spec change set (`2a4d39b..a77b9958e3c6535a39bf468d661a23ae5d38cb10`).
+//! Each constant lists the **new** identifiers introduced by the spec
+//! change set (`2a4d39b..a77b9958e3c6535a39bf468d661a23ae5d38cb10`).
 //! The pinned sets are cross-checked against the live canonical registry
 //! files inside `contrix-spec` so any drop / rename / typo fails cotest
 //! loudly.
@@ -26,20 +26,20 @@ use serde_json::Value;
 use super::{load_artifact_json, load_artifact_yaml};
 
 /// New capability action introduced by round 4 (7fae9ba).
-pub const ROUND4_NEW_CAPABILITY_ACTIONS: &[&str] = &["cx.morph.create"];
+pub const NEW_CAPABILITY_ACTIONS: &[&str] = &["cx.morph.create"];
 
 /// New error codes introduced by round 4 (7446832 + 7fae9ba).
-pub const ROUND4_NEW_ERROR_CODES: &[&str] = &[
+pub const NEW_ERROR_CODES: &[&str] = &[
     "delivery_binding_stale",
     "delivery_binding_handed_over",
     "historical_only",
 ];
 
 /// New typed-id kinds accepted inside `object_ref` (369f544).
-pub const ROUND4_NEW_OBJECT_REF_ID_KINDS: &[&str] = &["space"];
+pub const NEW_OBJECT_REF_ID_KINDS: &[&str] = &["space"];
 
 /// New schema `$defs` introduced by round 4 (d74bb75 + 369f544 + 58c5926).
-pub const ROUND4_NEW_SCHEMA_DEFS: &[&str] = &[
+pub const NEW_SCHEMA_DEFS: &[&str] = &[
     "third_party_invite",
     "space_state_transition_payload",
     "space_object_tombstone_payload",
@@ -48,7 +48,7 @@ pub const ROUND4_NEW_SCHEMA_DEFS: &[&str] = &[
 ];
 
 /// New OpenAPI components introduced by round 4 (d74bb75 + 7446832).
-pub const ROUND4_NEW_OPENAPI_COMPONENTS: &[&str] = &[
+pub const NEW_OPENAPI_COMPONENTS: &[&str] = &[
     "EventsSubmitBatchRequest",
     "EventsSubmitFederationRequest",
     "FederationServiceBindingRef",
@@ -64,12 +64,12 @@ pub const ROUND4_NEW_OPENAPI_COMPONENTS: &[&str] = &[
 /// present in the canonical registry — otherwise cotest reports the drift
 /// loudly so the implementer projects don't ship wire shape that the
 /// canonical artifact has already removed.
-pub fn run_round4_drift_allowlist_suite() -> Result<()> {
-    check_capability_actions_present(ROUND4_NEW_CAPABILITY_ACTIONS)?;
-    check_error_codes_present(ROUND4_NEW_ERROR_CODES)?;
-    check_id_kinds_present(ROUND4_NEW_OBJECT_REF_ID_KINDS)?;
-    check_schema_defs_present(ROUND4_NEW_SCHEMA_DEFS)?;
-    check_openapi_components_present(ROUND4_NEW_OPENAPI_COMPONENTS)?;
+pub fn run_protocol_artifact_allowlist_suite() -> Result<()> {
+    check_capability_actions_present(NEW_CAPABILITY_ACTIONS)?;
+    check_error_codes_present(NEW_ERROR_CODES)?;
+    check_id_kinds_present(NEW_OBJECT_REF_ID_KINDS)?;
+    check_schema_defs_present(NEW_SCHEMA_DEFS)?;
+    check_openapi_components_present(NEW_OPENAPI_COMPONENTS)?;
     Ok(())
 }
 
@@ -84,7 +84,7 @@ fn check_capability_actions_present(required: &[&str]) -> Result<()> {
     for action in required {
         if !actions.contains(*action) {
             bail!(
-                "round-4 drift allowlist: capability action `{action}` not found in canonical registry"
+                "protocol-artifact allowlist: capability action `{action}` not found in canonical registry"
             );
         }
     }
@@ -96,7 +96,7 @@ fn check_error_codes_present(required: &[&str]) -> Result<()> {
     let codes = collect_strings(&registry, &["codes", "error_codes", "errors", "entries"])?;
     for code in required {
         if !codes.contains(*code) {
-            bail!("round-4 drift allowlist: error code `{code}` not found in canonical registry");
+            bail!("protocol-artifact allowlist: error code `{code}` not found in canonical registry");
         }
     }
     Ok(())
@@ -117,7 +117,7 @@ fn check_id_kinds_present(required: &[&str]) -> Result<()> {
     for kind in required {
         if !kinds.contains(*kind) {
             bail!(
-                "round-4 drift allowlist: id_kind `{kind}` not present in canonical id-kind-registry"
+                "protocol-artifact allowlist: id_kind `{kind}` not present in canonical id-kind-registry"
             );
         }
     }
@@ -180,7 +180,7 @@ fn check_schema_defs_present(required: &[&str]) -> Result<()> {
     for def in required {
         if !found.contains(*def) {
             bail!(
-                "round-4 drift allowlist: schema $def `{def}` not present in any canonical schema file or OpenAPI components map"
+                "protocol-artifact allowlist: schema $def `{def}` not present in any canonical schema file or OpenAPI components map"
             );
         }
     }
@@ -201,7 +201,7 @@ fn check_openapi_components_present(required: &[&str]) -> Result<()> {
     for component in required {
         if !names.contains(*component) {
             bail!(
-                "round-4 drift allowlist: OpenAPI component `{component}` missing from canonical openapi schemas"
+                "protocol-artifact allowlist: OpenAPI component `{component}` missing from canonical openapi schemas"
             );
         }
     }
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn drift_allowlist_matches_canonical_registry() {
-        run_round4_drift_allowlist_suite()
+        run_protocol_artifact_allowlist_suite()
             .expect("round-4 drift allowlist must agree with canonical spec registry");
     }
 }
