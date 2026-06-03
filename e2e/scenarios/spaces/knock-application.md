@@ -4,9 +4,9 @@
 
 验证 spec §3.6 申请-审核路径 ("knock"):
 
-1. applicant 通过 `cx.member.state{knock}` 敲门 + `member.application` 提交结构化答案
+1. applicant 通过 `ck.member.state{knock}` 敲门 + `member.application` 提交结构化答案
 2. reviewer (持 `cx.space.join.review` capability) 通过 `member.application.review{accept|reject}` 决策
-3. reducer 校验 `cx.invite.create.refs[role="join_authorised_by"]` 链(MSC3083 借鉴的担保模式)
+3. reducer 校验 `ck.invite.create.refs[role="join_authorised_by"]` 链(MSC3083 借鉴的担保模式)
 4. reject 后 `cooldown_after_reject`(默认 72h) 内同一 actor 再申请被 reducer 拒绝
 5. application 正文只对 reviewer 可见,Matrix knock.reason spam 通道被堵
 
@@ -87,7 +87,7 @@
 ### Phase B — bob 敲门 + 提交申请 (happy path)
 
 4. **bob** 在 yougen 中通过 `/directory` 发现 Space S (因为 discoverability=listed)
-5. **bob** 提交 `cx.member.state{membership=knock}` Move (敲门事件,无正文)
+5. **bob** 提交 `ck.member.state{membership=knock}` Move (敲门事件,无正文)
 6. **bob** 提交 `member.application.v1`:
    - `space_id = spaceId`
    - `applicant_did = bob.did`
@@ -98,7 +98,7 @@
    - **eve** (普通成员,**无** `cx.space.join.review`) 调用 list-applications endpoint → 看不到 bob 的 application
    - eve 直接读 application event 的 payload → 服务端按 Sync Service 强制访问控制拒绝 / 字段被遮盖
    - **mallory** (非成员) 同样看不到
-8. 断言 (审计 §3.2 #2):eve 即使 API 路径看到了 event id,Sync Service 必须留下 `cx.audit.accessed` 记录
+8. 断言 (审计 §3.2 #2):eve 即使 API 路径看到了 event id,Sync Service 必须留下 `ck.audit.accessed` 记录
 
 ### Phase C — alice 审核 accept bob
 
@@ -112,10 +112,10 @@
 
 ### Phase D — invite 链 + bob join (§3.6.5)
 
-12. **alice** 提交 `cx.invite.create`:
+12. **alice** 提交 `ck.invite.create`:
     - `subject_did = bob.did`
     - `refs[role="join_authorised_by"] = <step 10 review event_id>`
-13. **bob** 提交 `cx.invite.accept`,引用 step 12 invite
+13. **bob** 提交 `ck.invite.accept`,引用 step 12 invite
 14. 断言 reducer 校验 (§3.6.5 第 3 步):
     - 被引用的 review accept 仍指向 step 6 application
     - alice 在当前 frontier 仍持有 `cx.space.join.review`
@@ -166,7 +166,7 @@
 
 - **E6.4 max_open_applications_per_actor**:bob 在 step 6 完成后,在 alice review 之前再发一个 application → 被拒(超出 `max_open_applications_per_actor=1`)
 - **E6.5 application_ttl 超时**:把 `application_ttl` 改成 `1s`,等几秒后 alice 才 review accept → reducer 拒绝(application 已 expired)
-- **E6.6 reviewer 失去 capability**:alice review accept 之后,通过另一 admin 撤销 alice 的 `cx.space.join.review`,然后 alice 提交 `cx.invite.create` 引用该 review → reducer 在写入 invite 时**再次** 校验 reviewer capability(§3.6.5 #3),发现 alice 已无 cap,拒绝 invite
+- **E6.6 reviewer 失去 capability**:alice review accept 之后,通过另一 admin 撤销 alice 的 `cx.space.join.review`,然后 alice 提交 `ck.invite.create` 引用该 review → reducer 在写入 invite 时**再次** 校验 reviewer capability(§3.6.5 #3),发现 alice 已无 cap,拒绝 invite
 - **E6.7 reviewer_quorum > any**:把 policy 改成 `reviewer_quorum = { threshold: 2, of: [alice.did, eve.did] }`,只 alice accept 时 application 状态停留在 `pending_quorum`;eve(临时被 grant `cx.space.join.review`)第二个 accept 才进入 `accepted`
 - **E6.8 cooldown gate**:join_policy 改成包含 `cooldown` kind gate(`min_interval_since_leave`),`bob` 主动 leave 后立即重新申请 → 被 cooldown gate 拒绝(独立于 `combinator`,见 §3.3.1 末行)
 

@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.event_kind_payload_coverage_vectors.v1",
+  "profile": "ck.profile.event_kind_payload_coverage_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
   "comment": "A1 Round 23 — every active event kind in the spec event-kind-registry.json has at least one positive payload vector here. The validator counts active kinds in the live registry, asserts the fixture's positive_vectors[] cover at least 20 distinct (cell_family, lattice) tuples, and cross-checks the sampled event_kind set against the spec's event-kind-registry.json + schema-registry.json. Each positive vector declares a synthetic minimal payload shape labelled by the registry-published cell_family + lattice + bottom; the validator does NOT execute the payload schema (cotest is black-box) but enforces the (event_kind, cell_family, lattice) consistency vs the live registry — drift fails loudly. Negative vectors cover (a) unknown event_kind, (b) cell_family/lattice mismatch vs registry.",
@@ -11,176 +11,176 @@
   "positive_vectors": [
     {
       "name": "realm_create_ordered_log",
-      "event_kind": "cx.realm.create",
-      "cell_family": "cx.component.realm.create.v1",
+      "event_kind": "ck.realm.create",
+      "cell_family": "ck.component.realm.create.v1",
       "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "name": "string", "kind": "collaboration" }
     },
     {
       "name": "space_upgrade_cas_register",
-      "event_kind": "cx.realm.upgrade",
-      "cell_family": "cx.component.realm.upgrade.v1",
+      "event_kind": "ck.realm.upgrade",
+      "cell_family": "ck.component.realm.upgrade.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "payload_shape": { "target_reducer_profile": "cx.profile.chat_mvp.v1" }
+      "payload_shape": { "target_reducer_profile": "ck.profile.chat_mvp.v1" }
     },
     {
       "name": "space_policy_cas_register",
-      "event_kind": "cx.realm.policy",
-      "cell_family": "cx.component.realm.policy.v1",
+      "event_kind": "ck.realm.policy",
+      "cell_family": "ck.component.realm.policy.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "policy_ref": "ck:policy:01h7..." }
     },
     {
       "name": "space_join_rule_cas_register",
-      "event_kind": "cx.realm.join_rule",
-      "cell_family": "cx.component.realm.join_rule.v1",
+      "event_kind": "ck.realm.join_rule",
+      "cell_family": "ck.component.realm.join_rule.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "rule": "invite" }
     },
     {
       "name": "space_history_visibility_cas_register",
-      "event_kind": "cx.realm.history_visibility",
-      "cell_family": "cx.component.realm.history_visibility.v1",
+      "event_kind": "ck.realm.history_visibility",
+      "cell_family": "ck.component.realm.history_visibility.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "scope": "shared" }
     },
     {
       "name": "realm_archive_cas_register",
-      "event_kind": "cx.realm.archive",
-      "cell_family": "cx.component.realm.archive.v1",
+      "event_kind": "ck.realm.archive",
+      "cell_family": "ck.component.realm.archive.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "archived": true }
     },
     {
       "name": "space_parent_cas_register",
-      "event_kind": "cx.space.parent",
-      "cell_family": "cx.component.space.parent.v1",
+      "event_kind": "ck.space.parent",
+      "cell_family": "ck.component.space.parent.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "space_id": "ck:space:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "parent_space_id": "ck:space:7fd5ae82-44e2-7a8a-9a4b-885799114210" }
     },
     {
       "name": "space_organization_cas_register",
-      "event_kind": "cx.realm.organization",
-      "cell_family": "cx.component.realm.organization.v1",
+      "event_kind": "ck.realm.organization",
+      "cell_family": "ck.component.realm.organization.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "organization_ref": "did:web:org.example" }
     },
     {
       "name": "space_inheritance_policy_cas_register",
-      "event_kind": "cx.realm.inheritance_policy",
-      "cell_family": "cx.component.realm.inheritance_policy.v1",
+      "event_kind": "ck.realm.inheritance_policy",
+      "cell_family": "ck.component.realm.inheritance_policy.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "parent_space_id": "ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "inherit_policy": false }
     },
     {
       "name": "consent_grant_or_set",
-      "event_kind": "cx.consent.grant",
-      "cell_family": "cx.component.consent.grant.v1",
+      "event_kind": "ck.consent.grant",
+      "cell_family": "ck.component.consent.grant.v1",
       "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "consent_id": "ck:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "peer": "did:web:bob.example", "scope": "messaging" }
     },
     {
       "name": "consent_revoke_or_set",
-      "event_kind": "cx.consent.revoke",
-      "cell_family": "cx.component.consent.grant.v1",
+      "event_kind": "ck.consent.revoke",
+      "cell_family": "ck.component.consent.grant.v1",
       "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "consent_id": "ck:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "revokes_op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-8857991142f0" }
     },
     {
       "name": "capability_grant_or_set",
-      "event_kind": "cx.capability.grant",
-      "cell_family": "cx.component.capability.grant.v1",
+      "event_kind": "ck.capability.grant",
+      "cell_family": "ck.component.capability.grant.v1",
       "lattice": "or_set",
       "bottom": "reject",
-      "payload_shape": { "grant_id": "ck:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "actions": ["cx.message.create"] }
+      "payload_shape": { "grant_id": "ck:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "actions": ["ck.message.create"] }
     },
     {
       "name": "capability_revoke_or_set",
-      "event_kind": "cx.capability.revoke",
-      "cell_family": "cx.component.capability.grant.v1",
+      "event_kind": "ck.capability.revoke",
+      "cell_family": "ck.component.capability.grant.v1",
       "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "revokes_grant_id": "ck:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }
     },
     {
       "name": "device_authorized_or_set",
-      "event_kind": "cx.device.authorize",
-      "cell_family": "cx.component.device.authorization.v1",
+      "event_kind": "ck.device.authorize",
+      "cell_family": "ck.component.device.authorization.v1",
       "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "device_id": "dev_alice_01", "principal_id": "did:web:alice.example" }
     },
     {
       "name": "member_state_fsm",
-      "event_kind": "cx.member.state",
-      "cell_family": "cx.component.member.state.v1",
+      "event_kind": "ck.member.state",
+      "cell_family": "ck.component.member.state.v1",
       "lattice": "fsm",
       "bottom": "reject",
       "payload_shape": { "actor_ref": "did:web:alice.example", "state": "join", "prev_state": "invite" }
     },
     {
       "name": "view_create_mv_register",
-      "event_kind": "cx.view.create",
-      "cell_family": "cx.component.view.create.v1",
+      "event_kind": "ck.view.create",
+      "cell_family": "ck.component.view.create.v1",
       "lattice": "mv_register",
       "bottom": "expose",
       "payload_shape": { "view_id": "ck:view:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "kind": "kanban" }
     },
     {
       "name": "view_update_mv_register",
-      "event_kind": "cx.view.update",
-      "cell_family": "cx.component.view.update.v1",
+      "event_kind": "ck.view.update",
+      "cell_family": "ck.component.view.update.v1",
       "lattice": "mv_register",
       "bottom": "expose",
       "payload_shape": { "view_id": "ck:view:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "patch": { "title": "Updated" } }
     },
     {
       "name": "profile_create_mv_register",
-      "event_kind": "cx.profile.create",
-      "cell_family": "cx.component.profile.create.v1",
+      "event_kind": "ck.profile.create",
+      "cell_family": "ck.component.profile.create.v1",
       "lattice": "mv_register",
       "bottom": "expose",
       "payload_shape": { "profile_id": "ck:profile:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "display_name": "Alice" }
     },
     {
       "name": "policy_rule_ordered_log",
-      "event_kind": "cx.policy.rule",
-      "cell_family": "cx.component.policy.rule.v1",
+      "event_kind": "ck.policy.rule",
+      "cell_family": "ck.component.policy.rule.v1",
       "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "rule_id": "rule_001", "expression": "actor.role == 'admin'" }
     },
     {
       "name": "flow_move_cas_register",
-      "event_kind": "cx.flow.move",
-      "cell_family": "cx.component.flow.position.v1",
+      "event_kind": "ck.flow.move",
+      "cell_family": "ck.component.flow.position.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "rank": "K1", "space_id": "ck:space:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }
     },
     {
       "name": "account_status_ordered_log",
-      "event_kind": "cx.account.status",
-      "cell_family": "cx.component.account.status.v1",
+      "event_kind": "ck.account.status",
+      "cell_family": "ck.component.account.status.v1",
       "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "status": "active" }
     },
     {
       "name": "session_grant_or_set",
-      "event_kind": "cx.session.grant",
-      "cell_family": "cx.component.session.grant.v1",
+      "event_kind": "ck.session.grant",
+      "cell_family": "ck.component.session.grant.v1",
       "lattice": "or_set",
       "bottom": "reject",
       "payload_shape": { "session_id": "ck:session:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "device_id": "dev_alice_01" }
@@ -195,14 +195,14 @@
     },
     {
       "name": "wrong_cell_family_for_kind",
-      "event_kind": "cx.consent.grant",
-      "claimed_cell_family": "cx.component.realm.policy.v1",
+      "event_kind": "ck.consent.grant",
+      "claimed_cell_family": "ck.component.realm.policy.v1",
       "drift": { "kind": "cell_family_mismatch" },
       "expected": { "outcome": "reject", "reason_code": "cell_family_drift" }
     },
     {
       "name": "wrong_lattice_for_family",
-      "event_kind": "cx.realm.create",
+      "event_kind": "ck.realm.create",
       "claimed_lattice": "or_set",
       "drift": { "kind": "lattice_mismatch" },
       "expected": { "outcome": "reject", "reason_code": "lattice_drift" }

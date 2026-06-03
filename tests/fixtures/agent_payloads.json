@@ -1,13 +1,13 @@
 {
   "suite": "agent_payloads",
   "profile": "cx.profile.agent_payload_vectors.v1",
-  "schema_ref": "cx.schema.event_payload.v1",
+  "schema_ref": "ck.schema.event_payload.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/event-payload.schema.json",
   "comment": "R3 sync (cokret-spec @ b47ff6ec) — minimal payload shapes for the new agent event kinds. Live reducer wiring is R3.1; this fixture only pins wire-shape.",
   "cases": [
     {
       "name": "agent_pause_payload_minimal",
-      "event_kind": "cx.agent.pause",
+      "event_kind": "ck.agent.pause",
       "payload_def_ref": "agent_pause_payload",
       "payload": {
         "agent_principal_id": "did:web:agent.example",
@@ -24,7 +24,7 @@
     },
     {
       "name": "agent_resume_payload_minimal",
-      "event_kind": "cx.agent.resume",
+      "event_kind": "ck.agent.resume",
       "payload_def_ref": "agent_resume_payload",
       "payload": {
         "agent_principal_id": "did:web:agent.example",
@@ -40,7 +40,7 @@
     },
     {
       "name": "agent_deactivate_payload_terminal",
-      "event_kind": "cx.agent.deactivate",
+      "event_kind": "ck.agent.deactivate",
       "payload_def_ref": "agent_deactivate_payload",
       "payload": {
         "agent_principal_id": "did:web:agent.example",
@@ -57,14 +57,14 @@
     },
     {
       "name": "agent_draft_propose_actor_private",
-      "event_kind": "cx.agent.draft.propose",
+      "event_kind": "ck.agent.draft.propose",
       "payload_def_ref": "agent_draft_propose_payload",
       "reducer_input": false,
       "payload": {
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
         "draft_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c001",
-        "proposed_action": "cx.message.create",
+        "proposed_action": "ck.message.create",
         "target": {
           "kind": "realm",
           "realm_id": "ck:realm:01999999-0000-7000-8000-000000000001"
@@ -77,14 +77,14 @@
     },
     {
       "name": "agent_action_request_actor_private",
-      "event_kind": "cx.agent.action_request",
+      "event_kind": "ck.agent.action_request",
       "payload_def_ref": "agent_action_request_payload",
       "reducer_input": false,
       "payload": {
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
         "request_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c002",
-        "proposed_action": "cx.message.create",
+        "proposed_action": "ck.message.create",
         "target": {
           "kind": "realm",
           "realm_id": "ck:realm:01999999-0000-7000-8000-000000000001"
@@ -97,7 +97,7 @@
     },
     {
       "name": "agent_action_approve_actor_private",
-      "event_kind": "cx.agent.action_approve",
+      "event_kind": "ck.agent.action_approve",
       "payload_def_ref": "agent_action_approve_payload",
       "reducer_input": false,
       "payload": {
@@ -105,7 +105,7 @@
         "request_id": "ck:agent_draft:01999999-0000-7000-8000-00000000c002",
         "agent_principal_id": "did:web:agent.example",
         "controller_principal_id": "did:web:controller.example",
-        "proposed_action": "cx.message.create",
+        "proposed_action": "ck.message.create",
         "target": {
           "kind": "realm",
           "realm_id": "ck:realm:01999999-0000-7000-8000-000000000001"
@@ -119,7 +119,7 @@
     },
     {
       "name": "agent_action_reject_actor_private",
-      "event_kind": "cx.agent.action_reject",
+      "event_kind": "ck.agent.action_reject",
       "payload_def_ref": "agent_action_reject_payload",
       "reducer_input": false,
       "payload": {
@@ -134,7 +134,7 @@
     },
     {
       "name": "actor_kind_field_must_fail",
-      "event_kind": "cx.agent.pause",
+      "event_kind": "ck.agent.pause",
       "payload_def_ref": "agent_pause_payload",
       "reason": "actor_kind_reducer_managed",
       "payload": {

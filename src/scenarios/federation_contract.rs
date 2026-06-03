@@ -103,9 +103,7 @@ fn trust_domain_from_service_did(service_did: &str) -> String {
     format!("ck:trust_domain:{scope}")
 }
 
-fn development_service_signing_key(
-    service_did: &str,
-) -> cokret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:anchorer-ephemeral:");
     hasher.update(service_did.as_bytes());
@@ -136,7 +134,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .put(server.url("/api/v1/federation/transactions/federation-bad"))
+            .put(server.url("/_cokret/peer/federation/transactions/federation-bad"))
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -146,7 +144,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/federation/push-operations"))
+            .post(server.url("/_cokret/peer/federation/push-operations"))
             .json(&json!({"operations": []})),
         StatusCode::BAD_REQUEST,
         "bad_request",
@@ -155,7 +153,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/api/v1/federation/pull-operations")),
+            .get(server.url("/_cokret/peer/federation/pull-operations")),
         StatusCode::BAD_REQUEST,
         "bad_request",
     )
@@ -163,7 +161,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/api/v1/federation/pull-operations?space_id=bad")),
+            .get(server.url("/_cokret/peer/federation/pull-operations?space_id=bad")),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
@@ -171,7 +169,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/api/v1/federation/space-members")),
+            .get(server.url("/_cokret/peer/federation/space-members")),
         StatusCode::BAD_REQUEST,
         "bad_request",
     )
@@ -179,7 +177,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/federation/verify-actor"))
+            .post(server.url("/_cokret/peer/federation/verify-actor"))
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -196,7 +194,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
         with_federation_trust_headers(
             server
                 .http()
-                .post(server.url("/api/v1/federation/verify-actor"))
+                .post(server.url("/_cokret/peer/federation/verify-actor"))
                 .json(&verify_actor_body),
             &server,
             &verify_actor_body,
@@ -222,17 +220,17 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let operation = Operation::create(
         OperationId::new(replay_operation_id)?,
         RealmId::new(realm_id)?,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "event_id": replay_event_id,
             "actor_id": "did:web:remote.example",
             "flow_id": realm_id.replacen("ck:realm:", "ck:flow:", 1),
             "track_name": "discussion",
-            "content": {"kind": "cx.content.text", "body": "from federation"}
+            "content": {"kind": "ck.content.text", "body": "from federation"}
         }),
     );
 
-    let first_push_url = server.url("/api/v1/federation/push-operations");
+    let first_push_url = server.url("/_cokret/peer/federation/push-operations");
     let first_push_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
@@ -257,7 +255,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let pulled = expect_json(
         server.http().get(server.url(&format!(
-            "/api/v1/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -266,7 +264,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let bootstrap = expect_json(
         server.http().get(server.url(&format!(
-            "/api/v1/federation/pull-operations?space_id={realm_id}&snapshot_bootstrap=true"
+            "/_cokret/peer/federation/pull-operations?space_id={realm_id}&snapshot_bootstrap=true"
         ))),
         StatusCode::OK,
     )
@@ -282,7 +280,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             .starts_with("sha256:")
     );
 
-    let replay_url = server.url("/api/v1/federation/push-operations");
+    let replay_url = server.url("/_cokret/peer/federation/push-operations");
     let replay_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
@@ -307,7 +305,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let after_replay_pull = expect_json(
         server.http().get(server.url(&format!(
-            "/api/v1/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -327,7 +325,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let invalid_operation = Operation::create(
         OperationId::new(invalid_operation_id)?,
         RealmId::new(realm_id)?,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "event_id": invalid_event_id,
             "actor_id": "did:web:remote.example",
@@ -335,7 +333,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "content": {"ciphertext": "missing-envelope-fields"}
         }),
     );
-    let invalid_push_url = server.url("/api/v1/federation/push-operations");
+    let invalid_push_url = server.url("/_cokret/peer/federation/push-operations");
     let invalid_push_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
@@ -364,13 +362,13 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let redaction = Operation::create(
         OperationId::new(redaction_operation_id)?,
         RealmId::new(realm_id)?,
-        "cx.message.redact",
+        "ck.message.redact",
         json!({
             "event_id": redaction_event_id,
             "target_event_id": replay_event_id
         }),
     );
-    let redaction_push_url = server.url("/api/v1/federation/push-operations");
+    let redaction_push_url = server.url("/_cokret/peer/federation/push-operations");
     let redaction_push_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
@@ -397,7 +395,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let redacted_pull = expect_json(
         server.http().get(server.url(&format!(
-            "/api/v1/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -416,21 +414,21 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     let operation = Operation::create(
         OperationId::new(operation_id)?,
         RealmId::new(realm_id.to_owned())?,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "event_id": event_id,
             "actor_id": "did:web:alice.example",
             "flow_id": realm_id.replacen("ck:realm:", "ck:flow:", 1),
             "track_name": "discussion",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "searchable federated payload",
                 "format": "plain"
             }
         }),
     );
 
-    let txn_url = server.url("/api/v1/federation/transactions/federation-project-txn");
+    let txn_url = server.url("/_cokret/peer/federation/transactions/federation-project-txn");
     let txn_body = json!({
         "origin": "did:web:remote-server.example",
         "destination": server.service_did(),
@@ -459,7 +457,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     let sync_response = expect_response(
         server
             .http()
-            .get(server.url("/api/v1/account/subscribe?catchup=true"))
+            .get(server.url("/_cokret/self/account/subscribe?catchup=true"))
             .bearer_auth(&alice)
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,

@@ -2,10 +2,10 @@
 //! `schema_policy_realtime.rs` during the round 28 Q1 refactor.
 //!
 //! Each submodule is single-responsibility:
-//! - [`schema`] — `/api/v1/schemas` registry lifecycle and visibility.
-//! - [`policy`] — `/api/v1/policies` document shape, decisions, and ownership.
-//! - [`typing`] — `/api/v1/typing` + `/api/v1/push_rules` realtime flow.
-//! - [`webrtc`] — `/api/v1/webrtc/*` session signaling flow and guards.
+//! - [`schema`] — `/_cokret/self/schemas` registry lifecycle and visibility.
+//! - [`policy`] — `/_cokret/self/policies` document shape, decisions, and ownership.
+//! - [`typing`] — `/_cokret/self/typing` + `/_cokret/self/push_rules` realtime flow.
+//! - [`webrtc`] — `/_cokret/self/webrtc/*` session signaling flow and guards.
 //!
 //! No private helpers exist between scenarios in this family — the move is a
 //! pure mechanical extraction.

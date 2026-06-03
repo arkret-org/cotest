@@ -22,7 +22,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     expect_api_error(
         carol
-            .post("/api/v1/ephemeral")
+            .post("/_cokret/self/ephemeral")
             .json(&typing_envelope(&carol.actor, &space_id, true)),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -30,7 +30,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     .await?;
 
     let typing = expect_json(
-        bob.post("/api/v1/ephemeral")
+        bob.post("/_cokret/self/ephemeral")
             .json(&typing_envelope(&bob.actor, &space_id, true)),
         StatusCode::OK,
     )
@@ -54,7 +54,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     );
 
     let stopped = expect_json(
-        bob.post("/api/v1/ephemeral")
+        bob.post("/_cokret/self/ephemeral")
             .json(&typing_envelope(&bob.actor, &space_id, false)),
         StatusCode::OK,
     )
@@ -69,11 +69,11 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
             .is_empty()
     );
 
-    let initial_rules = expect_json(bob.get("/api/v1/push/rules"), StatusCode::OK).await?;
+    let initial_rules = expect_json(bob.get("/_cokret/edge/push/rules"), StatusCode::OK).await?;
     assert!(initial_rules["rules"].as_array().unwrap().is_empty());
 
     let default_rule = expect_json(
-        bob.post("/api/v1/push/rules").json(&json!({
+        bob.post("/_cokret/edge/push/rules").json(&json!({
             "rule_id": "global.default"
         })),
         StatusCode::OK,
@@ -82,7 +82,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     assert_eq!(default_rule["rule"]["actions"][0], "notify");
 
     let mute_rule = expect_json(
-        bob.post("/api/v1/push/rules").json(&json!({
+        bob.post("/_cokret/edge/push/rules").json(&json!({
             "rule_id": "global.mute.messages",
             "actions": ["dont_notify"],
             "conditions": [{"field": "notification.type", "equals": "message"}]
@@ -92,11 +92,11 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     .await?;
     assert_eq!(mute_rule["rule"]["actions"][0], "dont_notify");
 
-    let listed_rules = expect_json(bob.get("/api/v1/push/rules"), StatusCode::OK).await?;
+    let listed_rules = expect_json(bob.get("/_cokret/edge/push/rules"), StatusCode::OK).await?;
     assert_eq!(listed_rules["rules"].as_array().unwrap().len(), 2);
 
     expect_api_error(
-        bob.post("/api/v1/push/rules").json(&json!({
+        bob.post("/_cokret/edge/push/rules").json(&json!({
             "rule_id": "global.invalid",
             "actions": ["explode"]
         })),
@@ -106,20 +106,20 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     .await?;
 
     let deleted_mute = expect_json(
-        bob.delete("/api/v1/push/rules/global.mute.messages"),
+        bob.delete("/_cokret/edge/push/rules/global.mute.messages"),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(deleted_mute["ok"], true);
 
     let deleted_default = expect_json(
-        bob.delete("/api/v1/push/rules/global.default"),
+        bob.delete("/_cokret/edge/push/rules/global.default"),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(deleted_default["ok"], true);
 
-    let final_rules = expect_json(bob.get("/api/v1/push/rules"), StatusCode::OK).await?;
+    let final_rules = expect_json(bob.get("/_cokret/edge/push/rules"), StatusCode::OK).await?;
     assert!(final_rules["rules"].as_array().unwrap().is_empty());
 
     Ok(())

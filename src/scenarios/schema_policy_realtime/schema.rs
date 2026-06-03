@@ -14,14 +14,14 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/api/v1/schemas?kind=flow&limit=20")),
+            .get(server.url("/_cokret/self/schemas?kind=flow&limit=20")),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
     .await?;
 
     expect_api_error(
-        alice.post("/api/v1/schemas").json(&json!({
+        alice.post("/_cokret/self/schemas").json(&json!({
             "schema_id": schema_id,
             "kind": "morph",
             "version": "1",
@@ -42,14 +42,14 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url(&format!("/api/v1/schemas/{schema_id}"))),
+            .get(server.url(&format!("/_cokret/self/schemas/{schema_id}"))),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
     .await?;
 
     expect_api_error(
-        alice.delete(&format!("/api/v1/schemas/{schema_id}")),
+        alice.delete(&format!("/_cokret/self/schemas/{schema_id}")),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )

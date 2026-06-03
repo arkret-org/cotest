@@ -22,8 +22,8 @@
 
 1. appellant / moderator / reviewer 注册并获取 dev session。
 2. appellant 创建 Realm,写入一条 target message。
-3. moderator 调用 `POST /_soland/admin/moderation/decision` 签发 `cx.moderation.decision`。
-4. appellant 调用 `POST /api/v1/moderation/appeal` 提交 `cx.moderation.appeal.submit`。
+3. moderator 调用 `POST /_soland/admin/moderation/decision` 签发 `ck.moderation.decision`。
+4. appellant 调用 `POST /_cokret/self/moderation/appeal` 提交 `ck.moderation.appeal.submit`。
 5. reviewer 依次调用:
    - `POST /_soland/admin/moderation/appeals/{appeal_id}/review`
    - `POST /_soland/admin/moderation/appeals/{appeal_id}/decision`

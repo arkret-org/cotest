@@ -56,7 +56,7 @@ async function accountSubscribeTimelineEvents(
   token: string,
   spaceId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const subscribe = await request.get(`${solandBaseUrl()}/api/v1/account/subscribe?catchup=true`, {
+  const subscribe = await request.get(`${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`, {
     headers: authHeaders(token),
   });
   expect(subscribe.status()).toBe(200);
@@ -86,7 +86,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.spaceId,
-        kind: "cx.reaction.add",
+        kind: "ck.reaction.add",
         payload: {
           target_ref: messageRef,
           actor: fixture.bob.did,
@@ -101,7 +101,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.spaceId,
-        kind: "cx.reaction.remove",
+        kind: "ck.reaction.remove",
         payload: {
           target_ref: messageRef,
           actor: fixture.bob.did,
@@ -113,9 +113,9 @@ test.describe("chat advanced", () => {
 
     const events = await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
     expect(events.map((event) => event.event_kind)).toEqual(
-      expect.arrayContaining(["cx.reaction.add", "cx.reaction.remove"]),
+      expect.arrayContaining(["ck.reaction.add", "ck.reaction.remove"]),
     );
-    expect(events.find((event) => event.event_kind === "cx.reaction.add")?.payload).toMatchObject({
+    expect(events.find((event) => event.event_kind === "ck.reaction.add")?.payload).toMatchObject({
       target_ref: messageRef,
       actor: fixture.bob.did,
       key: "+1",
@@ -136,20 +136,20 @@ test.describe("chat advanced", () => {
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.spaceId,
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       payload: {
         flow_id: flowIdFromRealmId(fixture.spaceId),
         track_name: "discussion",
         thread_id: "discussion",
         reply_to: rootMessageRef,
-        content: { kind: "cx.content.text", body: replyBody },
+        content: { kind: "ck.content.text", body: replyBody },
         encrypted: false,
       },
     });
     await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
 
     const events = await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
-    const messageEvents = events.filter((event) => event.event_kind === "cx.message.create");
+    const messageEvents = events.filter((event) => event.event_kind === "ck.message.create");
     expect(messageEvents.map((event) => event.event_id)).toEqual([
       root.event_id,
       reply.event_id,
@@ -169,12 +169,12 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.spaceId,
-        kind: "cx.message.create",
+        kind: "ck.message.create",
         payload: {
           flow_id: flowIdFromRealmId(fixture.spaceId),
           track_name: "discussion",
           content: {
-            kind: "cx.content.text",
+            kind: "ck.content.text",
             body,
             mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
           },
@@ -190,7 +190,7 @@ test.describe("chat advanced", () => {
     const events = await listSpaceEventsViaApi(request, fixture.bobToken, fixture.spaceId);
     const mention = events.find(
       (event) =>
-        event.event_kind === "cx.message.create" &&
+        event.event_kind === "ck.message.create" &&
         JSON.stringify(event.payload).includes(fixture.bob.did),
     );
     expect(mention?.payload).toMatchObject({
@@ -209,13 +209,13 @@ test.describe("chat advanced", () => {
     const root = signedEventEnvelope({
       actorDid: fixture.alice.did,
       realmId: fixture.spaceId,
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       payload: {
         flow_id: flowIdFromRealmId(fixture.spaceId),
         track_name: "discussion",
         thread_id: "discussion",
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body,
           mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
         },
@@ -231,13 +231,13 @@ test.describe("chat advanced", () => {
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.spaceId,
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       payload: {
         flow_id: flowIdFromRealmId(fixture.spaceId),
         track_name: "discussion",
         thread_id: "discussion",
         reply_to: rootMessageRef,
-        content: { kind: "cx.content.text", body: `reply ${Date.now()}` },
+        content: { kind: "ck.content.text", body: `reply ${Date.now()}` },
         encrypted: false,
       },
     });
@@ -249,7 +249,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.spaceId,
-        kind: "cx.reaction.add",
+        kind: "ck.reaction.add",
         payload: { target_ref: rootMessageRef, actor: fixture.alice.did, key: "+1" },
       }),
       { context: "alice add reaction" },
@@ -260,7 +260,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.spaceId,
-        kind: "cx.reaction.add",
+        kind: "ck.reaction.add",
         payload: { target_ref: rootMessageRef, actor: fixture.bob.did, key: "+1" },
       }),
       { context: "bob add reaction" },
@@ -271,7 +271,7 @@ test.describe("chat advanced", () => {
       signedEventEnvelope({
         actorDid: fixture.bob.did,
         realmId: fixture.spaceId,
-        kind: "cx.reaction.remove",
+        kind: "ck.reaction.remove",
         payload: { target_ref: rootMessageRef, actor: fixture.bob.did, key: "+1" },
       }),
       { context: "bob remove reaction" },
@@ -307,7 +307,7 @@ test.describe("chat advanced", () => {
   }) => {
     const fixture = await createChatApiFixture(request, "typing-api");
     const sentAt = new Date();
-    const typing = await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+    const typing = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
       headers: authHeaders(fixture.aliceToken),
       data: {
         kind: "cx.typing",
@@ -324,7 +324,7 @@ test.describe("chat advanced", () => {
     });
     expect(typing.status()).toBe(200);
 
-    const subscribe = await request.get(`${solandBaseUrl()}/api/v1/account/subscribe`, {
+    const subscribe = await request.get(`${solandBaseUrl()}/_cokret/self/account/subscribe`, {
       headers: authHeaders(fixture.bobToken),
     });
     expect(subscribe.status()).toBe(200);
@@ -688,7 +688,7 @@ test.describe("chat advanced", () => {
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         realmId: spaceId,
-        kind: "cx.message.create",
+        kind: "ck.message.create",
         payload: {
           flow_id: flowIdFromRealmId(spaceId),
           track_name: "discussion",
@@ -733,7 +733,7 @@ function encryptedEnvelope(
     ciphertext,
     authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",
-    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "cx.message.create" },
+    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "ck.message.create" },
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

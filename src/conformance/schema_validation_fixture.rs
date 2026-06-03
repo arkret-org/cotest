@@ -32,7 +32,7 @@ use super::{fixture_path, spec_artifacts_root, validate_profile};
 pub const SCHEMA_VALIDATION_FIXTURE: &str = "schema-validation-fixture.json";
 
 /// Canonical conformance profile pin.
-pub const SCHEMA_VALIDATION_PROFILE: &str = "cx.profile.privacy_security_vectors.v1";
+pub const SCHEMA_VALIDATION_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 
 const SCHEMA_DIR: &str = "schemas";
 const SCHEMA_ID_PREFIX: &str = "https://cokret.io/artifacts/";

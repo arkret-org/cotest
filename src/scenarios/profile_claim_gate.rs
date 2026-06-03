@@ -16,7 +16,7 @@ pub async fn live_describe_profile_claim_gate_from_env() -> Result<()> {
         return Ok(());
     }
 
-    let client = reqwest::Client::new();
+    let client = crate::scenarios::_helpers::http::live_probe_client()?;
     for target in targets {
         let response = client
             .get(&target.url)
@@ -52,29 +52,29 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     expect_profile_rejected(&unknown, "unknown claimed profile")?;
 
     let failed = serde_json::json!({
-        "supported_profiles": ["cx.profile.core_event_store.v1"],
+        "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": [
-            "cx.server.describe",
-            "cx.events.describe",
-            "cx.events.submit",
-            "cx.events.get",
-            "cx.events.resolve",
-            "cx.events.query",
-            "cx.events.frontier"
+            "ck.server.describe",
+            "ck.events.describe",
+            "ck.events.submit",
+            "ck.events.get",
+            "ck.events.resolve",
+            "ck.events.query",
+            "ck.events.frontier"
         ],
         "supported_event_kinds": [
-            "cx.space.create",
-            "cx.member.state"
+            "ck.space.create",
+            "ck.member.state"
         ],
         "supported_event_schemas": [
-            "cx.schema.event.v1",
-            "cx.schema.event_payload.v1",
-            "cx.schema.event_batch_receipt.v1",
-            "cx.schema.cursor.v1",
-            "cx.schema.anchor.v1"
+            "ck.schema.event.v1",
+            "ck.schema.event_payload.v1",
+            "ck.schema.event_batch_receipt.v1",
+            "ck.schema.cursor.v1",
+            "ck.schema.anchor.v1"
         ],
         "conformance_results": {
-            "cx.profile.core_event_store.v1": {
+            "ck.profile.core_event_store.v1": {
                 "status": "failed",
                 "failed_suites": ["event_envelope_fixture"]
             }
@@ -107,7 +107,7 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
     add_base_targets(
         &mut targets,
         std::env::var("COTEST_PROFILE_GATE_BASE_URLS").ok(),
-        "/api/v1/server/describe",
+        "/_cokret/describe",
     )?;
 
     for (service, exact_env, base_env, default_path) in [
@@ -115,19 +115,19 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
             "soland",
             "COTEST_SOLAND_DESCRIBE_URL",
             "COTEST_SOLAND_BASE_URL",
-            "/api/v1/server/describe",
+            "/_cokret/describe",
         ),
         (
             "floria",
             "COTEST_FLORIA_DESCRIBE_URL",
             "COTEST_FLORIA_BASE_URL",
-            "/api/v1/server/describe",
+            "/_cokret/describe",
         ),
         (
             "teabay",
             "COTEST_TEABAY_DESCRIBE_URL",
             "COTEST_TEABAY_BASE_URL",
-            "/api/v1/directory/describe",
+            "/_cokret/find/directory/describe",
         ),
         (
             "starid",
@@ -139,7 +139,7 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
             "coauth",
             "COTEST_COAUTH_DESCRIBE_URL",
             "COTEST_COAUTH_BASE_URL",
-            "/api/v1/server/describe",
+            "/_cokret/describe",
         ),
     ] {
         if let Ok(url) = std::env::var(exact_env)

@@ -21,7 +21,7 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
-const BLOCKLIST_DATA_TYPE = "cx.account.blocklist";
+const BLOCKLIST_DATA_TYPE = "ck.account.blocklist";
 
 type BlocklistEntry = {
   target:
@@ -47,13 +47,13 @@ test.describe("personal blocklist", () => {
     const auth = { authorization: `Bearer ${token}` };
 
     const accountData = await request.get(
-      `${solandBaseUrl()}/api/v1/account_data/${BLOCKLIST_DATA_TYPE}`,
+      `${solandBaseUrl()}/_cokret/self/account_data/${BLOCKLIST_DATA_TYPE}`,
       { headers: auth },
     );
     expect([200, 401, 403, 404]).toContain(accountData.status());
     expect(accountData.status()).toBeLessThan(500);
 
-    const hints = await request.get(`${solandBaseUrl()}/api/v1/federation/block-hints`);
+    const hints = await request.get(`${solandBaseUrl()}/_cokret/peer/federation/block-hints`);
     expect(hints.status()).toBeLessThan(500);
   });
 
@@ -205,7 +205,7 @@ test.describe("personal blocklist", () => {
 
       const redactOperation = makeOperation({
         spaceId,
-        objectType: "cx.message.redact",
+        objectType: "ck.message.redact",
         payload: {
           target_event_id: sent.event_id,
           redacts: sent.event_id,
@@ -247,7 +247,7 @@ test.describe("personal blocklist", () => {
         mutedVisible,
       );
 
-      const registerDevice = await request.post(`${solandBaseUrl()}/api/v1/push/register-device`, {
+      const registerDevice = await request.post(`${solandBaseUrl()}/_cokret/edge/push/register-device`, {
         headers: authHeaders(aliceToken),
         data: {
           device_id: alice.deviceId,
@@ -259,7 +259,7 @@ test.describe("personal blocklist", () => {
       });
       expect(registerDevice.status()).toBe(200);
 
-      const rule = await request.post(`${solandBaseUrl()}/api/v1/push/rules`, {
+      const rule = await request.post(`${solandBaseUrl()}/_cokret/edge/push/rules`, {
         headers: authHeaders(aliceToken),
         data: {
           rule_id: `mute-${stamp}`,
@@ -269,7 +269,7 @@ test.describe("personal blocklist", () => {
         },
       });
       expect(rule.status()).toBe(200);
-      const notify = await request.post(`${solandBaseUrl()}/api/v1/push/notify`, {
+      const notify = await request.post(`${solandBaseUrl()}/_cokret/edge/push/notify`, {
         data: {
           notification: {
             type: "blind_wakeup",
@@ -320,7 +320,7 @@ test.describe("personal blocklist", () => {
       expect(eventsText(await querySpaceEventsApi(request, bobToken, spaceId))).toContain(body);
 
       const bobBlocklist = await request.get(
-        `${solandBaseUrl()}/api/v1/account_data/${BLOCKLIST_DATA_TYPE}`,
+        `${solandBaseUrl()}/_cokret/self/account_data/${BLOCKLIST_DATA_TYPE}`,
         { headers: authHeaders(bobToken) },
       );
       expect([404, 200]).toContain(bobBlocklist.status());
@@ -346,7 +346,7 @@ async function putBlocklist(
   entries: BlocklistEntry[],
 ) {
   const response = await request.put(
-    `${solandBaseUrl()}/api/v1/account_data/${BLOCKLIST_DATA_TYPE}`,
+    `${solandBaseUrl()}/_cokret/self/account_data/${BLOCKLIST_DATA_TYPE}`,
     {
       headers: authHeaders(token),
       data: { content: { entries } },
@@ -361,7 +361,7 @@ async function blocklistContains(
   target: string,
 ): Promise<boolean> {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/account_data/${BLOCKLIST_DATA_TYPE}`,
+    `${solandBaseUrl()}/_cokret/self/account_data/${BLOCKLIST_DATA_TYPE}`,
     { headers: authHeaders(token) },
   );
   if (response.status() === 404) {
@@ -395,7 +395,7 @@ async function blockHintSuppressed(
   blocked: string,
 ): Promise<boolean> {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/federation/block-hints?actor=${encodeURIComponent(actor)}&blocked=${encodeURIComponent(blocked)}`,
+    `${solandBaseUrl()}/_cokret/peer/federation/block-hints?actor=${encodeURIComponent(actor)}&blocked=${encodeURIComponent(blocked)}`,
   );
   expect(response.status()).toBe(200);
   const body = await response.json();
@@ -406,7 +406,7 @@ async function readNotificationsText(
   request: APIRequestContext,
   token: string,
 ): Promise<string> {
-  const response = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+  const response = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
     headers: authHeaders(token),
   });
   expect(response.status()).toBe(200);

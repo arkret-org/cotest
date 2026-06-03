@@ -22,13 +22,13 @@ test.describe("third-party invite", () => {
     // Unauthenticated POST must not succeed. 405 (path routed but method
     // not allowed) is acceptable too — treated as "endpoint absent" for
     // the probe.
-    const probe = await request.post(`${solandBaseUrl()}/api/v1/invites/third-party`, {
+    const probe = await request.post(`${solandBaseUrl()}/_cokret/self/invites/third-party`, {
       data: { space_id: "ck:space:probe", token_commitment: "sha256:0".repeat(64) },
     });
     expect([401, 403, 404, 405]).toContain(probe.status());
 
     // With auth: either implemented or absent. 5xx is a bug.
-    const authProbe = await request.post(`${solandBaseUrl()}/api/v1/invites/third-party`, {
+    const authProbe = await request.post(`${solandBaseUrl()}/_cokret/self/invites/third-party`, {
       headers: { authorization: `Bearer ${token}` },
       data: { space_id: "ck:space:probe", token_commitment: "sha256:0".repeat(64) },
     });
@@ -39,7 +39,7 @@ test.describe("third-party invite", () => {
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
-    "alice issues cx.invite.third_party with token_commitment; plaintext email never leaves client",
+    "alice issues ck.invite.third_party with token_commitment; plaintext email never leaves client",
     async () => {
       // spec: third-party-invites.md §3.1
     },
@@ -59,7 +59,7 @@ test.describe("third-party invite", () => {
     // @blocking-on: soland#invites-third-party-gap
     // @user-promise: e2e/scenarios/invites/third-party.md
     // @expected-live-by: 2026Q3
-    "bob submits cx.invite.claim with binding_proof + subject_proof; reducer accepts and converts to cx.invite.create + accept",
+    "bob submits ck.invite.claim with binding_proof + subject_proof; reducer accepts and converts to ck.invite.create + accept",
     async () => {
       // spec: third-party-invites.md §4
     },

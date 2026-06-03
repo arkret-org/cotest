@@ -3,19 +3,19 @@
 //! Spec (round 2+3 cleanup, T06 — Moderation appeal):
 //!
 //! Four new active event kinds:
-//!   * `cx.moderation.appeal.submit`
-//!   * `cx.moderation.appeal.review`
-//!   * `cx.moderation.appeal.decision`
-//!   * `cx.moderation.appeal.close`
+//!   * `ck.moderation.appeal.submit`
+//!   * `ck.moderation.appeal.review`
+//!   * `ck.moderation.appeal.decision`
+//!   * `ck.moderation.appeal.close`
 //!
-//! Schema: `cx.schema.moderation_appeal.v1`. Typed ID:
+//! Schema: `ck.schema.moderation_appeal.v1`. Typed ID:
 //! `ck:appeal:<uuidv7>`. Cell state machine:
 //!
 //!   `none → submitted → under_review → decided → closed`
 //!
 //! Normative invariants:
 //!   * reviewer DID MUST differ from the original decision issuer (`appeal_self_review_forbidden`)
-//!   * an `overturn` decision MUST be paired with a `cx.moderation.decision.lift` in the **same**
+//!   * an `overturn` decision MUST be paired with a `ck.moderation.decision.lift` in the **same**
 //!     Anchor batch (`appeal_overturn_missing_lift`)
 //!   * close fires automatically after the 30-day cool-off or when the submitter (or reviewer)
 //!     issues an explicit close
@@ -30,14 +30,14 @@ use cokret_core::{
     TypedAppealId, is_known_error_code,
 };
 
-pub const APPEAL_KIND_SUBMIT: &str = "cx.moderation.appeal.submit";
-pub const APPEAL_KIND_REVIEW: &str = "cx.moderation.appeal.review";
-pub const APPEAL_KIND_DECISION: &str = "cx.moderation.appeal.decision";
-pub const APPEAL_KIND_CLOSE: &str = "cx.moderation.appeal.close";
+pub const APPEAL_KIND_SUBMIT: &str = "ck.moderation.appeal.submit";
+pub const APPEAL_KIND_REVIEW: &str = "ck.moderation.appeal.review";
+pub const APPEAL_KIND_DECISION: &str = "ck.moderation.appeal.decision";
+pub const APPEAL_KIND_CLOSE: &str = "ck.moderation.appeal.close";
 
-pub const DECISION_LIFT_KIND: &str = "cx.moderation.decision.lift";
+pub const DECISION_LIFT_KIND: &str = "ck.moderation.decision.lift";
 
-pub const APPEAL_SCHEMA: &str = "cx.schema.moderation_appeal.v1";
+pub const APPEAL_SCHEMA: &str = "ck.schema.moderation_appeal.v1";
 pub const APPEAL_ID_PREFIX: &str = "ck:appeal:";
 
 /// Error codes the reducer SHOULD surface on the negative branches.
@@ -104,7 +104,7 @@ mod tests {
             APPEAL_KIND_CLOSE,
         ] {
             assert!(
-                k.starts_with("cx.moderation.appeal."),
+                k.starts_with("ck.moderation.appeal."),
                 "kind {k} must be in appeal namespace"
             );
         }
@@ -115,7 +115,7 @@ mod tests {
         moderation_appeal_flow_end_to_end_run()
             .await
             .expect("appeal error codes + TypedAppealId must stay registered");
-        assert_eq!(DECISION_LIFT_KIND, "cx.moderation.decision.lift");
+        assert_eq!(DECISION_LIFT_KIND, "ck.moderation.decision.lift");
         assert_ne!(APPEAL_KIND_DECISION, DECISION_LIFT_KIND);
     }
 }

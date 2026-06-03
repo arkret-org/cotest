@@ -8,7 +8,7 @@ use super::{
 
 pub fn run_sync_fixture_suite() -> Result<()> {
     let value = load_fixture_value("sync-fixture.json")?;
-    validate_profile(&value, "cx.profile.sync_vectors.v1")?;
+    validate_profile(&value, "ck.profile.sync_vectors.v1")?;
     validate_collection_projection(&value)?;
     validate_flow_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;

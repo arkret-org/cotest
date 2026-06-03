@@ -19,7 +19,7 @@
 //!        - `outsider`        — NOT a Realm member,
 //!        - `realm_only`      — Realm member, NOT in any Circle,
 //!        - `circle_member`   — Realm member AND in all three Circles.
-//!   4. Probe teabay's `GET /api/v1/directory/circles?realm_id=<rid>` (or equivalent listing
+//!   4. Probe teabay's `GET /_cokret/find/directory/circles?realm_id=<rid>` (or equivalent listing
 //!      endpoint) and assert: a) `outsider`     — empty result for all three Circles (the Realm
 //!      membership is itself the entry gate; non-Realm-members see nothing), b) `realm_only`   —
 //!      sees ONLY the `RealmMembers` Circle, and its projection contains the opaque commitment
@@ -158,11 +158,11 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST /api/v1/realms                          (admin)
-    //         POST /api/v1/realms/<rid>/circles            x3 (admin)
-    //         POST /api/v1/realms/<rid>/members            add realm-only + circle-member
-    //         POST /api/v1/circles/<cid>/members           add circle-member to all 3
-    //         (teabay) GET /api/v1/directory/circles?realm_id=<rid>
+    //         POST /_cokret/self/realms                          (admin)
+    //         POST /_cokret/self/realms/<rid>/circles            x3 (admin)
+    //         POST /_cokret/self/realms/<rid>/members            add realm-only + circle-member
+    //         POST /_cokret/self/circles/<cid>/members           add circle-member to all 3
+    //         (teabay) GET /_cokret/find/directory/circles?realm_id=<rid>
     //                                                     query as each probe identity
     //
     //       Assertions on the teabay projection (after the soland→teabay
@@ -183,9 +183,9 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     //             - list length == 3, every entry contains the full metadata projection (`title`,
     //               `display`, `member_count`, `directory_visibility`, etc.).
     let _ = admin
-        .post("/api/v1/realms")
+        .post("/_cokret/self/realms")
         .json(&json!({
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Visibility Tier Realm",
         }))

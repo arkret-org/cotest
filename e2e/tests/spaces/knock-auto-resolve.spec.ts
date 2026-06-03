@@ -1,4 +1,4 @@
-// Knock auto-resolve path (cx.member.state{join, gate_proofs})
+// Knock auto-resolve path (ck.member.state{join, gate_proofs})
 // Contract: e2e/scenarios/spaces/knock-auto-resolve.md
 // Spec: models/space-and-place.md §3.4 + §3.5, §3.3.1 gate types
 
@@ -11,7 +11,7 @@ test.describe("knock auto-resolve path", () => {
     // @blocking-on: soland#spaces-knock-auto-resolve-gap
     // @user-promise: e2e/scenarios/spaces/knock-auto-resolve.md
     // @expected-live-by: 2026Q3
-    "alice sets join_rule=knock_restricted with gates=[claim_required(auto), challenge_response(auto)]; bob submits cx.member.state{join, gate_proofs[]} and joins directly",
+    "alice sets join_rule=knock_restricted with gates=[claim_required(auto), challenge_response(auto)]; bob submits ck.member.state{join, gate_proofs[]} and joins directly",
     async () => {
       // spec: space-and-place.md §3.5
       // soland gap: join_policy cell + gate verifier; harness gap: mock claim issuer + challenge provider.

@@ -2,7 +2,7 @@
   "profile": "cx.profile.key_backup_encryption_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and cx.schema.key_backup.v1. Client encrypts MLS history / secret-storage material with a passphrase-derived recovery key before PUT /api/v1/keys/backups/{backup_id}. Server stores an opaque cx.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
+  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and ck.schema.key_backup.v1. Client encrypts MLS history / secret-storage material with a passphrase-derived recovery key before PUT /_cokret/self/keys/backups/{backup_id}. Server stores an opaque ck.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
   "encoder": {
     "kdf": "PBKDF2-HMAC-SHA512",
     "kdf_iterations_min": 600000,
@@ -13,8 +13,8 @@
     "ciphertext_field": "ciphertext",
     "backup_id_format": "ck:backup:<uuid-v7>",
     "backup_version_format": "kb_<label>",
-    "server_endpoint_upload": "PUT /api/v1/keys/backups/{backup_id}",
-    "server_endpoint_restore": "GET /api/v1/keys/backups/{backup_id}"
+    "server_endpoint_upload": "PUT /_cokret/self/keys/backups/{backup_id}",
+    "server_endpoint_restore": "GET /_cokret/self/keys/backups/{backup_id}"
   },
   "vectors": [
     {
@@ -35,13 +35,13 @@
     },
     {
       "name": "server_side_blob_storage_opaque",
-      "comment": "After client encrypts, the upload is cx.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
+      "comment": "After client encrypts, the upload is ck.schema.key_backup.v1: {backup_id, actor_id, backup_class, backup_version, encryption, contents, ciphertext, ciphertext_digest}. Server treats ciphertext as opaque bytes and persists by backup_id. Server cannot decrypt without the passphrase.",
       "backup_id": "ck:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "blob_size_bytes": 4096,
       "server_treats_as_opaque": true,
       "server_decrypt_capable": false,
-      "stored_at": "GET /api/v1/keys/backups/ck:backup:01964137-0000-7000-8000-000000000000",
+      "stored_at": "GET /_cokret/self/keys/backups/ck:backup:01964137-0000-7000-8000-000000000000",
       "expected": {
         "outcome": "accept",
         "server_seen_plaintext": false,
@@ -51,7 +51,7 @@
     },
     {
       "name": "restore_path_redrives_key_and_decrypts",
-      "comment": "Client restores: GET /api/v1/keys/backups/{backup_id} → re-derive master key from local passphrase + envelope salt + iterations → decrypt with XChaCha20-Poly1305 using envelope nonce/auth tag → recover MLS history or secret-storage material. Successful decryption proves passphrase correctness and blob integrity.",
+      "comment": "Client restores: GET /_cokret/self/keys/backups/{backup_id} → re-derive master key from local passphrase + envelope salt + iterations → decrypt with XChaCha20-Poly1305 using envelope nonce/auth tag → recover MLS history or secret-storage material. Successful decryption proves passphrase correctness and blob integrity.",
       "backup_id": "ck:backup:01964137-0000-7000-8000-000000000000",
       "backup_version": "kb_1",
       "passphrase_correct": true,

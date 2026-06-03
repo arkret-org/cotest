@@ -10,7 +10,7 @@
 //! The companion scenario [`effective_scope_mismatch`] pins the
 //! *envelope-vs-payload* consistency check (same event, two declared
 //! scopes). This scenario instead pins the *prev-vs-next* check on the
-//! materialised object — i.e. two `cx.flow.update` events for the same
+//! materialised object — i.e. two `ck.flow.update` events for the same
 //! `entity_id` whose `scope_circle_id` values diverge MUST be rejected by
 //! `validate_no_scope_rebind(prev, next)` with the
 //! `scope_rebind_forbidden` reason code.
@@ -21,12 +21,12 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
-use cokret_core::{CircleId, Did, Flow, SpaceId};
+use cokret_core::{CircleId, Did, Flow, RealmId};
 use serde_json::Value;
 
-fn space_id() -> Result<SpaceId> {
-    SpaceId::new("ck:space:0196419b-0000-7000-8000-000000000602".to_owned())
-        .map_err(|e| anyhow!("space id: {e}"))
+fn realm_id() -> Result<RealmId> {
+    RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000602".to_owned())
+        .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
@@ -86,7 +86,7 @@ fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) ->
 pub async fn scope_circle_id_immutability_run() -> Result<()> {
     // ── Build a Flow with scope_circle_id=Some(circle_a) and confirm it
     //    serialises to wire shape with the field set.
-    let mut flow_a = Flow::new("flow-cxp-0007", space_id()?, "Quarterly review", actor()?);
+    let mut flow_a = Flow::new("flow-cxp-0007", realm_id()?, "Quarterly review", actor()?);
     flow_a.scope_circle_id = Some(circle_a()?);
 
     let json_a: Value =
@@ -121,7 +121,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     // ── circle_a → circle_a (build a sibling next-state Flow): accept.
     let mut flow_a_next = Flow::new(
         "flow-cxp-0007",
-        space_id()?,
+        realm_id()?,
         "Quarterly review v2",
         actor()?,
     );
@@ -135,7 +135,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     // ── Rebind: circle_a → circle_b: reject with scope_rebind_forbidden.
     let mut flow_b = Flow::new(
         "flow-cxp-0007",
-        space_id()?,
+        realm_id()?,
         "Quarterly review v3",
         actor()?,
     );
@@ -160,7 +160,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     }
 
     // ── Rebind: circle_a → None: reject (Circle → Realm-default).
-    let mut flow_none = Flow::new("flow-cxp-0007", space_id()?, "downgrade", actor()?);
+    let mut flow_none = Flow::new("flow-cxp-0007", realm_id()?, "downgrade", actor()?);
     flow_none.scope_circle_id = None;
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),

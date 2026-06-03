@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.operation_registry_coverage_vectors.v1",
+  "profile": "ck.profile.operation_registry_coverage_vectors.v1",
   "version": "2026-05-09",
   "comment": "A3 Round 23 — operation registry coverage. Cross-references operation-registry.json (operations[] + surface_groups[]) with event-kind-registry.json and capability-action-registry.json. Validator asserts: (a) every operation referenced in any surface_group exists in operations[]; (b) every operation belongs to exactly one surface_group → tier classification (core/extension/interop_bridge/deployment_local); (c) for every operation that is a 'mutation' (declared in operation_to_event_kinds[] mapping below), the target event_kind exists in event-kind-registry AND there is at least one capability_action in capability-action-registry whose target_event_kinds[] contains it. Negative vectors cover orphaned operation (no surface group), tier mismatch (op declared with tier different from its surface group), and event-kind not in registry.",
   "encoder": {
@@ -10,16 +10,16 @@
   },
   "operation_to_event_kinds": [
     {
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "tier": "core",
       "target_event_kinds_hint": "any",
       "capability_action_hint": "varies_per_event_kind"
     },
     {
-      "operation_id": "cx.moderation.report",
+      "operation_id": "ck.moderation.report",
       "tier": "extension",
-      "target_event_kinds": ["cx.moderation.report"],
-      "capability_actions": ["cx.moderation.report"]
+      "target_event_kinds": ["ck.moderation.report"],
+      "capability_actions": ["ck.moderation.report"]
     }
   ],
   "vectors": [
@@ -41,25 +41,25 @@
     {
       "name": "events_submit_is_core",
       "scope": "live_registry",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "expected": { "outcome": "tier_match", "tier": "core" }
     },
     {
       "name": "moderation_report_is_extension",
       "scope": "live_registry",
-      "operation_id": "cx.moderation.report",
+      "operation_id": "ck.moderation.report",
       "expected": { "outcome": "tier_match", "tier": "extension" }
     },
     {
       "name": "applet_ping_is_interop_bridge",
       "scope": "live_registry",
-      "operation_id": "cx.applet.ping",
+      "operation_id": "ck.applet.ping",
       "expected": { "outcome": "tier_match", "tier": "interop_bridge" }
     },
     {
       "name": "admin_get_server_status_is_deployment_local",
       "scope": "live_registry",
-      "operation_id": "cx.admin.get_server_status",
+      "operation_id": "ck.admin.get_server_status",
       "expected": { "outcome": "tier_match", "tier": "deployment_local" }
     },
     {
@@ -77,7 +77,7 @@
     },
     {
       "name": "tier_mismatch_for_known_op",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "claimed_tier": "deployment_local",
       "drift": { "kind": "tier_mismatch" },
       "expected": { "outcome": "reject", "reason_code": "tier_drift" }

@@ -2,10 +2,10 @@
 // and S7 (email onboarding).
 //
 // Endpoints:
-//   POST /api/v1/verification/send   { to, token, subject?, body?, body_html?, ttl_seconds? }
+//   POST /_cokret/self/verification/send   { to, token, subject?, body?, body_html?, ttl_seconds? }
 //     Captures the message in-memory. Returns 200 + message_id.
-//   GET  /api/v1/verification/inbox?to=email   → list of received messages
-//   POST /api/v1/verification/claim  { token, did }
+//   GET  /_cokret/self/verification/inbox?to=email   → list of received messages
+//   POST /_cokret/self/verification/claim  { token, did }
 //     If token exists and not expired, marks consumed and returns a
 //     binding_proof (signed with the service's RSA key) attesting
 //     "token holder = did".
@@ -135,7 +135,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/verification/send" && req.method === "POST") {
+  if (url.pathname === "/_cokret/self/verification/send" && req.method === "POST") {
     const body = await readJson(req);
     if (!body) {
       res.statusCode = 400;
@@ -181,7 +181,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/verification/inbox" && req.method === "GET") {
+  if (url.pathname === "/_cokret/self/verification/inbox" && req.method === "GET") {
     const to = url.searchParams.get("to");
     if (!to) {
       res.statusCode = 400;
@@ -192,7 +192,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/verification/claim" && req.method === "POST") {
+  if (url.pathname === "/_cokret/self/verification/claim" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.token || !body.did) {
       res.statusCode = 400;

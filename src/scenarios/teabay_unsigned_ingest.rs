@@ -1,6 +1,6 @@
 //! TB-3 — Gate test: "unsigned ingest must be rejected".
 //!
-//! Posts a valid-shape `cx.directory.announce` body to teabay **without** the
+//! Posts a valid-shape `ck.directory.announce` body to teabay **without** the
 //! RFC 9421 `Signature-Input` / `Signature` headers (and without any other
 //! transport-level authentication) and asserts the request is rejected with a
 //! 401 / 403 + an errcode that points at the missing transport signature.
@@ -42,7 +42,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
-    let url = proc.url("/api/v1/directory/announce");
+    let url = proc.url("/_cokret/find/directory/announce");
 
     // Construct a body that *would* be shape-valid if the transport were
     // signed. We aren't testing the verify chain here — we're testing that

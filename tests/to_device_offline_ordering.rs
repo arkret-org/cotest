@@ -1,7 +1,7 @@
 //! CT-10 — To-device queue offline ordering (entrypoint).
 //!
 //! Real test against the in-process soland harness. Verifies that
-//! `/api/v1/device_messages` preserves send order across a poll /
+//! `/_cokret/self/device_messages` preserves send order across a poll /
 //! disconnect / reconnect cycle and that `to_device_position` is
 //! monotonic per-(actor, device).
 //!

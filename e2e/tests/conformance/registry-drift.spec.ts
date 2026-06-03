@@ -11,7 +11,7 @@
 //   - cokret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
 // Treat the artifacts as the source-of-truth and walk soland's live
-// `/api/v1/server/describe` for drift. The three LIVE phases below (C / D / E)
+// `/_cokret/describe` for drift. The three LIVE phases below (C / D / E)
 // are pure artifact-vs-describe diffs and need no fixme — they are tagged
 // @fully-implemented so they run under the joint-smoke profile.
 //
@@ -205,7 +205,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     );
     expect(deprecated.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -247,7 +247,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       });
     expect(forbiddenFieldNames.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -287,7 +287,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const canonicalOps = new Set(operationRegistry.operations.map((o) => o.operation_id));
     expect(canonicalOps.size).toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
@@ -333,7 +333,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       kind: removed!.id,
       payload: {},
     });
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
@@ -351,8 +351,8 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const removed = removedOperationIds.entries.find((entry) => entry.rejection_level === "hard_reject");
     expect(removed, "removed hard-reject operation id fixture").toBeTruthy();
     const endpoints = [
-      `${solandBaseUrl()}/api/v1/operations/${encodeURIComponent(removed!.id)}`,
-      `${solandBaseUrl()}/api/v1/server/operation/invoke`,
+      `${solandBaseUrl()}/_cokret/self/operations/${encodeURIComponent(removed!.id)}`,
+      `${solandBaseUrl()}/_cokret/self/server/operation/invoke`,
     ];
     for (const url of endpoints) {
       const resp = await request.post(url, {
@@ -386,7 +386,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     expect(forbidden.length).toBeGreaterThan(0);
 
     const surfaces = [
-      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/api/v1/server/describe`) },
+      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_cokret/describe`) },
       { name: "health", response: await request.get(`${solandBaseUrl()}/health`) },
     ];
     const violations: Array<{ surface: string; path: string; term: string; value: string }> = [];

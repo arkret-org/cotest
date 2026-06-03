@@ -12,8 +12,8 @@
 //!
 //! Coverage map:
 //!
-//! - R2.1 positive — `cx.realm.create` / `cx.space.create` (container) /
-//!   `cx.realm.delivery_binding_policy` / `cx.realm.link` build via SDK typed `Event`, encode via
+//! - R2.1 positive — `ck.realm.create` / `ck.space.create` (container) /
+//!   `ck.realm.delivery_binding_policy` / `ck.realm.link` build via SDK typed `Event`, encode via
 //!   `canonical_json_bytes`, round-trip back to the same kind + payload, and classify into the
 //!   post- reversal `EventClass::Realm` / `EventClass::Space` families.
 

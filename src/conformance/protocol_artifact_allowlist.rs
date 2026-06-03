@@ -8,7 +8,7 @@
 //!
 //! Surfaces refreshed:
 //!
-//! * **capability action allowlist**: `cx.morph.create`
+//! * **capability action allowlist**: `ck.morph.create`
 //! * **error code allowlist**: `delivery_binding_stale`, `delivery_binding_handed_over`,
 //!   `historical_only`
 //! * **id_kind allowlist** for `object_ref` context: `ck:space:` joins the accepted set
@@ -26,7 +26,7 @@ use serde_json::Value;
 use super::{load_artifact_json, load_artifact_yaml};
 
 /// New capability action introduced by round 4 (7fae9ba).
-pub const NEW_CAPABILITY_ACTIONS: &[&str] = &["cx.morph.create"];
+pub const NEW_CAPABILITY_ACTIONS: &[&str] = &["ck.morph.create"];
 
 /// New error codes introduced by round 4 (7446832 + 7fae9ba).
 pub const NEW_ERROR_CODES: &[&str] = &[
@@ -96,7 +96,9 @@ fn check_error_codes_present(required: &[&str]) -> Result<()> {
     let codes = collect_strings(&registry, &["codes", "error_codes", "errors", "entries"])?;
     for code in required {
         if !codes.contains(*code) {
-            bail!("protocol-artifact allowlist: error code `{code}` not found in canonical registry");
+            bail!(
+                "protocol-artifact allowlist: error code `{code}` not found in canonical registry"
+            );
         }
     }
     Ok(())

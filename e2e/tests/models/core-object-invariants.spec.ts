@@ -64,7 +64,7 @@ test.describe("core object invariants", () => {
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
         const spaceRes = await request.get(
-          `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+          `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
           { headers: aliceAuth },
         );
         expect(spaceRes.status()).toBe(200);
@@ -93,7 +93,7 @@ test.describe("core object invariants", () => {
         // projection_event_json) is { event_id, space_id, event_kind,
         // sender, payload, created_at, ... }.
         const eventsRes = await request.get(
-          `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(spaceId)}&limit=20`,
+          `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(spaceId)}&limit=20`,
           { headers: aliceAuth },
         );
         expect(eventsRes.status()).toBe(200);
@@ -139,10 +139,10 @@ test.describe("core object invariants", () => {
 
   // ── Phase B — Patch precondition CAS fail.
   // soland gap: there is no unified Move/patch endpoint exposing
-  // preconditions[].head_eq on the wire today; cx.flow.update precondition
+  // preconditions[].head_eq on the wire today; ck.flow.update precondition
   // checks exist in the reducer but no HTTP path drives them with a stale
   // expected_revision. Live this once soland adds:
-  //   POST /api/v1/events  with { kind: "cx.flow.update", preconditions: [...],
+  //   POST /_cokret/self/events  with { kind: "ck.flow.update", preconditions: [...],
   //                                effects: [...], payload: { flow_id, patch } }
   // and returns { error_code: "failed_precondition", reason: "..." } on
   // head_eq mismatch (spec models/event-and-patch.md §4.2.4 / §4.2.5).
@@ -159,13 +159,13 @@ test.describe("core object invariants", () => {
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
       // 1. Create a Flow with fields.status = "open".
-      const flowRes = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const flowRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.flow.create",
+          kind: "ck.flow.create",
           payload: {
             object: {
-              kind: "cx.schema.flow.v1",
+              kind: "ck.schema.flow.v1",
               title: `core-invariants flow ${stamp}`,
               fields: { status: "open" },
             },
@@ -178,10 +178,10 @@ test.describe("core object invariants", () => {
 
       // 2. Submit an update with a STALE precondition (claims status == "closed"
       //    when it's actually "open"). Expect 4xx + failed_precondition.
-      const staleMove = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const staleMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.flow.update",
+          kind: "ck.flow.update",
           preconditions: [
             {
               cell: `ck:cell:cx.component.flow.fields.v1:${flowId}`,
@@ -204,7 +204,7 @@ test.describe("core object invariants", () => {
       // 3. Verify the cell head is UNCHANGED — failed precondition MUST NOT
       //    apply any effect (spec §2.2: preconditions + effects are atomic).
       const readBack = await request.get(
-        `${solandBaseUrl()}/api/v1/flows/${encodeURIComponent(flowId)}`,
+        `${solandBaseUrl()}/_cokret/self/flows/${encodeURIComponent(flowId)}`,
         { headers: aliceAuth },
       );
       const flowBody = await readBack.json();
@@ -222,7 +222,7 @@ test.describe("core object invariants", () => {
     // @blocking-on: soland#models-core-object-invariants-gap
     // @user-promise: e2e/scenarios/models/core-object-invariants.md
     // @expected-live-by: 2026Q3
-    "Phase C — cx.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
+    "Phase C — ck.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-c-${stamp}`);
@@ -231,16 +231,16 @@ test.describe("core object invariants", () => {
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
       // Create parent space + a child Flow as a live dependent.
-      const parentRes = await request.post(`${solandBaseUrl()}/api/v1/spaces`, {
+      const parentRes = await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants parent ${stamp}` },
       });
       const parentSpaceId = (await parentRes.json()).space_id as string;
 
-      const childFlowRes = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const childFlowRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.flow.create",
+          kind: "ck.flow.create",
           space_id: parentSpaceId,
           payload: { object: { title: `child ${stamp}` } },
         },
@@ -248,16 +248,16 @@ test.describe("core object invariants", () => {
       expect(childFlowRes.status()).toBe(201);
 
       // Step 11 — archive parent; verify child is still active.
-      const archiveRes = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const archiveRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
-        data: { kind: "cx.space.archive", payload: { space_id: parentSpaceId } },
+        data: { kind: "ck.space.archive", payload: { space_id: parentSpaceId } },
       });
       expect(archiveRes.status()).toBe(200);
 
       // Step 12 — tombstone with live child must fail (space §3.4).
-      const tombFail = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const tombFail = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
-        data: { kind: "cx.space.tombstone", payload: { space_id: parentSpaceId } },
+        data: { kind: "ck.space.tombstone", payload: { space_id: parentSpaceId } },
       });
       expect(tombFail.status()).toBeGreaterThanOrEqual(400);
       const tombFailBody = await tombFail.json();
@@ -270,7 +270,7 @@ test.describe("core object invariants", () => {
   );
 
   // ── Phase D — Relation cardinality.
-  // soland gap: cx.relation.create reducer + cardinality enforcement on
+  // soland gap: ck.relation.create reducer + cardinality enforcement on
   // has_default_view (many_to_one), idempotent dedup on
   // (realm_id, relation_kind, from_ref, to_ref), and cross-Realm contains
   // refusal are not stably wired today.
@@ -286,7 +286,7 @@ test.describe("core object invariants", () => {
       const aliceToken = await issueDevSession(request, alice);
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
-      const spaceRes = await request.post(`${solandBaseUrl()}/api/v1/spaces`, {
+      const spaceRes = await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants D ${stamp}` },
       });
@@ -294,7 +294,7 @@ test.describe("core object invariants", () => {
 
       // Two Views in the same space.
       const mkView = async (label: string) => {
-        const res = await request.post(`${solandBaseUrl()}/api/v1/views`, {
+        const res = await request.post(`${solandBaseUrl()}/_cokret/self/views`, {
           headers: aliceAuth,
           data: {
             kind: "collection",
@@ -309,10 +309,10 @@ test.describe("core object invariants", () => {
       const v2 = await mkView("V2");
 
       // Step 16 — first has_default_view edge succeeds.
-      const e1 = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const e1 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.relation.create",
+          kind: "ck.relation.create",
           payload: {
             relation_kind: "has_default_view",
             from_ref: spaceId,
@@ -326,10 +326,10 @@ test.describe("core object invariants", () => {
       // Acceptable outcomes:
       //  (a) 200/201 + v1 edge auto-tombstoned (reducer closes old winner)
       //  (b) 4xx + relation_cardinality_violation (early reducer fail-closed)
-      const e2 = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const e2 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.relation.create",
+          kind: "ck.relation.create",
           payload: {
             relation_kind: "has_default_view",
             from_ref: spaceId,
@@ -338,7 +338,7 @@ test.describe("core object invariants", () => {
         },
       });
       const activeEdges = await request.get(
-        `${solandBaseUrl()}/api/v1/relations?from_ref=${encodeURIComponent(spaceId)}&relation_kind=has_default_view&state=active`,
+        `${solandBaseUrl()}/_cokret/self/relations?from_ref=${encodeURIComponent(spaceId)}&relation_kind=has_default_view&state=active`,
         { headers: aliceAuth },
       );
       const edgesBody = await activeEdges.json();
@@ -348,10 +348,10 @@ test.describe("core object invariants", () => {
       }
 
       // Step 18 — completely duplicate edge create is idempotent.
-      const dup = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const dup = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.relation.create",
+          kind: "ck.relation.create",
           payload: {
             relation_kind: "has_default_view",
             from_ref: spaceId,
@@ -364,7 +364,7 @@ test.describe("core object invariants", () => {
       // Step 19 — cross-Realm contains MUST fail (spec §4.4).
       const otherSpace = (
         await (
-          await request.post(`${solandBaseUrl()}/api/v1/spaces`, {
+          await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
             headers: aliceAuth,
             data: { title: `other-realm ${stamp}` },
           })
@@ -372,16 +372,16 @@ test.describe("core object invariants", () => {
       ).space_id as string;
       const otherFlow = (
         await (
-          await request.post(`${solandBaseUrl()}/api/v1/events`, {
+          await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
             headers: aliceAuth,
-            data: { kind: "cx.flow.create", space_id: otherSpace, payload: { object: {} } },
+            data: { kind: "ck.flow.create", space_id: otherSpace, payload: { object: {} } },
           })
         ).json()
       ).flow_id as string;
-      const crossRealm = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const crossRealm = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "cx.relation.create",
+          kind: "ck.relation.create",
           space_id: spaceId,
           payload: {
             relation_kind: "contains",
@@ -396,7 +396,7 @@ test.describe("core object invariants", () => {
   );
 
   // ── Phase E — View projection fallback.
-  // soland gap: /api/v1/spaces/{id}/views/projection endpoint for the
+  // soland gap: /_cokret/self/spaces/{id}/views/projection endpoint for the
   // derived board response family does not exist. Once soland exposes it
   // (returning a CollectionProjectionResponse even when no user-defined
   // View has been registered), drop the fixme.
@@ -412,18 +412,18 @@ test.describe("core object invariants", () => {
       const aliceToken = await issueDevSession(request, alice);
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
-      const spaceRes = await request.post(`${solandBaseUrl()}/api/v1/spaces`, {
+      const spaceRes = await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants E ${stamp}` },
       });
       const spaceId = (await spaceRes.json()).space_id as string;
 
       // Step 20-21 — request a board projection on a Space that has never
-      // had cx.view.create called on it. Spec views.md §6: response MUST be
+      // had ck.view.create called on it. Spec views.md §6: response MUST be
       // derived (kind=collection, renderer=board) from query → contains →
       // flow, not 404.
       const proj = await request.get(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
         { headers: aliceAuth },
       );
       expect(proj.status()).toBe(200);
@@ -437,7 +437,7 @@ test.describe("core object invariants", () => {
       // Step 22 — unknown renderer MUST fail-closed (spec §2.2 — only the
       // 5 canonical View.kind / known renderers are valid response families).
       const bogus = await request.get(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
         { headers: aliceAuth },
       );
       expect(bogus.status()).toBeGreaterThanOrEqual(400);

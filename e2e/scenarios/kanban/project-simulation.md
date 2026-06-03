@@ -48,7 +48,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ### Phase C — alice 分配 Cards
 
-9. alice 在 Card 1 详情点 "Assign" → 选 bob.did → 提交 `cx.relation.create`:`{ relation_kind: "assigned_to", source: Card1.flow_id, target: bob.did, fields: { role: "primary" } }`
+9. alice 在 Card 1 详情点 "Assign" → 选 bob.did → 提交 `ck.relation.create`:`{ relation_kind: "assigned_to", source: Card1.flow_id, target: bob.did, fields: { role: "primary" } }`
 10. 同理 alice 把 Card 2 分给 carol,Card 3 分给 bob
 11. 断言:Card 1 / Card 3 卡片上显示 bob 的头像;Card 2 显示 carol 的头像
 12. 断言:bob 进 yougen,`/notifications` 或 dashboard 显示"You were assigned to: Card 1, Card 3"
@@ -57,8 +57,8 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 13. bob 在 Card 1 点 "Move to In Progress"
 14. yougen 提交两个动作:
-    - `cx.flow.move` 把 Card 1 从 `Todo.child_order` 挪到 `InProgress.child_order`
-    - `cx.flow.update`:`fields.status = "in_progress"`,这是 FSM 转换(spec §3.2 Effect: fsm)
+    - `ck.flow.move` 把 Card 1 从 `Todo.child_order` 挪到 `InProgress.child_order`
+    - `ck.flow.update`:`fields.status = "in_progress"`,这是 FSM 转换(spec §3.2 Effect: fsm)
 15. 若 yougen 把 status 建模为独立 FSM cell(`ck:cell:cx.component.flow.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
 16. 断言:Card 1 在 InProgress 列;alice/bob/carol 三方视图一致
 17. bob 继续 → `in_progress → done`
@@ -82,7 +82,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 26. 测试 harness 用两个 alice session(等价于 alice 在两台设备并发):
     - 设备 1:alice 把 Card 2 从 carol 改成 bob
     - 设备 2(同时):alice 把 Card 2 从 carol 改成 alice 自己
-27. 两条 `cx.relation.create` 并发到 soland
+27. 两条 `ck.relation.create` 并发到 soland
 28. 按 spec §6:relation profile `on_conflict = deterministic_winner` → reducer 仅接受一条(HLC 大者赢),另一条 rejected
 29. 断言:Card 2 的最终 assignee 是 deterministic 的(测试可以读 HLC 知道),不出现两个 active assignment
 
@@ -105,8 +105,8 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Edge cases / sub-tests
 
-- **E16.1 unassign**:alice 撤销 Card 1 的 bob assignment → `cx.relation.tombstone`(spec §3.2 tombstoned 状态);bob 视图 Card 1 不再标"assigned to me"
-- **E16.2 bob 离职**:alice 把 bob ban 出 space(`cx.member.state{ban}`)→ bob 名下的 cards 怎么办?spec 不强 cascade;yougen 可能把 assignment 显示为 "orphaned"
+- **E16.1 unassign**:alice 撤销 Card 1 的 bob assignment → `ck.relation.tombstone`(spec §3.2 tombstoned 状态);bob 视图 Card 1 不再标"assigned to me"
+- **E16.2 bob 离职**:alice 把 bob ban 出 space(`ck.member.state{ban}`)→ bob 名下的 cards 怎么办?spec 不强 cascade;yougen 可能把 assignment 显示为 "orphaned"
 - **E16.3 status FSM 非法转换**:bob 尝试 Card 1 直接从 todo 跳到 done(跳过 in_progress)→ FSM precondition 失败,reducer 拒(spec §3.8 类比 membership FSM)
 - **E16.4 due date 修改**:alice 改 Card 3 的 due_date,所有 actor 视图更新
 - **E16.5 board search / filter**:在 archive 之前,搜 "Implement" 应找到 Card 1;archive 之后看 archive filter 是否过滤
@@ -114,7 +114,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.relation.create assigned_to`、`cx.place.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `cx.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
+- **soland 缺口**:`ck.relation.create assigned_to`、`cx.place.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `ck.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **yougen 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 

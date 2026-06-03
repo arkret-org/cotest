@@ -1,7 +1,7 @@
 //! Phase 1 — event submit + key upload/query/claim setup.
 //!
 //! Walks Alice through pushing a single signed event, then uploading her
-//! device-key bundle and exercising `/api/v1/keys/{query,claim}` to confirm
+//! device-key bundle and exercising `/_cokret/self/keys/{query,claim}` to confirm
 //! the upload is visible.
 
 use anyhow::Result;
@@ -35,7 +35,7 @@ async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> 
     let submit = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .bearer_auth(token)
             .json(&event),
         StatusCode::OK,
@@ -58,7 +58,7 @@ async fn create_adapter_realm(server: &CokretServer, token: &str) -> Result<Stri
     let submit = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .bearer_auth(token)
             .json(&event),
         StatusCode::OK,
@@ -80,12 +80,12 @@ fn signed_realm_create_event(
     let payload = json!({
         "object": {
             "id": realm_id,
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "title": title,
             "summary": title,
             "trust_domain": "ck:trust_domain:protocol-payloads.cotest.local",
             "created_by": actor_id,
-            "schema_refs": ["cx.schema.realm.v1"],
+            "schema_refs": ["ck.schema.realm.v1"],
             "default_discoverability": "public",
             "default_join_rule": "public",
             "history_visibility": "world_readable",
@@ -106,7 +106,7 @@ fn signed_realm_create_event(
     });
     let mut event = json!({
         "event_id": event_id,
-        "kind": "cx.realm.create",
+        "kind": "ck.realm.create",
         "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
@@ -147,14 +147,14 @@ fn signed_message_event(
         "flow_id": "ck:flow:0196419b-0000-7000-8000-000000000001",
         "track_name": "discussion",
         "content": {
-            "kind": "cx.content.text",
+            "kind": "ck.content.text",
             "body": body,
             "format": "plain"
         }
     });
     let mut event = json!({
         "event_id": event_id,
-        "kind": "cx.message.create",
+        "kind": "ck.message.create",
         "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
@@ -186,7 +186,7 @@ async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<(
     let upload_keys = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/keys/upload"))
+            .post(server.url("/_cokret/self/keys/upload"))
             .bearer_auth(token)
             .json(&json!({
                 "device_id": "dev_alice",
@@ -206,7 +206,7 @@ async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<(
     let query_keys = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/keys/query"))
+            .post(server.url("/_cokret/self/keys/query"))
             .bearer_auth(token)
             .json(&json!({"device_keys": {"did:web:alice.example": ["dev_alice"]}})),
         StatusCode::OK,
@@ -220,7 +220,7 @@ async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<(
     let claimed = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/keys/claim"))
+            .post(server.url("/_cokret/self/keys/claim"))
             .bearer_auth(token)
             .json(&json!({
                 "one_time_keys": {

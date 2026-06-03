@@ -4,7 +4,7 @@
 //! Spec (round 2+3 cleanup, T12):
 //!
 //! `media_service_decrypts=true` MUST be bound in three places:
-//!   1. `cx.realm.policy_components` write covering this service + `policy_root` digest covers the
+//!   1. `ck.realm.policy_components` write covering this service + `policy_root` digest covers the
 //!      current epoch's policy
 //!   2. SFU service DID appears in `plaintext_visible_services[]` with `purpose=media_plaintext`
 //!   3. MLS epoch governance binding records `policy_root` so receivers can verify the SFU's

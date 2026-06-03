@@ -35,7 +35,7 @@ function recordFloorViolations(page: Page): string[] {
   const hits: string[] = [];
   page.on("response", (response) => {
     if (
-      !response.url().includes("/api/v1/events") ||
+      !response.url().includes("/_cokret/self/events") ||
       response.request().method() !== "POST"
     ) {
       return;
@@ -214,7 +214,7 @@ test.describe("kanban end-to-end", () => {
       // cross-space check), but driving the test through the kanban UI
       // is brittle (yougen page load + kanban panel render hits 180s
       // timeout under joint-e2e contention). Re-enable once a
-      // programmatic flow-creation helper (signed cx.flow.create POST)
+      // programmatic flow-creation helper (signed ck.flow.create POST)
       // lands or yougen's kanban view stabilizes its load timing.
     },
   );
@@ -353,7 +353,7 @@ test.describe("kanban end-to-end", () => {
         .poll(
           async () => {
             const cellResp = await request.get(
-              `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(boardId)}/cells/cx.component.child_order.v1`,
+              `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(boardId)}/cells/cx.component.child_order.v1`,
               { headers: { authorization: `Bearer ${aliceToken}` } },
             );
             if (cellResp.status() !== 200) {
@@ -389,12 +389,12 @@ test.describe("kanban end-to-end", () => {
   // yougen setup wizard, however, defaults new Realms to `mls_rfc9420` (the
   // "Encrypted" badge). Adding a Flow description writes the private `body`
   // patch path, so on an encrypted Realm the client MUST encrypt it before
-  // submit; if it ships plaintext, soland rejects the cx.flow.update with 412
+  // submit; if it ships plaintext, soland rejects the ck.flow.update with 412
   // `content_encryption_floor_violation` (exactly the failure reported from
   // the UI). encryption/key-backup.spec.ts A2 exercises this only on a
   // RESTORED second device — never on the original creator device, which is
   // the path this guards.
-  test("alice adds a flow description on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.flow.update (no content_encryption_floor_violation)", async ({
+  test("alice adds a flow description on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.flow.update (no content_encryption_floor_violation)", async ({
     browser,
     request,
   }, testInfo) => {
@@ -416,7 +416,7 @@ test.describe("kanban end-to-end", () => {
     const floorViolations: string[] = [];
     alicePage.page.on("response", (response) => {
       if (
-        !response.url().includes("/api/v1/events") ||
+        !response.url().includes("/_cokret/self/events") ||
         response.request().method() !== "POST"
       ) {
         return;
@@ -491,13 +491,13 @@ test.describe("kanban end-to-end", () => {
         );
       }, description);
 
-      // The encrypted cx.flow.update submit must reach soland and be accepted,
+      // The encrypted ck.flow.update submit must reach soland and be accepted,
       // not bounced by the content-encryption floor.
       const flowUpdate = alicePage.page.waitForResponse(
         (response) =>
-          response.url().includes("/api/v1/events") &&
+          response.url().includes("/_cokret/self/events") &&
           response.request().method() === "POST" &&
-          (response.request().postData() ?? "").includes("cx.flow.update"),
+          (response.request().postData() ?? "").includes("ck.flow.update"),
         { timeout: 60_000 },
       );
       await alicePage.page.getByTestId("card-detail-save-button").click();
@@ -506,18 +506,18 @@ test.describe("kanban end-to-end", () => {
       const responseBody = await response.text();
       expect(
         responseBody.includes("content_encryption_floor_violation"),
-        `cx.flow.update for the description hit the content-encryption floor — the client shipped plaintext body to an encrypted Realm: ${response.status()} ${responseBody.slice(0, 500)}`,
+        `ck.flow.update for the description hit the content-encryption floor — the client shipped plaintext body to an encrypted Realm: ${response.status()} ${responseBody.slice(0, 500)}`,
       ).toBe(false);
       expect(
         response.status(),
-        `cx.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
+        `ck.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
       // Prove the write was actually ENCRYPTED, not a false-green on a
       // plaintext realm: the private description must not appear verbatim in
       // the submitted payload (it should be an MLS encrypted envelope).
       expect(
         (response.request().postData() ?? "").includes(description),
-        `description leaked as plaintext into the cx.flow.update body — the realm was not actually encrypted or the client skipped MLS encryption`,
+        `description leaked as plaintext into the ck.flow.update body — the realm was not actually encrypted or the client skipped MLS encryption`,
       ).toBe(false);
 
       // UI corroboration: the description renders and no encrypted-write error
@@ -540,7 +540,7 @@ test.describe("kanban end-to-end", () => {
   // flow_operation_carries_plaintext_private_content / yougen
   // KANBAN_PRIVATE_FLOW_PATCH_PATHS) and rides its own client encryption +
   // commit code path, so it needs its own guard.
-  test("alice adds a flow synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.flow.update", async ({
+  test("alice adds a flow synthesis on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.flow.update", async ({
     browser,
     request,
   }, testInfo) => {
@@ -577,9 +577,9 @@ test.describe("kanban end-to-end", () => {
 
       const flowUpdate = alicePage.page.waitForResponse(
         (response) =>
-          response.url().includes("/api/v1/events") &&
+          response.url().includes("/_cokret/self/events") &&
           response.request().method() === "POST" &&
-          (response.request().postData() ?? "").includes("cx.flow.update"),
+          (response.request().postData() ?? "").includes("ck.flow.update"),
         { timeout: 60_000 },
       );
       await alicePage.page.getByTestId("card-detail-save-button").click();
@@ -588,15 +588,15 @@ test.describe("kanban end-to-end", () => {
       const responseBody = await response.text();
       expect(
         responseBody.includes("content_encryption_floor_violation"),
-        `synthesis cx.flow.update hit the content-encryption floor — client shipped plaintext synthesis: ${response.status()} ${responseBody.slice(0, 500)}`,
+        `synthesis ck.flow.update hit the content-encryption floor — client shipped plaintext synthesis: ${response.status()} ${responseBody.slice(0, 500)}`,
       ).toBe(false);
       expect(
         response.status(),
-        `synthesis cx.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
+        `synthesis ck.flow.update should be accepted; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
       expect(
         (response.request().postData() ?? "").includes(synthesis),
-        `synthesis leaked as plaintext into the cx.flow.update body — realm not actually encrypted or client skipped MLS encryption`,
+        `synthesis leaked as plaintext into the ck.flow.update body — realm not actually encrypted or client skipped MLS encryption`,
       ).toBe(false);
 
       await expect(alicePage.page.getByTestId("card-synthesis-panel")).toContainText(synthesis, {
@@ -613,14 +613,14 @@ test.describe("kanban end-to-end", () => {
   //
   // CONFIRMED BUG (parked — fix is a sizable SDK+yougen feature). Two layers:
   //   1. The kanban card Discussion composer's default Send (chat.rs
-  //      `send-chat-button`) ships PLAINTEXT cx.message.create unconditionally;
-  //      soland accepts it (cx.message.create is not gated by the content
+  //      `send-chat-button`) ships PLAINTEXT ck.message.create unconditionally;
+  //      soland accepts it (ck.message.create is not gated by the content
   //      encryption floor — only cx.flow.* is). The encrypt path
   //      (`run_local_mls_encrypt`) was additionally wasm-stubbed.
   //   2. Deeper: even when the encrypt path runs, yougen builds the message
   //      `encrypted_payload` from the loose `core::EncryptedPayload`
   //      (group.encrypt_payload), which does NOT conform to soland's
-  //      cx.schema.encrypted_envelope.v1 — it is missing `version`,
+  //      ck.schema.encrypted_envelope.v1 — it is missing `version`,
   //      `aad_visibility_event_id`, `aad.{realm_id,event_kind}`, `aad_digest`,
   //      and key_ref.algorithm must be "MLS". So an encrypted message is
   //      rejected with schema_violation. (kanban flow content "works" only
@@ -628,7 +628,7 @@ test.describe("kanban end-to-end", () => {
   //      schema.) The conforming builder exists in the SDK
   //      (cokret-rust-sdk crates/sdk/src/mls.rs MessageCrypto::encrypt_with_aad);
   //      yougen's chat send must be wired to it. Promote once that lands.
-  test("alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
+  test("alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted ck.message.create", async ({
     browser,
     request,
   }, testInfo) => {
@@ -664,9 +664,9 @@ test.describe("kanban end-to-end", () => {
 
       const messageCreate = alicePage.page.waitForResponse(
         (response) =>
-          response.url().includes("/api/v1/events") &&
+          response.url().includes("/_cokret/self/events") &&
           response.request().method() === "POST" &&
-          (response.request().postData() ?? "").includes("cx.message.create"),
+          (response.request().postData() ?? "").includes("ck.message.create"),
         { timeout: 60_000 },
       );
       await alicePage.page.getByTestId("chat-input").fill(comment);
@@ -680,11 +680,11 @@ test.describe("kanban end-to-end", () => {
       ).toBe(false);
       expect(
         response.status(),
-        `discussion cx.message.create should be accepted (encrypted), not rejected; body=${responseBody.slice(0, 500)}`,
+        `discussion ck.message.create should be accepted (encrypted), not rejected; body=${responseBody.slice(0, 500)}`,
       ).toBeLessThan(400);
       expect(
         (response.request().postData() ?? "").includes(comment),
-        `comment leaked as plaintext into the cx.message.create body — realm not actually encrypted or client skipped MLS encryption`,
+        `comment leaked as plaintext into the ck.message.create body — realm not actually encrypted or client skipped MLS encryption`,
       ).toBe(false);
 
       await expect(alicePage.page.getByTestId("chat-panel")).toContainText(comment, {

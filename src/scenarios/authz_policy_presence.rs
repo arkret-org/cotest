@@ -23,7 +23,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_before_grant = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/authz/check"))
+            .post(server.url("/_cokret/self/authz/check"))
             .json(&json!({
                 "actor": bob.actor,
                 "action": "manage_space",
@@ -36,7 +36,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_before_grant["reason_code"], "capability_denied");
 
     let manage_grant = expect_json(
-        alice.post("/api/v1/authz/grants").json(&json!({
+        alice.post("/_cokret/self/authz/grants").json(&json!({
             "space_id": space_id,
             "subject": bob.actor,
             "resource": "*",
@@ -51,7 +51,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let effective_grants = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/authz/effective-grants"))
+            .get(server.url("/_cokret/self/authz/effective-grants"))
             .query(&[
                 ("subject", bob.actor.as_str()),
                 ("space_id", space_id.as_str()),
@@ -65,7 +65,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let allowed_after_grant = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/authz/check"))
+            .post(server.url("/_cokret/self/authz/check"))
             .json(&json!({
                 "actor": bob.actor,
                 "action": "manage_space",
@@ -84,7 +84,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let member_send = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/authz/check"))
+            .post(server.url("/_cokret/self/authz/check"))
             .json(&json!({
                 "actor": bob.actor,
                 "action": "send",
@@ -96,7 +96,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(member_send["allowed"], true);
 
     let deny_send_grant = expect_json(
-        alice.post("/api/v1/authz/grants").json(&json!({
+        alice.post("/_cokret/self/authz/grants").json(&json!({
             "space_id": space_id,
             "subject": bob.actor,
             "resource": "*",
@@ -111,7 +111,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_send = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/authz/check"))
+            .post(server.url("/_cokret/self/authz/check"))
             .json(&json!({
                 "actor": bob.actor,
                 "action": "send",
@@ -124,7 +124,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_send["reason_code"], "explicit_deny");
 
     let revoked_deny = expect_json(
-        alice.delete(&format!("/api/v1/authz/grants/{deny_send_grant_id}")),
+        alice.delete(&format!("/_cokret/self/authz/grants/{deny_send_grant_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -133,7 +133,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let send_after_revoke = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/authz/check"))
+            .post(server.url("/_cokret/self/authz/check"))
             .json(&json!({
                 "actor": bob.actor,
                 "action": "send",
@@ -145,7 +145,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(send_after_revoke["allowed"], true);
 
     let revoked_manage = expect_json(
-        alice.delete(&format!("/api/v1/authz/grants/{manage_grant_id}")),
+        alice.delete(&format!("/_cokret/self/authz/grants/{manage_grant_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -154,7 +154,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_after_revoke = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/authz/check"))
+            .post(server.url("/_cokret/self/authz/check"))
             .json(&json!({
                 "actor": bob.actor,
                 "action": "manage_space",
@@ -166,7 +166,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_after_revoke["allowed"], false);
     assert_eq!(denied_after_revoke["reason_code"], "capability_denied");
 
-    let audit = expect_json(alice.get("/api/v1/audit/events?limit=20"), StatusCode::OK).await?;
+    let audit = expect_json(
+        alice.get("/_cokret/self/audit/events?limit=20"),
+        StatusCode::OK,
+    )
+    .await?;
     let _ = expect_audit_action(&audit, "authz.grant.create")?;
     let _ = expect_audit_action(&audit, "authz.grant.revoke")?;
 
@@ -185,13 +189,13 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     expect_status(
         server
             .http()
-            .get(server.url("/api/v1/account/subscribe?catchup=true&set_presence=online")),
+            .get(server.url("/_cokret/self/account/subscribe?catchup=true&set_presence=online")),
         StatusCode::UNAUTHORIZED,
     )
     .await?;
 
     let presence_sync = expect_account_subscribe_delta(
-        alice.get("/api/v1/account/subscribe?catchup=true&set_presence=unavailable"),
+        alice.get("/_cokret/self/account/subscribe?catchup=true&set_presence=unavailable"),
         StatusCode::OK,
     )
     .await?;
@@ -200,7 +204,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let profile = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/profile/presence?did=did:web:alice.example")),
+            .get(server.url("/_cokret/self/profile/presence?did=did:web:alice.example")),
         StatusCode::OK,
     )
     .await?;
@@ -208,24 +212,28 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(profile["presence"]["status"], "unavailable");
 
     let push_registration = expect_json(
-        alice.post("/api/v1/push/register-device").json(&json!({
-            "device_id": alice.device_id.as_str(),
-            "push_gateway": "https://push.example",
-            "push_key": "opaque",
-            "platform": "desktop",
-            "app_id": "yougen"
-        })),
+        alice
+            .post("/_cokret/edge/push/register-device")
+            .json(&json!({
+                "device_id": alice.device_id.as_str(),
+                "push_gateway": "https://push.example",
+                "push_key": "opaque",
+                "platform": "desktop",
+                "app_id": "yougen"
+            })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(push_registration["ok"], true);
 
     let push_unregister = expect_json(
-        alice.post("/api/v1/push/unregister-device").json(&json!({
-            "device_id": alice.device_id.as_str(),
-            "push_key": "opaque",
-            "app_id": "yougen"
-        })),
+        alice
+            .post("/_cokret/edge/push/unregister-device")
+            .json(&json!({
+                "device_id": alice.device_id.as_str(),
+                "push_key": "opaque",
+                "app_id": "yougen"
+            })),
         StatusCode::OK,
     )
     .await?;
@@ -234,12 +242,12 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let allow_policy = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/policy/check"))
+            .post(server.url("/_cokret/self/policy/check"))
             .json(&json!({
                 "request_id": "req-allow",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "cx.message.create",
+                "action": "ck.message.create",
                 "actor": "did:web:alice.example",
                 "source": {"service": "soland"}
             })),
@@ -252,7 +260,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     let review_policy = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/policy/check"))
+            .post(server.url("/_cokret/self/policy/check"))
             .json(&json!({
                 "request_id": "req-review",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
@@ -270,12 +278,12 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/policy/check"))
+            .post(server.url("/_cokret/self/policy/check"))
             .json(&json!({
                 "request_id": "req-invalid",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "cx.message.create",
+                "action": "ck.message.create",
                 "actor": "alice",
                 "source": {"service": "soland"}
             })),
@@ -285,7 +293,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
 
     let ice = expect_json(
-        alice.post("/cokret/v1/ice-config").json(&json!({
+        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
             "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
             "call_id": "ck:call:01964137-0000-7000-8000-000000000001",
             "actor_id": alice.actor.as_str(),

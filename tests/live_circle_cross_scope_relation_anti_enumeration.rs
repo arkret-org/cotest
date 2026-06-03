@@ -117,18 +117,18 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST /api/v1/realms                                 (admin)
-    //         POST /api/v1/realms/<rid>/circles                   (admin)
-    //         POST /api/v1/realms/<rid>/members                   add incircle + realm-only
-    //         POST /api/v1/circles/<cid>/members                  add incircle only
-    //         POST /api/v1/realms/<rid>/flows                     create F1 (scope_circle_id: null)
-    //         POST /api/v1/realms/<rid>/flows                     create F2 (scope_circle_id:
-    // <cid>)         POST /api/v1/relations
-    // kind=confidential_discussion_of, from=F1, to=F2         GET  /api/v1/flows/<F1>/relations
-    // as incircle       expect edge present + F2 hint         GET  /api/v1/flows/<F1>/relations
-    // as realm-only     expect F2 edge OMITTED         GET  /api/v1/flows/<F2> as realm-only
-    // expect 404 (NOT 403)         (teabay) POST /api/v1/directory/search-flows        as
-    // realm-only → F2 absent
+    //         POST /_cokret/self/realms                                 (admin)
+    //         POST /_cokret/self/realms/<rid>/circles                   (admin)
+    //         POST /_cokret/self/realms/<rid>/members                   add incircle + realm-only
+    //         POST /_cokret/self/circles/<cid>/members                  add incircle only
+    //         POST /_cokret/self/realms/<rid>/flows                     create F1 (scope_circle_id:
+    // null)         POST /_cokret/self/realms/<rid>/flows                     create F2
+    // (scope_circle_id: <cid>)         POST /_cokret/self/relations
+    // kind=confidential_discussion_of, from=F1, to=F2         GET
+    // /_cokret/self/flows/<F1>/relations as incircle       expect edge present + F2 hint
+    // GET  /_cokret/self/flows/<F1>/relations as realm-only     expect F2 edge OMITTED
+    // GET  /_cokret/self/flows/<F2> as realm-only expect 404 (NOT 403)         (teabay) POST
+    // /_cokret/find/directory/search-flows        as realm-only → F2 absent
     //
     //       Assertions:
     //         (a) circle_member's view: edge present, points at F2,
@@ -144,9 +144,9 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     //             hits for F2's title/id; same query as circle_member
     //             returns F2.
     let _ = admin
-        .post("/api/v1/realms")
+        .post("/_cokret/self/realms")
         .json(&json!({
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Anti-Enum Realm",
         }))

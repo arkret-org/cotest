@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(passphrase / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的备份设置、跨设备使用 backup envelope 解密、新设备的 `cx.device.authorize` 写入、E2EE 历史消息解密。
+验证用户在丢失主设备后,通过预设的恢复手段(passphrase / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的备份设置、跨设备使用 backup envelope 解密、新设备的 `ck.device.authorize` 写入、E2EE 历史消息解密。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
@@ -42,9 +42,9 @@
    - Argon2id KDF 生成 derived_key(salt + memoryCost + iterations,固化在 envelope)
    - 用 XChaCha20-Poly1305 加密 `{ self_signing_key, user_signing_key, MLS history backup key }`
    - 计算 `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
-4. `PUT /api/v1/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "secret_storage", kdf_params, ciphertext, ciphertext_digest, key_commitment }`
+4. `PUT /_cokret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "secret_storage", kdf_params, ciphertext, ciphertext_digest, key_commitment }`
 5. 服务端**只能存** ciphertext,不接受明文 passphrase
-6. 断言:`GET /api/v1/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext
+6. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext
 
 ### Phase B — (可选)alice 在 E2EE space 中收发消息
 
@@ -60,9 +60,9 @@
     - 生成新 device key(本地)
     - Argon2id 派生 → 计算 key_commitment → 拉 backup envelope → 比对 commitment(快速失败如果 passphrase 错)
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
-13. 客户端签 `cx.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
+13. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
 14. 提交到 soland;soland 校验 recovery policy → 接受
-15. 断言:device-2 上 `GET /api/v1/account/me` 返回 alice.did,设备列表新增 device-2
+15. 断言:device-2 上 `GET /_cokret/self/account/me` 返回 alice.did,设备列表新增 device-2
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 

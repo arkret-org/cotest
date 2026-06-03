@@ -46,7 +46,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     expect_status(
         server.http().get(server.url(&format!(
-            "/api/v1/events/subscribe?spaces={space_id}&limit=1"
+            "/_cokret/self/events/subscribe?spaces={space_id}&limit=1"
         ))),
         StatusCode::NOT_FOUND,
     )
@@ -54,7 +54,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let subscribe_response = expect_response(
         alice.get(&format!(
-            "/api/v1/events/subscribe?spaces={space_id}&limit=10"
+            "/_cokret/self/events/subscribe?spaces={space_id}&limit=10"
         )),
         StatusCode::OK,
     )
@@ -69,7 +69,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let reaction = bob
         .submit_event(
             &space_id,
-            "cx.reaction.add",
+            "ck.reaction.add",
             json!({
                 "target_ref": sent["event_id"],
                 "key": "like"
@@ -81,7 +81,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let removed_reaction = carol
         .submit_event(
             &space_id,
-            "cx.reaction.remove",
+            "ck.reaction.remove",
             json!({
                 "target_ref": sent["event_id"],
                 "key": "like"
@@ -98,7 +98,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .map(|event_id| event_id.replacen("ck:event:", "ck:message:", 1))
         .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
     let marker = expect_json(
-        dave.post("/api/v1/read-cursors").json(&json!({
+        dave.post("/_cokret/self/read-cursors").json(&json!({
             "realm_id": space_id,
             "read_scope": {
                 "kind": "thread",
@@ -117,7 +117,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(marker["read_scope"]["ref"], thread_root_ref);
 
     let markers = expect_json(
-        dave.get(&format!("/api/v1/read-cursors?realm_id={space_id}")),
+        dave.get(&format!("/_cokret/self/read-cursors?realm_id={space_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -130,7 +130,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let revised = alice
         .submit_event(
             &space_id,
-            "cx.message.revise",
+            "ck.message.revise",
             json!({
                 "body": "edited interaction",
                 "content": {"body": "edited interaction"},
@@ -144,7 +144,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let redacted = alice
         .submit_event(
             &space_id,
-            "cx.message.redact",
+            "ck.message.redact",
             json!({
                 "target_event_id": sent["event_id"],
             }),

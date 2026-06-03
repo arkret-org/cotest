@@ -19,7 +19,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
     let space_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
 
     expect_api_error(
-        dave.post("/api/v1/webrtc/sessions").json(&json!({
+        dave.post("/_cokret/self/webrtc/sessions").json(&json!({
             "space_id": space_id,
             "participants": []
         })),
@@ -29,7 +29,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
     .await?;
 
     let session = expect_json(
-        alice.post("/api/v1/webrtc/sessions").json(&json!({
+        alice.post("/_cokret/self/webrtc/sessions").json(&json!({
             "space_id": space_id,
             "participants": [],
             "ttl_ms": 90_000
@@ -42,14 +42,18 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
     assert_eq!(session["participants"].as_array().unwrap().len(), 1);
 
     expect_api_error(
-        carol.get(&format!("/api/v1/webrtc/sessions/{session_id}/signals")),
+        carol.get(&format!(
+            "/_cokret/self/webrtc/sessions/{session_id}/signals"
+        )),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
     let initial = expect_json(
-        alice.get(&format!("/api/v1/webrtc/sessions/{session_id}/signals")),
+        alice.get(&format!(
+            "/_cokret/self/webrtc/sessions/{session_id}/signals"
+        )),
         StatusCode::OK,
     )
     .await?;
@@ -57,7 +61,9 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     expect_api_error(
         alice
-            .post(&format!("/api/v1/webrtc/sessions/{session_id}/signals"))
+            .post(&format!(
+                "/_cokret/self/webrtc/sessions/{session_id}/signals"
+            ))
             .json(&json!({
                 "message_type": "offer",
                 "payload": {"sdp": "v=0"},
@@ -86,7 +92,9 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     let first = expect_json(
         alice
-            .post(&format!("/api/v1/webrtc/sessions/{session_id}/signals"))
+            .post(&format!(
+                "/_cokret/self/webrtc/sessions/{session_id}/signals"
+            ))
             .json(&json!({
                 "message_type": signal_types[0],
                 "seq": 1,
@@ -101,7 +109,9 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     expect_api_error(
         alice
-            .post(&format!("/api/v1/webrtc/sessions/{session_id}/signals"))
+            .post(&format!(
+                "/_cokret/self/webrtc/sessions/{session_id}/signals"
+            ))
             .json(&json!({
                 "message_type": "answer",
                 "seq": 1,
@@ -115,7 +125,9 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     expect_api_error(
         alice
-            .post(&format!("/api/v1/webrtc/sessions/{session_id}/signals"))
+            .post(&format!(
+                "/_cokret/self/webrtc/sessions/{session_id}/signals"
+            ))
             .json(&json!({
                 "message_type": "answer",
                 "seq": 99,
@@ -130,7 +142,9 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
     for (idx, signal_type) in signal_types.iter().enumerate().skip(1) {
         let appended = expect_json(
             alice
-                .post(&format!("/api/v1/webrtc/sessions/{session_id}/signals"))
+                .post(&format!(
+                    "/_cokret/self/webrtc/sessions/{session_id}/signals"
+                ))
                 .json(&json!({
                     "message_type": signal_type,
                     "seq": (idx + 1) as u64,
@@ -149,7 +163,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     let offer_events = expect_json(
         alice.get(&format!(
-            "/api/v1/webrtc/sessions/{session_id}/signals?since=0&limit=20"
+            "/_cokret/self/webrtc/sessions/{session_id}/signals?since=0&limit=20"
         )),
         StatusCode::OK,
     )
@@ -170,7 +184,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     let tail_events = expect_json(
         alice.get(&format!(
-            "/api/v1/webrtc/sessions/{session_id}/signals?since=12"
+            "/_cokret/self/webrtc/sessions/{session_id}/signals?since=12"
         )),
         StatusCode::OK,
     )
@@ -180,14 +194,16 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
     assert_eq!(tail_events["events"][0]["seq"], 13);
 
     let closed = expect_json(
-        alice.delete(&format!("/api/v1/webrtc/sessions/{session_id}")),
+        alice.delete(&format!("/_cokret/self/webrtc/sessions/{session_id}")),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(closed["ok"], true);
 
     expect_api_error(
-        alice.get(&format!("/api/v1/webrtc/sessions/{session_id}/signals")),
+        alice.get(&format!(
+            "/_cokret/self/webrtc/sessions/{session_id}/signals"
+        )),
         StatusCode::NOT_FOUND,
         "not_found",
     )

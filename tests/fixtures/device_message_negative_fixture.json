@@ -143,7 +143,7 @@
     },
     {
       "name": "key_ref_stale_b22_violation",
-      "comment": "B-22 strict_key_ref: key_ref points to a leaf that has been ROTATED OUT (no longer in trust_set; was revoked by a later cx.device.revoke Move). The envelope is technically signed but cryptographically stale — must reject.",
+      "comment": "B-22 strict_key_ref: key_ref points to a leaf that has been ROTATED OUT (no longer in trust_set; was revoked by a later ck.device.revoke Move). The envelope is technically signed but cryptographically stale — must reject.",
       "envelope": {
         "envelope_id": "ck:envelope:01970e58-0a01-7a01-8a01-000000000006",
         "sender_device_id": "did:ck:dev:dev_alice_01",

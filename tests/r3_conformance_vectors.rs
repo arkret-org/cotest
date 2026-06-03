@@ -109,7 +109,7 @@ fn mention_rendering_vector_suite_runs_clean() {
     );
 }
 
-// ─── R3.2 / VECT-COT-3 — cx.directory.list_handles_for_subject ────────────
+// ─── R3.2 / VECT-COT-3 — ck.directory.list_handles_for_subject ────────────
 
 #[test]
 fn list_handles_for_subject_vector_suite_runs_clean() {
@@ -216,7 +216,7 @@ fn test_oa_cot_5_share_resolve_open_live() {
     // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
     //   1. Author shares a flow as `web+cokret:realm/<r>/flow/<f>?via=<teabay>
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
-    //   2. Recipient POSTs `cx.directory.resolve_target { address, token }`.
+    //   2. Recipient POSTs `ck.directory.resolve_target { address, token }`.
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
     //      (scope-confusion replay rejected), and returns `DirectoryResolveTargetResBody {
     //      target_kind=flow, object_preview, join_rule, as_of, source_refs, via_services }`.
@@ -245,12 +245,12 @@ fn test_cot_1_handle_reassignment_full_flow_live() {
     //   3. coauth revokes H1 and issues H2 for S.
     //   4. roster member_display_state_digest changes (claim digest set folded);
     //      list_handles_for_subject drops H1, surfaces H2; yougen re-renders the mention to H2 with
-    //      no `cx.member.identity.update` forged.
+    //      no `ck.member.identity.update` forged.
     unreachable!("integration target gated on soland/coauth/yougen R3.2 P0 wiring");
 }
 
 #[test]
-#[ignore = "R3.2-followup: teabay POST /api/v1/directory/list-handles-for-subject \
+#[ignore = "R3.2-followup: teabay POST /_cokret/find/directory/list-handles-for-subject \
             endpoint not yet reachable end-to-end across services"]
 fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
     // Live integration (teabay directory):
@@ -283,7 +283,7 @@ fn recovery_policy_fixture_loads_and_has_canonical_shape() {
     let value = load_fixture_value("recovery-policy.json").expect("recovery-policy.json");
     assert_eq!(
         value.get("schema_ref").and_then(Value::as_str),
-        Some("cx.schema.recovery_policy.v1")
+        Some("ck.schema.recovery_policy.v1")
     );
     let cases = value
         .get("cases")
@@ -297,7 +297,7 @@ fn recovery_receipt_fixture_loads_and_has_canonical_shape() {
     let value = load_fixture_value("recovery-receipt.json").expect("recovery-receipt.json");
     assert_eq!(
         value.get("schema_ref").and_then(Value::as_str),
-        Some("cx.schema.recovery_receipt.v1")
+        Some("ck.schema.recovery_receipt.v1")
     );
     let cases = value
         .get("cases")
@@ -322,13 +322,13 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
         .filter_map(|c| c.get("event_kind").and_then(Value::as_str))
         .collect();
     for required in [
-        "cx.agent.pause",
-        "cx.agent.resume",
-        "cx.agent.deactivate",
-        "cx.agent.draft.propose",
-        "cx.agent.action_request",
-        "cx.agent.action_approve",
-        "cx.agent.action_reject",
+        "ck.agent.pause",
+        "ck.agent.resume",
+        "ck.agent.deactivate",
+        "ck.agent.draft.propose",
+        "ck.agent.action_request",
+        "ck.agent.action_approve",
+        "ck.agent.action_reject",
     ] {
         assert!(
             kinds.contains(&required),
@@ -365,7 +365,7 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
     // Negative-path matrix pinned at the SDK constant layer by
     // VECT-MB-3 / VECT-MB-4 / VECT-MB-5. Live integration:
     //   - happy: 200 with backend_token + participant_binding, TTL ≤ 600s, issuer_kid anchored to
-    //     current `cx.realm.media_service.service_id`.
+    //     current `ck.realm.media_service.service_id`.
     //   - neg-issuer: rogue issuer kid → 401 token_issuer_unauthorised.
     //   - neg-focus:  off-focus token request → 422 focus_mismatch.
     //   - neg-ttl:    server-issued TTL > 600s → 422 participant_binding_invalid.
@@ -379,7 +379,7 @@ fn test_2_media_token_exchange_happy_path_plus_negatives() {
 #[ignore = "R3.1: soland strict_reject reducer branch not yet implemented"]
 fn test_3_accountable_principals_strict_reject_profile_toggle() {
     // Live integration:
-    //   1. With `cx.profile.accountable_principals.strict_reject.v1` NOT advertised: actor-profile
+    //   1. With `ck.profile.accountable_principals.strict_reject.v1` NOT advertised: actor-profile
     //      create with unverified `accountable_principal_ids[]` → 200, server strips + audit logs.
     //   2. With the profile advertised: same envelope → 412 failed_precondition
     //      reason=accountability_grant_missing.
@@ -393,7 +393,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // Stateful core body is the default — round-trip via the SDK
     // primitives is exercised by `run_cursor_opaque_core_vector`. Here
     // we additionally assert that a stateless body parses through the
-    // SDK struct but a server with no `cx.profile.stateless_cursor.v1`
+    // SDK struct but a server with no `ck.profile.stateless_cursor.v1`
     // declaration MUST reject it. We pin both at the wire layer; the
     // server-side acceptance gate lands under soland P2-impl.
     use std::collections::BTreeMap;
@@ -517,7 +517,7 @@ fn test_6_handle_homograph_script_mix_or_nfc_variant_reject() {
     unreachable!("integration target gated on starid / teabay P2-impl");
 }
 
-// ─── R3.1 / TEST-7 — `cx.member.identity.update` end-to-end ───────────────
+// ─── R3.1 / TEST-7 — `ck.member.identity.update` end-to-end ───────────────
 
 #[test]
 fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
@@ -539,10 +539,10 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     // R3.2: MemberIdentity discloses subject_id + display_profile only;
     // handle lifecycle (the retired `primary_handle` / `handles[]`) has
-    // moved to `cx.schema.handle_claim.v1`.
+    // moved to `ck.schema.handle_claim.v1`.
     let make_identity = |name: &str| -> Result<MemberIdentity> {
         Ok(MemberIdentity {
-            schema: "cx.schema.member_identity.v1".to_owned(),
+            schema: "ck.schema.member_identity.v1".to_owned(),
             realm_id: realm.clone(),
             actor_id: alice.clone(),
             subject_id: subject.clone(),
@@ -618,17 +618,17 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 }
 
 #[test]
-#[ignore = "R3.1: soland MID reducer + cx.profile.update field-level delta wiring not yet implemented"]
+#[ignore = "R3.1: soland MID reducer + ck.profile.update field-level delta wiring not yet implemented"]
 fn test_7_cx_member_identity_update_live() {
     // Live integration:
-    //   1. Actor publishes initial `cx.member.identity.update` event with MemberIdentity v1
+    //   1. Actor publishes initial `ck.member.identity.update` event with MemberIdentity v1
     //      (display_name="Alice").
     //   2. Actor publishes second event with `replaces[]` pointing at the first; payload carries
     //      MemberIdentity v2 with display_name="Alice (work)".
     //   3. Client `account.subscribe` frame surfaces a roster with only the second event in
     //      `identity_event_ids[]`.
-    //   4. `cx.profile.update` field-level delta MUST drive the v2 display_name onto the projected
-    //      profile; the `cx.profile.space_override` profile MUST take precedence when set
+    //   4. `ck.profile.update` field-level delta MUST drive the v2 display_name onto the projected
+    //      profile; the `ck.profile.space_override` profile MUST take precedence when set
     //      per-Space.
     unreachable!("integration target gated on soland MID reducer (R3.1)");
 }
@@ -725,7 +725,7 @@ fn test_8_handle_rename_round_trip_live() {
     //   1. Client builds invite for canonical handle `alice:acme.example`.
     //   2. soland reducer accepts member-add with `payload.handle = "alice:acme.example"` (NO
     //      `handle_uri` field).
-    //   3. teabay's `cx.directory.resolve_handle(handle=...)` accepts the canonical handle string
+    //   3. teabay's `ck.directory.resolve_handle(handle=...)` accepts the canonical handle string
     //      in the request body and returns a candidate whose `handle` field is the same canonical
     //      wire form.
     //   4. coauth's handle-claim issuance + sync surface MUST NOT emit `handle_uri` anywhere on a

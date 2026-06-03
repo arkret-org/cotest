@@ -9,7 +9,7 @@
 //
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/cokret.rs::server_describe`) already serve
-// `GET /api/v1/server/describe` with the claim-level partition layer in place, so the two
+// `GET /_cokret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase B (error envelope) is also live on
 // soland. Phases C (pagination cursor), D (idempotency key) and E
 // (unsupported_feature fail-closed) stay pinned via test.fixme until the
@@ -36,7 +36,7 @@ type ErrorEnvelope = {
 
 async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   const unknown = await request.get(
-    `${solandBaseUrl()}/api/v1/__definitely_does_not_exist__/probe`,
+    `${solandBaseUrl()}/_cokret/self/__definitely_does_not_exist__/probe`,
   );
   expect(unknown.status(), "unknown API path status").toBe(404);
   expect(unknown.headers()["content-type"] ?? "", "unknown path content-type").toContain(
@@ -50,7 +50,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
   expect(unknownBody.request_id, "unknown path request_id").toMatch(/^ck:[a-z_]+:/);
 
-  const wrongMethod = await request.post(`${solandBaseUrl()}/api/v1/server/describe`);
+  const wrongMethod = await request.post(`${solandBaseUrl()}/_cokret/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
   expect(wrongMethod.headers()["content-type"] ?? "", "wrong method content-type").toContain(
     "application/json",
@@ -68,7 +68,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
 
 test.describe("describes soland surface @fully-implemented", () => {
-  test("soland /api/v1/server/describe returns canonical ServiceDescribe shape", async ({
+  test("soland /_cokret/describe returns canonical ServiceDescribe shape", async ({
     request,
   }, testInfo) => {
     // spec: service-surface.md §3 (canonical shape), §3.0 (claim-level partition),
@@ -78,7 +78,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     // fields (implemented_features / claimed_profiles / verified_profiles /
     // experimental_features / compat_surfaces + development_mode) are partitioned
     // correctly, and that dev-mode posture forces verified_profiles == [].
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
     const body = await resp.json();
@@ -118,9 +118,9 @@ test.describe("describes soland surface @fully-implemented", () => {
     }
 
     // §4.2 + service-api-schema.mdx §2.1 — every principal server must surface
-    // at least cx.server.describe + cx.events.submit on supported_operations.
-    expect(body.supported_operations, "exposes cx.server.describe").toContain("cx.server.describe");
-    expect(body.supported_operations, "exposes cx.events.submit").toContain("cx.events.submit");
+    // at least ck.server.describe + ck.events.submit on supported_operations.
+    expect(body.supported_operations, "exposes ck.server.describe").toContain("ck.server.describe");
+    expect(body.supported_operations, "exposes ck.events.submit").toContain("ck.events.submit");
 
     await testInfo.attach("soland-describe", {
       body: JSON.stringify(body, null, 2),
@@ -130,7 +130,7 @@ test.describe("describes soland surface @fully-implemented", () => {
 });
 
 test.describe("describes coauth surface @fully-implemented", () => {
-  test("coauth /api/v1/server/describe returns auth_server shape and does not claim identity_registry", async ({
+  test("coauth /_cokret/describe returns auth_server shape and does not claim identity_registry", async ({
     request,
   }, testInfo) => {
     // spec: service-surface.md §3 (service_type naming — auth_server),
@@ -141,7 +141,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
     const baseUrl = coauthBaseUrl();
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
 
-    const resp = await request.get(`${baseUrl}/api/v1/server/describe`);
+    const resp = await request.get(`${baseUrl}/_cokret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
     const body = await resp.json();
@@ -162,10 +162,10 @@ test.describe("describes coauth surface @fully-implemented", () => {
     const claimed = (body.claimed_profiles ?? []) as Array<{ profile_id?: string }>;
     const claimedIds = claimed.map((c) => c.profile_id).filter(Boolean);
     expect(claimedIds, "coauth does not self-claim identity_registry").not.toContain(
-      "cx.profile.identity_registry.v1",
+      "ck.profile.identity_registry.v1",
     );
     expect(claimedIds, "coauth does not self-claim principal_server").not.toContain(
-      "cx.profile.principal_server.v1",
+      "ck.profile.principal_server.v1",
     );
 
     // auth_metadata should expose at least one of oauth_issuer / supported_auth_methods.
@@ -237,8 +237,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //         invalid → invalid_param; expired → cursor_expired; TTL ≤ 7d for stream cursors),
       //       §7.1 (list pagination response: { items, next_cursor, has_more }).
       //
-      // 1) Seed ≥5 list-visible items as alice (via POST /api/v1/events or seed helper).
-      // 2) GET /api/v1/events?limit=2 (or whichever list endpoint reaches
+      // 1) Seed ≥5 list-visible items as alice (via POST /_cokret/self/events or seed helper).
+      // 2) GET /_cokret/self/events?limit=2 (or whichever list endpoint reaches
       //    §7.1 shape first) → page1.
       //    Assert: items.length <= 2, next_cursor matches /^ck:cursor:[A-Za-z0-9_-]+$/,
       //            has_more === true.
@@ -270,7 +270,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //         related Event is fully synced or expired).
       //
       // 1) ensureRegistered + issueDevSession for alice on soland.
-      // 2) Build a minimal write body B1 (POST /api/v1/events envelope or
+      // 2) Build a minimal write body B1 (POST /_cokret/self/events envelope or
       //    equivalent write endpoint that accepts Idempotency-Key).
       // 3) POST with header { Idempotency-Key: `ssc-${randomUUID()}` } + body B1 → R1.
       //    Assert: status 2xx, response carries event_id / request_id / accepted state.
@@ -309,7 +309,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // 1) Pull soland's describe (re-use Phase A); compute pickFeature =
       //    a feature id that is in NEITHER supported_features NOR implemented_features
       //    (e.g. "cx.feature.mimi_room_passthrough.v1" on default dev soland).
-      // 2) POST /api/v1/events with envelope:
+      // 2) POST /_cokret/self/events with envelope:
       //      { ..., requirements: { features: [pickFeature], critical_extensions: [] }, ... }
       // 3) Assert: status 4xx (likely 422 or 400),
       //            error.code === "unsupported_feature",

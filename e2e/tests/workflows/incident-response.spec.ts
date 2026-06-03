@@ -144,7 +144,7 @@ test.describe("workflow: incident response", () => {
         await expect(page.page.getByTestId("incident-status-current")).toContainText(/resolved/i);
 
         const audit = await request.get(
-          `${solandBaseUrl()}/api/v1/audit/events?actor=${encodeURIComponent(oncall.did)}`,
+          `${solandBaseUrl()}/_cokret/self/audit/events?actor=${encodeURIComponent(oncall.did)}`,
           { headers: { authorization: `Bearer ${token}` } },
         );
         expect(audit.status()).toBe(200);

@@ -1,7 +1,7 @@
 // Agent Protocol Interop — external A2A/ACP handoff full chain
 // Contract: e2e/scenarios/extensions/agent-protocol-interop.md
 // Spec: extensions/agent-protocol-interop.md §4 (upgrade trigger), §5.1
-//       (cx.agent.endpoint), §5.2 (protocol_session.start), §5.3
+//       (ck.agent.endpoint), §5.2 (protocol_session.start), §5.3
 //       (protocol_session.status throttle), §5.4 (protocol_session.result +
 //       result_objects/artifacts/transcript hash), §6 step 4 (endpoint
 //       validation normative MUST), §7 (capability actions + constraint),
@@ -10,9 +10,9 @@
 //
 // soland gap: external HTTP handoff (RFC 9421 + Content-Digest + DID
 // Document service binding) 未实现 — agent_bridge.rs 目前只跑 in-process
-// echo (REFERENCE_AGENT_AUDIT_ED25519_SEED). `POST /api/v1/agents/discover`
-// 与 `POST /api/v1/agents/sessions(/:id/status)` 端点未上线;
-// claimed_profiles 也尚未声明 `cx.profile.agent_runtime.v1`。
+// echo (REFERENCE_AGENT_AUDIT_ED25519_SEED). `POST /_cokret/self/agents/discover`
+// 与 `POST /_cokret/self/agents/sessions(/:id/status)` 端点未上线;
+// claimed_profiles 也尚未声明 `ck.profile.agent_runtime.v1`。
 //
 // yougen gap: /agents 的 create-session/publish affordances 当前未对接 soland
 // capability grant API;publish modal 的 attribution 分支需要 source authority
@@ -47,9 +47,9 @@ test.describe("agent protocol interop", () => {
     //      (real testid from yougen/src/views/agents.rs::AgentsPanel).
     //      Without this surface the spec's Phase A endpoint registry
     //      flow has no UI anchor.
-    //   2. soland's `/api/v1/server/describe` responds with 200 + a
+    //   2. soland's `/_cokret/describe` responds with 200 + a
     //      JSON body (current shape — claimed_profiles will eventually
-    //      include `cx.profile.agent_runtime.v1`, but today we don't
+    //      include `ck.profile.agent_runtime.v1`, but today we don't
     //      assert that contents).
     //
     // Anything tighter (e.g. asserting agent endpoints in the panel,
@@ -60,7 +60,7 @@ test.describe("agent protocol interop", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const describe = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const describe = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(describe.status()).toBe(200);
     const describeBody = await describe.json();
     expect(describeBody).toBeTruthy();
@@ -98,12 +98,12 @@ test.describe("agent protocol interop", () => {
     // @blocking-on: soland#extensions-agent-protocol-interop-gap
     // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
     // @expected-live-by: 2026Q3
-    "Phase A — agent endpoint discovery via cx.agent.endpoint + DID Document service binding",
+    "Phase A — agent endpoint discovery via ck.agent.endpoint + DID Document service binding",
     async ({ browser, request }) => {
-      // spec: extensions/agent-protocol-interop.md §5.1 (cx.agent.endpoint
+      // spec: extensions/agent-protocol-interop.md §5.1 (ck.agent.endpoint
       // declares agent_card_url / metadata_url / transport / auth),
       // §6 step 1 (requesting agent queries DID service endpoint /
-      // AgentCard / ACP metadata), §7 (`cx.agent.protocol.discover`
+      // AgentCard / ACP metadata), §7 (`ck.agent.protocol.discover`
       // capability), §11 (adapter registry: a2a / acp / mcp_bridge /
       // http_custom).
       //
@@ -121,11 +121,11 @@ test.describe("agent protocol interop", () => {
       //   //    agent-register-form (testid agent-register-submit-button).
       //   //    Assert agent-endpoint-row appears with remoteAgent.did.
       //
-      //   // 2. harness: GET /api/v1/identity/${remoteAgent.did}/did-document
+      //   // 2. harness: GET /_cokret/root/identity/${remoteAgent.did}/did-document
       //   //    → assert service[].serviceEndpoint byte-equals the
       //   //      mock-agent-runtime base URL (spec §6 step 4 host pinning).
       //
-      //   // 3. localAgent token: POST /api/v1/agents/discover
+      //   // 3. localAgent token: POST /_cokret/self/agents/discover
       //   //    { agent_id: remoteAgent.did }
       //   //    → expect 200 with { supported_protocols: ["a2a","acp"], ... }
       //   //      where supported_protocols ⊆ {"a2a","acp","mcp_bridge",
@@ -166,11 +166,11 @@ test.describe("agent protocol interop", () => {
       //
       //   // 3. harness: GET soland sync; find the capability.grant.create
       //   //    event; assert payload.actions includes
-      //   //    "cx.agent.protocol_session.start" and
+      //   //    "ck.agent.protocol_session.start" and
       //   //    payload.constraint.allowed_endpoints is single-valued and
       //   //    points exactly at the mock runtime base URL (no wildcard).
       //
-      //   // 4. Negative: localAgent calls POST /api/v1/agents/sessions
+      //   // 4. Negative: localAgent calls POST /_cokret/self/agents/sessions
       //   //    WITHOUT capability_grant_ref → expect HTTP 4xx with
       //   //    error.code === "policy_denied" (spec §12).
       //
@@ -187,27 +187,27 @@ test.describe("agent protocol interop", () => {
     // @expected-live-by: 2026Q3
     "Phase C — invocation handoff with throttled status transcript",
     async ({ browser, request }) => {
-      // spec: extensions/agent-protocol-interop.md §5.2 (cx.agent.protocol_session.start
+      // spec: extensions/agent-protocol-interop.md §5.2 (ck.agent.protocol_session.start
       // fields), §5.3 (status events + standard enum negotiating / accepted /
       // working / input_required / blocked / completed / failed / cancelled /
       // expired), §6 step 5-7, §9 (`audit_mode`: status_only /
       // summary_and_artifacts / full_transcript_hash / full_transcript).
       //
       // Pseudo:
-      //   // 1. localAgent token: POST /api/v1/agents/sessions
+      //   // 1. localAgent token: POST /_cokret/self/agents/sessions
       //   //    body = { session_id, counterparty_agent: remoteAgent.did,
       //   //             protocol: "a2a", endpoint_ref,
       //   //             capability_grant: cg, audit_mode: "summary_and_artifacts",
       //   //             allowed_artifact_types: ["text","json"],
       //   //             max_duration_seconds: 3600 }
       //
-      //   // 2. Assert 200 + GET /api/v1/account/subscribe?catchup=true finds
-      //   //    `cx.agent.protocol_session.start` immediately.
+      //   // 2. Assert 200 + GET /_cokret/self/account/subscribe?catchup=true finds
+      //   //    `ck.agent.protocol_session.start` immediately.
       //
       //   // 3. soland's agent_bridge.rs handshakes with mock-agent-runtime
       //   //    via reqwest (RFC 9421 HTTP Message Signature + Content-Digest).
       //
-      //   // 4. mock-agent-runtime callbacks POST /api/v1/agents/sessions/
+      //   // 4. mock-agent-runtime callbacks POST /_cokret/self/agents/sessions/
       //   //    ${sessionId}/status at least 3 times within 3s with status:
       //   //    negotiating → accepted → working.
       //
@@ -287,7 +287,7 @@ test.describe("agent protocol interop", () => {
       // coordination / authorization / audit layer).
       //
       // Pseudo:
-      //   // 1. GET /api/v1/account/subscribe?catchup=true; filter to this
+      //   // 1. GET /_cokret/self/account/subscribe?catchup=true; filter to this
       //   //    session_id's events; assert ordering matches
       //   //    start → status (negotiating) → status (accepted) →
       //   //    status (working) → result (completed). No status

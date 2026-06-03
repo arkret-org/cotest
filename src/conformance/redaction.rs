@@ -166,8 +166,8 @@ fn sample_event_with_id(event_id: &str) -> Value {
         "event_id": event_id,
         "created_at": "2026-04-29T00:00:00Z",
         "actor_id": "did:web:alice.example",
-        "kind": "cx.message.create",
-        "content": {"kind": "cx.content.text", "body": "secret"},
+        "kind": "ck.message.create",
+        "content": {"kind": "ck.content.text", "body": "secret"},
         "proofs": [{"alg": "none"}]
     })
 }

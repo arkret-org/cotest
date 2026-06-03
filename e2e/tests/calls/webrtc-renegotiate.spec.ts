@@ -15,7 +15,7 @@ import {
   postCallSignal,
 } from "../../helpers/webrtc";
 
-test.describe("cx.call.signal renegotiation", () => {
+test.describe("ck.call.signal renegotiation", () => {
   test("ICE config, device_change, and renegotiate stay in seq order", async ({
     request,
   }) => {
@@ -23,7 +23,7 @@ test.describe("cx.call.signal renegotiation", () => {
     const sessionId = await createCallSession(request, token);
     try {
       const ice = await request.post(
-        `${solandBaseUrl()}/cokret/v1/ice-config`,
+        `${solandBaseUrl()}/_cokret/self/rtc/ice-config`,
         {
           headers: authHeaders(token),
           data: {

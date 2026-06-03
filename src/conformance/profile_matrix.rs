@@ -37,37 +37,37 @@ const MIXED_PROFILE_FIELDS: &[&str] = &[
 
 const REQUIRED_COTEST_SUITES: &[(&str, &str)] = &[
     (
-        "cx.profile.event_envelope_negative_vectors.v1",
+        "ck.profile.event_envelope_negative_vectors.v1",
         "event_envelope_fixture",
     ),
     (
-        "cx.profile.discovery_vectors.v1",
+        "ck.profile.discovery_vectors.v1",
         "discovery_profile_fixture",
     ),
     (
-        "cx.profile.event_kind_lattice_dispatch_vectors.v1",
+        "ck.profile.event_kind_lattice_dispatch_vectors.v1",
         "event_kind_lattice_dispatch_fixture",
     ),
     (
-        "cx.profile.event_kind_payload_coverage_vectors.v1",
+        "ck.profile.event_kind_payload_coverage_vectors.v1",
         "event_kind_payload_coverage_fixture",
     ),
     (
-        "cx.profile.operation_registry_coverage_vectors.v1",
+        "ck.profile.operation_registry_coverage_vectors.v1",
         "operation_registry_coverage_fixture",
     ),
     (
-        "cx.profile.error_code_registry_coverage_vectors.v1",
+        "ck.profile.error_code_registry_coverage_vectors.v1",
         "error_code_registry_coverage_fixture",
     ),
     (
-        "cx.profile.privacy_security_vectors.v1",
+        "ck.profile.privacy_security_vectors.v1",
         "security_negative_profile",
     ),
 ];
 
 const LOCAL_PROFILE_SUITES: &[(&str, &str, &str)] = &[(
-    "cx.profile.privacy_security_vectors.v1",
+    "ck.profile.privacy_security_vectors.v1",
     "security_negative_profile",
     "security-negative-profile-fixture.json",
 )];
@@ -366,15 +366,15 @@ fn registry_id_set(
 fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
     let core = matrix
         .requirements
-        .get("cx.profile.core_event_store.v1")
+        .get("ck.profile.core_event_store.v1")
         .ok_or_else(|| anyhow!("core_event_store missing from profile matrix"))?;
     let good = json!({
-        "supported_profiles": ["cx.profile.core_event_store.v1"],
+        "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": sorted_values(&core.required_operations),
         "supported_event_kinds": sorted_values(&core.required_event_kinds),
         "supported_event_schemas": sorted_values(&core.required_schemas),
         "conformance_results": {
-            "cx.profile.core_event_store.v1": {
+            "ck.profile.core_event_store.v1": {
                 "status": "passed"
             }
         }
@@ -382,15 +382,15 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
     validate_server_claims_against_matrix(&good, matrix)?;
 
     let mut missing_operation = core.required_operations.clone();
-    missing_operation.remove("cx.events.submit");
+    missing_operation.remove("ck.events.submit");
     let bad = json!({
-        "supported_profiles": ["cx.profile.core_event_store.v1"],
+        "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": sorted_values(&missing_operation),
         "supported_event_kinds": sorted_values(&core.required_event_kinds),
         "supported_event_schemas": sorted_values(&core.required_schemas),
     });
     if validate_server_claims_against_matrix(&bad, matrix).is_ok() {
-        bail!("profile matrix accepted a server claim missing cx.events.submit");
+        bail!("profile matrix accepted a server claim missing ck.events.submit");
     }
 
     let unknown = json!({
@@ -402,12 +402,12 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
     }
 
     let failed_result = json!({
-        "supported_profiles": ["cx.profile.core_event_store.v1"],
+        "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": sorted_values(&core.required_operations),
         "supported_event_kinds": sorted_values(&core.required_event_kinds),
         "supported_event_schemas": sorted_values(&core.required_schemas),
         "conformance_results": {
-            "cx.profile.core_event_store.v1": {
+            "ck.profile.core_event_store.v1": {
                 "status": "failed",
                 "failed_suites": ["event_envelope_fixture"]
             }
@@ -419,15 +419,15 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
 
     let privacy = matrix
         .requirements
-        .get("cx.profile.privacy_security_vectors.v1")
+        .get("ck.profile.privacy_security_vectors.v1")
         .ok_or_else(|| anyhow!("privacy_security_vectors missing from profile matrix"))?;
     let failed_security_suite = json!({
-        "supported_profiles": ["cx.profile.privacy_security_vectors.v1"],
+        "supported_profiles": ["ck.profile.privacy_security_vectors.v1"],
         "supported_operations": sorted_values(&privacy.required_operations),
         "supported_event_kinds": sorted_values(&privacy.required_event_kinds),
         "supported_event_schemas": sorted_values(&privacy.required_schemas),
         "conformance_results": {
-            "cx.profile.privacy_security_vectors.v1": {
+            "ck.profile.privacy_security_vectors.v1": {
                 "status": "passed",
                 "suites": {
                     "security_negative_profile": "failed"

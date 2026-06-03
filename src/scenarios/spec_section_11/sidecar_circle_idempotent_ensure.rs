@@ -1,6 +1,6 @@
 //! §11.6 — sidecar Circle idempotent ensure.
 //!
-//! Calling `cx.agent.sidecar_thread.ensure` twice with the same
+//! Calling `ck.agent.sidecar_thread.ensure` twice with the same
 //! (controller, agent) pair MUST return the same `sidecar_circle_id`.
 //! The deterministic Circle key derivation is gated on the controller
 //! DID + agent_principal_id + an HKDF salt.
@@ -57,7 +57,7 @@ pub async fn sidecar_circle_idempotent_ensure_run() -> Result<()> {
         ));
     }
 
-    // TODO(P4-impl): drive POST /api/v1/agents/{id}/sidecar-thread/ensure
+    // TODO(P4-impl): drive POST /_cokret/self/agents/{id}/sidecar-thread/ensure
     // twice against a live soland; assert response.sidecar_circle_id is
     // byte-equal across calls and `created` is false on the second.
     Ok(())

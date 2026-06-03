@@ -34,7 +34,7 @@
 //!
 //! These match `spec/v1/proposals/0007-circle-primitive.md` §3.6 membership
 //! transition table. Each transition is also forced through a JSON wire
-//! round-trip on the canonical `cx.circle.member.state` payload to keep
+//! round-trip on the canonical `ck.circle.member.state` payload to keep
 //! the SDK wire shape stable.
 //!
 //! When `cokret-core` later grows a typed `CircleMemberState` enum, this
@@ -46,20 +46,20 @@ use cokret_core::{CircleId, Did, RealmId};
 use serde_json::json;
 
 /// Canonical Circle member state names per CXP-0007 §3.6. Mirrors the
-/// `cx.circle.member.state` payload `membership` field enum.
+/// `ck.circle.member.state` payload `membership` field enum.
 const STATES: &[&str] = &["invited", "active", "left", "banned"];
 
 /// `none` is a pseudo-state for an actor with no prior membership record.
 const NONE: &str = "none";
 
-/// `cx.circle.member.state` payload `join_rule` enum values that affect
+/// `ck.circle.member.state` payload `join_rule` enum values that affect
 /// what transitions are legal. The state machine only differs on
 /// `join_rule=open`.
 const JOIN_RULE_OPEN: &str = "open";
 const JOIN_RULE_INVITE: &str = "invite";
 
 /// Reducer-pure validator: returns Ok(()) iff `from → to` is a legal
-/// `cx.circle.member.state` transition under the given parent `join_rule`.
+/// `ck.circle.member.state` transition under the given parent `join_rule`.
 ///
 /// `from = "none"` denotes an actor who has never had a Circle membership
 /// row. Returns `Err(reason)` for illegal edges, where `reason` matches
@@ -152,7 +152,7 @@ fn actor() -> Result<Did> {
         .map_err(|e| anyhow!("actor did: {e}"))
 }
 
-/// Build a `cx.circle.member.state` payload for the given `(actor, state)`
+/// Build a `ck.circle.member.state` payload for the given `(actor, state)`
 /// pair and JSON round-trip it through `serde_json::Value`. Returns the
 /// re-parsed payload; the membership string MUST survive serde unchanged.
 fn round_trip_member_payload(state: &str) -> Result<()> {

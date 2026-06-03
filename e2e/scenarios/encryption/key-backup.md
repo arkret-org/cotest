@@ -13,7 +13,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - `identity/key-management.md` §7.2 — Envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
 - `identity/key-management.md` §7.3 — Restore flow(passphrase, commitment 校验, 解密)
 - `identity/key-management.md` §7.4 — Ownership proof / decryption proof
-- `identity/key-management.md` §12 — Backup API(`PUT/GET/DELETE /api/v1/keys/backups`)
+- `identity/key-management.md` §12 — Backup API(`PUT/GET/DELETE /_cokret/self/keys/backups`)
 - `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + API
 - `crypto-media/encryption-and-audit.md` §2.4 — MLS epoch backfill
 - `crypto-media/encryption-and-audit.md` §6 — Offline support, epoch key retention
@@ -47,13 +47,13 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
    - Argon2id(salt=random 16 bytes, memoryCost=64MB, iterations=3)→ `derived_key`
    - XChaCha20-Poly1305 加密 `{ self_signing_key, user_signing_key, mls_history_backup_key }`
    - `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
-4. `PUT /api/v1/keys/backups/<backup_id>` body 含:
+4. `PUT /_cokret/self/keys/backups/<backup_id>` body 含:
    - `backup_class: "secret_storage"`
    - `kdf_params: { algorithm: "argon2id", salt, memory_cost, iterations }`
    - `ciphertext` (base64)
    - `ciphertext_digest: sha256:...`
    - `key_commitment: sha256:...`
-5. 断言:`GET /api/v1/keys/backups` 列出该 backup,**metadata only**(no plaintext, no passphrase)
+5. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no passphrase)
 6. UI 显示 "Backup active. Save your passphrase somewhere safe."
 
 ### Phase B — bob 在 alice device-A 离线时给 alice 发消息
@@ -77,14 +77,14 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
     - 计算 commitment,与 backup 的 `key_commitment` 比对
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
     - commitment match → 用 derived_key 解 ciphertext → 拿回 SSK / USK / mls_history_backup_key
-15. 客户端签 `cx.device.authorize` (包含 recovery proof,引用 USK 或 control signature)
+15. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 USK 或 control signature)
 16. 提交到 soland;recovery policy 校验通过 → device-B 接入
 17. 断言:device-B `/settings/devices` 显示 alice 的 device 列表(可能含 device-A,看是否 revoke;此时未 revoke,所以 A 还在)
 
 ### Phase E — Device-B 从 MLS commit chain 重建 epoch keys + 解 bob 的消息
 
 18. device-B 拉 `S_e2ee` 的 sync:
-    - 自 epoch 0 起回放 `cx.mls.commit` 事件
+    - 自 epoch 0 起回放 `ck.mls.commit` 事件
     - 用 backup 提供的 `mls_history_backup_key` 派生历史 epoch secrets(spec §2.4 backfill)
     - 当前 epoch 应当 = device-A 离线时的 N(因为没有 commit advance)
 19. device-B 用 epoch N application key 解 `M1`,`M2`
@@ -121,14 +121,14 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - **E13.4 mixed-domain backup**:`mixed_secret_storage=true` 只在 `personal_node` profile 接受;`high_assurance` 部署 MUST 拒(§7.1)
 - **E13.5 epoch gap**:bob 在 device-A 离线期间发了 commits + 消息,backup 的 `mls_history_backup_key` 不含某些 epoch → 那些消息标 `decryption_pending`(spec §2.4)
 - **E13.6 backup 在 recovery policy 变更后**:alice 在 Phase A 之后改了 recovery policy → device-B 恢复时,reducer 校验新 policy,若新 policy 拒绝 → 恢复失败
-- **E13.7 删除 backup**:`DELETE /api/v1/keys/backups/<id>` 应需要 ownership proof(SSK 签名),无法仅凭 session token 删
+- **E13.7 删除 backup**:`DELETE /_cokret/self/keys/backups/<id>` 应需要 ownership proof(SSK 签名),无法仅凭 session token 删
 
 ## Implementation notes
 
 - **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list/get、DELETE ownership proof,以及 yougen Argon2id + XChaCha20-Poly1305 round trip、wrong passphrase local reject、late-recovery banner helper。
 - **剩余缺口**:本 scenario 的完整"丢设备 → 新设备授权 → MLS commit chain backfill → 历史 E2EE 消息可解"仍未贯通;`key-backup.spec.ts` 保留这些全链路 fixme。
 - **2026-05-30 A1 live**:`key-backup.spec.ts` 覆盖同账号两个 fresh browser profile 的验收路径:device-A 创建 `mls_rfc9420` realm 并写历史 timeline 卡片、Recovery vault 上传 `mls_account_secret` backup、device-B 空 profile 登录后出现 `MlsUnlockPrompt`、输入口令恢复、device-B 写入后 device-A 可见,同时收集 `keys/backups` PUT 和 subscribe/describe/events/MLS runtime 错误信号。
-- **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `cx.mls.commit` payload `schema_violation`,另一端能看到详情更新。
+- **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `ck.mls.commit` payload `schema_violation`,另一端能看到详情更新。
 - **harness**:Argon2id KDF 计算耗时 ~3s(intentional);测试要给足 timeout
 
 ## 风险

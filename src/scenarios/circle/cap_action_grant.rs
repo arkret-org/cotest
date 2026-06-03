@@ -88,13 +88,13 @@ pub async fn cap_action_grant_run() -> Result<()> {
     }
     // Spot-pin a couple of specific names so a typo in any constant fails
     // here (instead of silently shipping a non-existent action to coauth).
-    if CAP_ACTION_CIRCLE_MEMBER_ADD_OTHERS != "cx.circle.member.add.others" {
+    if CAP_ACTION_CIRCLE_MEMBER_ADD_OTHERS != "ck.circle.member.add.others" {
         return Err(anyhow!(
             "CAP_ACTION_CIRCLE_MEMBER_ADD_OTHERS spelling drifted: {}",
             CAP_ACTION_CIRCLE_MEMBER_ADD_OTHERS
         ));
     }
-    if CAP_ACTION_CIRCLE_AUDIT != "cx.circle.audit" {
+    if CAP_ACTION_CIRCLE_AUDIT != "ck.circle.audit" {
         return Err(anyhow!(
             "CAP_ACTION_CIRCLE_AUDIT spelling drifted: {}",
             CAP_ACTION_CIRCLE_AUDIT

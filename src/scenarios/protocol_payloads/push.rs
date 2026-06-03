@@ -1,4 +1,4 @@
-//! Phase 9 — `/api/v1/push/{register-device,notify}`.
+//! Phase 9 — `/_cokret/edge/push/{register-device,notify}`.
 //!
 //! Registers Alice's device with the push gateway, then dispatches a blind
 //! wakeup to two devices to confirm the missing one is reported back in
@@ -20,7 +20,7 @@ async fn register_device(server: &CokretServer, token: &str) -> Result<()> {
     let push = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/push/register-device"))
+            .post(server.url("/_cokret/edge/push/register-device"))
             .bearer_auth(token)
             .json(&json!({
                 "device_id": "dev_alice",
@@ -40,7 +40,7 @@ async fn notify_blind_wakeup(server: &CokretServer) -> Result<()> {
     let notify = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/push/notify"))
+            .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
                 "notification": {
                     "type": "blind_wakeup",

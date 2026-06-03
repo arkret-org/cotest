@@ -106,7 +106,7 @@ test.describe("applet bridge", () => {
       );
 
       const revoke = await request.post(
-        `${solandBaseUrl()}/api/v1/extensions/applets/${encodeURIComponent(
+        `${solandBaseUrl()}/_cokret/edge/applet/${encodeURIComponent(
           registration.applet_id,
         )}/revoke`,
         { headers: authHeaders(aliceToken), data: {} },
@@ -186,7 +186,7 @@ test.describe("applet bridge", () => {
     await addSpaceMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
 
     const revoke = await request.post(
-      `${solandBaseUrl()}/api/v1/extensions/applets/${encodeURIComponent(
+      `${solandBaseUrl()}/_cokret/edge/applet/${encodeURIComponent(
         registration.applet_id,
       )}/revoke`,
       { headers: authHeaders(aliceToken), data: {} },
@@ -194,7 +194,7 @@ test.describe("applet bridge", () => {
     expect(revoke.status()).toBe(200);
 
     const botWrite = await request.post(
-      `${solandBaseUrl()}/api/v1/extensions/applets/${encodeURIComponent(
+      `${solandBaseUrl()}/_cokret/edge/applet/${encodeURIComponent(
         registration.applet_id,
       )}/bot/messages`,
       {
@@ -277,7 +277,7 @@ async function rawRegisterApplet(
   signed: SignedManifest,
   idempotencyKey: string,
 ) {
-  return await request.post(`${solandBaseUrl()}/api/v1/extensions/applets/register`, {
+  return await request.post(`${solandBaseUrl()}/_cokret/edge/applet/register`, {
     headers: {
       ...authHeaders(token),
       "Idempotency-Key": idempotencyKey,
@@ -296,7 +296,7 @@ async function didDocument(
   did: string,
 ): Promise<Record<string, unknown>> {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/identity/${encodeURIComponent(did)}/did-document`,
+    `${solandBaseUrl()}/_cokret/root/identity/${encodeURIComponent(did)}/did-document`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);

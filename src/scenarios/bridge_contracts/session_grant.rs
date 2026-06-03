@@ -21,7 +21,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     expect_json(
         server
             .http()
-            .post(server.url("/api/v1/account/register"))
+            .post(server.url("/_cokret/self/account/register"))
             .json(&json!({
                 "did": principal_id,
                 "handle": "@alice-session-grant",
@@ -35,7 +35,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let exchange = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/auth/session-grant/exchange"))
+            .post(server.url("/_cokret/gate/auth/session-grant/exchange"))
             .json(&json!({
                 "grant_jwt": "coauth.session.jwt",
                 "principal_id": principal_id,
@@ -61,7 +61,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let authenticated = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/account/me"))
+            .get(server.url("/_cokret/self/account/me"))
             .bearer_auth(exchange["access_token"].as_str().unwrap()),
         StatusCode::OK,
     )
@@ -71,7 +71,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let push = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/push/register-device"))
+            .post(server.url("/_cokret/edge/push/register-device"))
             .header("X-Cokret-Session-Grant", "coauth.session.jwt")
             .header("X-Cokret-Session-Grant-Challenge", "soland-push-challenge")
             .header(
@@ -79,10 +79,10 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
                 "client.session-key.push-proof.jwt",
             )
             .json(&json!({
-                "operation_id": "cx.push.register_device",
+                "operation_id": "ck.push.register_device",
                 "principal_id": principal_id,
                 "device_id": device_id,
-                "push_gateway": "https://floria.example/api/v1/push/notify",
+                "push_gateway": "https://floria.example/_cokret/edge/push/notify",
                 "push_key": "webpush:opaque-token",
                 "platform": "web",
                 "request_id": "ck:request:push-session-grant",

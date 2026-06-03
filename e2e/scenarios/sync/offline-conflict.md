@@ -49,8 +49,8 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 12. alice 和 bob 都在网,但模拟一次极短"双方都基于相同 frontier 写 same cell"的情形:
     - 测试 harness 用 `route.fulfill` 拦掉双方 sync 请求 5s
-    - alice 提交 `cx.space.update { title: "renamed by alice" }`
-    - bob 提交 `cx.space.update { title: "renamed by bob" }`
+    - alice 提交 `ck.space.update { title: "renamed by alice" }`
+    - bob 提交 `ck.space.update { title: "renamed by bob" }`
     - 取消拦截 → 两条 move 都到 soland,但因为都基于旧 frontier,reducer 检测到 cas-register 冲突
 13. soland 把该 cell 标 `bottom_expose`,生成 `bottom_cells_banner` 数据
 14. 断言:bob `/space/<S>/admin` 进入 → `bottom-cells-banner` 可见;`bottom-cell-row` 显示该 cell 的两个 head
@@ -65,7 +65,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ### Phase F — Backfill via pull
 
-20. (sub-test)假设 bob 离线很久,本地缺很多 events;重连后先用 `GET /api/v1/account/subscribe?after=<old>&catchup=true`,缺口再用 `GET /api/v1/events?after=<old>`
+20. (sub-test)假设 bob 离线很久,本地缺很多 events;重连后先用 `GET /_cokret/self/account/subscribe?after=<old>&catchup=true`,缺口再用 `GET /_cokret/self/events?after=<old>`
 21. 断言:bob timeline 自动补齐离线期间的所有消息
 
 ## Edge cases
@@ -77,7 +77,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ## Implementation notes
 
-- **soland 已落地**:`cx.realm.update` 同 anchor basis 的 cas-register 冲突进入 `bottom=expose`;`cx.conflict.repair` 验证 `conflict_heads`、`state_witness` / recovery capability shape 后清理 bottom;account sync 输出 `anchor_view.bottom_cells`。
+- **soland 已落地**:`ck.realm.update` 同 anchor basis 的 cas-register 冲突进入 `bottom=expose`;`cx.conflict.repair` 验证 `conflict_heads`、`state_witness` / recovery capability shape 后清理 bottom;account sync 输出 `anchor_view.bottom_cells`。
 - **yougen 已落地**:sync 解析 `anchor_view.bottom_cells`;admin repair UI 为 realm organization conflict 填充 safer-side winner;repair Move 使用当前 session actor 提交。
 - **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 的 `bottom_expose` 与 `prefer-safer-side-button` repair 流程已从 fixme 升为 live。
 - **剩余边界**:outbox capacity、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。

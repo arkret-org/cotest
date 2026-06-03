@@ -18,22 +18,22 @@
 //     Returns { did, public_jwk }. Soland binds applet_registry_did to this.
 //   GET  /jwks
 //     Registry public key (for verifying registry-signed envelopes).
-//   POST /api/v1/applets/register  { manifest, manifest_signature }
+//   POST /_cokret/edge/applet/register  { manifest, manifest_signature }
 //     Accepts a signed applet manifest. Signature is NOT cryptographically
 //     verified here (mock shim) — any non-empty value is accepted. Mints a
 //     deterministic bot_actor_did and returns
 //     { applet_id, bot_actor_did, namespace, status: "registered" }.
-//   GET  /api/v1/applets/:applet_id
+//   GET  /_cokret/edge/applet/:applet_id
 //     Returns full applet record (manifest, bot_actor_did, capabilities, …).
-//   GET  /api/v1/applets
+//   GET  /_cokret/edge/applet
 //     Lists all registered applets.
-//   POST /api/v1/applets/:applet_id/ghost-actor  { external_id, display_name? }
+//   POST /_cokret/edge/applet/:applet_id/ghost-actor  { external_id, display_name? }
 //     Mints a ghost_actor_did for an external user impersonated through the
 //     applet. Accountability is set to { bot_actor_did, registry_did } so
 //     audit trails can attribute ghost activity back to the applet + registry.
-//   GET  /api/v1/applets/:applet_id/ghost-actors
+//   GET  /_cokret/edge/applet/:applet_id/ghost-actors
 //     Lists ghost actors minted under an applet.
-//   POST /api/v1/applets/:applet_id/revoke
+//   POST /_cokret/edge/applet/:applet_id/revoke
 //     Marks the applet status as "revoked". Subsequent ghost-actor mints
 //     are rejected. Existing ghost actors are retained for audit history.
 //   POST /scenarios  { namespace_conflict?, force_revoke? }
@@ -193,7 +193,7 @@ function signedManifest(body) {
 }
 
 function matchAppletPath(pathname) {
-  // /api/v1/applets/:applet_id[/(ghost-actor|ghost-actors|revoke)]
+  // /_cokret/edge/applet/:applet_id[/(ghost-actor|ghost-actors|revoke)]
   const m = pathname.match(
     /^\/api\/v1\/applets\/([^/]+)(?:\/(ghost-actor|ghost-actors|revoke))?$/,
   );
@@ -273,7 +273,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/applets/register" && req.method === "POST") {
+  if (url.pathname === "/_cokret/edge/applet/register" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.manifest || !body.manifest_signature) {
       res.statusCode = 400;
@@ -327,7 +327,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/applets" && req.method === "GET") {
+  if (url.pathname === "/_cokret/edge/applet" && req.method === "GET") {
     res.end(JSON.stringify({ applets: Array.from(applets.values()) }));
     return;
   }
@@ -445,7 +445,7 @@ const server = createServer(async (req, res) => {
       return;
     }
     const upstream = await fetch(
-      `${String(solandBase).replace(/\/$/, "")}/api/v1/extensions/applets/${encodeURIComponent(
+      `${String(solandBase).replace(/\/$/, "")}/_cokret/edge/applet/${encodeURIComponent(
         body.applet_id,
       )}/ghosts`,
       {

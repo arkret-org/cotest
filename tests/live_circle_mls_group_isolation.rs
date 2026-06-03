@@ -117,14 +117,14 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST /api/v1/realms                       (cx.realm.create) →
+    //         POST /_cokret/self/realms                       (ck.realm.create) →
     //              response carries `default_mls_group_ref`
-    //         POST /api/v1/realms/<rid>/circles         (cx.circle.create) →
+    //         POST /_cokret/self/realms/<rid>/circles         (ck.circle.create) →
     //              response carries Circle.mls_group_ref (distinct id)
-    //         POST /api/v1/circles/<cid>/members        membership commit
+    //         POST /_cokret/self/circles/<cid>/members        membership commit
     //              advances the Circle group's epoch (verify via GET on
     //              the Circle projection)
-    //         GET  /api/v1/realms/<rid>                 → realm-default
+    //         GET  /_cokret/self/realms/<rid>                 → realm-default
     //              group epoch UNCHANGED across the Circle commit
     //
     //       Cryptographic isolation: drive two `SdkClient` channels (one
@@ -134,9 +134,9 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     //       (NOT a decoding error — soland must withhold the key, not
     //       hand it out + fail decode).
     let _ = admin
-        .post("/api/v1/realms")
+        .post("/_cokret/self/realms")
         .json(&json!({
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "MLS Iso Realm",
             "encryption_profile": "mls_rfc9420",
@@ -148,8 +148,8 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     bail!(
         "TODO(P5/CXP-0007): live-stack wiring for Circle / Realm-default MLS \
          isolation is scaffolded; finalise once soland's CXP-0007 surface returns \
-         (a) `default_mls_group_ref` on `cx.realm.create` responses and \
-         (b) `mls_group_ref` on `cx.circle.create` / Circle projection. \
+         (a) `default_mls_group_ref` on `ck.realm.create` responses and \
+         (b) `mls_group_ref` on `ck.circle.create` / Circle projection. \
          Expected assertions: \
          (a) Circle.mls_group_ref != Realm.default_mls_group_ref, \
          (b) Circle member-add advances Circle epoch by exactly 1 + leaves \

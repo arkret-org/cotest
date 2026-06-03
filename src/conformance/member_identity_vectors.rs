@@ -1,4 +1,4 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — `cx.member.identity.update`
+//! R3.2 spec-sync (cokret-spec @ b56cab1) — `ck.member.identity.update`
 //! conformance vectors (VECT-MID-1..7) + VECT-COT-8.
 //!
 //! Source artefacts:
@@ -8,7 +8,7 @@
 //!
 //! R3.2 wire-breaking changes pinned here:
 //!   * `MemberIdentity` no longer carries `primary_handle` / `handles[]`; handle lifecycle is
-//!     governed solely by `cx.schema.handle_claim.v1`. A payload that re-introduces those fields
+//!     governed solely by `ck.schema.handle_claim.v1`. A payload that re-introduces those fields
 //!     MUST schema-reject (VECT-COT-8 — reason `member_identity_handle_field_forbidden`).
 //!   * Payload field `identity_state_digest` is renamed to `identity_payload_digest` (carrier cache
 //!     key, [`IdentityPayloadCarrier::carrier_sha256`]).
@@ -145,7 +145,7 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
 
 // ── VECT-MID-1 ──────────────────────────────────────────────────────────────
 
-/// VECT-MID-1 — first `cx.member.identity.update` event for an actor in a
+/// VECT-MID-1 — first `ck.member.identity.update` event for an actor in a
 /// Realm: empty `replaces[]`, plaintext `identity_payload`,
 /// `identity_payload_digest` matches the canonical digest of the payload
 /// carrier.
@@ -661,7 +661,7 @@ pub fn run_member_identity_vector_suite() -> Result<()> {
 }
 
 /// Helper for live-integration tests — returns a Value MemberIdentity
-/// fixture suitable for serialising into a soland `cx.member.identity.update`
+/// fixture suitable for serialising into a soland `ck.member.identity.update`
 /// event payload.
 pub fn sample_member_identity_value(display_name: &str) -> Result<Value> {
     let identity = build_member_identity(display_name, "AAAA")?;

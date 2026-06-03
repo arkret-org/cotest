@@ -13,16 +13,15 @@
 //!
 //! ## DID method segment
 //! * **`LegacyDidMethodSegment`** — DID strings whose method-name segment (between `did:` and the
-//!   next `:`) contains any of `.`, `-`, `_`. Spec tightened the regex to
-//!   `^did:[a-z0-9]+:[^\s]+$`.
+//!   next `:`) contains any of `.`, `-`, `_`. Spec tightened the regex to `^did:[a-z0-9]+:[^\s]+$`.
 //!
 //! ## events.subscribe payload typing
-//! * **`EventsSubscribeStringPayload`** — the payload of `cx.events.subscribe` is now the typed
+//! * **`EventsSubscribeStringPayload`** — the payload of `ck.events.subscribe` is now the typed
 //!   `EventsSubscribeFrame` object; any literal where the payload is declared as / typed as
 //!   `string` (or `String` / `&str`) is a violation.
 //!
 //! ## cross_signing.publish CAS
-//! * **`CrossSigningPublishMissingExpectedPreviousGeneration`** — a `cx.cross_signing.publish`
+//! * **`CrossSigningPublishMissingExpectedPreviousGeneration`** — a `ck.cross_signing.publish`
 //!   payload constructed inline without a visible `expected_previous_generation` field.
 //!
 //! ## audit policy digest arity
@@ -56,20 +55,20 @@ use serde::Serialize;
 pub const DID_METHOD_SEGMENT_REGEX: &str = r"^did:[a-z0-9]+:[^\s]+$";
 
 /// Twelve event kinds that are *ephemeral only* — they MUST NOT be
-/// submitted via `cx.events.submit` as durable events.
+/// submitted via `ck.events.submit` as durable events.
 pub const EPHEMERAL_ONLY_KINDS: &[&str] = &[
-    "cx.call.signal",
+    "ck.call.signal",
     "cx.presence",
     "cx.typing",
-    "cx.receipt.read",
-    "cx.key.verification.start",
-    "cx.key.verification.ready",
-    "cx.key.verification.accept",
-    "cx.key.verification.key",
-    "cx.key.verification.mac",
-    "cx.key.verification.done",
-    "cx.key.verification.cancel",
-    "cx.key.verification.request",
+    "ck.receipt.read",
+    "ck.key.verification.start",
+    "ck.key.verification.ready",
+    "ck.key.verification.accept",
+    "ck.key.verification.key",
+    "ck.key.verification.mac",
+    "ck.key.verification.done",
+    "ck.key.verification.cancel",
+    "ck.key.verification.request",
 ];
 
 /// Object-only kinds that MUST NOT appear as durable `Event.kind`.
@@ -293,7 +292,7 @@ fn scan_events_subscribe_string_payload(
     out: &mut Vec<ProtocolDriftFinding>,
 ) {
     // DRIFT-ALLOW: this is the rule's own search token, not a payload declaration.
-    let token = "cx.events.subscribe";
+    let token = "ck.events.subscribe";
     let Some(col) = line.find(token) else { return };
     let lower = line.to_ascii_lowercase();
     let migration_phrase = lower.contains("no longer a string")
@@ -357,7 +356,7 @@ fn scan_cross_signing_publish_payload(
     out: &mut Vec<ProtocolDriftFinding>,
 ) {
     // DRIFT-ALLOW: this is the rule's own search token, not a payload construction.
-    let token = "cx.cross_signing.publish";
+    let token = "ck.cross_signing.publish";
     let Some(col) = line.find(token) else { return };
     let lower = line.to_ascii_lowercase();
     let mentions_payload_shape = lower.contains("payload")
@@ -510,9 +509,7 @@ fn scan_object_only_kind(
                     column: col + 1,
                     rule: ProtocolDriftRule::ObjectOnlyKindAsEventKind,
                     matched_literal: (*kind).to_string(),
-                    message: format!(
-                        "`{kind}` is object-only; MUST NOT appear as Event.kind"
-                    ),
+                    message: format!("`{kind}` is object-only; MUST NOT appear as Event.kind"),
                 });
             }
         }
@@ -531,7 +528,7 @@ fn scan_ephemeral_kind(
         if let Some(col) = find_literal_token(line, kind) {
             let lower = line.to_ascii_lowercase();
             let looks_durable_submit = lower.contains("events.submit")
-                || lower.contains("cx.events.submit")
+                || lower.contains("ck.events.submit")
                 || lower.contains("event.kind")
                 || (lower.contains("\"kind\":") && !lower.contains("ephemeral"));
             if looks_durable_submit {
@@ -543,9 +540,9 @@ fn scan_ephemeral_kind(
                     matched_literal: (*kind).to_string(),
                     message: format!(
                         "`{kind}` is `wire_scope=ephemeral_event`; MUST NOT be submitted \
-                         via `cx.events.submit` as a durable Event. Use \
-                         `cx.schema.ephemeral_envelope.v1` (broadcast) or \
-                         `cx.schema.device_message.v1` (point-to-point)."
+                         via `ck.events.submit` as a durable Event. Use \
+                         `ck.schema.ephemeral_envelope.v1` (broadcast) or \
+                         `ck.schema.device_message.v1` (point-to-point)."
                     ),
                 });
             }
@@ -743,7 +740,7 @@ mod tests {
     fn flags_events_subscribe_with_string_type() {
         // DRIFT-ALLOW: scanner self-test asserts the rule fires on a pre-tightening stringly
         // subscribe.
-        let f = scan("fn handle_cx_events_subscribe(payload: String) {} // cx.events.subscribe");
+        let f = scan("fn handle_cx_events_subscribe(payload: String) {} // ck.events.subscribe");
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::EventsSubscribeStringPayload)
@@ -762,23 +759,21 @@ mod tests {
     #[test]
     fn flags_cross_signing_publish_payload_without_expected_previous() {
         // DRIFT-ALLOW: scanner self-test asserts the rule fires on a pre-tightening CAS payload.
-        let f = scan(r#"submit("cx.cross_signing.publish", payload: { principal_id: pid })"#);
+        let f = scan(r#"submit("ck.cross_signing.publish", payload: { principal_id: pid })"#);
         assert!(
-            f.iter()
-                .any(|r| r.rule
-                    == ProtocolDriftRule::CrossSigningPublishMissingExpectedPreviousGeneration)
+            f.iter().any(|r| r.rule
+                == ProtocolDriftRule::CrossSigningPublishMissingExpectedPreviousGeneration)
         );
     }
 
     #[test]
     fn does_not_flag_cross_signing_publish_with_expected_previous() {
         let f = scan(
-            r#"submit("cx.cross_signing.publish", payload: { principal_id: pid, expected_previous_generation: 1 })"#,
+            r#"submit("ck.cross_signing.publish", payload: { principal_id: pid, expected_previous_generation: 1 })"#,
         );
         assert!(
-            !f.iter()
-                .any(|r| r.rule
-                    == ProtocolDriftRule::CrossSigningPublishMissingExpectedPreviousGeneration)
+            !f.iter().any(|r| r.rule
+                == ProtocolDriftRule::CrossSigningPublishMissingExpectedPreviousGeneration)
         );
     }
 
@@ -827,7 +822,7 @@ mod tests {
 
     #[test]
     fn flags_ephemeral_kind_in_events_submit() {
-        let f = scan(r#"client.cx.events.submit(&[Event{ kind: "cx.presence", ... }]);"#);
+        let f = scan(r#"client.ck.events.submit(&[Event{ kind: "cx.presence", ... }]);"#);
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::EphemeralKindAsDurableEvent)

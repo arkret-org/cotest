@@ -338,7 +338,7 @@ async function flowTitlesForBoard(
   boardId: string,
 ): Promise<string[]> {
   const resp = await request.get(
-    `${solandBaseUrl()}/api/v1/projection/flows?realm_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(spaceId)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (resp.status() !== 200) {

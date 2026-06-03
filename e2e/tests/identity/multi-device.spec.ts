@@ -38,10 +38,10 @@ test.describe("multi-device pairing + revocation", () => {
       await device1.gotoHome();
       await device2.gotoHome();
       // Both sessions independently read /account/me successfully.
-      const me1 = await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+      const me1 = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
         headers: { authorization: `Bearer ${token1}` },
       });
-      const me2 = await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+      const me2 = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
         headers: { authorization: `Bearer ${token2}` },
       });
       expect(me1.ok()).toBeTruthy();
@@ -59,10 +59,10 @@ test.describe("multi-device pairing + revocation", () => {
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
-    "Device 1 scans Device 2's QR; signs cx.device.authorize with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
+    "Device 1 scans Device 2's QR; signs ck.device.authorize with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
     async () => {
       // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding
-      // soland gap: cx.device.authorize cross_signing_binding payload; device list materialization.
+      // soland gap: ck.device.authorize cross_signing_binding payload; device list materialization.
       // yougen gap: /settings/devices "Add device" + QR-scan flow.
     },
   );
@@ -71,7 +71,7 @@ test.describe("multi-device pairing + revocation", () => {
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
-    "both devices show up in alice's device list via cx.device.list_update projection within 30s of pairing",
+    "both devices show up in alice's device list via ck.device.list_update projection within 30s of pairing",
     async () => {
       // spec: device-lifecycle.md §6
     },
@@ -91,7 +91,7 @@ test.describe("multi-device pairing + revocation", () => {
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
-    "Device 1 revokes Device 2 via cx.device.revoke; Device 2's subsequent /api/v1/events POST returns device_revoked",
+    "Device 1 revokes Device 2 via ck.device.revoke; Device 2's subsequent /_cokret/self/events POST returns device_revoked",
     async () => {
       // spec: device-lifecycle.md §2.2 + key-management.md §5.2
     },
@@ -119,7 +119,7 @@ test.describe("multi-device pairing + revocation", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const selfRevoke = await request.post(
-      `${solandBaseUrl()}/api/v1/devices/${encodeURIComponent(alice.deviceId)}/revoke`,
+      `${solandBaseUrl()}/_cokret/self/devices/${encodeURIComponent(alice.deviceId)}/revoke`,
       { headers: { authorization: `Bearer ${aliceToken}` }, data: {} },
     );
     expect(selfRevoke.status()).toBe(400);

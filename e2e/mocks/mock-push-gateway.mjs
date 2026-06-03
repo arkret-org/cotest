@@ -11,10 +11,10 @@
 //     gateway accepted a payload without re-revealing E2EE content.
 //
 // Endpoints:
-//   POST /api/v1/push/register
+//   POST /_cokret/edge/push/register
 //     body = { pusher_id, app_id, push_key, push_token, device_did, kind, dnd? }
 //     Register a pusher. `kind` ∈ {"http","apns","fcm"}.
-//   POST /api/v1/push/notify
+//   POST /_cokret/edge/push/notify
 //     body = { pusher_id, payload, blind_wake?, priority?, event_id? }
 //     Honours DnD: if the gateway's current time falls inside either the
 //     pusher's DnD window or the global quiet_hours window, the call logs
@@ -22,7 +22,7 @@
 //     in the per-pusher inbox and a signed delivery receipt is returned.
 //     `blind_wake=true` requires the payload to look desensitized (no
 //     plaintext-shaped identifiers — enforced as a best-effort lint).
-//   GET  /api/v1/push/inbox?pusher_id=<id>
+//   GET  /_cokret/edge/push/inbox?pusher_id=<id>
 //     List delivered payloads for that pusher.
 //   POST /scenarios
 //     body = { quiet_hours?: {start, end, tz}, force_failure?: bool }
@@ -252,7 +252,7 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  if (url.pathname === "/api/v1/push/register" && req.method === "POST") {
+  if (url.pathname === "/_cokret/edge/push/register" && req.method === "POST") {
     const body = await readJson(req);
     if (
       !body ||
@@ -300,7 +300,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/push/notify" && req.method === "POST") {
+  if (url.pathname === "/_cokret/edge/push/notify" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.pusher_id || body.payload === undefined) {
       res.statusCode = 400;
@@ -398,7 +398,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/push/inbox" && req.method === "GET") {
+  if (url.pathname === "/_cokret/edge/push/inbox" && req.method === "GET") {
     const pusher_id = url.searchParams.get("pusher_id");
     if (!pusher_id) {
       res.statusCode = 400;

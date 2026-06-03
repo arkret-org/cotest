@@ -13,7 +13,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
     let space_id = alice.create_realm("Applet Surface Space").await?;
 
     let describe = expect_json(
-        server.http().get(server.url("/api/v1/server/describe")),
+        server.http().get(server.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -31,7 +31,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
 
     expect_api_error(
         alice
-            .post(&format!("/api/v1/spaces/{space_id}/applets"))
+            .post(&format!("/_cokret/self/spaces/{space_id}/applets"))
             .json(&json!({
                 "applet_id": "ck:applet:board",
                 "manifest": {"name": "Board"}
@@ -53,7 +53,7 @@ pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() ->
     let space_id = alice.create_realm("Agent Surface Space").await?;
 
     let describe = expect_json(
-        server.http().get(server.url("/api/v1/server/describe")),
+        server.http().get(server.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -71,7 +71,7 @@ pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() ->
 
     expect_api_error(
         alice
-            .post(&format!("/api/v1/spaces/{space_id}/agents"))
+            .post(&format!("/_cokret/self/spaces/{space_id}/agents"))
             .json(&json!({
                 "agent_id": "did:web:agent.example",
                 "display_name": "Planner"

@@ -8,12 +8,12 @@
 //!   2. Create a Realm and two Circles under it (`circle_alpha`, `circle_beta`). Both Circles share
 //!      the same Realm.
 //!   3. Register actor `X` and add X as a Realm member; also add X to both Circles
-//!      (`cx.circle.member.state → active`).
+//!      (`ck.circle.member.state → active`).
 //!   4. Admin issues `cx.realm.cx.member.state → left` for actor X. Assert: a) X's Realm membership
 //!      flips to `left` in soland's projection, b) X's membership in BOTH `circle_alpha` AND
 //!      `circle_beta` is auto-flipped to `left` (CXP-0007 strict-subset cascade: any Circle
 //!      membership is invalid when the actor leaves the parent Realm, so the reducer MUST emit
-//!      synthetic `cx.circle.member.state → left` events), c) each Circle's MLS group emits a
+//!      synthetic `ck.circle.member.state → left` events), c) each Circle's MLS group emits a
 //!      *remove proposal* + commit pair: verify the Circle's `mls_group_ref` epoch advanced (the
 //!      projection exposes the epoch number on `Circle.mls_group_ref` or via a sibling field once
 //!      P5 finalises), d) a sync request from an actor that IS still in the Circle no longer sees X
@@ -128,27 +128,27 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     );
 
     // ── 3. Drive the live wire: create Realm + 2 Circles, add X to both,
-    //       then `realm.cx.member.state → left` for X. The expected
+    //       then `realm.ck.member.state → left` for X. The expected
     //       endpoints are:
-    //         POST /api/v1/realms                            (cx.realm.create)
-    //         POST /api/v1/realms/<rid>/circles              (cx.circle.create) x2
-    //         POST /api/v1/realms/<rid>/members              for alice + X (active)
-    //         POST /api/v1/circles/<cid>/members             for X (active)  x2
-    //         POST /api/v1/realms/<rid>/members/<x>/state    body {"state":"left"}
+    //         POST /_cokret/self/realms                            (ck.realm.create)
+    //         POST /_cokret/self/realms/<rid>/circles              (ck.circle.create) x2
+    //         POST /_cokret/self/realms/<rid>/members              for alice + X (active)
+    //         POST /_cokret/self/circles/<cid>/members             for X (active)  x2
+    //         POST /_cokret/self/realms/<rid>/members/<x>/state    body {"state":"left"}
     //
     //       Assertions to wire in once the endpoints land:
-    //         a) GET /api/v1/realms/<rid>/members/<x>  → 200 with state=left
-    //         b) GET /api/v1/circles/<alpha>/members/<x> → state=left (cascade)
-    //         c) GET /api/v1/circles/<beta>/members/<x>  → state=left (cascade)
-    //         d) GET /api/v1/circles/<alpha>             → mls_group_ref epoch ↑
-    //         e) GET /api/v1/circles/<beta>              → mls_group_ref epoch ↑
+    //         a) GET /_cokret/self/realms/<rid>/members/<x>  → 200 with state=left
+    //         b) GET /_cokret/self/circles/<alpha>/members/<x> → state=left (cascade)
+    //         c) GET /_cokret/self/circles/<beta>/members/<x>  → state=left (cascade)
+    //         d) GET /_cokret/self/circles/<alpha>             → mls_group_ref epoch ↑
+    //         e) GET /_cokret/self/circles/<beta>              → mls_group_ref epoch ↑
     //         f) other-member sync stream contains the synthetic
-    //            `cx.circle.member.state` event with state=left for X
+    //            `ck.circle.member.state` event with state=left for X
     //            (eventually() with 10s timeout, 250ms cadence).
     let _ = admin
-        .post("/api/v1/realms")
+        .post("/_cokret/self/realms")
         .json(&json!({
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Member Cascade Realm",
         }))
@@ -159,10 +159,10 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     bail!(
         "TODO(P5/CXP-0007): live-stack wiring for Realm-member-left → Circle cascade \
          is scaffolded; finalise once soland exposes the `cx.realm.cx.member.state` \
-         and `cx.circle.member.state` projections + MLS epoch field. Expected \
+         and `ck.circle.member.state` projections + MLS epoch field. Expected \
          assertions: (a) X.realm.state=left, (b/c) X.circle.alpha.state=left + \
          X.circle.beta.state=left within 5s, (d/e) MLS epoch advanced exactly once \
-         per Circle, (f) other members see synthetic `cx.circle.member.state→left` \
+         per Circle, (f) other members see synthetic `ck.circle.member.state→left` \
          event on the sync stream."
     );
 }

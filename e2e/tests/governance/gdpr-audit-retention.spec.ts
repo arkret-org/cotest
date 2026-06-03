@@ -32,13 +32,13 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const exportProbe = await request.post(`${solandBaseUrl()}/api/v1/account/export`, {
+    const exportProbe = await request.post(`${solandBaseUrl()}/_cokret/self/account/export`, {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
     expect(exportProbe.status()).toBeLessThan(500);
 
-    const eraseProbe = await request.post(`${solandBaseUrl()}/api/v1/account/erase`, {
+    const eraseProbe = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
@@ -58,7 +58,7 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.post(`${solandBaseUrl()}/api/v1/account/export`, {
+    const exportResp = await request.post(`${solandBaseUrl()}/_cokret/self/account/export`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
@@ -85,18 +85,18 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const erase = await request.post(`${solandBaseUrl()}/api/v1/account/erase`, {
+    const erase = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
     expect(erase.status()).toBe(200);
     const eraseBody = await erase.json();
     expect(eraseBody.state).toBe("erased");
-    expect(eraseBody.erasure_receipt?.schema).toBe("cx.schema.erasure_receipt.v1");
+    expect(eraseBody.erasure_receipt?.schema).toBe("ck.schema.erasure_receipt.v1");
     expect(eraseBody.erasure_receipt?.outcome).toBe("completed");
 
     // Subsequent /account/me with the same bearer returns 401 account_erased.
-    const me = await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+    const me = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
       headers: { authorization: `Bearer ${aliceToken}` },
     });
     expect(me.status()).toBe(401);
@@ -116,17 +116,17 @@ test.describe("GDPR / audit / retention", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // bob and alice connect so bob's directory search can see alice pre-erase.
-    await request.post(`${solandBaseUrl()}/api/v1/contacts/request`, {
+    await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { target: alice.did },
     });
-    await request.post(`${solandBaseUrl()}/api/v1/contacts/respond`, {
+    await request.post(`${solandBaseUrl()}/_cokret/self/contacts/respond`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { requester: bob.did, action: "accept" },
     });
 
     // Pre-erasure: bob's directory search returns alice.
-    const before = await request.post(`${solandBaseUrl()}/api/v1/directory/search-actors`, {
+    const before = await request.post(`${solandBaseUrl()}/_cokret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { query: alice.handle },
     });
@@ -137,14 +137,14 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(true);
 
     // alice erases.
-    const erase = await request.post(`${solandBaseUrl()}/api/v1/account/erase`, {
+    const erase = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
     expect(erase.status()).toBe(200);
 
     // Post-erasure: bob's directory search no longer returns alice.
-    const after = await request.post(`${solandBaseUrl()}/api/v1/directory/search-actors`, {
+    const after = await request.post(`${solandBaseUrl()}/_cokret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { query: alice.handle },
     });
@@ -155,7 +155,7 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(false);
   });
 
-  test("audit log contains cx.audit.exported, cx.audit.erasure_initiated, cx.audit.erasure_receipt entries", async ({
+  test("audit log contains cx.audit.exported, cx.audit.erasure_initiated, ck.audit.erasure_receipt entries", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §3 + §8 — every export / erasure
@@ -165,12 +165,12 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.post(`${solandBaseUrl()}/api/v1/account/export`, {
+    const exportResp = await request.post(`${solandBaseUrl()}/_cokret/self/account/export`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
     expect(exportResp.status()).toBe(200);
-    const eraseResp = await request.post(`${solandBaseUrl()}/api/v1/account/erase`, {
+    const eraseResp = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
@@ -185,11 +185,11 @@ test.describe("GDPR / audit / retention", () => {
     const actions = auditEvents.map((e) => e.action);
     expect(actions).toContain("cx.audit.exported");
     expect(actions).toContain("cx.audit.erasure_initiated");
-    expect(actions).toContain("cx.audit.erasure_receipt");
-    const receiptEvent = auditEvents.find((e) => e.action === "cx.audit.erasure_receipt") as
+    expect(actions).toContain("ck.audit.erasure_receipt");
+    const receiptEvent = auditEvents.find((e) => e.action === "ck.audit.erasure_receipt") as
       | { payload?: { schema?: string; outcome?: string; proofs?: unknown[] } }
       | undefined;
-    expect(receiptEvent?.payload?.schema).toBe("cx.schema.erasure_receipt.v1");
+    expect(receiptEvent?.payload?.schema).toBe("ck.schema.erasure_receipt.v1");
     expect(receiptEvent?.payload?.outcome).toBe("completed");
     expect(Array.isArray(receiptEvent?.payload?.proofs)).toBe(true);
   });
@@ -260,7 +260,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(retainedJson).not.toContain(oldBody);
 
     const direct = await request.get(
-      `${solandBaseUrl()}/api/v1/events/${encodeURIComponent(sent.event_id)}`,
+      `${solandBaseUrl()}/_cokret/self/events/${encodeURIComponent(sent.event_id)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(direct.status()).toBe(200);
@@ -350,7 +350,7 @@ test.describe("GDPR / audit / retention", () => {
         .toContain(aliceBody);
 
       const remoteBefore = await request.get(
-        `${solandBaseUrl("beta")}/api/v1/federation/actors/${encodeURIComponent(alice.did)}/events`,
+        `${solandBaseUrl("beta")}/_cokret/peer/federation/actors/${encodeURIComponent(alice.did)}/events`,
         { headers: { authorization: `Bearer ${bobToken}` } },
       );
       expect(remoteBefore.status()).toBe(200);
@@ -358,19 +358,19 @@ test.describe("GDPR / audit / retention", () => {
       expect(beforeJson).toContain(alice.did);
       expect(beforeJson).toContain(aliceBody);
 
-      const erase = await request.post(`${solandBaseUrl("alpha")}/api/v1/account/erase`, {
+      const erase = await request.post(`${solandBaseUrl("alpha")}/_cokret/self/account/erase`, {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: {},
       });
       expect(erase.status()).toBe(200);
       const eraseBody = await erase.json();
-      expect(eraseBody.erasure_receipt?.schema).toBe("cx.schema.erasure_receipt.v1");
+      expect(eraseBody.erasure_receipt?.schema).toBe("ck.schema.erasure_receipt.v1");
 
       await expect
         .poll(
           async () => {
             const remoteAfter = await request.get(
-              `${solandBaseUrl("beta")}/api/v1/federation/actors/${encodeURIComponent(alice.did)}/events`,
+              `${solandBaseUrl("beta")}/_cokret/peer/federation/actors/${encodeURIComponent(alice.did)}/events`,
               { headers: { authorization: `Bearer ${bobToken}` } },
             );
             if (remoteAfter.status() !== 200) return "";

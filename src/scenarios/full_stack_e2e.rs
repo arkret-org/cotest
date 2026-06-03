@@ -12,7 +12,7 @@
 //!      the teabay binary; falls back to the schema-level validator otherwise.
 //!   4. **soland member_add candidate validation** — the `member_add_with_candidate` audience/now
 //!      invariants from T3.5.
-//!   5. **yougen mock client send_message** — SDK-only: builds a `cx.message.create` Event Envelope
+//!   5. **yougen mock client send_message** — SDK-only: builds a `ck.message.create` Event Envelope
 //!      payload (no Dioxus app required).
 //!   6. **floria notify gateway blind-wakeup payload** — verifies the sanitizer rejects all
 //!      forbidden fields per `push-notifications.md` §4.5.
@@ -129,7 +129,7 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
     let _alice =
         Did::new(ALICE_DID.to_owned()).context("starid MUST mint a parseable did:web for Alice")?;
-    // Build the rest of the candidate as if `cx.directory.resolve_handle`
+    // Build the rest of the candidate as if `ck.directory.resolve_handle`
     // returned it (T3.5 pattern).
     sample_candidate()
 }
@@ -191,7 +191,7 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
 
 // ── Step 3: teabay directory resolve_handle ────────────────────────────────
 
-/// teabay's `cx.directory.resolve_handle` (T3.4) filters candidates against
+/// teabay's `ck.directory.resolve_handle` (T3.4) filters candidates against
 /// the target Space's `allowed_recipient_services` and emits the same
 /// candidate shape we constructed above. At the SDK layer the validator is
 /// the same gate teabay re-runs on the wire — we exercise it with
@@ -222,7 +222,7 @@ fn step_3_teabay_resolve_handle(candidate: &MemberDeliveryBindingCandidate) -> R
 
 // ── Step 4: soland member_add candidate validation ─────────────────────────
 
-/// soland's `cx.member.state{join}` reducer (T3.3) re-runs the SDK validator
+/// soland's `ck.member.state{join}` reducer (T3.3) re-runs the SDK validator
 /// before persisting the new binding. We exercise the happy path here.
 fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
     let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned())
@@ -237,16 +237,16 @@ fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Resul
     Ok(())
 }
 
-// ── Step 5: yougen mock sends a `cx.message.create` envelope ───────────────
+// ── Step 5: yougen mock sends a `ck.message.create` envelope ───────────────
 
 /// We don't need to boot the Dioxus app to drive this — yougen's
-/// `OperationBuilder` emits a `cx.message.create` Event Envelope shape; we
+/// `OperationBuilder` emits a `ck.message.create` Event Envelope shape; we
 /// construct that shape directly and assert it is internally consistent
 /// (T3.5 pattern, mirroring the production envelope soland would accept).
 fn step_5_yougen_mock_send_message() -> Result<Value> {
     let envelope = json!({
         "event_id": STABLE_EVENT_ID,
-        "kind": "cx.message.create",
+        "kind": "ck.message.create",
         "actor_id": BOB_DID,
         "actor_seq": 1,
         "realm_id": TARGET_SPACE_ID,
@@ -550,7 +550,7 @@ async fn live_stack_probe() -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("T8.1 live probe: teabay handle missing after bootstrap"))?;
     let resolve_url = format!(
-        "{}/api/v1/directory/resolve-handle",
+        "{}/_cokret/find/directory/resolve-handle",
         teabay.base_url.trim_end_matches('/')
     );
     let client = reqwest::Client::builder()
@@ -567,7 +567,7 @@ async fn live_stack_probe() -> Result<()> {
         }))
         .send()
         .await
-        .context("POST /api/v1/directory/resolve-handle on live teabay")?;
+        .context("POST /_cokret/find/directory/resolve-handle on live teabay")?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
     if !(status.is_success() || status.as_u16() == 404) {
@@ -587,7 +587,7 @@ async fn live_stack_probe() -> Result<()> {
     {
         let placeholder_envelope = json!({
             "event_id": STABLE_EVENT_ID,
-            "kind": "cx.message.create",
+            "kind": "ck.message.create",
             "actor_id": ALICE_DID,
             "actor_seq": 1,
             "realm_id": TARGET_SPACE_ID,
@@ -607,7 +607,7 @@ async fn live_stack_probe() -> Result<()> {
             }]
         });
         let prod_resp = client
-            .post(prod_soland.url("/api/v1/events"))
+            .post(prod_soland.url("/_cokret/self/events"))
             .bearer_auth("cotest-bogus-token-not-a-real-session")
             .json(&placeholder_envelope)
             .send()

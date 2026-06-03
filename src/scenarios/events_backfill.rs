@@ -51,9 +51,9 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     for _ in 0..12 {
         let path = match cursor.as_deref() {
             Some(cursor) => {
-                format!("/api/v1/events?realms={space_id}&limit=1&after={cursor}")
+                format!("/_cokret/self/events?realms={space_id}&limit=1&after={cursor}")
             }
-            None => format!("/api/v1/events?realms={space_id}&limit=1"),
+            None => format!("/_cokret/self/events?realms={space_id}&limit=1"),
         };
         let page = expect_json(alice.get(&path), StatusCode::OK).await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());
@@ -65,7 +65,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let recovered_message_ids = collected
         .iter()
-        .filter(|event| event["event_kind"] == "cx.message.create")
+        .filter(|event| event["event_kind"] == "ck.message.create")
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();
     assert_eq!(

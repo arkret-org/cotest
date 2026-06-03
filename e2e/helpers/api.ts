@@ -1,12 +1,11 @@
 import { expect, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceDid, type SolandKey } from "./env";
+import { solandBaseUrl, type SolandKey } from "./env";
 import {
-  canonicalTimestamp,
+  createSpaceApi,
+  flowIdFromRealmId,
   sameRealmOrSpaceId,
-  singleDidAnchorer,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
 } from "./soland-api";
 import type { JointUser } from "./users";
 
@@ -51,73 +50,33 @@ export type ReadMarker = {
   updated_at: string;
 };
 
+// Thin wrapper over `createSpaceApi` (soland-api.ts) so there is a single
+// realm-creation flow. The only behavioural carry-over from the old standalone
+// implementation is the `default_discoverability: "public"` default (the
+// soland-api version defaults to "listed"); we preserve it by mapping
+// `discoverability` to "public" when the caller does not specify one. The
+// `ownerDid` assertion is also preserved — existing callers always pass it.
 export async function createSpaceViaApi(
   request: APIRequestContext,
   token: string,
   opts: ApiSpaceOpts,
 ): Promise<string> {
   expect(opts.ownerDid, "createSpaceViaApi requires opts.ownerDid for canonical events").toBeTruthy();
-  const realmId = typedId("realm");
-  const createdAt = canonicalTimestamp();
-  const plaintextVisibleServices =
-    opts.plaintextVisibleServices ??
-    Array.from(new Set([solandServiceDid(opts.server), "did:web:soland.local"]));
-  await submitSignedEventApi(
+  return await createSpaceApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid: opts.ownerDid!,
-      realmId,
-      kind: "cx.realm.create",
-      createdAt,
-      payload: {
-        // `plaintext_visible_services` lives on the realm object only — the
-        // realm_create_payload root is additionalProperties:false and rejects
-        // it (it stays inside `object` below, which is additionalProperties:true).
-        object: {
-          id: realmId,
-          schema: "cx.schema.realm.v1",
-          title: opts.title,
-          summary: opts.summary,
-          created_by: opts.ownerDid!,
-          trust_domain: "ck:trust_domain:soland.local",
-          schema_refs: ["cx.schema.realm.v1"],
-          default_discoverability: "public",
-          default_join_rule: "invite",
-          history_visibility: opts.historyVisibility ?? "shared",
-          encryption_profile: opts.encryptionProfile ?? "none",
-          plaintext_visible_services: plaintextVisibleServices,
-          security_class: "standard",
-          federation_policy: "restricted",
-          anchor_profile: "single_did",
-          digest_algorithm: "sha256",
-          anchorer: singleDidAnchorer(opts.ownerDid!),
-          created_at: createdAt,
-        },
-      },
-    }),
-    { server: opts.server, context: `create realm ${opts.title}` },
+    {
+      title: opts.title,
+      summary: opts.summary,
+      discoverability: opts.discoverability ?? "public",
+      history_visibility: opts.historyVisibility,
+      encryption_profile: opts.encryptionProfile,
+      plaintext_visible_services: opts.plaintextVisibleServices,
+      invitees: opts.invitees,
+      ownerDid: opts.ownerDid,
+    },
+    { server: opts.server },
   );
-
-  for (const invitee of opts.invitees ?? []) {
-    await submitSignedEventApi(
-      request,
-      token,
-      signedEventEnvelope({
-        actorDid: opts.ownerDid!,
-        realmId,
-        kind: "cx.member.state",
-        payload: {
-          actor_id: invitee,
-          member: invitee,
-          membership: "invite",
-        },
-      }),
-      { server: opts.server, context: `invite ${invitee}` },
-    );
-  }
-
-  return realmId;
 }
 
 export async function acceptInviteViaApi(
@@ -128,7 +87,7 @@ export async function acceptInviteViaApi(
   opts: { server?: SolandKey } = {},
 ) {
   const base = solandBaseUrl(opts.server);
-  const list = await request.get(`${base}/api/v1/authz/invites`, {
+  const list = await request.get(`${base}/_cokret/self/authz/invites`, {
     headers: authHeaders(token),
   });
   expect(list.status()).toBe(200);
@@ -146,7 +105,7 @@ export async function acceptInviteViaApi(
     signedEventEnvelope({
       actorDid,
       realmId: spaceId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: actorDid,
         membership: "join",
@@ -177,7 +136,7 @@ export async function createSharedSpaceViaApi(
     signedEventEnvelope({
       actorDid: owner.did,
       realmId: spaceId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: member.did,
         member: member.did,
@@ -203,6 +162,15 @@ export async function allowPlaintextMessagesViaApi(
   void opts;
 }
 
+// NOT a thin wrapper over `sendMessageApi` (soland-api.ts): `sendMessageApi`
+// derives the signing actor from `GET /account/me` (the token's own account)
+// and exposes no parameter for an explicit signer, whereas this helper signs
+// with the caller-supplied `opts.actorDid` (asserted required). Multi-actor
+// specs depend on sending as a DID that is not the token's `/account/me`, so
+// delegating would change the signer and add a network round-trip. Since
+// `sendMessageApi`'s exported signature must not change, the flow is kept here
+// and shares the same primitives (signedEventEnvelope/submitSignedEventApi/
+// flowIdFromRealmId) to prevent canonical drift.
 export async function sendPlaintextMessageViaApi(
   request: APIRequestContext,
   token: string,
@@ -214,12 +182,12 @@ export async function sendPlaintextMessageViaApi(
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
     realmId: spaceId,
-    kind: "cx.message.create",
+    kind: "ck.message.create",
     payload: {
-      flow_id: `ck:flow:${spaceId.replace(/^ck:(realm|space):/, "")}`,
+      flow_id: flowIdFromRealmId(spaceId),
       track_name: "discussion",
       content: {
-        kind: "cx.content.text",
+        kind: "ck.content.text",
         body,
       },
       encrypted: false,
@@ -243,7 +211,7 @@ export async function listSpaceEventsViaApi(
   opts: { limit?: number; server?: SolandKey } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/events?realms=${encodeURIComponent(spaceId)}&limit=${
+    `${solandBaseUrl(opts.server)}/_cokret/self/events?realms=${encodeURIComponent(spaceId)}&limit=${
       opts.limit ?? 50
     }`,
     { headers: authHeaders(token) },
@@ -261,7 +229,7 @@ export async function listReadMarkersViaApi(
   opts: { server?: SolandKey } = {},
 ): Promise<ReadMarker[]> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/read-cursors?realm_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(spaceId)}`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);

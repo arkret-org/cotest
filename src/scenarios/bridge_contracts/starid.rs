@@ -20,7 +20,9 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     .await?;
 
     let describe = expect_json(
-        server.http().get(server.url("/api/v1/identity/describe")),
+        server
+            .http()
+            .get(server.url("/_cokret/root/identity/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -53,7 +55,7 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     );
     assert_eq!(
         describe["resolver_policy"]["freshness_receipts"]["endpoint_template"],
-        "/api/v1/identity/receipts?did={did}"
+        "/_cokret/root/identity/receipts?did={did}"
     );
     assert_eq!(
         describe["resolver_policy"]["webvh_validation"]["witness_quorum"],

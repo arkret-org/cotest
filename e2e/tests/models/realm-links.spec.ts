@@ -25,9 +25,9 @@ test.describe("realm links", () => {
     "alice declares governed_by link from team realm to governance realm; bob's violations get filtered via inherited policy; link rejection restores independence",
     async ({ browser, request }, testInfo) => {
       // soland gap: realm-link projection logic + inherited policy merge 未实现
-      //   - cx.realm.link Move endpoint
-      //   - cx.realm.inheritance_policy opt-in
-      //   - /api/v1/realms/:id/policy/effective (link-aware merge)
+      //   - ck.realm.link Move endpoint
+      //   - ck.realm.inheritance_policy opt-in
+      //   - /_cokret/self/realms/:id/policy/effective (link-aware merge)
       //   - moderation decision source attribution (derived_via_link)
       // yougen gap: realm-link-list / realm-overview-panel / policy-hold-marker testids
       const stamp = Date.now();
@@ -45,7 +45,7 @@ test.describe("realm links", () => {
       try {
         // Phase A — alice creates governance Realm G + moderation policy with inheritable=true.
         // (Direct soland API; yougen has no governance-realm wizard yet.)
-        const govRes = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
+        const govRes = await request.post(`${solandBaseUrl()}/_cokret/self/realms`, {
           headers: aliceAuth,
           data: {
             title: `models/realm-links Gov Realm ${stamp}`,
@@ -57,17 +57,17 @@ test.describe("realm links", () => {
         const govRealmId: string = govBody.realm_id;
         expect(govRealmId).toMatch(/^ck:realm:/);
 
-        await request.post(`${solandBaseUrl()}/api/v1/realms/${govRealmId}/events`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realms/${govRealmId}/events`, {
           headers: aliceAuth,
           data: {
             kind: "cx.policy.moderation",
             payload: { banned_keywords: [bannedKeyword], inheritable: true },
           },
         });
-        await request.post(`${solandBaseUrl()}/api/v1/realms/${govRealmId}/events`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realms/${govRealmId}/events`, {
           headers: aliceAuth,
           data: {
-            kind: "cx.realm.inheritance_policy",
+            kind: "ck.realm.inheritance_policy",
             payload: {
               allow_downstream_link_kinds: ["governed_by"],
               allow_rule_ids: ["moderation.banned_keywords"],
@@ -75,9 +75,9 @@ test.describe("realm links", () => {
           },
         });
 
-        // Phase B — alice creates team Realm T, then signs cx.realm.link governed_by → G,
+        // Phase B — alice creates team Realm T, then signs ck.realm.link governed_by → G,
         // and explicitly opts into inheritance on T's side.
-        const teamRes = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
+        const teamRes = await request.post(`${solandBaseUrl()}/_cokret/self/realms`, {
           headers: aliceAuth,
           data: {
             title: `models/realm-links Team Realm ${stamp}`,
@@ -88,11 +88,11 @@ test.describe("realm links", () => {
         const teamRealmId: string = (await teamRes.json()).realm_id;
 
         const linkRes = await request.post(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/events`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/events`,
           {
             headers: aliceAuth,
             data: {
-              kind: "cx.realm.link",
+              kind: "ck.realm.link",
               payload: {
                 target_realm_id: govRealmId,
                 link_kind: "governed_by",
@@ -104,10 +104,10 @@ test.describe("realm links", () => {
         );
         expect(linkRes.status()).toBe(201);
 
-        await request.post(`${solandBaseUrl()}/api/v1/realms/${teamRealmId}/events`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/events`, {
           headers: aliceAuth,
           data: {
-            kind: "cx.realm.inheritance_policy",
+            kind: "ck.realm.inheritance_policy",
             payload: {
               from_realm_id: govRealmId,
               inherit_rule_ids: ["moderation.banned_keywords"],
@@ -117,7 +117,7 @@ test.describe("realm links", () => {
 
         // Phase C — T's effective policy now includes G's banned_keywords via derivation.
         const eff1 = await request.get(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/policy/effective`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/policy/effective`,
           { headers: aliceAuth },
         );
         expect(eff1.status()).toBe(200);
@@ -131,7 +131,7 @@ test.describe("realm links", () => {
         // T's local (non-inherited) policy does NOT contain the keyword — verifies that
         // inherited is a merge artifact, not a copy.
         const local = await request.get(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/policy/local`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/policy/local`,
           { headers: aliceAuth },
         );
         const localBody = await local.json();
@@ -141,13 +141,13 @@ test.describe("realm links", () => {
         // (We rely on the seed-members default-space helper that other scenarios use;
         //  the assertion here is at the API layer to stay independent of yougen testids.)
         const defaultSpaceRes = await request.get(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/spaces/default`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/spaces/default`,
           { headers: bobAuth },
         );
         const defaultSpaceId: string = (await defaultSpaceRes.json()).space_id;
         const violatingText = `this contains ${bannedKeyword} test`;
         const sendRes = await request.post(
-          `${solandBaseUrl()}/api/v1/spaces/${defaultSpaceId}/messages`,
+          `${solandBaseUrl()}/_cokret/self/spaces/${defaultSpaceId}/messages`,
           { headers: bobAuth, data: { body: violatingText } },
         );
         // moderation_hold or rejected — both are spec-acceptable for an inherited deny.
@@ -156,7 +156,7 @@ test.describe("realm links", () => {
 
         // Phase E — moderation decision attributes the rule back to G via the link.
         const decisions = await request.get(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/moderation/decisions?message_id=${sendBody.message_id}`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/moderation/decisions?message_id=${sendBody.message_id}`,
           { headers: aliceAuth },
         );
         const decisionsBody = await decisions.json();
@@ -170,11 +170,11 @@ test.describe("realm links", () => {
 
         // Phase F — alice rejects the link; effective policy reverts; bob can resend.
         const rejectRes = await request.post(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/events`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/events`,
           {
             headers: aliceAuth,
             data: {
-              kind: "cx.realm.link",
+              kind: "ck.realm.link",
               payload: {
                 target_realm_id: govRealmId,
                 link_kind: "governed_by",
@@ -186,14 +186,14 @@ test.describe("realm links", () => {
         expect(rejectRes.status()).toBe(201);
 
         const eff2 = await request.get(
-          `${solandBaseUrl()}/api/v1/realms/${teamRealmId}/policy/effective`,
+          `${solandBaseUrl()}/_cokret/self/realms/${teamRealmId}/policy/effective`,
           { headers: aliceAuth },
         );
         const eff2Body = await eff2.json();
         expect(eff2Body.moderation.banned_keywords ?? []).not.toContain(bannedKeyword);
 
         const resend = await request.post(
-          `${solandBaseUrl()}/api/v1/spaces/${defaultSpaceId}/messages`,
+          `${solandBaseUrl()}/_cokret/self/spaces/${defaultSpaceId}/messages`,
           { headers: bobAuth, data: { body: violatingText } },
         );
         const resendBody = await resend.json();
@@ -226,7 +226,7 @@ test.describe("realm links", () => {
       const C = await mk("C");
 
       const link = async (src: string, dst: string) =>
-        request.post(`${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(src)}/links`, {
+        request.post(`${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(src)}/links`, {
           headers: auth,
           data: {
             target_realm_id: dst,
@@ -241,7 +241,7 @@ test.describe("realm links", () => {
       expect(bc.ok()).toBeTruthy();
 
       const outboundA = await request.get(
-        `${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(A)}/links?direction=outbound`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(A)}/links?direction=outbound`,
         { headers: auth },
       );
       expect(outboundA.ok()).toBeTruthy();
@@ -278,12 +278,12 @@ test.describe("realm links", () => {
       const auth = { authorization: `Bearer ${aliceToken}` };
 
       const mk = async (label: string, banned: string[]) => {
-        const res = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
+        const res = await request.post(`${solandBaseUrl()}/_cokret/self/realms`, {
           headers: auth,
           data: { title: `multi-${label}-${stamp}`, realm_kind: "governance" },
         });
         const id = (await res.json()).realm_id as string;
-        await request.post(`${solandBaseUrl()}/api/v1/realms/${id}/events`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realms/${id}/events`, {
           headers: auth,
           data: {
             kind: "cx.policy.moderation",
@@ -295,29 +295,29 @@ test.describe("realm links", () => {
       const G1 = await mk("G1", [`w1-${stamp}`, `w2-${stamp}`]);
       const G2 = await mk("G2", [`w2-${stamp}`, `w3-${stamp}`]);
 
-      const teamRes = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
+      const teamRes = await request.post(`${solandBaseUrl()}/_cokret/self/realms`, {
         headers: auth,
         data: { title: `multi-T-${stamp}` },
       });
       const T = (await teamRes.json()).realm_id as string;
       for (const G of [G1, G2]) {
-        await request.post(`${solandBaseUrl()}/api/v1/realms/${T}/events`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realms/${T}/events`, {
           headers: auth,
           data: {
-            kind: "cx.realm.link",
+            kind: "ck.realm.link",
             payload: { target_realm_id: G, link_kind: "governed_by", status: "active" },
           },
         });
-        await request.post(`${solandBaseUrl()}/api/v1/realms/${T}/events`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realms/${T}/events`, {
           headers: auth,
           data: {
-            kind: "cx.realm.inheritance_policy",
+            kind: "ck.realm.inheritance_policy",
             payload: { from_realm_id: G, inherit_rule_ids: ["moderation.banned_keywords"] },
           },
         });
       }
 
-      const eff = await request.get(`${solandBaseUrl()}/api/v1/realms/${T}/policy/effective`, {
+      const eff = await request.get(`${solandBaseUrl()}/_cokret/self/realms/${T}/policy/effective`, {
         headers: auth,
       });
       const effBody = await eff.json();
@@ -355,31 +355,31 @@ test.describe("realm links", () => {
       const bobAuth = { authorization: `Bearer ${bobToken}` };
 
       // alice owns G (admin).
-      const gRes = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
+      const gRes = await request.post(`${solandBaseUrl()}/_cokret/self/realms`, {
         headers: aliceAuth,
         data: { title: `cap-G-${stamp}`, realm_kind: "governance" },
       });
       const G = (await gRes.json()).realm_id as string;
 
       // bob owns T (admin); alice is NOT a member of T.
-      const tRes = await request.post(`${solandBaseUrl()}/api/v1/realms`, {
+      const tRes = await request.post(`${solandBaseUrl()}/_cokret/self/realms`, {
         headers: bobAuth,
         data: { title: `cap-T-${stamp}` },
       });
       const T = (await tRes.json()).realm_id as string;
 
       // bob links T --governed_by--> G.
-      const linkRes = await request.post(`${solandBaseUrl()}/api/v1/realms/${T}/events`, {
+      const linkRes = await request.post(`${solandBaseUrl()}/_cokret/self/realms/${T}/events`, {
         headers: bobAuth,
         data: {
-          kind: "cx.realm.link",
+          kind: "ck.realm.link",
           payload: { target_realm_id: G, link_kind: "governed_by", status: "active" },
         },
       });
       expect(linkRes.status()).toBe(201);
 
       // alice tries to use her G-admin rights against T — must fail.
-      const attempt = await request.post(`${solandBaseUrl()}/api/v1/realms/${T}/admin/members`, {
+      const attempt = await request.post(`${solandBaseUrl()}/_cokret/self/realms/${T}/admin/members`, {
         headers: aliceAuth,
         data: { action: "ban", target_did: bob.did },
       });

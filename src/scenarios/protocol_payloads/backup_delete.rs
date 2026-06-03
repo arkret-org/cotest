@@ -1,4 +1,4 @@
-//! Terminal `DELETE /api/v1/keys/backups/{id}`.
+//! Terminal `DELETE /_cokret/self/keys/backups/{id}`.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -10,7 +10,7 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     let backup_delete = expect_json(
         server
             .http()
-            .delete(server.url(&format!("/api/v1/keys/backups/{BACKUP_ID}")))
+            .delete(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .header(
                 "x-cokret-key-backup-delete-proof",

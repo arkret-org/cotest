@@ -30,7 +30,7 @@ test.describe("private read marker", () => {
     const aliceToken = await issueDevSession(request, alice);
     const auth = { authorization: `Bearer ${aliceToken}` };
 
-    const before = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const before = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: auth,
     });
     expect(before.status()).toBe(200);
@@ -38,7 +38,7 @@ test.describe("private read marker", () => {
     expect(beforeBody.last_read_at == null).toBe(true);
 
     const mark = await request.post(
-      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      `${solandBaseUrl()}/_cokret/self/notifications/mark-all-read`,
       { headers: auth, data: {} },
     );
     expect(mark.status()).toBe(200);
@@ -46,7 +46,7 @@ test.describe("private read marker", () => {
     expect(typeof markBody.marked_at).toBe("string");
     expect(markBody.actor).toBe(alice.did);
 
-    const after = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const after = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: auth,
     });
     expect(after.status()).toBe(200);
@@ -59,7 +59,7 @@ test.describe("private read marker", () => {
     request,
   }) => {
     // Live G2.T7 no-leak smoke on the implemented marker surface. The
-    // canonical cx.read_cursor.advance write path and cross-device to-device fanout
+    // canonical ck.read_cursor.advance write path and cross-device to-device fanout
     // remain fixme below.
     const stamp = Date.now();
     const alice = uniqueUser(`s11-prm-alice-${stamp}`);
@@ -72,28 +72,28 @@ test.describe("private read marker", () => {
     const aliceAuth = { authorization: `Bearer ${aliceToken}` };
     const bobAuth = { authorization: `Bearer ${bobToken}` };
 
-    const bobBefore = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const bobBefore = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: bobAuth,
     });
     expect(bobBefore.status()).toBe(200);
     expect((await bobBefore.json()).last_read_at == null).toBe(true);
 
     const markAlice = await request.post(
-      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      `${solandBaseUrl()}/_cokret/self/notifications/mark-all-read`,
       { headers: aliceAuth, data: {} },
     );
     expect(markAlice.status()).toBe(200);
     const markAliceBody = await markAlice.json();
     expect(markAliceBody.actor).toBe(alice.did);
 
-    const aliceAfter = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const aliceAfter = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: aliceAuth,
     });
     expect(aliceAfter.status()).toBe(200);
     const aliceAfterBody = await aliceAfter.json();
     expect(aliceAfterBody.last_read_at).toBe(markAliceBody.marked_at);
 
-    const bobAfter = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const bobAfter = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: bobAuth,
     });
     expect(bobAfter.status()).toBe(200);
@@ -140,7 +140,7 @@ test.describe("private read marker", () => {
     // @blocking-on: soland#models-private-read-cursor-gap
     // @user-promise: e2e/scenarios/models/private-read-marker.md
     // @expected-live-by: 2026Q3
-    "E10.2 E2EE space notification redaction: server-side GET /api/v1/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
+    "E10.2 E2EE space notification redaction: server-side GET /_cokret/self/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
     async () => {
       // spec: discovery/push-notifications.md §4 + private-objects.md §3
       // soland gap: encrypted-space notification projection redaction path not wired;

@@ -7,7 +7,7 @@
 //! helper (`TestServerGroup::try_multi_external`) so the test runs against
 //! the pre-built `soland.exe` without paying the `cargo run` startup cost
 //! per server. Locate the binary via `SOLAND_BIN=...` or by building the
-//! sibling `cokret-dev/soland` checkout.
+//! sibling `cokret/soland` checkout.
 //!
 //! C35.2 promoted the test out of `#[ignore]`: the in-scenario binary lookup
 //! silently returns `Ok(())` when neither `SOLAND_BIN` is set nor the

@@ -88,7 +88,7 @@ conformance_test!(
 
 conformance_test!(
     /// Round 4 / A2 — drift allowlist refresh: new capability action
-    /// (`cx.morph.create`), error codes (`delivery_binding_stale`,
+    /// (`ck.morph.create`), error codes (`delivery_binding_stale`,
     /// `delivery_binding_handed_over`, `historical_only`), id_kinds
     /// (`ck:space:`), and new schemas / OpenAPI components are present
     /// in the canonical registry.
@@ -540,7 +540,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// S4 — cx.profile.cross_signing.reset.v1 parser-level conformance
+    /// S4 — ck.profile.cross_signing.reset.v1 parser-level conformance
     /// vectors: proof family, generation monotonicity, replay cache, clock
     /// skew, and successor-publish window.
     cross_signing_reset_fixture_suite_matches_reference_semantics,

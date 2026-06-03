@@ -14,7 +14,7 @@
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §4 — Personal blocklist 概念、与 quarantine 的边界
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5 — Mute vs block 语义差异
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §6 — Federation 中的 block propagation(server hint,非 PII 泄露)
-- `cokret-spec/spec/v1/zh/discovery/client-preferences.md` §2 — account_data 写 blocklist entry 的 schema(`cx.account.blocklist`)
+- `cokret-spec/spec/v1/zh/discovery/client-preferences.md` §2 — account_data 写 blocklist entry 的 schema(`ck.account.blocklist`)
 
 ## 拓扑
 
@@ -30,7 +30,7 @@
 
 ## Pre-conditions
 
-- alice / bob 都通过 `POST /api/v1/account/register` 注册
+- alice / bob 都通过 `POST /_cokret/self/account/register` 注册
 - alice / bob 都持有有效 dev session token
 - 两个 actor 的 browser context 都注入了 `yougen.config.v1` localStorage
 
@@ -60,9 +60,9 @@
 ### Phase D — client 写 account_data blocklist entry
 
 8. alice 的 yougen client 应该把这次 block 持久化到 soland 的 actor-private account_data:
-   - 调用:`PUT /api/v1/account_data/cx.account.blocklist`,payload `{ version: 1, entries: [{ target: { kind: "actor", did: bob.did }, mode: "block", applies_to: ["messages", "mentions", "dm", "calls", "presence", "notifications", "directory"], created_at: <ts> }] }`
+   - 调用:`PUT /_cokret/self/account_data/ck.account.blocklist`,payload `{ version: 1, entries: [{ target: { kind: "actor", did: bob.did }, mode: "block", applies_to: ["messages", "mentions", "dm", "calls", "presence", "notifications", "directory"], created_at: <ts> }] }`
    - 断言 (HTTP 层):`PUT` 返回 200
-   - 断言 (跨设备 sync):`GET /api/v1/account_data/cx.account.blocklist` 返回同样的 entries
+   - 断言 (跨设备 sync):`GET /_cokret/self/account_data/ck.account.blocklist` 返回同样的 entries
    - 备注:这是 actor-private — 只对 alice 自己的 device 同步,bob 拿不到
 
 ### Phase E — bob 发 M2,alice 看不到(client-side filter)
@@ -79,7 +79,7 @@
 
 12. **alice** 回 `/settings/blocked-users`,在 bob 那行点 `unblock-button`
     - 断言:`blocked-users-list` 不再含 bob 行
-    - 断言:client 调 `PUT /api/v1/account_data/cx.account.blocklist` 把 entry 移除(或 mark `kind: "unblock"`)
+    - 断言:client 调 `PUT /_cokret/self/account_data/ck.account.blocklist` 把 entry 移除(或 mark `kind: "unblock"`)
 13. **bob** 再发 `M3 = "bob is back ${stamp}"`
 14. **alice** sync `/timeline/${spaceId}`
     - 断言:`timeline-event` 含 `M3`
@@ -90,7 +90,7 @@
 15. 拓扑切到 2 server:`alice@server1`、`bob@server2`,通过 federation peering 共享 space `S_fed`
 16. **alice@server1** 在 `/settings/blocked-users` 中 block `bob@server2`
 17. server1 写 alice 的 account_data;同时 server1 应该向 server2 发一个 federation hint:
-    - `POST {server2}/api/v1/federation/block-hint`,payload `{ actor: alice.did, blocked: bob.did }`
+    - `POST {server2}/_cokret/peer/federation/block-hint`,payload `{ actor: alice.did, blocked: bob.did }`
     - 这个 hint **不泄露** alice 的 PII(只告诉 server2:bob → alice 方向的 push 可以减少 / 完全不送)
 18. **bob@server2** 在 `S_fed` 发 `M_fed`
 19. 断言:
@@ -109,14 +109,14 @@
 
 ## Edge cases / sub-tests
 
-- **E11.1 Quarantine vs block**:同一个 space 中 admin 把 bob 的某条消息 quarantine(`POST /api/v1/moderation/quarantine`)— 这是**服务端**操作,影响**所有**成员;alice 的个人 block 只影响 alice 自己。验证两者**互不依赖**:即使 alice 没 block bob,quarantine 的消息对 alice 也不可见(以 placeholder 渲染);即使 admin 没 quarantine,alice block 也能让 bob 的消息对 alice 单独不可见。
+- **E11.1 Quarantine vs block**:同一个 space 中 admin 把 bob 的某条消息 quarantine(`POST /_cokret/self/moderation/quarantine`)— 这是**服务端**操作,影响**所有**成员;alice 的个人 block 只影响 alice 自己。验证两者**互不依赖**:即使 alice 没 block bob,quarantine 的消息对 alice 也不可见(以 placeholder 渲染);即使 admin 没 quarantine,alice block 也能让 bob 的消息对 alice 单独不可见。
 - **E11.2 mute vs block 差异**:alice 在 `/settings/notifications` 把 bob mute(不是 block)→ bob 的消息在 alice timeline **仍可见**,但 push notification 不送达(`notifications-panel` 中无新条目)。这与 block 的"完全隐藏"形成对照。
 - **E11.3 被 block 的用户视角**:bob 在 `/timeline/${spaceId}` 自己看自己的消息,M1/M2/M3 都正常显示,`write-status` 全部 `persisted`;bob 的 `/notifications` 不会出现"You were blocked by alice"这类提示(spec §4 明确:block 不可被被 block 方探测,反 social-graph 泄露)。
 
 ## Implementation notes
 
-- **yougen 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `cx.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
-- **soland 实现**:`PUT/GET /api/v1/account_data/cx.account.blocklist` 已用于个人 blocklist;事件 query、account sync timeline、`/api/v1/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /api/v1/federation/block-hint` 与 `GET /api/v1/federation/block-hints` 支持 block hint 记录和 unblock retract。
+- **yougen 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `ck.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
+- **soland 实现**:`PUT/GET /_cokret/self/account_data/ck.account.blocklist` 已用于个人 blocklist;事件 query、account sync timeline、`/_cokret/self/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /_cokret/peer/federation/block-hint` 与 `GET /_cokret/peer/federation/block-hints` 支持 block hint 记录和 unblock retract。
 - **测试侧**:主流程、E11.1、E11.2、E11.3 均为 live tests;Phase G 的跨服务器成本用本地 block-hint 记录/撤回端点验证,完整双 soland outbox suppression 可在 `federation/cross-server` harness 扩展时继续加深。
 
 ## 风险

@@ -25,7 +25,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         .remove("ciphertext");
     expect_backup_error(
         alice
-            .put(&format!("/api/v1/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
             .json(&missing_ciphertext),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -39,7 +39,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     );
     expect_backup_error(
         alice
-            .put(&format!("/api/v1/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
             .json(&body_id_mismatch),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
@@ -49,7 +49,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let wrong_actor = backup_body(&bob.actor, DEVICE_A, BACKUP_ID);
     expect_backup_error(
         alice
-            .put(&format!("/api/v1/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
             .json(&wrong_actor),
         StatusCode::FORBIDDEN,
         "capability_denied",
@@ -58,7 +58,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 
     let accepted = expect_json(
         alice
-            .put(&format!("/api/v1/keys/backups/{BACKUP_ID}"))
+            .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
             .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)),
         StatusCode::OK,
     )
@@ -66,7 +66,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     assert_eq!(accepted["backup"]["backup_id"], BACKUP_ID);
 
     expect_backup_error(
-        bob.get(&format!("/api/v1/keys/backups/{BACKUP_ID}")),
+        bob.get(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -81,17 +81,13 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     Ok(())
 }
 
-async fn reject_wrong_device_on_put(
-    server: &CokretServer,
-    token: &str,
-    actor: &str,
-) -> Result<()> {
+async fn reject_wrong_device_on_put(server: &CokretServer, token: &str, actor: &str) -> Result<()> {
     let id = "ck:backup:01975510-0000-7000-8000-0000000000d4";
     let body = backup_body(actor, DEVICE_B, id);
     expect_backup_error(
         server
             .http()
-            .put(server.url(&format!("/api/v1/keys/backups/{id}")))
+            .put(server.url(&format!("/_cokret/self/keys/backups/{id}")))
             .bearer_auth(token)
             .json(&body),
         StatusCode::FORBIDDEN,
@@ -114,7 +110,7 @@ async fn reject_digest_mismatch_on_put(
     expect_backup_error(
         server
             .http()
-            .put(server.url(&format!("/api/v1/keys/backups/{id}")))
+            .put(server.url(&format!("/_cokret/self/keys/backups/{id}")))
             .bearer_auth(token)
             .json(&body),
         StatusCode::BAD_REQUEST,
@@ -128,7 +124,7 @@ async fn reject_wrong_device_on_get(server: &CokretServer, actor: &str) -> Resul
     expect_backup_error(
         server
             .http()
-            .get(server.url(&format!("/api/v1/keys/backups/{BACKUP_ID}")))
+            .get(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(&device_b_token),
         StatusCode::NOT_FOUND,
         "not_found",
@@ -149,7 +145,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
         "encryption": {
             "recipient_method": "secret_storage_key",
             "recipient_key_ref": "mls_group_secrets_backup_key",
-            "aead": {"name": "xchacha20_poly1305", "aead_profile": "cx.aead.xchacha20_poly1305.v1", "nonce": "cotest-d3-nonce"}
+            "aead": {"name": "xchacha20_poly1305", "aead_profile": "ck.aead.xchacha20_poly1305.v1", "nonce": "cotest-d3-nonce"}
         },
         "contents": [
             {

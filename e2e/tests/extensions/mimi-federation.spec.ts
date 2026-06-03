@@ -38,7 +38,7 @@ test.describe("mimi federation", () => {
     async () => {
       // Phase A — alice 通过 /setup 创建 Realm,设
       //   cx.realm.federation_profile = "mimi_interop"
-      // 断言 GET /api/v1/realm/:id/federation/mimi/endpoint 返回 mimi_endpoint_url + room_binding_id。
+      // 断言 GET /_cokret/self/realm/:id/federation/mimi/endpoint 返回 mimi_endpoint_url + room_binding_id。
       //
       // Phase B — mimi_facade (mock) 模拟外部 MIMI 网络的 join request,
       //   翻译为 Cokret 的 cx.invite.request / knock,投递到 soland;
@@ -46,8 +46,8 @@ test.describe("mimi federation", () => {
       //
       // Phase C — alice approve;soland 通过 facade 验证 bob_mimi 的 MIMI identity,
       //   按 spec §6 生成 pairwise DID = did:pairwise:${realmId}/${hash(handle, realmId.salt)};
-      //   POST /api/v1/realm/:id/federation/mimi/approve 返回 pairwise_did;
-      //   GET /api/v1/realm/:id/members 含 source = mimi 的成员。
+      //   POST /_cokret/self/realm/:id/federation/mimi/approve 返回 pairwise_did;
+      //   GET /_cokret/self/realm/:id/members 含 source = mimi 的成员。
       //
       // Phase D — alice 在 /timeline/:realmId 发 M1;
       //   facade mock 记录到 outbound MIMI event;soland message 挂
@@ -88,7 +88,7 @@ test.describe("mimi federation", () => {
         source_format: "application/mimi-content",
         e2ee: true,
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body: `silent plaintext leak ${stamp}`,
         },
         sender_did: "did:web:mimi.example",
@@ -107,7 +107,7 @@ test.describe("mimi federation", () => {
         e2ee: true,
         e2ee_downgrade: "mimi_bridge",
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body: downgradeText,
         },
         sender_did: "did:web:mimi.example",
@@ -133,7 +133,7 @@ test.describe("mimi federation", () => {
           transcript_hash: `sha256:transcript-${stamp}`,
         },
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body: transcriptText,
         },
         sender_did: "did:web:mimi.example",
@@ -223,10 +223,10 @@ async function createBoundMimiRoom(
     encryption_profile: "mls_rfc9420",
   });
   const roomId = `MIMI-${suffix}-${stamp}`;
-  const update = await request.put(`${solandBaseUrl()}/api/v1/mimi/flows/${roomId}/update`, {
+  const update = await request.put(`${solandBaseUrl()}/_cokret/open/mimi/flows/${roomId}/update`, {
     data: {
       room_binding: {
-        profile: "cx.profile.mimi_interop.v1",
+        profile: "ck.profile.mimi_interop.v1",
         mimi_room_uri: `mimi://soland.local/rooms/${roomId}`,
         binding_scope: {
           space_id: spaceId,
@@ -242,7 +242,7 @@ async function createBoundMimiRoom(
 }
 
 function mimiMessagesUrl(roomId: string): string {
-  return `${solandBaseUrl()}/api/v1/mimi/flows/${encodeURIComponent(roomId)}/messages`;
+  return `${solandBaseUrl()}/_cokret/open/mimi/flows/${encodeURIComponent(roomId)}/messages`;
 }
 
 function eventById(eventsBody: Record<string, unknown>, eventId: string): Record<string, unknown> {

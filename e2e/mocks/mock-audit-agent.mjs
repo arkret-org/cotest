@@ -1,24 +1,24 @@
 // Mock audit-agent — supports S25 audited E2EE (audit-agent invited via
-// audit_disclosure_policy.trigger, acks invite, emits cx.audit.accessed).
+// audit_disclosure_policy.trigger, acks invite, emits ck.audit.accessed).
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
 // harness configures soland's audit_disclosure_policy.audit_agent_principal_id to
 // match the mock's DID; soland then federates invites to the mock and
-// surfaces emitted `cx.audit.accessed` events back to admin views.
+// surfaces emitted `ck.audit.accessed` events back to admin views.
 //
 // Endpoints:
-//   GET  /api/v1/audit-agent/identity
+//   GET  /_soland/admin/audit-agent/identity
 //     Returns { did, public_jwk, key_package? }. Soland reads this to
 //     bind audit_disclosure_policy.audit_agent_principal_id.
-//   POST /api/v1/audit-agent/events  { kind, event }
-//     Forward `cx.moderation.franking_proof` / `cx.audit.report` events to the
-//     mock. Auto-acknowledges by recording a generated `cx.audit.accessed`
+//   POST /_soland/admin/audit-agent/events  { kind, event }
+//     Forward `ck.moderation.franking_proof` / `cx.audit.report` events to the
+//     mock. Auto-acknowledges by recording a generated `ck.audit.accessed`
 //     envelope, fetchable via /inspect.
-//   POST /api/v1/audit-agent/invite { space_id, invite, mls_key_package? }
-//     Acknowledge an invite. Returns a synthetic `cx.audit.accessed`
+//   POST /_soland/admin/audit-agent/invite { space_id, invite, mls_key_package? }
+//     Acknowledge an invite. Returns a synthetic `ck.audit.accessed`
 //     envelope signed by the agent.
-//   GET  /api/v1/audit-agent/inbox   → events received
-//   GET  /api/v1/audit-agent/accessed → cx.audit.accessed envelopes emitted
+//   GET  /_soland/admin/audit-agent/inbox   → events received
+//   GET  /_soland/admin/audit-agent/accessed → ck.audit.accessed envelopes emitted
 //   GET  /inspect → full mock state
 //   DELETE /inspect → reset
 //   GET  /jwks → audit-agent public key
@@ -89,7 +89,7 @@ function makeAccessedEnvelope({ space_id, source_event_id, reason }) {
   const event = {
     event_id: `ck:event:audit-accessed:${randomUUID()}`,
     space_id,
-    type: "cx.audit.accessed",
+    type: "ck.audit.accessed",
     actor_did: agentDid,
     occurred_at: new Date().toISOString(),
     payload: {
@@ -135,7 +135,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/audit-agent/identity" && req.method === "GET") {
+  if (url.pathname === "/_soland/admin/audit-agent/identity" && req.method === "GET") {
     res.end(
       JSON.stringify({
         did: agentDid,
@@ -146,7 +146,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/audit-agent/events" && req.method === "POST") {
+  if (url.pathname === "/_soland/admin/audit-agent/events" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.kind || !body.event) {
       res.statusCode = 400;
@@ -167,7 +167,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/audit-agent/invite" && req.method === "POST") {
+  if (url.pathname === "/_soland/admin/audit-agent/invite" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.space_id) {
       res.statusCode = 400;
@@ -191,12 +191,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/audit-agent/inbox" && req.method === "GET") {
+  if (url.pathname === "/_soland/admin/audit-agent/inbox" && req.method === "GET") {
     res.end(JSON.stringify({ events: inboxLog.entries }));
     return;
   }
 
-  if (url.pathname === "/api/v1/audit-agent/accessed" && req.method === "GET") {
+  if (url.pathname === "/_soland/admin/audit-agent/accessed" && req.method === "GET") {
     res.end(JSON.stringify({ events: accessedLog.entries }));
     return;
   }

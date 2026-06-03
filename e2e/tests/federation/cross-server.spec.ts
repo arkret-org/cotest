@@ -8,13 +8,13 @@
 //   - §5.1 cross-domain invite
 //
 // Soland implementation status (2026-05 audit):
-//   ✓ POST /api/v1/federation/push-operations handler routed and ingests events
-//   ✓ GET  /api/v1/federation/pull-operations cursor-based
+//   ✓ POST /_cokret/peer/federation/push-operations handler routed and ingests events
+//   ✓ GET  /_cokret/peer/federation/pull-operations cursor-based
 //   ✓ Per-event accepted / rejected partial-accept
 //   ✓ Idempotent by operation_id
 //   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
 //   ✓ Outbound push worker POSTs local invite/message operations to peers
-//   ✓ cx.invite.create, cx.member.state join, and cx.message.create trigger federation push
+//   ✓ ck.invite.create, ck.member.state join, and ck.message.create trigger federation push
 //   ✓ backfill-operations pulls peer pages and ingests missing local operations
 //   ✓ operation-frontier exposes deterministic operation-id coverage
 //   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
@@ -102,7 +102,7 @@ async function waitForMember(
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+          `${solandBaseUrl(server)}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -150,7 +150,7 @@ test.describe("cross-server federation", () => {
 
     // POST without auth/body should not 404 — endpoint MUST exist.
     const pushProbe = await request.post(
-      `${solandBaseUrl("beta")}/api/v1/federation/push-operations`,
+      `${solandBaseUrl("beta")}/_cokret/peer/federation/push-operations`,
       {
         data: {},
       },
@@ -158,7 +158,7 @@ test.describe("cross-server federation", () => {
     expect(pushProbe.status()).not.toBe(404);
 
     const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/api/v1/federation/pull-operations?space_id=ck:space:probe`,
+      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?space_id=ck:space:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
   });
@@ -195,7 +195,7 @@ test.describe("cross-server federation", () => {
 
       // Each principal context binds to its own server.
       const aliceMeResp = await request.get(
-        `${solandBaseUrl("alpha")}/api/v1/account/me`,
+        `${solandBaseUrl("alpha")}/_cokret/self/account/me`,
         {
           headers: { authorization: `Bearer ${aliceToken}` },
         },
@@ -205,7 +205,7 @@ test.describe("cross-server federation", () => {
       expect(aliceMe.did).toBe(alice.did);
 
       const bobMeResp = await request.get(
-        `${solandBaseUrl("beta")}/api/v1/account/me`,
+        `${solandBaseUrl("beta")}/_cokret/self/account/me`,
         {
           headers: { authorization: `Bearer ${bobToken}` },
         },
@@ -271,7 +271,7 @@ test.describe("cross-server federation", () => {
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
     const alphaDescribe = await request.get(
-      `${solandBaseUrl("alpha")}/api/v1/server/describe`,
+      `${solandBaseUrl("alpha")}/_cokret/describe`,
     );
     expect(alphaDescribe.ok()).toBeTruthy();
     const alphaDescribeBody = await alphaDescribe.json();
@@ -282,7 +282,7 @@ test.describe("cross-server federation", () => {
     const spaceId = typedId("space");
     const inviteOperation = makeOperation({
       spaceId,
-      objectType: "cx.member.state",
+      objectType: "ck.member.state",
       payload: {
         actor_id: bob.did,
         member: bob.did,
@@ -314,7 +314,7 @@ test.describe("cross-server federation", () => {
     expect(replay.rejected ?? []).toEqual([]);
 
     const pull = await request.get(
-      `${solandBaseUrl("beta")}/api/v1/federation/pull-operations?space_id=${encodeURIComponent(spaceId)}&limit=10`,
+      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?space_id=${encodeURIComponent(spaceId)}&limit=10`,
     );
     expect(pull.ok()).toBeTruthy();
     const pullBody = await pull.json();
@@ -348,7 +348,7 @@ test.describe("cross-server federation", () => {
     );
 
     const betaSpace = await request.get(
-      `${solandBaseUrl("beta")}/api/v1/spaces/${encodeURIComponent(invite!.space_id)}`,
+      `${solandBaseUrl("beta")}/_cokret/self/spaces/${encodeURIComponent(invite!.space_id)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();
@@ -467,7 +467,7 @@ test.describe("cross-server federation", () => {
     await waitForEventBody(request, aliceToken, spaceId, bobBody, "alpha");
   });
 
-  test("Pull / backfill: after a network partition, β fetches missing α events via GET /api/v1/federation/pull-operations", async ({
+  test("Pull / backfill: after a network partition, β fetches missing α events via GET /_cokret/peer/federation/pull-operations", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -519,14 +519,14 @@ test.describe("cross-server federation", () => {
     const missingBody = `pulled after partition ${stamp}`;
     const missingOperation = makeOperation({
       spaceId,
-      objectType: "cx.message.create",
+      objectType: "ck.message.create",
       payload: {
         event_id: typedId("event"),
         sender: alice.did,
         flow_id: typedId("flow"),
         track_name: "discussion",
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body: missingBody,
         },
       },
@@ -605,14 +605,14 @@ test.describe("cross-server federation", () => {
     const spaceId = typedId("space");
     const operation = makeOperation({
       spaceId,
-      objectType: "cx.message.create",
+      objectType: "ck.message.create",
       payload: {
         event_id: typedId("event"),
         sender: "did:web:alice-rfc9421.example",
         flow_id: typedId("flow"),
         track_name: "discussion",
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body: `tampered signature ${Date.now()}`,
         },
       },

@@ -14,14 +14,14 @@
 //! Scenario (Phase B scaffold):
 //!   1. Boot soland + coauth (coauth issues the cap grant).
 //!   2. Create a Realm + Circle. Actor Y is a Realm member but NOT a Circle member.
-//!   3. Grant Y `cx.circle.manage` via coauth's session-grant surface.
-//!   4. Y attempts `cx.circle.update` (e.g. patch the title) → MUST be rejected
+//!   3. Grant Y `ck.circle.manage` via coauth's session-grant surface.
+//!   4. Y attempts `ck.circle.update` (e.g. patch the title) → MUST be rejected
 //!      (`permission_denied` / membership half failed) despite the grant being present.
-//!   5. Add Y to the Circle (`cx.circle.member.state → active`); retry the update → MUST succeed
+//!   5. Add Y to the Circle (`ck.circle.member.state → active`); retry the update → MUST succeed
 //!      (both halves satisfied).
-//!   6. Revoke Y's `cx.circle.manage` grant while Y is still a Circle member; retry the update →
+//!   6. Revoke Y's `ck.circle.manage` grant while Y is still a Circle member; retry the update →
 //!      MUST be rejected (`permission_denied` / grant half failed).
-//!   7. Cross-check: `cx.circle.audit` (a strictly read-only cap) follows the same two-tier
+//!   7. Cross-check: `ck.circle.audit` (a strictly read-only cap) follows the same two-tier
 //!      evaluation — a member without the cap MUST be rejected; a non-member with the cap MUST be
 //!      rejected too.
 //!
@@ -47,13 +47,13 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     // ── 0. SDK-level invariants: the cap actions we exercise live in
     //       the canonical CXP-0007 allow-list. A spelling drift here
     //       would mask the live wire assertion.
-    if CAP_ACTION_CIRCLE_MANAGE != "cx.circle.manage" {
+    if CAP_ACTION_CIRCLE_MANAGE != "ck.circle.manage" {
         bail!(
             "CAP_ACTION_CIRCLE_MANAGE drifted: `{CAP_ACTION_CIRCLE_MANAGE}`; \
              coauth's grant surface keys on this string"
         );
     }
-    if CAP_ACTION_CIRCLE_AUDIT != "cx.circle.audit" {
+    if CAP_ACTION_CIRCLE_AUDIT != "ck.circle.audit" {
         bail!(
             "CAP_ACTION_CIRCLE_AUDIT drifted: `{CAP_ACTION_CIRCLE_AUDIT}`; \
              coauth's grant surface keys on this string"
@@ -74,8 +74,8 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
         .await
         .map_err(|e| anyhow!("stack health check failed: {e}"))?;
 
-    // ── 2. Register admin + actor Y. Admin holds `cx.circle.create` /
-    //       `cx.circle.member.manage` by default in development mode; Y
+    // ── 2. Register admin + actor Y. Admin holds `ck.circle.create` /
+    //       `ck.circle.member.manage` by default in development mode; Y
     //       starts with zero grants.
     let admin = stack
         .soland
@@ -110,15 +110,16 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     );
 
     // ── 3. Drive the live wire (P5 unblock). Expected endpoints:
-    //         POST  /api/v1/realms                              (admin)
-    //         POST  /api/v1/realms/<rid>/circles                (admin)
-    //         POST  /api/v1/realms/<rid>/members                add Y (Realm member)
-    //         POST  /coauth/api/v1/session-grants               grant Y cx.circle.manage
-    //         POST  /api/v1/circles/<cid>                       (Y; expect 403)
-    //         POST  /api/v1/circles/<cid>/members               add Y to Circle (admin)
-    //         POST  /api/v1/circles/<cid>                       (Y; expect 200)
-    //         DELETE /coauth/api/v1/session-grants/<grant>      revoke (admin/system)
-    //         POST  /api/v1/circles/<cid>                       (Y; expect 403)
+    //         POST  /_cokret/self/realms                              (admin)
+    //         POST  /_cokret/self/realms/<rid>/circles                (admin)
+    //         POST  /_cokret/self/realms/<rid>/members                add Y (Realm member)
+    //         POST  /coauth/_cokret/gate/account/session-grants               grant Y
+    // ck.circle.manage         POST  /_cokret/self/circles/<cid>                       (Y;
+    // expect 403)         POST  /_cokret/self/circles/<cid>/members               add Y to
+    // Circle (admin)         POST  /_cokret/self/circles/<cid>                       (Y; expect
+    // 200)         DELETE /coauth/_cokret/gate/account/session-grants/<grant>      revoke
+    // (admin/system)         POST  /_cokret/self/circles/<cid>                       (Y; expect
+    // 403)
     //
     //       Assertions:
     //         (i)   first update: 403 with reason
@@ -126,13 +127,13 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     //         (ii)  second update: 200 + projection reflects the patch,
     //         (iii) third update (post-revoke): 403 with reason
     //               `permission_denied` + sub-reason `capability_missing`,
-    //         (iv)  cx.circle.audit cross-check: Y without cap (still
+    //         (iv)  ck.circle.audit cross-check: Y without cap (still
     //               Circle member) MUST be rejected; Y with cap but
     //               removed from Circle MUST be rejected.
     let _ = admin
-        .post("/api/v1/realms")
+        .post("/_cokret/self/realms")
         .json(&json!({
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Cap AND Realm",
         }))
@@ -143,12 +144,12 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     bail!(
         "TODO(P5/CXP-0007): live-stack wiring for the two-tier capability \
          (grant ∧ membership) evaluation is scaffolded; finalise once soland \
-         publishes the `cx.circle.update` REST surface and coauth's \
+         publishes the `ck.circle.update` REST surface and coauth's \
          session-grant issue/revoke endpoints are reachable from cotest. \
          Expected assertions: \
          (i) cap-present + non-member → 403 `actor_not_in_circle`, \
          (ii) cap-present + member → 200 + projection reflects update, \
          (iii) cap-absent + member → 403 `capability_missing`, \
-         (iv) cx.circle.audit cross-check follows the same AND rule."
+         (iv) ck.circle.audit cross-check follows the same AND rule."
     );
 }

@@ -228,7 +228,7 @@ fn validate_schema_registry(
         serde_json::from_str::<Value>(&raw)
             .map_err(|error| anyhow!("schema file {} is not JSON: {error}", path.display()))?;
     }
-    for required in ["cx.schema.event.v1", "cx.schema.event_payload.v1"] {
+    for required in ["ck.schema.event.v1", "ck.schema.event_payload.v1"] {
         if !ids.contains(required) {
             bail!("schema registry missing required {required}");
         }
@@ -328,8 +328,8 @@ fn validate_event_kind_registry(
             // itself, even when null). The explicit `cell_subject: null` form
             // declares "space-singleton cell" — one cell per space, keyed by
             // the implicit space_id from the envelope. Kinds where this is
-            // the right semantics (cx.realm.policy / cx.realm.history_visibility /
-            // cx.space.archive / ...) MUST still set the field to null rather
+            // the right semantics (ck.realm.policy / ck.realm.history_visibility /
+            // ck.space.archive / ...) MUST still set the field to null rather
             // than omit it, so the schema-level intent is unambiguous. A
             // MISSING field is rejected.
             let subject = entry.get("cell_subject").ok_or_else(|| {
@@ -376,19 +376,19 @@ fn validate_event_kind_registry(
     }
     // Holder-private consent (cell or-set) MUST be wired per Move/Anchor/Lattice
     // spec (2026-05-08): both grant and revoke share cell_family
-    // cx.component.consent.grant.v1, lattice or-set, cell_subject keyed by
+    // ck.component.consent.grant.v1, lattice or-set, cell_subject keyed by
     // payload.consent_id. cx.realm.host{,.transfer} are intentionally
     // removed (anchorer cell governs Anchor signing).
     let required_kinds: &[(&str, &str, &str)] = &[
         (
-            "cx.consent.grant",
+            "ck.consent.grant",
             "or_set",
-            "cx.component.consent.grant.v1",
+            "ck.component.consent.grant.v1",
         ),
         (
-            "cx.consent.revoke",
+            "ck.consent.revoke",
             "or_set",
-            "cx.component.consent.grant.v1",
+            "ck.component.consent.grant.v1",
         ),
     ];
     for (kind, expected_lattice, expected_cell_family) in required_kinds {
@@ -440,9 +440,9 @@ fn validate_operation_registry(
         }
     }
     for required in [
-        "cx.events.describe",
-        "cx.events.submit",
-        "cx.account.subscribe",
+        "ck.events.describe",
+        "ck.events.submit",
+        "ck.account.subscribe",
     ] {
         if !ids.contains(required) {
             bail!("operation registry missing required {required}");
@@ -686,12 +686,12 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     let mut all_profiles = core_profiles.clone();
     all_profiles.extend(extension_profiles.clone());
     for required in [
-        "cx.profile.core_event_store.v1",
-        "cx.profile.chat_mvp.v1",
-        "cx.profile.kanban_mvp.v1",
-        "cx.profile.push_gateway.v1",
+        "ck.profile.core_event_store.v1",
+        "ck.profile.chat_mvp.v1",
+        "ck.profile.kanban_mvp.v1",
+        "ck.profile.push_gateway.v1",
         // E2EE state binding: mandatory inherits of e2ee_client.
-        "cx.profile.mls_governance_binding.full.v1",
+        "ck.profile.mls_governance_binding.full.v1",
     ] {
         if !all_profiles.contains(required) {
             bail!("conformance profiles missing required {required}");
@@ -735,28 +735,28 @@ fn validate_profile_requirements(
     // Phase 3 binding: e2ee_client MUST inherit mls_governance_binding.full.v1 directly,
     // not as an optional extension.
     let e2ee_client = requirements
-        .get("cx.profile.e2ee_client.v1")
+        .get("ck.profile.e2ee_client.v1")
         .ok_or_else(|| anyhow!("e2ee_client.v1 missing profile_requirements entry"))?;
     let inherits = string_array_field(e2ee_client, "inherits")?;
-    if !inherits.contains(&"cx.profile.mls_governance_binding.full.v1") {
+    if !inherits.contains(&"ck.profile.mls_governance_binding.full.v1") {
         bail!(
-            "e2ee_client.v1 must inherit cx.profile.mls_governance_binding.full.v1 (Phase 3 binding)"
+            "e2ee_client.v1 must inherit ck.profile.mls_governance_binding.full.v1 (Phase 3 binding)"
         );
     }
 
     // Move/Anchor/Lattice binding (spec 2026-05-08): mls_governance_binding.full.v1
     // no longer carries Phase 3 component-type lists; instead it declares
-    // required_event_kinds (cx.mls.commit + key share/withheld) and
+    // required_event_kinds (ck.mls.commit + key share/withheld) and
     // feature_discovery.required (move_based_mls_commit, covered_frontier_cell,
     // mls_epoch_cell). Validate the new shape so a stale profile slips through.
     let mls_binding = requirements
-        .get("cx.profile.mls_governance_binding.full.v1")
+        .get("ck.profile.mls_governance_binding.full.v1")
         .ok_or_else(|| {
             anyhow!("mls_governance_binding.full.v1 missing profile_requirements entry")
         })?;
     let required_event_kinds = string_array_field(mls_binding, "required_event_kinds")?;
-    if !required_event_kinds.contains(&"cx.mls.commit") {
-        bail!("mls_governance_binding.full.v1 required_event_kinds must include cx.mls.commit");
+    if !required_event_kinds.contains(&"ck.mls.commit") {
+        bail!("mls_governance_binding.full.v1 required_event_kinds must include ck.mls.commit");
     }
     let feature_discovery = mls_binding
         .get("feature_discovery")
@@ -1009,7 +1009,7 @@ fn validate_value_refs(
                     ("kind", Some(kind)) if kind.starts_with("cx.") => {
                         // The recursive walk hits `kind:` fields nested in
                         // payload content blocks (e.g. `payload.content.kind`
-                        // = `cx.content.text`), profile refs, feature ids,
+                        // = `ck.content.text`), profile refs, feature ids,
                         // etc. — none of which live in the event-kind
                         // registry. Skip namespace prefixes that are
                         // intentionally NOT event kinds; only validate

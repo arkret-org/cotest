@@ -197,7 +197,7 @@ async function banMember(request: APIRequestContext, fixture: OfflineFixture) {
     signedEventEnvelope({
       actorDid: fixture.alice.did,
       realmId: fixture.spaceId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: fixture.bob.did,
         member: fixture.bob.did,

@@ -23,7 +23,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation appeal", () => {
-  test("appellant submits cx.moderation.appeal.submit against an admin decision", async ({
+  test("appellant submits ck.moderation.appeal.submit against an admin decision", async ({
     request,
   }) => {
     const fixture = await createAppealFixture(request, "submit");
@@ -32,7 +32,7 @@ test.describe("moderation appeal", () => {
     expect(appeal.state).toBe("submitted");
     const history = await getAppealHistory(request, fixture.reviewerToken, appeal.appeal_id);
     expect(history.map((event) => event.event_kind)).toEqual([
-      "cx.moderation.appeal.submit",
+      "ck.moderation.appeal.submit",
     ]);
     expect(history[0]).toMatchObject({
       appeal_id: appeal.appeal_id,
@@ -92,7 +92,7 @@ test.describe("moderation appeal", () => {
         decision.decision_id,
       );
       const spaceAfterBan = await request.get(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(reviewerToken) },
       );
       expect(spaceAfterBan.ok()).toBeTruthy();
@@ -132,10 +132,10 @@ test.describe("moderation appeal", () => {
       "closed",
     ]);
     expect(history.map((event) => event.event_kind)).toEqual([
-      "cx.moderation.appeal.submit",
-      "cx.moderation.appeal.review",
-      "cx.moderation.appeal.decision",
-      "cx.moderation.appeal.close",
+      "ck.moderation.appeal.submit",
+      "ck.moderation.appeal.review",
+      "ck.moderation.appeal.decision",
+      "ck.moderation.appeal.close",
     ]);
   });
 
@@ -160,7 +160,7 @@ test.describe("moderation appeal", () => {
     const fixture = await createAppealFixture(request, "duplicate");
     await submitAppeal(request, fixture);
 
-    const duplicate = await request.post(`${solandBaseUrl()}/api/v1/moderation/appeal`, {
+    const duplicate = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/appeal`, {
       headers: authHeaders(fixture.appellantToken),
       data: appealPayload(fixture),
     });
@@ -337,7 +337,7 @@ async function banMemberViaApi(
     signedEventEnvelope({
       actorDid,
       realmId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: memberDid,
         member: memberDid,
@@ -361,7 +361,7 @@ function appealPayload(fixture: AppealFixture) {
 }
 
 async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/moderation/appeal`, {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/appeal`, {
     headers: authHeaders(fixture.appellantToken),
     data: appealPayload(fixture),
   });

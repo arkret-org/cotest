@@ -4,12 +4,12 @@
     {
       "id": "server_describe",
       "method": "GET",
-      "path": "/api/v1/server/describe"
+      "path": "/_cokret/describe"
     },
     {
       "id": "events_submit",
       "method": "POST",
-      "path": "/api/v1/events",
+      "path": "/_cokret/self/events",
       "auth": "alice",
       "headers": { "x-cokret-request-id": "mock-parity-events-submit" },
       "body_template": "realm_create_event"
@@ -17,57 +17,57 @@
     {
       "id": "events_list",
       "method": "GET",
-      "path": "/api/v1/events?realms=${realm_id}&limit=20",
+      "path": "/_cokret/self/events?realms=${realm_id}&limit=20",
       "auth": "alice"
     },
     {
       "id": "account_profile",
       "method": "GET",
-      "path": "/api/v1/account/me",
+      "path": "/_cokret/self/account/me",
       "auth": "alice"
     },
     {
       "id": "realm_create",
       "method": "POST",
-      "path": "/api/v1/events",
+      "path": "/_cokret/self/events",
       "auth": "alice",
       "body_template": "realm_create_event_2"
     },
     {
       "id": "space_create",
       "method": "POST",
-      "path": "/api/v1/events",
+      "path": "/_cokret/self/events",
       "auth": "alice",
       "body_template": "realm_create_event_3"
     },
     {
       "id": "directory_describe",
       "method": "GET",
-      "path": "/api/v1/directory/describe"
+      "path": "/_cokret/find/directory/describe"
     },
     {
       "id": "directory_search_realms",
       "method": "POST",
-      "path": "/api/v1/directory/search-realms",
+      "path": "/_cokret/find/directory/search-realms",
       "body": { "query": "Mock Parity", "limit": 20 }
     },
     {
       "id": "keys_backups",
       "method": "GET",
-      "path": "/api/v1/keys/backups",
+      "path": "/_cokret/self/keys/backups",
       "auth": "alice"
     },
     {
       "id": "devices_pairing_challenge",
       "method": "POST",
-      "path": "/api/v1/devices/pairing-challenge",
+      "path": "/_cokret/self/devices/pairing-challenge",
       "auth": "alice",
       "body": { "device_id": "dev_mock_parity_b" }
     },
     {
       "id": "ephemeral",
       "method": "POST",
-      "path": "/api/v1/ephemeral",
+      "path": "/_cokret/self/ephemeral",
       "auth": "alice",
       "body_template": "typing_ephemeral"
     }

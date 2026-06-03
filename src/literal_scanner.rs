@@ -18,8 +18,8 @@
 //!   `**/migrations/**`.
 //! * **Magic comment** — anywhere in the file, a line `// cokret-allow: <artifact_id>` (or `#
 //!   cokret-allow: ...` / `<!-- cokret-allow: ... -->`) exempts that specific id.
-//! * **Wildcard magic comment** — `// cokret-allow: *` exempts every artifact inside that file
-//!   (use sparingly; only for whole-file legacy fixtures).
+//! * **Wildcard magic comment** — `// cokret-allow: *` exempts every artifact inside that file (use
+//!   sparingly; only for whole-file legacy fixtures).
 //!
 //! The scanner is intentionally a single-crate module so the binary
 //! [`literal_scanner`] and integration smoke tests can both reach it through

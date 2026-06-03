@@ -72,7 +72,7 @@ test.describe("project simulation", () => {
     // @blocking-on: soland#kanban-project-simulation-gap
     // @user-promise: e2e/scenarios/kanban/project-simulation.md
     // @expected-live-by: 2026Q3
-    "alice assigns Card 1 to bob via cx.relation.create assigned_to; bob's notifications surface the assignment",
+    "alice assigns Card 1 to bob via ck.relation.create assigned_to; bob's notifications surface the assignment",
     async () => {
       // spec: relation.md §3.2 assigned_to
       // soland gap: assigned_to relation kind + notification projection.
@@ -80,7 +80,7 @@ test.describe("project simulation", () => {
   );
 
   test(
-    "status FSM: Card transitions todo → in_progress → done via cx.flow.update; invalid transition (todo → done direct) rejected by FSM cell",
+    "status FSM: Card transitions todo → in_progress → done via ck.flow.update; invalid transition (todo → done direct) rejected by FSM cell",
     async ({ request }) => {
       const alice = uniqueUser("s16-fsm-alice");
       await ensureRegistered(request, alice);
@@ -99,12 +99,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.flow.create",
+          kind: "ck.flow.create",
           createdAt: taskCreatedAt,
           payload: {
             object: {
               id: taskFlowId,
-              schema: "cx.schema.flow.v1",
+              schema: "ck.schema.flow.v1",
               realm_id: spaceId,
               space_id: spaceId,
               title: "Implement login",
@@ -119,12 +119,12 @@ test.describe("project simulation", () => {
         { context: "create todo card flow" },
       );
 
-      const badDone = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const badDone = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.flow.update",
+          kind: "ck.flow.update",
           payload: {
             target_ref: taskFlowId,
             flow_id: taskFlowId,
@@ -141,7 +141,7 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.flow.update",
+          kind: "ck.flow.update",
           payload: {
             target_ref: taskFlowId,
             flow_id: taskFlowId,
@@ -157,7 +157,7 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.flow.update",
+          kind: "ck.flow.update",
           payload: {
             target_ref: taskFlowId,
             flow_id: taskFlowId,
@@ -174,12 +174,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.flow.create",
+          kind: "ck.flow.create",
           createdAt: incidentCreatedAt,
           payload: {
             object: {
               id: incidentFlowId,
-              schema: "cx.schema.flow.v1",
+              schema: "ck.schema.flow.v1",
               realm_id: spaceId,
               space_id: spaceId,
               title: "SEV-2 checkout outage",
@@ -194,12 +194,12 @@ test.describe("project simulation", () => {
         { context: "create investigating incident flow" },
       );
 
-      const badResolved = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+      const badResolved = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.flow.update",
+          kind: "ck.flow.update",
           payload: {
             target_ref: incidentFlowId,
             flow_id: incidentFlowId,
@@ -236,7 +236,7 @@ test.describe("project simulation", () => {
     // @blocking-on: soland#kanban-project-simulation-gap
     // @user-promise: e2e/scenarios/kanban/project-simulation.md
     // @expected-live-by: 2026Q3
-    "E16.1 unassign emits cx.relation.tombstone; assignment no longer shows in card UI",
+    "E16.1 unassign emits ck.relation.tombstone; assignment no longer shows in card UI",
     async () => {
       // spec: relation.md §3.2 tombstoned state
     },

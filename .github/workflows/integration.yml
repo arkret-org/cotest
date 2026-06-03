@@ -33,7 +33,7 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: cokret-dev/cokret-rust-sdk
+          repository: cokret/cokret-rust-sdk
           path: cokret-rust-sdk
           ref: circle-rollout
       # P5.1 — upstream checkout failures MUST hard-fail the job. The previous
@@ -42,17 +42,17 @@ jobs:
       # job has no business green-lighting a partial bringup.
       - uses: actions/checkout@v4
         with:
-          repository: cokret-dev/soland
+          repository: cokret/soland
           path: soland
           ref: circle-rollout
       - uses: actions/checkout@v4
         with:
-          repository: cokret-dev/coauth
+          repository: cokret/coauth
           path: coauth
           ref: circle-rollout
       - uses: actions/checkout@v4
         with:
-          repository: cokret-dev/floria
+          repository: cokret/floria
           path: floria
           ref: circle-rollout
       - uses: dtolnay/rust-toolchain@master
@@ -126,7 +126,7 @@ jobs:
             sleep 1
           done
           curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
-          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /api/v1/server/describe"
+          npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /_cokret/describe"
       - name: run federation security hardening Playwright
         working-directory: cotest/e2e
         env:

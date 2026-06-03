@@ -3,13 +3,13 @@
 // Spec: models/morph.md §4.1 (schema_refs[] Evolution Policy, S1/S2/S3),
 //       §4.0 (decision matrix — schema evolution row),
 //       §6 (schema evolution generic constraints).
-// Profile: cx.profile.morph.schema_migration_transformations.v1
+// Profile: ck.profile.morph.schema_migration_transformations.v1
 //   defined in cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
-//   — opt-in Realm profile permitting cx.morph.schema_migrate events with
+//   — opt-in Realm profile permitting ck.morph.schema_migrate events with
 //     compatibility_class ∈ {breaking, transformation}.
 // Decision table (canonical): cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
 //   — 4 precedence sources for "what a Morph is and what it allows" merge.
-// Event kind: cx.morph.schema_migrate (event-kind-registry.json, category=morph,
+// Event kind: ck.morph.schema_migrate (event-kind-registry.json, category=morph,
 //             status=active, reducer_input=true).
 // Error codes (error-code-registry.json):
 //   - morph_schema_refs_evolution_unauthorized
@@ -104,7 +104,7 @@ type ConformanceProfilesDoc = {
   profile_requirements: Record<string, MigrationProfileBlock | Record<string, unknown>>;
 };
 
-const MIGRATION_PROFILE_ID = "cx.profile.morph.schema_migration_transformations.v1";
+const MIGRATION_PROFILE_ID = "ck.profile.morph.schema_migration_transformations.v1";
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -187,7 +187,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     });
   });
 
-  test("Phase E — cx.profile.morph.schema_migration_transformations.v1 profile block parses with the §4.1 S3 invariants", async ({}, testInfo) => {
+  test("Phase E — ck.profile.morph.schema_migration_transformations.v1 profile block parses with the §4.1 S3 invariants", async ({}, testInfo) => {
     // spec: morph.md §4.1 S3 (breaking / transformation opt-in) +
     //       conformance-profiles.json profile registry entry.
     const profileBlock = profilesDoc.profile_requirements[MIGRATION_PROFILE_ID] as
@@ -198,11 +198,11 @@ test.describe("morph schema migration @fully-implemented", () => {
       `${MIGRATION_PROFILE_ID} must exist in conformance-profiles.json#/profile_requirements`,
     ).toBeDefined();
 
-    // The profile commits the deployment to a) requiring cx.morph.schema_migrate
-    // event kind support, and b) gating it on the cx.morph.schema.migrate
+    // The profile commits the deployment to a) requiring ck.morph.schema_migrate
+    // event kind support, and b) gating it on the ck.morph.schema.migrate
     // capability action. Both invariants are in additional_requirements +
     // required_event_kinds.
-    expect(profileBlock!.required_event_kinds).toContain("cx.morph.schema_migrate");
+    expect(profileBlock!.required_event_kinds).toContain("ck.morph.schema_migrate");
 
     expect(profileBlock!.additional_requirements).toBeDefined();
     expect(profileBlock!.additional_requirements.capability_must).toMatch(
@@ -246,10 +246,10 @@ test.describe("morph schema migration @fully-implemented", () => {
     // @blocking-on: soland#models-morph-schema-migration-gap
     // @user-promise: e2e/scenarios/models/morph-schema-migration.md
     // @expected-live-by: 2026Q3
-    "Phase A — cx.morph.schema_migrate with unsupported transformation_rules is hard-rejected",
+    "Phase A — ck.morph.schema_migrate with unsupported transformation_rules is hard-rejected",
     async ({ request }) => {
       // spec: morph.md §4.1 S3 (breaking / transformation 类需 Realm 显式启用
-      //       cx.profile.morph.schema_migration_transformations.v1 profile,
+      //       ck.profile.morph.schema_migration_transformations.v1 profile,
       //       未声明 → reducer MUST failed_precondition reason=
       //       morph_schema_refs_transformation_unsupported).
       //
@@ -257,8 +257,8 @@ test.describe("morph schema migration @fully-implemented", () => {
       // surface land):
       //   1. alice registers, dev-logins, creates a test Realm R (without
       //      declaring the migration profile), then a Morph M with
-      //      schema_refs = ["cx.schema.morph.customer_risk.v1"].
-      //   2. alice POSTs cx.morph.schema_migrate with:
+      //      schema_refs = ["ck.schema.morph.customer_risk.v1"].
+      //   2. alice POSTs ck.morph.schema_migrate with:
       //        compatibility_class = "transformation"
       //        transformation_rules[*].rule = "cx.transform.bogus.unsupported.v1"
       //      (a rule id deliberately outside the profile's
@@ -286,25 +286,25 @@ test.describe("morph schema migration @fully-implemented", () => {
       // spec: morph.md §4.1 S1 (per-event requirements.schema[] version
       //       binding — readers MUST validate historical events against the
       //       schema bound at write time, NOT current schema_refs[]) +
-      //       §4.1 S2 (cx.morph.update schema_refs[] change is the
+      //       §4.1 S2 (ck.morph.update schema_refs[] change is the
       //       additive-only fast path) +
       //       §4.1 S3 additive arm (core reducer MUST accept additive
-      //       cx.morph.schema_migrate without the opt-in profile).
+      //       ck.morph.schema_migrate without the opt-in profile).
       //
       // Acceptance criteria (once soland Morph reducer lands):
       //   1. alice creates Morph M_b with schema_refs = ["...customer_risk.v1"]
       //      and writes some v1 fields.
-      //   2. alice POSTs cx.morph.update with schema_refs[] expanded to
+      //   2. alice POSTs ck.morph.update with schema_refs[] expanded to
       //      ["...customer_risk.v1", "...customer_risk.optional_ext.v1"]
       //      (additive: optional fields only).
       //      The event's requirements.schema[] MUST include both old and
       //      new schema ids (overlap window — spec §4.1 S2).
       //   3. Expect HTTP 2xx. GET the Morph: schema_refs[] is the new set;
       //      v1 fields still present.
-      //   4. Pull /api/v1/audit/recent (or equivalent). Assert there is one
+      //   4. Pull /_cokret/self/audit/recent (or equivalent). Assert there is one
       //      schema_evolution entry recording issuer, schema_refs old/new,
       //      authorization_ref.
-      //   5. alice POSTs cx.morph.schema_migrate with
+      //   5. alice POSTs ck.morph.schema_migrate with
       //      compatibility_class = "additive" stacking another optional
       //      extension. HTTP 2xx (no profile opt-in needed for additive).
       //   6. GET event history: events written before step 2 still carry
@@ -321,19 +321,19 @@ test.describe("morph schema migration @fully-implemented", () => {
     "Phase C — breaking / transformation migration requires opt-in profile + capability and emits schema_migration_breaking audit",
     async ({ request }) => {
       // spec: morph.md §4.1 S3 (breaking / transformation arms — Realm MUST
-      //       declare cx.profile.morph.schema_migration_transformations.v1
-      //       opt-in AND reducer MUST gate on cx.morph.schema.migrate
+      //       declare ck.profile.morph.schema_migration_transformations.v1
+      //       opt-in AND reducer MUST gate on ck.morph.schema.migrate
       //       capability action; absence → failed_precondition reason=
       //       morph_schema_refs_transformation_unsupported or capability_denied).
       //
       // Acceptance criteria:
       //   1. In Realm R (no migration profile declared), alice POSTs
-      //      cx.morph.schema_migrate with compatibility_class = "breaking"
+      //      ck.morph.schema_migrate with compatibility_class = "breaking"
       //      (e.g. to_schema_refs[] removes a required field).
       //      Expect HTTP 4xx, error.code =
       //      morph_schema_refs_transformation_unsupported.
-      //   2. alice POSTs cx.realm.profile.update declaring the migration
-      //      profile + granting cx.morph.schema.migrate to her own DID.
+      //   2. alice POSTs ck.realm.profile.update declaring the migration
+      //      profile + granting ck.morph.schema.migrate to her own DID.
       //   3. alice re-POSTs the breaking schema_migrate from step 1.
       //      Expect HTTP 2xx.
       //   4. Pull audit log; assert one entry with kind matching
@@ -341,13 +341,13 @@ test.describe("morph schema migration @fully-implemented", () => {
       //        issuer = alice.did
       //        from_schema_refs[], to_schema_refs[]
       //        compatibility_class = "breaking"
-      //        capability_used = "cx.morph.schema.migrate"
+      //        capability_used = "ck.morph.schema.migrate"
       //        profile_ref = MIGRATION_PROFILE_ID
       //   5. alice POSTs schema_migrate with
       //      compatibility_class = "transformation" and well-formed
       //      transformation_rules[] (each rule.id ∈ profile
       //      transformation_rules_dialect). Expect HTTP 2xx.
-      //   6. alice revokes her own cx.morph.schema.migrate capability via
+      //   6. alice revokes her own ck.morph.schema.migrate capability via
       //      cx.realm.policy.update, then re-POSTs a transformation migrate.
       //      Expect HTTP 4xx, error.code = capability_denied.
       void request;
@@ -377,7 +377,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       //      cokret-spec/spec/v1/artifacts/fixtures/.
       //   2. For each vector v:
       //      a. Seed Morph state matching v.input.
-      //      b. POST cx.morph.schema_migrate with v.input.payload
+      //      b. POST ck.morph.schema_migrate with v.input.payload
       //         (from_schema_refs[], to_schema_refs[], compatibility_class,
       //         transformation_rules[]).
       //      c. GET the Morph projection after migration.

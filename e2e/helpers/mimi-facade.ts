@@ -61,17 +61,17 @@ export function createMimiFacadeClient(request: APIRequestContext): MimiFacadeCl
       return jsonBody(await request.post(`${baseUrl}/scenarios`, { data: input }));
     },
     async createJoinRequest(input) {
-      return jsonBody(await request.post(`${baseUrl}/api/v1/mimi/join-requests`, { data: input }));
+      return jsonBody(await request.post(`${baseUrl}/_cokret/open/mimi/join-requests`, { data: input }));
     },
     async approveJoin(input) {
-      return jsonBody(await request.post(`${baseUrl}/api/v1/mimi/approve`, { data: input }));
+      return jsonBody(await request.post(`${baseUrl}/_cokret/open/mimi/approve`, { data: input }));
     },
     async sendOutbound(input) {
-      const response = await request.post(`${baseUrl}/api/v1/mimi/outbound`, { data: input });
+      const response = await request.post(`${baseUrl}/_cokret/open/mimi/outbound`, { data: input });
       return { status: response.status(), body: await jsonBody(response) };
     },
     async injectInbound(input) {
-      const response = await request.post(`${baseUrl}/api/v1/mimi/inbound`, { data: input });
+      const response = await request.post(`${baseUrl}/_cokret/open/mimi/inbound`, { data: input });
       return { status: response.status(), body: await jsonBody(response) };
     },
     async inspect() {

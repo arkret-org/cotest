@@ -1015,14 +1015,14 @@ try {
             "`$env:MOCK_WITNESS_PORT='$mockWitnessPort'; `$env:MOCK_WITNESS_DID={0}; node {1}"
         ) -f (Quote-PsLiteral $MockWitnessDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-witness" -Command $mockWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockWitnessBaseUrl/api/v1/witness/policy" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockWitnessBaseUrl/_cokret/root/witness/policy" -TimeoutSeconds 30
         $witnessIndex = 2
         foreach ($witness in $mockWitnessExtraInstances) {
             $extraWitnessCmd = (
                 "`$env:MOCK_WITNESS_PORT='{0}'; `$env:MOCK_WITNESS_DID={1}; node {2}"
             ) -f $witness.port, (Quote-PsLiteral $witness.did), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
             $managedServices.Add((Start-ManagedCommand -Name "mock-witness-$witnessIndex" -Command $extraWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-            Wait-HttpReady -Url "$($witness.base_url)/api/v1/witness/policy" -TimeoutSeconds 30
+            Wait-HttpReady -Url "$($witness.base_url)/_cokret/root/witness/policy" -TimeoutSeconds 30
             $witnessIndex++
         }
     }
@@ -1033,7 +1033,7 @@ try {
         }
         $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/api/v1/audit-agent/identity" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/_soland/admin/audit-agent/identity" -TimeoutSeconds 30
     }
     if ($StartMockPolicyServer) {
         $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
@@ -1042,7 +1042,7 @@ try {
         }
         $mockPolicyServerCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-policy-server.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-policy-server" -Command $mockPolicyServerCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockPolicyServerBaseUrl/api/v1/policy/health" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockPolicyServerBaseUrl/_cokret/self/policy/health" -TimeoutSeconds 30
     }
     if ($StartMockPushGateway) {
         $envExpr = "`$env:MOCK_PUSH_GATEWAY_PORT='$mockPushGatewayPort'"
@@ -1176,7 +1176,7 @@ try {
             (Quote-PsLiteral $coauthTrimmed),
             (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
             (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
-            (Quote-PsLiteral "$coauthTrimmed/api/v1/session-grants/introspect"),
+            (Quote-PsLiteral "$coauthTrimmed/_cokret/gate/account/session-grants/introspect"),
             (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
             (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer)
     }
@@ -1196,7 +1196,7 @@ try {
         $teabayTrimmed = $TeabayBaseUrl.TrimEnd("/")
         $solandTeabayEnv = (
             "`$env:SOLAND_DIRECTORY_ANNOUNCE_URL={0}; "
-        ) -f (Quote-PsLiteral "$teabayTrimmed/api/v1/directory/announce")
+        ) -f (Quote-PsLiteral "$teabayTrimmed/_cokret/find/directory/announce")
     }
 
     function Build-SolandCommand {
@@ -2023,7 +2023,7 @@ $summary = [pscustomobject]@{
     teabay_service_did = if ($TeabayBaseUrl) { $TeabayServiceDid } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
     coauth_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
-    coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/api/v1/session-grants/introspect" } else { $null }
+    coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_cokret/gate/account/session-grants/introspect" } else { $null }
     screenshots = $screenshotDir
     visual_baselines = $visualBaselineDir
     diagnostics = Join-Path $jointDir "diagnostics"

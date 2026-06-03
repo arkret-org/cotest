@@ -1,8 +1,8 @@
 //! §11.1 — provisioning + pairing + grant MUST land in spec order.
 //!
-//! Spec: provisioning fires `cx.agent.provision`; pairing fires
-//! `cx.account.agent_key_pair` (the agent_key_authorize_payload); grant
-//! attach fires `cx.agent.grant.attach`. Any reorder (pairing-before-
+//! Spec: provisioning fires `ck.agent.provision`; pairing fires
+//! `ck.account.agent_key_pair` (the agent_key_authorize_payload); grant
+//! attach fires `ck.agent.grant.attach`. Any reorder (pairing-before-
 //! provision, grant-before-pairing) MUST be rejected.
 
 use anyhow::{Result, anyhow};
@@ -32,15 +32,15 @@ pub async fn provisioning_pairing_grant_order_run() -> Result<()> {
             "duplicate steps in provisioning sequence: {SPEC_ORDER:?}"
         ));
     }
-    if AGENT_PAUSE != "cx.agent.pause" {
+    if AGENT_PAUSE != "ck.agent.pause" {
         return Err(anyhow!(
             "AGENT_PAUSE event kind drifted; reducer pause invariant cannot anchor"
         ));
     }
     // TODO(P4-impl): walk a real envelope sequence:
-    //   1. POST /api/v1/agents          (cx.agent.provision)  → 201
-    //   2. POST /auth/account/agent-key-pair (cx.account.agent_key_pair) → 200
-    //   3. POST /api/v1/agents/{id}/grants (cx.agent.grant.attach) → 201
+    //   1. POST /_cokret/self/agents          (ck.agent.provision)  → 201
+    //   2. POST /_cokret/gate/account/agent-key-pair (ck.account.agent_key_pair) → 200
+    //   3. POST /_cokret/self/agents/{id}/grants (ck.agent.grant.attach) → 201
     // then re-submit steps in (2,1,3) order and assert each out-of-order
     // step is rejected with `provisioning_order_violation`. Pending
     // soland reducer wiring (P2-impl agent_principal projection).

@@ -19,33 +19,41 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let event = event_envelope(
         &alice.actor,
         &space_id,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
             "track_name": "discussion",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "idempotent replay body",
                 "format": "plain",
             },
         }),
     );
 
-    let first = expect_json(alice.post("/api/v1/events").json(&event), StatusCode::OK).await?;
+    let first = expect_json(
+        alice.post("/_cokret/self/events").json(&event),
+        StatusCode::OK,
+    )
+    .await?;
     assert_eq!(first["status"], "accepted");
     let event_id = first["event_id"]
         .as_str()
         .ok_or_else(|| anyhow!("accepted response missing event_id: {first}"))?;
     assert_eq!(event_id, json_string(&event, "event_id")?);
 
-    let duplicate = expect_json(alice.post("/api/v1/events").json(&event), StatusCode::OK).await?;
+    let duplicate = expect_json(
+        alice.post("/_cokret/self/events").json(&event),
+        StatusCode::OK,
+    )
+    .await?;
     assert_eq!(duplicate["status"], "duplicate");
     assert_eq!(duplicate["event_id"], first["event_id"]);
     assert_eq!(duplicate["receipt"]["idempotent"], true);
 
     let listed = expect_json(
         alice
-            .get("/api/v1/events")
+            .get("/_cokret/self/events")
             .query(&[("realms", space_id.as_str()), ("limit", "100")]),
         StatusCode::OK,
     )
@@ -79,12 +87,12 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let create_event = event_envelope(
         &alice.actor,
         &space_id,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
             "track_name": "discussion",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "message before edit/redact replay",
                 "format": "plain",
             },
@@ -95,17 +103,17 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let create_event_id = json_string(&created, "event_id")?;
     let message_ref = create_event_id.replacen("ck:event:", "ck:message:", 1);
 
-    assert_projected_kind_count(&alice, &space_id, "cx.message.create", 1).await?;
+    assert_projected_kind_count(&alice, &space_id, "ck.message.create", 1).await?;
 
     let revise_event = event_envelope(
         &alice.actor,
         &space_id,
-        "cx.message.revise",
+        "ck.message.revise",
         json!({
             "target_event_id": create_event_id,
             "target_ref": message_ref,
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "message after idempotent edit replay",
                 "format": "plain",
             },
@@ -114,12 +122,12 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
     let revise_event_id = json_string(&revised, "event_id")?;
     assert_projected_event_count(&alice, &space_id, revise_event_id, 1).await?;
-    assert_projected_kind_count(&alice, &space_id, "cx.message.revise", 1).await?;
+    assert_projected_kind_count(&alice, &space_id, "ck.message.revise", 1).await?;
 
     let redact_event = event_envelope(
         &alice.actor,
         &space_id,
-        "cx.message.redact",
+        "ck.message.redact",
         json!({
             "target_event_id": create_event_id,
             "target_ref": message_ref,
@@ -145,7 +153,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         "duplicate redaction replay should not duplicate the visible edit-chain projection: {visible_after_redaction}"
     );
     assert_eq!(
-        event_kind_count(&visible_after_redaction, "cx.message.revise")?,
+        event_kind_count(&visible_after_redaction, "ck.message.revise")?,
         1,
         "edit-chain projection should remain single after redaction replay: {visible_after_redaction}"
     );
@@ -157,16 +165,16 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
     let event = event_envelope(
         &alice.actor,
         realm_id,
-        "cx.realm.create",
+        "ck.realm.create",
         json!({
             "object": {
                 "id": realm_id,
-                "schema": "cx.schema.realm.v1",
+                "schema": "ck.schema.realm.v1",
                 "title": title,
                 "summary": title,
                 "trust_domain": "ck:trust_domain:event-idempotency.cotest.local",
                 "created_by": &alice.actor,
-                "schema_refs": ["cx.schema.realm.v1"],
+                "schema_refs": ["ck.schema.realm.v1"],
                 "default_discoverability": "public",
                 "default_join_rule": "public",
                 "history_visibility": "world_readable",
@@ -187,17 +195,29 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
             }
         }),
     );
-    let response = expect_json(alice.post("/api/v1/events").json(&event), StatusCode::OK).await?;
+    let response = expect_json(
+        alice.post("/_cokret/self/events").json(&event),
+        StatusCode::OK,
+    )
+    .await?;
     assert_eq!(response["status"], "accepted");
     Ok(realm_id.to_owned())
 }
 
 async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<Value> {
-    let first = expect_json(alice.post("/api/v1/events").json(event), StatusCode::OK).await?;
+    let first = expect_json(
+        alice.post("/_cokret/self/events").json(event),
+        StatusCode::OK,
+    )
+    .await?;
     assert_eq!(first["status"], "accepted");
     assert_eq!(first["event_id"].as_str(), event["event_id"].as_str());
 
-    let duplicate = expect_json(alice.post("/api/v1/events").json(event), StatusCode::OK).await?;
+    let duplicate = expect_json(
+        alice.post("/_cokret/self/events").json(event),
+        StatusCode::OK,
+    )
+    .await?;
     assert_eq!(duplicate["status"], "duplicate");
     assert_eq!(duplicate["event_id"], first["event_id"]);
     assert_eq!(duplicate["canonical_digest"], first["canonical_digest"]);
@@ -209,7 +229,7 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<
 async fn list_space_events(alice: &TestActorClient, space_id: &str) -> Result<Value> {
     expect_json(
         alice
-            .get("/api/v1/events")
+            .get("/_cokret/self/events")
             .query(&[("realms", space_id), ("limit", "100")]),
         StatusCode::OK,
     )

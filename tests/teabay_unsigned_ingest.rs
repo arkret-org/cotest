@@ -1,6 +1,6 @@
 //! TB-3 — teabay unsigned-ingest rejection gate (entrypoint).
 //!
-//! Verifies an unsigned `POST /api/v1/directory/announce` is rejected at the
+//! Verifies an unsigned `POST /_cokret/find/directory/announce` is rejected at the
 //! transport layer with 401/403. TB-1 has landed — see
 //! `teabay/crates/server/src/middleware/http_sig.rs` and the
 //! `.hoop(HttpSigMiddleware::new(...))` wire-up in
@@ -12,7 +12,7 @@
 //!
 //! This end-to-end scenario remains `#[ignore]` because it spawns the
 //! teabay binary and exercises the live HTTP stack — it requires
-//! `TEABAY_BIN` (or a debug build at `cokret-dev/teabay/target/debug/`)
+//! `TEABAY_BIN` (or a debug build at `cokret/teabay/target/debug/`)
 //! plus a Postgres `DATABASE_URL`. Opt in locally with:
 //!
 //!   cargo test --test teabay_unsigned_ingest -- --ignored

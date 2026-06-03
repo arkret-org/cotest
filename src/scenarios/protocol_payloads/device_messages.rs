@@ -1,5 +1,5 @@
-//! Phase 2 — `/api/v1/device_messages` send / duplicate / list / describe
-//! plus the `cx.key.verification.request` side channel.
+//! Phase 2 — `/_cokret/self/device_messages` send / duplicate / list / describe
+//! plus the `ck.key.verification.request` side channel.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -20,7 +20,7 @@ async fn send_application_message(server: &CokretServer, token: &str) -> Result<
     let send = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/device_messages"))
+            .post(server.url("/_cokret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
@@ -44,7 +44,7 @@ async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Res
     let duplicate_send = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/device_messages"))
+            .post(server.url("/_cokret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&json!({
@@ -68,7 +68,7 @@ async fn list_delivered_keeps_ciphertext_only(server: &CokretServer, token: &str
     let delivered = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/device_messages"))
+            .get(server.url("/_cokret/self/device_messages"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -83,7 +83,7 @@ async fn describe_contract_is_stable(server: &CokretServer, token: &str) -> Resu
     let device_messages_describe = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/device_messages/describe"))
+            .get(server.url("/_cokret/self/device_messages/describe"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -94,7 +94,7 @@ async fn describe_contract_is_stable(server: &CokretServer, token: &str) -> Resu
     );
     assert_eq!(
         device_messages_describe["schema"],
-        "cx.schema.device_message.v1"
+        "ck.schema.device_message.v1"
     );
     Ok(())
 }
@@ -103,16 +103,16 @@ async fn send_verification_message(server: &CokretServer, token: &str) -> Result
     let verification_send = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/device_messages"))
+            .post(server.url("/_cokret/self/device_messages"))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-verification-txn")
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
                         "dev_alice": {
-                            "type": "cx.key.verification.request",
+                            "type": "ck.key.verification.request",
                             "content": encrypted_envelope(
-                                "cx.key.verification.request",
+                                "ck.key.verification.request",
                                 "base64url-opaque-verification-ciphertext"
                             )
                         }

@@ -7,16 +7,16 @@
       "expect": "reject",
       "source": {
         "mode": "fixture",
-        "path": "/api/v1/server/describe"
+        "path": "/_cokret/describe"
       },
       "describe": {
         "service": "soland",
         "service_type": "principal_server",
         "supported_profiles": [
-          "cx.profile.principal_server.v1"
+          "ck.profile.principal_server.v1"
         ],
         "supported_operations": [
-          "cx.server.describe"
+          "ck.server.describe"
         ],
         "limits": {
           "profile_status": {
@@ -36,13 +36,13 @@
       "expect": "pass",
       "source": {
         "mode": "fixture",
-        "path": "/api/v1/server/describe"
+        "path": "/_cokret/describe"
       },
       "describe": {
         "service": "floria",
-        "operation_id": "cx.push.notify",
+        "operation_id": "ck.push.notify",
         "supported_profiles": [
-          "cx.profile.push_gateway.v1"
+          "ck.profile.push_gateway.v1"
         ],
         "supported_providers": [
           "webpush",
@@ -66,13 +66,13 @@
       "expect": "pass",
       "source": {
         "mode": "fixture",
-        "path": "/api/v1/directory/describe"
+        "path": "/_cokret/find/directory/describe"
       },
       "describe": {
         "service": "teabay",
         "service_did": "did:web:teabay.example",
         "discovery_profiles": [
-          "cx.profile.directory_service.v1"
+          "ck.profile.directory_service.v1"
         ],
         "ingest_modes": [
           "announce"
@@ -109,13 +109,13 @@
       "expect": "reject",
       "source": {
         "mode": "fixture",
-        "path": "/api/v1/server/describe"
+        "path": "/_cokret/describe"
       },
       "describe": {
         "service": "coauth",
         "service_type": "auth_server",
         "supported_profiles": [
-          "cx.profile.principal_server.v1"
+          "ck.profile.principal_server.v1"
         ],
         "admin_surfaces": [
           {

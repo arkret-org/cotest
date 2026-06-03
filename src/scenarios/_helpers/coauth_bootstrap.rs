@@ -36,7 +36,6 @@
 //! Ubuntu job only — see `.github/workflows/integration.yml`.
 
 use std::io::Write;
-use crate::harness::free_port;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -45,6 +44,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
 
+use crate::harness::free_port;
 use crate::scenarios::_helpers::external_binary::{
     ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
 };
@@ -108,7 +108,7 @@ pub struct SpawnedCoauth {
 }
 
 impl SpawnedCoauth {
-    /// Public REST base — what callers should use for `/api/v1/...`.
+    /// Public REST base — what callers should use for `/_cokret/self/...`.
     pub fn base_url(&self) -> &str {
         &self.server.base_url
     }
@@ -569,7 +569,6 @@ fn docker_available() -> bool {
         .map(|s| s.success())
         .unwrap_or(false)
 }
-
 
 fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
     let cutoff = Instant::now() + deadline;

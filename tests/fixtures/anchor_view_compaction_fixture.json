@@ -84,7 +84,7 @@
           "state_root": "sha256:eee1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ck:cell:cx.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": [
                 "ck:event:01970e58-0000-7000-8000-000000000010",
@@ -112,7 +112,7 @@
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ck:cell:cx.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
               "ck:event:01970e58-0000-7000-8000-000000000010",
@@ -130,7 +130,7 @@
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ck:cell:cx.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
               "ck:event:01970e58-0000-7000-8000-000000000010",
@@ -157,7 +157,7 @@
           "state_root": "sha256:8a81111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ck:cell:cx.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ck:cell:ck.component.realm.policy.v1:ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": ["ck:event:01970e58-0000-7000-8000-000000000020"]
             }

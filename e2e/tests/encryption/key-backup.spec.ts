@@ -28,8 +28,8 @@ test.describe("key backup + restore", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      // Probe: is /api/v1/keys/backups routed?
-      const listResp = await request.get(`${solandBaseUrl()}/api/v1/keys/backups`, {
+      // Probe: is /_cokret/self/keys/backups routed?
+      const listResp = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
         headers: { authorization: `Bearer ${aliceToken}` },
       });
       // If routed, body must be JSON; backups array (possibly empty).
@@ -55,7 +55,7 @@ test.describe("key backup + restore", () => {
     "alice sets up passphrase-protected backup via /settings/recovery; Argon2id KDF + XChaCha20-Poly1305 envelope uploaded",
     async () => {
       // spec: key-management.md §7.1-§7.2
-      // soland gap: cx.schema.key_backup.v1 schema + recovery policy state.
+      // soland gap: ck.schema.key_backup.v1 schema + recovery policy state.
       // yougen gap: /settings/recovery setup wizard.
     },
   );
@@ -76,7 +76,7 @@ test.describe("key backup + restore", () => {
     // @blocking-on: soland#encryption-key-backup-gap
     // @user-promise: e2e/scenarios/encryption/key-backup.md
     // @expected-live-by: 2026Q3
-    "device-2 replays cx.mls.commit chain using backup's mls_history_backup_key; pre-loss E2EE messages decrypt",
+    "device-2 replays ck.mls.commit chain using backup's mls_history_backup_key; pre-loss E2EE messages decrypt",
     async () => {
       // spec: encryption-and-audit.md §2.4 + key-management.md §7.3 step 6
       // soland gap: MLS epoch backfill on restore.

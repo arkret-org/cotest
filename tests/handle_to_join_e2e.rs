@@ -7,11 +7,11 @@
 //!     `member_delivery_binding`).
 //!   - T3.3 lands the soland `delivery_binding_policy` reducer (`recipient_service_not_allowed` /
 //!     `binding_source_not_allowed`).
-//!   - T3.4 adds the teabay `cx.directory.resolve_handle(intent="member_add")` allow-list filter.
+//!   - T3.4 adds the teabay `ck.directory.resolve_handle(intent="member_add")` allow-list filter.
 //!
 //! The scenario in `cotest::scenarios::handle_to_join_e2e` always exercises
 //! the SDK happy path + all seven negatives, and best-effort drives a live
-//! `POST /api/v1/directory/resolve-handle` against teabay when COAUTH_BIN,
+//! `POST /_cokret/find/directory/resolve-handle` against teabay when COAUTH_BIN,
 //! SOLAND_BIN, TEABAY_BIN and their required env vars (DATABASE_URL,
 //! COAUTH_DATABASE_URI, docker) are all present.
 //!

@@ -38,23 +38,23 @@ use super::{fixture_path, validate_profile};
 pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-vectors.json";
 
 /// Canonical conformance profile for the security closure fixture suite.
-pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "cx.profile.privacy_security_vectors.v1";
+pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 
 /// The 12 vector ids the round-4 spec promotes from prose to fixture. The
 /// list is pinned here so any drift on either side is loud.
 pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
-    "cx.vector.federation.idempotency_after_key_revoke.v1",
-    "cx.vector.webrtc.media_plaintext_downgrade.v1",
-    "cx.vector.identity_link.eager_invalidation.v1",
-    "cx.vector.identity_link.policy_tightening_invalidation.v1",
-    "cx.vector.late_key_recovery.removed_actor.v1",
-    "cx.vector.invite.oob_code_entropy.v1",
-    "cx.vector.invite.failure_indistinguishable.v1",
-    "cx.vector.consent.scope_cascade.v1",
-    "cx.vector.consent.cache_invalidation.v1",
-    "cx.vector.sync.soft_fail_reconcile.v1",
-    "cx.vector.lattice.lww_open_set.v1",
-    "cx.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
+    "ck.vector.federation.idempotency_after_key_revoke.v1",
+    "ck.vector.webrtc.media_plaintext_downgrade.v1",
+    "ck.vector.identity_link.eager_invalidation.v1",
+    "ck.vector.identity_link.policy_tightening_invalidation.v1",
+    "ck.vector.late_key_recovery.removed_actor.v1",
+    "ck.vector.invite.oob_code_entropy.v1",
+    "ck.vector.invite.failure_indistinguishable.v1",
+    "ck.vector.consent.scope_cascade.v1",
+    "ck.vector.consent.cache_invalidation.v1",
+    "ck.vector.sync.soft_fail_reconcile.v1",
+    "ck.vector.lattice.lww_open_set.v1",
+    "ck.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
 ];
 
 /// Top-level fixture shape.
@@ -220,7 +220,7 @@ impl SecurityClosureStep {
 /// Top-level sanity suite — wire shape closure over the fixture itself.
 ///
 /// Pins:
-/// * profile equals `cx.profile.privacy_security_vectors.v1`
+/// * profile equals `ck.profile.privacy_security_vectors.v1`
 /// * every required vector_id is present
 /// * every step exposes the full 6-field `runner{}` contract
 /// * `expected_state_transition.outcome` (when set) matches `expected.outcome` (mirrors the

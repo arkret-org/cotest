@@ -12,10 +12,10 @@ this grid against [`spec-section-11-compliance.md`](spec-section-11-compliance.m
 
 | ID  | Profile                                       | SDK module                                            | Test                                            |
 |-----|-----------------------------------------------|-------------------------------------------------------|-------------------------------------------------|
-| P-1 | `cx.profile.personal_agent_provisioning.v1`   | `cotest::scenarios::personal_agent_provisioning`      | `personal_agent_provisioning_profile`           |
-| P-2 | `cx.profile.agent_auth.v1`                    | `cotest::scenarios::agent_auth`                       | `agent_auth_profile`                            |
-| P-3 | `cx.profile.agent_delegation_policy.v1`       | `cotest::scenarios::agent_delegation_policy`          | `agent_delegation_policy_profile`               |
-| P-4 | `cx.profile.agent_sidecar_thread.v1`          | `cotest::scenarios::agent_sidecar_thread`             | `agent_sidecar_thread_profile`                  |
+| P-1 | `ck.profile.personal_agent_provisioning.v1`   | `cotest::scenarios::personal_agent_provisioning`      | `personal_agent_provisioning_profile`           |
+| P-2 | `ck.profile.agent_auth.v1`                    | `cotest::scenarios::agent_auth`                       | `agent_auth_profile`                            |
+| P-3 | `ck.profile.agent_delegation_policy.v1`       | `cotest::scenarios::agent_delegation_policy`          | `agent_delegation_policy_profile`               |
+| P-4 | `ck.profile.agent_sidecar_thread.v1`          | `cotest::scenarios::agent_sidecar_thread`             | `agent_sidecar_thread_profile`                  |
 
 ## §11 vectors
 

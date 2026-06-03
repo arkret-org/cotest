@@ -11,11 +11,11 @@
 //!   (`$defs.effective_scope`).
 //! * A new `confidential_discussion_of` Relation between two `ck:flow:` identifiers
 //!   (broad-composition + narrow-discussion duo).
-//! * 7 new event kinds (`cx.circle.create`, `cx.circle.update`, `cx.circle.archive`,
-//!   `cx.circle.restore`, `cx.circle.tombstone`, `cx.circle.member.state`,
-//!   `cx.circle.anchor_commit`).
-//! * 6 new capability actions (`cx.circle.create`, `cx.circle.manage`, `cx.circle.member.add`,
-//!   `cx.circle.member.manage`, `cx.circle.member.add.others`, `cx.circle.audit`).
+//! * 7 new event kinds (`ck.circle.create`, `ck.circle.update`, `ck.circle.archive`,
+//!   `ck.circle.restore`, `ck.circle.tombstone`, `ck.circle.member.state`,
+//!   `ck.circle.anchor_commit`).
+//! * 6 new capability actions (`ck.circle.create`, `ck.circle.manage`, `ck.circle.member.add`,
+//!   `ck.circle.member.manage`, `ck.circle.member.add.others`, `ck.circle.audit`).
 //! * 6 new reason / error codes (5 CXP-0007 sub-reasons plus `delivery_binding_handed_over`
 //!   registered in CXP-0006).
 //!
@@ -51,25 +51,25 @@ pub const CIRCLE_ALLOW_MARKER: &str = "CIRCLE-ALLOW";
 /// `cokret-core::events::kinds` (`CIRCLE_*` constants) and
 /// `cokret-spec/spec/v1/artifacts/registry/event-kind-registry.json`.
 pub const CIRCLE_EVENT_KINDS: &[&str] = &[
-    "cx.circle.create",
-    "cx.circle.update",
-    "cx.circle.archive",
-    "cx.circle.restore",
-    "cx.circle.tombstone",
-    "cx.circle.member.state",
-    "cx.circle.anchor_commit",
+    "ck.circle.create",
+    "ck.circle.update",
+    "ck.circle.archive",
+    "ck.circle.restore",
+    "ck.circle.tombstone",
+    "ck.circle.member.state",
+    "ck.circle.anchor_commit",
 ];
 
 /// Canonical `cx.circle.*` capability-action allowlist. Mirrors
 /// `cokret-core::model::constants` (`CAP_ACTION_CIRCLE_*`) and
 /// `cokret-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
 pub const CIRCLE_CAPABILITY_ACTIONS: &[&str] = &[
-    "cx.circle.create",
-    "cx.circle.manage",
-    "cx.circle.member.add",
-    "cx.circle.member.manage",
-    "cx.circle.member.add.others",
-    "cx.circle.audit",
+    "ck.circle.create",
+    "ck.circle.manage",
+    "ck.circle.member.add",
+    "ck.circle.member.manage",
+    "ck.circle.member.add.others",
+    "ck.circle.audit",
 ];
 
 /// CXP-0007 reason codes (sub-codes of `failed_precondition` /
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn allows_known_circle_event_kind() {
-        let f = scan(r#"const KIND: &str = "cx.circle.member.state";"#);
+        let f = scan(r#"const KIND: &str = "ck.circle.member.state";"#);
         assert!(
             f.iter()
                 .all(|r| r.rule != CircleRule::UnknownCircleEventKind),
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn allows_known_capability_action() {
-        let f = scan(r#"let cap = "cx.circle.member.add.others";"#);
+        let f = scan(r#"let cap = "ck.circle.member.add.others";"#);
         assert!(
             f.iter()
                 .all(|r| r.rule != CircleRule::UnknownCircleEventKind),

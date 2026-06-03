@@ -32,15 +32,15 @@
   - §8 — 错误语义(MUST reject vs SHOULD soft_fail / quarantine,不得静默截断)
 - `cokret-spec/spec/v1/zh/conformance/conformance-vectors.md` — vector loader pattern(同一目录 `spec/v1/artifacts/fixtures/<vector_id>.json`,`expected_*` 字段命名约定,失败时报告 actual / expected diff)
 - 关联 artifact: `cokret-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json`、`cx.vector.query.*.json`、`cx.vector.scalability.*.json`(目前尚未提交,见 Implementation notes 的 fixture absence fallback)
-- 关联实现:soland snapshot/query 模块、`/api/v1/conformance/{snapshot,query}` 端点(目前未实现,见 Implementation notes)
+- 关联实现:soland snapshot/query 模块、`/_cokret/self/conformance/{snapshot,query}` 端点(目前未实现,见 Implementation notes)
 
 ## 拓扑
 
-- 1 × soland (principal server) — `solandBaseUrl()`,暴露(将暴露)`/api/v1/conformance/snapshot`、`/api/v1/conformance/query` 端点
+- 1 × soland (principal server) — `solandBaseUrl()`,暴露(将暴露)`/_cokret/self/conformance/snapshot`、`/_cokret/self/conformance/query` 端点
 - 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使 Phase B 验证 snapshot signature 的签名者 DID 时可以拉到真实 actor signing key
 - 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `cokret-spec/spec/v1/artifacts/fixtures/` glob `cx.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
 
-(都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/api/v1/conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)
+(都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/_cokret/self/conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)
 
 ## Actors
 
@@ -51,12 +51,12 @@
 
 ## Pre-conditions
 
-- `alice` 通过 `POST /api/v1/account/register` 注册过 (`ensureRegistered`)
-- `alice` 持有有效 dev session token (`POST /api/v1/auth/dev-login`)
+- `alice` 通过 `POST /_cokret/self/account/register` 注册过 (`ensureRegistered`)
+- `alice` 持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
 - harness 可访问 `cokret-spec/spec/v1/artifacts/fixtures/` 目录(从 spec test 文件位置 `cotest/e2e/tests/conformance/*.spec.ts` 解析为 `../../../../cokret-spec/spec/v1/artifacts/fixtures`,见 Implementation notes)
 - soland 暴露以下 conformance 端点 (gap,见 Implementation notes):
-  - `POST /api/v1/conformance/snapshot` — body `{ vector_id, manifest, chunks }` → `{ manifest_digest, chunk_hashes[], signature_valid, signer_did }`
-  - `POST /api/v1/conformance/query` — body `{ vector_id, query }` → `{ items[], next_cursor, has_more, frontier{...} }` (按 spec §8)
+  - `POST /_cokret/self/conformance/snapshot` — body `{ vector_id, manifest, chunks }` → `{ manifest_digest, chunk_hashes[], signature_valid, signer_did }`
+  - `POST /_cokret/self/conformance/query` — body `{ vector_id, query }` → `{ items[], next_cursor, has_more, frontier{...} }` (按 spec §8)
 
 ## Steps
 
@@ -74,7 +74,7 @@
      "expected_state_digest": "sha256:..."
    }
    ```
-2. `POST /api/v1/conformance/snapshot` with `{ vector_id, manifest, chunks }`
+2. `POST /_cokret/self/conformance/snapshot` with `{ vector_id, manifest, chunks }`
 3. 断言:
    - `response.manifest_digest === expected_manifest_digest`(`sha256:<lowercase_hex>`)
    - `response.chunk_hashes.length === expected_chunk_count`
@@ -85,7 +85,7 @@
 ### Phase B — Snapshot signature binding (snapshot-schema §5)
 
 5. **harness** 加载 `cx.vector.snapshot.signature_ed25519.v1`(deterministic Ed25519 vector)
-6. `POST /api/v1/conformance/snapshot` with `{ vector_id, manifest, chunks }`(manifest 内含 `signature` 字段)
+6. `POST /_cokret/self/conformance/snapshot` with `{ vector_id, manifest, chunks }`(manifest 内含 `signature` 字段)
 7. 断言:
    - `response.signature_valid === true`
    - `response.signer_did === vector.expected_signer_did`(spec §5 列出的 5 类签名者之一:Realm owner / creator / admin / trusted snapshot issuer / witness quorum)
@@ -115,7 +115,7 @@
       "expected_has_more_page_2": false
     }
     ```
-11. POST `/api/v1/conformance/query` with `{ vector_id, query }` → cursor_A 返回 page 1
+11. POST `/_cokret/self/conformance/query` with `{ vector_id, query }` → cursor_A 返回 page 1
 12. 断言:
     - `response.items.map(o => o.id)` 与 `expected_rows_page_1` **顺序相等**(filter + sort 必须按 vector 声明执行)
     - `response.has_more === expected_has_more_page_1`
@@ -131,7 +131,7 @@
 ### Phase D — Query schema fail-closed (query-schema §3 / §9)
 
 17. **harness** 加载 `cx.vector.query.unknown_filter_key.v1`(filter 用了 spec §3 op 之外的字符串,例如 `"op": "bogus"`)
-18. `POST /api/v1/conformance/query` → MUST HTTP 4xx + `error.code === "query_schema_violation"`(或 spec 允许的等价 `schema_violation`),响应体 MUST NOT 包含 `items` / `next_cursor`(silent-empty 是失败模式)
+18. `POST /_cokret/self/conformance/query` → MUST HTTP 4xx + `error.code === "query_schema_violation"`(或 spec 允许的等价 `schema_violation`),响应体 MUST NOT 包含 `items` / `next_cursor`(silent-empty 是失败模式)
 19. **harness** 加载 `cx.vector.query.conflicting_sort.v1`(同一 `field` 出现两次,direction 一次 asc 一次 desc)
 20. `POST .../query` → MUST 4xx + `error.code === "query_schema_violation"`,不能默认拿第一个 sort
 21. **harness** 加载 `cx.vector.query.unauthorized_field.v1`(projection 包含调用方未授权字段) → MUST reject 而不是 silent-strip(query-schema §9 "实现 MUST 拒绝访问未授权字段")
@@ -139,13 +139,13 @@
 ### Phase E — Scalability constraints fail-closed (scalability-constraints §2 / §3 / §5 / §8)
 
 22. **harness** 加载 `cx.vector.scalability.page_size_over_max.v1`(query `limit` = 1,001,超过 §2 单次 sync / projection page 1,000 上限)
-23. `POST /api/v1/conformance/query` → MUST HTTP 4xx + `error.code === "scalability_limit_exceeded"`(或等价 `payload_too_large` / `quota_exceeded`,见 §8),响应 MUST NOT 截断到 1,000 后静默接受
+23. `POST /_cokret/self/conformance/query` → MUST HTTP 4xx + `error.code === "scalability_limit_exceeded"`(或等价 `payload_too_large` / `quota_exceeded`,见 §8),响应 MUST NOT 截断到 1,000 后静默接受
 24. **harness** 加载 `cx.vector.scalability.batch_size_over_max.v1`(snapshot chunk 数 > 1,000,或 events[] > 1,000)
-25. `POST /api/v1/conformance/snapshot` → MUST 4xx + `error.code ∈ {scalability_limit_exceeded, payload_too_large}`
+25. `POST /_cokret/self/conformance/snapshot` → MUST 4xx + `error.code ∈ {scalability_limit_exceeded, payload_too_large}`
 26. **harness** 加载 `cx.vector.scalability.relation_depth_over_max.v1`(query.relation.depth = 33,超过 §2 关系展开深度 32)
-27. `POST /api/v1/conformance/query` → MUST 4xx + `error.code === "scalability_limit_exceeded"`
+27. `POST /_cokret/self/conformance/query` → MUST 4xx + `error.code === "scalability_limit_exceeded"`
 28. **harness** 加载 `cx.vector.scalability.envelope_over_1mib.v1`(单个 manifest canonical 编码 > 1 MiB)
-29. `POST /api/v1/conformance/snapshot` → MUST 4xx + `error.code === "payload_too_large"`(§2 envelope 1 MiB 规则)
+29. `POST /_cokret/self/conformance/snapshot` → MUST 4xx + `error.code === "payload_too_large"`(§2 envelope 1 MiB 规则)
 30. 对每条 reject vector 额外断言:响应 envelope 符合 spec §8 错误语义(`retry_after_ms` 出现仅在 `soft_fail` / `temporarily_unavailable` 路径;reject 路径不应携带 retry 提示)
 
 ### Phase F — Vector loader smoke (harness-only,no soland call)
@@ -158,10 +158,10 @@
 
 ### Phase G — Surface probe (optional, encouraged)
 
-36. `GET ${solandBaseUrl()}/api/v1/server/describe`(无认证)
+36. `GET ${solandBaseUrl()}/_cokret/describe`(无认证)
 37. 断言响应是 JSON,且内部一致:
-    - **不应** 同时存在 "claim 了 `cx.profile.conformance.vectors.v1` profile" 与 "`/api/v1/conformance/snapshot` 端点返回 404/501" 这对矛盾状态
-    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "cx.profile.conformance.vectors.v1"`,则对 `/api/v1/conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
+    - **不应** 同时存在 "claim 了 `cx.profile.conformance.vectors.v1` profile" 与 "`/_cokret/self/conformance/snapshot` 端点返回 404/501" 这对矛盾状态
+    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "cx.profile.conformance.vectors.v1"`,则对 `/_cokret/self/conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
     - 若 `claimed_profiles` 不含该 profile,则任何状态码(包括 404)都可以接受 — 这是 "surface 内部一致" 而非 "端点已实现" 的断言
 
 ## Observable assertions (合并清单)
@@ -183,7 +183,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`/api/v1/conformance/{snapshot,query}` 端点目前**未实现**。当前 snapshot manifest 与 query schema 的 conformance 只跑在 Rust 侧内部测试(`soland/src/snapshot/*`、reducer 集成测试),不走 HTTP。本 scenario 的价值是把同一组 vector 通过 HTTP 暴露,捕获 reducer 与 HTTP layer 之间的 serializer drift。Phase A–E 在端点落地前以 `test.fixme(...)` 钉住 spec 合约;G3.S7 着陆后可逐项 live 化。
+- **soland 缺口**:`/_cokret/self/conformance/{snapshot,query}` 端点目前**未实现**。当前 snapshot manifest 与 query schema 的 conformance 只跑在 Rust 侧内部测试(`soland/src/snapshot/*`、reducer 集成测试),不走 HTTP。本 scenario 的价值是把同一组 vector 通过 HTTP 暴露,捕获 reducer 与 HTTP layer 之间的 serializer drift。Phase A–E 在端点落地前以 `test.fixme(...)` 钉住 spec 合约;G3.S7 着陆后可逐项 live 化。
 - **fixture 缺失 fallback**:目前 `cokret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `cx.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "cokret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。

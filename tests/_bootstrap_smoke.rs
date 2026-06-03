@@ -19,7 +19,7 @@ use cotest::scenarios::four_service_smoke::four_service_smoke_run;
 #[ignore]
 async fn dump_patched_coauth_config() -> Result<()> {
     use std::path::Path;
-    let bin = Path::new("D:/Works/cokret-dev/coauth/target/debug/coauth.exe");
+    let bin = Path::new("D:/Works/cokret/coauth/target/debug/coauth.exe");
     if !bin.exists() {
         eprintln!("skip: coauth binary not found");
         return Ok(());

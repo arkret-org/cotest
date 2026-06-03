@@ -21,7 +21,7 @@ pub async fn series_chain_broken_run() -> Result<()> {
         return Err(anyhow!("test scaffold accidentally produced equal digests"));
     }
 
-    // TODO(P4-impl): drive a live PUT /api/v1/keys/backups/{id} with
+    // TODO(P4-impl): drive a live PUT /_cokret/self/keys/backups/{id} with
     // series_seq=2 and a supersedes_digest that doesn't match the
     // genesis envelope's digest; assert 409 + `series_chain_broken`.
     Ok(())

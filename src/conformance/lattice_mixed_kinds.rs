@@ -8,8 +8,8 @@
 //! Spec authority:
 //!   * `cokret-spec/spec/v1/zh/models/space-and-place.md` (lattice cell registry /
 //!     `co_write_policy`)
-//!   * `cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md` §3 (lattice_op kinds) and
-//!     §5.3 (per-lattice reference impl)
+//!   * `cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md` §3 (lattice_op kinds) and §5.3
+//!     (per-lattice reference impl)
 //!
 //! Each cell family has its own lattice; a single Move MAY write multiple
 //! cells, and concurrent Moves are resolved per-cell by the cell's own

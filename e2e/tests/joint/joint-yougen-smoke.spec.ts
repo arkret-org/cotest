@@ -54,7 +54,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
 
     for (const observedPage of [alicePage.page, bobPage.page]) {
       observedPage.on("response", async (response) => {
-        if (!response.url().includes("/api/v1/account/subscribe") || response.status() < 400) {
+        if (!response.url().includes("/_cokret/self/account/subscribe") || response.status() < 400) {
           return;
         }
         const body = await response.text().catch(() => "");
@@ -129,14 +129,14 @@ async function submitMessageEvent(
     flow_id: flowIdFromSpaceId(spaceId),
     track_name: "discussion",
     content: {
-      kind: "cx.content.text",
+      kind: "ck.content.text",
       body,
     },
     encrypted: false,
   };
   const envelope = {
     event_id: eventId,
-    kind: "cx.message.create",
+    kind: "ck.message.create",
     realm_id: spaceId,
     actor_id: actorDid,
     actor_seq: 9_000_000_000_000_000,
@@ -144,7 +144,7 @@ async function submitMessageEvent(
     prev_refs: [],
     refs: [],
     requirements: {
-      schema: ["cx.schema.event.v1"],
+      schema: ["ck.schema.event.v1"],
       features: [],
       critical_extensions: [],
     },
@@ -152,12 +152,12 @@ async function submitMessageEvent(
     proofs: [eventProof({ actorDid, payload })],
   };
 
-  const response = await request.post(`${serverUrl}/api/v1/events`, {
+  const response = await request.post(`${serverUrl}/_cokret/self/events`, {
     headers: { authorization: `Bearer ${token}` },
     data: envelope,
   });
   const text = await response.text();
-  expect([200, 201], `submit cx.message.create: ${text}`).toContain(response.status());
+  expect([200, 201], `submit ck.message.create: ${text}`).toContain(response.status());
 }
 
 function flowIdFromSpaceId(spaceId: string): string {

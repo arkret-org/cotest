@@ -27,20 +27,20 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     assert_eq!(description.service_type, "principal_server");
 
     let server_describe = expect_json(
-        server.http().get(server.url("/api/v1/server/describe")),
+        server.http().get(server.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
     crate::conformance::validate_server_profile_claims(&server_describe)?;
 
     for required in [
-        "cx.account.subscribe",
-        "cx.directory.search_realms",
-        "cx.authz.check",
-        "cx.ephemeral.send",
-        "cx.push.register_device",
-        "cx.policy.check",
-        "cx.moderation.report",
+        "ck.account.subscribe",
+        "ck.directory.search_realms",
+        "ck.authz.check",
+        "ck.ephemeral.send",
+        "ck.push.register_device",
+        "ck.policy.check",
+        "ck.moderation.report",
     ] {
         assert!(
             description
@@ -66,7 +66,9 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     }
 
     let sync = expect_json(
-        server.http().get(server.url("/api/v1/account/describe")),
+        server
+            .http()
+            .get(server.url("/_cokret/self/account/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -77,7 +79,9 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     );
 
     let directory = expect_json(
-        server.http().get(server.url("/api/v1/directory/describe")),
+        server
+            .http()
+            .get(server.url("/_cokret/find/directory/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -88,7 +92,9 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     );
 
     let index = expect_json(
-        server.http().get(server.url("/api/v1/index/describe")),
+        server
+            .http()
+            .get(server.url("/_cokret/self/index/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -99,7 +105,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     );
 
     expect_status(
-        server.http().post(server.url("/api/v1/server/describe")),
+        server.http().post(server.url("/_cokret/describe")),
         StatusCode::METHOD_NOT_ALLOWED,
     )
     .await?;

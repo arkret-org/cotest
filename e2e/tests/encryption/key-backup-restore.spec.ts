@@ -42,7 +42,7 @@ test.describe("key backup restore live path", () => {
       backup: { backup_id: backupId, ciphertext_digest: backup.ciphertext_digest },
     });
 
-    const list = await request.get(`${solandBaseUrl()}/api/v1/keys/backups`, {
+    const list = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
       headers: authHeaders(aliceToken),
     });
     expect(list.status()).toBe(200);
@@ -68,7 +68,7 @@ test.describe("key backup restore live path", () => {
 
     expect((await putBackup(request, aliceToken, backupId, makeBackupBody(alice, backupId))).status()).toBe(200);
 
-    const bobList = await request.get(`${solandBaseUrl()}/api/v1/keys/backups`, {
+    const bobList = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
       headers: authHeaders(bobToken),
     });
     expect(bobList.status()).toBe(200);
@@ -87,7 +87,7 @@ test.describe("key backup restore live path", () => {
 
     const put = await putBackup(request, aliceToken, backupId, backup);
     expect([400, 403]).toContain(put.status());
-    const list = await request.get(`${solandBaseUrl()}/api/v1/keys/backups`, {
+    const list = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
       headers: authHeaders(aliceToken),
     });
     expect(JSON.stringify(await list.json())).not.toContain(backupId);
@@ -142,13 +142,13 @@ test.describe("key backup restore live path", () => {
     expect((await putBackup(request, aliceToken, backupId, makeBackupBody(alice, backupId))).status()).toBe(200);
 
     const sessionOnlyDelete = await request.delete(
-      `${solandBaseUrl()}/api/v1/keys/backups/${encodeURIComponent(backupId)}`,
+      `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(sessionOnlyDelete.status()).toBe(403);
 
     const proofDelete = await request.delete(
-      `${solandBaseUrl()}/api/v1/keys/backups/${encodeURIComponent(backupId)}`,
+      `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`,
       {
         headers: {
           ...authHeaders(aliceToken),
@@ -181,14 +181,14 @@ async function putBackup(
   backupId: string,
   body: Record<string, unknown>,
 ) {
-  return await request.put(`${solandBaseUrl()}/api/v1/keys/backups/${encodeURIComponent(backupId)}`, {
+  return await request.put(`${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`, {
     headers: authHeaders(token),
     data: body,
   });
 }
 
 async function getBackup(request: APIRequestContext, token: string, backupId: string) {
-  return await request.get(`${solandBaseUrl()}/api/v1/keys/backups/${encodeURIComponent(backupId)}`, {
+  return await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`, {
     headers: authHeaders(token),
   });
 }

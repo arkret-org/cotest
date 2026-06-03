@@ -1,7 +1,7 @@
 {
   "profile": "cx.profile.read_receipt_policy_vectors.v1",
   "version": "2026-05-19",
-  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell cx.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.scope_circle_id pointing at a Circle, per CXP-0007) whose own cx.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key cx.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ck.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.scope_circle_id pointing at a Circle, per CXP-0007) whose own ck.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ck.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
   "vectors": [
     {
       "name": "disclosure_required_locks_client_send",
@@ -23,7 +23,7 @@
     },
     {
       "name": "disclosure_disabled_drops_receipt_at_sync_service",
-      "comment": "When a Space declares disclosure=disabled, even a user preference of send=true MUST be overridden — compliant clients MUST NOT generate the receipt and Sync Service MUST drop any inbound cx.receipt.read for this scope.",
+      "comment": "When a Space declares disclosure=disabled, even a user preference of send=true MUST be overridden — compliant clients MUST NOT generate the receipt and Sync Service MUST drop any inbound ck.receipt.read for this scope.",
       "policy": {
         "scope": "space",
         "disclosure": "disabled",
@@ -89,7 +89,7 @@
     },
     {
       "name": "branch_overrides_loosen_rejected_when_not_allowed",
-      "comment": "When the parent Space declares scope_overrides_allowed=false, a child Space MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the child-Space cx.realm.read_receipt_policy is the only surface.",
+      "comment": "When the parent Space declares scope_overrides_allowed=false, a child Space MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the child-Space ck.realm.read_receipt_policy is the only surface.",
       "policy": {
         "scope": "child_space",
         "parent": {

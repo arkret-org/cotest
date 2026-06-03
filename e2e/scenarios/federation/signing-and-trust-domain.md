@@ -4,7 +4,7 @@
 
 ## 范围
 
-- 出站 `POST /api/v1/federation/push-operations` 带 `Idempotency-Key`、`Content-Digest`、`Signature-Input`、`Signature`。
+- 出站 `POST /_cokret/peer/federation/push-operations` 带 `Idempotency-Key`、`Content-Digest`、`Signature-Input`、`Signature`。
 - 签名 transcript 覆盖 `@method`、`@target-uri`、body digest、source/destination service DID、source/destination trust_domain、canonical request hash。
 - body digest 篡改、缺失 trust_domain、trust_domain mismatch 都会使接收端验签失败。
 - 同 peer + idempotency key 重放不产生第二条 outbox row。

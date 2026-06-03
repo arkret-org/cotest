@@ -1,6 +1,6 @@
 //! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
 //! and `session_grant_exchange_uses_configured_coauth_introspection`.
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -45,7 +45,7 @@ pub async fn load_optional_live_contract(
         return Ok(None);
     };
     let url = format!("{base_url}{path}");
-    let client = reqwest::Client::new();
+    let client = super::http::live_probe_client()?;
     let body = expect_json(client.get(url), StatusCode::OK).await?;
     Ok(Some(body))
 }
@@ -162,7 +162,7 @@ impl MockCoauthIntrospectionServer {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let addr = listener.local_addr()?;
-        let url = format!("http://{addr}/api/v1/session-grants/introspect");
+        let url = format!("http://{addr}/_cokret/gate/account/session-grants/introspect");
         let stop = Arc::new(AtomicBool::new(false));
         let requests = Arc::new(Mutex::new(Vec::new()));
         let thread_stop = Arc::clone(&stop);
@@ -234,10 +234,10 @@ fn handle_mock_coauth_request(
         .to_ascii_lowercase()
         .contains("authorization: bearer principal-token")
     {
-        write_http_response(&mut stream, 401, json!({"error": "unauthorized"}));
+        super::mock_http::write_json_response(&mut stream, 401, &json!({"error": "unauthorized"}));
         return;
     }
-    let body = parse_http_json_body(&request).unwrap_or_else(|| json!({}));
+    let body = super::mock_http::parse_json_body(&request).unwrap_or_else(|| json!({}));
     requests
         .lock()
         .expect("mock requests lock")
@@ -246,10 +246,10 @@ fn handle_mock_coauth_request(
         .get("audience")
         .and_then(Value::as_str)
         .unwrap_or("did:web:missing-audience");
-    write_http_response(
+    super::mock_http::write_json_response(
         &mut stream,
         200,
-        json!({
+        &json!({
             "active": true,
             "status": "active",
             "proof_required": true,
@@ -280,45 +280,9 @@ fn read_http_request(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
             break;
         }
         request.extend_from_slice(&buffer[..read]);
-        if http_request_complete(&request) {
+        if super::mock_http::request_complete(&request) {
             break;
         }
     }
     Ok(request)
-}
-
-fn http_request_complete(request: &[u8]) -> bool {
-    let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return false;
-    };
-    let body_start = header_end + 4;
-    let headers = String::from_utf8_lossy(&request[..header_end]);
-    let content_length = headers
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse::<usize>().ok())
-                .flatten()
-        })
-        .unwrap_or(0);
-    request.len() >= body_start + content_length
-}
-
-fn parse_http_json_body(request: &[u8]) -> Option<Value> {
-    let header_end = request
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")?;
-    let body = &request[header_end + 4..];
-    serde_json::from_slice(body).ok()
-}
-
-fn write_http_response(stream: &mut TcpStream, status: u16, body: Value) {
-    let body = body.to_string();
-    let reason = if status == 200 { "OK" } else { "Unauthorized" };
-    let response = format!(
-        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    let _ = stream.write_all(response.as_bytes());
 }

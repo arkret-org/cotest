@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/identity/tsp-bootstrap.md
 // Spec refs:
 //   - identity/tsp-integration.md §2 (TSP applicability), §3 (VID/Endpoint/Relationship mapping)
-//   - §4 (cx.service.tsp endpoint declaration), §5 (Cokret over TSP rules)
+//   - §4 (ck.service.tsp endpoint declaration), §5 (Cokret over TSP rules)
 //   - §8 (Security requirements: VID verification, audit log fields)
 
 import { test } from "@playwright/test";
@@ -17,7 +17,7 @@ test.describe("tsp bootstrap", () => {
     "alice and bob_extern bootstrap TSP relationship; alice sends Cokret invite via TSP; bob_extern verifies + ACKs",
     async () => {
       // Main flow covers tsp-bootstrap.md Phase A-E:
-      //   A — both VIDs' DID Documents declare `cx.service.tsp` endpoint
+      //   A — both VIDs' DID Documents declare `ck.service.tsp` endpoint
       //       (spec §4); yougen feature-discovery shows TSP capability badge
       //       (spec §3: DID method adapter SHOULD expose TSP support).
       //   B — alice POSTs TSP bootstrap message to bob_extern's endpoint
@@ -25,7 +25,7 @@ test.describe("tsp bootstrap", () => {
       //       MOCK_TSP_ENDPOINT_VID); mock returns relationship_id + remote
       //       pubkey; alice's /settings/connections shows the new relationship
       //       with trust_level="verified" (spec §8).
-      //   C — alice wraps `cx.invite.create` (with inner Cokret event
+      //   C — alice wraps `ck.invite.create` (with inner Cokret event
       //       signature) as a TSP application payload using nested mode
       //       (content_type="application/cokret+json"; outer envelope
       //       carries only pairwise VID, real `vid_local` hidden inside;
@@ -38,11 +38,11 @@ test.describe("tsp bootstrap", () => {
       //       relationship_id / payload_digest / payload_type /
       //       verification_result (spec §8).
       //   E — reverse channel: mock sends bob_extern's
-      //       `cx.member.state{join}` via the same relationship; alice's
+      //       `ck.member.state{join}` via the same relationship; alice's
       //       TSP listener decrypts, verifies bob_extern's did:web
       //       signature, and the space-admin-panel reflects the join.
       //
-      // soland gap: cx.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
+      // soland gap: ck.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
       // yougen gap: establish-tsp-button on /directory, /settings/connections
       //   TSP relationship list, trust_level badge.
       // harness gap: mock-tsp-endpoint.mjs is delivered by a parallel task;
@@ -61,10 +61,10 @@ test.describe("tsp bootstrap", () => {
       // spec: tsp-integration.md status header (v1 core default = HTTPS JWE /
       // MLS DM; TSP is opt-in). Drop the mock TSP endpoint (kill the process
       // bound to MOCK_TSP_ENDPOINT_PORT or use route.block) before alice
-      // sends the second `cx.invite.create`; the client MUST degrade to the
+      // sends the second `ck.invite.create`; the client MUST degrade to the
       // default Cokret v1 core transport rather than fail-closed.
       //
-      // soland gap: cx.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
+      // soland gap: ck.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
     },
   );
 
@@ -83,7 +83,7 @@ test.describe("tsp bootstrap", () => {
       // ACK from D step 18 must carry verification.vid_trust =
       // "degraded_no_witness" alongside tsp_authenticity = "ok".
       //
-      // soland gap: cx.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
+      // soland gap: ck.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
     },
   );
 
@@ -102,7 +102,7 @@ test.describe("tsp bootstrap", () => {
       // bob_extern (the terminus) still successfully decrypts and
       // executes the inner Cokret payload.
       //
-      // soland gap: cx.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
+      // soland gap: ck.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
     },
   );
 });

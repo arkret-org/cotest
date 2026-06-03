@@ -18,7 +18,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
 a branch, copy it from
-[`cokret-rust-sdk`](https://github.com/cokret-dev/cokret-rust-sdk) and
+[`cokret-rust-sdk`](https://github.com/cokret/cokret-rust-sdk) and
 adapt to your local toolchain.
 
 The current default server under test is the sibling
@@ -141,7 +141,7 @@ the `TEABAY_BIN`/sibling-binary convention.
 - `docker`: spawn the SUT from `COTEST_SUT_IMAGE` with Docker while the Rust
   tests remain host-side, similar to Complement.
 
-See [docs/runtime-workflow.md](/E:/Works/cokret-dev/cotest/docs/runtime-workflow.md:1)
+See [docs/runtime-workflow.md](/E:/Works/cokret/cotest/docs/runtime-workflow.md:1)
 for the full startup model, Docker image contract, and result artifacts.
 
 ## Layout
@@ -297,7 +297,7 @@ on-call engineer chases.
 
 For the runtime model comparison against Complement, including image creation,
 Docker networking, host-side execution, and result formatting, see
-[docs/complement-map.md](/E:/Works/cokret-dev/cotest/docs/complement-map.md:1).
+[docs/complement-map.md](/E:/Works/cokret/cotest/docs/complement-map.md:1).
 
 The suite is organized by protocol and behavior, not milestone folders.
 
@@ -388,5 +388,5 @@ backlog of legacy literals.
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_cotest_todos.md` in the parent `cokret-dev/` directory for the
+> `_cotest_todos.md` in the parent `cokret/` directory for the
 > circle-rollout (CXP-0007) work item list and per-stage checkpoints.

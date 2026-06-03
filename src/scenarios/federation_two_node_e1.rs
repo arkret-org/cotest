@@ -1,15 +1,15 @@
 //! E2 Round 26 / C33.4 — federation two-node real Move replay.
 //!
 //! Spawns two real `soland` binaries on independent ports/blob roots,
-//! confirms they negotiate basic federation handshake (`/api/v1/server/describe`
+//! confirms they negotiate basic federation handshake (`/_cokret/describe`
 //! reachable on both, distinct service DIDs), then exercises the federation
 //! Move forwarding path: register an account on server_a, mint a Move into a
-//! space, push the canonical Move to server_b via `/api/v1/federation/anchors`,
+//! space, push the canonical Move to server_b via `/_cokret/peer/federation/anchors`,
 //! and confirm both nodes converge on the same anchored frontier.
 //!
 //! C33.4 wired the spawn through the reusable `external_binary` helper:
 //! `TestServerGroup::try_multi_external` resolves `SOLAND_BIN` (or sibling-
-//! checkout `cokret-dev/soland/target/debug/soland[.exe]`) and spawns the
+//! checkout `cokret/soland/target/debug/soland[.exe]`) and spawns the
 //! pre-built binary directly — no `cargo run` slow path. When neither is
 //! available the scenario silently returns `Ok(())` so CI runners that have
 //! not built soland do not flake.
@@ -36,10 +36,10 @@ use crate::harness::{TestServerGroup, expect_json, expect_response};
 ///   2. server_a registers an account + creates a space + sends a message Move
 ///   3. server_a's anchor leaves are fetched
 ///   4. server_b accepts the same anchor leaves via the federation push endpoint
-///   5. server_b's `/api/v1/federation/anchors` reports the pushed leaves
+///   5. server_b's `/_cokret/peer/federation/anchors` reports the pushed leaves
 ///
 /// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling
-/// `cokret-dev/soland/target/debug/soland[.exe]` exists (silent skip path).
+/// `cokret/soland/target/debug/soland[.exe]` exists (silent skip path).
 pub async fn two_node_federation_harness_starts() -> Result<()> {
     let Some(group) = TestServerGroup::try_multi_external("e2-federation-two-node", 2).await?
     else {
@@ -54,12 +54,12 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 1: handshake ────────────────────────────────────────────────
     let describe_a = expect_json(
-        server_a.http().get(server_a.url("/api/v1/server/describe")),
+        server_a.http().get(server_a.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
     let describe_b = expect_json(
-        server_b.http().get(server_b.url("/api/v1/server/describe")),
+        server_b.http().get(server_b.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -96,14 +96,14 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 3: pull anchors from server_a ──────────────────────────────
     // The MAL-12 round-25 federation endpoints expose:
-    //   GET /api/v1/federation/anchors?space_id=...   →  { anchors: [...] }
-    //   POST /api/v1/federation/anchors  (peer-push)
+    //   GET /_cokret/peer/federation/anchors?space_id=...   →  { anchors: [...] }
+    //   POST /_cokret/peer/federation/anchors  (peer-push)
     //
     // Spec mandates the envelope object with an `anchors` array; the count
     // can be zero if the space has not yet rolled an Anchor.
     let anchors_a_response = expect_response(
         server_a.http().get(format!(
-            "{}/api/v1/federation/anchors?space_id={}",
+            "{}/_cokret/peer/federation/anchors?space_id={}",
             server_a.base_url().as_str().trim_end_matches('/'),
             space_id
         )),
@@ -135,7 +135,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     let push_response = server_b
         .http()
         .post(format!(
-            "{}/api/v1/federation/anchors",
+            "{}/_cokret/peer/federation/anchors",
             server_b.base_url().as_str().trim_end_matches('/')
         ))
         .json(&push_body)
@@ -152,7 +152,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // ── Step 5: confirm server_b's anchors endpoint is reachable ─────────
     let anchors_b = expect_json(
         server_b.http().get(format!(
-            "{}/api/v1/federation/anchors?space_id={}",
+            "{}/_cokret/peer/federation/anchors?space_id={}",
             server_b.base_url().as_str().trim_end_matches('/'),
             space_id
         )),

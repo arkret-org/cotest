@@ -31,8 +31,8 @@
 //! 1. The proof check fires (`dev_proof_in_production`) — preferred, since it directly proves the
 //!    T1.3 soland guard is wired.
 //! 2. The auth wall fires first (`unauthenticated`) — also acceptable. Production-mode soland does
-//!    not expose `POST /api/v1/auth/dev-login`, so without a real OAuth bearer the request never
-//!    makes it to the proof check. That itself is the production safety posture working as
+//!    not expose `POST /_cokret/gate/auth/dev-login`, so without a real OAuth bearer the request
+//!    never makes it to the proof check. That itself is the production safety posture working as
 //!    intended.
 //!
 //! Either way, a 2xx here would mean a production soland accepted a
@@ -78,10 +78,10 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
-    let url = proc.url("/api/v1/events");
+    let url = proc.url("/_cokret/self/events");
 
     // Build an envelope that *looks* like a yougen `OperationBuilder::build()`
-    // output before T1.3 — a `cx.message.create` payload with the
+    // output before T1.3 — a `ck.message.create` payload with the
     // detached-JWS placeholder proof (`jws == "a..b"`). Production
     // soland's `validate_event_proofs` MUST reject this with
     // `dev_proof_in_production`. The `Bearer` header is intentionally
@@ -93,7 +93,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     let event_id = "ck:event:0196419b-0000-7000-8000-pp1pp1pp1pp1";
     let envelope = json!({
         "event_id": event_id,
-        "kind": "cx.message.create",
+        "kind": "ck.message.create",
         "actor_id": actor,
         "actor_seq": 1,
         "realm_id": realm_id,
@@ -121,7 +121,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
         .json(&envelope)
         .send()
         .await
-        .context("POST /api/v1/events to production soland")?;
+        .context("POST /_cokret/self/events to production soland")?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
 
@@ -185,15 +185,15 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     }
 
     // Belt-and-braces positive control: production soland MUST NOT
-    // expose `POST /api/v1/auth/dev-login` (a 404 here doubles as a
+    // expose `POST /_cokret/gate/auth/dev-login` (a 404 here doubles as a
     // sanity check that we really did boot in production mode).
-    let dev_login_url = proc.url("/api/v1/auth/dev-login");
+    let dev_login_url = proc.url("/_cokret/gate/auth/dev-login");
     let dev_login_resp = client
         .post(&dev_login_url)
         .json(&json!({"actor": actor, "device_id": "cotest-dev"}))
         .send()
         .await
-        .context("POST /api/v1/auth/dev-login probe on production soland")?;
+        .context("POST /_cokret/gate/auth/dev-login probe on production soland")?;
     let dev_login_status = dev_login_resp.status();
     // dev-login in production returns `AppError::not_found` → 404.
     // Anything other than 4xx here means we are not in production mode.

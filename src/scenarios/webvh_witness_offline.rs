@@ -16,8 +16,8 @@
 //!      `did:web:witness.joint-e2e.local`).
 //!   3. Resolve a `did:webvh` and assert the resolver reports `health="healthy"` with a fresh
 //!      witness signature.
-//!   4. Flip witness via `POST /api/v1/witness/health {state:"down"}`. Per `mock-witness.mjs`,
-//!      subsequent `/witness/sign` calls return 503 `witness_unavailable`.
+//!   4. Flip witness via `POST /_cokret/root/witness/health {state:"down"}`. Per
+//!      `mock-witness.mjs`, subsequent `/witness/sign` calls return 503 `witness_unavailable`.
 //!   5. Within 24h: resolver SHOULD report `degraded_no_witness` (read ok, write disallowed for new
 //!      high-risk DID ops).
 //!   6. Simulate stale-by-clock by either (a) advancing test clock if starid supports a
@@ -36,14 +36,14 @@
 //!
 //! Prerequisite blockers:
 //!   * `mock-witness.mjs` exists (per `cotest/e2e/mocks/mock-witness.mjs`) and supports the `POST
-//!     /api/v1/witness/health {state:"down"}` hook verified above. But the Rust harness has no
-//!     helper yet to spawn it standalone — currently it's launched by `scripts/run-joint-e2e.ps1`.
-//!     Need a `spawn_mock_witness()` helper analogous to `external_binary::spawn_required` that
-//!     exec's `node mock-witness.mjs` with `MOCK_WITNESS_PORT` and returns a
-//!     `SpawnedExternalProcess`-ish handle.
+//!     /_cokret/root/witness/health {state:"down"}` hook verified above. But the Rust harness has
+//!     no helper yet to spawn it standalone — currently it's launched by
+//!     `scripts/run-joint-e2e.ps1`. Need a `spawn_mock_witness()` helper analogous to
+//!     `external_binary::spawn_required` that exec's `node mock-witness.mjs` with
+//!     `MOCK_WITNESS_PORT` and returns a `SpawnedExternalProcess`-ish handle.
 //!   * `starid` resolver health-state surfacing: the in-process resolver would need to expose
 //!     `degraded_no_witness` / `stale_history` via a diagnostic endpoint (e.g. `GET
-//!     /api/v1/identity/health/{did}`). Not yet present in `starid/src/`.
+//!     /_cokret/root/identity/health/{did}`). Not yet present in `starid/src/`.
 //!   * Test-clock injection or short-window override: the 24h hard cap is a real wall-clock window
 //!     in production. The test needs either a `STARID_WITNESS_MAX_EVIDENCE_AGE` env that we can set
 //!     to a few seconds, or a fake-clock harness. Neither exists today.
@@ -67,39 +67,39 @@ pub async fn webvh_witness_offline_recovery_run() -> Result<()> {
     //   let client = Client::new();
     //
     //   // Step 3: healthy resolve
-    //   let h1 = client.get(starid.url("/api/v1/identity/health/did:webvh:.../scid"))
+    //   let h1 = client.get(starid.url("/_cokret/root/identity/health/did:webvh:.../scid"))
     //                  .send().await?.json::<Value>().await?;
     //   assert_eq!(h1["state"], "healthy");
     //
     //   // Step 4: flip witness down
-    //   client.post(format!("{}/api/v1/witness/health", witness.base_url))
+    //   client.post(format!("{}/_cokret/root/witness/health", witness.base_url))
     //         .json(&json!({"state":"down"})).send().await?;
     //
     //   // Step 5: degraded_no_witness within window
-    //   let h2 = client.get(starid.url("/api/v1/identity/health/did:webvh:.../scid"))
+    //   let h2 = client.get(starid.url("/_cokret/root/identity/health/did:webvh:.../scid"))
     //                  .send().await?.json::<Value>().await?;
     //   assert_eq!(h2["state"], "degraded_no_witness");
     //
     //   // Step 7: stale_history past window (with short max-evidence-age)
     //   tokio::time::sleep(Duration::from_secs(3)).await;
-    //   let h3 = client.get(starid.url("/api/v1/identity/health/did:webvh:.../scid"))
+    //   let h3 = client.get(starid.url("/_cokret/root/identity/health/did:webvh:.../scid"))
     //                  .send().await?.json::<Value>().await?;
     //   assert!(matches!(h3["state"].as_str(), Some("stale_history"|"untrusted")));
     //
     //   // High-risk write fails closed
-    //   let create = client.post(starid.url("/api/v1/webvh/dids"))
+    //   let create = client.post(starid.url("/_cokret/root/webvh/dids"))
     //                      .json(&json!({...})).send().await?;
     //   assert!(create.status().as_u16() >= 500 || create.status() == 423);
     //
     //   // Step 8: emergency recovery
-    //   let rot = client.post(starid.url("/api/v1/webvh/dids/<scid>/rotate"))
+    //   let rot = client.post(starid.url("/_cokret/root/webvh/dids/<scid>/rotate"))
     //                   .json(&json!({"kind":"emergency",
     //                                 "skip_prev_key_sig": true,
     //                                 "new_controller_keys": [...],
     //                                 "recovery_proof": {...}}))
     //                   .send().await?;
     //   assert!(rot.status().is_success());
-    //   let doc = client.get(starid.url("/api/v1/webvh/dids/<scid>"))
+    //   let doc = client.get(starid.url("/_cokret/root/webvh/dids/<scid>"))
     //                   .send().await?.json::<Value>().await?;
     //   let latest = doc["history"].as_array().unwrap().last().unwrap();
     //   assert_eq!(latest["rotation_kind"], "emergency");

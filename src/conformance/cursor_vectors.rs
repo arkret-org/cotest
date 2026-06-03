@@ -2,24 +2,24 @@
 //! (§0.11 of `_before_todos.md`).
 //!
 //! 2 vectors:
-//!   - `cx.vector.encoding.cursor_opaque.core.v1` — default stateful body `{v, purpose, t, x, h}`.
-//!   - `cx.vector.encoding.cursor_opaque.stateless_profile.v1` — stateless body gated by
-//!     `cx.profile.stateless_cursor.v1`.
+//!   - `ck.vector.encoding.cursor_opaque.core.v1` — default stateful body `{v, purpose, t, x, h}`.
+//!   - `ck.vector.encoding.cursor_opaque.stateless_profile.v1` — stateless body gated by
+//!     `ck.profile.stateless_cursor.v1`.
 //!
 //! Core cursor schema MUST reject stateless bodies; stateless body MUST
 //! only be accepted when the server has advertised
-//! `cx.profile.stateless_cursor.v1`.
+//! `ck.profile.stateless_cursor.v1`.
 
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
 
-pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "cx.vector.encoding.cursor_opaque.core.v1";
+pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "ck.vector.encoding.cursor_opaque.core.v1";
 pub const VECTOR_ID_CURSOR_OPAQUE_STATELESS_PROFILE: &str =
-    "cx.vector.encoding.cursor_opaque.stateless_profile.v1";
+    "ck.vector.encoding.cursor_opaque.stateless_profile.v1";
 
-pub const PROFILE_STATELESS_CURSOR: &str = "cx.profile.stateless_cursor.v1";
+pub const PROFILE_STATELESS_CURSOR: &str = "ck.profile.stateless_cursor.v1";
 
 pub const ALL_CURSOR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_CURSOR_OPAQUE_CORE,
@@ -66,7 +66,7 @@ pub fn run_cursor_opaque_core_vector() -> Result<()> {
 /// VECT-CUR-2 — stateless cursor body. The body carries `issuer_kid`
 /// plus a `_mac` (or `_sig`) over the canonical cursor JSON and MUST
 /// NOT carry a stateful `h` handle. Acceptance is profile-gated: only
-/// servers advertising `cx.profile.stateless_cursor.v1` accept this
+/// servers advertising `ck.profile.stateless_cursor.v1` accept this
 /// shape.
 pub fn run_cursor_opaque_stateless_profile_vector() -> Result<()> {
     let cursor = Cursor {
@@ -98,7 +98,7 @@ pub fn run_cursor_opaque_stateless_profile_vector() -> Result<()> {
     if decoded.issuer_kid != cursor.issuer_kid || decoded.mac != cursor.mac {
         bail!("stateless cursor round-trip lost integrity material");
     }
-    if PROFILE_STATELESS_CURSOR != "cx.profile.stateless_cursor.v1" {
+    if PROFILE_STATELESS_CURSOR != "ck.profile.stateless_cursor.v1" {
         bail!("PROFILE_STATELESS_CURSOR spelling drifted: {PROFILE_STATELESS_CURSOR}");
     }
     Ok(())

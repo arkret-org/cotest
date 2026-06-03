@@ -16,12 +16,12 @@ mod member_roster_vectors;
 mod mention_rendering_vectors;
 pub mod mock_vector_base;
 mod object_addressing_vectors;
+mod openapi_lint_parity;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
 mod profile_matrix;
 mod profile_registry;
-mod openapi_lint_parity;
 mod protocol_artifact_allowlist;
 mod redaction;
 mod registry;
@@ -34,7 +34,7 @@ mod sidecar_vectors;
 mod snapshot_v1_tampered_merkle;
 mod state_resolution;
 mod sync;
-mod wire_model;
+mod wire;
 mod yougen_client;
 
 use std::fs;
@@ -128,6 +128,10 @@ pub use object_addressing_vectors::{
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,
 };
+pub use openapi_lint_parity::{
+    run_policy_check_alignment_check, run_service_describe_alignment_check,
+    run_vector_reference_closure_check,
+};
 pub use primary_handle_vectors::{
     ALL_PRIMARY_HANDLE_VECTOR_IDS, run_as_of_replay_vs_realtime_vector,
     run_audience_match_wins_vector, run_claim_digest_stable_under_hint_vector,
@@ -148,16 +152,12 @@ pub use profile_registry::{
     render_profile_gate_report_json, render_profile_gate_report_markdown,
     run_profile_registry_gate_suite,
 };
-pub use redaction::run_redaction_fixture_suite;
-pub use registry::run_artifact_registry_suite;
-pub use openapi_lint_parity::{
-    run_policy_check_alignment_check, run_service_describe_alignment_check,
-    run_vector_reference_closure_check,
-};
 pub use protocol_artifact_allowlist::{
     NEW_CAPABILITY_ACTIONS, NEW_ERROR_CODES, NEW_OBJECT_REF_ID_KINDS, NEW_OPENAPI_COMPONENTS,
     NEW_SCHEMA_DEFS, run_protocol_artifact_allowlist_suite,
 };
+pub use redaction::run_redaction_fixture_suite;
+pub use registry::run_artifact_registry_suite;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,
@@ -184,7 +184,7 @@ pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };
 pub use sync::run_sync_fixture_suite;
-pub use wire_model::{
+pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
     run_conflict_repair_fixture_suite, run_consent_fixture_suite,

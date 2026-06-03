@@ -110,8 +110,8 @@ artifacts.
 CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
 small local feedback set, `release-gate` is the local milestone gate, and
 `full-nightly` runs all tests. Coverage is grouped by conformance profiles such
-as `cx.profile.core_event_store.v1`, `cx.profile.chat_mvp.v1`, and
-`cx.profile.principal_server_events_api.v1`. The runner emits `ci-profile.*`,
+as `ck.profile.core_event_store.v1`, `ck.profile.chat_mvp.v1`, and
+`ck.profile.principal_server_events_api.v1`. The runner emits `ci-profile.*`,
 `coverage-gate.*`, `release-gate.*`, `spec-sync-gate.*`, and
 `secret-scan.*` artifacts and can fail on coverage regressions with
 `-FailOnCoverageRegression`.
@@ -185,7 +185,7 @@ that the smoke matrix does not exercise:
 - `chat-interactions.spec.ts` exercises the `/chat/:space_id` view: send,
   open the reaction picker, render `chat-reactions`, open the reply banner,
   and post a reply that renders `chat-reply-indicator`.
-- `failure-paths.spec.ts` route-mocks `POST /api/v1/events` to return 500,
+- `failure-paths.spec.ts` route-mocks `POST /_cokret/self/events` to return 500,
   asserts `chat-message-error` and `chat-retry-button` appear, clears the
   mock, and confirms `chat-retry-button` recovers the send.
 - `notifications-smoke.spec.ts` renders `/notifications`, cycles the grouping
@@ -216,7 +216,7 @@ The coauth/soland test mapping is fixed by the runner:
 - coauth publishes soland under `cokret.principal_servers`
 - soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
 - soland introspects session grants at
-  `<coauth>/api/v1/session-grants/introspect`
+  `<coauth>/_cokret/gate/account/session-grants/introspect`
 - the static bearer values are local E2E-only defaults and never exposed to the
   browser
 
@@ -275,7 +275,7 @@ for policy, push, applet, TSP, and MIMI).
 
 When `-StartCoauth -StartMockEmail` are both enabled, the generated Coauth
 config uses the `email.http_webhook` provider with the mock email
-`/api/v1/verification/send` endpoint. This keeps joint runs local-only and
+`/_cokret/self/verification/send` endpoint. This keeps joint runs local-only and
 prevents SMTP/sendmail providers from being exercised by email verification
 paths. The mock endpoint accepts both its native token payload and Coauth's
 generic outbound email webhook payload.
@@ -291,14 +291,14 @@ single-witness env vars and the quorum lists
 | mock | covers spec sections | key endpoints |
 |------|---------------------|---------------|
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
-| `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/api/v1/verification/send` (with `ttl_seconds` + `body_html`), `/inbox?to=`, `/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
-| `mock-witness.mjs` | S9 did:webvh rotation | `/api/v1/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/policy`, `/health` test hook, `/inspect` |
-| `mock-audit-agent.mjs` | S25 audited E2EE / `cx.audit.accessed` | `/api/v1/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `cx.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
-| `mock-policy-server.mjs` | authz policy server / obligation transcript | `/api/v1/policy/check`, `/api/v1/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
-| `mock-push-gateway.mjs` | notification push / blind wake | `/api/v1/push/register`, `/api/v1/push/notify`, `/api/v1/push/inbox`, `/scenarios`, `/jwks` |
-| `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/api/v1/applets/register`, `/api/v1/applets/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
+| `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/_cokret/self/verification/send` (with `ttl_seconds` + `body_html`), `/inbox?to=`, `/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
+| `mock-witness.mjs` | S9 did:webvh rotation | `/_cokret/root/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/policy`, `/health` test hook, `/inspect` |
+| `mock-audit-agent.mjs` | S25 audited E2EE / `ck.audit.accessed` | `/_soland/admin/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ck.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
+| `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_cokret/self/policy/check`, `/_cokret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
+| `mock-push-gateway.mjs` | notification push / blind wake | `/_cokret/edge/push/register`, `/_cokret/edge/push/notify`, `/_cokret/edge/push/inbox`, `/scenarios`, `/jwks` |
+| `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_cokret/edge/applet/register`, `/_cokret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
 | `mock-tsp-endpoint.mjs` | TSP relationship bootstrap / message ACK | `/tsp/relationship-bootstrap`, `/tsp/message`, `/tsp/inbox`, `/tsp/outbox`, `/identity`, `/inspect` |
-| `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/api/v1/mimi/join-requests`, `/api/v1/mimi/approve`, `/api/v1/mimi/outbound`, `/api/v1/mimi/inbound`, `/identity`, `/inspect` |
+| `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/_cokret/open/mimi/join-requests`, `/_cokret/open/mimi/approve`, `/_cokret/open/mimi/outbound`, `/_cokret/open/mimi/inbound`, `/identity`, `/inspect` |
 
 `e2e/tests/harness/mocks-selftest.spec.ts` is the contract pin for these
 mocks. It is tagged `@fully-implemented` so the `joint-smoke` profile runs
@@ -450,11 +450,11 @@ gap-coverage gaps deferred to R4.
 
 | Spec section | Subject | cotest vector(s) | Stage |
 |---|---|---|---|
-| **§7 media binding** — `cx.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
+| **§7 media binding** — `ck.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
 | **§8 handles** — NFC normalization + UTS#39 confusable skeleton | Confusable handle rejected before rate-limit; mixed-script rejected | `e2e/handle/homograph_forbidden.rs`, `e2e/handle/mixed_script_rejects.rs`, `e2e/handle/nfc_round_trip.rs` | Active |
 | **§9 agent** — FSM (Active/Paused/Deactivated) + pairing | Pause/resume/deactivate transitions; pairing window expiry; proof verification | `e2e/agent/fsm_transitions.rs`, `e2e/agent/pairing_window_expires.rs`, `e2e/agent/pairing_proof_invalid.rs`, `e2e/agent/verification_method_principal_mismatch.rs` | Active |
-| **§9 agent** — actor-private event kinds | `cx.agent.draft.propose`, `cx.agent.action_request`, `cx.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
-| **§10 call.media** — token exchange | `cx.call.media.token_exchange` round-trip; TTL gate; backend type enum reject | `e2e/call_media/token_exchange_round_trip.rs`, `e2e/call_media/token_ttl_exceeded.rs`, `e2e/call_media/unknown_focus_type_rejects.rs` | Active |
+| **§9 agent** — actor-private event kinds | `ck.agent.draft.propose`, `ck.agent.action_request`, `cx.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
+| **§10 call.media** — token exchange | `ck.call.media.token_exchange` round-trip; TTL gate; backend type enum reject | `e2e/call_media/token_exchange_round_trip.rs`, `e2e/call_media/token_ttl_exceeded.rs`, `e2e/call_media/unknown_focus_type_rejects.rs` | Active |
 | **§10 call.media** — participant_binding | Canonical-bytes round-trip; issuer_kid validation; identity-string canonical form | `e2e/call_media/participant_binding_canonical.rs`, `e2e/call_media/token_issuer_unauthorised.rs`, `e2e/call_media/participant_identity_unrecognised.rs` | Active |
 | **§11 media binding** — focus/session commit invariants | `session_focus_already_committed` reject; `e2ee_key_source_unauthorised` reject | `e2e/call_media/session_focus_already_committed.rs`, `e2e/call_media/e2ee_key_source_unauthorised.rs` | Active (some stubbed — see below) |
 | **§13 recovery** — policy + receipt | Policy version monotonicity; receipt completeness; proof_kinds dispatch | `e2e/recovery/policy_round_trip.rs`, `e2e/recovery/receipt_emitted_on_complete.rs`, `e2e/recovery/policy_version_monotone.rs` | Active |

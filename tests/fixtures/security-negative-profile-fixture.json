@@ -1,17 +1,17 @@
 {
   "suite": "security_negative_profile",
-  "profile": "cx.profile.privacy_security_vectors.v1",
+  "profile": "ck.profile.privacy_security_vectors.v1",
   "cases": [
     {
       "name": "bad_signature_correct_digest_forged_jws_rejects",
       "category": "bad_signature",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it — a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
       "input": {
         "signing_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
         "event": {
           "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
-          "kind": "cx.message.create",
+          "kind": "ck.message.create",
           "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 1,
@@ -44,11 +44,11 @@
     {
       "name": "bad_canonical_bytes_same_event_id_quarantines",
       "category": "bad_canonical_bytes",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "input": {
         "stored_event": {
           "event_id": "ck:event:01970e589d22-0001-a13f9c2e",
-          "kind": "cx.message.create",
+          "kind": "ck.message.create",
           "space_id": "ck:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 2,
@@ -64,7 +64,7 @@
         },
         "incoming_event": {
           "event_id": "ck:event:01970e589d22-0001-a13f9c2e",
-          "kind": "cx.message.create",
+          "kind": "ck.message.create",
           "space_id": "ck:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 2,
@@ -88,11 +88,11 @@
     {
       "name": "bad_schema_payload_rejects",
       "category": "bad_schema_payload",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "input": {
         "event": {
           "event_id": "ck:event:01970e589d23-0001-a13f9c2e",
-          "kind": "cx.message.create",
+          "kind": "ck.message.create",
           "space_id": "ck:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 3,
@@ -115,7 +115,7 @@
     {
       "name": "replay_actor_seq_rejects",
       "category": "replay",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "input": {
         "actor_frontier": {
           "actor_id": "did:web:alice.example",
@@ -123,7 +123,7 @@
         },
         "event": {
           "event_id": "ck:event:01970e589d24-0001-a13f9c2e",
-          "kind": "cx.message.create",
+          "kind": "ck.message.create",
           "space_id": "ck:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 4,
@@ -147,14 +147,14 @@
     {
       "name": "downgrade_missing_critical_profile_rejects",
       "category": "downgrade",
-      "operation_id": "cx.events.submit",
+      "operation_id": "ck.events.submit",
       "input": {
-        "claimed_profile": "cx.profile.e2ee_client.v1",
-        "attempted_profile": "cx.profile.full_client.v1",
+        "claimed_profile": "ck.profile.e2ee_client.v1",
+        "attempted_profile": "ck.profile.full_client.v1",
         "supported_features": [],
         "event": {
           "event_id": "ck:event:01970e589d25-0001-a13f9c2e",
-          "kind": "cx.message.create",
+          "kind": "ck.message.create",
           "space_id": "ck:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 5,
@@ -165,7 +165,7 @@
           "requirements": {
             "critical_extensions": [
               {
-                "id": "cx.profile.mls_governance_binding.full.v1",
+                "id": "ck.profile.mls_governance_binding.full.v1",
                 "fail_closed": true
               }
             ]
@@ -186,11 +186,11 @@
     {
       "name": "query_auth_leakage_hard_fails",
       "category": "query_auth_leakage",
-      "operation_id": "cx.events.query",
+      "operation_id": "ck.events.query",
       "input": {
         "request": {
           "method": "GET",
-          "url": "/api/v1/events?spaces=ck:realm:01970e589d21-7000-8000-000000000001&access_token=secret",
+          "url": "/_cokret/self/events?spaces=ck:realm:01970e589d21-7000-8000-000000000001&access_token=secret",
           "headers": {},
           "protected_endpoint": true
         }

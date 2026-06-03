@@ -27,7 +27,7 @@ pub async fn existence_privacy_run() -> Result<()> {
         ));
     }
 
-    // TODO(P4-impl): drive GET /api/v1/agents/{id} as a second account
+    // TODO(P4-impl): drive GET /_cokret/self/agents/{id} as a second account
     // (non-controller) against both an existing and a non-existing
     // agent_principal id; assert the wire response (status + body) is
     // byte-identical.

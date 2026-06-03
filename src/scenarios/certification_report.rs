@@ -45,19 +45,19 @@ const SERVICE_SPECS: &[ServiceSpec] = &[
         service: "soland",
         exact_env: "COTEST_SOLAND_DESCRIBE_URL",
         base_env: "COTEST_SOLAND_BASE_URL",
-        default_path: "/api/v1/server/describe",
+        default_path: "/_cokret/describe",
     },
     ServiceSpec {
         service: "floria",
         exact_env: "COTEST_FLORIA_DESCRIBE_URL",
         base_env: "COTEST_FLORIA_BASE_URL",
-        default_path: "/api/v1/server/describe",
+        default_path: "/_cokret/describe",
     },
     ServiceSpec {
         service: "teabay",
         exact_env: "COTEST_TEABAY_DESCRIBE_URL",
         base_env: "COTEST_TEABAY_BASE_URL",
-        default_path: "/api/v1/directory/describe",
+        default_path: "/_cokret/find/directory/describe",
     },
     ServiceSpec {
         service: "starid",
@@ -69,7 +69,7 @@ const SERVICE_SPECS: &[ServiceSpec] = &[
         service: "coauth",
         exact_env: "COTEST_COAUTH_DESCRIBE_URL",
         base_env: "COTEST_COAUTH_BASE_URL",
-        default_path: "/api/v1/server/describe",
+        default_path: "/_cokret/describe",
     },
 ];
 
@@ -242,7 +242,7 @@ fn claims_principal_server(body: &Value) -> bool {
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .any(|value| value.as_str() == Some("cx.profile.principal_server.v1"))
+            .any(|value| value.as_str() == Some("ck.profile.principal_server.v1"))
         {
             return true;
         }

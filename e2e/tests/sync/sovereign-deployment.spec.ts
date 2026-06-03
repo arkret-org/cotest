@@ -18,17 +18,17 @@ test.describe("sovereign deployment", () => {
   }) => {
     const fixture = await setupSovereignFixture(request, "core");
 
-    const mainInfo = await getJson(request, "alpha", "/api/v1/deployment/info");
+    const mainInfo = await getJson(request, "alpha", "/_soland/admin/deployment/info");
     expect(mainInfo.profile).toBe("sovereign_main");
     expect(mainInfo.trusted_enclaves).toEqual(
       expect.arrayContaining([expect.objectContaining({ server_id: solandServiceDid("beta") })]),
     );
 
-    const enclaveInfo = await getJson(request, "beta", "/api/v1/deployment/info");
+    const enclaveInfo = await getJson(request, "beta", "/_soland/admin/deployment/info");
     expect(enclaveInfo.profile).toBe("enclave");
     expect(enclaveInfo.upstream_main).toBe(solandBaseUrl("alpha"));
 
-    const rogue = await request.post(`${solandBaseUrl("alpha")}/api/v1/account/register`, {
+    const rogue = await request.post(`${solandBaseUrl("alpha")}/_cokret/self/account/register`, {
       data: {
         did: `did:web:rogue-${fixture.stamp}.evil`,
         handle: `@rogue${fixture.short}`,
@@ -42,7 +42,7 @@ test.describe("sovereign deployment", () => {
     const betaRealm = await getJson(
       request,
       "beta",
-      `/api/v1/realm/${encodeURIComponent(fixture.enclaveRealmId)}`,
+      `/_cokret/self/realm/${encodeURIComponent(fixture.enclaveRealmId)}`,
     );
     expect(betaRealm.profile).toBe("enclave");
     expect(betaRealm.hosted_on).toBe(solandServiceDid("beta"));
@@ -50,7 +50,7 @@ test.describe("sovereign deployment", () => {
     const bobStatus = await getJson(
       request,
       "alpha",
-      `/api/v1/account/${encodeURIComponent(fixture.bobDid)}`,
+      `/_cokret/self/account/${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(bobStatus.external_via_enclave).toBe(true);
     expect(bobStatus.realm).toBe(fixture.enclaveRealmId);
@@ -58,7 +58,7 @@ test.describe("sovereign deployment", () => {
     const audit = await getJson(
       request,
       "beta",
-      `/api/v1/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
+      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(audit.entries.map((entry: any) => entry.action)).toContain("external_invite.accept");
   });
@@ -69,7 +69,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/api/v1/space/${encodeURIComponent(fixture.internalSpaceId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
+      `${solandBaseUrl("alpha")}/_cokret/self/space/${encodeURIComponent(fixture.internalSpaceId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(direct.status()).toBe(403);
     await expectErrorCode(direct, "external_user_no_main_access");
@@ -77,16 +77,16 @@ test.describe("sovereign deployment", () => {
     const directory = await getJson(
       request,
       "alpha",
-      `/api/v1/directory/spaces?q=internal&actor=${encodeURIComponent(fixture.bobDid)}`,
+      `/_cokret/find/directory/spaces?q=internal&actor=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(directory.results).toEqual([]);
     expect(directory.boundary).toBe("external_via_enclave");
 
-    const proxy = await request.post(`${solandBaseUrl("beta")}/api/v1/federation/proxy`, {
+    const proxy = await request.post(`${solandBaseUrl("beta")}/_cokret/peer/federation/proxy`, {
       data: {
         actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
-        path: `/api/v1/space/${fixture.internalSpaceId}`,
+        path: `/_cokret/self/space/${fixture.internalSpaceId}`,
       },
     });
     expect(proxy.status()).toBe(403);
@@ -95,7 +95,7 @@ test.describe("sovereign deployment", () => {
     const audit = await getJson(
       request,
       "beta",
-      `/api/v1/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
+      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(audit.entries.map((entry: any) => entry.action)).toContain("boundary.federation_proxy");
   });
@@ -105,10 +105,10 @@ test.describe("sovereign deployment", () => {
   }) => {
     const fixture = await setupSovereignFixture(request, "outage");
 
-    await postJson(request, "beta", "/api/v1/deployment/network/link", {
+    await postJson(request, "beta", "/_soland/admin/deployment/network/link", {
       upstream_available: false,
     });
-    const accepted = await postJson(request, "beta", "/api/v1/deployment/store-and-forward/messages", {
+    const accepted = await postJson(request, "beta", "/_soland/admin/deployment/store-and-forward/messages", {
       actor: fixture.bobDid,
       realm_id: fixture.enclaveRealmId,
       content: { body: `store forward ${fixture.stamp}` },
@@ -121,17 +121,17 @@ test.describe("sovereign deployment", () => {
     const lag = await getJson(
       request,
       "beta",
-      `/api/v1/deployment/enclave-frontier?realm_id=${encodeURIComponent(fixture.enclaveRealmId)}`,
+      `/_soland/admin/deployment/enclave-frontier?realm_id=${encodeURIComponent(fixture.enclaveRealmId)}`,
     );
     expect(lag.status).toBe("enclave_sync_lag");
 
-    await postJson(request, "beta", "/api/v1/deployment/network/link", {
+    await postJson(request, "beta", "/_soland/admin/deployment/network/link", {
       upstream_available: true,
     });
-    const drained = await postJson(request, "beta", "/api/v1/deployment/store-and-forward/drain", {});
+    const drained = await postJson(request, "beta", "/_soland/admin/deployment/store-and-forward/drain", {});
     expect(drained.operations).toHaveLength(1);
 
-    const ingested = await postJson(request, "alpha", "/api/v1/deployment/store-and-forward/ingest", {
+    const ingested = await postJson(request, "alpha", "/_soland/admin/deployment/store-and-forward/ingest", {
       operations: drained.operations,
     });
     expect(ingested.converged).toBe(true);
@@ -139,7 +139,7 @@ test.describe("sovereign deployment", () => {
     const converged = await getJson(
       request,
       "alpha",
-      `/api/v1/deployment/enclave-frontier?realm_id=${encodeURIComponent(fixture.enclaveRealmId)}`,
+      `/_soland/admin/deployment/enclave-frontier?realm_id=${encodeURIComponent(fixture.enclaveRealmId)}`,
     );
     expect(converged.status).toBe("converged");
     expect(converged.main_frontier).toBeGreaterThanOrEqual(1);
@@ -150,7 +150,7 @@ test.describe("sovereign deployment", () => {
   }) => {
     const fixture = await setupSovereignFixture(request, "trust");
 
-    const mainReject = await request.post(`${solandBaseUrl("alpha")}/api/v1/account/register`, {
+    const mainReject = await request.post(`${solandBaseUrl("alpha")}/_cokret/self/account/register`, {
       data: {
         did: fixture.bobDid,
         handle: `@direct${fixture.short}`,
@@ -166,7 +166,7 @@ test.describe("sovereign deployment", () => {
     expect(accepted.session_metadata.actor).toBe(fixture.bobDid);
 
     const enclaveReject = await request.post(
-      `${solandBaseUrl("beta")}/api/v1/account/accept-external-invite`,
+      `${solandBaseUrl("beta")}/_cokret/self/account/accept-external-invite`,
       {
         data: {
           invite_token: `ck:external_invite:${fixture.short}-rogue`,
@@ -189,41 +189,41 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const enclaveRealmId = `ck:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
   const internalSpaceId = `ck:space:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
 
-  await postJson(request, "alpha", "/api/v1/deployment/configure", {
+  await postJson(request, "alpha", "/_soland/admin/deployment/configure", {
     profile: "sovereign_main",
     trust_roots: ["did:web:*.example"],
     allow_external_via_enclave: true,
   });
-  await postJson(request, "beta", "/api/v1/deployment/configure", {
+  await postJson(request, "beta", "/_soland/admin/deployment/configure", {
     profile: "enclave",
     upstream_main: solandBaseUrl("alpha"),
     trust_roots: ["did:web:*.example", "did:web:*.example.org"],
     upstream_available: true,
   });
-  await postJson(request, "alpha", "/api/v1/deployment/register-enclave", {
+  await postJson(request, "alpha", "/_soland/admin/deployment/register-enclave", {
     server_id: solandServiceDid("beta"),
     base_url: solandBaseUrl("beta"),
     trust_chain: ["did:web:*.example.org"],
   });
-  await postJson(request, "alpha", "/api/v1/deployment/realm.create", {
+  await postJson(request, "alpha", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
     hosted_on: solandServiceDid("beta"),
     created_by: aliceDid,
     external_invite_policy: "allowed",
   });
-  await postJson(request, "beta", "/api/v1/deployment/realm.create", {
+  await postJson(request, "beta", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
     hosted_on: solandServiceDid("beta"),
     created_by: aliceDid,
     external_invite_policy: "allowed",
   });
 
-  const invite = await postJson(request, "alpha", "/api/v1/deployment/external-invite", {
+  const invite = await postJson(request, "alpha", "/_soland/admin/deployment/external-invite", {
     target_realm: enclaveRealmId,
     invitee: bobDid,
     inviter: aliceDid,
   });
-  const acceptBody = await postJson(request, "beta", "/api/v1/account/accept-external-invite", {
+  const acceptBody = await postJson(request, "beta", "/_cokret/self/account/accept-external-invite", {
     invite_token: invite.invite_token,
     actor_did: bobDid,
     target_realm: invite.target_realm,

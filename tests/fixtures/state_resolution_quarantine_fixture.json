@@ -10,7 +10,7 @@
   "vectors": [
     {
       "name": "cas_register_concurrent_fork_join_rule_quarantine_all_heads",
-      "cell_family": "cx.component.realm.join_rule.v1",
+      "cell_family": "ck.component.realm.join_rule.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
@@ -27,7 +27,7 @@
     },
     {
       "name": "cas_register_concurrent_fork_history_visibility_quarantine_all_heads",
-      "cell_family": "cx.component.realm.history_visibility.v1",
+      "cell_family": "ck.component.realm.history_visibility.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
@@ -49,7 +49,7 @@
     },
     {
       "name": "cas_register_admin_escalation_anchorer_endorse_one_head_unquarantines",
-      "cell_family": "cx.component.realm.policy.v1",
+      "cell_family": "ck.component.realm.policy.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
@@ -75,12 +75,12 @@
     },
     {
       "name": "cas_register_three_way_fork_quarantine_then_partial_repair",
-      "cell_family": "cx.component.realm.upgrade.v1",
+      "cell_family": "ck.component.realm.upgrade.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
-        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "cx.profile.chat_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
-        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "cx.profile.kanban_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "ck.profile.chat_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "ck.profile.kanban_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
         { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "cx.profile.applet.v1", "head_in": ["ck:anchor:sha256:jkl000"] }
       ],
       "expected": {
@@ -97,7 +97,7 @@
     },
     {
       "name": "fsm_member_state_concurrent_join_invite_quarantine",
-      "cell_family": "cx.component.member.state.v1",
+      "cell_family": "ck.component.member.state.v1",
       "lattice": "fsm",
       "bottom": "reject",
       "ops": [
@@ -117,7 +117,7 @@
     },
     {
       "name": "or_set_concurrent_grant_does_not_quarantine_merges_union",
-      "cell_family": "cx.component.consent.grant.v1",
+      "cell_family": "ck.component.consent.grant.v1",
       "lattice": "or_set",
       "bottom": "expose",
       "ops": [

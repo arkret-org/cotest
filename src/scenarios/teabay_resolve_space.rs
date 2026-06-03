@@ -1,4 +1,4 @@
-//! TB-2 — `cx.directory.resolve_realm` three-lookup fixture for teabay.
+//! TB-2 — `ck.directory.resolve_realm` three-lookup fixture for teabay.
 //!
 //! Per spec §9, `resolve_realm` accepts any of `realm_id`, `alias`,
 //! `invite_token`, or `signed_link` as the lookup key. **Per the current
@@ -44,7 +44,7 @@ pub async fn teabay_resolve_space_three_lookups_run() -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
-    let url = proc.url("/api/v1/directory/resolve-realm");
+    let url = proc.url("/_cokret/find/directory/resolve-realm");
 
     // --- by realm_id ------------------------------------------------------
     let probe = json!({ "realm_id": "cotest-tb2-space-id" });

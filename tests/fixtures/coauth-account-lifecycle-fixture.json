@@ -122,7 +122,7 @@
       "request": {
         "dry_run": true,
         "policy_ref": "cedar:default",
-        "action": "cx.session.grant"
+        "action": "ck.session.grant"
       },
       "observed": {
         "persisted_effect": false,

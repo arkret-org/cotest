@@ -8,7 +8,7 @@
 //!   2. Create a Realm and a Circle inside that Realm.
 //!   3. Add two members to the Circle (strict subset of the Realm).
 //!   4. Create N child Flows whose `scope_circle_id` references the Circle.
-//!   5. Issue `cx.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
+//!   5. Issue `ck.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
 //!      the projection, b) any further write into the Circle is rejected with `failed_precondition`
 //!      / sub-reason `circle_not_active`, c) child Flow projections surface as unavailable through
 //!      the sync API (`history_visibility` clamped, deliverability flag cleared) per CXP-0007
@@ -67,7 +67,7 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
         .map_err(|e| anyhow!("stack health check failed: {e}"))?;
 
     // ── 2. Register actors and create a Realm + Circle ──────────────────
-    // soland's principal admin signer is responsible for `cx.realm.create`
+    // soland's principal admin signer is responsible for `ck.realm.create`
     // in development mode; alice + bob are the future Circle members.
     let admin = stack
         .soland
@@ -114,21 +114,21 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
     // ── 3. Drive the live wire: create Realm + Circle + Flows ───────────
     //
     // The remaining wire steps require soland's CXP-0007 surface:
-    //   - POST /api/v1/realms                       (cx.realm.create)
-    //   - POST /api/v1/realms/<id>/circles          (cx.circle.create)
-    //   - POST /api/v1/circles/<id>/members         (cx.circle.member.state→active)
-    //   - POST /api/v1/spaces/<rid>/flows           with scope_circle_id
-    //   - POST /api/v1/circles/<id>/tombstone       (cx.circle.tombstone)
-    //   - POST /api/v1/realms/<id>/tombstone        (cx.realm.tombstone)
+    //   - POST /_cokret/self/realms                       (ck.realm.create)
+    //   - POST /_cokret/self/realms/<id>/circles          (ck.circle.create)
+    //   - POST /_cokret/self/circles/<id>/members         (ck.circle.member.state→active)
+    //   - POST /_cokret/self/spaces/<rid>/flows           with scope_circle_id
+    //   - POST /_cokret/self/circles/<id>/tombstone       (ck.circle.tombstone)
+    //   - POST /_cokret/self/realms/<id>/tombstone        (ck.realm.tombstone)
     //
     // P5 finalises these endpoints; once they're stable replace the bail
     // below with the wire dance and the assertions documented in the doc
     // comment (steps 5a–d + Realm cascade).
     let _ = (alice.actor.as_str(), bob.actor.as_str());
     let _ = admin
-        .post("/api/v1/realms")
+        .post("/_cokret/self/realms")
         .json(&json!({
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "id": realm_id.as_str(),
             "title": "Tombstone Cascade Realm",
         }))
@@ -138,8 +138,8 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
 
     bail!(
         "TODO(P5/CXP-0007): live-stack wiring for Circle tombstone cascade is \
-         scaffolded; finalise once soland exposes `cx.realm.tombstone` and \
-         `cx.circle.tombstone` over the public REST surface. Expected assertions \
+         scaffolded; finalise once soland exposes `ck.realm.tombstone` and \
+         `ck.circle.tombstone` over the public REST surface. Expected assertions \
          (see doc comment): \
          (a) circle state→tombstoned visible in projection within {settle_ms}ms, \
          (b) follow-up writes rejected with reason `{reason}`, \

@@ -13,8 +13,8 @@
 //   submit reject path.
 //
 // coauth note: `coauth/crates/backend/src/handlers/cokret.rs` now self-claims
-//   `cx.profile.auth_server.v1` and intentionally does NOT claim
-//   `cx.profile.identity_registry.v1` / `cx.profile.principal_server.v1`. The
+//   `ck.profile.auth_server.v1` and intentionally does NOT claim
+//   `ck.profile.identity_registry.v1` / `ck.profile.principal_server.v1`. The
 //   coauth-specific partition test runs live when COTEST_COAUTH_BASE_URL is
 //   configured and skips cleanly in single-server topologies.
 //
@@ -92,7 +92,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     //   artifact_ref / cotest_issuer_did / signature / timestamp.
     // The two profile_id sets MUST be disjoint — a profile cannot be simultaneously
     // self-claimed and cotest-verified.
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
 
@@ -150,7 +150,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     // spec: service-surface.md §3.0 — when development_mode=true, verified_profiles
     //   MUST be []; never null, never a placeholder stub. soland enforces this with
     //   validate (`describe.rs::server_describe`).
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
 
@@ -183,7 +183,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     ]);
     expect(knownProfiles.size, "catalog known-profiles set is non-empty").toBeGreaterThan(0);
 
-    const resp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
 
@@ -232,11 +232,11 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: "ck:realm:01904100-0000-7000-8000-000000000999",
-      kind: "cx.applet.transaction",
+      kind: "ck.applet.transaction",
       payload: { transaction_id: "ck:txn:profile-gate", params: {} },
     });
 
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
@@ -261,11 +261,11 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: "ck:realm:01904100-0000-7000-8000-000000001000",
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       payload: {
         flow_id: "ck:flow:01904100-0000-7000-8000-000000001000",
         track_name: "discussion",
-        content: { kind: "cx.content.text", body: "must not accept unknown critical extension" },
+        content: { kind: "ck.content.text", body: "must not accept unknown critical extension" },
       },
     });
     (envelope.requirements as { critical_extensions: unknown[] }).critical_extensions = [
@@ -276,7 +276,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       },
     ];
 
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
@@ -293,14 +293,14 @@ test.describe("conformance profile gates @fully-implemented", () => {
   }) => {
     const baseUrl = coauthBaseUrl();
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
-    const resp = await request.get(`${baseUrl}/api/v1/server/describe`);
+    const resp = await request.get(`${baseUrl}/_cokret/describe`);
     expect(resp.status()).toBe(200);
     const body = (await resp.json()) as DescribeResponse;
     const claimed = body.claimed_profiles ?? [];
     const claimedIds = new Set(claimed.map((entry) => entry.profile_id).filter(Boolean));
-    expect(claimedIds.has("cx.profile.auth_server.v1")).toBe(true);
-    expect(claimedIds.has("cx.profile.identity_registry.v1")).toBe(false);
-    expect(claimedIds.has("cx.profile.principal_server.v1")).toBe(false);
+    expect(claimedIds.has("ck.profile.auth_server.v1")).toBe(true);
+    expect(claimedIds.has("ck.profile.identity_registry.v1")).toBe(false);
+    expect(claimedIds.has("ck.profile.principal_server.v1")).toBe(false);
     for (const entry of claimed) {
       expect(entry.claim_kind).toBe("self_claimed");
     }

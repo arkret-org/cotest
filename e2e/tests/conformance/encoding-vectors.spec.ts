@@ -19,7 +19,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { wireErrCode } from "../../helpers/soland-api";
+import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
 
 // ---------------------------------------------------------------------------
 // Fixture loader — resolves relative to this spec file so cwd doesn't matter.
@@ -91,20 +91,9 @@ function vectorById(id: string): EncodingVector | undefined {
 }
 
 // Canonical-JSON (matches soland::routing::conformance::util::canonical_json):
-// object keys sorted by Unicode code point, no whitespace, arrays preserve
-// input order. Used to build local expected canonicals when the fixture only
+// imported from the shared helper so there is one canonicalizer for the whole
+// e2e suite. Used to build local expected canonicals when the fixture only
 // gives us inputs (e.g. building a hlc clocks list).
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
-}
 
 // Convert a single HLC fixture string `"<unix_ms_hex>-<logical_hex>-<actor_id_hash>"`
 // into the `{actor, hlc, payload_hint}` clock shape soland's /hlc-merge expects.
@@ -131,12 +120,12 @@ test.describe("conformance encoding vectors", () => {
   test("§1.1 canonical JSON encoding (basic) matches spec vector", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.canonical_json.basic.v1");
+    const vector = vectorById("ck.vector.encoding.canonical_json.basic.v1");
     expect(vector, "encoding-fixture vector basic.v1 missing").toBeTruthy();
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -150,12 +139,12 @@ test.describe("conformance encoding vectors", () => {
   test("§1.1 canonical JSON encoding (nested) matches spec vector", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.canonical_json.nested.v1");
+    const vector = vectorById("ck.vector.encoding.canonical_json.nested.v1");
     expect(vector, "encoding-fixture vector nested.v1 missing").toBeTruthy();
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -172,7 +161,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }) => {
     const vector = vectorById(
-      "cx.vector.encoding.reject_noncanonical_numbers.v1",
+      "ck.vector.encoding.reject_noncanonical_numbers.v1",
     );
     expect(
       vector,
@@ -181,7 +170,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         data: {
           vector_id: v.vector_id,
@@ -207,7 +196,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.1 canonical JSON reject (malformed JSON) returns 4xx", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.reject_malformed_json.v1");
+    const vector = vectorById("ck.vector.encoding.reject_malformed_json.v1");
     expect(
       vector,
       "encoding-fixture vector reject_malformed_json.v1 missing",
@@ -215,7 +204,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         // The soland reject classifier triggers off `vector_id` containing
         // `reject_malformed_json` — input shape is irrelevant to the reject
@@ -244,12 +233,12 @@ test.describe("conformance encoding vectors", () => {
   test("§1.2 event_digest canonical bytes + digest match spec vector", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.event_digest.v1");
+    const vector = vectorById("ck.vector.encoding.event_digest.v1");
     expect(vector, "encoding-fixture vector event_digest.v1 missing").toBeTruthy();
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -264,7 +253,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }) => {
     const vector = vectorById(
-      "cx.vector.encoding.event_batch_receipt_digest.v1",
+      "ck.vector.encoding.event_batch_receipt_digest.v1",
     );
     expect(
       vector,
@@ -273,7 +262,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -307,7 +296,7 @@ test.describe("conformance encoding vectors", () => {
       signing_key_ref: "alice.dev_key",
     };
     const resp1 = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/sign`,
+      `${solandBaseUrl()}/_cokret/self/conformance/sign`,
       { data: body1 },
     );
     expect(resp1.status()).toBe(200);
@@ -322,7 +311,7 @@ test.describe("conformance encoding vectors", () => {
     // signature (Ed25519 is deterministic by construction; soland's seed is
     // derived from signing_key_ref so the key is also stable).
     const resp2 = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/sign`,
+      `${solandBaseUrl()}/_cokret/self/conformance/sign`,
       { data: body1 },
     );
     expect(resp2.status()).toBe(200);
@@ -365,7 +354,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.3 HLC ordering converges on expected ascending order", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.hlc_order.v1");
+    const vector = vectorById("ck.vector.encoding.hlc_order.v1");
     expect(vector, "encoding-fixture vector hlc_order.v1 missing").toBeTruthy();
     const v = vector!;
     expect(Array.isArray(v.input)).toBe(true);
@@ -373,7 +362,7 @@ test.describe("conformance encoding vectors", () => {
 
     const clocks = (v.input as string[]).map(hlcToClockEntry);
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/hlc-merge`,
+      `${solandBaseUrl()}/_cokret/self/conformance/hlc-merge`,
       {
         data: { vector_id: v.vector_id, clocks },
       },
@@ -390,7 +379,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.3 HLC logical overflow returns 4xx hlc_logical_overflow", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.hlc_logical_overflow.v1");
+    const vector = vectorById("ck.vector.encoding.hlc_logical_overflow.v1");
     expect(
       vector,
       "encoding-fixture vector hlc_logical_overflow.v1 missing",
@@ -398,7 +387,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/hlc-merge`,
+      `${solandBaseUrl()}/_cokret/self/conformance/hlc-merge`,
       {
         // Vector_id contains `logical_overflow` which trips soland's reject
         // branch — clocks list is irrelevant to the reject dispatch.
@@ -436,7 +425,7 @@ test.describe("conformance encoding vectors", () => {
     const shuffled = [events[2], events[0], events[1]];
 
     const respA = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/cursor`,
+      `${solandBaseUrl()}/_cokret/self/conformance/cursor`,
       { data: { vector_id: v.vector_id, events, reduce_round: 1 } },
     );
     expect(respA.status()).toBe(200);
@@ -444,7 +433,7 @@ test.describe("conformance encoding vectors", () => {
     expect(typeof bodyA.cursor).toBe("string");
 
     const respB = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/cursor`,
+      `${solandBaseUrl()}/_cokret/self/conformance/cursor`,
       {
         data: {
           vector_id: v.vector_id,
@@ -483,7 +472,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }) => {
     const vector = vectorById(
-      "cx.vector.encoding.encrypted_envelope_digest.v1",
+      "ck.vector.encoding.encrypted_envelope_digest.v1",
     );
     expect(
       vector,
@@ -500,7 +489,7 @@ test.describe("conformance encoding vectors", () => {
     // canonical-bytes hash shape — see the wire-shape mismatch note in the
     // task report.
     const resp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/envelope`,
+      `${solandBaseUrl()}/_cokret/self/conformance/envelope`,
       {
         data: { vector_id: v.vector_id, envelope: v.cleartext_metadata },
       },
@@ -511,7 +500,7 @@ test.describe("conformance encoding vectors", () => {
     expect(body.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     // Determinism: re-post the same envelope should yield identical digest.
     const resp2 = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/envelope`,
+      `${solandBaseUrl()}/_cokret/self/conformance/envelope`,
       {
         data: { vector_id: v.vector_id, envelope: v.cleartext_metadata },
       },
@@ -541,11 +530,11 @@ test.describe("conformance encoding vectors", () => {
     const guestDid = "did:web:guest.example";
     const event = {
       event_id: "ck:event:019640ed-8000-7000-8000-000000000abc",
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       sender: ownerDid,
       payload: {
         flow_id: "ck:flow:019640ed-8000-7000-8000-000000000000",
-        content: { kind: "cx.content.text", body: "private message" },
+        content: { kind: "ck.content.text", body: "private message" },
       },
     };
     const redaction = {
@@ -555,7 +544,7 @@ test.describe("conformance encoding vectors", () => {
     };
 
     const ownerResp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/redact`,
+      `${solandBaseUrl()}/_cokret/self/conformance/redact`,
       {
         data: {
           vector_id: "cx.vector.redaction.owner_view.synthetic.v1",
@@ -574,7 +563,7 @@ test.describe("conformance encoding vectors", () => {
     expect(ownerBody.projected_event?.redacted_because).toBeUndefined();
 
     const guestResp = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/redact`,
+      `${solandBaseUrl()}/_cokret/self/conformance/redact`,
       {
         data: {
           vector_id: "cx.vector.redaction.guest_view.synthetic.v1",
@@ -627,10 +616,10 @@ test.describe("conformance encoding vectors", () => {
     request,
   }, testInfo) => {
     const probe = await request.post(
-      `${solandBaseUrl()}/api/v1/conformance/encode`,
+      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
       {
         data: {
-          vector_id: "cx.vector.encoding.canonical_json.basic.v1",
+          vector_id: "ck.vector.encoding.canonical_json.basic.v1",
           input: { b: 2, a: 1 },
         },
       },

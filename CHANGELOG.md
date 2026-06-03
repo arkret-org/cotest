@@ -217,7 +217,7 @@ Scenarios still gated `#[ignore]` (need live-server fixtures):
 - `full_soland_consent_cascade_and_cache_invalidation` (T17)
 
 Also added `tests/round23_tree_scan.rs` — a manual `#[ignore]`
-driver that walks the cokret-dev sibling projects (soland, floria,
+driver that walks the cokret sibling projects (soland, floria,
 chime, yougen, teabay, coauth, sodmin, starid, cokret-rust-sdk,
 e2e, logos) with `scan_tree_round23` and prints residual structural
 findings. Invoke with `cargo test --test round23_tree_scan --

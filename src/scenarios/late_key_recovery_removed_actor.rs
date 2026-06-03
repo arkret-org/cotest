@@ -14,7 +14,7 @@
 //!   (a) membership at the originating event time
 //!   (b) policy at the originating event time
 //!   (c) key-share source authorization
-//!   (d) `cx.audit.accessed` with `late_recovery=true` (when the actor
+//!   (d) `ck.audit.accessed` with `late_recovery=true` (when the actor
 //!       belongs to an audit profile)
 //!
 //! This scenario pins condition (a) — a removed actor MUST hit the

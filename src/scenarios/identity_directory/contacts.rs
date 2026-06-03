@@ -18,13 +18,13 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     expect_json(
         alice
-            .post("/api/v1/contacts/request")
+            .post("/_cokret/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/api/v1/contacts/respond").json(&json!({
+        bob.post("/_cokret/self/contacts/respond").json(&json!({
             "requester": alice.actor,
             "action": "accept"
         })),
@@ -32,7 +32,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
 
-    let contacts = expect_json(bob.get("/api/v1/contacts"), StatusCode::OK).await?;
+    let contacts = expect_json(bob.get("/_cokret/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
     let invite_space = alice
@@ -46,7 +46,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let invite_event = alice
         .submit_event(
             &invite_space_id,
-            "cx.invite.create",
+            "ck.invite.create",
             json!({
                 "invitee": bob.actor,
                 "expires_at": "2026-12-31T00:00:00Z"
@@ -60,7 +60,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         serde_json::to_string_pretty(&invite_event)?
     );
 
-    let invites = expect_json(bob.get("/api/v1/authz/invites"), StatusCode::OK).await?;
+    let invites = expect_json(bob.get("/_cokret/self/authz/invites"), StatusCode::OK).await?;
     assert_eq!(
         invites["invites"].as_array().unwrap().len(),
         1,
@@ -73,7 +73,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-realm"))
+            .post(server.url("/_cokret/find/directory/resolve-realm"))
             .json(&json!({"invite_token": "ck:invite-token:invalid"})),
         StatusCode::NOT_FOUND,
     )
@@ -82,7 +82,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let invite_resolve = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-realm"))
+            .post(server.url("/_cokret/find/directory/resolve-realm"))
             .json(&json!({"invite_token": invite_token})),
         StatusCode::OK,
     )
@@ -99,7 +99,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let listed_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-realms"))
+            .post(server.url("/_cokret/find/directory/search-realms"))
             .json(&json!({"query": "Listed Directory Space"})),
         StatusCode::OK,
     )
@@ -116,7 +116,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let unlisted_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-realms"))
+            .post(server.url("/_cokret/find/directory/search-realms"))
             .json(&json!({"query": "Unlisted Directory Space"})),
         StatusCode::OK,
     )
@@ -126,7 +126,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let unlisted_resolve = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/resolve-realm"))
+            .post(server.url("/_cokret/find/directory/resolve-realm"))
             .json(&json!({"realm_id": unlisted_space_id})),
         StatusCode::OK,
     )
@@ -147,7 +147,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await?;
 
     let exported = expect_json(
-        alice.get(&format!("/api/v1/spaces/{shared_space_id}/export")),
+        alice.get(&format!("/_cokret/self/spaces/{shared_space_id}/export")),
         StatusCode::OK,
     )
     .await?;
@@ -167,7 +167,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let waited_sync = expect_response(
         alice
-            .get("/api/v1/account/subscribe?catchup=true")
+            .get("/_cokret/self/account/subscribe?catchup=true")
             .header("x-cokret-wait-for", sent["sync_token"].as_str().unwrap())
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
@@ -193,19 +193,22 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     expect_status(
         alice
-            .get("/api/v1/account/subscribe?catchup=true")
+            .get("/_cokret/self/account/subscribe?catchup=true")
             .header("x-cokret-wait-for", "not-a-sync-token")
             .header("accept", "application/x-ndjson"),
         StatusCode::BAD_REQUEST,
     )
     .await?;
 
-    let audit_events =
-        expect_json(alice.get("/api/v1/audit/events?limit=20"), StatusCode::OK).await?;
+    let audit_events = expect_json(
+        alice.get("/_cokret/self/audit/events?limit=20"),
+        StatusCode::OK,
+    )
+    .await?;
     let _ = expect_audit_action(&audit_events, "events.submit")?;
 
     expect_status(
-        alice.get(&format!("/api/v1/audit/events?actor={}", bob.actor)),
+        alice.get(&format!("/_cokret/self/audit/events?actor={}", bob.actor)),
         StatusCode::FORBIDDEN,
     )
     .await?;

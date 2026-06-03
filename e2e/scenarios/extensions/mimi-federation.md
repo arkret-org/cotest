@@ -34,8 +34,8 @@
 
 ## Pre-conditions
 
-- alice 通过 `POST /api/v1/account/register` 注册 (与现有 `ensureRegistered` 行为一致)
-- alice 持有有效 dev session token (`POST /api/v1/auth/dev-login`)
+- alice 通过 `POST /_cokret/self/account/register` 注册 (与现有 `ensureRegistered` 行为一致)
+- alice 持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
 - alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
 - soland 配置中启用了 `extensions.mimi_interop = true` (extension profile);如果未启用,整个 spec 应该跳过而非失败
 - mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供,真实 soland/yougen federation 仍由当前 `.fixme` 锚定
@@ -52,7 +52,7 @@
    - `cx.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
 2. 断言:`realm-lifecycle-flow` 显示 `created ck:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
-4. alice 调 `GET /api/v1/realm/${realmId}/federation/mimi/endpoint`
+4. alice 调 `GET /_cokret/self/realm/${realmId}/federation/mimi/endpoint`
    - 断言:返回 200,body 含 `mimi_endpoint_url`(facade 已在 soland 中绑定该 Realm)、`room_binding_id`
 
 ### Phase B — bob_mimi 经 MIMI federation 申请加入
@@ -70,8 +70,8 @@
 10. soland 验证 facade 返回的 identity 证明,通过 `extensions/mimi-interop` §6 的规则生成 pairwise DID:
     - DID = `did:pairwise:${realmId}/${hash(bob_mimi.mimi_handle, realmId.salt)}`
     - 同一个 bob_mimi 在不同 Realm 中得到不同的 pairwise DID(不可关联)
-11. 断言:`POST /api/v1/realm/${realmId}/federation/mimi/approve` 返回 200,body 含 `pairwise_did`,符合 `did:pairwise:...` 形态
-12. 断言:bob_mimi 现在是 Realm `R` 的成员(`GET /api/v1/realm/${realmId}/members` 包含该 pairwise DID,标记 `source = mimi`)
+11. 断言:`POST /_cokret/self/realm/${realmId}/federation/mimi/approve` 返回 200,body 含 `pairwise_did`,符合 `did:pairwise:...` 形态
+12. 断言:bob_mimi 现在是 Realm `R` 的成员(`GET /_cokret/self/realm/${realmId}/members` 包含该 pairwise DID,标记 `source = mimi`)
 
 ### Phase D — 双向消息 + content/policy mapping
 

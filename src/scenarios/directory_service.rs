@@ -45,7 +45,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     let health = get_json(&http, directory.url("/health")).await?;
     assert_eq!(health["ok"], true);
 
-    let describe = get_json(&http, directory.url("/api/v1/directory/describe")).await?;
+    let describe = get_json(&http, directory.url("/_cokret/find/directory/describe")).await?;
     assert!(
         describe["service_did"]
             .as_str()
@@ -57,13 +57,13 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     assert_array_contains(
         &describe,
         "discovery_profiles",
-        "cx.profile.directory_service.v1",
+        "ck.profile.directory_service.v1",
     );
     if directory.is_spawned() {
         assert_array_contains(
             &describe,
             "discovery_profiles",
-            "cx.private_contact_discovery.v1",
+            "ck.private_contact_discovery.v1",
         );
     }
     assert_array_contains(&describe, "accepted_resource_kinds", "space");
@@ -72,10 +72,10 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
 
     let openapi = get_json(&http, directory.url("/.well-known/cokret/openapi.json")).await?;
     for path in [
-        "/api/v1/directory/describe",
-        "/api/v1/directory/search-realms",
-        "/api/v1/directory/resolve-handle",
-        "/api/v1/directory/private-contact-discovery",
+        "/_cokret/find/directory/describe",
+        "/_cokret/find/directory/search-realms",
+        "/_cokret/find/directory/resolve-handle",
+        "/_cokret/find/directory/private-contact-discovery",
         "/api/admin/v1/resources",
     ] {
         assert!(
@@ -85,7 +85,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     }
 
     let not_found = http
-        .post(directory.url("/api/v1/directory/resolve-handle"))
+        .post(directory.url("/_cokret/find/directory/resolve-handle"))
         .json(&json!({ "handle": "absent.example" }))
         .send()
         .await?;

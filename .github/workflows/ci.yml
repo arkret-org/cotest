@@ -255,4 +255,4 @@ jobs:
             sleep 1
           done
           curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
-          npx playwright test --config playwright.config.ts --project=${{ matrix.project }} tests/sync/service-surface-contract.spec.ts --grep "soland /api/v1/server/describe"
+          npx playwright test --config playwright.config.ts --project=${{ matrix.project }} tests/sync/service-surface-contract.spec.ts --grep "soland /_cokret/describe"

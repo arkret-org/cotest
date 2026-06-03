@@ -15,7 +15,7 @@ pub fn run_event_envelope_fixture_suite() -> Result<()> {
     let event_kinds = event_kind_metadata(&event_kind_registry)?;
 
     let crypto_fixture = load_fixture_value("crypto-signature-fixture.json")?;
-    validate_profile(&crypto_fixture, "cx.profile.crypto_signature_vectors.v1")?;
+    validate_profile(&crypto_fixture, "ck.profile.crypto_signature_vectors.v1")?;
     for vector in crypto_fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -219,14 +219,14 @@ fn validate_synthetic_event_envelope_negatives(
     event_kinds: &HashMap<String, EventKindInfo>,
 ) -> Result<()> {
     let base = sample_envelope_event(
-        "cx.message.create",
+        "ck.message.create",
         1,
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00Z",
         json!({
             "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "hello"
             },
             "noncritical_future_field": {"preserve": true}
@@ -246,27 +246,27 @@ fn validate_synthetic_event_envelope_negatives(
     }
 
     let duplicate_a = sample_envelope_event(
-        "cx.message.create",
+        "ck.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
             "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "a"
             }
         }),
     );
     let duplicate_b = sample_envelope_event(
-        "cx.message.create",
+        "ck.message.create",
         2,
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
             "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "b"
             }
         }),
@@ -281,14 +281,14 @@ fn validate_synthetic_event_envelope_negatives(
     let mut future_context = EventEnvelopeContext::default_for_durable_history();
     future_context.now_hlc_ms = Some(0x01970e589d21);
     let future = sample_envelope_event(
-        "cx.message.create",
+        "ck.message.create",
         3,
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00Z",
         json!({
             "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "future"
             }
         }),
@@ -307,14 +307,14 @@ fn validate_synthetic_event_envelope_negatives(
         "2026-05-02T00:05:00Z".to_owned(),
     );
     let backdated = sample_envelope_event(
-        "cx.message.create",
+        "ck.message.create",
         4,
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02Z",
         json!({
             "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "backdated"
             }
         }),
@@ -331,14 +331,14 @@ fn validate_synthetic_event_envelope_negatives(
     // `additionalProperties:false`). Inject a forbidden legacy field
     // (`space_id`) onto an otherwise-valid event and assert hard rejection.
     let mut unknown_field_event = sample_envelope_event(
-        "cx.message.create",
+        "ck.message.create",
         5,
         "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03Z",
         json!({
             "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "legacy field"
             }
         }),
@@ -663,7 +663,7 @@ fn validate_event_envelope(
 
 fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
     match kind {
-        "cx.message.create" => {
+        "ck.message.create" => {
             if content.get("flow_id").and_then(Value::as_str).is_none() {
                 return Some("message create content missing flow_id".to_owned());
             }
@@ -686,16 +686,16 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
             }
             None
         }
-        "cx.flow.move" => {
+        "ck.flow.move" => {
             missing_payload_fields(content, &["board_id", "flow_id", "to_list_id", "rank"])
         }
-        "cx.flow.reorder" => {
+        "ck.flow.reorder" => {
             missing_payload_fields(content, &["board_id", "flow_id", "list_id", "rank"])
         }
-        "cx.container.rebalance" => {
+        "ck.container.rebalance" => {
             missing_payload_fields(content, &["board_id", "list_id", "rank"])
         }
-        "cx.member.state" => {
+        "ck.member.state" => {
             if let Some(err) = missing_payload_fields(content, &["membership"]) {
                 return Some(err);
             }
@@ -916,8 +916,8 @@ fn sample_envelope_event(
             "jws": "eyJhbGciOiJFZERTQSJ9..synthetic_placeholder_signature_bytes"
         }]
     });
-    let digest = canonical_event_payload_digest(&event)
-        .expect("synthetic event is canonicalizable");
+    let digest =
+        canonical_event_payload_digest(&event).expect("synthetic event is canonicalizable");
     event["proofs"][0]["event_digest"] = Value::String(digest);
     event
 }

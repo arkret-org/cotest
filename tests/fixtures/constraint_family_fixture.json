@@ -33,7 +33,7 @@
         "effect": "allow",
         "evaluation_class": "stateless",
         "message_edit_window": "PT5M",
-        "applies_to_actions": ["cx.message.revise"]
+        "applies_to_actions": ["ck.message.revise"]
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "stateless", "fast_path_eligible": true }
     },

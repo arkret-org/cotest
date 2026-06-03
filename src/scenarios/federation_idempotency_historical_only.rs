@@ -62,7 +62,7 @@ use sha2::{Digest, Sha256};
 /// as `cotest::scenarios::security_closure_vectors::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE`,
 /// repeated here so a grep on `federation_idempotency_historical_only`
 /// finds the binding directly.
-pub const VECTOR_ID: &str = "cx.vector.federation.idempotency_after_key_revoke.v1";
+pub const VECTOR_ID: &str = "ck.vector.federation.idempotency_after_key_revoke.v1";
 
 /// Canonical `reason_code` carried on a cache-replay-after-key-revoke
 /// response. The SDK constant is the authoritative source — this pin
@@ -220,7 +220,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
 
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
-        "operation": "cx.events.submit",
+        "operation": "ck.events.submit",
         "envelopes": [{"kind": "cx.message.text", "payload": {"body": "federation-c3"}}],
         "idempotency_key": "idem-c3-001",
     });
@@ -306,7 +306,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     let first = server_b.receive(&initial_key, dest_td.as_str(), || {
         json!({
             "ok": true,
-            "operation": "cx.events.submit",
+            "operation": "ck.events.submit",
             "accepted": 1,
             "request_canonical_digest": request_canonical_digest.as_str(),
         })
@@ -462,8 +462,9 @@ mod tests {
     /// Non-ignored — drive the full in-memory multi-server scenario.
     #[test]
     fn scenario_federation_idempotency_historical_only_in_memory() {
-        run_federation_idempotency_historical_only()
-            .expect("federation idempotency historical_only scenario must pass against in-memory rig");
+        run_federation_idempotency_historical_only().expect(
+            "federation idempotency historical_only scenario must pass against in-memory rig",
+        );
     }
 
     /// Non-ignored — cache key composition pin. Strict key diverges

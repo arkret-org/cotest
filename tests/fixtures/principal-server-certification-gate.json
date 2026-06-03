@@ -9,7 +9,7 @@
         "service": "soland",
         "service_type": "principal_server",
         "supported_profiles": [
-          "cx.profile.principal_server_events_api.v1"
+          "ck.profile.principal_server_events_api.v1"
         ],
         "certification": {
           "principal_server": {
@@ -39,7 +39,7 @@
       "describe": {
         "service": "candidate",
         "supported_profiles": [
-          "cx.profile.principal_server.v1"
+          "ck.profile.principal_server.v1"
         ],
         "certification": {
           "principal_server": {
@@ -47,27 +47,27 @@
           }
         },
         "supported_operations": [
-          "cx.server.describe",
-          "cx.account.describe",
-          "cx.account.subscribe",
-          "cx.events.subscribe",
-          "cx.events.query",
-          "cx.snapshot.head",
-          "cx.authz.check"
+          "ck.server.describe",
+          "ck.account.describe",
+          "ck.account.subscribe",
+          "ck.events.subscribe",
+          "ck.events.query",
+          "ck.snapshot.head",
+          "ck.authz.check"
         ],
         "supported_event_kinds": [
-          "cx.space.create",
-          "cx.member.state",
-          "cx.flow.create",
-          "cx.message.create",
-          "cx.capability.grant",
-          "cx.capability.revoke"
+          "ck.space.create",
+          "ck.member.state",
+          "ck.flow.create",
+          "ck.message.create",
+          "ck.capability.grant",
+          "ck.capability.revoke"
         ],
         "supported_schemas": [
-          "cx.schema.account_subscribe_frame.v1",
-          "cx.schema.snapshot.v1",
-          "cx.schema.capability.v1",
-          "cx.schema.grant_constraint.v1"
+          "ck.schema.account_subscribe_frame.v1",
+          "ck.schema.snapshot.v1",
+          "ck.schema.capability.v1",
+          "ck.schema.grant_constraint.v1"
         ],
         "federation": {
           "outbound": {
@@ -91,7 +91,7 @@
       "describe": {
         "service": "certified-reference",
         "supported_profiles": [
-          "cx.profile.principal_server.v1"
+          "ck.profile.principal_server.v1"
         ],
         "certification": {
           "principal_server": {
@@ -99,31 +99,31 @@
           }
         },
         "supported_operations": [
-          "cx.server.describe",
-          "cx.account.describe",
-          "cx.account.subscribe",
-          "cx.events.subscribe",
-          "cx.events.query",
-          "cx.snapshot.head",
-          "cx.authz.check",
+          "ck.server.describe",
+          "ck.account.describe",
+          "ck.account.subscribe",
+          "ck.events.subscribe",
+          "ck.events.query",
+          "ck.snapshot.head",
+          "ck.authz.check",
           "cx.admin.device.revoke",
           "cx.agent.task.submit",
           "cx.applet.install",
           "cx.media.session.offer"
         ],
         "supported_event_kinds": [
-          "cx.space.create",
-          "cx.member.state",
-          "cx.flow.create",
-          "cx.message.create",
-          "cx.capability.grant",
-          "cx.capability.revoke"
+          "ck.space.create",
+          "ck.member.state",
+          "ck.flow.create",
+          "ck.message.create",
+          "ck.capability.grant",
+          "ck.capability.revoke"
         ],
         "supported_schemas": [
-          "cx.schema.account_subscribe_frame.v1",
-          "cx.schema.snapshot.v1",
-          "cx.schema.capability.v1",
-          "cx.schema.grant_constraint.v1"
+          "ck.schema.account_subscribe_frame.v1",
+          "ck.schema.snapshot.v1",
+          "ck.schema.capability.v1",
+          "ck.schema.grant_constraint.v1"
         ],
         "federation": {
           "outbound": {

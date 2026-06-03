@@ -78,8 +78,8 @@
 //!   * **No schema-migration manifest.** Today there is no machine-readable list of "event kind X
 //!     changed shape between v0.4.0 and v0.5.0; here's the migrator". Without one, step 6 can only
 //!     do a strict byte-equality check, which makes the test fail every time any reducer touches
-//!     the projection shape — defeating the point. A `cokret-spec/state/migrations/*.json`
-//!     manifest (or a Rust `inventory!`-style registry) would close this.
+//!     the projection shape — defeating the point. A `cokret-spec/state/migrations/*.json` manifest
+//!     (or a Rust `inventory!`-style registry) would close this.
 //!   * **Per-rev data dir / DB schema isolation.** The N-1 binary and the N binary MUST share the
 //!     same on-disk state, but two concurrent CT-17 invocations MUST NOT share. Need a `Pg
 //!     schema-per-test` or a unique tempdir hand-off, with the N-1 process's lock file released

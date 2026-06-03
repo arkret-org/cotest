@@ -83,24 +83,24 @@ pub fn assert_vector_runner_contract(vector_id: &str) -> Result<()> {
 // call lands directly on the right step set.
 
 pub const VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE: &str =
-    "cx.vector.federation.idempotency_after_key_revoke.v1";
+    "ck.vector.federation.idempotency_after_key_revoke.v1";
 pub const VECTOR_WEBRTC_MEDIA_PLAINTEXT_DOWNGRADE: &str =
-    "cx.vector.webrtc.media_plaintext_downgrade.v1";
+    "ck.vector.webrtc.media_plaintext_downgrade.v1";
 pub const VECTOR_IDENTITY_LINK_EAGER_INVALIDATION: &str =
-    "cx.vector.identity_link.eager_invalidation.v1";
+    "ck.vector.identity_link.eager_invalidation.v1";
 pub const VECTOR_IDENTITY_LINK_POLICY_TIGHTENING_INVALIDATION: &str =
-    "cx.vector.identity_link.policy_tightening_invalidation.v1";
+    "ck.vector.identity_link.policy_tightening_invalidation.v1";
 pub const VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR: &str =
-    "cx.vector.late_key_recovery.removed_actor.v1";
-pub const VECTOR_INVITE_OOB_CODE_ENTROPY: &str = "cx.vector.invite.oob_code_entropy.v1";
+    "ck.vector.late_key_recovery.removed_actor.v1";
+pub const VECTOR_INVITE_OOB_CODE_ENTROPY: &str = "ck.vector.invite.oob_code_entropy.v1";
 pub const VECTOR_INVITE_FAILURE_INDISTINGUISHABLE: &str =
-    "cx.vector.invite.failure_indistinguishable.v1";
-pub const VECTOR_CONSENT_SCOPE_CASCADE: &str = "cx.vector.consent.scope_cascade.v1";
-pub const VECTOR_CONSENT_CACHE_INVALIDATION: &str = "cx.vector.consent.cache_invalidation.v1";
-pub const VECTOR_SYNC_SOFT_FAIL_RECONCILE: &str = "cx.vector.sync.soft_fail_reconcile.v1";
-pub const VECTOR_LATTICE_LWW_OPEN_SET: &str = "cx.vector.lattice.lww_open_set.v1";
+    "ck.vector.invite.failure_indistinguishable.v1";
+pub const VECTOR_CONSENT_SCOPE_CASCADE: &str = "ck.vector.consent.scope_cascade.v1";
+pub const VECTOR_CONSENT_CACHE_INVALIDATION: &str = "ck.vector.consent.cache_invalidation.v1";
+pub const VECTOR_SYNC_SOFT_FAIL_RECONCILE: &str = "ck.vector.sync.soft_fail_reconcile.v1";
+pub const VECTOR_LATTICE_LWW_OPEN_SET: &str = "ck.vector.lattice.lww_open_set.v1";
 pub const VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING: &str =
-    "cx.vector.e2ee_relaxed.window_exceeds_ceiling.v1";
+    "ck.vector.e2ee_relaxed.window_exceeds_ceiling.v1";
 
 #[cfg(test)]
 mod tests {

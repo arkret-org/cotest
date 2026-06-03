@@ -1,4 +1,4 @@
-//! Phase 3 — `/api/v1/keys/backups/*` PUT / list / describe / GET.
+//! Phase 3 — `/_cokret/self/keys/backups/*` PUT / list / describe / GET.
 //!
 //! Stores Alice's MLS-history backup, enumerates the collection, walks the
 //! key-backup descriptor, and fetches the stored backup back.
@@ -23,7 +23,7 @@ async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
     let backup_put = expect_json(
         server
             .http()
-            .put(server.url(&format!("/api/v1/keys/backups/{BACKUP_ID}")))
+            .put(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .json(&json!({
                 "backup_id": BACKUP_ID,
@@ -37,7 +37,7 @@ async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
                 "encryption": {
                     "recipient_method": "secret_storage_key",
                     "recipient_key_ref": "mls_group_secrets_backup_key",
-                    "aead": {"name": "xchacha20_poly1305", "aead_profile": "cx.aead.xchacha20_poly1305.v1", "nonce": "nonce"}
+                    "aead": {"name": "xchacha20_poly1305", "aead_profile": "ck.aead.xchacha20_poly1305.v1", "nonce": "nonce"}
                 },
                 "contents": [
                     {
@@ -61,7 +61,7 @@ async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
     let backup_list = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/keys/backups"))
+            .get(server.url("/_cokret/self/keys/backups"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -74,7 +74,7 @@ async fn describe_backup_surfaces(server: &CokretServer, token: &str) -> Result<
     let key_backups_describe = expect_json(
         server
             .http()
-            .get(server.url("/api/v1/keys/backups/describe"))
+            .get(server.url("/_cokret/self/keys/backups/describe"))
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -83,8 +83,8 @@ async fn describe_backup_surfaces(server: &CokretServer, token: &str) -> Result<
         key_backups_describe["contract"],
         "cokret.rest.key_backups_describe.v1"
     );
-    assert_eq!(key_backups_describe["schema"], "cx.schema.key_backup.v1");
-    assert_eq!(key_backups_describe["operations"][0], "cx.keys.backups.put");
+    assert_eq!(key_backups_describe["schema"], "ck.schema.key_backup.v1");
+    assert_eq!(key_backups_describe["operations"][0], "ck.keys.backups.put");
     Ok(())
 }
 
@@ -92,7 +92,7 @@ async fn get_backup(server: &CokretServer, token: &str) -> Result<()> {
     let backup_get = expect_json(
         server
             .http()
-            .get(server.url(&format!("/api/v1/keys/backups/{BACKUP_ID}")))
+            .get(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token),
         StatusCode::OK,
     )

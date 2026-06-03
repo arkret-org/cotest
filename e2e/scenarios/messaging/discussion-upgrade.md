@@ -9,7 +9,7 @@
 - `models/flow-and-message.md` §5 — `discussion_space_ref` 字段
 - `models/flow-and-message.md` §5.1 — Track / discussion_space_ref 关系图
 - `models/flow-and-message.md` §4.3 — Discussion track(不支持 hybrid 访问)
-- `models/space-hierarchy.md` §3-§4 — `cx.space.child`/`cx.space.parent` confirmed edge
+- `models/space-hierarchy.md` §3-§4 — `cx.space.child`/`ck.space.parent` confirmed edge
 - `models/space-hierarchy.md` §3.4(可继承的能力 bundles)
 - `discovery/read-receipts.md` §2.5 — Disclosure scope override
 
@@ -38,16 +38,16 @@
 
 5. alice 在 `F1` 详情点 "Promote discussion to separate space"
 6. yougen 客户端:
-   - 创建新 Space `S_discussion`:`cx.space.create`,parent_space_id = `S_parent`
-   - 更新 `F1`:`cx.flow.update`,`discussion_space_ref = S_discussion.id`
-   - 父子边互相确认:`cx.space.child`(在 `S_parent` 写入)+ `cx.space.parent`(在 `S_discussion` 写入)
+   - 创建新 Space `S_discussion`:`ck.space.create`,parent_space_id = `S_parent`
+   - 更新 `F1`:`ck.flow.update`,`discussion_space_ref = S_discussion.id`
+   - 父子边互相确认:`cx.space.child`(在 `S_parent` 写入)+ `ck.space.parent`(在 `S_discussion` 写入)
    - 两条边都 status=active 后,reducer 标记 edge `confirmed`(spec §3-§4)
 7. 断言:`F1` 详情 UI 提示 "Discussion moved to child space `S_discussion`"
 
 ### Phase C — 新消息路由到子 Space
 
 8. alice 在 `F1` discussion 输入新消息 `M11`
-9. yougen 客户端:因为 `F1.discussion_space_ref = S_discussion`,`cx.message.create` 应路由到 `S_discussion`(不是 `S_parent`)
+9. yougen 客户端:因为 `F1.discussion_space_ref = S_discussion`,`ck.message.create` 应路由到 `S_discussion`(不是 `S_parent`)
 10. 断言:`M11` 出现在 `S_discussion` 的 timeline;**不出现** 在 `S_parent` 的 timeline
 11. `F1` 详情的 Comments 区:既显示 `M1..M10`(老,落在 S_parent)+ `M11`(新,落在 S_discussion)— 客户端把两端拼起来显示
 
@@ -81,9 +81,9 @@
 
 ## Edge cases / sub-tests
 
-- **E21.1 子 Space 不存在**:alice 把 `discussion_space_ref` 指向不存在的 space → reducer 拒绝 `cx.flow.update`,reason `orphan_discussion_space_ref`
+- **E21.1 子 Space 不存在**:alice 把 `discussion_space_ref` 指向不存在的 space → reducer 拒绝 `ck.flow.update`,reason `orphan_discussion_space_ref`
 - **E21.2 切换 primary track**:升级后 alice 切回原 `inline` discussion → spec §4.6 切换规则,但**不**删除已有 messages
-- **E21.3 父子边未确认**:alice 只写了 `cx.space.child` 但 reducer 未收到 `cx.space.parent`(假设网络问题)→ edge 状态 `unconfirmed`,继承策略不应用
+- **E21.3 父子边未确认**:alice 只写了 `cx.space.child` 但 reducer 未收到 `ck.space.parent`(假设网络问题)→ edge 状态 `unconfirmed`,继承策略不应用
 - **E21.4 E2EE 父 + 非 E2EE 子**:父 `S_parent` 是 E2EE,子 `S_discussion` 是 plain text → spec §9 要求 parent 的 MLS key MUST NOT 解 child,验证密钥独立
 - **E21.5 跨服务器子 Space**:`S_parent` 在 α、`S_discussion` 在 β → 联邦 hierarchy(与 federation/cross-server 联动)
 

@@ -22,13 +22,13 @@
 //!
 //! 2. Wire pairwise federation peer trust: alpha ↔ beta, alpha ↔ gamma, beta ↔ gamma. For now this
 //!    is "they can address each other by URL"; once soland ships outbound HTTP federation
-//!    (E2E-FED-1) this step becomes a POST to `/api/v1/federation/peers` on each pair.
+//!    (E2E-FED-1) this step becomes a POST to `/_cokret/peer/federation/peers` on each pair.
 //!
 //! 3. Alice creates space `S` on alpha. The space is pushed to beta and gamma so all three reach
 //!    the same initial frontier.
 //!
 //! 4. Concurrent conflicting Moves on the **same `cell_subject`**:
-//!       * alice from alpha submits a `cx.flow.move` (or `cx.space.title` cas-register Move)
+//!       * alice from alpha submits a `ck.flow.move` (or `cx.space.title` cas-register Move)
 //!         targeting `S/cell:title`.
 //!       * bob's anchor request races on beta (independent actor, same cell, conflicting value).
 //!       * charlie's on gamma (third independent value).
@@ -57,15 +57,15 @@
 //!
 //! Prerequisite blockers (soland-side):
 //!   * **E2E-FED-1**: federation outbound push is currently a stub. Until `broadcast_move_to_peers`
-//!     does real `POST /api/v1/federation/push- operations` with RFC 9421 signatures, the three
-//!     nodes will not actually exchange their concurrent Moves and the "fork detected" branch is
-//!     unreachable.
+//!     does real `POST /_cokret/peer/federation/push- operations` with RFC 9421 signatures, the
+//!     three nodes will not actually exchange their concurrent Moves and the "fork detected" branch
+//!     is unreachable.
 //!   * **E2E-FED-2**: inbound RFC 9421 signature verification — required for each receiving server
 //!     to trust the pushed Moves before quarantining vs. accepting.
 //!   * **Fork quarantine surface**: soland does not yet expose a `GET
-//!     /api/v1/federation/quarantine` (or `quarantine[]` field on
-//!     `/api/v1/federation/push-operations` responses). The §4.5 `duplicate_conflict` taxonomy is
-//!     spec-only today.
+//!     /_cokret/peer/federation/quarantine` (or `quarantine[]` field on
+//!     `/_cokret/peer/federation/push-operations` responses). The §4.5 `duplicate_conflict`
+//!     taxonomy is spec-only today.
 //!   * **State-resolution profile selection**: 3-way merge of conflicting cas-register Moves needs
 //!     the `state_resolution` profile to be deterministic across nodes; current soland only exposes
 //!     the lattice merge at single-node level.
@@ -120,7 +120,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //   ] {
     //       expect_status(
     //           origin.http()
-    //               .post(origin.url("/api/v1/federation/peers"))
+    //               .post(origin.url("/_cokret/peer/federation/peers"))
     //               .json(&json!({
     //                   "peer_service_did": peer.service_did(),
     //                   "peer_base_url": peer.base_url(),
@@ -148,7 +148,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //   for peer in [beta, gamma] {
     //       expect_json(
     //           peer.http()
-    //               .post(peer.url("/api/v1/federation/push-operations"))
+    //               .post(peer.url("/_cokret/peer/federation/push-operations"))
     //               .json(&json!({
     //                   "origin": alpha.service_did(),
     //                   "destination": peer.service_did(),
@@ -163,7 +163,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //
     // All three target `S/cell:title` (a cas-register cell) with
     // different values. Each is submitted to a *different* server's
-    // /api/v1/events endpoint so each server initially accepts its own
+    // /_cokret/self/events endpoint so each server initially accepts its own
     // value into local frontier.
     //
     //   let alpha_move = alice.submit_event(&space_id, "cx.space.title",
@@ -196,7 +196,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //   ] {
     //       let response = expect_json(
     //           peer.http()
-    //               .post(peer.url("/api/v1/federation/push-operations"))
+    //               .post(peer.url("/_cokret/peer/federation/push-operations"))
     //               .json(&json!({
     //                   "origin": origin.service_did(),
     //                   "destination": peer.service_did(),
@@ -225,7 +225,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //       let frontiers = [alpha, beta, gamma].into_iter().map(|s| async move {
     //           expect_json(
     //               s.http().get(s.url(&format!(
-    //                   "/api/v1/federation/anchors?space_id={space_id}"
+    //                   "/_cokret/peer/federation/anchors?space_id={space_id}"
     //               ))),
     //               StatusCode::OK,
     //           ).await
@@ -246,7 +246,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //   for server in [alpha, beta, gamma] {
     //       let q = expect_json(
     //           server.http().get(server.url(&format!(
-    //               "/api/v1/federation/quarantine?space_id={space_id}"
+    //               "/_cokret/peer/federation/quarantine?space_id={space_id}"
     //           ))),
     //           StatusCode::OK,
     //       ).await?;
@@ -261,7 +261,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
         "CT-1 three-server fork quarantine — blocked on soland E2E-FED-1 \
          (outbound real HTTP federation push), E2E-FED-2 (inbound RFC 9421 \
          signature verification), and the §4.5 quarantine surface \
-         (`GET /api/v1/federation/quarantine` + `duplicate_conflict` \
+         (`GET /_cokret/peer/federation/quarantine` + `duplicate_conflict` \
          reason_code in push response). See module docs + \
          soland/_todos.md E2E-FED-1/2/3 + spec §4.5."
     )

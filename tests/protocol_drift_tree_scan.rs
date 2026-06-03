@@ -1,8 +1,8 @@
 //! One-shot scan driver for the structural protocol-drift rules.
 //!
 //! Invoked manually via `cargo test --test protocol_drift_tree_scan --
-//! --ignored --nocapture` — it walks the cokret-dev tree from
-//! `D:\Works\cokret-dev` (or the directory in `COKRET_DEV_ROOT`) and
+//! --ignored --nocapture` — it walks the cokret tree from
+//! `D:\Works\cokret` (or the directory in `COKRET_DEV_ROOT`) and
 //! reports any [`ProtocolDriftFinding`] residual violations from sibling
 //! projects (excluding `cokret-spec`, `cotest` itself, and noisy
 //! build/target dirs).
@@ -16,14 +16,14 @@ use std::path::PathBuf;
 use cotest::literal_scanner::scan_tree_protocol_drift;
 
 /// Gating: manual operator scan over sibling project trees — uses
-/// `COKRET_DEV_ROOT` (default `D:\Works\cokret-dev`); not a CI gate.
+/// `COKRET_DEV_ROOT` (default `D:\Works\cokret`); not a CI gate.
 #[test]
 #[ignore = "manual: cargo test --test protocol_drift_tree_scan -- --ignored --nocapture"]
 fn protocol_drift_tree_scan_other_projects() {
     let dev_root = std::env::var("COKRET_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret-dev"));
+        .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret"));
     assert!(
         dev_root.exists(),
         "dev root does not exist: {}",

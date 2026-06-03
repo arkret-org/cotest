@@ -32,7 +32,7 @@ async function createGrant(
   body: GrantBody,
 ) {
   return await (request as import("@playwright/test").APIRequestContext).post(
-    `${solandBaseUrl()}/api/v1/authz/grants`,
+    `${solandBaseUrl()}/_cokret/self/authz/grants`,
     {
       headers: { authorization: `Bearer ${token}` },
       data: body,
@@ -45,7 +45,7 @@ async function authzCheck(
   token: string,
   body: { actor: string; action: string; resource: unknown },
 ) {
-  return await request.post(`${solandBaseUrl()}/api/v1/authz/check`, {
+  return await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
     headers: { authorization: `Bearer ${token}` },
     data: body,
   });
@@ -79,7 +79,7 @@ test.describe("capability chain @fully-implemented", () => {
       });
 
       // mallory (non-member, no capability) attempts to send a message via API.
-      const send = await request.post(`${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/messages`, {
+      const send = await request.post(`${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/messages`, {
         headers: { authorization: `Bearer ${malloryToken}` },
         data: { content: { text: "mallory attempt" } },
       });
@@ -114,20 +114,20 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: bob.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: expiresAt,
       });
       expect(grantResp.status()).toBe(200);
       const grant = await grantResp.json();
       expect(grant.grant_id).toBeTruthy();
       expect(grant.subject).toBe(bob.did);
-      expect(grant.actions).toContain("cx.message.create");
+      expect(grant.actions).toContain("ck.message.create");
       expect(grant.expires_at).toBeTruthy();
       expect(grant.delegated_from).toBeUndefined();
 
       const check = await authzCheck(request, aliceToken, {
         actor: bob.did,
-        action: "cx.message.create",
+        action: "ck.message.create",
         resource: { kind: "space", space_id: spaceId },
       });
       expect(check.status()).toBe(200);
@@ -168,7 +168,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: bob.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(3600),
       });
       expect(parentGrant.status()).toBe(200);
@@ -179,7 +179,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: carol.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(1800),
         delegated_from: parent.grant_id,
       });
@@ -189,7 +189,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       const check = await authzCheck(request, aliceToken, {
         actor: carol.did,
-        action: "cx.message.create",
+        action: "ck.message.create",
         resource: { kind: "space", space_id: spaceId },
       });
       expect(check.status()).toBe(200);
@@ -229,7 +229,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: bob.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(3600),
       });
       expect(parentResp.status()).toBe(200);
@@ -239,7 +239,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: carol.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(1800),
         delegated_from: parent.grant_id,
       });
@@ -249,14 +249,14 @@ test.describe("capability chain @fully-implemented", () => {
       // Sanity: both currently allowed.
       const bobBefore = await authzCheck(request, aliceToken, {
         actor: bob.did,
-        action: "cx.message.create",
+        action: "ck.message.create",
         resource: { kind: "space", space_id: spaceId },
       });
       expect((await bobBefore.json()).allowed).toBe(true);
 
       // alice (space owner) revokes the parent grant — cascade revokes carol's.
       const revokeResp = await request.delete(
-        `${solandBaseUrl()}/api/v1/authz/grants/${encodeURIComponent(parent.grant_id)}`,
+        `${solandBaseUrl()}/_cokret/self/authz/grants/${encodeURIComponent(parent.grant_id)}`,
         { headers: { authorization: `Bearer ${aliceToken}` } },
       );
       expect(revokeResp.status()).toBe(200);
@@ -267,12 +267,12 @@ test.describe("capability chain @fully-implemented", () => {
       // Both must now be rejected.
       const bobAfter = await authzCheck(request, aliceToken, {
         actor: bob.did,
-        action: "cx.message.create",
+        action: "ck.message.create",
         resource: { kind: "space", space_id: spaceId },
       });
       const carolAfter = await authzCheck(request, aliceToken, {
         actor: carol.did,
-        action: "cx.message.create",
+        action: "ck.message.create",
         resource: { kind: "space", space_id: spaceId },
       });
       expect((await bobAfter.json()).allowed).toBe(false);
@@ -307,12 +307,12 @@ test.describe("capability chain @fully-implemented", () => {
         joinRule: "invite",
       });
 
-      // alice only gives bob `cx.message.create`.
+      // alice only gives bob `ck.message.create`.
       const parentResp = await createGrant(request, aliceToken, {
         space_id: spaceId,
         subject: bob.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(3600),
       });
       expect(parentResp.status()).toBe(200);
@@ -365,7 +365,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: bob.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(1800),
       });
       expect(parentResp.status()).toBe(200);
@@ -376,7 +376,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: carol.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(7200),
         delegated_from: parent.grant_id,
       });
@@ -417,7 +417,7 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: bob.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(3600),
       });
       const parent = await parentResp.json();
@@ -426,20 +426,20 @@ test.describe("capability chain @fully-implemented", () => {
         space_id: spaceId,
         subject: carol.did,
         resource: "*",
-        actions: ["cx.message.create"],
+        actions: ["ck.message.create"],
         expires_at: plusSeconds(1800),
         delegated_from: parent.grant_id,
       });
       const child = await childResp.json();
 
       await request.delete(
-        `${solandBaseUrl()}/api/v1/authz/grants/${encodeURIComponent(parent.grant_id)}`,
+        `${solandBaseUrl()}/_cokret/self/authz/grants/${encodeURIComponent(parent.grant_id)}`,
         { headers: { authorization: `Bearer ${aliceToken}` } },
       );
 
       // alice queries her own audit log — must contain authz.grant.create + authz.grant.revoke.
       const aliceAudit = await request.get(
-        `${solandBaseUrl()}/api/v1/audit/events?actor=${encodeURIComponent(alice.did)}`,
+        `${solandBaseUrl()}/_cokret/self/audit/events?actor=${encodeURIComponent(alice.did)}`,
         { headers: { authorization: `Bearer ${aliceToken}` } },
       );
       expect(aliceAudit.status()).toBe(200);
@@ -456,7 +456,7 @@ test.describe("capability chain @fully-implemented", () => {
       expect(aliceCreate, "alice must have an authz.grant.create entry for the parent grant").toBeTruthy();
       expect(aliceCreate?.actor).toBe(alice.did);
       expect(aliceCreate?.target?.subject).toBe(bob.did);
-      expect(aliceCreate?.target?.actions).toContain("cx.message.create");
+      expect(aliceCreate?.target?.actions).toContain("ck.message.create");
       expect(aliceCreate?.created_at).toBeTruthy();
 
       const aliceRevoke = aliceEvents.find(
@@ -467,7 +467,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // bob queries his own audit log — must contain authz.grant.delegate.
       const bobAudit = await request.get(
-        `${solandBaseUrl()}/api/v1/audit/events?actor=${encodeURIComponent(bob.did)}`,
+        `${solandBaseUrl()}/_cokret/self/audit/events?actor=${encodeURIComponent(bob.did)}`,
         { headers: { authorization: `Bearer ${bobToken}` } },
       );
       expect(bobAudit.status()).toBe(200);

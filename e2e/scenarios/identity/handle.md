@@ -32,7 +32,7 @@
    - handle 格式合法
    - handle 未被占用
    - alice 有权(自己持有)
-5. 断言:`/api/v1/actors/<alice.did>/profile.handle = "@alice-pretty"`
+5. 断言:`/_cokret/self/actors/<alice.did>/profile.handle = "@alice-pretty"`
 6. 断言:directory 搜 `@alice-pretty` → 找到 alice
 
 ### Phase B — Handle 冲突

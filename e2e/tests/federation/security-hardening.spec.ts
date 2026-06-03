@@ -46,12 +46,12 @@ test.describe("federation security hardening", () => {
     const spaceId = typedId("space");
     const op = makeOperation({
       spaceId,
-      objectType: "cx.message.create",
+      objectType: "ck.message.create",
       payload: {
         event_id: typedId("event"),
         sender: "did:web:alice.alpha.example",
         thread_id: "ck:thread:federation-security",
-        content: { kind: "cx.content.text", body: "denylisted inbound" },
+        content: { kind: "ck.content.text", body: "denylisted inbound" },
       },
     });
     const response = await rawPushFederationOperations(request, [op], {
@@ -120,7 +120,7 @@ test.describe("federation security hardening", () => {
     );
 
     const response = await request.post(
-      `${solandBaseUrl("alpha")}/api/v1/federation/backfill-operations`,
+      `${solandBaseUrl("alpha")}/_cokret/peer/federation/backfill-operations`,
       {
         headers: authHeaders(aliceToken),
         data: {

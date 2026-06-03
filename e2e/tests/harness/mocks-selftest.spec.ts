@@ -100,12 +100,12 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const to = `alice-${Date.now()}@selftest.invalid`;
     // Fresh token with TTL=1s → expect 410 after wait.
     const expiringToken = `expiring-${Date.now()}`;
-    const sendExpiring = await request.post(`${baseUrl}/api/v1/verification/send`, {
+    const sendExpiring = await request.post(`${baseUrl}/_cokret/self/verification/send`, {
       data: { to, token: expiringToken, ttl_seconds: 1, body_html: "<p>hi</p>" },
     });
     expect(sendExpiring.status()).toBe(200);
     await new Promise((r) => setTimeout(r, 1500));
-    const claimExpired = await request.post(`${baseUrl}/api/v1/verification/claim`, {
+    const claimExpired = await request.post(`${baseUrl}/_cokret/self/verification/claim`, {
       data: { token: expiringToken, did: "did:web:alice.selftest" },
     });
     expect(claimExpired.status()).toBe(410);
@@ -113,10 +113,10 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     // Happy path with a longer TTL
     const goodToken = `good-${Date.now()}`;
-    await request.post(`${baseUrl}/api/v1/verification/send`, {
+    await request.post(`${baseUrl}/_cokret/self/verification/send`, {
       data: { to, token: goodToken, ttl_seconds: 600 },
     });
-    const claim = await request.post(`${baseUrl}/api/v1/verification/claim`, {
+    const claim = await request.post(`${baseUrl}/_cokret/self/verification/claim`, {
       data: { token: goodToken, did: "did:web:alice.selftest" },
     });
     expect(claim.status()).toBe(200);
@@ -135,29 +135,29 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     test.skip(!baseUrl, "mock-witness not started for this run");
 
     const scid = `selftest-${Date.now()}`;
-    const sign1 = await request.post(`${baseUrl}/api/v1/witness/sign`, {
+    const sign1 = await request.post(`${baseUrl}/_cokret/root/witness/sign`, {
       data: { scid, entry_hash: "h1", entry_number: 1 },
     });
     expect(sign1.status()).toBe(200);
 
-    const sign2 = await request.post(`${baseUrl}/api/v1/witness/sign`, {
+    const sign2 = await request.post(`${baseUrl}/_cokret/root/witness/sign`, {
       data: { scid, entry_hash: "h2", entry_number: 2, prev_entry_hash: "h1" },
     });
     expect(sign2.status()).toBe(200);
 
-    const badPrev = await request.post(`${baseUrl}/api/v1/witness/sign`, {
+    const badPrev = await request.post(`${baseUrl}/_cokret/root/witness/sign`, {
       data: { scid, entry_hash: "h3", entry_number: 3, prev_entry_hash: "WRONG" },
     });
     expect(badPrev.status()).toBe(409);
     expect((await badPrev.json()).error).toBe("prev_entry_hash_mismatch");
 
-    const skipEntry = await request.post(`${baseUrl}/api/v1/witness/sign`, {
+    const skipEntry = await request.post(`${baseUrl}/_cokret/root/witness/sign`, {
       data: { scid, entry_hash: "h5", entry_number: 5, prev_entry_hash: "h2" },
     });
     expect(skipEntry.status()).toBe(409);
     expect((await skipEntry.json()).error).toBe("non_monotonic_entry_number");
 
-    const stale = await request.post(`${baseUrl}/api/v1/witness/sign`, {
+    const stale = await request.post(`${baseUrl}/_cokret/root/witness/sign`, {
       data: {
         scid,
         entry_hash: "h3",
@@ -183,7 +183,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     expect(dids.length).toBe(baseUrls.length);
     for (const [index, baseUrl] of baseUrls.entries()) {
-      const policy = await request.get(`${baseUrl}/api/v1/witness/policy`);
+      const policy = await request.get(`${baseUrl}/_cokret/root/witness/policy`);
       expect(policy.status()).toBe(200);
       const body = await policy.json();
       expect(body.witness_did).toBe(dids[index]);
@@ -195,23 +195,23 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const baseUrl = mockAuditAgentBaseUrl();
     test.skip(!baseUrl, "mock-audit-agent not started for this run");
 
-    const identity = await (await request.get(`${baseUrl}/api/v1/audit-agent/identity`)).json();
+    const identity = await (await request.get(`${baseUrl}/_soland/admin/audit-agent/identity`)).json();
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
     const spaceId = `ck:space:selftest:${Date.now()}`;
-    const invite = await request.post(`${baseUrl}/api/v1/audit-agent/invite`, {
+    const invite = await request.post(`${baseUrl}/_soland/admin/audit-agent/invite`, {
       data: { space_id: spaceId, invite: { event_id: "evt-selftest" } },
     });
     expect(invite.status()).toBe(200);
     const inviteBody = await invite.json();
     expect(inviteBody.agent_id).toBe(identity.did);
-    expect(inviteBody.emitted.type).toBe("cx.audit.accessed");
+    expect(inviteBody.emitted.type).toBe("ck.audit.accessed");
     expect(inviteBody.emitted.space_id).toBe(spaceId);
     expect(typeof inviteBody.emitted.binding_proof).toBe("string");
 
     const accessed = await (
-      await request.get(`${baseUrl}/api/v1/audit-agent/accessed`)
+      await request.get(`${baseUrl}/_soland/admin/audit-agent/accessed`)
     ).json();
     expect(
       (accessed.events as Array<{ space_id: string }>).some((e) => e.space_id === spaceId),
@@ -235,7 +235,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     await request.delete(`${baseUrl}/scenarios`);
 
     // Default allow when no rules match.
-    const allowResp = await request.post(`${baseUrl}/api/v1/policy/check`, {
+    const allowResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
       data: { action: "cx.member.invite", actor: "did:web:alice", target: "did:web:carol" },
     });
     expect(allowResp.status()).toBe(200);
@@ -257,7 +257,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       },
     });
 
-    const denyResp = await request.post(`${baseUrl}/api/v1/policy/check`, {
+    const denyResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
       data: { action: "cx.member.invite", actor: "did:web:alice", target: "did:web:bob" },
     });
     expect(denyResp.status()).toBe(200);
@@ -286,7 +286,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     await request.delete(`${baseUrl}/scenarios`);
 
     const pusherId = `selftest-pusher-${Date.now()}`;
-    const reg = await request.post(`${baseUrl}/api/v1/push/register`, {
+    const reg = await request.post(`${baseUrl}/_cokret/edge/push/register`, {
       data: {
         pusher_id: pusherId,
         app_id: "selftest",
@@ -298,7 +298,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(reg.status()).toBe(200);
 
-    const notify = await request.post(`${baseUrl}/api/v1/push/notify`, {
+    const notify = await request.post(`${baseUrl}/_cokret/edge/push/notify`, {
       data: {
         pusher_id: pusherId,
         payload: { title: "selftest", body: "hello" },
@@ -312,7 +312,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(notifyBody.delivery_receipt.split(".").length).toBe(3);
 
     // Blind-wake payload MUST not contain plain content.
-    const blindBad = await request.post(`${baseUrl}/api/v1/push/notify`, {
+    const blindBad = await request.post(`${baseUrl}/_cokret/edge/push/notify`, {
       data: {
         pusher_id: pusherId,
         blind_wake: true,
@@ -322,7 +322,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     // Mock rejects forbidden plaintext keys in blind-wake mode.
     expect([400, 422]).toContain(blindBad.status());
 
-    const inbox = await (await request.get(`${baseUrl}/api/v1/push/inbox?pusher_id=${pusherId}`)).json();
+    const inbox = await (await request.get(`${baseUrl}/_cokret/edge/push/inbox?pusher_id=${pusherId}`)).json();
     expect(inbox.pusher_id).toBe(pusherId);
     expect(Array.isArray(inbox.pushes)).toBe(true);
     expect(inbox.pushes.length).toBeGreaterThanOrEqual(1);
@@ -338,12 +338,12 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     test.skip(!baseUrl, "mock-applet-registry not started for this run");
 
     const namespace = `selftest-${Date.now()}`;
-    const reg = await request.post(`${baseUrl}/api/v1/applets/register`, {
+    const reg = await request.post(`${baseUrl}/_cokret/edge/applet/register`, {
       data: {
         manifest: {
           name: "selftest-bridge",
           namespace,
-          capabilities: ["cx.message.send"],
+          capabilities: ["ck.message.send"],
         },
         manifest_signature: "selftest-signature",
       },
@@ -356,7 +356,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(regBody.status).toBe("registered");
 
     const ghost = await request.post(
-      `${baseUrl}/api/v1/applets/${regBody.applet_id}/ghost-actor`,
+      `${baseUrl}/_cokret/edge/applet/${regBody.applet_id}/ghost-actor`,
       { data: { external_id: "u-42", display_name: "External User" } },
     );
     expect(ghost.status()).toBe(200);
@@ -395,7 +395,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
       data: {
         from_vid: unestablishedRemote,
         to_vid: bsBody.endpoint_vid,
-        payload_b64: Buffer.from(JSON.stringify({ type: "cx.invite.create" })).toString("base64url"),
+        payload_b64: Buffer.from(JSON.stringify({ type: "ck.invite.create" })).toString("base64url"),
         signature_b64: "test-sig",
       },
     });
@@ -407,7 +407,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
         from_vid: remoteVid,
         to_vid: bsBody.endpoint_vid,
         payload_b64: Buffer.from(
-          JSON.stringify({ type: "cx.invite.create", target: bsBody.endpoint_vid }),
+          JSON.stringify({ type: "ck.invite.create", target: bsBody.endpoint_vid }),
         ).toString("base64url"),
         signature_b64: "test-sig",
       },

@@ -85,11 +85,11 @@ pub struct ProfileGateReport {
 /// is caught — but the suite list itself is loaded from the artifact at
 /// runtime, never hardcoded.
 const NEW_VECTOR_PROFILES: &[&str] = &[
-    "cx.profile.discovery_vectors.v1",
-    "cx.profile.event_kind_lattice_dispatch_vectors.v1",
-    "cx.profile.event_kind_payload_coverage_vectors.v1",
-    "cx.profile.operation_registry_coverage_vectors.v1",
-    "cx.profile.error_code_registry_coverage_vectors.v1",
+    "ck.profile.discovery_vectors.v1",
+    "ck.profile.event_kind_lattice_dispatch_vectors.v1",
+    "ck.profile.event_kind_payload_coverage_vectors.v1",
+    "ck.profile.operation_registry_coverage_vectors.v1",
+    "ck.profile.error_code_registry_coverage_vectors.v1",
 ];
 
 /// New implementation profiles that cotest emits explicit manifest entries
@@ -97,15 +97,15 @@ const NEW_VECTOR_PROFILES: &[&str] = &[
 /// event_kind through a live server, so they default to `unsupported` per
 /// spec's `default_unsupported_behavior` — never silently skipped.
 const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
-    "cx.profile.e2ee_relaxed.v1",
-    "cx.profile.directory_service.v1",
+    "ck.profile.e2ee_relaxed.v1",
+    "ck.profile.directory_service.v1",
     // Round C45 (2026-05-18 main; spec 5ed365c) — federation high-assurance
     // peer profile, sender_commitment opt-in franking profile, and
     // morph.schema_migrate transformation profile. All default to
     // `unsupported` here pending fixture vectors.
-    "cx.profile.federation.high_assurance.v1",
-    "cx.profile.franking.sender_commitment.v1",
-    "cx.profile.morph.schema_migration_transformations.v1",
+    "ck.profile.federation.high_assurance.v1",
+    "ck.profile.franking.sender_commitment.v1",
+    "ck.profile.morph.schema_migration_transformations.v1",
 ];
 
 /// Wired cotest suites. Each entry is `(suite_id, fixture_file)`. The fixture

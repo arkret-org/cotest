@@ -39,11 +39,11 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
     `claimed_profiles` 4 条 self_claimed,`verified_profiles=[]`
   - `coauth/crates/backend/src/handlers/cokret.rs` (T6.3) —
     `claimed_profiles=Vec::new()` + `verified_profiles=Vec::new()`,coauth 不假 claim
-    `cx.profile.identity_registry.v1` (跟踪项 `_codex_test_gaps.md` G3.C3)
+    `ck.profile.identity_registry.v1` (跟踪项 `_codex_test_gaps.md` G3.C3)
 
 ## 拓扑
 
-- 1 × soland (principal server) — `COTEST_SOLAND_BASE_URL`,暴露 `/api/v1/server/describe`
+- 1 × soland (principal server) — `COTEST_SOLAND_BASE_URL`,暴露 `/_cokret/describe`
 - 1 × coauth (auth server,可选) — `COTEST_COAUTH_BASE_URL`,缺省时 coauth-specific 子
   测试 skip
 - 1 × profile-gates harness (Playwright `request` fixture) — 纯 HTTP,无 browser context;
@@ -60,7 +60,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ## Pre-conditions
 
-- soland `/api/v1/server/describe` 已暴露 T6.1 claim-level partition
+- soland `/_cokret/describe` 已暴露 T6.1 claim-level partition
   (`implemented_features` / `claimed_profiles` / `verified_profiles` /
   `experimental_features` / `compat_surfaces`)
 - soland 启动时 `development_mode=true`(cotest harness 默认配置)
@@ -72,7 +72,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 ### Phase A — claim_kind 分区(`claimed_profiles` ∩ `verified_profiles` = ∅)
 
-1. **harness** `GET ${solandBaseUrl}/api/v1/server/describe`
+1. **harness** `GET ${solandBaseUrl}/_cokret/describe`
 2. 断言 `claimed_profiles` 是数组,每条 entry MUST 有 `profile_id` + `claim_kind`
 3. 断言 `claimed_profiles[].claim_kind` 全部等于 `self_claimed`(`verified` 只能由
    cotest verifier 写入 `verified_profiles`)
@@ -86,9 +86,9 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 6. **harness** 从 `event-kind-registry.json` 挑一个 active durable 但 soland
    claimed profile 不覆盖的 kind(候选 `cx.applet.transaction.v1` ↔
-   `cx.profile.applet_service.v1`,后者不在 soland claimed 列表)
+   `ck.profile.applet_service.v1`,后者不在 soland claimed 列表)
 7. alice 注册 + dev-login
-8. `POST /api/v1/events/submit` `{ kind: "<unsupported_kind>", ...minimal payload... }`
+8. `POST /_cokret/self/events/submit` `{ kind: "<unsupported_kind>", ...minimal payload... }`
    + Bearer token
 9. 断言:
    - HTTP 4xx
@@ -116,7 +116,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 15. 断言顶层 `development_mode === true`(cotest harness 默认)
 16. 断言顶层 `verified_profiles` 严格等于 `[]`(Array.isArray + length === 0,**不接受**
     `null` / `undefined` / 占位 stub)
-17. coauth 在线时,对 `coauthBaseUrl()/api/v1/server/describe` 重复 15-16
+17. coauth 在线时,对 `coauthBaseUrl()/_cokret/describe` 重复 15-16
 
 ### Phase E — profile catalog integrity
 
@@ -141,7 +141,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 - **E1 coauth 分区独立**:coauth 当前 `claimed_profiles=[]`、`verified_profiles=[]`
   (T6.3) — 子测试断言两个数组都为 `[]`,确保 coauth 没有 silent claim
-  `cx.profile.identity_registry.v1`(对应 G3.C3 跟踪项)
+  `ck.profile.identity_registry.v1`(对应 G3.C3 跟踪项)
 - **E2 verified_profiles entry shape**:一旦 cotest verifier 写入 `verified_profiles`,
   每条 entry MUST 携带 `cotest_run_id` / `artifact_digest` / `artifact_ref` /
   `cotest_issuer_did` / `signature` / `timestamp`;Phase A 的 entry-shape 断言提前钉住未来形态

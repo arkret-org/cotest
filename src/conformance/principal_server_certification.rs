@@ -8,32 +8,32 @@ use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "principal-server-certification-gate.json";
 const FIXTURE_PROFILE: &str = "cx.profile.principal_server_certification_gate.v1";
-const PRINCIPAL_SERVER_PROFILE: &str = "cx.profile.principal_server.v1";
+const PRINCIPAL_SERVER_PROFILE: &str = "ck.profile.principal_server.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
-    "cx.server.describe",
-    "cx.account.describe",
-    "cx.account.subscribe",
-    "cx.events.subscribe",
-    "cx.events.query",
-    "cx.snapshot.head",
-    "cx.authz.check",
+    "ck.server.describe",
+    "ck.account.describe",
+    "ck.account.subscribe",
+    "ck.events.subscribe",
+    "ck.events.query",
+    "ck.snapshot.head",
+    "ck.authz.check",
 ];
 
 const REQUIRED_EVENT_KINDS: &[&str] = &[
-    "cx.space.create",
-    "cx.member.state",
-    "cx.flow.create",
-    "cx.message.create",
-    "cx.capability.grant",
-    "cx.capability.revoke",
+    "ck.space.create",
+    "ck.member.state",
+    "ck.flow.create",
+    "ck.message.create",
+    "ck.capability.grant",
+    "ck.capability.revoke",
 ];
 
 const REQUIRED_SCHEMAS: &[&str] = &[
-    "cx.schema.account_subscribe_frame.v1",
-    "cx.schema.snapshot.v1",
-    "cx.schema.capability.v1",
-    "cx.schema.grant_constraint.v1",
+    "ck.schema.account_subscribe_frame.v1",
+    "ck.schema.snapshot.v1",
+    "ck.schema.capability.v1",
+    "ck.schema.grant_constraint.v1",
 ];
 
 const REQUIRED_MINIMUM_SURFACES: &[&str] = &["admin", "agent", "applet", "media"];

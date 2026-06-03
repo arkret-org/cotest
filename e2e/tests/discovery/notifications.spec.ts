@@ -187,8 +187,8 @@ test.describe("notifications", () => {
   }) => {
     // spec: discovery/push-notifications.md — `last_read_at` marker is
     // the canonical "everything before this is read" cursor. Asserted
-    // via the dedicated `POST /api/v1/notifications/mark-all-read` +
-    // `GET /api/v1/notifications` pair.
+    // via the dedicated `POST /_cokret/self/notifications/mark-all-read` +
+    // `GET /_cokret/self/notifications` pair.
     const stamp = Date.now();
     const alice = uniqueUser(`s23-mark-${stamp}`);
     await ensureRegistered(request, alice);
@@ -196,7 +196,7 @@ test.describe("notifications", () => {
     const auth = { authorization: `Bearer ${aliceToken}` };
 
     // Pre-mark: last_read_at is null.
-    const before = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const before = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: auth,
     });
     expect(before.status()).toBe(200);
@@ -205,7 +205,7 @@ test.describe("notifications", () => {
 
     // mark-all-read writes a marker.
     const mark = await request.post(
-      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      `${solandBaseUrl()}/_cokret/self/notifications/mark-all-read`,
       { headers: auth, data: {} },
     );
     expect(mark.status()).toBe(200);
@@ -214,7 +214,7 @@ test.describe("notifications", () => {
     expect(markBody.actor).toBe(alice.did);
 
     // Post-mark: last_read_at reflects the marker.
-    const after = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+    const after = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
       headers: auth,
     });
     expect(after.status()).toBe(200);
@@ -225,7 +225,7 @@ test.describe("notifications", () => {
     // Idempotency / advancement: a second call advances the marker.
     await new Promise((r) => setTimeout(r, 20));
     const mark2 = await request.post(
-      `${solandBaseUrl()}/api/v1/notifications/mark-all-read`,
+      `${solandBaseUrl()}/_cokret/self/notifications/mark-all-read`,
       { headers: auth, data: {} },
     );
     const mark2Body = await mark2.json();
@@ -254,7 +254,7 @@ test.describe("notifications", () => {
         encryption_profile: "mls_rfc9420",
       });
       await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-      const rules = await request.put(`${solandBaseUrl()}/api/v1/account_data/cx.push_rules`, {
+      const rules = await request.put(`${solandBaseUrl()}/_cokret/self/account_data/cx.push_rules`, {
         headers: authHeaders(bobToken),
         data: {
           content: {
@@ -276,7 +276,7 @@ test.describe("notifications", () => {
       const encrypted = signedEventEnvelope({
         actorDid: alice.did,
         realmId: spaceId,
-        kind: "cx.message.create",
+        kind: "ck.message.create",
         payload: {
           flow_id: flowIdFromRealmId(spaceId),
           track_name: "discussion",
@@ -293,7 +293,7 @@ test.describe("notifications", () => {
         context: "encrypted message with blind wake sidecar",
       });
 
-      const notifications = await request.get(`${solandBaseUrl()}/api/v1/notifications`, {
+      const notifications = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
         headers: authHeaders(bobToken),
       });
       expect(notifications.status()).toBe(200);
@@ -392,7 +392,7 @@ function encryptedEnvelope(
     ciphertext,
     authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",
-    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "cx.message.create" },
+    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "ck.message.create" },
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

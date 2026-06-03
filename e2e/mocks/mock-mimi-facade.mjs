@@ -6,11 +6,11 @@
 //   GET  /identity
 //   POST /scenarios
 //   DELETE /scenarios
-//   POST /api/v1/mimi/join-requests
-//   POST /api/v1/mimi/approve
-//   POST /api/v1/mimi/outbound
-//   POST /api/v1/mimi/inbound
-//   GET  /api/v1/mimi/events
+//   POST /_cokret/open/mimi/join-requests
+//   POST /_cokret/open/mimi/approve
+//   POST /_cokret/open/mimi/outbound
+//   POST /_cokret/open/mimi/inbound
+//   GET  /_cokret/open/mimi/events
 //   GET  /inspect, DELETE /inspect
 //
 // The mock intentionally models the facade contract, not a real MIMI server:
@@ -30,8 +30,8 @@ const supportedContentKinds = new Set([
   "m.text",
   "text/plain",
   "cx.message.text",
-  "cx.message.revise",
-  "cx.message.redact",
+  "ck.message.revise",
+  "ck.message.redact",
 ]);
 
 const identities = new Map([
@@ -193,7 +193,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/mimi/join-requests" && req.method === "POST") {
+  if (url.pathname === "/_cokret/open/mimi/join-requests" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.room_binding_id) {
       res.statusCode = 400;
@@ -218,7 +218,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/mimi/approve" && req.method === "POST") {
+  if (url.pathname === "/_cokret/open/mimi/approve" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.realm_id) {
       res.statusCode = 400;
@@ -251,7 +251,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/mimi/outbound" && req.method === "POST") {
+  if (url.pathname === "/_cokret/open/mimi/outbound" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.realm_id || !body.room_binding_id) {
       res.statusCode = 400;
@@ -287,7 +287,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/mimi/inbound" && req.method === "POST") {
+  if (url.pathname === "/_cokret/open/mimi/inbound" && req.method === "POST") {
     const body = await readJson(req);
     if (!body || !body.room_binding_id) {
       res.statusCode = 400;
@@ -329,7 +329,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/mimi/events" && req.method === "GET") {
+  if (url.pathname === "/_cokret/open/mimi/events" && req.method === "GET") {
     const direction = url.searchParams.get("direction");
     const filtered = direction ? events.filter((event) => event.direction === direction) : events;
     res.end(JSON.stringify({ events: filtered }));

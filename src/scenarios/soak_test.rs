@@ -11,8 +11,9 @@
 //! are operational, not protocol:
 //!   - heap growth MUST be sub-linear in event count once the steady state is reached (a small
 //!     per-actor and per-space working set is expected, but a linear-in-N leak is a bug);
-//!   - p50 / p95 read latency for `GET /api/v1/messages?space_id=...` MUST stay within a constant
-//!     factor of the empty-store latency as the log grows (index-backed read, not full scan);
+//!   - p50 / p95 read latency for `GET /_cokret/self/messages?space_id=...` MUST stay within a
+//!     constant factor of the empty-store latency as the log grows (index-backed read, not full
+//!     scan);
 //!   - anchor-store row growth MUST be linear in event count (no pathological write amplification),
 //!     but the rate MUST be stable (no super-linear gc-then-rebuild storms).
 //!
@@ -34,8 +35,8 @@
 //!   4. Sampling (concurrent with step 3, runs at 1 Hz):
 //!        - Heap: read `RSS` from `/proc/<pid>/status` on Linux, `wmic process where
 //!          ProcessId=<pid> get WorkingSetSize` on Windows, `task_info` via libproc on macOS.
-//!        - Latency: every 5 s, fire 10 `GET /api/v1/messages?space_id= <space>&limit=50` requests,
-//!          record p50 / p95.
+//!        - Latency: every 5 s, fire 10 `GET /_cokret/self/messages?space_id= <space>&limit=50`
+//!          requests, record p50 / p95.
 //!        - Anchor store: every 30 s, query `SELECT count(*) FROM anchor_store` (or equivalent).
 //!   5. Steady-state window: drop the first 10% of samples (warm-up) and the last 10% (drain). On
 //!      the middle 80%:

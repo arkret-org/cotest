@@ -216,19 +216,19 @@ async function createRealm(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "cx.realm.create",
+      kind: "ck.realm.create",
       createdAt: createdAtValue,
       payload: {
         // realm_create_payload root is additionalProperties:false; the field
         // lives on the realm object (additionalProperties:true) below.
         object: {
           id: realmId,
-          schema: "cx.schema.realm.v1",
+          schema: "ck.schema.realm.v1",
           title: `history ${historyVisibility} ${Date.now()}`,
           summary: "cotest joined-history enforcement fixture",
           created_by: actor.did,
           trust_domain: "ck:trust_domain:soland.local",
-          schema_refs: ["cx.schema.realm.v1"],
+          schema_refs: ["ck.schema.realm.v1"],
           default_discoverability: "public",
           default_join_rule: "invite",
           history_visibility: historyVisibility,
@@ -261,13 +261,13 @@ async function createMessage(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       createdAt: createdAtValue,
       payload: {
         flow_id: flowIdFromRealmId(realmId),
         track_name: "discussion",
         content: {
-          kind: "cx.content.text",
+          kind: "ck.content.text",
           body,
         },
         encrypted: false,
@@ -291,7 +291,7 @@ async function joinMember(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       createdAt: createdAtValue,
       payload: {
         actor_id: member.did,
@@ -310,7 +310,7 @@ async function listMessageBodies(
   realmId: string,
 ): Promise<string[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(realmId)}&limit=100`,
+    `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();
@@ -328,7 +328,7 @@ async function accountSubscribeBodies(
   realmId: string,
 ): Promise<string[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/account/subscribe?catchup=true&filter=${encodeURIComponent(
+    `${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true&filter=${encodeURIComponent(
       JSON.stringify({ spaces: [realmId] }),
     )}`,
     { headers: authHeaders(token) },
@@ -354,7 +354,7 @@ async function eventsSubscribeBodies(
   realmId: string,
 ): Promise<string[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/events/subscribe?realms=${encodeURIComponent(
+    `${solandBaseUrl()}/_cokret/self/events/subscribe?realms=${encodeURIComponent(
       realmId,
     )}&limit=100&max_duration_ms=100&heartbeat_ms=100`,
     { headers: authHeaders(token) },
@@ -369,8 +369,8 @@ async function eventsSubscribeBodies(
 
 function isMessageEvent(event: Record<string, unknown>): boolean {
   return (
-    event.event_kind === "cx.message.create" ||
-    event.kind === "cx.message.create"
+    event.event_kind === "ck.message.create" ||
+    event.kind === "ck.message.create"
   );
 }
 

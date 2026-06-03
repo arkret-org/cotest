@@ -250,8 +250,8 @@ pub fn install_failure_dump_hook() {
 mod tests {
     use super::*;
 
-    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/api/v1/events","headers":{},"body":{"event_id":"ck:event:01999999-0000-7000-8000-000000000001","kind":"cx.message.create","actor_id":"did:web:alice.example","realm_id":"ck:realm:abc","prev_refs":["ck:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ck:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
-    const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/api/v1/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
+    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_cokret/self/events","headers":{},"body":{"event_id":"ck:event:01999999-0000-7000-8000-000000000001","kind":"ck.message.create","actor_id":"did:web:alice.example","realm_id":"ck:realm:abc","prev_refs":["ck:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ck:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
+    const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/_cokret/self/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
 
     #[test]
     fn parses_event_envelope_and_get_request() {
@@ -262,7 +262,7 @@ mod tests {
         let first = &timeline.events[0];
         assert_eq!(first.sender, "did:web:alice.example");
         assert_eq!(first.op_id, "ck:event:01999999-0000-7000-8000-000000000001");
-        assert_eq!(first.kind, "cx.message.create");
+        assert_eq!(first.kind, "ck.message.create");
         assert_eq!(first.event_digest, "sha256:deadbeef");
         assert_eq!(first.depends_on, vec!["ck:event:prev-1".to_owned()]);
         assert_eq!(first.status, Some(200));
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(second.sender, "-");
         assert_eq!(
             second.op_id,
-            "GET http://127.0.0.1:8008/api/v1/account/subscribe"
+            "GET http://127.0.0.1:8008/_cokret/self/account/subscribe"
         );
         assert_eq!(second.kind, "http");
         assert!(second.depends_on.is_empty());
@@ -284,7 +284,7 @@ mod tests {
         let rendered = EventTimeline::from_ndjson(&ndjson).to_string();
         assert!(rendered.contains("cotest event timeline"));
         assert!(rendered.contains("did:web:alice.example"));
-        assert!(rendered.contains("cx.message.create"));
+        assert!(rendered.contains("ck.message.create"));
         assert!(rendered.contains("sha256:deadbeef"));
         assert!(rendered.contains("ck:event:prev-1"));
         assert!(rendered.contains("401"));
@@ -337,7 +337,7 @@ mod tests {
         let loaded = EventTimeline::load_from_env().expect("env-driven load");
         let rendered = loaded.to_string();
         assert!(rendered.contains("did:web:alice.example"));
-        assert!(rendered.contains("cx.message.create"));
+        assert!(rendered.contains("ck.message.create"));
 
         // Install the hook and run a panic in a child thread; the join handle
         // captures the panic so the test process itself does not abort.

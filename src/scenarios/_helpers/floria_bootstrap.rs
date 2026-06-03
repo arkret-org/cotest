@@ -12,7 +12,6 @@
 //! synthetic placeholder rows on stripped-down CI runners.
 
 use std::io::Write;
-use crate::harness::free_port;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -20,6 +19,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
 
+use crate::harness::free_port;
 use crate::scenarios::_helpers::external_binary::{
     ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
 };
@@ -136,7 +136,6 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         config: config_file,
     }))
 }
-
 
 async fn wait_for_health(base_url: &str, timeout: Duration) -> bool {
     let client = match reqwest::Client::builder()

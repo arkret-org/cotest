@@ -53,7 +53,7 @@ async function expectConsentCell(
   expectedState: "granted" | "revoked" | "expired" | "pending",
 ) {
   const cell = await request.get(
-    `${solandBaseUrl()}/api/v1/consent/cells/${encodeURIComponent(holderDid)}` +
+    `${solandBaseUrl()}/_cokret/self/consent/cells/${encodeURIComponent(holderDid)}` +
       `?peer=${encodeURIComponent(peerDid)}&scope=${encodeURIComponent(scope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
@@ -71,7 +71,7 @@ async function requestContactApi(
   targetDid: string,
   scope: "invite" | "message" | "call",
 ) {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/contacts/request`, {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
     headers: authHeaders(token),
     data: { target: targetDid, scope },
   });
@@ -144,7 +144,7 @@ test.describe("consent grant", () => {
     const bob = uniqueUser("g2t5-consent-api-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
 
-    const open = await request.post(`${solandBaseUrl()}/api/v1/mimi/consent/request`, {
+    const open = await request.post(`${solandBaseUrl()}/_cokret/open/mimi/consent/request`, {
       data: {
         holder_did: alice.did,
         grantee_did: bob.did,
@@ -157,11 +157,11 @@ test.describe("consent grant", () => {
     expect(openBody.ok).toBe(true);
     expect(openBody.state).toBe("requested");
     expect(openBody.consent_id).toMatch(/^ck:mimi_consent:/);
-    expect(openBody.receipt?.operation_id).toBe("cx.mimi.request_consent");
+    expect(openBody.receipt?.operation_id).toBe("ck.mimi.request_consent");
     expect(openBody.receipt?.extra?.privacy_state).toBe("holder_private");
     expect(openBody.receipt?.extra?.consent_grants_space_capability).toBe(false);
 
-    const update = await request.post(`${solandBaseUrl()}/api/v1/mimi/consent/update`, {
+    const update = await request.post(`${solandBaseUrl()}/_cokret/open/mimi/consent/update`, {
       data: {
         consent_id: openBody.consent_id,
         state: "accepted",
@@ -174,11 +174,11 @@ test.describe("consent grant", () => {
     expect(updateBody.ok).toBe(true);
     expect(updateBody.consent_id).toBe(openBody.consent_id);
     expect(updateBody.state).toBe("accepted");
-    expect(updateBody.receipt?.operation_id).toBe("cx.mimi.update_consent");
+    expect(updateBody.receipt?.operation_id).toBe("ck.mimi.update_consent");
     expect(updateBody.receipt?.extra?.membership_still_required).toBe(true);
   });
 
-  test("cx.consent.grant event projects consent cell and contact gate", async ({
+  test("ck.consent.grant event projects consent cell and contact gate", async ({
     request,
   }) => {
     const alice = uniqueUser("p1-020-consent-event-alice");
@@ -200,7 +200,7 @@ test.describe("consent grant", () => {
     const grantEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "cx.consent.grant",
+      kind: "ck.consent.grant",
       payload: {
         consent_id: consentId,
         peer: bob.did,
@@ -209,7 +209,7 @@ test.describe("consent grant", () => {
       },
     });
     await submitSignedEventApi(request, aliceToken, grantEnvelope, {
-      context: "submit cx.consent.grant",
+      context: "submit ck.consent.grant",
     });
     const grantDot = `${String(grantEnvelope.event_id)}:${Number(grantEnvelope.actor_seq)}`;
 
@@ -221,7 +221,7 @@ test.describe("consent grant", () => {
       "message",
       "granted",
     );
-    expect(granted.cell_id).toBe(`ck:cell:cx.component.consent.grant.v1:${consentId}`);
+    expect(granted.cell_id).toBe(`ck:cell:ck.component.consent.grant.v1:${consentId}`);
     expect(granted.grant_dots).toContain(grantDot);
     const accepted = await requestContactApi(request, bobToken, alice.did, "message");
     expect(accepted.status).toBe("accepted");
@@ -229,7 +229,7 @@ test.describe("consent grant", () => {
     const revokeEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "cx.consent.revoke",
+      kind: "ck.consent.revoke",
       payload: {
         consent_id: consentId,
         observed_dots: [grantDot],
@@ -237,7 +237,7 @@ test.describe("consent grant", () => {
       },
     });
     await submitSignedEventApi(request, aliceToken, revokeEnvelope, {
-      context: "submit cx.consent.revoke",
+      context: "submit ck.consent.revoke",
     });
 
     const revoked = await expectConsentCell(

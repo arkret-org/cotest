@@ -82,10 +82,10 @@ fn compile_handle_claim_schema() -> Result<jsonschema::Validator> {
         .map_err(|err| anyhow!("compile handle-claim schema failed: {err}"))
 }
 
-/// A schema-valid `cx.schema.handle_claim.v1` instance to mutate per case.
+/// A schema-valid `ck.schema.handle_claim.v1` instance to mutate per case.
 fn base_claim() -> Value {
     json!({
-        "schema": "cx.schema.handle_claim.v1",
+        "schema": "ck.schema.handle_claim.v1",
         "handle": "alice:acme.example",
         "subject": "did:web:alice.principal.example",
         "issuer": "did:web:coauth.acme.example",

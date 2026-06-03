@@ -14,7 +14,7 @@ import {
 } from "../../helpers/webrtc";
 import { solandBaseUrl } from "../../helpers/env";
 
-test.describe("cx.call.signal seq monotonicity", () => {
+test.describe("ck.call.signal seq monotonicity", () => {
   test("rollback from seq N to N-1 is rejected and preserves the frontier", async ({
     request,
   }) => {
@@ -29,7 +29,7 @@ test.describe("cx.call.signal seq monotonicity", () => {
       });
 
       const rollback = await request.post(
-        `${solandBaseUrl()}/api/v1/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+        `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
         {
           headers: authHeaders(token),
           data: {
@@ -60,7 +60,7 @@ test.describe("cx.call.signal seq monotonicity", () => {
       });
 
       const gap = await request.post(
-        `${solandBaseUrl()}/api/v1/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+        `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
         {
           headers: authHeaders(token),
           data: {

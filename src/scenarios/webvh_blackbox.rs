@@ -3,7 +3,7 @@
 //! Spawns a real `starid` binary on a random local port and exercises 5 webvh
 //! conformance vectors via plain HTTP. The binary is located via the
 //! `STARID_BIN` env var (explicit override) or the conventional sibling
-//! checkout path (`cokret-dev/starid/target/debug/starid[.exe]`).
+//! checkout path (`cokret/starid/target/debug/starid[.exe]`).
 //!
 //! The thin test wrapper at `tests/webvh_blackbox.rs` is `#[ignore]`'d so CI
 //! runners without a built starid binary do not flake; locally, run with
@@ -18,9 +18,9 @@ use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 /// Spawn a `starid` binary and assert 5 webvh conformance vectors:
 ///   1. /health              — liveness pings 200
 ///   2. /describe            — supported_methods includes "did:webvh"
-///   3. /api/v1/identity/describe — exposes profile/contract metadata
+///   3. /_cokret/root/identity/describe — exposes profile/contract metadata
 ///   4. /openapi.yaml        — published openapi document is reachable
-///   5. negative GET on POST-only `/api/v1/webvh/dids` returns 404 or 405
+///   5. negative GET on POST-only `/_cokret/root/webvh/dids` returns 404 or 405
 pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     let proc = spawn_required(&STARID_SPEC)
         .await
@@ -54,13 +54,13 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
         bail!("/describe does not list did:webvh in supported_methods: {body}");
     }
 
-    // ── Vector 3: /api/v1/identity/describe surfaces profile metadata ─────
+    // ── Vector 3: /_cokret/root/identity/describe surfaces profile metadata ─────
     let resp = client
-        .get(proc.url("/api/v1/identity/describe"))
+        .get(proc.url("/_cokret/root/identity/describe"))
         .send()
         .await?;
     if !resp.status().is_success() {
-        bail!("/api/v1/identity/describe returned {}", resp.status());
+        bail!("/_cokret/root/identity/describe returned {}", resp.status());
     }
     let body: serde_json::Value = resp.json().await?;
     let has_profile_metadata = body.get("profiles").is_some()
@@ -81,10 +81,15 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     }
 
     // ── Vector 5: GET on a POST-only route surfaces 405/404 ───────────────
-    let resp = client.get(proc.url("/api/v1/webvh/dids")).send().await?;
+    let resp = client
+        .get(proc.url("/_cokret/root/webvh/dids"))
+        .send()
+        .await?;
     let status = resp.status().as_u16();
     if !(status == 405 || status == 404) {
-        bail!("GET /api/v1/webvh/dids expected 405 (method not allowed) or 404, got {status}");
+        bail!(
+            "GET /_cokret/root/webvh/dids expected 405 (method not allowed) or 404, got {status}"
+        );
     }
 
     Ok(())

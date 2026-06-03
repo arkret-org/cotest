@@ -30,7 +30,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-// Build an encrypted Realm via a direct cx.realm.create envelope. The shared
+// Build an encrypted Realm via a direct ck.realm.create envelope. The shared
 // createSpaceApi helper puts `plaintext_visible_services` at the payload root,
 // which the current soland realm_create schema rejects (additionalProperties);
 // this inline shape mirrors the accepted envelope used elsewhere in this file.
@@ -48,16 +48,16 @@ async function createEncryptedRealm(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "cx.realm.create",
+      kind: "ck.realm.create",
       createdAt,
       payload: {
         object: {
           id: realmId,
-          schema: "cx.schema.realm.v1",
+          schema: "ck.schema.realm.v1",
           title,
           created_by: ownerDid,
           trust_domain: "ck:trust_domain:soland.local",
-          schema_refs: ["cx.schema.realm.v1"],
+          schema_refs: ["ck.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",
           history_visibility: "joined",
@@ -110,7 +110,7 @@ test.describe("MLS group encryption", () => {
 
       // Non-member access to raw events MUST be rejected.
       const eventsResp = await request.get(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/events`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/events`,
         { headers: { authorization: `Bearer ${malloryToken}` } },
       );
       expect([401, 403, 404, 405]).toContain(eventsResp.status());
@@ -123,7 +123,7 @@ test.describe("MLS group encryption", () => {
   test("alice creates space with encryption_profile=mls_rfc9420 at create time; world_readable policy is rejected", async ({
     request,
   }) => {
-    // Smoke for the create-time encryption profile path. Full cx.mls.genesis
+    // Smoke for the create-time encryption profile path. Full ck.mls.genesis
     // materialization remains pinned below in the richer lifecycle cases.
     const stamp = Date.now();
     const alice = uniqueUser("s11-create-alice");
@@ -138,7 +138,7 @@ test.describe("MLS group encryption", () => {
     });
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/export`,
+      `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
@@ -149,22 +149,22 @@ test.describe("MLS group encryption", () => {
     const incompatibleRealmId = typedId("realm");
     const incompatibleCreatedAt = canonicalTimestamp();
     const incompatible = await request.post(
-      `${solandBaseUrl()}/api/v1/events`,
+      `${solandBaseUrl()}/_cokret/self/events`,
       {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: incompatibleRealmId,
-          kind: "cx.realm.create",
+          kind: "ck.realm.create",
           createdAt: incompatibleCreatedAt,
           payload: {
             object: {
               id: incompatibleRealmId,
-              schema: "cx.schema.realm.v1",
+              schema: "ck.schema.realm.v1",
               title: `S11 MLS incompatible ${stamp}`,
               created_by: alice.did,
               trust_domain: "ck:trust_domain:soland.local",
-              schema_refs: ["cx.schema.realm.v1"],
+              schema_refs: ["ck.schema.realm.v1"],
               default_discoverability: "listed",
               default_join_rule: "invite",
               history_visibility: "world_readable",
@@ -211,7 +211,7 @@ test.describe("MLS group encryption", () => {
     const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
 
     const publish = await request.post(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/upload`,
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/upload`,
       {
         headers: authHeaders(bobToken),
         data: {
@@ -234,7 +234,7 @@ test.describe("MLS group encryption", () => {
     expect(publishBody.claimed).toBe(false);
 
     const pendingBefore = await request.get(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/welcomes/pending`,
       {
         headers: authHeaders(bobToken),
       },
@@ -243,7 +243,7 @@ test.describe("MLS group encryption", () => {
     expect((await pendingBefore.json()).welcomes).toEqual([]);
 
     const claim = await request.post(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/claim`,
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(aliceToken),
         data: { keypackage_id: keypackageId, group_id: groupId },
@@ -256,7 +256,7 @@ test.describe("MLS group encryption", () => {
     expect(claimBody.claimed_at).toBeTruthy();
 
     const claimAgain = await request.post(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/claim`,
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(aliceToken),
         data: { keypackage_id: keypackageId, group_id: typedId("mls_group") },
@@ -293,7 +293,7 @@ test.describe("MLS group encryption", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.mls.genesis",
+        kind: "ck.mls.genesis",
         eventId: genesisEventId,
         payload: {
           mls_group_id: groupId,
@@ -325,7 +325,7 @@ test.describe("MLS group encryption", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.mls.welcome",
+        kind: "ck.mls.welcome",
         payload: {
           welcome_id: welcomeId,
           mls_group_id: groupId,
@@ -389,7 +389,7 @@ test.describe("MLS group encryption", () => {
     const commitEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "cx.mls.commit",
+      kind: "ck.mls.commit",
       eventId: commitEventId,
       payload: commitPayload(`opaque-commit-${stamp}`),
     });
@@ -404,7 +404,7 @@ test.describe("MLS group encryption", () => {
     expect(commitBody.event_id).toMatch(/^ck:event:/);
 
     const pendingAfterWelcome = await request.get(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/welcomes/pending`,
       {
         headers: authHeaders(bobToken),
       },
@@ -420,7 +420,7 @@ test.describe("MLS group encryption", () => {
     expect(pendingAfterWelcomeBody.welcomes[0].delivered_at).toBeTruthy();
 
     const pendingAfterDrain = await request.get(
-      `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_cokret/self/keys/keypackages/welcomes/pending`,
       {
         headers: authHeaders(bobToken),
       },
@@ -428,12 +428,12 @@ test.describe("MLS group encryption", () => {
     expect(pendingAfterDrain.ok()).toBeTruthy();
     expect((await pendingAfterDrain.json()).welcomes).toEqual([]);
 
-    const staleCommit = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const staleCommit = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.mls.commit",
+        kind: "ck.mls.commit",
         payload: commitPayload(`opaque-stale-commit-${stamp}`),
       }),
     });
@@ -452,7 +452,7 @@ test.describe("MLS group encryption", () => {
   test.fixme(// @blocking-on: soland#encryption-mls-group-gap
   // @user-promise: e2e/scenarios/encryption/mls-group.md
   // @expected-live-by: 2026Q3
-  "carol added in epoch 1 → cx.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async () => {
+  "carol added in epoch 1 → ck.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async () => {
     // spec: encryption-and-audit.md §2.4.1, models/space-and-place.md §3.4
   });
 
@@ -540,7 +540,7 @@ test.describe("MLS group encryption", () => {
   // but no soland unit test or cotest case exercises it. This pins the wire
   // rejection so a regression that lets the profile be patched after creation
   // — silently downgrading an Encrypted Realm to plaintext — is caught.
-  test("cx.realm.update that patches encryption_profile is rejected (create-locked)", async ({
+  test("ck.realm.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -555,12 +555,12 @@ test.describe("MLS group encryption", () => {
       `MLS create-lock realm ${stamp}`,
     );
 
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.realm.update",
+        kind: "ck.realm.update",
         payload: {
           target_ref: realmId,
           patch: { encryption_profile: { $op: "set", value: "none" } },
@@ -575,18 +575,18 @@ test.describe("MLS group encryption", () => {
 
   // Circle counterpart of the realm create-lock.
   //
-  // CONFIRMED GAP (parked pending fix): unlike cx.realm.update, soland's
+  // CONFIRMED GAP (parked pending fix): unlike ck.realm.update, soland's
   // submit path does NOT enforce the circle create-lock synchronously. The
   // check exists (operations.rs validate_content_encryption_floor CX_CIRCLE_UPDATE
   // branch + reducer.rs apply), but `operation_schema_for_kind` has no arm for
-  // cx.circle.create / cx.circle.update, so projection_operation_from_event
+  // ck.circle.create / ck.circle.update, so projection_operation_from_event
   // returns None and event_log.rs skips ALL submit-time operation validation
   // for circle events. The create-lock is only caught at the async projection
   // (reducer) layer — so state stays safe (profile is not actually changed),
   // but the submit returns a misleading 200 instead of 4xx. Fix = add circle
   // operation schemas (needs full circle-path regression: it would newly run
   // validate_operation_policy + policy_gate on circle events at submit).
-  test("cx.circle.update that patches encryption_profile is rejected (create-locked)", async ({
+  test("ck.circle.update that patches encryption_profile is rejected (create-locked)", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -608,11 +608,11 @@ test.describe("MLS group encryption", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.circle.create",
+        kind: "ck.circle.create",
         payload: {
           object: {
             id: circleId,
-            schema: "cx.schema.circle.v1",
+            schema: "ck.schema.circle.v1",
             realm_id: realmId,
             title: `lock circle ${stamp}`,
             display: {
@@ -633,12 +633,12 @@ test.describe("MLS group encryption", () => {
       { context: `create circle ${circleId}` },
     );
 
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(aliceToken),
       data: signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.circle.update",
+        kind: "ck.circle.update",
         payload: {
           target_ref: circleId,
           patch: { encryption_profile: { $op: "set", value: "none" } },
@@ -655,7 +655,7 @@ test.describe("MLS group encryption", () => {
   // an MLS Welcome and has NOT restored its account secret must NOT silently
   // downgrade an encrypted private write to plaintext. The client should
   // surface a recoverable "MLS state not ready" affordance and refuse to
-  // submit; it must never POST a plaintext cx.flow.update that the server
+  // submit; it must never POST a plaintext ck.flow.update that the server
   // accepts (or bounces with content_encryption_floor_violation).
   //
   // Parked as fixme: deterministically reaching the "fresh device, no
@@ -675,7 +675,7 @@ test.describe("MLS group encryption", () => {
       //    vault set up, NO welcome applied.
       // 3) deviceB opens the board, opens the card (title is plaintext metadata),
       //    tries to add a description.
-      // 4) Assert: NO /api/v1/events POST carrying a plaintext private `body`
+      // 4) Assert: NO /_cokret/self/events POST carrying a plaintext private `body`
       //    is accepted (and none is bounced with content_encryption_floor_violation),
       //    AND a not-ready affordance (mls-unlock-banner / "MLS state is not
       //    ready" board status) is shown.

@@ -1,4 +1,4 @@
-//! P4-A.2 — `cx.profile.agent_auth.v1` coverage.
+//! P4-A.2 — `ck.profile.agent_auth.v1` coverage.
 //!
 //! Spec (CXP-0008 §1.2 + `event-payload.schema.json` `agent_key_authorize_payload`):
 //! agent runtime authn uses a dedicated `agent_key_proof` branch of

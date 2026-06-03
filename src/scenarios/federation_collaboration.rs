@@ -10,8 +10,8 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, TestServerGroup, encrypted_envelope, expect_account_subscribe_delta,
-    expect_json, expect_text, register_account, submit_event,
+    CokretServer, TestServerGroup, encrypted_envelope, expect_account_subscribe_delta, expect_json,
+    expect_text, register_account, submit_event,
 };
 
 const ALICE_DID: &str = "did:web:cotest-fed-alice.example";
@@ -30,12 +30,12 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let bob = register_account(server_b, BOB_DID, "@cotest-fed-bob-b", "dev_bob_b").await?;
 
     let describe_a = expect_json(
-        server_a.http().get(server_a.url("/api/v1/server/describe")),
+        server_a.http().get(server_a.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
     let describe_b = expect_json(
-        server_b.http().get(server_b.url("/api/v1/server/describe")),
+        server_b.http().get(server_b.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
@@ -45,7 +45,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let bob_document = expect_json(
         server_a
             .http()
-            .post(server_a.url("/api/v1/identity/resolve"))
+            .post(server_a.url("/_cokret/root/identity/resolve"))
             .json(&json!({"did": BOB_DID})),
         StatusCode::OK,
     )
@@ -57,7 +57,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "signature": {"alg": "none"},
         "purpose": "cross-server-invite"
     });
-    let verify_bob_url = server_a.url("/api/v1/federation/verify-actor");
+    let verify_bob_url = server_a.url("/_cokret/peer/federation/verify-actor");
     let verify_bob = expect_json(
         with_federation_trust_headers(
             server_a.http().post(&verify_bob_url).json(&verify_bob_body),
@@ -73,12 +73,12 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     assert_eq!(verify_bob["valid"], true);
 
     let realm_id = create_federated_realm(server_a, &alice).await?;
-    // Federation cx.message.create operation payload carries the message
+    // Federation ck.message.create operation payload carries the message
     // addressing/identity fields soland's federation projection consumes
     // (event_id, actor_id, flow_id, track_name, content). The forbidden wire
     // field `sender` is replaced by `actor_id`; Realm/membership metadata
     // (discoverability, history_visibility, members, encryption_profile, …)
-    // belongs on the Realm object and `cx.member.state`, not the message.
+    // belongs on the Realm object and `ck.member.state`, not the message.
     let flow_id = format!(
         "ck:flow:{}",
         realm_id.strip_prefix("ck:realm:").unwrap_or(&realm_id)
@@ -87,14 +87,14 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let alice_message = Operation::create(
         OperationId::new(ALICE_MESSAGE_OPERATION_ID)?,
         RealmId::new(realm_id.clone())?,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "event_id": ALICE_MESSAGE_EVENT_ID,
             "actor_id": ALICE_DID,
             "flow_id": flow_id.clone(),
             "track_name": "discussion",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "hello bob from server a"
             }
         }),
@@ -102,7 +102,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let bob_join = Operation::create(
         OperationId::new(BOB_JOIN_OPERATION_ID)?,
         RealmId::new(realm_id.clone())?,
-        "cx.member.state",
+        "ck.member.state",
         json!({
             "actor_id": BOB_DID,
             "membership": "join",
@@ -115,7 +115,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "service_binding_ref": "cotest",
         "operations": [alice_message, bob_join]
     });
-    let a_to_b_url = server_b.url("/api/v1/federation/transactions/federation-a-to-b-01");
+    let a_to_b_url = server_b.url("/_cokret/peer/federation/transactions/federation-a-to-b-01");
     let pushed_to_b = expect_json(
         with_federation_trust_headers(
             server_b.http().put(&a_to_b_url).json(&a_to_b_body),
@@ -133,7 +133,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
 
     let pulled_on_b = expect_json(
         server_b.http().get(server_b.url(&format!(
-            "/api/v1/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -150,7 +150,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let bob_sync = expect_account_subscribe_delta(
         server_b
             .http()
-            .get(server_b.url("/api/v1/account/subscribe?catchup=true"))
+            .get(server_b.url("/_cokret/self/account/subscribe?catchup=true"))
             .bearer_auth(&bob),
         StatusCode::OK,
     )
@@ -165,14 +165,14 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let bob_reply = Operation::create(
         OperationId::new(BOB_MESSAGE_OPERATION_ID)?,
         RealmId::new(realm_id.clone())?,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "event_id": BOB_MESSAGE_EVENT_ID,
             "actor_id": BOB_DID,
             "flow_id": flow_id,
             "track_name": "discussion",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "hello alice from server b"
             }
         }),
@@ -183,7 +183,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         "service_binding_ref": "cotest",
         "operations": [bob_reply]
     });
-    let b_to_a_url = server_a.url("/api/v1/federation/transactions/federation-b-to-a-01");
+    let b_to_a_url = server_a.url("/_cokret/peer/federation/transactions/federation-b-to-a-01");
     let txn = expect_json(
         with_federation_trust_headers(
             server_a.http().put(&b_to_a_url).json(&b_to_a_body),
@@ -200,7 +200,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let alice_sync = expect_account_subscribe_delta(
         server_a
             .http()
-            .get(server_a.url("/api/v1/account/subscribe?catchup=true"))
+            .get(server_a.url("/_cokret/self/account/subscribe?catchup=true"))
             .bearer_auth(&alice),
         StatusCode::OK,
     )
@@ -215,7 +215,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let key_upload = expect_json(
         server_b
             .http()
-            .post(server_b.url("/api/v1/keys/upload"))
+            .post(server_b.url("/_cokret/self/keys/upload"))
             .bearer_auth(&bob)
             .json(&json!({
                 "device_id": "dev_bob_b",
@@ -235,15 +235,15 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let device_message = expect_json(
         server_b
             .http()
-            .post(server_b.url("/api/v1/device_messages"))
+            .post(server_b.url("/_cokret/self/device_messages"))
             .bearer_auth(&bob)
             .header("Idempotency-Key", "federation-to-bob-01")
             .json(&json!({
                 "messages": {
                     BOB_DID: {
                         "dev_bob_b": {
-                            "type": "cx.mls.welcome",
-                            "content": encrypted_envelope("cx.mls.welcome", "opaque-cross-server-welcome")
+                            "type": "ck.mls.welcome",
+                            "content": encrypted_envelope("ck.mls.welcome", "opaque-cross-server-welcome")
                         }
                     }
                 }
@@ -256,7 +256,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let received = expect_json(
         server_b
             .http()
-            .get(server_b.url("/api/v1/device_messages"))
+            .get(server_b.url("/_cokret/self/device_messages"))
             .bearer_auth(&bob),
         StatusCode::OK,
     )
@@ -269,7 +269,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let blob = expect_json(
         server_a
             .http()
-            .post(server_a.url("/api/v1/blob/upload"))
+            .post(server_a.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice)
             .header("content-type", "application/octet-stream")
             .body("federated-media"),
@@ -280,7 +280,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         server_a
             .http()
             .get(server_a.url(&format!(
-                "/api/v1/blob/get?blob_ref={}&purpose=federation.media",
+                "/_cokret/self/blob/get?blob_ref={}&purpose=federation.media",
                 blob["blob_ref"].as_str().unwrap()
             )))
             .bearer_auth(&alice),
@@ -292,7 +292,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let push = expect_json(
         server_b
             .http()
-            .post(server_b.url("/api/v1/push/register-device"))
+            .post(server_b.url("/_cokret/edge/push/register-device"))
             .bearer_auth(&bob)
             .json(&json!({
                 "device_id": "dev_bob_b",
@@ -309,7 +309,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let report = expect_json(
         server_b
             .http()
-            .post(server_b.url("/api/v1/moderation/report"))
+            .post(server_b.url("/_cokret/self/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
                 "realm_id": realm_id,
@@ -332,16 +332,16 @@ async fn create_federated_realm(server: &CokretServer, alice: &str) -> Result<St
         alice,
         ALICE_DID,
         &realm_id,
-        "cx.realm.create",
+        "ck.realm.create",
         json!({
             "object": {
                 "id": &realm_id,
-                "schema": "cx.schema.realm.v1",
+                "schema": "ck.schema.realm.v1",
                 "title": "Federated Collaboration Space",
                 "summary": "cross server collaboration",
                 "trust_domain": "ck:trust_domain:federation-collaboration.cotest.local",
                 "created_by": ALICE_DID,
-                "schema_refs": ["cx.schema.realm.v1"],
+                "schema_refs": ["ck.schema.realm.v1"],
                 "default_discoverability": "invite_only",
                 "default_join_rule": "invite",
                 "history_visibility": "shared",
@@ -439,9 +439,7 @@ fn trust_domain_for(service_did: &str) -> String {
     )
 }
 
-fn development_service_signing_key(
-    service_did: &str,
-) -> cokret::http_signature::Ed25519SigningKey {
+fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:anchorer-ephemeral:");
     hasher.update(service_did.as_bytes());

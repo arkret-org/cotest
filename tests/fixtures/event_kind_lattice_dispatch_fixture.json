@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.event_kind_lattice_dispatch_vectors.v1",
+  "profile": "ck.profile.event_kind_lattice_dispatch_vectors.v1",
   "version": "2026-05-09",
   "comment": "Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors per spec event-kind-registry.json + soland/src/reducer/lattice_kinds.rs::default_lattice_registry. Validates that the spec event-kind registry's (event_kind, cell_family, lattice, bottom) tuples are coherent: (a) every active reducer-input durable kind that declares cell_family also declares a single lattice in the core set {or-set, mv-register, cas-register, fsm, counter, ordered-log}; (b) any single cell_family is bound to exactly ONE lattice across ALL kinds that declare it (no cell_family in two lattices); (c) cell_family namespace prefix is `cx.component.`; (d) bottom ∈ {reject, expose}; (e) the aggregate cell-family set covers the spec-mandated families used by Move/Anchor pipeline. Cross-checks the LIVE event-kind-registry (not a frozen snapshot). The validator is structural — does not run dispatch — and complements `validate_event_kind_registry` by surfacing the same-cell-family/different-lattice drift loudly. Pattern mirrors `discovery_profile_fixture` and the Round-21 anchor_view_compaction approach: the fixture declares EXPECTED canonical lattices per cell-family AND the validator confirms the live registry matches. Drift from either side fails loudly.",
   "encoder": {
@@ -11,68 +11,68 @@
   "expected_cell_family_lattice_bindings": {
     "comment": "Canonical lattice per cell-family. Mirrors the LIVE event-kind-registry.json exactly. soland/src/reducer/lattice_kinds.rs::default_lattice_registry may add SDK-side families ahead of the spec; once those land in the spec registry they MUST be added here. Future spec drift surfaces here as a hard failure.",
     "or_set_families": [
-      "cx.component.consent.grant.v1",
-      "cx.component.capability.grant.v1",
-      "cx.component.capability.delegate.v1",
-      "cx.component.capability.derived.v1",
-      "cx.component.session.grant.v1",
-      "cx.component.device.authorization.v1",
-      "cx.component.device.list_update.v1",
-      "cx.component.agent.key.v1"
+      "ck.component.consent.grant.v1",
+      "ck.component.capability.grant.v1",
+      "ck.component.capability.delegate.v1",
+      "ck.component.capability.derived.v1",
+      "ck.component.session.grant.v1",
+      "ck.component.device.authorization.v1",
+      "ck.component.device.list_update.v1",
+      "ck.component.agent.key.v1"
     ],
     "cas_register_families": [
-      "cx.component.realm.policy.v1",
-      "cx.component.realm.read_receipt_policy.v1",
-      "cx.component.realm.history_visibility.v1",
-      "cx.component.realm.join_rule.v1",
-      "cx.component.realm.discovery.v1",
-      "cx.component.realm.preview_policy.v1",
-      "cx.component.realm.organization.v1",
-      "cx.component.realm.upgrade.v1",
-      "cx.component.realm.archive.v1",
-      "cx.component.realm.freeze.v1",
-      "cx.component.realm.tombstone.v1",
-      "cx.component.realm.destroy.v1",
-      "cx.component.realm.moderation_policy.v1",
-      "cx.component.realm.history_sharing_policy.v1",
-      "cx.component.realm.asset_privacy_policy.v1",
-      "cx.component.realm.delivery_binding_policy.v1",
-      "cx.component.realm.policy_components.v1",
-      "cx.component.realm.policy_server.v1",
-      "cx.component.realm.plaintext_visible_services.v1",
-      "cx.component.realm.media_service.v1",
-      "cx.component.realm.schema.v1",
-      "cx.component.realm.inheritance_policy.v1",
-      "cx.component.circle.member.v1",
-      "cx.component.circle.tombstone.v1",
+      "ck.component.realm.policy.v1",
+      "ck.component.realm.read_receipt_policy.v1",
+      "ck.component.realm.history_visibility.v1",
+      "ck.component.realm.join_rule.v1",
+      "ck.component.realm.discovery.v1",
+      "ck.component.realm.preview_policy.v1",
+      "ck.component.realm.organization.v1",
+      "ck.component.realm.upgrade.v1",
+      "ck.component.realm.archive.v1",
+      "ck.component.realm.freeze.v1",
+      "ck.component.realm.tombstone.v1",
+      "ck.component.realm.destroy.v1",
+      "ck.component.realm.moderation_policy.v1",
+      "ck.component.realm.history_sharing_policy.v1",
+      "ck.component.realm.asset_privacy_policy.v1",
+      "ck.component.realm.delivery_binding_policy.v1",
+      "ck.component.realm.policy_components.v1",
+      "ck.component.realm.policy_server.v1",
+      "ck.component.realm.plaintext_visible_services.v1",
+      "ck.component.realm.media_service.v1",
+      "ck.component.realm.schema.v1",
+      "ck.component.realm.inheritance_policy.v1",
+      "ck.component.circle.member.v1",
+      "ck.component.circle.tombstone.v1",
       "cx.component.flow.fields.v1",
-      "cx.component.flow.position.v1",
-      "cx.component.flow.stage.v1",
-      "cx.component.flow.tracks.v1",
-      "cx.component.flow.watch.v1",
-      "cx.component.morph.stage.v1",
-      "cx.component.space.parent.v1",
-      "cx.component.cross_signing.publish.v1"
+      "ck.component.flow.position.v1",
+      "ck.component.flow.stage.v1",
+      "ck.component.flow.tracks.v1",
+      "ck.component.flow.watch.v1",
+      "ck.component.morph.stage.v1",
+      "ck.component.space.parent.v1",
+      "ck.component.cross_signing.publish.v1"
     ],
     "fsm_families": [
-      "cx.component.member.state.v1",
-      "cx.component.agent.status.v1"
+      "ck.component.member.state.v1",
+      "ck.component.agent.status.v1"
     ],
     "ordered_log_families": [
-      "cx.component.realm.create.v1",
-      "cx.component.realm.link.v1",
-      "cx.component.account.status.v1",
-      "cx.component.policy.rule.v1",
-      "cx.component.cross_signing.reset.v1",
-      "cx.component.circle.create.v1",
-      "cx.component.member.identity.v1"
+      "ck.component.realm.create.v1",
+      "ck.component.realm.link.v1",
+      "ck.component.account.status.v1",
+      "ck.component.policy.rule.v1",
+      "ck.component.cross_signing.reset.v1",
+      "ck.component.circle.create.v1",
+      "ck.component.member.identity.v1"
     ],
     "mv_register_families": [
-      "cx.component.profile.create.v1",
-      "cx.component.view.create.v1",
-      "cx.component.view.update.v1",
-      "cx.component.view.reconcile.v1",
-      "cx.component.mimi.room_binding.v1"
+      "ck.component.profile.create.v1",
+      "ck.component.view.create.v1",
+      "ck.component.view.update.v1",
+      "ck.component.view.reconcile.v1",
+      "ck.component.mimi.room_binding.v1"
     ]
   },
   "vectors": [
@@ -165,7 +165,7 @@
       "expected": {
         "outcome": "reject",
         "reason_code": "lattice_not_in_core_set",
-        "rationale": "lww-register / rga are extension-only lattices restricted to ui_affordance/content/draft/cosmetic cells via cx.profile.collaborative_text.v1. A reducer-input durable kind in the registry MUST NOT declare these as its lattice."
+        "rationale": "lww-register / rga are extension-only lattices restricted to ui_affordance/content/draft/cosmetic cells via ck.profile.collaborative_text.v1. A reducer-input durable kind in the registry MUST NOT declare these as its lattice."
       }
     },
     {

@@ -60,7 +60,7 @@
     },
     {
       "name": "broadcast_mention_controls_authorized_audience_delivers",
-      "vector_id": "cx.vector.push.broadcast_mention_controls.v1",
+      "vector_id": "ck.vector.push.broadcast_mention_controls.v1",
       "watch_level": "mentions_only",
       "event": {
         "mentions_actor": true
@@ -80,7 +80,7 @@
     },
     {
       "name": "flow_engaged_here_maps_to_receiver_side_mention",
-      "vector_id": "cx.vector.push.flow_engaged_mention.v1",
+      "vector_id": "ck.vector.push.flow_engaged_mention.v1",
       "watch_level": "mentions_only",
       "event": {
         "mentions_actor": true

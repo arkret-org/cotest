@@ -4,11 +4,11 @@
 //! scenario:
 //!
 //!   1. coauth (T3.2) issues a `handle_claim` whose `handle` is the canonical
-//!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, cokret-spec @ 7157ee8)
-//!      and whose `member_delivery_binding` points at a recipient principal server.
-//!   2. teabay (T3.4) hosts `cx.directory.resolve_handle(intent="member_add")` and filters
+//!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, cokret-spec @ 7157ee8) and
+//!      whose `member_delivery_binding` points at a recipient principal server.
+//!   2. teabay (T3.4) hosts `ck.directory.resolve_handle(intent="member_add")` and filters
 //!      candidates against the target Space's `allowed_recipient_services`.
-//!   3. soland (T3.3) projects `cx.realm.delivery_binding_policy` and the `cx.member.state{join}`
+//!   3. soland (T3.3) projects `ck.realm.delivery_binding_policy` and the `ck.member.state{join}`
 //!      reducer rejects bindings whose `recipient_service_did` is not in the policy allow-list.
 //!   4. The SDK (T3.1) ships `MemberDeliveryBindingCandidate` and
 //!      `Space::member_add_with_candidate` as the *only* sanctioned builder-side entry point: the
@@ -23,8 +23,8 @@
 //! the full four-service stack and silently skips otherwise), this scenario:
 //!
 //!  - **Happy path** — boots `four_service_bootstrap` when COAUTH_BIN / SOLAND_BIN / TEABAY_BIN are
-//!    all available and exercises the live `/api/v1/directory/resolve-handle` surface. When the
-//!    stack is partial (the default cargo-test posture), the scenario falls back to the SDK
+//!    all available and exercises the live `/_cokret/find/directory/resolve-handle` surface. When
+//!    the stack is partial (the default cargo-test posture), the scenario falls back to the SDK
 //!    candidate builder, exercising the same `audience` / `expires_at` / `subject_id` /
 //!    `binding_source` invariants that the live teabay row in T3.4 enforces.
 //!  - **Negative cases** — always run; each builds a malformed candidate and asserts the matching
@@ -71,7 +71,7 @@ const ALICE_DID: &str = "did:web:alice.acme.example";
 const ALICE_HANDLE: &str = "alice:acme.example";
 
 /// Source-ref event id the directory would echo back on a real
-/// `cx.directory.resolve_handle` envelope. Carried so `source_refs[]` is
+/// `ck.directory.resolve_handle` envelope. Carried so `source_refs[]` is
 /// non-empty (a candidate validator MUST-rule).
 const SOURCE_REF_EVENT_ID: &str = "ck:event:01890000-0000-7000-8000-source0001";
 
@@ -100,7 +100,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     //    (COAUTH_BIN + SOLAND_BIN + TEABAY_BIN
     //    + DATABASE_URL + docker), drive a real HTTP `resolve-handle`
     //    against teabay and assert the surface responds with the
-    //    `cx.directory.resolve_handle` envelope shape. Partial stacks
+    //    `ck.directory.resolve_handle` envelope shape. Partial stacks
     //    silently skip this leg — the SDK assertions above are the
     //    cotest contract surface.
     if four_service_stack_available() {
@@ -405,7 +405,7 @@ async fn live_stack_probe() -> Result<()> {
     let stack = try_bootstrap(FourServiceConfig::new("t3-5-handle-to-join")).await?;
     stack.assert_healthy().await?;
 
-    // Live teabay surface check: `cx.directory.resolve_handle` accepts
+    // Live teabay surface check: `ck.directory.resolve_handle` accepts
     // `intent=member_add` and returns a structured response. We don't try
     // to mint a real signed claim — without a seeded directory row the
     // resolver collapses to blinded `not_found`, which is the spec-correct
@@ -416,7 +416,7 @@ async fn live_stack_probe() -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow!("T3.5 live probe: teabay handle missing after bootstrap"))?;
     let url = format!(
-        "{}/api/v1/directory/resolve-handle",
+        "{}/_cokret/find/directory/resolve-handle",
         teabay.base_url.trim_end_matches('/')
     );
     let client = reqwest::Client::builder()
@@ -433,7 +433,7 @@ async fn live_stack_probe() -> Result<()> {
         }))
         .send()
         .await
-        .context("POST /api/v1/directory/resolve-handle to live teabay")?;
+        .context("POST /_cokret/find/directory/resolve-handle to live teabay")?;
     let status = resp.status();
     let text = resp.text().await.unwrap_or_default();
 

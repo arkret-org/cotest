@@ -1,4 +1,4 @@
-//! Round 2+3 / T08 — `cx.cross_signing.reset` cross-domain replay
+//! Round 2+3 / T08 — `ck.cross_signing.reset` cross-domain replay
 //! defense + event_id binding.
 //!
 //! Spec (round 2+3 cleanup, T08):

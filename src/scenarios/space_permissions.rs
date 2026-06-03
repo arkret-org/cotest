@@ -18,7 +18,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/spaces"))
+            .post(server.url("/_cokret/self/spaces"))
             .json(&json!({"title": "No Auth"})),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
@@ -29,20 +29,20 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .json(&event_envelope(
                 "did:web:alice.example",
                 unauth_realm_id,
-                "cx.realm.create",
+                "ck.realm.create",
                 json!({
                     "object": {
                         "id": unauth_realm_id,
-                        "schema": "cx.schema.realm.v1",
+                        "schema": "ck.schema.realm.v1",
                         "title": "No Auth",
                         "summary": "No Auth",
                         "created_by": "did:web:alice.example",
                         "trust_domain": "ck:trust_domain:soland.local",
-                        "schema_refs": ["cx.schema.realm.v1"],
+                        "schema_refs": ["ck.schema.realm.v1"],
                         "default_discoverability": "invite_only",
                         "default_join_rule": "invite",
                         "history_visibility": "shared",
@@ -75,12 +75,12 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .bearer_auth(&bob)
             .json(&event_envelope(
                 "did:web:bob-space.example",
                 &realm_id,
-                "cx.member.state",
+                "ck.member.state",
                 json!({
                     "actor_id": "did:web:bob-space.example",
                     "membership": "join",
@@ -94,7 +94,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .delete(server.url(&format!("/api/v1/spaces/{realm_id}")))
+            .delete(server.url(&format!("/_cokret/self/spaces/{realm_id}")))
             .bearer_auth(&alice),
         StatusCode::METHOD_NOT_ALLOWED,
         "method_not_allowed",
@@ -129,7 +129,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     let anonymous_search = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/directory/search-realms"))
+            .post(server.url("/_cokret/find/directory/search-realms"))
             .json(&json!({"query": "Private Space"})),
         StatusCode::OK,
     )
@@ -139,12 +139,12 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .bearer_auth(&bob.token)
             .json(&event_envelope(
                 "did:web:bob-visible.example",
                 &realm_id,
-                "cx.message.create",
+                "ck.message.create",
                 json!({
                     "body": "not a member",
                     "content": {"body": "not a member"},
@@ -179,7 +179,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &alice.token,
         "did:web:alice.example",
         &realm_id,
-        "cx.realm.destroy",
+        "ck.realm.destroy",
         json!({"reason": "owner_requested"}),
         StatusCode::OK,
     )
@@ -187,12 +187,12 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     expect_api_error(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .bearer_auth(&alice.token)
             .json(&event_envelope(
                 "did:web:alice.example",
                 &realm_id,
-                "cx.message.create",
+                "ck.message.create",
                 json!({
                     "body": "after delete",
                     "content": {"body": "after delete"},

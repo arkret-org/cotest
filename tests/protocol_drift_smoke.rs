@@ -75,7 +75,7 @@ fn protocol_drift_tree_scan_other_projects() {
     let dev_root = std::env::var("COKRET_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret-dev"));
+        .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret"));
     if !dev_root.exists() {
         eprintln!("[skip] dev root does not exist: {}", dev_root.display());
         return;

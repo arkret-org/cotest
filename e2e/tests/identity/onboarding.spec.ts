@@ -30,7 +30,7 @@ test.describe("account onboarding", () => {
     const token = await issueDevSession(request, alice);
     expect(token).toBeTruthy();
 
-    const meResp = await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+    const meResp = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(meResp.ok()).toBeTruthy();
@@ -44,19 +44,19 @@ test.describe("account onboarding", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
-    const bridgeResponse = await request.get(`${coauth}/api/v1/auth/bridge/describe`);
+    const bridgeResponse = await request.get(`${coauth}/_cokret/gate/auth/bridge/describe`);
     expect(bridgeResponse.status()).toBe(200);
     const bridge = await bridgeResponse.json();
     expect(bridge.todos).toEqual([]);
     expect(bridge.oauth.supported_flows).toContain("authorization_code_pkce_browser");
-    expect(bridge.passkey.register_start_path).toBe("/api/v1/auth/passkey/register/start");
+    expect(bridge.passkey.register_start_path).toBe("/_cokret/gate/auth/passkey/register/start");
     expect(bridge.cokret.session_grants_introspect_path).toBe(
-      "/api/v1/session-grants/introspect",
+      "/_cokret/gate/account/session-grants/introspect",
     );
 
     const user = uniqueUser("p1-025-webvh-email");
     const bridgeSessionResponse = await request.post(
-      `${coauth}/api/v1/auth/oidc/browser-bridge/session`,
+      `${coauth}/_cokret/gate/auth/oidc/browser-bridge/session`,
       {
         data: {
           redirect_uri: "urn:yougen:oauth:callback",
@@ -72,7 +72,7 @@ test.describe("account onboarding", () => {
     expect(bridgeSession.authorize_url).toContain(encodeURIComponent(solandServiceDid()));
     expect(bridgeSession.code_challenge_method).toBe("S256");
 
-    const start = await request.post(`${coauth}/api/v1/auth/register/webvh/start`, {
+    const start = await request.post(`${coauth}/_cokret/gate/auth/register/webvh/start`, {
       data: {
         handle: user.handle.slice(1),
         principal_server_url: solandBaseUrl(),
@@ -84,7 +84,7 @@ test.describe("account onboarding", () => {
     expect(started.email_verification_bypass_allowed).toBe(true);
 
     const email = await request.post(
-      `${coauth}/api/v1/auth/register/webvh/${started.registration_id}/email`,
+      `${coauth}/_cokret/gate/auth/register/webvh/${started.registration_id}/email`,
       { data: { email: `${user.name}@example.test` } },
     );
     expect(email.status()).toBe(200);
@@ -94,7 +94,7 @@ test.describe("account onboarding", () => {
     expect(emailBody.dev_code).toBeTruthy();
 
     const verify = await request.post(
-      `${coauth}/api/v1/auth/register/webvh/${started.registration_id}/verify-email`,
+      `${coauth}/_cokret/gate/auth/register/webvh/${started.registration_id}/verify-email`,
       { data: { code: emailBody.dev_code } },
     );
     expect(verify.status()).toBe(200);
@@ -133,7 +133,7 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "alice registers via passkey/WebAuthn; coauth binds principal DID and issues short-term cx.session.grant",
+    "alice registers via passkey/WebAuthn; coauth binds principal DID and issues short-term ck.session.grant",
     async () => {
       // spec: account-lifecycle.md §2.1, device-lifecycle.md §3.2
       // soland/coauth gap: WebAuthn binding handler, principal DID provisioning.
@@ -156,7 +156,7 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "principal control space is created (purpose=principal_control); first device registered via cx.device.authorize; cross-signing PSK/SSK/USK published",
+    "principal control space is created (purpose=principal_control); first device registered via ck.device.authorize; cross-signing PSK/SSK/USK published",
     async () => {
       // spec: key-management.md §5.0.1 (4-step bootstrap)
       // soland gap: cx.profile.principal_control_space.v1 profile; cx.cross_signing.publish.v1.

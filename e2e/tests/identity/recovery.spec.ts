@@ -22,7 +22,7 @@ test.describe("account recovery", () => {
     const token = await issueDevSession(request, alice);
 
     // Recovery setup / list endpoints. Either implemented (200) or absent (404).
-    const recoveryListResp = await request.get(`${solandBaseUrl()}/api/v1/keys/recovery`, {
+    const recoveryListResp = await request.get(`${solandBaseUrl()}/_cokret/self/keys/recovery`, {
       headers: { authorization: `Bearer ${token}` },
     });
     expect([200, 401, 404]).toContain(recoveryListResp.status());
@@ -35,7 +35,7 @@ test.describe("account recovery", () => {
     "alice (device-1) configures passphrase-protected backup; envelope uses Argon2id KDF + XChaCha20-Poly1305; key_commitment uploaded",
     async () => {
       // spec: key-management.md §7.1-§7.2
-      // soland gap: cx.schema.key_backup.v1; yougen gap: /settings/recovery wizard.
+      // soland gap: ck.schema.key_backup.v1; yougen gap: /settings/recovery wizard.
     },
   );
 
@@ -43,7 +43,7 @@ test.describe("account recovery", () => {
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
-    "device-2 restores account using passphrase; SSK/USK recovered; new device authorized via cx.device.authorize with recovery proof",
+    "device-2 restores account using passphrase; SSK/USK recovered; new device authorized via ck.device.authorize with recovery proof",
     async () => {
       // spec: key-management.md §7.3-§7.4, §5.0.1
     },

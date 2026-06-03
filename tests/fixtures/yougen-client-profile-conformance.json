@@ -3,8 +3,8 @@
   "profile": "cx.profile.yougen_client_blackbox_manifest.v1",
   "service": "yougen",
   "target_profiles": [
-    "cx.profile.full_client.v1",
-    "cx.profile.e2ee_client.v1"
+    "ck.profile.full_client.v1",
+    "ck.profile.e2ee_client.v1"
   ],
   "runnable_harness": {
     "kind": "headless_contract",
@@ -13,8 +13,8 @@
       "status": "certified",
       "format": "json",
       "profiles": [
-        "cx.profile.full_client.v1",
-        "cx.profile.e2ee_client.v1"
+        "ck.profile.full_client.v1",
+        "ck.profile.e2ee_client.v1"
       ],
       "evidence_ref": "target/conformance-transcripts/yougen_client_profile_manifest.jsonl"
     },
@@ -56,7 +56,7 @@
     {
       "name": "oidc_callback_exchanges_coauth_session_grant",
       "flow": "oidc_session_grant",
-      "profile": "cx.profile.full_client.v1",
+      "profile": "ck.profile.full_client.v1",
       "expect": "pass",
       "environment": {
         "production": true
@@ -73,7 +73,7 @@
         },
         {
           "method": "POST",
-          "path": "/api/v1/auth/session-grant/exchange",
+          "path": "/_cokret/gate/auth/session-grant/exchange",
           "status": 200
         }
       ],
@@ -89,7 +89,7 @@
     {
       "name": "secure_store_handoff_keeps_session_material_out_of_dom_storage",
       "flow": "secure_store_handoff",
-      "profile": "cx.profile.full_client.v1",
+      "profile": "ck.profile.full_client.v1",
       "expect": "pass",
       "environment": {
         "production": true
@@ -109,7 +109,7 @@
     {
       "name": "device_verification_promotes_cross_signed_sas_device_to_trusted",
       "flow": "device_verification",
-      "profile": "cx.profile.e2ee_client.v1",
+      "profile": "ck.profile.e2ee_client.v1",
       "expect": "pass",
       "environment": {
         "production": true
@@ -133,7 +133,7 @@
     {
       "name": "e2ee_missing_room_key_blocks_plaintext_render_and_write",
       "flow": "e2ee_fail_closed",
-      "profile": "cx.profile.e2ee_client.v1",
+      "profile": "ck.profile.e2ee_client.v1",
       "expect": "fail",
       "environment": {
         "production": true
@@ -158,7 +158,7 @@
     {
       "name": "native_secure_enclave_absence_is_explicit_unsupported_not_fallback",
       "flow": "platform_secure_enclave",
-      "profile": "cx.profile.e2ee_client.v1",
+      "profile": "ck.profile.e2ee_client.v1",
       "expect": "unsupported",
       "environment": {
         "production": true

@@ -50,18 +50,18 @@ test.describe("Document Morph collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.morph.create",
+        kind: "ck.morph.create",
         payload: {
           morph_id: morphId,
           object: {
             id: morphId,
-            schema: "cx.schema.morph.v1",
+            schema: "ck.schema.morph.v1",
             realm_id: realmId,
             space_id: realmId,
             morph_type: "document",
             metadata: { title: "Projection draft" },
             stage: "draft",
-            schema_refs: ["cx.schema.morph.v1"],
+            schema_refs: ["ck.schema.morph.v1"],
             facets: { documentable: {} },
             fields: { document: initialBody },
             created_by: alice.did,
@@ -78,7 +78,7 @@ test.describe("Document Morph collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.relation.create",
+        kind: "ck.relation.create",
         payload: {
           relation_id: relationId,
           kind: "references",
@@ -96,13 +96,13 @@ test.describe("Document Morph collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.message.create",
+        kind: "ck.message.create",
         payload: {
           flow_id: flowIdFromRealmId(realmId),
           thread_id: morphId,
           track_name: "discussion",
           content: {
-            kind: "cx.content.text",
+            kind: "ck.content.text",
             morph_id: morphId,
             body: "tighten this range",
             anchor_range: {
@@ -122,7 +122,7 @@ test.describe("Document Morph collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId,
-        kind: "cx.morph.update",
+        kind: "ck.morph.update",
         payload: {
           morph_id: morphId,
           target_ref: morphId,
@@ -279,7 +279,7 @@ function paragraphDocumentBody(body: string) {
 
 async function readDocumentProjection(request: APIRequestContext, token: string, morphId: string) {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/projection/documents/${encodeURIComponent(morphId)}`,
+    `${solandBaseUrl()}/_cokret/self/projection/documents/${encodeURIComponent(morphId)}`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();
@@ -295,7 +295,7 @@ async function waitForDocumentMorphId(
 ): Promise<string> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const response = await request.get(
-      `${solandBaseUrl()}/api/v1/projection/morphs?realm_id=${encodeURIComponent(realmId)}`,
+      `${solandBaseUrl()}/_cokret/self/projection/morphs?realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(token) },
     );
     if (response.ok()) {

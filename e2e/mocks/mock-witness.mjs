@@ -1,14 +1,14 @@
 // Mock WebVH witness service — supports S9 (DID key rotation).
 //
 // Endpoints:
-//   POST /api/v1/witness/sign  { scid, entry_hash, entry_number, prev_entry_hash?, entry_timestamp? }
+//   POST /_cokret/root/witness/sign  { scid, entry_hash, entry_number, prev_entry_hash?, entry_timestamp? }
 //     Signs the entry_hash with the witness RSA key, returns a witness
 //     attestation envelope. Enforces:
 //       - entry_number monotonicity per scid (must be prev + 1)
 //       - prev_entry_hash matches the last signed entry (if provided)
 //       - entry_timestamp not older than MOCK_WITNESS_STALE_SECONDS
-//   GET  /api/v1/witness/policy  → { witness_did, health: "healthy" }
-//   POST /api/v1/witness/health  { state: "healthy" | "down" }
+//   GET  /_cokret/root/witness/policy  → { witness_did, health: "healthy" }
+//   POST /_cokret/root/witness/health  { state: "healthy" | "down" }
 //     Test hook to flip witness state for E9.4 (24h degraded window).
 //   GET  /jwks → witness public key
 //   GET  /inspect → signing history grouped by scid
@@ -96,12 +96,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/witness/policy" && req.method === "GET") {
+  if (url.pathname === "/_cokret/root/witness/policy" && req.method === "GET") {
     res.end(JSON.stringify({ witness_did: witnessDid, health: healthState }));
     return;
   }
 
-  if (url.pathname === "/api/v1/witness/health" && req.method === "POST") {
+  if (url.pathname === "/_cokret/root/witness/health" && req.method === "POST") {
     const body = await readJson(req);
     if (body && (body.state === "healthy" || body.state === "down")) {
       healthState = body.state;
@@ -113,7 +113,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/api/v1/witness/sign" && req.method === "POST") {
+  if (url.pathname === "/_cokret/root/witness/sign" && req.method === "POST") {
     if (healthState !== "healthy") {
       res.statusCode = 503;
       res.end(JSON.stringify({ error: "witness_unavailable", state: healthState }));

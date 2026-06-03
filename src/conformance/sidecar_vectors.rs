@@ -2,10 +2,10 @@
 //! (§0.11 of `_before_todos.md`).
 //!
 //! 4 vectors:
-//!   - `cx.vector.sidecar.ensure_idempotent.v1`
-//!   - `cx.vector.sidecar.eligibility_states.v1`
-//!   - `cx.vector.sidecar.existence_privacy.v1`
-//!   - `cx.vector.sidecar.multi_agent_publish.v1`
+//!   - `ck.vector.sidecar.ensure_idempotent.v1`
+//!   - `ck.vector.sidecar.eligibility_states.v1`
+//!   - `ck.vector.sidecar.existence_privacy.v1`
+//!   - `ck.vector.sidecar.multi_agent_publish.v1`
 //!
 //! Wire-shape pins only. Live `POST /agents/{id}/sidecar-thread:ensure`
 //! and the multi-agent fan-out reducer path land in soland P2-impl;
@@ -21,10 +21,10 @@ use cokret_core::{
     OP_AGENT_SIDECAR_THREAD_ENSURE, PROFILE_AGENT_SIDECAR_THREAD,
 };
 
-pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "cx.vector.sidecar.ensure_idempotent.v1";
-pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "cx.vector.sidecar.eligibility_states.v1";
-pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "cx.vector.sidecar.existence_privacy.v1";
-pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "cx.vector.sidecar.multi_agent_publish.v1";
+pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ck.vector.sidecar.ensure_idempotent.v1";
+pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "ck.vector.sidecar.eligibility_states.v1";
+pub const VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY: &str = "ck.vector.sidecar.existence_privacy.v1";
+pub const VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH: &str = "ck.vector.sidecar.multi_agent_publish.v1";
 
 pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT,
@@ -36,15 +36,15 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
-    if OP_AGENT_SIDECAR_THREAD_ENSURE != "cx.agent.sidecar_thread.ensure" {
+    if OP_AGENT_SIDECAR_THREAD_ENSURE != "ck.agent.sidecar_thread.ensure" {
         bail!("OP_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {OP_AGENT_SIDECAR_THREAD_ENSURE}");
     }
-    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "cx.agent.sidecar_thread.ensure" {
+    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ck.agent.sidecar_thread.ensure" {
         bail!(
             "CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE}"
         );
     }
-    if PROFILE_AGENT_SIDECAR_THREAD != "cx.profile.agent_sidecar_thread.v1" {
+    if PROFILE_AGENT_SIDECAR_THREAD != "ck.profile.agent_sidecar_thread.v1" {
         bail!("PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}");
     }
     // Idempotency invariant: same (controller, agent_principal) MUST
@@ -79,7 +79,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
 // ─── VECT-SC-3 — existence_privacy ─────────────────────────────────────────
 
 pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
-    // A caller without the `cx.agent.sidecar_thread.ensure` capability
+    // A caller without the `ck.agent.sidecar_thread.ensure` capability
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
     if ERROR_CODE_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {

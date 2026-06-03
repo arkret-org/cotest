@@ -204,7 +204,7 @@ export class JointUserPage {
     if (!token) {
       throw new Error("acceptInvite: no session_token captured on session");
     }
-    const listResp = await this.page.request.get(`${serverUrl}/api/v1/authz/invites`, {
+    const listResp = await this.page.request.get(`${serverUrl}/_cokret/self/authz/invites`, {
       headers: { authorization: `Bearer ${token}` },
     });
     if (!listResp.ok()) {
@@ -236,7 +236,7 @@ export class JointUserPage {
     const envelope = signedEventEnvelope({
       actorDid: this.user.did,
       realmId: spaceId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: this.user.did,
         membership: "join",
@@ -245,14 +245,14 @@ export class JointUserPage {
         delivery_status: "unroutable",
       },
     });
-    const acceptResp = await this.page.request.post(`${serverUrl}/api/v1/events`, {
+    const acceptResp = await this.page.request.post(`${serverUrl}/_cokret/self/events`, {
       headers: { authorization: `Bearer ${token}` },
       data: envelope,
     });
     if (![200, 201].includes(acceptResp.status())) {
       const text = await acceptResp.text();
       throw new Error(
-        `acceptInviteById: cx.member.state{join} returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
+        `acceptInviteById: ck.member.state{join} returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
       );
     }
   }
@@ -278,7 +278,7 @@ export class JointUserPage {
     const persisted = await writeResponse;
     if (![200, 201].includes(persisted.status())) {
       throw new Error(
-        `sendTimelineMessage: /api/v1/events returned ${persisted.status()} for ${body}`,
+        `sendTimelineMessage: /_cokret/self/events returned ${persisted.status()} for ${body}`,
       );
     }
     await expect(this.page.getByTestId("timeline")).toContainText(body, { timeout: 30_000 });
@@ -328,7 +328,7 @@ export async function ensureRegistered(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/api/v1/account/register`, {
+  const response = await request.post(`${solandBaseUrl(opts.server)}/_cokret/self/account/register`, {
     data: {
       did: user.did,
       handle: user.handle,
@@ -344,7 +344,7 @@ export async function issueDevSession(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/api/v1/auth/dev-login`, {
+  const response = await request.post(`${solandBaseUrl(opts.server)}/_cokret/gate/auth/dev-login`, {
     data: {
       actor: user.did,
       device_id: user.deviceId,

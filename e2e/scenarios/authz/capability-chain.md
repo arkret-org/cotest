@@ -34,7 +34,7 @@
 1. alice createSpace,seedMembers=[bob, carol, mallory]
 2. alice 进 `/space/${spaceId}/admin` → "Capabilities" 区
 3. 点 "Grant" → 选 grantee = bob.did,actions = `[cx.space.write_message]`,constraints = `{ expires_at: +1h }`
-4. yougen 提交 `cx.capability.grant`,event 落到 `cx.cell:cx.component.capability.<grant_id>.v1`
+4. yougen 提交 `ck.capability.grant`,event 落到 `cx.cell:cx.component.capability.<grant_id>.v1`
 5. 断言:`/space/${spaceId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
 
 ### Phase B — bob 用 capability 写消息
@@ -47,7 +47,7 @@
 
 9. bob 进 `/settings/capabilities` 或 space admin → "Delegate"
 10. 输入 grantee = carol.did,actions = `[cx.space.write_message]`,sub-constraints = `{ expires_at: +30min }`(在 bob 自己 expiry 之前)
-11. yougen 提交 `cx.capability.delegate`
+11. yougen 提交 `ck.capability.delegate`
 12. 断言:capability tree 显示 alice → bob → carol 三层
 
 ### Phase D — carol 用 delegated capability
@@ -59,7 +59,7 @@
 ### Phase E — alice revoke bob
 
 16. alice 进 capabilities 列表,点 bob 旁的 "Revoke"
-17. 提交 `cx.capability.revoke { grant_id: bob_grant_id }`
+17. 提交 `ck.capability.revoke { grant_id: bob_grant_id }`
 18. reducer cascade:revoke bob → carol 的 delegated capability 也自动失效(spec §3.3 cascade rule)
 19. 断言:capability tree 中 bob/carol 都标 `revoked`
 20. bob 再发消息 → reducer 拒,reason `capability_revoked`
@@ -67,7 +67,7 @@
 
 ### Phase F — Audit trail
 
-22. alice 查 `/space/${spaceId}/audit` 或调 `GET /api/v1/audit/events?space_id=<S>&kind=cx.capability.*`
+22. alice 查 `/space/${spaceId}/audit` 或调 `GET /_cokret/self/audit/events?space_id=<S>&kind=cx.capability.*`
 23. 断言:看到一行 grant、一行 delegate、一行 revoke;每行含 grantor / grantee / timestamp / actions / constraints
 
 ## Edge cases

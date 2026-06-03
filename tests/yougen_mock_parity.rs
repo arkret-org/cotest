@@ -289,15 +289,15 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 }
 
 fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_seq: u64) -> Value {
-    let cell = format!("ck:cell:cx.component.realm.create.v1:{realm_id}");
+    let cell = format!("ck:cell:ck.component.realm.create.v1:{realm_id}");
     let payload = json!({
         "object": {
             "id": realm_id,
-            "schema": "cx.schema.realm.v1",
+            "schema": "ck.schema.realm.v1",
             "title": title,
             "trust_domain": "ck:trust_domain:mock-parity.cotest.local",
             "created_by": ctx.alice_did,
-            "schema_refs": ["cx.schema.realm.v1"],
+            "schema_refs": ["ck.schema.realm.v1"],
             "summary": "created by T-P0-04 parity baseline",
             "default_discoverability": "public",
             "default_join_rule": "public",
@@ -325,7 +325,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
     );
     json!({
         "event_id": event_id,
-        "kind": "cx.realm.create",
+        "kind": "ck.realm.create",
         "realm_id": realm_id,
         "actor_id": ctx.alice_did,
         "actor_seq": actor_seq,
@@ -333,7 +333,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "prev_refs": [],
         "refs": [],
         "requirements": {
-            "schema": ["cx.schema.realm.v1"],
+            "schema": ["ck.schema.realm.v1"],
             "critical_extensions": []
         },
         "payload": payload,
@@ -538,7 +538,7 @@ fn normalize_server_describe(body: Value) -> Value {
             operations
                 .iter()
                 .filter_map(Value::as_str)
-                .any(|operation| operation == "cx.events.submit")
+                .any(|operation| operation == "ck.events.submit")
         })
         .unwrap_or(false);
     json!({

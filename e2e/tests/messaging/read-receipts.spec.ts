@@ -26,7 +26,7 @@ test.describe("read receipts + privacy", () => {
     request,
   }) => {
     // Live G2.T7 smoke: the ephemeral receipt API and durable read-cursor API
-    // are separate surfaces. Durable cx.read_cursor.advance writes, UI receipt rendering,
+    // are separate surfaces. Durable ck.read_cursor.advance writes, UI receipt rendering,
     // and policy toggles stay fixme.
     const stamp = Date.now();
     const alice = uniqueUser("g2t7-receipt-alice");
@@ -60,10 +60,10 @@ test.describe("read receipts + privacy", () => {
 
     const sentAt = new Date();
     const expiresAt = new Date(sentAt.getTime() + 5 * 60 * 1000);
-    const receipt = await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+    const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
       headers: authHeaders(aliceToken),
       data: {
-        kind: "cx.receipt.read",
+        kind: "ck.receipt.read",
         realm_id: spaceId,
         actor_id: alice.did,
         device_id: alice.deviceId,
@@ -77,7 +77,7 @@ test.describe("read receipts + privacy", () => {
     expect(receipt.status()).toBe(200);
     const receiptBody = await receipt.json();
     expect(receiptBody.accepted).toBe(true);
-    expect(receiptBody.kind).toBe("cx.receipt.read");
+    expect(receiptBody.kind).toBe("ck.receipt.read");
     expect(receiptBody.realm_id).toBe(spaceId);
 
     const [aliceMarkers, bobMarkers] = await Promise.all([
@@ -88,7 +88,7 @@ test.describe("read receipts + privacy", () => {
     expect(bobMarkers).toHaveLength(0);
   });
 
-  test("cx.receipt.read rejects TTL above the 5 minute hard ceiling", async ({ request }) => {
+  test("ck.receipt.read rejects TTL above the 5 minute hard ceiling", async ({ request }) => {
     const fixture = await createReceiptFixture(request, "ttl-too-long");
     const receipt = await postReceipt(request, fixture.aliceToken, {
       ...receiptEnvelope(fixture, 5 * 60 * 1000 + 1),
@@ -98,7 +98,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("hard TTL");
   });
 
-  test("cx.receipt.read rejects already expired envelopes", async ({ request }) => {
+  test("ck.receipt.read rejects already expired envelopes", async ({ request }) => {
     const fixture = await createReceiptFixture(request, "expired");
     const sentAt = new Date(Date.now() - 10_000);
     const receipt = await postReceipt(request, fixture.aliceToken, {
@@ -109,7 +109,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("already expired");
   });
 
-  test("cx.receipt.read rejects actor_id that does not match the bearer session", async ({
+  test("ck.receipt.read rejects actor_id that does not match the bearer session", async ({
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "actor-mismatch");
@@ -123,7 +123,7 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("actor_id must match");
   });
 
-  test("cx.receipt.read rejects non-members", async ({ request }) => {
+  test("ck.receipt.read rejects non-members", async ({ request }) => {
     const fixture = await createReceiptFixture(request, "non-member");
     const outsider = uniqueUser("receipt-outsider");
     await ensureRegistered(request, outsider);
@@ -166,7 +166,7 @@ test.describe("read receipts + privacy", () => {
   );
 
   test(
-    "alice toggles preference=false; subsequent reads do NOT emit cx.receipt.read; bob's view stops updating",
+    "alice toggles preference=false; subsequent reads do NOT emit ck.receipt.read; bob's view stops updating",
     async ({ request }) => {
       const fixture = await createReceiptFixture(request, "preference-disabled");
       expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.spaceId))
@@ -175,7 +175,7 @@ test.describe("read receipts + privacy", () => {
   );
 
   test(
-    "alice re-enables preference; new reads emit a single fresh cx.receipt.read; reads during the disabled window stay invisible",
+    "alice re-enables preference; new reads emit a single fresh ck.receipt.read; reads during the disabled window stay invisible",
     async ({ request }) => {
       const fixture = await createReceiptFixture(request, "preference-reenabled");
       const hiddenWindowMessage = await sendPlaintextMessageViaApi(
@@ -215,7 +215,7 @@ test.describe("read receipts + privacy", () => {
     // @blocking-on: soland#messaging-read-receipts-gap
     // @user-promise: e2e/scenarios/messaging/read-receipts.md
     // @expected-live-by: 2026Q3
-    "space disclosure=disabled: client does not send; Sync Service silently drops any inbound cx.receipt.read for the space",
+    "space disclosure=disabled: client does not send; Sync Service silently drops any inbound ck.receipt.read for the space",
     async () => {
       // spec: read-receipts.md §2.5
     },
@@ -225,7 +225,7 @@ test.describe("read receipts + privacy", () => {
     // @blocking-on: soland#messaging-read-receipts-gap
     // @user-promise: e2e/scenarios/messaging/read-receipts.md
     // @expected-live-by: 2026Q3
-    "actor-private read marker (cx.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob",
+    "actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob",
     async () => {
       // spec: read-receipts.md §3.1-§3.2
     },
@@ -281,7 +281,7 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
 
 function receiptEnvelope(fixture: ReceiptFixture, ttlMs = 5 * 60 * 1000, sentAt = new Date()) {
   return {
-    kind: "cx.receipt.read",
+    kind: "ck.receipt.read",
     realm_id: fixture.spaceId,
     actor_id: fixture.alice.did,
     device_id: fixture.alice.deviceId,
@@ -298,7 +298,7 @@ async function postReceipt(
   token: string,
   data: Record<string, unknown>,
 ) {
-  return await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+  return await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
     headers: authHeaders(token),
     data,
   });

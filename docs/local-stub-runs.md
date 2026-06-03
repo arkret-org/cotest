@@ -68,7 +68,7 @@ these in CI and when filing bugs.
 |---|---|---|
 | Agent FSM | All transitions, all reject paths, audit row shape | Reducer-on-real-Postgres write contention; replica lag |
 | Recovery policy/receipt | Schema round-trip, policy version monotonicity, receipt emission | Cryptographic proof verification (SDK side stubbed; see test-strategy R3.1 deferred) |
-| `cx.call.media.token_exchange` | Token shape, TTL gate, participant_binding canonical bytes, all reject paths | Live backend handshake (LiveKit / Mediasoup / etc.) |
+| `ck.call.media.token_exchange` | Token shape, TTL gate, participant_binding canonical bytes, all reject paths | Live backend handshake (LiveKit / Mediasoup / etc.) |
 | Handle normalization | NFC, minimal UTS#39 skeleton, mixed-script reject | Full UTS#39 confusable set (R3.1) |
 | Strict-reject profile | Toggle event, reject behavior, audit row | Federation peer interaction under strict-reject |
 | Push (chime ↔ floria) | Wakeup payload shape, blind/visible profile selection, nonce window | Real provider 4xx, real provider rate-limit |

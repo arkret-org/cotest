@@ -28,7 +28,7 @@
     },
     {
       "name": "device_authorized_alice",
-      "kind": "cx.device.authorize",
+      "kind": "ck.device.authorize",
       "components_array": ["did:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
       "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
@@ -36,7 +36,7 @@
     },
     {
       "name": "realm_policy_default",
-      "kind": "cx.realm.policy",
+      "kind": "ck.realm.policy",
       "components_array": ["ck:realm:01js0sp01000000000000000000", "default"],
       "components_order_source": "[realm_id, policy_name]",
       "expected_canonical_json": "[\"ck:realm:01js0sp01000000000000000000\",\"default\"]",

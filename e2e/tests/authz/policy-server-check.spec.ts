@@ -1,7 +1,7 @@
 // Pluggable policy decision service (realm-level external policy_server)
 // Contract: e2e/scenarios/authz/policy-server-check.md
-// Spec: authz/policy-server.md §2 (cx.realm.policy_server Move),
-//        §3 (POST /api/v1/policy/check request/response contract),
+// Spec: authz/policy-server.md §2 (ck.realm.policy_server Move),
+//        §3 (POST /_cokret/self/policy/check request/response contract),
 //        §4 (obligations + fail-closed default).
 // Depends on: mock-policy-server.mjs reachable via process.env.MOCK_POLICY_SERVER_PORT
 //             (delivered by a parallel task; this spec assumes it's already running).
@@ -43,7 +43,7 @@ function mockPolicyServerBaseUrl(): string {
 }
 
 test.describe("policy server check", () => {
-  test("policy server config API projects cx.realm.policy_server and authz stays fail-closed without a grant", async ({
+  test("policy server config API projects ck.realm.policy_server and authz stays fail-closed without a grant", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -61,10 +61,10 @@ test.describe("policy server check", () => {
       public: true,
     });
     const policyServerDid = mockPolicyServerDid() ?? "did:web:policy.example.com";
-    const policyServerUrl = `${mockPolicyServerBaseUrl()}/api/v1/policy/check`;
+    const policyServerUrl = `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`;
 
     const put = await request.put(
-      `${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(spaceId)}/policy-server`,
+      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(spaceId)}/policy-server`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -86,7 +86,7 @@ test.describe("policy server check", () => {
     expect(projected.from_org_fallback).toBe(false);
 
     const get = await request.get(
-      `${solandBaseUrl()}/api/v1/realms/${encodeURIComponent(spaceId)}/policy-server`,
+      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(spaceId)}/policy-server`,
       { headers: authHeaders(aliceToken) },
     );
     const fetched = await expectJsonOk<Record<string, unknown>>(
@@ -96,7 +96,7 @@ test.describe("policy server check", () => {
     expect(fetched.policy_server_did).toBe(policyServerDid);
     expect(fetched.policy_server_url).toBe(policyServerUrl);
 
-    const denied = await request.post(`${solandBaseUrl()}/api/v1/authz/check`, {
+    const denied = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
       data: {
         actor: bob.did,
         action: "cx.space.write_message",
@@ -140,11 +140,11 @@ test.describe("policy server check", () => {
       try {
         // Phase A — Realm declares policy server endpoint.
         // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        const realmResp = await request.post(`${solandBaseUrl()}/api/v1/realm/state`, {
+        const realmResp = await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: {
-            kind: "cx.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/api/v1/policy/check`,
+            kind: "ck.realm.policy_server",
+            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
             fail_mode: "closed",
             cache_ttl_ms: 5000,
           },
@@ -175,7 +175,7 @@ test.describe("policy server check", () => {
           `${mockPolicyServerBaseUrl()}/scenarios`,
           {
             data: {
-              match: { action: "cx.invite.create", target: bob.did },
+              match: { action: "ck.invite.create", target: bob.did },
               decision: "deny",
               reason: "external_policy_blocks_user",
             },
@@ -191,7 +191,7 @@ test.describe("policy server check", () => {
           `${mockPolicyServerBaseUrl()}/scenarios`,
           {
             data: {
-              match: { action: "cx.invite.create" },
+              match: { action: "ck.invite.create" },
               decision: "deny",
               reason: "external_policy_blocks_user",
               obligations: [
@@ -205,7 +205,7 @@ test.describe("policy server check", () => {
           },
         );
         expect(obligationScenario.status()).toBe(200);
-        // (re-drive invite, then GET /api/v1/audit/events?actor=alice.did
+        // (re-drive invite, then GET /_cokret/self/audit/events?actor=alice.did
         //  &action=policy.deny and assert >=1 entry with
         //  target.category="policy_block" + target.upstream_reason="external_policy_blocks_user")
 
@@ -244,11 +244,11 @@ test.describe("policy server check", () => {
 
       try {
         // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        await request.post(`${solandBaseUrl()}/api/v1/realm/state`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: {
-            kind: "cx.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/api/v1/policy/check`,
+            kind: "ck.realm.policy_server",
+            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
             fail_mode: "closed",
             cache_ttl_ms: 0,
           },
@@ -292,20 +292,20 @@ test.describe("policy server check", () => {
 
       try {
         // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        await request.post(`${solandBaseUrl()}/api/v1/realm/state`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: {
-            kind: "cx.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/api/v1/policy/check?source=realm`,
+            kind: "ck.realm.policy_server",
+            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=realm`,
             fail_mode: "closed",
             cache_ttl_ms: 0,
           },
         });
-        await request.post(`${solandBaseUrl()}/api/v1/org/state`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/org/state`, {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: {
             kind: "cx.org.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/api/v1/policy/check?source=org`,
+            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=org`,
             fail_mode: "closed",
             cache_ttl_ms: 0,
           },
@@ -314,8 +314,8 @@ test.describe("policy server check", () => {
         await request.post(`${mockPolicyServerBaseUrl()}/scenarios`, {
           data: {
             routes: {
-              "/api/v1/policy/check?source=realm": { default: { decision: "allow" } },
-              "/api/v1/policy/check?source=org": { default: { decision: "deny", reason: "org_blocks" } },
+              "/_cokret/self/policy/check?source=realm": { default: { decision: "allow" } },
+              "/_cokret/self/policy/check?source=org": { default: { decision: "deny", reason: "org_blocks" } },
             },
           },
         });
@@ -349,11 +349,11 @@ test.describe("policy server check", () => {
 
       try {
         // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        await request.post(`${solandBaseUrl()}/api/v1/realm/state`, {
+        await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: {
-            kind: "cx.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/api/v1/policy/check`,
+            kind: "ck.realm.policy_server",
+            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
             fail_mode: "closed",
             cache_ttl_ms: 5000,
           },
@@ -368,7 +368,7 @@ test.describe("policy server check", () => {
         void baselineCount;
         void bob;
         void alicePage;
-        // (bob sends two identical cx.message.create within 5s; assert
+        // (bob sends two identical ck.message.create within 5s; assert
         //  /inspect.checks.length grows by exactly 1 — or the second entry
         //  carries from_cache=true depending on mock implementation)
       } finally {

@@ -11,7 +11,7 @@
 - `cokret-spec/spec/v1/zh/sync/federation.md` §2.1 — Event Chain 是信任锚点
 - `cokret-spec/spec/v1/zh/sync/federation.md` §2.2 — Principal Server 是受控同步边界,不是全局权威
 - `cokret-spec/spec/v1/zh/sync/federation.md` §3.1-§3.2 — 基于 DID 的服务器身份 + RFC 9421 请求签名
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /api/v1/federation/push-operations` 请求字段
+- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_cokret/peer/federation/push-operations` 请求字段
 - `cokret-spec/spec/v1/zh/sync/federation.md` §4.1.0 — Push 时序图(信任根说明)
 - `cokret-spec/spec/v1/zh/sync/federation.md` §4.1.1 — 批量推送幂等 (`(origin, destination, event_id)` 去重)
 - `cokret-spec/spec/v1/zh/sync/federation.md` §4.2 — Pull / Backfill (`pull-operations`)
@@ -66,21 +66,21 @@
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `joined`
-   - seed_members = `[]`(本次不在创建阶段邀,改用空间管理面 invite 流程,这样能精确捕获 `cx.invite.create` 事件)
+   - seed_members = `[]`(本次不在创建阶段邀,改用空间管理面 invite 流程,这样能精确捕获 `ck.invite.create` 事件)
 2. 记录 `spaceId`
 3. **alice** 进 `/space/${spaceId}/admin`,通过 `invite-member` 邀请 `bob.did`
-   - 在 α 侧产生 `cx.invite.create` Event,subject_did = bob.did
+   - 在 α 侧产生 `ck.invite.create` Event,subject_did = bob.did
 4. 断言:α 侧 `space-admin-panel` 显示 `invited bob.did`
 
 ### Phase B — 联邦 push 把 invite 送到 β
 
 5. α 检测到 bob 不在本地,通过服务发现拿到 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Principal Server
-6. α `POST http://<port_β>/api/v1/federation/push-operations`,body 含:
+6. α `POST http://<port_β>/_cokret/peer/federation/push-operations`,body 含:
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `space_id = spaceId`
    - `service_binding_ref` 含 `space_policy_hash` / `membership_frontier` / `reducer_profile_digest`
-   - `events: [<完整签名的 cx.invite.create Envelope>]`
+   - `events: [<完整签名的 ck.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
 7. β 校验:
    - HTTP signature transcript + destination DID 匹配
@@ -94,8 +94,8 @@
 ### Phase C — bob@β 接受 invite
 
 10. **bob** 通过 β 的 yougen 加载;客户端检测到收到一个 invite (yougen 应该有 invite 列表 UI;如果没有,scenario 注释成需要 yougen 补 UI 或者通过 API call 走)
-11. bob 触发接受;β 上产生 `cx.invite.accept` Event,refs 指向 `cx.invite.create.event_id`
-12. β 主动把 `cx.invite.accept` push 到 α (反向 federation push)
+11. bob 触发接受;β 上产生 `ck.invite.accept` Event,refs 指向 `cx.invite.create.event_id`
+12. β 主动把 `ck.invite.accept` push 到 α (反向 federation push)
 13. α 校验后接受;α 上 reducer 收敛 bob 的 `membership=join`
 14. 断言:α 上 `/space/${spaceId}/admin` 的成员列表含 bob.did
 
@@ -111,14 +111,14 @@
 
 ### Phase E — Frontier 一致性
 
-20. 测试 harness 分别查询 α 和 β 的 `/api/v1/spaces/${spaceId}/anchor-frontier` (或等价 endpoint),拿到两端的 anchor frontier 集合
+20. 测试 harness 分别查询 α 和 β 的 `/_cokret/self/spaces/${spaceId}/anchor-frontier` (或等价 endpoint),拿到两端的 anchor frontier 集合
 21. 断言:两端 frontier 覆盖相同的 event 集合;event_id 相同,顺序可能不同但因果一致
 
 ### Phase F — Pull / Backfill (sub-test E2.1)
 
 22. 把 β 临时离线(harness 用 `route.block` 拦掉 α→β 的 push,模拟网络分区)
 23. **alice** 发 `M_offline = "during partition ${stamp}"`,α 多次重试 push 失败
-24. 恢复 β,**bob** 进 timeline → β 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /api/v1/federation/pull-operations?space_id=...&after_cursor=...`
+24. 恢复 β,**bob** 进 timeline → β 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /_cokret/peer/federation/pull-operations?space_id=...&after_cursor=...`
 25. α 返回缺口 event 数组,β 落库,bob 现在能看到 `M_offline`
 
 ### Phase G — Capability revoke fanout (sub-test E2.2)
@@ -169,7 +169,7 @@
 
 - **已落地**:双 soland 拓扑、`push-operations` / `pull-operations` endpoint、α→β invite 自动 push、β→α invite-accept member join push、双向 message push、幂等 replay、网络分区恢复后的 pull/backfill operation frontier coverage、入站 RFC 9421 HTTP Message Signature 验证、key rotation hint、relay outer/inner signature 边界。
 - **仍待后续 GAP**:`reducer_profile_digest` 强校验、服务委托 revoke fanout。
-- **yougen invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `cx.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
+- **yougen invite accept UI** 仍可补强;当前 live 用 β 的 authz invite API + canonical `ck.member.state{membership=join, reason=invite_accept}` 覆盖接受链路。
 
 ## 总耗时预估
 

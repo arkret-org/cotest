@@ -75,11 +75,11 @@ test.describe("single-server triad collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId: spaceId,
-        kind: "cx.message.revise",
+        kind: "ck.message.revise",
         payload: {
           target_event_id: created.event_id,
           target_ref: messageRef,
-          content: { kind: "cx.content.text", body: revisedBody },
+          content: { kind: "ck.content.text", body: revisedBody },
         },
       }),
       { context: "revise message" },
@@ -87,9 +87,9 @@ test.describe("single-server triad collaboration", () => {
 
     const beforeRedact = await listSpaceEventsViaApi(request, bobToken, spaceId);
     expect(beforeRedact.map((event) => event.event_kind)).toEqual(
-      expect.arrayContaining(["cx.message.create", "cx.message.revise"]),
+      expect.arrayContaining(["ck.message.create", "ck.message.revise"]),
     );
-    expect(beforeRedact.find((event) => event.event_kind === "cx.message.revise")?.payload)
+    expect(beforeRedact.find((event) => event.event_kind === "ck.message.revise")?.payload)
       .toMatchObject({ target_event_id: created.event_id, target_ref: messageRef });
 
     await submitSignedEventApi(
@@ -98,7 +98,7 @@ test.describe("single-server triad collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId: spaceId,
-        kind: "cx.message.redact",
+        kind: "ck.message.redact",
         payload: {
           target_event_id: created.event_id,
           target_ref: messageRef,
@@ -109,10 +109,10 @@ test.describe("single-server triad collaboration", () => {
     );
 
     const events = await listSpaceEventsViaApi(request, bobToken, spaceId);
-    expect(events.map((event) => event.event_kind)).toContain("cx.message.revise");
-    expect(events.map((event) => event.event_kind)).not.toContain("cx.message.create");
-    expect(events.map((event) => event.event_kind)).not.toContain("cx.message.redact");
-    expect(events.find((event) => event.event_kind === "cx.message.revise")?.payload)
+    expect(events.map((event) => event.event_kind)).toContain("ck.message.revise");
+    expect(events.map((event) => event.event_kind)).not.toContain("ck.message.create");
+    expect(events.map((event) => event.event_kind)).not.toContain("ck.message.redact");
+    expect(events.find((event) => event.event_kind === "ck.message.revise")?.payload)
       .toMatchObject({ target_event_id: created.event_id, target_ref: messageRef });
   });
 
@@ -141,12 +141,12 @@ test.describe("single-server triad collaboration", () => {
     const pre = signedEventEnvelope({
       actorDid: alice.did,
       realmId: spaceId,
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
         flow_id: flowIdFromRealmId(spaceId),
         track_name: "discussion",
-        content: { kind: "cx.content.text", body: `triad pre ${stamp}` },
+        content: { kind: "ck.content.text", body: `triad pre ${stamp}` },
         encrypted: false,
       },
     });
@@ -159,7 +159,7 @@ test.describe("single-server triad collaboration", () => {
       signedEventEnvelope({
         actorDid: alice.did,
         realmId: spaceId,
-        kind: "cx.member.state",
+        kind: "ck.member.state",
         createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
         payload: {
           actor_id: carol.did,
@@ -173,12 +173,12 @@ test.describe("single-server triad collaboration", () => {
     const post = signedEventEnvelope({
       actorDid: alice.did,
       realmId: spaceId,
-      kind: "cx.message.create",
+      kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
         flow_id: flowIdFromRealmId(spaceId),
         track_name: "discussion",
-        content: { kind: "cx.content.text", body: `triad post ${stamp}` },
+        content: { kind: "ck.content.text", body: `triad post ${stamp}` },
         encrypted: false,
       },
     });
@@ -324,7 +324,7 @@ test.describe("single-server triad collaboration", () => {
   );
 
   test.describe("E1 sub-cases", () => {
-    // E1.1 — soland's POST /api/v1/spaces/{id}/invite is idempotent on
+    // E1.1 — soland's POST /_cokret/self/spaces/{id}/invite is idempotent on
     // (space_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
     // space.rs:627-644): the second create returns the existing invite_id
     // unchanged. yougen's invite-member button drives the same endpoint via
@@ -410,7 +410,7 @@ test.describe("single-server triad collaboration", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: spaceId,
-          kind: "cx.member.state",
+          kind: "ck.member.state",
           payload: {
             actor_id: carol.did,
             member: carol.did,

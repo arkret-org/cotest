@@ -11,7 +11,7 @@
 // HTTP RFC 9421 入站 OK 但出站签名生成不完整。
 // Soland implementation status (2026-05 audit, mirrored from
 // tests/federation/cross-server.spec.ts):
-//   ✓ POST /api/v1/federation/push-operations handler routed
+//   ✓ POST /_cokret/peer/federation/push-operations handler routed
 //   ✓ Basic envelope validation + idempotency on (origin, operation_id)
 //   ~ RFC 9421 inbound: partial — Signature-Input parsing works for
 //     simple cases but Content-Digest / nonce window / key-rotation hint
@@ -53,9 +53,9 @@ test.describe("transport negotiation", () => {
 
     // /server/describe MUST exist on both sides and SHOULD return at least
     // an http_json binding entry (transport-bindings.md §7).
-    const alphaDescribe = await request.get(`${solandBaseUrl("alpha")}/api/v1/server/describe`);
+    const alphaDescribe = await request.get(`${solandBaseUrl("alpha")}/_cokret/describe`);
     expect(alphaDescribe.status()).not.toBe(404);
-    const betaDescribe = await request.get(`${solandBaseUrl("beta")}/api/v1/server/describe`);
+    const betaDescribe = await request.get(`${solandBaseUrl("beta")}/_cokret/describe`);
     expect(betaDescribe.status()).not.toBe(404);
 
     if (alphaDescribe.ok()) {
@@ -76,7 +76,7 @@ test.describe("transport negotiation", () => {
     // without any RFC 9421 signature MUST NOT 404 (route exists) and
     // MUST NOT 200 (signature required). Expected: 400 / 401 / 403.
     const probe = await request.post(
-      `${solandBaseUrl("beta")}/api/v1/federation/push-operations`,
+      `${solandBaseUrl("beta")}/_cokret/peer/federation/push-operations`,
       { data: { events: [] } },
     );
     expect(probe.status()).not.toBe(404);
@@ -98,8 +98,8 @@ test.describe("transport negotiation", () => {
       // Acceptance criteria once soland ships the full binding stack:
       //
       // Phase A — HTTP baseline (RFC 9421 signed POST):
-      //   1. alice@α issues cx.invite.create targeting bob's DID on β
-      //   2. soland_a constructs POST ${SOLAND_B}/api/v1/federation/push-operations with:
+      //   1. alice@α issues ck.invite.create targeting bob's DID on β
+      //   2. soland_a constructs POST ${SOLAND_B}/_cokret/peer/federation/push-operations with:
       //        - Source-Service-DID / Destination-Service-DID headers
       //        - Signature-Input covering (@method @target-uri content-digest
       //          source-service-did destination-service-did)
@@ -108,11 +108,11 @@ test.describe("transport negotiation", () => {
       //        - Idempotency-Key
       //   3. soland_b verifies signature against α's DID document key, returns
       //      200 with { accepted: [invite_event_id] }
-      //   4. bob@β sees invite via GET /api/v1/notifications within 30s
+      //   4. bob@β sees invite via GET /_cokret/self/notifications within 30s
       //
       // Phase B — WebSocket upgrade:
-      //   5. soland_a reads β's /api/v1/server/describe → finds websocket_frame
-      //      entry with upgrade_path /api/v1/federation/stream
+      //   5. soland_a reads β's /_cokret/describe → finds websocket_frame
+      //      entry with upgrade_path /_cokret/peer/federation/stream
       //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: cx.federation.v1
       //      and RFC 9421 Signature on the upgrade request
       //   7. β responds 101 Switching Protocols

@@ -5,12 +5,12 @@
 //   - §3.11 reuse limits / cooldown
 //
 // Soland implementation status (2026-05 audit):
-//   ✓ PUT /api/v1/spaces/{id}/policy can set join_rule="knock"
-//   ✓ POST /api/v1/moves accepts cx.member.state{membership="knock"}
+//   ✓ PUT /_cokret/self/spaces/{id}/policy can set join_rule="knock"
+//   ✓ POST /_cokret/self/moves accepts ck.member.state{membership="knock"}
 //   ✗ space.join_policy cell family not registered
 //   ✗ member.application / member.application.review event kinds not present
 //   ✗ cooldown_after_reject not enforced
-//   ✗ cx.invite.create.refs[role="join_authorised_by"] not validated
+//   ✗ ck.invite.create.refs[role="join_authorised_by"] not validated
 // The fixme tests below encode the spec contract that soland MUST satisfy
 // once those handlers ship.
 
@@ -48,12 +48,12 @@ test.describe("knock + application + cooldown", () => {
         historyVisibility: "joined",
       });
 
-      // bob submits cx.member.state{membership="knock"} — soland accepts via
-      // POST /api/v1/moves. Constructing a signed Move here would duplicate
+      // bob submits ck.member.state{membership="knock"} — soland accepts via
+      // POST /_cokret/self/moves. Constructing a signed Move here would duplicate
       // SDK code, so we go through soland's higher-level "knock" REST shim
       // if it exists; otherwise the membership endpoint MAY be wired.
       const knockResp = await request.post(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/members`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/members`,
         {
           headers: { authorization: `Bearer ${bobToken}` },
           data: { member: bob.did, action: "knock" },
@@ -92,7 +92,7 @@ test.describe("knock + application + cooldown", () => {
     async () => {
       // spec: models/space-and-place.md §3.6.2-§3.6.3
       // soland gap: member.application{,.review} event kinds not registered;
-      //             no /api/v1/spaces/:id/applications listing endpoint.
+      //             no /_cokret/self/spaces/:id/applications listing endpoint.
     },
   );
 
@@ -100,7 +100,7 @@ test.describe("knock + application + cooldown", () => {
     // @blocking-on: soland#spaces-knock-application-gap
     // @user-promise: e2e/scenarios/spaces/knock-application.md
     // @expected-live-by: 2026Q3
-    "E6.B alice's cx.invite.create.refs[role=\"join_authorised_by\"] is required to point at a fresh review accept; reducer rejects re-used or stale refs",
+    "E6.B alice's ck.invite.create.refs[role=\"join_authorised_by\"] is required to point at a fresh review accept; reducer rejects re-used or stale refs",
     async () => {
       // spec: models/space-and-place.md §3.6.5
       // soland gap: invite reducer does not enforce the refs binding.
@@ -155,7 +155,7 @@ test.describe("knock + application + cooldown", () => {
     // @blocking-on: soland#spaces-knock-application-gap
     // @user-promise: e2e/scenarios/spaces/knock-application.md
     // @expected-live-by: 2026Q3
-    "E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes cx.audit.accessed",
+    "E6.G applicant_visibility=reviewer_only — non-reviewer members CANNOT read application answers; sync service returns 403 and writes ck.audit.accessed",
     async () => {
       // spec: §3.2 #2, §3.6.2 encryption_envelope.
       // soland gap: no access-control on application payloads (kinds not present).

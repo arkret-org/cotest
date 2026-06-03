@@ -1,14 +1,14 @@
 {
   "suite": "recovery_receipt",
   "profile": "cx.profile.recovery_receipt_vectors.v1",
-  "schema_ref": "cx.schema.recovery_receipt.v1",
+  "schema_ref": "ck.schema.recovery_receipt.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/recovery-receipt.schema.json",
   "cases": [
     {
       "name": "device_quorum_success",
       "expect": "pass",
       "receipt": {
-        "schema": "cx.schema.recovery_receipt.v1",
+        "schema": "ck.schema.recovery_receipt.v1",
         "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b1",
         "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a2",
         "policy_epoch": 2,
@@ -34,7 +34,7 @@
       "name": "recovery_unlock_passphrase_success",
       "expect": "pass",
       "receipt": {
-        "schema": "cx.schema.recovery_receipt.v1",
+        "schema": "ck.schema.recovery_receipt.v1",
         "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b2",
         "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a1",
         "policy_epoch": 1,
@@ -55,7 +55,7 @@
       "expect": "fail",
       "reason": "receipt policy_epoch does not match active policy",
       "receipt": {
-        "schema": "cx.schema.recovery_receipt.v1",
+        "schema": "ck.schema.recovery_receipt.v1",
         "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b3",
         "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a1",
         "policy_epoch": 99,
@@ -69,7 +69,7 @@
       "expect": "fail",
       "reason": "recovery_witness_revoke_lagging",
       "receipt": {
-        "schema": "cx.schema.recovery_receipt.v1",
+        "schema": "ck.schema.recovery_receipt.v1",
         "recovery_session_id": "ck:recovery_session:01999999-0000-7000-8000-0000000000b4",
         "policy_id": "ck:recovery_policy:01999999-0000-7000-8000-0000000000a3",
         "policy_epoch": 3,

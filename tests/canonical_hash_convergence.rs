@@ -46,7 +46,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "handle": "alice:cokret.example",
                 "handle_aliases": ["acct:alice@cokret.example"],
                 "issuer_service_did": "did:web:coauth.example",
-                "audience": "https://soland.example/api/v1",
+                "audience": "https://soland.example/_cokret",
                 "member_delivery_binding": {
                     "recipient_service_did": "did:web:soland.example",
                     "recipient_service_type": "principal_server",
@@ -74,11 +74,11 @@ fn vectors() -> Vec<CanonicalVector> {
                 "actor_id": "did:web:alice.example",
                 "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
                 "realm_id": "ck:realm:01904100-0000-7000-8000-668e2181b41d",
-                "kind": "cx.message.create",
+                "kind": "ck.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
                     "content": {
-                        "kind": "cx.content.text",
+                        "kind": "ck.content.text",
                         "body": "hello"
                     },
                     "flow_id": "ck:flow:01904100-0000-7000-8000-6c663fa0205f",

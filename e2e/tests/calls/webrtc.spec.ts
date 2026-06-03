@@ -30,14 +30,14 @@ test.describe("calls", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const iceProbe = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
+    const iceProbe = await request.post(`${solandBaseUrl()}/_cokret/self/rtc/ice-config`, {
       data: { call_id: "ck:call:probe", device_id: alice.deviceId, mode: "p2p" },
     });
     // Unauthenticated must be rejected (or endpoint absent → 404, or 405
     // when the path is routed but POST is not allowed yet).
     expect([401, 403, 404, 405]).toContain(iceProbe.status());
 
-    const iceAuth = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
+    const iceAuth = await request.post(`${solandBaseUrl()}/_cokret/self/rtc/ice-config`, {
       headers: { authorization: `Bearer ${token}` },
       data: { call_id: "ck:call:probe", device_id: alice.deviceId, mode: "p2p" },
     });
@@ -46,7 +46,7 @@ test.describe("calls", () => {
   });
 
   test(
-    "alice initiates 1:1 call to bob; Call Morph state transitions ringing → connecting → active via cx.call.signal frames",
+    "alice initiates 1:1 call to bob; Call Morph state transitions ringing → connecting → active via ck.call.signal frames",
     async ({ browser, request }) => {
       // spec: webrtc-signaling.md §3 + §4
       const stamp = Date.now();
@@ -61,7 +61,7 @@ test.describe("calls", () => {
       });
       await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
 
-      const session = await request.post(`${solandBaseUrl()}/api/v1/webrtc/sessions`, {
+      const session = await request.post(`${solandBaseUrl()}/_cokret/self/webrtc/sessions`, {
         headers: authHeaders(aliceToken),
         data: {
           space_id: spaceId,
@@ -151,7 +151,7 @@ test.describe("calls", () => {
   );
 
   test(
-    "alice mutes mic: cx.call.signal{kind=mute_state, muted=true} routes to bob; bob's UI shows muted indicator",
+    "alice mutes mic: ck.call.signal{kind=mute_state, muted=true} routes to bob; bob's UI shows muted indicator",
     async ({ browser, request }) => {
       // spec: webrtc-signaling.md §7 + §8
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-mute");
@@ -178,7 +178,7 @@ test.describe("calls", () => {
   );
 
   test(
-    "alice shares screen: getDisplayMedia track added; cx.call.signal{kind=media_state, screen_share=true} routes",
+    "alice shares screen: getDisplayMedia track added; ck.call.signal{kind=media_state, screen_share=true} routes",
     async ({ browser, request }) => {
       // spec: webrtc-signaling.md §5 call.screen_share capability
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-screen");
@@ -290,7 +290,7 @@ test.describe("calls", () => {
       });
 
       const denied = await request.post(
-        `${solandBaseUrl()}/api/v1/calls/${encodeURIComponent(session.session_id)}/recording/start`,
+        `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(session.session_id)}/recording/start`,
         {
           headers: authHeaders(carolToken),
           data: { space_id: spaceId },
@@ -448,7 +448,7 @@ async function appendCallSignal(
   payload: Record<string, unknown>,
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/v1/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
     {
       headers: authHeaders(token),
       data: {
@@ -495,7 +495,7 @@ async function createWebrtcSession(
     recording_policy: string;
   },
 ) {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/webrtc/sessions`, {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/webrtc/sessions`, {
     headers: authHeaders(token),
     data: { ...data, ttl_ms: 120_000 },
   });
@@ -513,7 +513,7 @@ async function issueIceConfig(
     device_id: string;
   },
 ) {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/rtc/ice-config`, {
     headers: authHeaders(token),
     data,
   });
@@ -532,7 +532,7 @@ async function refreshIceConfig(
   },
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/v1/calls/${encodeURIComponent(sessionId)}/ice-config/refresh`,
+    `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/ice-config/refresh`,
     {
       headers: authHeaders(token),
       data,
@@ -549,7 +549,7 @@ async function startRecording(
   spaceId: string,
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/v1/calls/${encodeURIComponent(sessionId)}/recording/start`,
+    `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
     {
       headers: authHeaders(token),
       data: { space_id: spaceId },
@@ -566,7 +566,7 @@ async function readCallSignals(
   since: number,
 ) {
   const response = await request.get(
-    `${solandBaseUrl()}/api/v1/webrtc/sessions/${encodeURIComponent(sessionId)}/signals?since=${since}&limit=100`,
+    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals?since=${since}&limit=100`,
     { headers: authHeaders(token) },
   );
   expect(response.ok(), `read signals since ${since}`).toBeTruthy();

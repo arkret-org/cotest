@@ -7,15 +7,15 @@ use super::{load_local_fixture_value, required_str, validate_profile, value_arra
 use crate::transcripts::record_vector_event;
 
 const SCAFFOLD_FIXTURE: &str = "scaffold-profile-gate-fixture.json";
-const SCAFFOLD_FIXTURE_PROFILE: &str = "cx.profile.privacy_security_vectors.v1";
+const SCAFFOLD_FIXTURE_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 const LIVE_DESCRIBE_FIXTURE: &str = "live-describe-profile-gate-fixture.json";
 const LIVE_DESCRIBE_FIXTURE_PROFILE: &str = "cx.profile.live_describe_profile_gate_vectors.v1";
 
 const FULL_PROFILE_CLAIMS: &[&str] = &[
-    "cx.profile.principal_server_events_api.v1",
-    "cx.profile.principal_server.v1",
-    "cx.profile.full_client.v1",
-    "cx.profile.e2ee_client.v1",
+    "ck.profile.principal_server_events_api.v1",
+    "ck.profile.principal_server.v1",
+    "ck.profile.full_client.v1",
+    "ck.profile.e2ee_client.v1",
 ];
 
 const SCAFFOLD_MARKERS: &[&str] = &[

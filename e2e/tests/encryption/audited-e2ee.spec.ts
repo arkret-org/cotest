@@ -30,7 +30,7 @@ test.describe("audited E2EE", () => {
     const token = await issueDevSession(request, alice);
 
     const probe = await request.get(
-      `${solandBaseUrl()}/api/v1/audit/events?space_id=ck:space:probe`,
+      `${solandBaseUrl()}/_cokret/self/audit/events?space_id=ck:space:probe`,
       { headers: { authorization: `Bearer ${token}` } },
     );
     expect([200, 401, 403, 404]).toContain(probe.status());
@@ -38,12 +38,12 @@ test.describe("audited E2EE", () => {
   });
 
   test(
-    "alice configures audit_disclosure_policy on E2EE space; cx.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
+    "alice configures audit_disclosure_policy on E2EE space; ck.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-frank");
 
       const audit = await request.get(
-        `${solandBaseUrl()}/api/v1/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=cx.moderation.franking_proof`,
+        `${solandBaseUrl()}/_cokret/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -59,7 +59,7 @@ test.describe("audited E2EE", () => {
       expect(proofText).not.toContain("plaintext");
       expect(proofText).toContain("proof_digest");
 
-      const verify = await request.post(`${solandBaseUrl()}/api/v1/audit/franking/verify`, {
+      const verify = await request.post(`${solandBaseUrl()}/_cokret/self/audit/franking/verify`, {
         headers: authHeaders(setup.aliceToken),
         data: (proof as Record<string, unknown>).payload,
       });
@@ -79,19 +79,19 @@ test.describe("audited E2EE", () => {
       expect(JSON.stringify(inspect)).toContain(String(report.report_id));
       expect(JSON.stringify(inspect)).toContain(setup.spaceId);
 
-      const invite = await (await request.get(`${setup.agentBaseUrl}/api/v1/audit-agent/inbox`)).json();
+      const invite = await (await request.get(`${setup.agentBaseUrl}/_soland/admin/audit-agent/inbox`)).json();
       expect(JSON.stringify(invite)).toContain(String(report.report_id));
     },
   );
 
   test(
-    "audit-agent's access writes cx.audit.accessed entry; alice in space-admin/audit sees the access record",
+    "audit-agent's access writes ck.audit.accessed entry; alice in space-admin/audit sees the access record",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-accessed");
       const report = await fileModerationReport(request, setup);
 
       const accessed = await request.get(
-        `${solandBaseUrl()}/api/v1/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=cx.audit.accessed`,
+        `${solandBaseUrl()}/_cokret/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.audit.accessed`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const accessedText = await accessed.text();
@@ -104,11 +104,11 @@ test.describe("audited E2EE", () => {
   );
 
   test(
-    "E25.1 tampered cx.moderation.franking_proof ciphertext_digest causes downstream verification to fail",
+    "E25.1 tampered ck.moderation.franking_proof ciphertext_digest causes downstream verification to fail",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-tamper");
       const audit = await request.get(
-        `${solandBaseUrl()}/api/v1/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=cx.moderation.franking_proof`,
+        `${solandBaseUrl()}/_cokret/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -120,7 +120,7 @@ test.describe("audited E2EE", () => {
         ciphertext_digest:
           "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       };
-      const verify = await request.post(`${solandBaseUrl()}/api/v1/audit/franking/verify`, {
+      const verify = await request.post(`${solandBaseUrl()}/_cokret/self/audit/franking/verify`, {
         headers: authHeaders(setup.aliceToken),
         data: tampered,
       });
@@ -154,7 +154,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   const agentBaseUrl = mockAuditAgentBaseUrl();
   test.skip(!agentBaseUrl, "mock-audit-agent not started for audited E2EE");
   await request.delete(`${agentBaseUrl}/inspect`);
-  const identity = await (await request.get(`${agentBaseUrl}/api/v1/audit-agent/identity`)).json();
+  const identity = await (await request.get(`${agentBaseUrl}/_soland/admin/audit-agent/identity`)).json();
   const agentDid = String(identity.did);
 
   const alice = uniqueUser(`${label}-alice`);
@@ -195,7 +195,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   const message = signedEventEnvelope({
     actorDid: bob.did,
     realmId: spaceId,
-    kind: "cx.message.create",
+    kind: "ck.message.create",
     payload: {
       flow_id: flowIdFromRealmId(spaceId),
       track_name: "discussion",
@@ -221,7 +221,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
 }
 
 async function fileModerationReport(request: APIRequestContext, setup: AuditedSetup) {
-  const response = await request.post(`${solandBaseUrl()}/api/v1/moderation/report`, {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
     headers: authHeaders(setup.reporterToken),
     data: {
       space_id: setup.spaceId,
@@ -256,7 +256,7 @@ function encryptedEnvelope(
     ciphertext,
     authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",
-    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "cx.message.create" },
+    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "ck.message.create" },
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

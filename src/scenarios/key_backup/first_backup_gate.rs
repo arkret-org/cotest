@@ -57,7 +57,7 @@ pub async fn first_backup_gate_run() -> Result<()> {
     }
 
     // TODO(P4-impl): live yougen bootstrap flow — bind device-A,
-    // attempt `cx.device.authorize` for device-B BEFORE the recovery
+    // attempt `ck.device.authorize` for device-B BEFORE the recovery
     // envelope lands; assert 4xx with errcode `first_backup_gate`.
     Ok(())
 }

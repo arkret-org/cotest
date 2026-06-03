@@ -221,7 +221,7 @@ async function flowState(
   flowId: string,
 ): Promise<string | undefined> {
   const resp = await request.get(
-    `${solandBaseUrl()}/api/v1/projection/flows?realm_id=${encodeURIComponent(spaceId)}&include_terminal=true`,
+    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(spaceId)}&include_terminal=true`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (resp.status() !== 200) {

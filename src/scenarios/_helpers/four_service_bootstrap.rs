@@ -1,8 +1,8 @@
 //! CT-6 — 4-service joint bootstrap (soland + coauth + starid + teabay).
 //!
 //! Provides a single [`FourServiceStack`] entry point that:
-//!   1. Spawns `soland` (via the existing [`CokretServer::spawn_with_env`] machinery, which
-//!      honours the pre-built sibling binary fast path).
+//!   1. Spawns `soland` (via the existing [`CokretServer::spawn_with_env`] machinery, which honours
+//!      the pre-built sibling binary fast path).
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
 //!      + generated config). Wires soland → coauth introspection URLs via the soland env
 //!      (`SOLAND_OAUTH_INTROSPECTION_URL` / `SOLAND_SESSION_GRANT_INTROSPECTION_URL`).
@@ -209,7 +209,7 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         ));
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
-            format!("{base}/api/v1/session-grants/introspect"),
+            format!("{base}/_cokret/gate/account/session-grants/introspect"),
         ));
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER".to_owned(),
@@ -239,7 +239,7 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         // key is optional (default: no announce), so unset is harmless.
         soland_env.push((
             "SOLAND_DIRECTORY_ANNOUNCE_URL".to_owned(),
-            format!("{}/api/v1/directory/announce", teabay.base_url),
+            format!("{}/_cokret/find/directory/announce", teabay.base_url),
         ));
     }
 

@@ -57,9 +57,9 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
     for case in fixture.cases.proof_payload {
         let event = json!({
             "event_id": "ck:event:01970e58-0003-7000-8000-000000000010",
-            "kind": "cx.message.create",
+            "kind": "ck.message.create",
             "realm_id": "ck:realm:01970e58-0003-7000-8000-000000000011",
-            "content": {"kind": "cx.content.text", "body": "covered"},
+            "content": {"kind": "ck.content.text", "body": "covered"},
             "proofs": [{"alg": "none"}],
             "unsigned": {"hint": "not covered"}
         });
@@ -194,7 +194,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 }
 
 fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
-    validate_profile(value, "cx.profile.encoding_vectors.v1")?;
+    validate_profile(value, "ck.profile.encoding_vectors.v1")?;
     let rank_order = value
         .get("rank_order")
         .and_then(Value::as_array)

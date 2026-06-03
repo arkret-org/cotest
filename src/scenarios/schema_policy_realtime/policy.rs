@@ -18,16 +18,16 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let space_id = alice.create_realm("Policy Document Space").await?;
     alice.add_member(&space_id, &bob).await?;
 
-    let initial = expect_json(alice.get("/api/v1/policies"), StatusCode::OK).await?;
+    let initial = expect_json(alice.get("/_cokret/self/policies"), StatusCode::OK).await?;
     assert!(initial["policies"].as_array().unwrap().is_empty());
 
     let policy = expect_json(
-        alice.post("/api/v1/policies").json(&json!({
+        alice.post("/_cokret/self/policies").json(&json!({
             "scope": space_id,
             "subject_ref": bob.actor,
-            "policy_type": "cx.message.create",
+            "policy_type": "ck.message.create",
             "effect": "deny",
-            "actions": ["cx.message.create"],
+            "actions": ["ck.message.create"],
             "resource": {"kind": "space", "realm_id": space_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}]
         })),
@@ -39,7 +39,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(policy["owner"], alice.actor);
 
     let listed = expect_json(
-        alice.get(&format!("/api/v1/policies?scope={space_id}")),
+        alice.get(&format!("/_cokret/self/policies?scope={space_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -47,14 +47,14 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(listed["policies"][0]["policy_id"], policy_id);
 
     let fetched = expect_json(
-        alice.get(&format!("/api/v1/policies/{policy_id}")),
+        alice.get(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(fetched["payload"]["effect"], "deny");
 
     expect_api_error(
-        bob.get(&format!("/api/v1/policies/{policy_id}")),
+        bob.get(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -63,11 +63,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let denied = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/policy/check"))
+            .post(server.url("/_cokret/self/policy/check"))
             .json(&json!({
                 "request_id": "ck:request:policy-deny",
                 "request_canonical_digest": REQUEST_HASH,
-                "action": "cx.message.create",
+                "action": "ck.message.create",
                 "actor": bob.actor,
                 "realm_id": space_id,
                 "source": {"kind": "space", "realm_id": space_id}
@@ -80,13 +80,13 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(denied["obligations"].as_array().unwrap().len(), 1);
 
     let inactive = expect_json(
-        alice.post("/api/v1/policies").json(&json!({
+        alice.post("/_cokret/self/policies").json(&json!({
             "policy_id": policy_id,
             "scope": space_id,
             "subject_ref": bob.actor,
-            "policy_type": "cx.message.create",
+            "policy_type": "ck.message.create",
             "effect": "deny",
-            "actions": ["cx.message.create"],
+            "actions": ["ck.message.create"],
             "resource": {"kind": "space", "realm_id": space_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}],
             "active": false
@@ -99,11 +99,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let allowed = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/policy/check"))
+            .post(server.url("/_cokret/self/policy/check"))
             .json(&json!({
                 "request_id": "ck:request:policy-allow",
                 "request_canonical_digest": REQUEST_HASH,
-                "action": "cx.message.create",
+                "action": "ck.message.create",
                 "actor": bob.actor,
                 "realm_id": space_id,
                 "source": {"kind": "space", "realm_id": space_id}
@@ -114,7 +114,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(allowed["decision"], "allow");
     assert_eq!(allowed["reason_code"], "ok");
 
-    let hidden_in_default_list = expect_json(alice.get("/api/v1/policies"), StatusCode::OK).await?;
+    let hidden_in_default_list =
+        expect_json(alice.get("/_cokret/self/policies"), StatusCode::OK).await?;
     assert!(
         hidden_in_default_list["policies"]
             .as_array()
@@ -123,7 +124,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     );
 
     let visible_with_inactive = expect_json(
-        alice.get("/api/v1/policies?include_inactive=true"),
+        alice.get("/_cokret/self/policies?include_inactive=true"),
         StatusCode::OK,
     )
     .await?;
@@ -134,21 +135,21 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(visible_with_inactive["policies"][0]["active"], false);
 
     expect_api_error(
-        bob.delete(&format!("/api/v1/policies/{policy_id}")),
+        bob.delete(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
     let deleted = expect_json(
-        alice.delete(&format!("/api/v1/policies/{policy_id}")),
+        alice.delete(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(deleted["ok"], true);
 
     expect_api_error(
-        alice.get(&format!("/api/v1/policies/{policy_id}")),
+        alice.get(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::NOT_FOUND,
         "not_found",
     )

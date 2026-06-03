@@ -5,7 +5,7 @@
 //   - §2.5 Moderation MUST anchored
 //   - §3 Report
 //   - §5.1 Redact requires cx.space.moderate
-//   - §5.2 Ban via cx.member.state{membership="ban"}
+//   - §5.2 Ban via ck.member.state{membership="ban"}
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
@@ -29,7 +29,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation and ban", () => {
-  test("report -> cx.member.state ban -> post-ban writes rejected -> redaction filters public timeline", async ({
+  test("report -> ck.member.state ban -> post-ban writes rejected -> redaction filters public timeline", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -72,7 +72,7 @@ test.describe("moderation and ban", () => {
     const beforeRedaction = await querySpaceEventsApi(request, aliceToken, spaceId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
-    const reportResp = await request.post(`${solandBaseUrl()}/api/v1/moderation/report`, {
+    const reportResp = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
       headers: authHeaders(bobToken),
       data: {
         space_id: spaceId,
@@ -89,21 +89,21 @@ test.describe("moderation and ban", () => {
     expect(reportBody.status).toBe("queued");
 
     const reporterReports = await request.get(
-      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(reporterReports.ok()).toBeTruthy();
     expect(JSON.stringify(await reporterReports.json())).toContain(reportBody.report_id);
 
     const targetReports = await request.get(
-      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
       { headers: authHeaders(malloryToken) },
     );
     expect(targetReports.ok()).toBeTruthy();
     expect(JSON.stringify(await targetReports.json())).not.toContain(reportBody.report_id);
 
     const bystanderReports = await request.get(
-      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
       { headers: authHeaders(carolToken) },
     );
     expect(bystanderReports.ok()).toBeTruthy();
@@ -116,18 +116,18 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(await targetAdminReports.json())).not.toContain(reportBody.report_id);
 
     const ownerReports = await request.get(
-      `${solandBaseUrl()}/api/v1/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(ownerReports.ok()).toBeTruthy();
     expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
 
-    const unauthorizedBan = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const unauthorizedBan = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(bobToken),
       data: signedEventEnvelope({
         actorDid: bob.did,
         realmId: spaceId,
-        kind: "cx.member.state",
+        kind: "ck.member.state",
         payload: {
           actor_id: mallory.did,
           member: mallory.did,
@@ -147,7 +147,7 @@ test.describe("moderation and ban", () => {
 
     const banOperation = makeOperation({
       spaceId,
-      objectType: "cx.member.state",
+      objectType: "ck.member.state",
       payload: {
         actor_id: mallory.did,
         member: mallory.did,
@@ -163,14 +163,14 @@ test.describe("moderation and ban", () => {
     expect(banPush.accepted).toContain(banOperation.operation_id);
 
     const spaceAfterBan = await request.get(
-      `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(spaceAfterBan.ok()).toBeTruthy();
     const spaceAfterBanBody = await spaceAfterBan.json();
     expect(spaceAfterBanBody.members ?? []).not.toContain(mallory.did);
 
-    const bannedWrite = await request.post(`${solandBaseUrl()}/api/v1/messages/send`, {
+    const bannedWrite = await request.post(`${solandBaseUrl()}/_cokret/self/messages/send`, {
       headers: authHeaders(malloryToken),
       data: { space_id: spaceId, content: { body: postBan } },
     });
@@ -178,7 +178,7 @@ test.describe("moderation and ban", () => {
 
     const redactOperation = makeOperation({
       spaceId,
-      objectType: "cx.message.redact",
+      objectType: "ck.message.redact",
       payload: {
         target_event_id: sent.event_id,
         redacts: sent.event_id,
@@ -200,17 +200,17 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(afterRedactionCarol)).not.toContain(abusive);
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}/export`,
+      `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
     const exportText = JSON.stringify(await exportResp.json());
     expect(exportText).toContain('"membership":"ban"');
-    expect(exportText).toContain('"event_kind":"cx.message.redact"');
+    expect(exportText).toContain('"event_kind":"ck.message.redact"');
     expect(exportText).toContain(sent.event_id);
   });
 
-  test("E5.3 idempotent ban smoke: re-issuing cx.member.state{ban} leaves mallory non-member", async ({
+  test("E5.3 idempotent ban smoke: re-issuing ck.member.state{ban} leaves mallory non-member", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -233,12 +233,12 @@ test.describe("moderation and ban", () => {
 
     const firstBan = makeOperation({
       spaceId,
-      objectType: "cx.member.state",
+      objectType: "ck.member.state",
       payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
     });
     const secondBan = makeOperation({
       spaceId,
-      objectType: "cx.member.state",
+      objectType: "ck.member.state",
       payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
     });
 
@@ -254,7 +254,7 @@ test.describe("moderation and ban", () => {
     });
     expect(second.accepted).toContain(secondBan.operation_id);
 
-    const space = await request.get(`${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}`, {
+    const space = await request.get(`${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`, {
       headers: authHeaders(aliceToken),
     });
     expect(space.ok()).toBeTruthy();
@@ -293,7 +293,7 @@ test.describe("moderation and ban", () => {
       });
 
       const space = await request.get(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(spaceId)}`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
         { headers: authHeaders(aliceToken) },
       );
       expect(space.ok()).toBeTruthy();

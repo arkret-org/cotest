@@ -48,12 +48,12 @@ test.describe("world_readable history @fully-implemented", () => {
       // outsider is registered but NOT a member; with world_readable the
       // events query MUST succeed for them.
       const events = await request.get(
-        `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
         { headers: { authorization: `Bearer ${outsiderToken}` } },
       );
       expect(events.status()).toBe(200);
       const body = await events.json();
-      // Response shape is the spec's `cx.events.query` envelope; we only
+      // Response shape is the spec's `ck.events.query` envelope; we only
       // need the request to be accepted, not its body content.
       expect(body).toBeDefined();
     } finally {
@@ -61,7 +61,7 @@ test.describe("world_readable history @fully-implemented", () => {
     }
   });
 
-  test("anonymous (no session token) GET /api/v1/events succeeds when history_visibility=world_readable", async ({
+  test("anonymous (no session token) GET /_cokret/self/events succeeds when history_visibility=world_readable", async ({
     browser,
     request,
   }) => {
@@ -88,7 +88,7 @@ test.describe("world_readable history @fully-implemented", () => {
       const anonRequest = await playwrightRequest.newContext({});
       try {
         const anonResp = await anonRequest.get(
-          `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
         );
         expect(anonResp.status()).toBe(200);
       } finally {
@@ -126,7 +126,7 @@ test.describe("world_readable history @fully-implemented", () => {
       // outsider attempts to write a message via API — must be denied even with
       // world_readable history (capability is not granted to non-members).
       const write = await request.post(
-        `${solandBaseUrl()}/api/v1/spaces/${encodeURIComponent(realmId)}/messages`,
+        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(realmId)}/messages`,
         {
           headers: { authorization: `Bearer ${outsiderToken}` },
           data: { content: { text: "S1.3 outsider tries to write" } },
@@ -148,7 +148,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const event = encryptedWorldReadableRealmCreateEvent(alice.did);
-    const create = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const create = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: event,
     });
@@ -164,11 +164,11 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
   const payload = {
     object: {
       id: realmId,
-      schema: "cx.schema.realm.v1",
+      schema: "ck.schema.realm.v1",
       title: `incompat ${Date.now()}`,
       created_by: actorDid,
       trust_domain: "ck:trust_domain:soland.local",
-      schema_refs: ["cx.schema.realm.v1"],
+      schema_refs: ["ck.schema.realm.v1"],
       default_discoverability: "listed",
       default_join_rule: "invite",
       history_visibility: "world_readable",
@@ -183,7 +183,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
   };
   return {
     event_id: `ck:event:${uuidV7()}`,
-    kind: "cx.realm.create",
+    kind: "ck.realm.create",
     realm_id: realmId,
     actor_id: actorDid,
     actor_seq: 1,
@@ -191,7 +191,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
     prev_refs: [],
     refs: [],
     requirements: {
-      schema: ["cx.schema.realm.v1"],
+      schema: ["ck.schema.realm.v1"],
       features: [],
       critical_extensions: [],
     },

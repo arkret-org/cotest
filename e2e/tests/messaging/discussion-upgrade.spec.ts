@@ -44,12 +44,12 @@ test.describe("discussion upgrade to child space", () => {
       signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.parentId,
-        kind: "cx.message.create",
+        kind: "ck.message.create",
         payload: {
           flow_id: flowIdFromRealmId(fixture.parentId),
           track_name: "discussion",
           thread_id: "discussion",
-          content: { kind: "cx.content.text", body },
+          content: { kind: "ck.content.text", body },
           encrypted: false,
         },
       }),
@@ -164,7 +164,7 @@ test.describe("discussion upgrade to child space", () => {
     );
 
     const response = await request.get(
-      `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(parentId)}&limit=50`,
+      `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(parentId)}&limit=50`,
       { headers: authHeaders(carolToken) },
     );
     if (response.status() === 404) {
@@ -200,10 +200,10 @@ test.describe("discussion upgrade to child space", () => {
       { actorDid: fixture.alice.did },
     );
     const sentAt = new Date();
-    const receipt = await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+    const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
       headers: authHeaders(fixture.bobToken),
       data: {
-        kind: "cx.receipt.read",
+        kind: "ck.receipt.read",
         realm_id: childId,
         actor_id: fixture.bob.did,
         device_id: fixture.bob.deviceId,
@@ -270,7 +270,7 @@ test.describe("discussion upgrade to child space", () => {
     }
   });
 
-  test("alice promotes F1 to a Circle scope; F1.scope_circle_id = C.id; cx.circle.create on parent Realm", async ({
+  test("alice promotes F1 to a Circle scope; F1.scope_circle_id = C.id; ck.circle.create on parent Realm", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "fixme-promote");
@@ -297,7 +297,7 @@ test.describe("discussion upgrade to child space", () => {
       fixture.parentId,
     );
     expect(
-      parentEvents.find((event) => event.event_kind === "cx.flow.update")
+      parentEvents.find((event) => event.event_kind === "ck.flow.update")
         ?.payload,
     ).toMatchObject({
       flow_id: flowId,
@@ -306,7 +306,7 @@ test.describe("discussion upgrade to child space", () => {
     // The Circle creation event lives on the parent Realm; child Spaces
     // are no longer minted as part of the discussion-upgrade flow.
     expect(parentEvents.map((event) => event.event_kind)).toContain(
-      "cx.circle.create",
+      "ck.circle.create",
     );
   });
 
@@ -436,7 +436,7 @@ test.describe("discussion upgrade to child space", () => {
     );
 
     const parentResponse = await request.get(
-      `${solandBaseUrl()}/api/v1/events?realms=${encodeURIComponent(parentId)}&limit=50`,
+      `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(parentId)}&limit=50`,
       { headers: authHeaders(carolToken) },
     );
     if (parentResponse.status() === 200) {
@@ -474,10 +474,10 @@ test.describe("discussion upgrade to child space", () => {
 
     const parentRealm = (
       await listSpaceEventsViaApi(request, fixture.bobToken, fixture.parentId)
-    ).find((event) => event.event_kind === "cx.realm.create");
+    ).find((event) => event.event_kind === "ck.realm.create");
     const childRealm = (
       await listSpaceEventsViaApi(request, fixture.bobToken, childId)
-    ).find((event) => event.event_kind === "cx.realm.create");
+    ).find((event) => event.event_kind === "ck.realm.create");
     expect(parentRealm?.payload).toMatchObject({
       object: { encryption_profile: "none" },
     });
@@ -501,12 +501,12 @@ test.describe("discussion upgrade to child space", () => {
       "orphan F1",
     );
     const orphanCircleId = typedId("circle");
-    const response = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(fixture.aliceToken),
       data: signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.parentId,
-        kind: "cx.flow.update",
+        kind: "ck.flow.update",
         payload: {
           target_ref: flowId,
           flow_id: flowId,
@@ -523,7 +523,7 @@ test.describe("discussion upgrade to child space", () => {
     expect(
       events.find(
         (event) =>
-          event.event_kind === "cx.flow.update" &&
+          event.event_kind === "ck.flow.update" &&
           JSON.stringify(event.payload).includes(orphanCircleId),
       )?.payload,
     ).toMatchObject({
@@ -556,10 +556,10 @@ test.describe("discussion upgrade to child space", () => {
       "receipt override child",
     );
     const sentAt = new Date();
-    const receipt = await request.post(`${solandBaseUrl()}/api/v1/ephemeral`, {
+    const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
       headers: authHeaders(fixture.bobToken),
       data: {
-        kind: "cx.receipt.read",
+        kind: "ck.receipt.read",
         realm_id: childId,
         actor_id: fixture.bob.did,
         device_id: fixture.bob.deviceId,
@@ -622,11 +622,11 @@ async function createFlowViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "cx.flow.create",
+      kind: "ck.flow.create",
       payload: {
         object: {
           id: flowId,
-          schema: "cx.schema.flow.v1",
+          schema: "ck.schema.flow.v1",
           realm_id: realmId,
           title: `${title} ${Date.now()}`,
           stage: "draft",
@@ -666,11 +666,11 @@ async function setFlowScopeCircleViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "cx.circle.create",
+      kind: "ck.circle.create",
       payload: {
         object: {
           id: circleId,
-          schema: "cx.schema.circle.v1",
+          schema: "ck.schema.circle.v1",
           realm_id: realmId,
           title: `circle for ${flowId}`,
           display: {
@@ -696,7 +696,7 @@ async function setFlowScopeCircleViaApi(
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "cx.flow.update",
+      kind: "ck.flow.update",
       payload: {
         target_ref: flowId,
         flow_id: flowId,
@@ -720,12 +720,12 @@ async function createDiscussionMessageViaApi(
   const envelope = signedEventEnvelope({
     actorDid: actor.did,
     realmId,
-    kind: "cx.message.create",
+    kind: "ck.message.create",
     payload: {
       flow_id: flowId,
       track_name: "discussion",
       thread_id: "discussion",
-      content: { kind: "cx.content.text", body: `${body} ${Date.now()}` },
+      content: { kind: "ck.content.text", body: `${body} ${Date.now()}` },
       encrypted: false,
     },
   });

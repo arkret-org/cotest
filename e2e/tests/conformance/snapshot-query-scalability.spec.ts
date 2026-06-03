@@ -13,7 +13,7 @@
 // Fixtures: cokret-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json,
 //           cx.vector.query.*.json, cx.vector.scalability.*.json
 //
-// Phases A-E exercise soland's /api/v1/conformance/{snapshot,query} HTTP
+// Phases A-E exercise soland's /_cokret/self/conformance/{snapshot,query} HTTP
 // endpoints directly. These endpoints are debug/conformance surfaces only;
 // production deployments must not advertise cx.profile.conformance.vectors.v1
 // unless they explicitly enable the route.
@@ -22,7 +22,7 @@
 //   - Phase F: harness-only vector loader smoke (filesystem read; never
 //     touches soland). Always-pass on count so the suite stays green even
 //     when the fixtures directory has zero matching files today.
-//   - Phase G: optional surface probe of GET /api/v1/server/describe to
+//   - Phase G: optional surface probe of GET /_cokret/describe to
 //     assert the surface is *internally consistent* (does NOT claim the
 //     cx.profile.conformance.vectors.v1 profile while the endpoint is 404,
 //     OR if it does claim it then the endpoint must respond with something
@@ -35,13 +35,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { wireErrCode } from "../../helpers/soland-api";
+import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
 
 const __filename_ = fileURLToPath(import.meta.url);
 const __dirname_ = dirname(__filename_);
 
 // From cotest/e2e/tests/conformance/<this-file>.spec.ts walk up four levels
-// (conformance → tests → e2e → cotest) to reach the cokret-dev root, then
+// (conformance → tests → e2e → cotest) to reach the cokret root, then
 // into cokret-spec/spec/v1/artifacts/fixtures.
 const FIXTURES_DIR = resolve(
   __dirname_,
@@ -75,21 +75,6 @@ function listVectorFixtures(): { dir: string; exists: boolean; matches: string[]
     .filter((name) => VECTOR_PREFIXES.some((prefix) => name.startsWith(prefix)))
     .sort();
   return { dir: FIXTURES_DIR, exists: true, matches };
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .filter((key) => record[key] !== undefined)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-    .join(",")}}`;
 }
 
 function sha256Prefixed(value: string): string {
@@ -128,14 +113,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const manifest = {
       snapshot_ref: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000001:fixture",
       realm_id: "ck:realm:01904100-0000-7000-8000-000000000001",
-      reducer_profile: "cx.reducer.v1",
+      reducer_profile: "ck.reducer.v1",
       schema_profile_refs: ["cx.schema.core.v1"],
       chunk_hashes: chunkHashes,
       created_by: "did:web:soland.conformance",
       created_at: "2026-05-31T00:00:00Z",
     };
 
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
         vector_id: "cx.vector.snapshot.manifest_integrity.v1",
         manifest,
@@ -149,7 +134,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(body.expected_chunk_count).toBe(2);
     expect(body.state_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
-    const tampered = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+    const tampered = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
         vector_id: "cx.vector.snapshot.tampered_chunk.v1",
         manifest,
@@ -168,7 +153,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const manifest = {
       snapshot_ref: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000002:signed",
       realm_id: "ck:realm:01904100-0000-7000-8000-000000000002",
-      reducer_profile: "cx.reducer.v1",
+      reducer_profile: "ck.reducer.v1",
       schema_profile_refs: ["cx.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),
       created_by: signerDid,
@@ -179,7 +164,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         signature: "deterministic-conformance-fixture",
       },
     };
-    const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
         vector_id: "cx.vector.snapshot.signature_binding.v1",
         manifest,
@@ -204,7 +189,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       "created_at",
     ]);
 
-    const revoked = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+    const revoked = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
         vector_id: "cx.vector.snapshot.signature_binding.revoked.v1",
         manifest,
@@ -230,7 +215,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       order_by: [{ field: "rank", direction: "asc" }],
       limit: 2,
     };
-    const first = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, {
+    const first = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/query`, {
       data: { vector_id: "cx.vector.query.page_order.v1", rows, query },
     });
     expect(first.status()).toBe(200);
@@ -246,7 +231,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       rows,
       query: { ...query, cursor: page1.next_cursor },
     };
-    const second = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, {
+    const second = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/query`, {
       data: page2Req,
     });
     expect(second.status()).toBe(200);
@@ -254,7 +239,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(page2.items.map((row: { id: string }) => row.id)).toEqual(["row-3"]);
     expect(page2.has_more).toBe(false);
 
-    const secondAgain = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, {
+    const secondAgain = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/query`, {
       data: page2Req,
     });
     expect(await secondAgain.json()).toEqual(page2);
@@ -284,7 +269,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
 
     for (const data of rejectVectors) {
-      const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, { data });
+      const resp = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/query`, { data });
       expect(resp.status(), data.vector_id).toBeGreaterThanOrEqual(400);
       const body = await resp.json();
       expect(["query_schema_violation", "schema_violation"]).toContain(wireErrCode(body));
@@ -316,7 +301,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
 
     for (const data of rejectVectors) {
-      const resp = await request.post(`${solandBaseUrl()}/api/v1/conformance/query`, { data });
+      const resp = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/query`, { data });
       expect(resp.status(), data.vector_id).toBeGreaterThanOrEqual(400);
       const body = await resp.json();
       expect(["scalability_limit_exceeded", "payload_too_large", "quota_exceeded"]).toContain(
@@ -373,14 +358,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // Optional surface probe — the assertion is "the surface is internally
     // consistent", NOT "the endpoint works". Two outcomes are acceptable:
     //   (a) /server/describe does NOT claim cx.profile.conformance.vectors.v1
-    //       → any status from /api/v1/conformance/snapshot (incl. 404) is OK,
+    //       → any status from /_cokret/self/conformance/snapshot (incl. 404) is OK,
     //         because the server isn't promising the endpoint exists.
     //   (b) /server/describe DOES claim cx.profile.conformance.vectors.v1
-    //       → /api/v1/conformance/snapshot MUST NOT return 404 (anything else
+    //       → /_cokret/self/conformance/snapshot MUST NOT return 404 (anything else
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
     //         claim is a lie).
 
-    const describeResp = await request.get(`${solandBaseUrl()}/api/v1/server/describe`);
+    const describeResp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
     if (!describeResp.ok()) {
       // soland might be on an older build without /server/describe at all;
       // that's a different bug, surfaced by service-surface-contract. Skip
@@ -413,7 +398,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // NOT 404. We don't care about correctness of the body — we just need to
     // distinguish "endpoint absent" (404) from "endpoint present but stubbed
     // / rejecting / requiring auth" (anything else).
-    const probe = await request.post(`${solandBaseUrl()}/api/v1/conformance/snapshot`, {
+    const probe = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
         vector_id: "cx.vector.snapshot.surface_probe.v1",
         manifest: {},
@@ -422,7 +407,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     });
     expect(
       probe.status(),
-      `server claims cx.profile.conformance.vectors.v1 but /api/v1/conformance/snapshot returned 404 — surface is inconsistent`,
+      `server claims cx.profile.conformance.vectors.v1 but /_cokret/self/conformance/snapshot returned 404 — surface is inconsistent`,
     ).not.toBe(404);
   });
 });

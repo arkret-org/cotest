@@ -1,7 +1,7 @@
 //! Identity / directory scenarios.
 //!
 //! Each submodule is single-responsibility:
-//! - [`identity`] — `/api/v1/identity/*` describe/resolve/document/log/submit/receipts.
+//! - [`identity`] — `/_cokret/root/identity/*` describe/resolve/document/log/submit/receipts.
 //! - [`contacts`] — contacts/invites listing/export/audit flow.
 //! - [`directory`] — directory discoverability + actor-privacy projections.
 //!

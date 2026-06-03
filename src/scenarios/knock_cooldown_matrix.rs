@@ -5,7 +5,7 @@
 //!   - §3.6.2 — `member.application` schema
 //!   - §3.6.3 — `member.application.review` (accept / reject / request_changes)
 //!   - §3.6.4 — `member.application.cancel`
-//!   - §3.6.5 — accepted-after-review → `cx.invite.create` + `cx.invite.accept`
+//!   - §3.6.5 — accepted-after-review → `ck.invite.create` + `ck.invite.accept`
 //!   - §3.8  — membership state machine (knock → invite → join, reject → leave)
 //!   - §3.11 — anti-abuse defaults (application_ttl=168h, cooldown=72h,
 //!     max_open_applications_per_actor=1)
@@ -14,7 +14,7 @@
 //!   1. Alice creates a Space with `join_rule="knock"` and `manual_review` gate
 //!      (`auto_resolve=false`); short test-only `application_ttl=10s` and
 //!      `cooldown_after_reject=2s` so the matrix exercises in seconds.
-//!   2. Bob (non-member) submits `cx.member.state{membership=knock}` → reducer accepts, projects
+//!   2. Bob (non-member) submits `ck.member.state{membership=knock}` → reducer accepts, projects
 //!      bob into `members_in_state("knock")`.
 //!   3. Bob submits `member.application` (in same batch SHOULD be allowed per §3.6.1); reducer
 //!      accepts, projects `application_pending`.
@@ -36,7 +36,7 @@
 //! dev-mode reducer, despite the bare `knock` membership state being
 //! supported per `soland/src/reducer.rs::knock_state_visible_in_members_in_state_query`):
 //!
-//!   * `cx.realm.join_rule` event kind not yet enforced by reducer (Space create only stores
+//!   * `ck.realm.join_rule` event kind not yet enforced by reducer (Space create only stores
 //!     `public: bool`, no enum); no path to set `join_rule="knock"`.
 //!   * `member.application` / `.review` / `.cancel` event kinds not in the soland event kind
 //!     registry (`soland/src/routing/events/operations.rs` dispatcher table).
@@ -53,7 +53,7 @@ use anyhow::Result;
 
 /// CT-4 scenario probe. See module docs for the full matrix this exercises.
 ///
-/// Until the soland reducer wires up `cx.realm.join_rule="knock"`,
+/// Until the soland reducer wires up `ck.realm.join_rule="knock"`,
 /// `member.application`, `member.application.review`, and the cooldown /
 /// TTL enforcement (§3.11), this scaffold returns immediately so the
 /// `#[ignore]`'d test surfaces in `cargo test --list` output without
@@ -74,7 +74,7 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     //
     //   // 2. Knock
     //   submit_event(&server, &bob, "did:web:bob.example", &space_id,
-    //                "cx.member.state",
+    //                "ck.member.state",
     //                json!({"membership":"knock"}), StatusCode::OK).await?;
     //   // 3. Application
     //   let app = submit_event(&server, &bob, "did:web:bob.example", &space_id,

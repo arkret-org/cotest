@@ -1,4 +1,4 @@
-//! Soland `cx.account.subscribe` long-poll + realms-incremental coverage.
+//! Soland `ck.account.subscribe` long-poll + realms-incremental coverage.
 //!
 //! Pins the two behaviors that landed in `routing::events::sync`:
 //!
@@ -147,7 +147,7 @@ async fn fetch_account_subscribe_with_size(
 ) -> Result<(Value, usize)> {
     let response = expect_response(
         actor
-            .get(&format!("/api/v1/account/subscribe?{query}"))
+            .get(&format!("/_cokret/self/account/subscribe?{query}"))
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )

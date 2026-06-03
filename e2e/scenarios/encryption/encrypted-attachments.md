@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `cx.moderation.franking_proof` 收据(可证存在但不可解密)。
+在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `ck.moderation.franking_proof` 收据(可证存在但不可解密)。
 
 不验证:MLS 群组生命周期本身(encryption/mls-group 前置)、密钥备份(encryption/key-backup)、calls 中的媒体(calls/webrtc)。
 
@@ -15,7 +15,7 @@
 - `crypto-media/media-and-blob.md` §6 — Asset Privacy Policy(`download_mode=provider_proxy` 默认)
 - `crypto-media/encryption-and-audit.md` §2.3.1 — `key_ref` for MLS profile
 - `crypto-media/audited-e2ee.md` §3 — Audit agent 进入(需要 explicit policy)
-- `crypto-media/audited-e2ee.md` §4 — `cx.moderation.franking_proof` / `cx.audit.accessed`
+- `crypto-media/audited-e2ee.md` §4 — `ck.moderation.franking_proof` / `ck.audit.accessed`
 
 ## 拓扑
 
@@ -46,12 +46,12 @@
    - 生成本地 AEAD key + nonce
    - 用 XChaCha20-Poly1305 加密 `cat.png` → ciphertext
    - 计算 `ciphertext_digest = sha256(ciphertext)`
-3. `POST /api/v1/blob/put` 上传:
+3. `POST /_cokret/self/blob/put` 上传:
    - body: ciphertext bytes
    - meta: `{ space_id, media_type: "application/octet-stream", encryption: { algorithm: "MLS", group_state_ref: { epoch, key_ref } }, ciphertext_digest }`
    - **关键 invariant**:不带明文文件名、不带 plaintext media type
 4. soland Blob Service 返回 `blob_ref: sha256:...`
-5. alice 客户端组消息 `cx.message.create`:
+5. alice 客户端组消息 `ck.message.create`:
    - `encrypted_payload`(明文 = "look at this", `attachments: [{ blob_ref, encryption, ciphertext_digest }]`)
    - 用 MLS 当前 epoch key 加密整个 payload
 6. 提交事件 → soland 接受,Sync 路由
@@ -59,7 +59,7 @@
 ### Phase B — bob 下载 + 解密
 
 7. bob yougen 拉 sync → 解 message → 拿到 plaintext `attachments` 数组
-8. bob 客户端 `GET /api/v1/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
+8. bob 客户端 `GET /_cokret/self/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
 9. soland Blob Service 校验:
    - bob 是 `S_e2ee` 的当前成员
    - `covered_frontier_cell` 包含必要的 governance frontier(若 E2EE Space 要求)
@@ -77,7 +77,7 @@
 ### Phase D — Non-member access denied
 
 17. mallory(非 `S_e2ee` 成员)拿到 `blob_ref`(假设外漏)
-18. mallory `GET /api/v1/blob/get?blob_ref=<sha>` with `mallory_token`
+18. mallory `GET /_cokret/self/blob/get?blob_ref=<sha>` with `mallory_token`
 19. soland 应拒绝;返回**不可区分** 的 opaque 403(同样的错误码 + body 对"不存在"和"无权限"都返回)
 20. 断言:status 403/404;response 不暴露 space_id / blob 是否存在
 
@@ -91,8 +91,8 @@
 
 24. 重新建一个 audit-enabled space `S_audit`(`audit_disclosure_policy` 含 audit-agent 的 DID)
 25. alice 在 `S_audit` 发加密附件 — 同 Phase A
-26. audit-agent 拉 `GET /api/v1/audit/events?space_id=<S_audit>` → 应当看到 `cx.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
-27. audit-agent **不能** 直接拿到 plaintext attachment;若要审,需要触发 `cx.audit.accessed`(spec §4),记录到 audit trail
+26. audit-agent 拉 `GET /_cokret/self/audit/events?space_id=<S_audit>` → 应当看到 `ck.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
+27. audit-agent **不能** 直接拿到 plaintext attachment;若要审,需要触发 `ck.audit.accessed`(spec §4),记录到 audit trail
 
 ## Observable assertions(合并)
 
@@ -114,9 +114,9 @@
 
 ## Implementation notes
 
-- **2026-05-25 P2-044 local close**:soland `POST /api/v1/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
+- **2026-05-25 P2-044 local close**:soland `POST /_cokret/self/blob/upload` 对 encrypted attachment 强制 `media_type=application/octet-stream`,丢弃明文 filename,校验 `ciphertext_digest` 与 ciphertext bytes 匹配,成员可直接下载 ciphertext,非成员拿到 opaque `not_found`,E2EE blob presign fail-closed。
 - **2026-05-25 P2-044 local close**:yougen 新增客户端 XChaCha20-Poly1305 MLS attachment helper,thumbnail 作为独立 ciphertext asset 加密并携带独立 digest/nonce;`CokretApi::upload_encrypted_mls_attachment_asset` 发送 ciphertext-only headers。
-- **仍待 audited-e2ee**:`cx.moderation.franking_proof`、audit-agent invite、`cx.audit.accessed` 与 tamper verification 归入 `encryption/audited-e2ee` / GAP-P2-045。
+- **仍待 audited-e2ee**:`ck.moderation.franking_proof`、audit-agent invite、`ck.audit.accessed` 与 tamper verification 归入 `encryption/audited-e2ee` / GAP-P2-045。
 - **仍待 UI polish**:E2EE attachment lock icon、"Decrypting..." 进度、integrity check 失败的错误 UI 可作为后续用户体验强化,不再阻塞 P2-044 protocol/privacy closure。
 
 ## 总耗时预估

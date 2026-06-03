@@ -62,7 +62,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let mut tasks = JoinSet::new();
     tasks.spawn({
         let client = server.http();
-        let url = server.url("/api/v1/events");
+        let url = server.url("/_cokret/self/events");
         let token = token.clone();
         let event = event.clone();
         async move {
@@ -91,7 +91,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let retry = expect_json(
         server
             .http()
-            .post(server.url("/api/v1/events"))
+            .post(server.url("/_cokret/self/events"))
             .bearer_auth(&token)
             .json(&event),
         StatusCode::OK,
@@ -128,7 +128,11 @@ impl ChaosDatabase {
 }
 
 async fn create_chaos_realm(alice: &TestActorClient, event: &Value) -> Result<()> {
-    let response = expect_json(alice.post("/api/v1/events").json(event), StatusCode::OK).await?;
+    let response = expect_json(
+        alice.post("/_cokret/self/events").json(event),
+        StatusCode::OK,
+    )
+    .await?;
     if response["status"] != "accepted" && response["status"] != "duplicate" {
         bail!("realm setup event did not commit: {response}");
     }
@@ -139,16 +143,16 @@ fn chaos_realm_event() -> Value {
     event_envelope(
         ACTOR_DID,
         REALM_ID,
-        "cx.realm.create",
+        "ck.realm.create",
         json!({
             "object": {
                 "id": REALM_ID,
-                "schema": "cx.schema.realm.v1",
+                "schema": "ck.schema.realm.v1",
                 "title": "Chaos Midwrite",
                 "summary": "Chaos Midwrite",
                 "trust_domain": "ck:trust_domain:chaos-midwrite.cotest.local",
                 "created_by": ACTOR_DID,
-                "schema_refs": ["cx.schema.realm.v1"],
+                "schema_refs": ["ck.schema.realm.v1"],
                 "default_discoverability": "public",
                 "default_join_rule": "public",
                 "history_visibility": "world_readable",
@@ -175,11 +179,11 @@ fn chaos_message_event() -> Value {
     event_envelope(
         ACTOR_DID,
         REALM_ID,
-        "cx.message.create",
+        "ck.message.create",
         json!({
             "body": "doomed",
             "content": {
-                "kind": "cx.content.text",
+                "kind": "ck.content.text",
                 "body": "doomed"
             },
             "thread_id": "ck:thread:chaos-midwrite"

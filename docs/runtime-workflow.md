@@ -59,7 +59,7 @@ The harness reads these environment variables:
 
 ### Docker image contract
 
-The default image asset is [docker/soland.Dockerfile](/E:/Works/cokret-dev/cotest/docker/soland.Dockerfile:1).
+The default image asset is [docker/soland.Dockerfile](/E:/Works/cokret/cotest/docker/soland.Dockerfile:1).
 It is built from the workspace root one level above `cotest`, because `soland`
 depends on the sibling checkout `cokret-rust-sdk`. The workspace root
 `.dockerignore` trims the build context so Docker only receives the `soland`,
@@ -94,8 +94,8 @@ identical between `process` and `docker` modes.
 
 This script:
 
-- uses `E:\Works\cokret-dev` as the Docker build context by default
-- reads [docker/soland.Dockerfile](/E:/Works/cokret-dev/cotest/docker/soland.Dockerfile:1)
+- uses `E:\Works\cokret` as the Docker build context by default
+- reads [docker/soland.Dockerfile](/E:/Works/cokret/cotest/docker/soland.Dockerfile:1)
 - expects sibling `soland` and `cokret-rust-sdk` checkouts to exist
 - produces `cotest-soland:latest` unless `-ImageTag` overrides it
 - accepts Docker cache controls through `-CacheFrom`, `-CacheTo`, `-Pull`, and
@@ -151,7 +151,7 @@ then stops those processes after the run:
 ```powershell
 .\scripts\run-compose.ps1 `
   -FloriaBaseUrl http://127.0.0.1:5000 `
-  -FloriaCommand '$env:FLORIA_CONF="D:\Works\cokret-dev\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\cokret-dev\floria\Cargo.toml'
+  -FloriaCommand '$env:FLORIA_CONF="D:\Works\cokret\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\cokret\floria\Cargo.toml'
 ```
 
 ### Run in Docker mode

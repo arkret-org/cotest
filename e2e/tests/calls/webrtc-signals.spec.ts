@@ -12,7 +12,7 @@ import {
   postCallSignal,
 } from "../../helpers/webrtc";
 
-test.describe("cx.call.signal v2 signal catalog", () => {
+test.describe("ck.call.signal v2 signal catalog", () => {
   for (const signalType of CALL_SIGNAL_TYPES) {
     test(`${signalType} stores monotonic seq and device_proof`, async ({
       request,

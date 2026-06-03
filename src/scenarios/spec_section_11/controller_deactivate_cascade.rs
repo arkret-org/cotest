@@ -2,9 +2,9 @@
 //!
 //! When the controller principal is deactivated, every agent_principal
 //! it owns MUST cascade through:
-//!     1. `cx.agent.deactivate` per agent
-//!     2. `cx.agent.key.revoke` per outstanding agent_key
-//!     3. `cx.capability.revoke` per attached accountability_grant
+//!     1. `ck.agent.deactivate` per agent
+//!     2. `ck.agent.key.revoke` per outstanding agent_key
+//!     3. `ck.capability.revoke` per attached accountability_grant
 //!     4. runtime endpoint revocation (DID Document service entry removal)
 
 use anyhow::{Result, anyhow};
@@ -12,13 +12,13 @@ use cokret_core::events::kinds::AGENT_DEACTIVATE;
 
 /// Canonical fan-out chain for controller deactivate.
 const CASCADE_KINDS: &[&str] = &[
-    "cx.agent.deactivate",
-    "cx.agent.key.revoke",
-    "cx.capability.revoke",
+    "ck.agent.deactivate",
+    "ck.agent.key.revoke",
+    "ck.capability.revoke",
 ];
 
 pub async fn controller_deactivate_cascade_run() -> Result<()> {
-    if AGENT_DEACTIVATE != "cx.agent.deactivate" {
+    if AGENT_DEACTIVATE != "ck.agent.deactivate" {
         return Err(anyhow!(
             "AGENT_DEACTIVATE event-kind constant drifted from canonical spelling"
         ));

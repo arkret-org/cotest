@@ -33,8 +33,8 @@
 
 ## Pre-conditions
 
-- 三个 DID 都通过 `POST /api/v1/account/register` 注册过 (与现有 `ensureRegistered` 行为一致)
-- 三个 actor 都持有有效 dev session token (`POST /api/v1/auth/dev-login`)
+- 三个 DID 都通过 `POST /_cokret/self/account/register` 注册过 (与现有 `ensureRegistered` 行为一致)
+- 三个 actor 都持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
 - 三个 actor 的 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
 
 ## Steps
@@ -84,7 +84,7 @@
 
 ### Phase E — 三方 anchor frontier 一致
 
-19. 三方各调一次 `GET /api/v1/account/subscribe?catchup=true`(或读 `sync-cursor` testid),分别记录 anchor frontier
+19. 三方各调一次 `GET /_cokret/self/account/subscribe?catchup=true`(或读 `sync-cursor` testid),分别记录 anchor frontier
 20. 断言:三个 frontier 集合一致(忽略 carol 那侧因 history_visibility 被裁掉的部分,只比较 carol 可见的 `M3` 之后的 anchor 集合)
 
 ## Observable assertions (合并清单)
@@ -100,7 +100,7 @@
 
 ## Edge cases / sub-tests
 
-- **E1.1 idempotent invite**:alice 在 Phase C 之前对 carol 连发两次 invite,只产生一个 `cx.invite.create` 事件,后续 accept 仍能成功
+- **E1.1 idempotent invite**:alice 在 Phase C 之前对 carol 连发两次 invite,只产生一个 `ck.invite.create` 事件,后续 accept 仍能成功
 - **E1.2 history_visibility=shared**:同样的步骤改用 `shared` 而不是 `joined`,carol 应该看到 `M1/M2/M2'/tombstone`(`shared` 允许新成员读"应该共享的"历史) — spec §3.4 / §3.7
 - **E1.3 history_visibility=world_readable**:carol 在加入空间**之前**就能通过 `/timeline/${spaceId}` 看到消息(在 spec 里 `world_readable` 允许未加入者读历史) — 这一条要小心,因为它跨过了 join_rule 的 gate
 

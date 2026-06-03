@@ -19,11 +19,11 @@ fn client_claiming_gateway_profile_is_rejected() {
     let table = ProfileRoleTable::load().expect("artifact loads");
     let claims = vec![
         (
-            "cx.profile.chat_mvp.v1".to_owned(),
+            "ck.profile.chat_mvp.v1".to_owned(),
             ClaimKind::CotestVerified,
         ),
         (
-            "cx.profile.push_gateway.v1".to_owned(),
+            "ck.profile.push_gateway.v1".to_owned(),
             ClaimKind::SelfClaimed,
         ),
     ];
@@ -36,7 +36,7 @@ fn client_claiming_gateway_profile_is_rejected() {
             declared_role,
             service_role,
         } => {
-            assert_eq!(profile_id, "cx.profile.push_gateway.v1");
+            assert_eq!(profile_id, "ck.profile.push_gateway.v1");
             assert_eq!(*declared_role, ServiceRole::Gateway);
             assert_eq!(*service_role, ServiceRole::Client);
         }
@@ -51,12 +51,12 @@ fn interop_profile_is_always_acceptable() {
         // `mimi_interop` is the canonical interop bridge; it must be
         // claimable from every role (gateway, server, client, …).
         (
-            "cx.profile.mimi_interop.v1".to_owned(),
+            "ck.profile.mimi_interop.v1".to_owned(),
             ClaimKind::CotestVerified,
         ),
         // `matrix_compat` is also interop.
         (
-            "cx.profile.matrix_compat.v1".to_owned(),
+            "ck.profile.matrix_compat.v1".to_owned(),
             ClaimKind::CotestVerified,
         ),
     ];
@@ -87,11 +87,11 @@ fn client_claiming_chat_and_kanban_mvp_passes() {
     let table = ProfileRoleTable::load().expect("artifact loads");
     let claims = vec![
         (
-            "cx.profile.chat_mvp.v1".to_owned(),
+            "ck.profile.chat_mvp.v1".to_owned(),
             ClaimKind::CotestVerified,
         ),
         (
-            "cx.profile.kanban_mvp.v1".to_owned(),
+            "ck.profile.kanban_mvp.v1".to_owned(),
             ClaimKind::CotestVerified,
         ),
     ];
@@ -115,9 +115,9 @@ fn client_claiming_chat_and_kanban_mvp_passes() {
 fn describe_payload_validates_via_supported_profiles() {
     let describe = json!({
         "supported_profiles": [
-            "cx.profile.chat_mvp.v1",
-            "cx.profile.kanban_mvp.v1",
-            "cx.profile.mimi_interop.v1",
+            "ck.profile.chat_mvp.v1",
+            "ck.profile.kanban_mvp.v1",
+            "ck.profile.mimi_interop.v1",
         ],
     });
     let outcome =
@@ -132,8 +132,8 @@ fn describe_payload_validates_via_supported_profiles() {
 fn describe_with_directory_role_rejects_principal_server_profile() {
     let describe = json!({
         "supported_profiles": [
-            "cx.profile.directory_service.v1",
-            "cx.profile.principal_server.v1",
+            "ck.profile.directory_service.v1",
+            "ck.profile.principal_server.v1",
         ],
     });
     let outcome =

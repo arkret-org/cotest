@@ -220,7 +220,7 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
 fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.realm.policy.v1",
+        "ck.component.realm.policy.v1",
         "cx.realm.01js0sp0000000000000000000",
     );
     // Two anchored Moves concurrently set the cell to distinct values.
@@ -255,7 +255,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
 fn cas_register_single_set_returns_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.realm.policy.v1",
+        "ck.component.realm.policy.v1",
         "cx.realm.01js0sp0000000000000000001",
     );
     let ops = vec![AnchoredOp::new(
@@ -320,7 +320,7 @@ fn membership_fsm() -> Fsm {
 
 fn fsm_legal_transition_advances_state() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("cx.component.member.state.v1", "did.web.alice.example");
+    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
     // Single legal transition: invited → joined.
     let ops = vec![AnchoredOp::new(
         move_id("22"),
@@ -335,7 +335,7 @@ fn fsm_legal_transition_advances_state() -> Result<()> {
 
 fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     let lattice = membership_fsm();
-    let cref = cell("cx.component.member.state.v1", "did.web.alice.example");
+    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
     // Two concurrent transitions claiming distinct `from` states for the
     // same cell — a join of these MUST surface a Bottom because the
     // pre-state can only be one value at a time.
@@ -436,7 +436,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 
 // ──────────────────── Anchorer cell ────────────────────
 //
-// `ck:cell:cx.component.anchorer.v1:<space_id>` is a cas_register holding the
+// `ck:cell:ck.component.anchorer.v1:<space_id>` is a cas_register holding the
 // `AnchorerValue` (single_did | threshold(k/n) | open_set | mixed). Each
 // happy-path test below confirms a single anchored Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
@@ -445,7 +445,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 
 fn anchorer_cell(space_suffix: &str) -> CellRef {
     cell(
-        "cx.component.anchorer.v1",
+        "ck.component.anchorer.v1",
         &format!("cx.realm.01js{space_suffix}000000000000000000"),
     )
 }
@@ -577,7 +577,7 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
 fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.realm.policy.v1",
+        "ck.component.realm.policy.v1",
         "cx.realm.01js0sp0000000000000000000",
     );
     // Anchor view AFTER recovery: only the repair Move's anchored op is in
@@ -603,7 +603,7 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
 fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        "cx.component.realm.policy.v1",
+        "ck.component.realm.policy.v1",
         "cx.realm.01js0sp0000000000000000001",
     );
     // Two concurrent set-Moves where one self-references its own "winner"

@@ -126,7 +126,7 @@ export async function createSpaceApi(
     signedEventEnvelope({
       actorDid: ownerDid,
       realmId,
-      kind: "cx.realm.create",
+      kind: "ck.realm.create",
       createdAt,
       payload: {
         // `plaintext_visible_services` lives on the realm object only — the
@@ -134,12 +134,12 @@ export async function createSpaceApi(
         // it (it stays inside `object` below, which is additionalProperties:true).
         object: {
           id: realmId,
-          schema: "cx.schema.realm.v1",
+          schema: "ck.schema.realm.v1",
           title: data.title,
           summary: data.summary,
           created_by: ownerDid,
           trust_domain: "ck:trust_domain:soland.local",
-          schema_refs: ["cx.schema.realm.v1"],
+          schema_refs: ["ck.schema.realm.v1"],
           default_discoverability:
             data.discoverability ?? (data.public ? "public" : "listed"),
           default_join_rule: "invite",
@@ -174,7 +174,7 @@ export async function createSpaceApi(
       signedEventEnvelope({
         actorDid: ownerDid,
         realmId,
-        kind: "cx.member.state",
+        kind: "ck.member.state",
         payload: {
           actor_id: invitee,
           member: invitee,
@@ -202,7 +202,7 @@ export async function addSpaceMemberApi(
     signedEventEnvelope({
       actorDid,
       realmId: spaceId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: memberDid,
         member: memberDid,
@@ -228,7 +228,7 @@ export async function acceptInviteApi(
     signedEventEnvelope({
       actorDid,
       realmId: spaceId,
-      kind: "cx.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: actorDid,
         membership: "join",
@@ -255,7 +255,7 @@ export async function listInvitesApi(
   }>
 > {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/authz/invites`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/authz/invites`,
     {
       headers: authHeaders(token),
     },
@@ -277,13 +277,13 @@ export async function sendMessageApi(
   const envelope = signedEventEnvelope({
     actorDid,
     realmId: spaceId,
-    kind: "cx.message.create",
+    kind: "ck.message.create",
     createdAt: opts.createdAt,
     payload: {
       flow_id: flowIdFromRealmId(spaceId),
       track_name: "discussion",
       content: {
-        kind: "cx.content.text",
+        kind: "ck.content.text",
         body,
       },
       encrypted: opts.encrypted ?? false,
@@ -308,7 +308,7 @@ export async function querySpaceEventsApi(
 ) {
   const queryParam = spaceId.startsWith("ck:realm:") ? "realms" : "space_id";
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/events?${queryParam}=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/events?${queryParam}=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<Record<string, unknown>>(
@@ -323,7 +323,7 @@ export async function currentActorDidApi(
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/account/me`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/account/me`,
     {
       headers: authHeaders(token),
     },
@@ -344,7 +344,7 @@ export function signedEventEnvelope(
   return {
     event_id: args.eventId ?? typedId("event"),
     kind: args.kind,
-    schema_id: args.schemaId ?? "cx.schema.event.v1",
+    schema_id: args.schemaId ?? "ck.schema.event.v1",
     realm_id: args.realmId,
     actor_id: args.actorDid,
     actor_seq: args.actorSeq ?? nextActorSeq(),
@@ -353,7 +353,7 @@ export function signedEventEnvelope(
     refs: args.refs ?? [],
     ...(args.anchorRef ? { anchor_ref: args.anchorRef } : {}),
     requirements: {
-      schema: ["cx.schema.event.v1"],
+      schema: ["ck.schema.event.v1"],
       features: [],
       critical_extensions: [],
     },
@@ -412,7 +412,7 @@ export async function submitSignedEventApi(
   opts: { server?: SolandKey; context?: string } = {},
 ) {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/api/v1/events`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/events`,
     {
       headers: authHeaders(token),
       data: envelope,
@@ -497,7 +497,7 @@ export async function rawPushFederationOperations(
   },
 ) {
   const destination = opts.destination ?? solandServiceDid(opts.server);
-  const url = `${solandBaseUrl(opts.server)}/api/v1/federation/push-operations`;
+  const url = `${solandBaseUrl(opts.server)}/_cokret/peer/federation/push-operations`;
   const body = stripUndefined({
     origin: opts.origin,
     destination,
@@ -542,7 +542,7 @@ export async function backfillFederationOperations(
   },
 ) {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/api/v1/federation/backfill-operations`,
+    `${solandBaseUrl(opts.server)}/_cokret/peer/federation/backfill-operations`,
     {
       data: {
         peer_url: opts.peerUrl,
@@ -571,7 +571,7 @@ export async function operationFrontierApi(
   opts: { server?: SolandKey } = {},
 ) {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/api/v1/federation/operation-frontier?space_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/peer/federation/operation-frontier?space_id=${encodeURIComponent(spaceId)}`,
   );
   return await expectJsonOk<{
     space_id: string;
@@ -711,11 +711,15 @@ function nextActorSeq(): number {
   return seq;
 }
 
-function sha256CanonicalJson(value: unknown): string {
+// Canonical-JSON — single source of truth for the whole e2e suite. Mirrors
+// soland's wire canonicalizer (object keys sorted by Unicode code point, no
+// whitespace, arrays preserve order, `undefined` members dropped). Other
+// helpers/specs import these instead of hand-copying the algorithm.
+export function sha256CanonicalJson(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
   }

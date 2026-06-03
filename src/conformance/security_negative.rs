@@ -19,7 +19,7 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
     if required_str(&fixture, "suite")? != SUITE {
         bail!("{FIXTURE} suite must be {SUITE}");
     }
-    validate_profile(&fixture, "cx.profile.privacy_security_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.privacy_security_vectors.v1")?;
 
     let cases = fixture
         .get("cases")
@@ -131,20 +131,34 @@ fn verify_event_proof_signature(
         return Err("invalid_signature");
     }
 
-    let jws = proof.get("jws").and_then(Value::as_str).ok_or("invalid_signature")?;
+    let jws = proof
+        .get("jws")
+        .and_then(Value::as_str)
+        .ok_or("invalid_signature")?;
     let parts: Vec<&str> = jws.split('.').collect();
     if parts.len() != 3 || !parts[1].is_empty() {
         return Err("invalid_signature");
     }
-    let header_bytes = URL_SAFE_NO_PAD.decode(parts[0]).map_err(|_| "invalid_signature")?;
+    let header_bytes = URL_SAFE_NO_PAD
+        .decode(parts[0])
+        .map_err(|_| "invalid_signature")?;
     let header: Value = serde_json::from_slice(&header_bytes).map_err(|_| "invalid_signature")?;
     if header.get("alg").and_then(Value::as_str) != Some("EdDSA") {
         return Err("invalid_signature");
     }
-    let sig_bytes = URL_SAFE_NO_PAD.decode(parts[2]).map_err(|_| "invalid_signature")?;
-    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| "invalid_signature")?;
+    let sig_bytes = URL_SAFE_NO_PAD
+        .decode(parts[2])
+        .map_err(|_| "invalid_signature")?;
+    let sig_arr: [u8; 64] = sig_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| "invalid_signature")?;
     let signature = Signature::from_bytes(&sig_arr);
-    let signing_input = format!("{}.{}", parts[0], URL_SAFE_NO_PAD.encode(canonical_bytes.as_bytes()));
+    let signing_input = format!(
+        "{}.{}",
+        parts[0],
+        URL_SAFE_NO_PAD.encode(canonical_bytes.as_bytes())
+    );
     verifying_key
         .verify(signing_input.as_bytes(), &signature)
         .map_err(|_| "invalid_signature")
@@ -215,7 +229,7 @@ fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
             return Ok(SecurityDecision::reject("schema_violation"));
         }
     }
-    if required_str(event, "kind")? == "cx.message.create" {
+    if required_str(event, "kind")? == "ck.message.create" {
         let payload = required_field(event, "payload")?;
         let has_body = ["content", "encrypted_content", "blob_refs"]
             .iter()
@@ -383,13 +397,14 @@ impl SecurityCoverage {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ed25519_dalek::{Signer, SigningKey};
+
+    use super::*;
 
     fn sample_event() -> Value {
         json!({
             "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
-            "kind": "cx.message.create",
+            "kind": "ck.message.create",
             "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
@@ -400,7 +415,7 @@ mod tests {
             "payload": {
                 "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
                 "track_name": "discussion",
-                "content": {"kind": "cx.content.text", "body": "signed body"}
+                "content": {"kind": "ck.content.text", "body": "signed body"}
             }
         })
     }
@@ -411,7 +426,10 @@ mod tests {
         let canonical = canonical_event_payload_string(event).unwrap();
         let header = r#"{"alg":"EdDSA","typ":"JWT"}"#;
         let header_b64 = URL_SAFE_NO_PAD.encode(header.as_bytes());
-        let signing_input = format!("{header_b64}.{}", URL_SAFE_NO_PAD.encode(canonical.as_bytes()));
+        let signing_input = format!(
+            "{header_b64}.{}",
+            URL_SAFE_NO_PAD.encode(canonical.as_bytes())
+        );
         let sig = signing_key.sign(signing_input.as_bytes());
         let sig_b64 = URL_SAFE_NO_PAD.encode(sig.to_bytes());
         json!({
@@ -440,7 +458,13 @@ mod tests {
         let signing_key = SigningKey::from_bytes(&[7u8; 32]);
         let event = sample_event();
         let mut proof = signed_proof(&event, &signing_key);
-        let header_b64 = proof["jws"].as_str().unwrap().split('.').next().unwrap().to_owned();
+        let header_b64 = proof["jws"]
+            .as_str()
+            .unwrap()
+            .split('.')
+            .next()
+            .unwrap()
+            .to_owned();
         let forged_sig = URL_SAFE_NO_PAD.encode([0u8; 64]);
         proof["jws"] = json!(format!("{header_b64}..{forged_sig}"));
         assert_eq!(

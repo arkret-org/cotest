@@ -246,7 +246,7 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
         "identity_events": [
             {
                 "event_id": "ck:event:01904100-0000-7000-8000-00000000ea01",
-                "kind": "cx.member.identity.update",
+                "kind": "ck.member.identity.update",
                 "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
@@ -258,7 +258,7 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
             },
             {
                 "event_id": "ck:event:01904100-0000-7000-8000-00000000ea02",
-                "kind": "cx.member.identity.update",
+                "kind": "ck.member.identity.update",
                 "realm_id": "ck:realm:01904100-0000-7000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
@@ -303,10 +303,10 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
     }
     for event in events_array {
         let kind = event["kind"].as_str().unwrap_or_default();
-        if kind != "cx.member.identity.update" {
+        if kind != "ck.member.identity.update" {
             bail!(
                 "VECT-ROST-3: identity_events[] MUST carry only \
-                 `cx.member.identity.update` events; got kind=`{kind}`"
+                 `ck.member.identity.update` events; got kind=`{kind}`"
             );
         }
     }

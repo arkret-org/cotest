@@ -11,7 +11,7 @@
     {
       "name": "head_in_single_op_resolves_existing_bottom",
       "comment": "Anchor view AFTER recovery: only the repair Move is in scope (the earlier conflict pair was rolled back / superseded by the recovery anchor). cas-register sees a single anchored op ⇒ resolves to Value, clearing the prior Bottom.",
-      "cell_id": "ck:cell:cx.component.realm.policy.v1:cx.realm.01js0sp01000000000000000000",
+      "cell_id": "ck:cell:ck.component.realm.policy.v1:cx.realm.01js0sp01000000000000000000",
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
@@ -47,7 +47,7 @@
     {
       "name": "self_authorising_winner_rejected_at_lattice_layer",
       "comment": "Two concurrent set-Moves where one self-references its own 'winner' capability remain a Bottom at the lattice layer. The cas-register doesn't peek at payload semantics; it sees concurrent writes and surfaces Bottom. Self-authorisation prevention is the AUTH layer's job (verify_move), but the lattice MUST NOT be tricked into picking a winner just because one payload claims authority.",
-      "cell_id": "ck:cell:cx.component.realm.policy.v1:cx.realm.01js0sp02000000000000000000",
+      "cell_id": "ck:cell:ck.component.realm.policy.v1:cx.realm.01js0sp02000000000000000000",
       "concurrent_anchored_ops": [
         {
           "move_id": "ck:event:01970e58-0001-7a13-8013-000000000013",
@@ -73,7 +73,7 @@
     {
       "name": "manual_repair_via_recovery_capability_holder",
       "comment": "Manual repair scenario: an operator with `cap:01js0rc0...` capability picks one of the conflicting values, writes a fresh signed Move that carries `repair_of [move_id_a, move_id_b]`, and the lattice resolves to that single Value. The recovery_capability MUST be issued by the Space's anchorer (no self-authorising loops).",
-      "cell_id": "ck:cell:cx.component.realm.policy.v1:cx.realm.01js0sp03000000000000000000",
+      "cell_id": "ck:cell:ck.component.realm.policy.v1:cx.realm.01js0sp03000000000000000000",
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [
@@ -116,7 +116,7 @@
     {
       "name": "repair_without_recovery_capability_rejected",
       "comment": "A Move with `head_in` but NO `recovery_capability` MUST be rejected at verify_move. The lattice would happily resolve a single op to Value; the AUTH layer is the gate.",
-      "cell_id": "ck:cell:cx.component.realm.policy.v1:cx.realm.01js0sp04000000000000000000",
+      "cell_id": "ck:cell:ck.component.realm.policy.v1:cx.realm.01js0sp04000000000000000000",
       "repair_move": {
         "move_id": "ck:event:01970e58-0001-7a1a-801a-00000000001a",
         "op_type": "set",
@@ -135,7 +135,7 @@
     {
       "name": "repair_head_in_does_not_match_actual_bottom_heads",
       "comment": "head_in declares heads [x, y] but the cell's actual Bottom heads are [a, b]. The Move MUST be rejected (drifted repair target).",
-      "cell_id": "ck:cell:cx.component.realm.policy.v1:cx.realm.01js0sp05000000000000000000",
+      "cell_id": "ck:cell:ck.component.realm.policy.v1:cx.realm.01js0sp05000000000000000000",
       "prior_bottom": {
         "kind": "Conflict",
         "move_ids": [

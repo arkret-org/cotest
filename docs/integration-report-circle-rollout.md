@@ -24,7 +24,7 @@ All ten subprojects landed their `circle-rollout` branch heads at:
 
 cotest then added two P5 commits on top of `e7abf7b`:
 - P5 evidence (journey + fixme-debt + report). Hash recorded in
-  `D:\Works\cokret-dev\_todos_all.md` § 11 after this commit lands.
+  `D:\Works\cokret\_todos_all.md` § 11 after this commit lands.
 
 ## 2. Gate pass timestamps
 
@@ -35,7 +35,7 @@ session under the `circle-rollout` branch convention).
 | gate | meaning | first pass | notes |
 |---|---|---|---|
 | GATE-A | SDK lock (P1 → P2) | 2026-05-26 | `cargo check/test --workspace --all-features` green; spec-drift 0; 7 event kinds + 6 caps + 6 errors all registered |
-| GATE-B | Backend API lock (P2 → P3) | 2026-05-26 | soland `/api/v1/circles/*` exposed; coauth admin cx.circle.* surface live; floria + chime accept `circle_id`; cargo workspaces green across 7 projects |
+| GATE-B | Backend API lock (P2 → P3) | 2026-05-26 | soland `/_cokret/self/circles/*` exposed; coauth admin cx.circle.* surface live; floria + chime accept `circle_id`; cargo workspaces green across 7 projects |
 | GATE-C | End-to-end usable (P3 → P4) | 2026-05-26 | sodmin Circle admin UI + yougen Circle UX both shipped; 920 yougen tests + sodmin wasm build clean |
 | GATE-D | Engineering hygiene (P4 → P5) | 2026-05-26 | all 10 projects have CI, typos, deny.toml, SECURITY.md, CHANGELOG.Unreleased, Dockerfile HEALTHCHECK where applicable |
 | GATE-E | Conformance (P5 → P6) | 2026-05-26 | cotest UJ-A..UJ-I either >= 90% or explicitly deferred (see § 4 and § 5); mock-parity baseline 0; no expired fixme |
@@ -136,15 +136,15 @@ independent of CXP-0007 work:
 - `federation_fixture_suite_matches_reference_semantics` — unknown
   federation fixture case `http_message_signature_digest`
 - `event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics`
-  — `cx.circle.member.state` cell_subject must declare `field` or
+  — `ck.circle.member.state` cell_subject must declare `field` or
   `components[]`
 - `event_kind_payload_coverage_fixture_suite_matches_reference_semantics`
   — `cx.component.device.authorized.v1` (group=or_set_families) absent in
-  live registry (renamed → `cx.component.device.authorization.v1`)
+  live registry (renamed → `ck.component.device.authorization.v1`)
 - `artifact_registry_suite_matches_reference_semantics` — same family
   rename
 - `schema_validation_suite_matches_reference_semantics` — pointer
-  `/properties/blob_ref` does not exist on `cx.schema.media_metadata.v1#thumbnails`
+  `/properties/blob_ref` does not exist on `ck.schema.media_metadata.v1#thumbnails`
 
 These were present at HEAD `e7abf7b` (P4 close) before P5 began. They are
 caused by spec rename collisions between the canonical registry artifacts

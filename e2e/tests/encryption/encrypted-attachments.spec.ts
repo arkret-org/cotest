@@ -3,7 +3,7 @@
 // Spec refs:
 //   - crypto-media/media-and-blob.md §3 (encrypted metadata), §5 (authz + download), §5.1 (no plaintext content-type), §6 (asset privacy)
 //   - crypto-media/encryption-and-audit.md §2.3.1 (key_ref MLS)
-//   - crypto-media/audited-e2ee.md §3-§4 (franking, cx.audit.accessed)
+//   - crypto-media/audited-e2ee.md §3-§4 (franking, ck.audit.accessed)
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -42,7 +42,7 @@ test.describe("encrypted attachments", () => {
     const token = await issueDevSession(request, alice);
 
     // Probe endpoints
-    const putResp = await request.post(`${solandBaseUrl()}/api/v1/blob/put`, {
+    const putResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/put`, {
       headers: { authorization: `Bearer ${token}` },
       data: { space_id: "ck:space:probe", media_type: "application/octet-stream" },
     });
@@ -51,7 +51,7 @@ test.describe("encrypted attachments", () => {
 
     const probeBlobRef = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     const getResp = await request.get(
-      `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(probeBlobRef)}&purpose=download`,
+      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(probeBlobRef)}&purpose=download`,
       {},
     );
     // Spec §5: non-existent and unauthorized must look the same — opaque 403/404.
@@ -95,7 +95,7 @@ test.describe("encrypted attachments", () => {
       media_type: "application/octet-stream",
     };
 
-    const upload = await request.post(`${solandBaseUrl()}/api/v1/blob/upload`, {
+    const upload = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
       headers: {
         ...authHeaders(aliceToken),
         "content-type": "image/png",
@@ -118,7 +118,7 @@ test.describe("encrypted attachments", () => {
     expect(JSON.stringify(body.upload_receipt)).not.toContain("image/png");
 
     const bobDownload = await request.get(
-      `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
+      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
       { headers: authHeaders(bobToken) },
     );
     if (!bobDownload.ok()) {
@@ -134,7 +134,7 @@ test.describe("encrypted attachments", () => {
     expect(Buffer.compare(bobBytes, ciphertext)).toBe(0);
     expect(sha256Digest(bobBytes)).toBe(ciphertextDigest);
 
-    const presign = await request.post(`${solandBaseUrl()}/api/v1/blob/presign`, {
+    const presign = await request.post(`${solandBaseUrl()}/_cokret/self/blob/presign`, {
       headers: authHeaders(aliceToken),
       data: { blob_ref: body.blob_ref, purpose: "message_attachment" },
     });
@@ -142,7 +142,7 @@ test.describe("encrypted attachments", () => {
     expect(wireErrCode(await presign.json())).toBe("capability_denied");
 
     const malloryDownload = await request.get(
-      `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
+      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,
       { headers: authHeaders(malloryToken) },
     );
     expect(malloryDownload.status()).toBe(404);
@@ -154,7 +154,7 @@ test.describe("encrypted attachments", () => {
     expect(deniedText).not.toContain(body.blob_ref);
 
     const missing = await request.get(
-      `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(
+      `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(
         "ck:blob:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       )}&purpose=message_attachment`,
       { headers: authHeaders(malloryToken) },
@@ -173,7 +173,7 @@ test.describe("encrypted attachments", () => {
     // @blocking-on: soland#encryption-encrypted-attachments-gap
     // @user-promise: e2e/scenarios/encryption/encrypted-attachments.md
     // @expected-live-by: 2026Q3
-    "E12.4 audited E2EE: cx.moderation.franking_proof receipt visible to audit agent without revealing plaintext",
+    "E12.4 audited E2EE: ck.moderation.franking_proof receipt visible to audit agent without revealing plaintext",
     async () => {
       // spec: audited-e2ee.md §4
     },

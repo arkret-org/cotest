@@ -2,7 +2,7 @@
 
 ## 目标
 
-`Acme` Organization 拥有一个 organization moderation policy(`cx.organization.moderation_policy`);Acme 的 space `S_acme` 默认继承该 policy(deny_join、deny_write 规则);space-level policy 可以 override 但要走 governance approval。
+`Acme` Organization 拥有一个 organization moderation policy(`ck.organization.moderation_policy`);Acme 的 space `S_acme` 默认继承该 policy(deny_join、deny_write 规则);space-level policy 可以 override 但要走 governance approval。
 
 ## Spec 锚点
 
@@ -18,7 +18,7 @@
 
 | 名字 | 角色 |
 |---|---|
-| acme-org | Organization,持 `cx.policy.manage` 顶层 capability |
+| acme-org | Organization,持 `ck.policy.manage` 顶层 capability |
 | alice | Organization member + space owner |
 | bob | Acme member |
 | mallory | 非 Acme 成员 |
@@ -28,14 +28,14 @@
 ### Phase A — Setup organization
 
 1. 测试 harness 注册 organization DID `did:web:acme.example`
-2. acme-org 提交 `cx.organization.moderation_policy`,payload `{ targets: [{ kind: "actor", did: mallory.did, action: "deny_join" }], content_filters: [], appeal: { enabled: true } }`
-3. 断言:`GET /api/v1/organizations/acme/policy` 返回该 policy
+2. acme-org 提交 `ck.organization.moderation_policy`,payload `{ targets: [{ kind: "actor", did: mallory.did, action: "deny_join" }], content_filters: [], appeal: { enabled: true } }`
+3. 断言:`GET /_cokret/self/organizations/acme/policy` 返回该 policy
 
 ### Phase B — alice 在 Acme 下建 space
 
 4. alice 持 Acme membership;alice createSpace `S_acme`,关联到 `acme-org.did`
 5. soland reducer:`S_acme.organization_ref = acme-org.did`
-6. 断言:space `S_acme` 上的 policy chain 含 organization 层(可通过 `GET /api/v1/spaces/<S>/effective-policy` 查)
+6. 断言:space `S_acme` 上的 policy chain 含 organization 层(可通过 `GET /_cokret/self/spaces/<S>/effective-policy` 查)
 
 ### Phase C — mallory 被 organization 层 deny_join
 
@@ -45,7 +45,7 @@
 
 ### Phase D — Space-level override
 
-10. alice 觉得 mallory 特殊情况要放行;在 `S_acme` 层提交 `cx.realm.moderation_policy { allow_override: [{ target: mallory.did, action: "allow_join" }] }`
+10. alice 觉得 mallory 特殊情况要放行;在 `S_acme` 层提交 `ck.realm.moderation_policy { allow_override: [{ target: mallory.did, action: "allow_join" }] }`
 11. 但 spec 可能要求 override organization policy 必须有 `cx.organization.override_approval` 由 acme-org 签 → 验证这个 gating
 12. (sub-test:无 approval)reducer 拒 alice 的 override;reason `requires_organization_approval`
 13. (sub-test:有 approval)acme-org 签 approval → reducer 接受;mallory 现在能 join
@@ -68,8 +68,8 @@
 
 ## Implementation notes
 
-- **soland 已落地**:`/api/v1/organizations` 提供本地 organization registry/policy surface;`cx.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/api/v1/spaces/{id}/effective-policy` 返回 organization layers、fanout space list、Space override。
-- **join gate 已落地**:`cx.member.state{membership="join"}` 会读取 inherited organization policy,命中 `deny_join` target 时返回 `organization_policy_denied`。
+- **soland 已落地**:`/_cokret/self/organizations` 提供本地 organization registry/policy surface;`cx.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/_cokret/self/spaces/{id}/effective-policy` 返回 organization layers、fanout space list、Space override。
+- **join gate 已落地**:`ck.member.state{membership="join"}` 会读取 inherited organization policy,命中 `deny_join` target 时返回 `organization_policy_denied`。
 - **override approval 已落地**:Space 级 `allow_join` override 若覆盖组织 `deny_join`,必须携带 `organization_approval`;否则返回 `requires_organization_approval`。
 - **yougen directory 已落地**:Organization directory tab 会显示 verified badge、member count,并根据 linked Realm 数量提示 organization policy inheritance 状态。
 

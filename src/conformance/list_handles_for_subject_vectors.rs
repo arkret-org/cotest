@@ -1,13 +1,13 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — `cx.directory.list_handles_for_subject`
+//! R3.2 spec-sync (cokret-spec @ b56cab1) — `ck.directory.list_handles_for_subject`
 //! conformance vectors (VECT-COT-3).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.0` +
 //! `artifacts/schemas/list-handles-for-subject-response.schema.json`
-//! (`cx.schema.list_handles_for_subject_response.v1`).
+//! (`ck.schema.list_handles_for_subject_response.v1`).
 //!
 //! The operation is the inverse of `resolve_handle` (handle → subject):
 //! given a holder/principal DID it returns the current context-visible
-//! signed `cx.schema.handle_claim.v1` set. The response schema enforces
+//! signed `ck.schema.handle_claim.v1` set. The response schema enforces
 //! `claims[].subject == subject` (byte-equal); mismatches MUST drop or fail
 //! closed (exercised through
 //! [`DirectoryListHandlesForSubjectResBody::validate`]).

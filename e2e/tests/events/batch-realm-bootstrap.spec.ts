@@ -1,5 +1,5 @@
 // Contract: e2e/scenarios/events/batch-realm-bootstrap.md
-// Regression guard for cx.events.submit batch responses and Realm creator
+// Regression guard for ck.events.submit batch responses and Realm creator
 // membership materialization.
 
 import { expect, test } from "@playwright/test";
@@ -20,7 +20,7 @@ import {
 } from "../../helpers/users";
 
 test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
-  test("batch cx.realm.create returns JSON and owner can write immediately", async ({
+  test("batch ck.realm.create returns JSON and owner can write immediately", async ({
     request,
   }) => {
     const alice = uniqueUser("events-batch-alice");
@@ -34,19 +34,19 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const createEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "cx.realm.create",
+      kind: "ck.realm.create",
       createdAt,
       payload: {
         // realm_create_payload root is additionalProperties:false; the field
         // lives on the realm object (additionalProperties:true) below.
         object: {
           id: realmId,
-          schema: "cx.schema.realm.v1",
+          schema: "ck.schema.realm.v1",
           title: `Batch bootstrap ${Date.now()}`,
           summary: "cotest batch realm bootstrap fixture",
           created_by: alice.did,
           trust_domain: "ck:trust_domain:soland.local",
-          schema_refs: ["cx.schema.realm.v1"],
+          schema_refs: ["ck.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",
           history_visibility: "shared",
@@ -62,7 +62,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       },
     });
 
-    const response = await request.post(`${solandBaseUrl()}/api/v1/events`, {
+    const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(aliceToken),
       data: {
         events: [createEnvelope],

@@ -2,7 +2,7 @@
 //!
 //! Pins:
 //!   1. `PROFILE_AGENT_SIDECAR_THREAD` is spelled exactly per registry
-//!      (`cx.profile.agent_sidecar_thread.v1`).
+//!      (`ck.profile.agent_sidecar_thread.v1`).
 //!   2. The home-policy constant carries the canonical value `context_realm_preferred` (B-F).
 //!   3. `SidecarCircleId` round-trips through the SDK validator.
 //!   4. The 3 sidecar capability actions are all present and form a cohesive ensure / write /
@@ -17,7 +17,7 @@ use cokret_core::{
 
 pub async fn agent_sidecar_thread_run() -> Result<()> {
     // (1) Profile id pinned to the registry spelling.
-    if PROFILE_AGENT_SIDECAR_THREAD != "cx.profile.agent_sidecar_thread.v1" {
+    if PROFILE_AGENT_SIDECAR_THREAD != "ck.profile.agent_sidecar_thread.v1" {
         return Err(anyhow!(
             "PROFILE_AGENT_SIDECAR_THREAD spelling drifted: {PROFILE_AGENT_SIDECAR_THREAD}"
         ));
@@ -60,7 +60,7 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
         return Err(anyhow!("sidecar capability action trio has duplicates"));
     }
 
-    // TODO(P4-impl): exercise live `POST /api/v1/agents/{id}/sidecar-
+    // TODO(P4-impl): exercise live `POST /_cokret/self/agents/{id}/sidecar-
     // thread/ensure` against a soland server. The endpoint MUST be
     // idempotent (same controller/agent pair returns the same
     // sidecar_circle_id). Pending soland P2-impl deterministic Circle

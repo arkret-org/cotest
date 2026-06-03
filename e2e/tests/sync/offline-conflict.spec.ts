@@ -222,7 +222,7 @@ async function submitRealmTitleUpdate(
     signedEventEnvelope({
       actorDid,
       realmId: spaceId,
-      kind: "cx.realm.update",
+      kind: "ck.realm.update",
       anchorRef,
       payload: {
         target_ref: spaceId,

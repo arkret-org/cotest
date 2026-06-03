@@ -15,7 +15,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("account auth + device flow", () => {
   test("auth refresh endpoint surface probe", async ({ request }) => {
-    const probe = await request.post(`${solandBaseUrl()}/api/v1/auth/refresh`, {
+    const probe = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/refresh`, {
       data: { refresh_token: "probe-token" },
     });
     // 4xx for bad token / not implemented; 5xx is a bug.
@@ -23,7 +23,7 @@ test.describe("account auth + device flow", () => {
   });
 
   test("expired access token returns 401 on protected endpoint", async ({ request }) => {
-    const meResp = await request.get(`${solandBaseUrl()}/api/v1/account/me`, {
+    const meResp = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
       headers: { authorization: `Bearer expired-or-bogus-token` },
     });
     expect([401, 403]).toContain(meResp.status());
@@ -33,7 +33,7 @@ test.describe("account auth + device flow", () => {
     // @blocking-on: soland#identity-account-device-auth-gap
     // @user-promise: e2e/scenarios/identity/account-device-auth.md
     // @expected-live-by: 2026Q3
-    "alice registers via OIDC bridge (mock IdP); coauth issues short-term cx.session.grant + refresh_token",
+    "alice registers via OIDC bridge (mock IdP); coauth issues short-term ck.session.grant + refresh_token",
     async () => {
       // spec: account-lifecycle.md §2.1, key-management.md §6
       // harness gap: mock IdP service.
@@ -54,7 +54,7 @@ test.describe("account auth + device flow", () => {
     // @blocking-on: soland#identity-account-device-auth-gap
     // @user-promise: e2e/scenarios/identity/account-device-auth.md
     // @expected-live-by: 2026Q3
-    "expired access token triggers /api/v1/auth/refresh; new session_grant issued without re-OIDC",
+    "expired access token triggers /_cokret/gate/auth/refresh; new session_grant issued without re-OIDC",
     async () => {
       // spec: key-management.md §6 refresh path.
     },

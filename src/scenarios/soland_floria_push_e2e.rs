@@ -5,11 +5,12 @@
 //!
 //! Goal:
 //!   1. Alice's chime-like client registers a push device with soland (the principal server) using
-//!      the standard `cx.push.register_device` operation. soland forwards the registration to
+//!      the standard `ck.push.register_device` operation. soland forwards the registration to
 //!      floria (the push gateway) per the principal/push bridge contract.
 //!   2. A message-creation event in a Space alice is in triggers soland's notify rule.
-//!   3. Soland calls floria's `POST /api/v1/push/notify` with a blind-wakeup envelope (no sender
-//!      DID, no message body, no Space id — only `push_target_id`, `wakeup_kind`, and `devices[]`).
+//!   3. Soland calls floria's `POST /_cokret/edge/push/notify` with a blind-wakeup envelope (no
+//!      sender DID, no message body, no Space id — only `push_target_id`, `wakeup_kind`, and
+//!      `devices[]`).
 //!   4. Floria's `custom` pushkin dispatches to a mock HTTPS receiver we stand up in-process; the
 //!      receiver MUST observe exactly one POST whose body satisfies §4.5 blind-wakeup invariants.
 //!
@@ -29,7 +30,7 @@
 //! [`crate::scenarios::_helpers::external_binary::skip_reason`] so a missing
 //! binary surfaces as a descriptive `bail!` rather than a hang.
 
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -73,7 +74,7 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     let floria_gateway_url = floria.base_url().to_owned();
 
     // 3. Spawn soland configured with floria as its outbound push gateway. Soland reads
-    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `cx.push.notify` calls. The helper
+    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `ck.push.notify` calls. The helper
     //    keeps SOLAND_SPEC.extra_env and layers this per-run URL on top.
     let _soland = match try_spawn_with_extra_env(
         &SOLAND_SPEC,
@@ -95,7 +96,7 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     bail!(
         "TODO(CT-7): helper-level wiring is unblocked and live services were spawned \
          (floria={floria_gateway_url}, receiver={receiver_url}); finish the service API \
-         steps by (a) POSTing `cx.push.register_device` for alice, \
+         steps by (a) POSTing `ck.push.register_device` for alice, \
          (b) writing a bob→alice message event, (c) waiting on \
          `receiver.next_notification()` and asserting blind-wakeup invariants per §4.5: \
          - `notification.push_target_id` is a per-(principal,device,push_route) pseudonym \
@@ -197,49 +198,23 @@ fn handle_request(mut stream: TcpStream, notifications: Arc<Mutex<Vec<Value>>>) 
             Ok(0) => break,
             Ok(n) => {
                 buffer.extend_from_slice(&chunk[..n]);
-                if request_complete(&buffer) {
+                if crate::scenarios::_helpers::mock_http::request_complete(&buffer) {
                     break;
                 }
             }
             Err(_) => break,
         }
     }
-    if let Some(body) = parse_json_body(&buffer) {
+    if let Some(body) = crate::scenarios::_helpers::mock_http::parse_json_body(&buffer) {
         notifications.lock().unwrap().push(body);
     }
     // Floria's custom pushkin expects a 200 with `{"rejected": []}` to mark
     // the delivery as successful (no push token retraction).
-    let response_body = json!({"rejected": []}).to_string();
-    let response = format!(
-        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-        response_body.len(),
-        response_body
+    crate::scenarios::_helpers::mock_http::write_json_response(
+        &mut stream,
+        200,
+        &json!({"rejected": []}),
     );
-    let _ = stream.write_all(response.as_bytes());
-}
-
-fn request_complete(buffer: &[u8]) -> bool {
-    let Some(header_end) = buffer.windows(4).position(|w| w == b"\r\n\r\n") else {
-        return false;
-    };
-    let body_start = header_end + 4;
-    let headers = String::from_utf8_lossy(&buffer[..header_end]);
-    let content_length = headers
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse::<usize>().ok())
-                .flatten()
-        })
-        .unwrap_or(0);
-    buffer.len() >= body_start + content_length
-}
-
-fn parse_json_body(buffer: &[u8]) -> Option<Value> {
-    let header_end = buffer.windows(4).position(|w| w == b"\r\n\r\n")?;
-    let body = &buffer[header_end + 4..];
-    serde_json::from_slice(body).ok()
 }
 
 /// §4.5 blind-wakeup invariant checks — exported for use by the live wiring

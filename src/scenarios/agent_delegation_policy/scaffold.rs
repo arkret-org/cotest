@@ -89,7 +89,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
 
     // TODO(P4-impl): walk a controller → agent grant attach + detach
     // through the reducer, verifying that each capability action
-    // produces a corresponding `cx.capability.grant` / `cx.capability.revoke`
+    // produces a corresponding `ck.capability.grant` / `ck.capability.revoke`
     // pair. Pending soland P2-impl reducer wiring + accountability_grant
     // projection.
 

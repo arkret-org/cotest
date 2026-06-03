@@ -43,7 +43,7 @@ pub async fn act_on_behalf_attribution_run() -> Result<()> {
             "authorization_ref must be an accountability_grant typed id"
         ));
     }
-    // TODO(P4-impl): drive a real `cx.message.create` envelope through
+    // TODO(P4-impl): drive a real `ck.message.create` envelope through
     // the SDK with the triple set; assert the reducer accepts it +
     // stamps `actor_kind=Agent` (rejecting any client-supplied value).
     Ok(())
