@@ -407,7 +407,7 @@ test.describe("conformance encoding vectors", () => {
   test("§1.4 sync cursor stable across re-reduce + opaque to clients", async ({
     request,
   }) => {
-    const vector = vectorById("cx.vector.encoding.cursor_opaque.v1");
+    const vector = vectorById("ck.vector.encoding.cursor_opaque.v1");
     expect(
       vector,
       "encoding-fixture vector cursor_opaque.v1 missing",
@@ -547,7 +547,7 @@ test.describe("conformance encoding vectors", () => {
       `${solandBaseUrl()}/_cokret/self/conformance/redact`,
       {
         data: {
-          vector_id: "cx.vector.redaction.owner_view.synthetic.v1",
+          vector_id: "ck.vector.redaction.owner_view.synthetic.v1",
           event,
           redaction,
           viewer_did: ownerDid,
@@ -566,7 +566,7 @@ test.describe("conformance encoding vectors", () => {
       `${solandBaseUrl()}/_cokret/self/conformance/redact`,
       {
         data: {
-          vector_id: "cx.vector.redaction.guest_view.synthetic.v1",
+          vector_id: "ck.vector.redaction.guest_view.synthetic.v1",
           event,
           redaction,
           viewer_did: guestDid,

@@ -55,9 +55,9 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
             .as_array()
             .expect("local extension operation list");
     for extension in [
-        "cx.extension.soland.index.query",
-        "cx.extension.soland.push.rules",
-        "cx.extension.soland.webrtc.create_session",
+        "ck.extension.soland.index.query",
+        "ck.extension.soland.push.rules",
+        "ck.extension.soland.webrtc.create_session",
     ] {
         assert!(
             local_extensions.iter().any(|op| op == extension),

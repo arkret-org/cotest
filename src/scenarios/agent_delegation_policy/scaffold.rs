@@ -5,7 +5,7 @@
 //! The sub-test here pins:
 //!   1. all 14 actions are present in `AGENT_CAPABILITY_ACTIONS`.
 //!   2. every action is well-formed (snake_case, no whitespace, dot- delimited, prefixed
-//!      `cx.agent.`).
+//!      `ck.agent.`).
 //!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
 //!   4. an `accountability_grant` typed-id round-trips through the SDK validator.
@@ -40,9 +40,9 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
 
     // (2) Per-action well-formedness.
     for action in AGENT_CAPABILITY_ACTIONS {
-        if !action.starts_with("cx.agent.") {
+        if !action.starts_with("ck.agent.") {
             return Err(anyhow!(
-                "capability action `{action}` MUST start with cx.agent."
+                "capability action `{action}` MUST start with ck.agent."
             ));
         }
         if action.contains(char::is_whitespace) {

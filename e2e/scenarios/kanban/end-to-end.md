@@ -45,7 +45,7 @@
 
 6. alice 进 board,点 "Add list" 三次,分别命名 `Todo`、`In Progress`、`Done`
 7. 每次 yougen 提交 `ck.space.create`:`{ kind: "list", parent_space_id: boardId, title }`
-8. 内部:通过 `GET /_cokret/self/spaces/{boardId}/cells/cx.component.child_order.v1` 暴露 list 顺序
+8. 内部:通过 `GET /_cokret/self/spaces/{boardId}/cells/ck.component.child_order.v1` 暴露 list 顺序
 9. 断言:board 视图渲染三列(`list-column` testid × 3),按创建顺序排列
 
 ### Phase D — 在 Todo 加两个 Card
@@ -62,7 +62,7 @@
     - 提交 `ck.flow.move`(Move kind,cas-register)
     - precondition:Card A 当前在 `Todo` list 的 `child_order` cell 中(state_witness)
     - effect:从 `Todo.child_order` 移除,插入 `InProgress.child_order` 末尾
-    - 可选同时 `cx.flow.update.fields = { status: "in_progress" }`
+    - 可选同时 `ck.flow.update.fields = { status: "in_progress" }`
 16. soland reducer 接受 → 双 cell 更新原子
 17. 断言:刷新后 Card A 在 In Progress 列,Todo 列只剩 Card B
 18. 断言:`fields.status` 字段也更新
@@ -111,7 +111,7 @@
 
 ## Implementation notes
 
-- **soland**:`ck.space.create/update/archive` Space-container 投影已支持 Board/List rank;P1-031 暴露 `cx.component.child_order.v1` 读取面。
+- **soland**:`ck.space.create/update/archive` Space-container 投影已支持 Board/List rank;P1-031 暴露 `ck.component.child_order.v1` 读取面。
 - **yougen**:`/kanban` 视图已稳定 `kanban-column`、`column-drag-handle`、`column-drop-target-before`、`kanban-column-title`;列拖拽后提交 `ck.space.update` rank patch 让 server `child_order` 与 UI 顺序一致。
 - **harness**:Playwright 的 drag-and-drop 用 `locator.dragTo(target)`;但 dioxus 的拖拽可能需要 mouse event sequence(`mouse.down`/`mouse.move`/`mouse.up`)
 

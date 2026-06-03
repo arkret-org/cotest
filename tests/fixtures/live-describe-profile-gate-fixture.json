@@ -1,6 +1,6 @@
 {
   "suite": "live_describe_profile_gate",
-  "profile": "cx.profile.live_describe_profile_gate_vectors.v1",
+  "profile": "ck.profile.live_describe_profile_gate_vectors.v1",
   "cases": [
     {
       "name": "soland_principal_claim_with_scaffold_limitation_is_rejected",
@@ -99,8 +99,8 @@
         "development_mode": false,
         "receipt_signing_key_stable": false,
         "profiles": [
-          "cx.identity.webvh.v1",
-          "cx.identity.registry.v1"
+          "ck.identity.webvh.v1",
+          "ck.identity.registry.v1"
         ]
       }
     },

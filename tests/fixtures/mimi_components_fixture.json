@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.mimi_components_vectors.v1",
+  "profile": "ck.profile.mimi_components_vectors.v1",
   "version": "2026-05-07",
   "comment": "MIMI <-> Cokret policy-component round-trip vectors per spec/v1/zh/extensions/mimi-interop.md §9.1 (component_type translation) + §9.2 (criticality translation). Each vector either declares a bidirectional mapping or marks a Cokret-only component that the facade must emit as application/vnd.cokret.component+json with appropriate MIMI unknown-handling. Round-trip means: (a) a Cokret component_type emitted to MIMI must round-trip back to the same component_type when ingested; (b) criticality preserved on both legs.",
   "criticality_mapping": {

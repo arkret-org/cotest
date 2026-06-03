@@ -61,7 +61,7 @@
    - `owner` — Space 的 owner DID，对应 spec `created_by` / actor 主体引用
    - `members` — 数组，至少含 `owner`
    - `deleted` — boolean，对应 spec `lifecycle_state`（`false` ⇒ 等价 `active`）
-4. **alice** 调 `GET /_cokret/self/events?spaces=${spaceId}&limit=20`，断言响应 `events[]` 至少有一条 `event_kind` 形如 `cx.space.*`（典型 `ck.space.create` / `cx.space.lifecycle`），且每条 event 都携带：
+4. **alice** 调 `GET /_cokret/self/events?spaces=${spaceId}&limit=20`，断言响应 `events[]` 至少有一条 `event_kind` 形如 `ck.space.*`（典型 `ck.space.create` / `ck.space.lifecycle`），且每条 event 都携带：
    - `event_id` — 对应 spec Event Envelope `event_id`
    - `created_at` — RFC 3339 timestamp，对应 spec `created_at`
    - `sender` — DID，对应 spec `actor_id`
@@ -73,7 +73,7 @@
 6. **alice** 在 `spaceId` 内创建一个 Flow `F`（`POST /_cokret/self/realms/${spaceId}/flows`，或 `POST /_cokret/self/events` 提交 `ck.flow.create`），记录 `flowId` 与初始 `fields.status = "open"`。
 7. **alice** 发一个 `ck.flow.update` Move，`preconditions[].head_eq` 指向**陈旧**的 `prev_revision`（例如 `expected_revision: 0`，但服务端当前 revision 已经 ≥ 1，或者把 `fields.status` 的预期值故意写错为 `"closed"` 而当前态是 `"open"`）。
 8. 断言：HTTP 4xx + `error_code = "failed_precondition"` + `reason` 来自 spec §5.1 reason-code 表或 `event-and-patch.md` §4.2.4 reducer 失败枚举。
-9. 断言：再次 `GET /_cokret/self/realms/${spaceId}/flows/${flowId}`，`fields.status` 仍然是步骤 6 写入的初值；任何 cell（`cx.component.flow.fields.v1` 等）的 head 都没有被该失败 Move 触动——验证 spec §2.2 "preconditions 与 effects 同步原子"。
+9. 断言：再次 `GET /_cokret/self/realms/${spaceId}/flows/${flowId}`，`fields.status` 仍然是步骤 6 写入的初值；任何 cell（`ck.component.flow.fields.v1` 等）的 head 都没有被该失败 Move 触动——验证 spec §2.2 "preconditions 与 effects 同步原子"。
 
 ### Phase C — Cascade / archive / delete（fixme，需要 soland lifecycle reducer）
 
@@ -133,7 +133,7 @@
 ## Implementation notes
 
 - **soland 当前覆盖**：Phase A 的 `GET /_cokret/self/spaces/{space_id}` 走 `SpaceLifecycleResponse`（`wire.rs`），实际 wire 字段是 `ok` / `space_id` / `owner` / `members` / `deleted`，**不**包含 `created_at` 与显式 `lifecycle_state`——这些字段从 events query (`/_cokret/self/events?spaces=...`) 中的 event item 上读 `created_at` / `sender` / `event_kind` 三项，再加 `event_id`，凑齐 spec §3 公共字段语义的最低 4 项。后续若 soland 在 `SpaceLifecycleResponse` 中补 `created_at` / `state` 字段，Phase A 的 assertion 应直接迁移到 spaces endpoint，不再依赖 events query 兜底。
-- **soland gap**：Phase B 的 patch precondition 路径需要 soland 暴露通用 Move endpoint（带 `preconditions[].head_eq`）；当前只有零散的 cell 更新通道，未统一到 `cx.events` 提交路径。主流程标 `test.fixme`，并在 fixme body 中以 `request.post(...)` 形态 sketch 出预期调用。
+- **soland gap**：Phase B 的 patch precondition 路径需要 soland 暴露通用 Move endpoint（带 `preconditions[].head_eq`）；当前只有零散的 cell 更新通道，未统一到 `ck.events` 提交路径。主流程标 `test.fixme`，并在 fixme body 中以 `request.post(...)` 形态 sketch 出预期调用。
 - **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
 - **soland gap**：Phase D Relation cardinality 检查需要 soland 实现 `ck.relation.create` reducer 与 `has_default_view` 基数表；当前 `routing/spaces/relation.rs` 存在但 cardinality enforcement 弱。整 phase 标 fixme。
 - **soland gap**：Phase E `/_cokret/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → flow 派生"的 path。整 phase 标 fixme。

@@ -151,7 +151,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(exported["schema"], "cx.export.space.v1");
+    assert_eq!(exported["schema"], "ck.export.space.v1");
     let sent_operation_id =
         sent["event_id"]
             .as_str()

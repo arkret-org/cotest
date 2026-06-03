@@ -176,7 +176,7 @@ fn collect_declared_profiles(profiles: &Value) -> Result<BTreeSet<String>> {
     }
     for field in MIXED_PROFILE_FIELDS {
         for profile in string_array_field(profiles, field)? {
-            if profile.starts_with("cx.profile.") {
+            if profile.starts_with("ck.profile.") {
                 validate_profile_id(profile)?;
                 declared.insert(profile.to_owned());
             }
@@ -229,7 +229,7 @@ fn collect_profile_requirements(
         let cotest_suites = collect_cotest_suites(requirement, profile)?;
 
         for extension in string_array_field(requirement, "optional_extensions")? {
-            if extension.starts_with("cx.profile.") && !declared_profiles.contains(extension) {
+            if extension.starts_with("ck.profile.") && !declared_profiles.contains(extension) {
                 bail!("{profile} references unknown optional profile {extension}");
             }
         }
@@ -394,7 +394,7 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
     }
 
     let unknown = json!({
-        "supported_profiles": ["cx.profile.not_registered.v1"],
+        "supported_profiles": ["ck.profile.not_registered.v1"],
         "supported_operations": [],
     });
     if validate_server_claims_against_matrix(&unknown, matrix).is_ok() {
@@ -440,7 +440,7 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
     }
 
     let limited_supported = json!({
-        "supported_profiles": ["cx.profile.soland_limited_server.v1"],
+        "supported_profiles": ["ck.profile.soland_limited_server.v1"],
         "supported_operations": [],
     });
     if validate_server_claims_against_matrix(&limited_supported, matrix).is_ok() {
@@ -452,7 +452,7 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
         "supported_operations": [],
         "unsupported_profiles": [
             {
-                "profile": "cx.profile.soland_limited_server.v1",
+                "profile": "ck.profile.soland_limited_server.v1",
                 "status": "unsupported",
                 "reason": "limited profile is not a conformance claim"
             }
@@ -613,7 +613,7 @@ fn is_failed_conformance_status(status: &str) -> bool {
 }
 
 fn is_limited_profile(profile: &str) -> bool {
-    profile.starts_with("cx.profile.")
+    profile.starts_with("ck.profile.")
         && profile.ends_with(".v1")
         && (profile.contains(".limited_")
             || profile.contains("_limited_")
@@ -671,7 +671,7 @@ fn sorted_values(values: &BTreeSet<String>) -> Vec<String> {
 }
 
 fn validate_profile_id(profile: &str) -> Result<()> {
-    if !profile.starts_with("cx.profile.") || !profile.ends_with(".v1") {
+    if !profile.starts_with("ck.profile.") || !profile.ends_with(".v1") {
         bail!("invalid profile id {profile}");
     }
     Ok(())

@@ -9,7 +9,7 @@
 - `models/flow-and-message.md` §5 — `discussion_space_ref` 字段
 - `models/flow-and-message.md` §5.1 — Track / discussion_space_ref 关系图
 - `models/flow-and-message.md` §4.3 — Discussion track(不支持 hybrid 访问)
-- `models/space-hierarchy.md` §3-§4 — `cx.space.child`/`ck.space.parent` confirmed edge
+- `models/space-hierarchy.md` §3-§4 — `ck.space.child`/`ck.space.parent` confirmed edge
 - `models/space-hierarchy.md` §3.4(可继承的能力 bundles)
 - `discovery/read-receipts.md` §2.5 — Disclosure scope override
 
@@ -40,7 +40,7 @@
 6. yougen 客户端:
    - 创建新 Space `S_discussion`:`ck.space.create`,parent_space_id = `S_parent`
    - 更新 `F1`:`ck.flow.update`,`discussion_space_ref = S_discussion.id`
-   - 父子边互相确认:`cx.space.child`(在 `S_parent` 写入)+ `ck.space.parent`(在 `S_discussion` 写入)
+   - 父子边互相确认:`ck.space.child`(在 `S_parent` 写入)+ `ck.space.parent`(在 `S_discussion` 写入)
    - 两条边都 status=active 后,reducer 标记 edge `confirmed`(spec §3-§4)
 7. 断言:`F1` 详情 UI 提示 "Discussion moved to child space `S_discussion`"
 
@@ -83,13 +83,13 @@
 
 - **E21.1 子 Space 不存在**:alice 把 `discussion_space_ref` 指向不存在的 space → reducer 拒绝 `ck.flow.update`,reason `orphan_discussion_space_ref`
 - **E21.2 切换 primary track**:升级后 alice 切回原 `inline` discussion → spec §4.6 切换规则,但**不**删除已有 messages
-- **E21.3 父子边未确认**:alice 只写了 `cx.space.child` 但 reducer 未收到 `ck.space.parent`(假设网络问题)→ edge 状态 `unconfirmed`,继承策略不应用
+- **E21.3 父子边未确认**:alice 只写了 `ck.space.child` 但 reducer 未收到 `ck.space.parent`(假设网络问题)→ edge 状态 `unconfirmed`,继承策略不应用
 - **E21.4 E2EE 父 + 非 E2EE 子**:父 `S_parent` 是 E2EE,子 `S_discussion` 是 plain text → spec §9 要求 parent 的 MLS key MUST NOT 解 child,验证密钥独立
 - **E21.5 跨服务器子 Space**:`S_parent` 在 α、`S_discussion` 在 β → 联邦 hierarchy(与 federation/cross-server 联动)
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.flow.update.discussion_space_ref`、`cx.space.child`/`parent` 双向 confirm、cross-space 消息路由 — partial
+- **soland 缺口**:`ck.flow.update.discussion_space_ref`、`ck.space.child`/`parent` 双向 confirm、cross-space 消息路由 — partial
 - **yougen 缺口**:"Promote discussion" 按钮、跨 space 拼接 comments 显示、子 Space 切换 policy UI
 
 ## 总耗时预估

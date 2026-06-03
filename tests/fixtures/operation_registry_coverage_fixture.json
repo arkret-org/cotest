@@ -71,7 +71,7 @@
   "negative_vectors": [
     {
       "name": "orphaned_operation_no_surface_group",
-      "synthetic_operation_id": "cx.totally.fake_op",
+      "synthetic_operation_id": "ck.totally.fake_op",
       "drift": { "kind": "operation_not_in_any_surface_group" },
       "expected": { "outcome": "reject", "reason_code": "operation_orphaned" }
     },
@@ -84,8 +84,8 @@
     },
     {
       "name": "capability_action_target_event_kind_does_not_exist",
-      "synthetic_action": "cx.fake.action",
-      "synthetic_target_event_kind": "cx.totally.fake.kind.v1",
+      "synthetic_action": "ck.fake.action",
+      "synthetic_target_event_kind": "ck.totally.fake.kind.v1",
       "drift": { "kind": "target_event_kind_dangling" },
       "expected": { "outcome": "reject", "reason_code": "target_event_kind_unknown" }
     }

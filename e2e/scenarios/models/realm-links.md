@@ -42,7 +42,7 @@
 1. **alice** 通过 `/setup` 创建 governance Realm `G`：
    - title = `"models/realm-links Gov Realm ${stamp}"`
    - realm_kind = `governance`（profile 标签；在没有专用 UI 时由测试直接调 soland API 创建）
-2. **alice** 在 G 中写一条 moderation policy（`cx.policy.moderation`），含 `banned_keywords = ["forbidden-word-${stamp}"]`，并在同一 Realm 内发 `ck.realm.inheritance_policy` 允许下游 `governed_by` 子 Realm 继承该 moderation rule（narrow-only）。
+2. **alice** 在 G 中写一条 moderation policy（`ck.policy.moderation`），含 `banned_keywords = ["forbidden-word-${stamp}"]`，并在同一 Realm 内发 `ck.realm.inheritance_policy` 允许下游 `governed_by` 子 Realm 继承该 moderation rule（narrow-only）。
 3. 断言：`realm-overview-panel` 显示 `realmId` 形如 `ck:realm:...`，记录 `govRealmId`；G 的 effective policy 中含 `banned_keywords` 且 `inheritable = true`。
 
 ### Phase B — 创建 team Realm T + 声明 governed_by link

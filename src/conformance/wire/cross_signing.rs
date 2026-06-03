@@ -11,7 +11,7 @@ use crate::conformance::{required_str, validate_profile};
 /// emoji code.
 pub fn run_device_verification_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("device_verification_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.device_verification_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.device_verification_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -173,7 +173,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
 /// user-signing requires re-anchor.
 pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("device_cross_signing_trust_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.device_cross_signing_trust_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.device_cross_signing_trust_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

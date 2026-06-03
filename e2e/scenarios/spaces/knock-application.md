@@ -5,7 +5,7 @@
 验证 spec §3.6 申请-审核路径 ("knock"):
 
 1. applicant 通过 `ck.member.state{knock}` 敲门 + `member.application` 提交结构化答案
-2. reviewer (持 `cx.space.join.review` capability) 通过 `member.application.review{accept|reject}` 决策
+2. reviewer (持 `ck.space.join.review` capability) 通过 `member.application.review{accept|reject}` 决策
 3. reducer 校验 `ck.invite.create.refs[role="join_authorised_by"]` 链(MSC3083 借鉴的担保模式)
 4. reject 后 `cooldown_after_reject`(默认 72h) 内同一 actor 再申请被 reducer 拒绝
 5. application 正文只对 reviewer 可见,Matrix knock.reason spam 通道被堵
@@ -33,7 +33,7 @@
 
 | 名字 | DID | 角色 | capability |
 |---|---|---|---|
-| alice | `did:web:alice-s6-<uuid>.example` | space owner + reviewer | owner 默认 + `cx.space.join.review` |
+| alice | `did:web:alice-s6-<uuid>.example` | space owner + reviewer | owner 默认 + `ck.space.join.review` |
 | bob | `did:web:bob-s6-<uuid>.example` | applicant (会被 accept) | (无) |
 | mallory | `did:web:mallory-s6-<uuid>.example` | applicant (会被 reject,进入 cooldown) | (无) |
 | eve | `did:web:eve-s6-<uuid>.example` | 旁观成员;验证 application 正文不可见 | 成员默认 capability |
@@ -41,7 +41,7 @@
 ## Pre-conditions
 
 - 四个 DID 都注册过、都有有效 dev session token
-- alice 持有 `cx.space.moderate` (owner) 和 `cx.space.join.review`
+- alice 持有 `ck.space.moderate` (owner) 和 `ck.space.join.review`
 
 ## Steps
 
@@ -74,7 +74,7 @@
        }
      ],
      "combinator": "all",
-     "review_capability": "cx.space.join.review",
+     "review_capability": "ck.space.join.review",
      "reviewer_quorum": "any",
      "application_ttl": "168h",
      "cooldown_after_reject": "72h",
@@ -95,7 +95,7 @@
    - `policy_version = <step 2 写入时 cell value 的 canonical hash>`
    - `answers = [{ question_id: "q1", value: "我想加入这个 space 学习协议设计" }]`
 7. 断言 (隐私 §3.2 #2 / §3.6.2 `applicant_visibility="reviewer_only"`):
-   - **eve** (普通成员,**无** `cx.space.join.review`) 调用 list-applications endpoint → 看不到 bob 的 application
+   - **eve** (普通成员,**无** `ck.space.join.review`) 调用 list-applications endpoint → 看不到 bob 的 application
    - eve 直接读 application event 的 payload → 服务端按 Sync Service 强制访问控制拒绝 / 字段被遮盖
    - **mallory** (非成员) 同样看不到
 8. 断言 (审计 §3.2 #2):eve 即使 API 路径看到了 event id,Sync Service 必须留下 `ck.audit.accessed` 记录
@@ -118,7 +118,7 @@
 13. **bob** 提交 `ck.invite.accept`,引用 step 12 invite
 14. 断言 reducer 校验 (§3.6.5 第 3 步):
     - 被引用的 review accept 仍指向 step 6 application
-    - alice 在当前 frontier 仍持有 `cx.space.join.review`
+    - alice 在当前 frontier 仍持有 `ck.space.join.review`
     - application 未过 `application_ttl`(168h)
     - application 未被后续 reject/cancel 覆盖
 15. bob 进入 `membership=join` 状态;断言 alice、eve 的成员列表都看到 bob
@@ -166,8 +166,8 @@
 
 - **E6.4 max_open_applications_per_actor**:bob 在 step 6 完成后,在 alice review 之前再发一个 application → 被拒(超出 `max_open_applications_per_actor=1`)
 - **E6.5 application_ttl 超时**:把 `application_ttl` 改成 `1s`,等几秒后 alice 才 review accept → reducer 拒绝(application 已 expired)
-- **E6.6 reviewer 失去 capability**:alice review accept 之后,通过另一 admin 撤销 alice 的 `cx.space.join.review`,然后 alice 提交 `ck.invite.create` 引用该 review → reducer 在写入 invite 时**再次** 校验 reviewer capability(§3.6.5 #3),发现 alice 已无 cap,拒绝 invite
-- **E6.7 reviewer_quorum > any**:把 policy 改成 `reviewer_quorum = { threshold: 2, of: [alice.did, eve.did] }`,只 alice accept 时 application 状态停留在 `pending_quorum`;eve(临时被 grant `cx.space.join.review`)第二个 accept 才进入 `accepted`
+- **E6.6 reviewer 失去 capability**:alice review accept 之后,通过另一 admin 撤销 alice 的 `ck.space.join.review`,然后 alice 提交 `ck.invite.create` 引用该 review → reducer 在写入 invite 时**再次** 校验 reviewer capability(§3.6.5 #3),发现 alice 已无 cap,拒绝 invite
+- **E6.7 reviewer_quorum > any**:把 policy 改成 `reviewer_quorum = { threshold: 2, of: [alice.did, eve.did] }`,只 alice accept 时 application 状态停留在 `pending_quorum`;eve(临时被 grant `ck.space.join.review`)第二个 accept 才进入 `accepted`
 - **E6.8 cooldown gate**:join_policy 改成包含 `cooldown` kind gate(`min_interval_since_leave`),`bob` 主动 leave 后立即重新申请 → 被 cooldown gate 拒绝(独立于 `combinator`,见 §3.3.1 末行)
 
 ## Implementation notes
@@ -183,7 +183,7 @@
 
 ## 风险 / 前置依赖
 
-- spec §3.1 明确说 "当前 v1 core 的 active 机器 contract 仍以 `cx.space.join_rule`、`cx.space.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 registry"。也就是说 **`ck:cell:space.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 v1 registry 里是候选状态**,soland 实现到没到这一步是开放问题。
+- spec §3.1 明确说 "当前 v1 core 的 active 机器 contract 仍以 `ck.space.join_rule`、`ck.space.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 registry"。也就是说 **`ck:cell:space.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 v1 registry 里是候选状态**,soland 实现到没到这一步是开放问题。
 - 如果 soland 没实现,这条 scenario 只能停在 spec 文档,等 soland 跟进。**写测试代码之前必须先确认 soland 这边的实现度**。
 
 ## 总耗时预估

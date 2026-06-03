@@ -159,7 +159,7 @@ test.describe("account onboarding", () => {
     "principal control space is created (purpose=principal_control); first device registered via ck.device.authorize; cross-signing PSK/SSK/USK published",
     async () => {
       // spec: key-management.md §5.0.1 (4-step bootstrap)
-      // soland gap: cx.profile.principal_control_space.v1 profile; cx.cross_signing.publish.v1.
+      // soland gap: ck.profile.principal_control_space.v1 profile; ck.cross_signing.publish.v1.
     },
   );
 

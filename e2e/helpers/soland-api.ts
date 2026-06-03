@@ -447,7 +447,7 @@ export function makeOperation(args: {
   payload: Record<string, unknown>;
 }) {
   return {
-    schema: "cx.local.operation_draft.v1",
+    schema: "ck.local.operation_draft.v1",
     operation_id: args.operationId ?? typedId("operation"),
     type: "operation",
     operation_type: args.operationType ?? "create",

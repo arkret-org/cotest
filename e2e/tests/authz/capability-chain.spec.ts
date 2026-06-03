@@ -89,7 +89,7 @@ test.describe("capability chain @fully-implemented", () => {
     }
   });
 
-  test("alice grants bob cx.space.write_message with expires_at=+1h; the grant is effective via /authz/check", async ({
+  test("alice grants bob ck.space.write_message with expires_at=+1h; the grant is effective via /authz/check", async ({
     browser,
     request,
   }) => {
@@ -318,12 +318,12 @@ test.describe("capability chain @fully-implemented", () => {
       expect(parentResp.status()).toBe(200);
       const parent = await parentResp.json();
 
-      // bob tries to delegate `cx.space.moderate` to carol — bob doesn't hold it.
+      // bob tries to delegate `ck.space.moderate` to carol — bob doesn't hold it.
       const childResp = await createGrant(request, bobToken, {
         space_id: spaceId,
         subject: carol.did,
         resource: "*",
-        actions: ["cx.space.moderate"],
+        actions: ["ck.space.moderate"],
         expires_at: plusSeconds(1800),
         delegated_from: parent.grant_id,
       });

@@ -3,7 +3,7 @@
 //! Spec (round 2+3 cleanup, T16 — Late key recovery state machine):
 //!
 //! When an actor has been **removed from a Realm** (membership tombstoned)
-//! and a late `cx.key.share` arrives for an MLS epoch the actor was no
+//! and a late `ck.key.share` arrives for an MLS epoch the actor was no
 //! longer a member of at the originating event's HLC, the receiver MUST
 //! refuse to decrypt and MUST surface the error code
 //! `late_recovery_rejected_membership`.
@@ -34,7 +34,7 @@ pub const EXPECTED_REASON: &str = "late_recovery_rejected_membership";
 /// canonical registry recognises it.
 ///
 /// The live end-to-end test that boots soland, revokes membership, and
-/// posts a late `cx.key.share` can layer on top of this local contract
+/// posts a late `ck.key.share` can layer on top of this local contract
 /// without weakening the always-on error-code gate.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
     if ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP != EXPECTED_REASON {

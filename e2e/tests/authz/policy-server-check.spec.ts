@@ -99,7 +99,7 @@ test.describe("policy server check", () => {
     const denied = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
       data: {
         actor: bob.did,
-        action: "cx.space.write_message",
+        action: "ck.space.write_message",
         resource: {
           kind: "space",
           id: spaceId,
@@ -304,7 +304,7 @@ test.describe("policy server check", () => {
         await request.post(`${solandBaseUrl()}/_cokret/self/org/state`, {
           headers: { authorization: `Bearer ${aliceToken}` },
           data: {
-            kind: "cx.org.policy_server",
+            kind: "ck.org.policy_server",
             endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=org`,
             fail_mode: "closed",
             cache_ttl_ms: 0,

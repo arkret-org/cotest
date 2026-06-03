@@ -23,7 +23,7 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
     `unsupported_feature` / `schema_violation` / quarantine;`requirements.critical_extensions[]`
     不支持时 fail closed 优先级高于 "可忽略可选功能";`default_unsupported_behavior` 是
     conformance lint 机读来源
-  - §3 — 通用强制要求(标准 `cx.*` kind MUST 注册、auth 不可豁免、`causal` 关系
+  - §3 — 通用强制要求(标准 `ck.*` kind MUST 注册、auth 不可豁免、`causal` 关系
     fail-closed)
 - `cokret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — `claimed_profiles` /
   `verified_profiles` 分区 wire 形态、`claim_kind` 枚举、`development_mode=true` MUST
@@ -85,7 +85,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 ### Phase B — 未声明的标准 event kind fail-closed
 
 6. **harness** 从 `event-kind-registry.json` 挑一个 active durable 但 soland
-   claimed profile 不覆盖的 kind(候选 `cx.applet.transaction.v1` ↔
+   claimed profile 不覆盖的 kind(候选 `ck.applet.transaction.v1` ↔
    `ck.profile.applet_service.v1`,后者不在 soland claimed 列表)
 7. alice 注册 + dev-login
 8. `POST /_cokret/self/events/submit` `{ kind: "<unsupported_kind>", ...minimal payload... }`
@@ -125,8 +125,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
     profile_tiers.extension_profile_implementation`(并集 — `mimi_interop` 属 extension
     tier,不在 stable catalog 但在 `implementation_profiles` 中)
 19. 断言 `claimed_profiles[].profile_id` ⊆ `catalog_known`(零容忍 typo,例如
-    `cx.profile.principal-server.v1`)
-20. **不**把 `unsupported_profiles[]`(如 `cx.profile.soland_limited_server.v1`)纳入
+    `ck.profile.principal-server.v1`)
+20. **不**把 `unsupported_profiles[]`(如 `ck.profile.soland_limited_server.v1`)纳入
     检查 — 这类是 limitation descriptor,不是 conformance claim,也不必出现在 catalog
 
 ## Observable assertions
@@ -146,7 +146,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
   每条 entry MUST 携带 `cotest_run_id` / `artifact_digest` / `artifact_ref` /
   `cotest_issuer_did` / `signature` / `timestamp`;Phase A 的 entry-shape 断言提前钉住未来形态
 - **E3 `unsupported_profiles` 不参与 claim**:Phase E 验证
-  `cx.profile.soland_limited_server.v1` 等 limitation descriptor **不**在
+  `ck.profile.soland_limited_server.v1` 等 limitation descriptor **不**在
   `claimed_profiles` 中,且**不**要求出现在 catalog 中
 - **E4 catalog 自洽性**:`v1_profile_catalog ⊆ implementation_profiles`,作为 lint;
   不是 server 断言
@@ -156,7 +156,7 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
 ## Implementation notes
 
 - **soland 现状**:`apply_claim_level_partition` 已经实现 T6.1 partition;
-  `claimed_profiles` 4 条 `cx.profile.{core_event_store, principal_server,
+  `claimed_profiles` 4 条 `ck.profile.{core_event_store, principal_server,
   principal_server_events_api, mimi_interop}.v1`(最后一条带 `notes`),
   `verified_profiles` dev mode 下 `Vec::new()` 由 `validate` 硬性约束 — Phase A /
   D / E 可立即 live

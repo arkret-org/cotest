@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.snapshot_v1_tampered_merkle_vectors.v1",
+  "profile": "ck.profile.snapshot_v1_tampered_merkle_vectors.v1",
   "version": "2026-05-18",
   "comment": "CT-3 — verifies that a server (or client) MUST reject a snapshot whose chunk content has been mutated, even when a local Merkle branch is recomputed to be self-consistent against the mutated chunk. Spec authority: cokret-spec/spec/v1/zh/conformance/snapshot-schema.md §3 (chunk descriptor.sha256 covers chunk payload canonical JSON bytes), §4 (state_digest MUST be the canonical Merkle root over reducer output leaves), §5 (signature covers manifest payload), §6 (event_set_commitment.root + merkle_branch inclusion proofs). The signed manifest pins state_digest, event_set_commitment.root and each chunk.sha256 — recomputing a local Merkle branch from a mutated chunk does not recover the signed root, so the snapshot MUST be rejected. Spec note: snapshot-schema.md does not currently use the field name 'audit_path'; the normative inclusion-proof field is `merkle_branch` (§6). The errcode is `digest_mismatch` per error-code-registry.json (canonical entry for content/digest verification failure).",
   "encoder": {

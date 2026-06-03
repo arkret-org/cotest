@@ -6,12 +6,12 @@ use serde_json::{Value, json};
 use super::{emit_vector, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// Round-21 — Discovery profile (`cx.profile.discovery.v1`) black-box
+/// Round-21 — Discovery profile (`ck.profile.discovery.v1`) black-box
 /// vectors covering tier filtering and post-C16 surface naming.
 ///
 /// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
 /// `capability_tiers`. The fixture asserts:
-///   * core surfaces are implied by claiming `cx.profile.cokret_v1.core` — events_sync /
+///   * core surfaces are implied by claiming `ck.profile.cokret_v1.core` — events_sync /
 ///     identity_registry / service_discovery MUST appear and the discovery client MAY call ops in
 ///     those surfaces;
 ///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST

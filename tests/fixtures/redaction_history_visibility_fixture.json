@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.redaction_history_visibility_vectors.v1",
+  "profile": "ck.profile.redaction_history_visibility_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "B2 Round 24 — redaction reducer × history_visibility composition vectors. Spec authority: data-structures/redaction.md + data-structures/history-visibility.md + authz/event-auth-state-resolution.md. The redaction reducer produces a tombstone (kind=ck.message.redact) that supersedes the target event; history_visibility (cell ck.component.realm.history_visibility.v1) controls who SEES a redacted event vs a fully-removed event vs the original. Authors of the redacted event ALWAYS see it (consent + audit). Members see the tombstone only. world_readable visibility removes the event entirely (no tombstone surface) since non-members cannot prove membership consent. Reverse-redaction is a Move that removes the tombstone (causal or-set remove of the redaction op_id), re-exposing the original.",
@@ -91,7 +91,7 @@
     },
     {
       "name": "reverse_redaction_re_exposes_original",
-      "comment": "A reverse-redaction Move (cx.message.unredact) issues a causal or_set_remove against the redaction op_id; the original event must be re-exposed. The history_visibility setting governs the post-revert view in the same way the pre-redaction view was governed.",
+      "comment": "A reverse-redaction Move (ck.message.unredact) issues a causal or_set_remove against the redaction op_id; the original event must be re-exposed. The history_visibility setting governs the post-revert view in the same way the pre-redaction view was governed.",
       "history_visibility": "shared",
       "viewer_role": "member",
       "viewer_did": "did:web:bob.example",
@@ -109,7 +109,7 @@
       },
       "unredaction_move": {
         "move_id": "ck:event:01970e58-0b01-7a01-8b01-000000000032",
-        "kind": "cx.message.unredact",
+        "kind": "ck.message.unredact",
         "actor_id": "did:web:alice.example",
         "removes": ["ck:event:01970e58-0b01-7a01-8b01-000000000031"]
       },

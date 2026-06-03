@@ -1,6 +1,6 @@
 {
   "suite": "agent_payloads",
-  "profile": "cx.profile.agent_payload_vectors.v1",
+  "profile": "ck.profile.agent_payload_vectors.v1",
   "schema_ref": "ck.schema.event_payload.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/event-payload.schema.json",
   "comment": "R3 sync (cokret-spec @ b47ff6ec) — minimal payload shapes for the new agent event kinds. Live reducer wiring is R3.1; this fixture only pins wire-shape.",

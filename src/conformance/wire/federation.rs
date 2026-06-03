@@ -10,7 +10,7 @@ use crate::conformance::{required_str, validate_profile};
 /// cross-space rejection.
 pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("multi_space_federation_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.multi_space_federation_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.multi_space_federation_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

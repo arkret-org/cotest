@@ -30,7 +30,7 @@ use crate::conformance::{canonical_json, required_str, validate_profile};
 ///   * `reject` Moves carry `reason_code=consent_required` and always have no matching active tag
 pub fn run_consent_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("consent_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.consent_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.consent_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -163,8 +163,8 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                 }
                 _ => {
-                    // Downstream Move (cx.invite.send / ck.message.send /
-                    // cx.call.invite ...) carrying a `consent_active`
+                    // Downstream Move (ck.invite.send / ck.message.send /
+                    // ck.call.invite ...) carrying a `consent_active`
                     // precondition. Resolve precondition against the
                     // consent.grant.v1 cell join.
                     let preconditions = mv
@@ -269,7 +269,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
 /// encoder change is caught loudly.
 pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_subject_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.composite_state_subject_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.composite_state_subject_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -374,7 +374,7 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_key_encoding_fixture.json")?;
     validate_profile(
         &fixture,
-        "cx.profile.composite_state_key_encoding_vectors.v1",
+        "ck.profile.composite_state_key_encoding_vectors.v1",
     )?;
 
     let vectors = fixture

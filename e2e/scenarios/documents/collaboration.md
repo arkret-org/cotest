@@ -63,7 +63,7 @@
 ## Follow-up edge cases
 
 - **D1 并发同位置编辑**:alice/bob 同时插入不同内容,UI 需显示冲突或合并结果。
-- **D2 real-time cursor presence**:`cx.presence` ephemeral 从 alice 传播到 bob,1s 内显示 remote cursor。
+- **D2 real-time cursor presence**:`ck.presence` ephemeral 从 alice 传播到 bob,1s 内显示 remote cursor。
 - **D3 proof-backed restore**:`ck.morph.update` 带 `state_witness` + `inclusion_proof` 恢复历史版本。
 - **D4 encrypted document edit**:MLS epoch 变化期间 document cells 仍可合并。
 - **D5 retention purge**:被 retention GC 的历史版本恢复应失败并显示 `anchor_purged_by_retention`。

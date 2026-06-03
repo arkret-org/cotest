@@ -254,7 +254,7 @@ test.describe("notifications", () => {
         encryption_profile: "mls_rfc9420",
       });
       await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-      const rules = await request.put(`${solandBaseUrl()}/_cokret/self/account_data/cx.push_rules`, {
+      const rules = await request.put(`${solandBaseUrl()}/_cokret/self/account_data/ck.push_rules`, {
         headers: authHeaders(bobToken),
         data: {
           content: {
@@ -283,7 +283,7 @@ test.describe("notifications", () => {
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],
           encrypted_content: encryptedEnvelope(
-            "cx.message.v1",
+            "ck.message.v1",
             "opaque-ciphertext-for-sealed-keyword",
             spaceId,
           ),

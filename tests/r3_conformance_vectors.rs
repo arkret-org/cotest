@@ -170,8 +170,8 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
         );
         for id in ids {
             assert!(
-                id.starts_with("cx.vector."),
-                "{label} id must live in cx.vector registry namespace: {id}"
+                id.starts_with("ck.vector."),
+                "{label} id must live in ck.vector registry namespace: {id}"
             );
             assert!(seen.insert(*id), "duplicate conformance vector id: {id}");
         }

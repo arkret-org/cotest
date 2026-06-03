@@ -29,7 +29,7 @@
 //!   `compute_audit_policy_version_digest(...)` whose argument list has fewer than 4 arguments.
 //!
 //! ## event-kind envelope split
-//! * **`ObjectOnlyKindAsEventKind`** — `cx.event_batch_receipt` is object-only; if it appears as
+//! * **`ObjectOnlyKindAsEventKind`** — `ck.event_batch_receipt` is object-only; if it appears as
 //!   `Event.kind` it is a violation.
 //! * **`EphemeralKindAsDurableEvent`** — 12 `wire_scope=ephemeral_event` kinds MUST NOT be durable
 //!   events.
@@ -58,8 +58,8 @@ pub const DID_METHOD_SEGMENT_REGEX: &str = r"^did:[a-z0-9]+:[^\s]+$";
 /// submitted via `ck.events.submit` as durable events.
 pub const EPHEMERAL_ONLY_KINDS: &[&str] = &[
     "ck.call.signal",
-    "cx.presence",
-    "cx.typing",
+    "ck.presence",
+    "ck.typing",
     "ck.receipt.read",
     "ck.key.verification.start",
     "ck.key.verification.ready",
@@ -72,7 +72,7 @@ pub const EPHEMERAL_ONLY_KINDS: &[&str] = &[
 ];
 
 /// Object-only kinds that MUST NOT appear as durable `Event.kind`.
-pub const OBJECT_ONLY_KINDS: &[&str] = &["cx.event_batch_receipt"];
+pub const OBJECT_ONLY_KINDS: &[&str] = &["ck.event_batch_receipt"];
 
 /// Hard ceiling for `relaxed_window_max_ms`.
 pub const RELAXED_WINDOW_MAX_MS_CEILING: u64 = 300_000;
@@ -813,7 +813,7 @@ mod tests {
 
     #[test]
     fn flags_event_batch_receipt_as_event_kind() {
-        let f = scan(r#"let kind = "cx.event_batch_receipt";"#);
+        let f = scan(r#"let kind = "ck.event_batch_receipt";"#);
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::ObjectOnlyKindAsEventKind)
@@ -822,7 +822,7 @@ mod tests {
 
     #[test]
     fn flags_ephemeral_kind_in_events_submit() {
-        let f = scan(r#"client.ck.events.submit(&[Event{ kind: "cx.presence", ... }]);"#);
+        let f = scan(r#"client.ck.events.submit(&[Event{ kind: "ck.presence", ... }]);"#);
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::EphemeralKindAsDurableEvent)

@@ -269,7 +269,7 @@ fn report_with_services(services: Vec<ServiceCertificationEntry>) -> StackCertif
     // authoritative pass/fail signal.
     let profile_gate = build_profile_gate_report().ok();
     StackCertificationReport {
-        schema: "cx.cotest.live_stack_certification_report.v1".to_owned(),
+        schema: "ck.cotest.live_stack_certification_report.v1".to_owned(),
         generated_at: chrono::Utc::now().to_rfc3339(),
         services,
         profile_gate,

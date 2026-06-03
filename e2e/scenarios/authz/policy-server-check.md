@@ -116,7 +116,7 @@
 ## Edge cases / sub-tests
 
 - **E3.1 policy server 超时 fail-closed**:通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入 `{ delay_ms: 9000 }`(超过 soland 的 policy check timeout,假设默认 2s);soland 应 fail-closed(`decision = deny`,reason `policy_timeout`),邀请被拒;`/inspect.checks` 可能为空(请求未到 mock)或带 partial 标记
-- **E3.2 多个 policy_source 优先级**:在 realm `ck.realm.policy_server` 之上,再给 alice 当 owner 的 org 设一条 `cx.org.policy_server`(指向同一 mock 的不同 path,如 `/_cokret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)
+- **E3.2 多个 policy_source 优先级**:在 realm `ck.realm.policy_server` 之上,再给 alice 当 owner 的 org 设一条 `ck.org.policy_server`(指向同一 mock 的不同 path,如 `/_cokret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)
 - **E3.3 cache_ttl 幂等**:cache_ttl_ms = 5000 时,在 5 秒内对**同一** `{actor, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
 
 (E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)

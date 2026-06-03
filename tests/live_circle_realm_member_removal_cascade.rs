@@ -9,7 +9,7 @@
 //!      the same Realm.
 //!   3. Register actor `X` and add X as a Realm member; also add X to both Circles
 //!      (`ck.circle.member.state → active`).
-//!   4. Admin issues `cx.realm.cx.member.state → left` for actor X. Assert: a) X's Realm membership
+//!   4. Admin issues `ck.realm.ck.member.state → left` for actor X. Assert: a) X's Realm membership
 //!      flips to `left` in soland's projection, b) X's membership in BOTH `circle_alpha` AND
 //!      `circle_beta` is auto-flipped to `left` (CXP-0007 strict-subset cascade: any Circle
 //!      membership is invalid when the actor leaves the parent Realm, so the reducer MUST emit
@@ -17,7 +17,7 @@
 //!      *remove proposal* + commit pair: verify the Circle's `mls_group_ref` epoch advanced (the
 //!      projection exposes the epoch number on `Circle.mls_group_ref` or via a sibling field once
 //!      P5 finalises), d) a sync request from an actor that IS still in the Circle no longer sees X
-//!      in the Circle's `cx.circle.members` projection.
+//!      in the Circle's `ck.circle.members` projection.
 //!
 //! Gating mirrors the existing `#[ignore]` live tests; the bootstrap is
 //! soft-skipped via a descriptive `bail!` when the stack cannot start.
@@ -158,7 +158,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
 
     bail!(
         "TODO(P5/CXP-0007): live-stack wiring for Realm-member-left → Circle cascade \
-         is scaffolded; finalise once soland exposes the `cx.realm.cx.member.state` \
+         is scaffolded; finalise once soland exposes the `ck.realm.ck.member.state` \
          and `ck.circle.member.state` projections + MLS epoch field. Expected \
          assertions: (a) X.realm.state=left, (b/c) X.circle.alpha.state=left + \
          X.circle.beta.state=left within 5s, (d/e) MLS epoch advanced exactly once \

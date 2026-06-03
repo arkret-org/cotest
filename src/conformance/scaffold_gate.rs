@@ -9,7 +9,7 @@ use crate::transcripts::record_vector_event;
 const SCAFFOLD_FIXTURE: &str = "scaffold-profile-gate-fixture.json";
 const SCAFFOLD_FIXTURE_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 const LIVE_DESCRIBE_FIXTURE: &str = "live-describe-profile-gate-fixture.json";
-const LIVE_DESCRIBE_FIXTURE_PROFILE: &str = "cx.profile.live_describe_profile_gate_vectors.v1";
+const LIVE_DESCRIBE_FIXTURE_PROFILE: &str = "ck.profile.live_describe_profile_gate_vectors.v1";
 
 const FULL_PROFILE_CLAIMS: &[&str] = &[
     "ck.profile.principal_server_events_api.v1",

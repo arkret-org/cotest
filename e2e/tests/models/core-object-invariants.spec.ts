@@ -111,10 +111,10 @@ test.describe("core object invariants", () => {
 
         // Find the Space lifecycle / create event — soland writes lifecycle
         // ops via record_space_lifecycle_operation, so the kind is in the
-        // cx.realm.* family. We accept any cx.realm.* event_kind to stay
+        // ck.realm.* family. We accept any ck.realm.* event_kind to stay
         // resilient to soland's exact lifecycle op naming.
         const lifecycleEvent =
-          events.find((event) => event.event_kind?.startsWith("cx.realm.")) ?? events[0];
+          events.find((event) => event.event_kind?.startsWith("ck.realm.")) ?? events[0];
         expect(lifecycleEvent).toBeTruthy();
         // Common-field (Event Envelope §2.2): event_id.
         expect(lifecycleEvent.event_id).toMatch(/^ck:event:/);
@@ -184,13 +184,13 @@ test.describe("core object invariants", () => {
           kind: "ck.flow.update",
           preconditions: [
             {
-              cell: `ck:cell:cx.component.flow.fields.v1:${flowId}`,
+              cell: `ck:cell:ck.component.flow.fields.v1:${flowId}`,
               predicate: { op: "head_eq", value: { "fields.status": "closed" } },
             },
           ],
           effects: [
             {
-              cell: `ck:cell:cx.component.flow.fields.v1:${flowId}`,
+              cell: `ck:cell:ck.component.flow.fields.v1:${flowId}`,
               op: { kind: "set", value: { "fields.status": "done" } },
             },
           ],

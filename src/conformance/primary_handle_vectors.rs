@@ -22,29 +22,29 @@ use cokret_core::Did;
 use cokret_core::model::{Handle, HandleBindingState, HandleClaim};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
-    "cx.vector.primary_handle_selection.empty_candidate_fallback.v1";
+    "ck.vector.primary_handle_selection.empty_candidate_fallback.v1";
 pub const VECTOR_ID_PH_SINGLE_PASSTHROUGH: &str =
-    "cx.vector.primary_handle_selection.single_candidate_passthrough.v1";
+    "ck.vector.primary_handle_selection.single_candidate_passthrough.v1";
 pub const VECTOR_ID_PH_AUDIENCE_MATCH_WINS: &str =
-    "cx.vector.primary_handle_selection.audience_match_wins.v1";
+    "ck.vector.primary_handle_selection.audience_match_wins.v1";
 pub const VECTOR_ID_PH_HOLDER_FLAG_WINS: &str =
-    "cx.vector.primary_handle_selection.holder_flag_wins_over_most_recent.v1";
+    "ck.vector.primary_handle_selection.holder_flag_wins_over_most_recent.v1";
 pub const VECTOR_ID_PH_MOST_RECENT_WINS: &str =
-    "cx.vector.primary_handle_selection.most_recent_wins_when_neither.v1";
+    "ck.vector.primary_handle_selection.most_recent_wins_when_neither.v1";
 pub const VECTOR_ID_PH_TIE_BREAK_ISSUER: &str =
-    "cx.vector.primary_handle_selection.tie_break_by_accepted_issuers_position.v1";
+    "ck.vector.primary_handle_selection.tie_break_by_accepted_issuers_position.v1";
 pub const VECTOR_ID_PH_TIE_BREAK_CREATED_AT: &str =
-    "cx.vector.primary_handle_selection.tie_break_by_created_at.v1";
+    "ck.vector.primary_handle_selection.tie_break_by_created_at.v1";
 pub const VECTOR_ID_PH_TIE_BREAK_CLAIM_DIGEST: &str =
-    "cx.vector.primary_handle_selection.tie_break_by_claim_digest.v1";
+    "ck.vector.primary_handle_selection.tie_break_by_claim_digest.v1";
 pub const VECTOR_ID_PH_HOLDER_PRIMARY_NULL: &str =
-    "cx.vector.primary_handle_selection.holder_primary_null_skips_layer.v1";
+    "ck.vector.primary_handle_selection.holder_primary_null_skips_layer.v1";
 pub const VECTOR_ID_PH_AS_OF_REPLAY: &str =
-    "cx.vector.primary_handle_selection.as_of_replay_vs_realtime.v1";
+    "ck.vector.primary_handle_selection.as_of_replay_vs_realtime.v1";
 pub const VECTOR_ID_PH_CLAIM_DIGEST_STABLE: &str =
-    "cx.vector.primary_handle_selection.claim_digest_stable_under_hint.v1";
+    "ck.vector.primary_handle_selection.claim_digest_stable_under_hint.v1";
 pub const VECTOR_ID_PH_POLICY_SNAPSHOT_REPLAY: &str =
-    "cx.vector.primary_handle_selection.policy_snapshot_as_of_replay.v1";
+    "ck.vector.primary_handle_selection.policy_snapshot_as_of_replay.v1";
 
 pub const ALL_PRIMARY_HANDLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PH_EMPTY_FALLBACK,

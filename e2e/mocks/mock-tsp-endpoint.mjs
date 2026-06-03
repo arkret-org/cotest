@@ -6,7 +6,7 @@
 // systems. In the joint-e2e harness, this mock plays the role of an
 // *external* organization's TSP endpoint: soland (or another local
 // service) bootstraps a TSP relationship against this mock, then exchanges
-// Cokret-over-TSP envelopes that carry `cx.*` operations across the
+// Cokret-over-TSP envelopes that carry `ck.*` operations across the
 // trust boundary.
 //
 // The mock fakes two stages of the TSP contract:
@@ -15,7 +15,7 @@
 //      VID/JWK so both sides have a verifiable counterparty record.
 //   2. Message ingest — bootstrapped peers POST signed envelopes; the
 //      mock records them into the inbox and, when the envelope carries a
-//      recognizable `cx.*` operation, fabricates a reply envelope into
+//      recognizable `ck.*` operation, fabricates a reply envelope into
 //      the matching peer's outbox so scenario specs can assert round
 //      trips through the trust boundary.
 //
@@ -30,7 +30,7 @@
 //   POST /tsp/message  { from_vid, to_vid, payload_b64, signature_b64 }
 //     Verifies `from_vid` has a bootstrapped relationship, records the
 //     envelope into the inbox, and — if the decoded payload parses as a
-//     JSON object with a `type: "cx.*"` field — fabricates a reply
+//     JSON object with a `type: "ck.*"` field — fabricates a reply
 //     envelope into the outbox so callers can poll /tsp/outbox to assert
 //     the round trip. Returns { ok, message_id, accepted }.
 //   POST /scenarios  { unreachable?, vid_invalid?, force_signature_failure? }
@@ -111,7 +111,7 @@ function makeReplyEnvelope({ from_vid, to_vid, source_message_id, source_payload
   // opaque base64 blob plus a deterministic-shape signature so consumers
   // can assert "a reply was queued" without engaging crypto.
   const replyPayload = {
-    type: "cx.tsp.ack",
+    type: "ck.tsp.ack",
     in_reply_to: source_message_id,
     source_type: source_payload?.type ?? null,
     occurred_at: new Date().toISOString(),
@@ -269,11 +269,11 @@ const server = createServer(async (req, res) => {
     };
     receivedLog.record(envelope);
 
-    // If the payload carries a recognizable `cx.*` operation, fabricate
+    // If the payload carries a recognizable `ck.*` operation, fabricate
     // a reply envelope so callers can poll /tsp/outbox to assert the
     // round trip across the trust boundary.
     let reply = null;
-    if (decoded && typeof decoded.type === "string" && decoded.type.startsWith("cx.")) {
+    if (decoded && typeof decoded.type === "string" && decoded.type.startsWith("ck.")) {
       reply = makeReplyEnvelope({
         from_vid: endpointVid,
         to_vid: body.from_vid,

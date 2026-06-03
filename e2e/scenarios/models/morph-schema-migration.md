@@ -58,10 +58,10 @@
    {
      "morph_id": "<morphId>",
      "from_schema_refs": ["ck.schema.morph.customer_risk.v1"],
-     "to_schema_refs": ["cx.schema.morph.customer_risk.v2"],
+     "to_schema_refs": ["ck.schema.morph.customer_risk.v2"],
      "compatibility_class": "transformation",
      "transformation_rules": [
-       { "rule": "cx.transform.bogus.unsupported.v1", "field": "fields.status" }
+       { "rule": "ck.transform.bogus.unsupported.v1", "field": "fields.status" }
      ]
    }
    ```
@@ -75,7 +75,7 @@
 ### Phase B — Compatible (additive) migration 接受 + 历史 event 兼容
 
 6. **alice** 重置一个新 Morph `morphId_B` (同 `R`),`schema_refs = ["ck.schema.morph.customer_risk.v1"]`,写入若干 v1 字段
-7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ck.schema.morph.customer_risk.v1", "cx.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
+7. **alice** 发一条 `ck.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ck.schema.morph.customer_risk.v1", "ck.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
 8. 断言:
    - HTTP 2xx,Morph 当前 `schema_refs[]` = new set
    - 后续 `GET /_cokret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
@@ -95,14 +95,14 @@
    - HTTP 2xx
    - audit log 出现一条 `schema_migration_breaking` 类型记录,字段含 `issuer = alice.did`、`from_schema_refs[]`、`to_schema_refs[]`、`compatibility_class = "breaking"`、`capability_used = "ck.morph.schema.migrate"`、`profile_ref = "ck.profile.morph.schema_migration_transformations.v1"`(确切 audit kind 名以 soland 实现为准,test 用宽 regex `/schema_migration|morph_schema_migrate|breaking/` 匹配)
    - 再发 `compatibility_class = "transformation"` + 合法 `transformation_rules[]`(每条 rule id 在 profile `transformation_rules_dialect` 内)→ HTTP 2xx
-16. 反向:撤销 capability(`cx.realm.policy.update` 删除 grant),再发 transformation → HTTP 4xx,`error.code = capability_denied`(spec §4.1 S3 capability 缺失分支)
+16. 反向:撤销 capability(`ck.realm.policy.update` 删除 grant),再发 transformation → HTTP 4xx,`error.code = capability_denied`(spec §4.1 S3 capability 缺失分支)
 
 ### Phase D — Deterministic transform 向量(若有 fixture)
 
-17. **harness** 尝试加载 `cokret-spec/spec/v1/artifacts/fixtures/cx.vector.morph.*.json` 形态的 transform fixture(若未来 spec 引入)
+17. **harness** 尝试加载 `cokret-spec/spec/v1/artifacts/fixtures/ck.vector.morph.*.json` 形态的 transform fixture(若未来 spec 引入)
 18. 若 fixture 存在:对每个 vector,driver alice 写入 `input` Morph 状态,发对应 `ck.morph.schema_migrate` event,然后 `GET` 该 Morph 当前投影
 19. 断言:投影 bytes(`canonical_json` after sort)与 vector `expected_output` 字节相等;digest 也匹配(若 vector 暴露 `expected_digest`)
-20. 当前 spec 仓库**无** `cx.vector.morph.*` fixture(本 scenario 写作时已 grep 确认),Phase D 整体 `test.fixme` 钉住 contract,等 spec 侧 publish 后再 live
+20. 当前 spec 仓库**无** `ck.vector.morph.*` fixture(本 scenario 写作时已 grep 确认),Phase D 整体 `test.fixme` 钉住 contract,等 spec 侧 publish 后再 live
 
 ### Phase E — Type registry alignment (LIVE)
 
@@ -120,7 +120,7 @@
 - Phase A:每个 unsupported transformation_rules POST → HTTP 4xx + `morph_schema_refs_transformation_unsupported` 或 `unsupported_transformation_rule`;无 partial echo
 - Phase B:additive `ck.morph.update` schema_refs[] 接受;additive `ck.morph.schema_migrate` 不需 profile;v1 历史 event `requirements.schema[]` 未被 silently rewrite
 - Phase C:breaking/transformation 在无 profile 时 reject;Realm 声明 profile + capability 后接受;audit 含 `schema_migration_breaking` marker;撤 capability 后 `capability_denied`
-- Phase D (fixme):`cx.vector.morph.*` fixture 驱动的 transform 投影与 expected_output byte-equal(等 fixture 落地)
+- Phase D (fixme):`ck.vector.morph.*` fixture 驱动的 transform 投影与 expected_output byte-equal(等 fixture 落地)
 - Phase E (LIVE):`morph-type-decision-table.json` 与 `ck.profile.morph.schema_migration_transformations.v1` profile 块结构正确解析;`precedence[*].consumed_by` ∩ `MUST_NOT_consume_by` 为空;`required_event_kinds` 含 `ck.morph.schema_migrate`
 
 ## Edge cases / sub-tests
@@ -136,7 +136,7 @@
 - **artifact loader**:复用 G1.T4 (`tests/conformance/registry-drift.spec.ts`) 的 `import.meta.url` + `dirname` + `resolve` 模式;artifacts 落在 `<repo_root>/cokret-spec/spec/v1/artifacts/`,相对 `cotest/e2e/tests/models/*.spec.ts` 是 `../../../../cokret-spec/spec/v1/artifacts`。Playwright 配置 `"type": "module"`(见 `e2e/package.json`),原生支持 ESM `import.meta.url`
 - **profile loader**:`conformance-profiles.json` 是单个大对象,profile-id → requirements 映射在 `profile_requirements.<profile_id>`,全局 v1 catalog 列表在 `implementation_profiles[]`;harness 解析后直接索引 `parsed.profile_requirements["ck.profile.morph.schema_migration_transformations.v1"]`,不要 deep-walk(profile id 是稳定 wire key,不存在 fallback)
 - **describe key 名 fallback**:Phase A step 2 / Phase E step 23 — soland 暴露的 profile feature discovery 字段路径未敲定,harness 按顺序尝试:`describe.implemented_features.profile_features[<profile_id>]` → `describe.profile_features[<profile_id>]` → `describe.feature_discovery[<profile_id>]`,第一个非空对象即视为有效 hint;全部 missing 时该子断言 `test.skip()`
-- **audit log scope**:Phase C 的 `schema_migration_breaking` 检查需要一个 audit query 端点;若 soland 仅暴露 per-event 检索而无 audit kind 过滤,harness 改为拉 `/_cokret/self/realms/${realmId}/events?kinds=cx.audit.*` 后 filter `audit_kind` field
+- **audit log scope**:Phase C 的 `schema_migration_breaking` 检查需要一个 audit query 端点;若 soland 仅暴露 per-event 检索而无 audit kind 过滤,harness 改为拉 `/_cokret/self/realms/${realmId}/events?kinds=ck.audit.*` 后 filter `audit_kind` field
 - **error code 集合宽松匹配**:registry `error-code-registry.json` 已显式列出 `morph_schema_refs_evolution_unauthorized` / `morph_schema_refs_transformation_unsupported` / `morph_schema_version_binding_missing`;但 reducer 早期实现可能用通用 `schema_violation` / `failed_precondition` + reason 字段。Phase A/B/C 用 `{ code, reason }` 双轨匹配,任一命中即视为通过
 - **fixme 范围**:Phase A / B / C / D 全部 `test.fixme`(Morph reducer 在 soland 当前是 partial,gap report §1.2/1.3 列为 schema 演进 implementation 缺口);Phase E 是纯 artifact + 可选 describe probe,LIVE
 - **no new helper**:全部逻辑放在 spec 文件内,只依赖 `helpers/env.ts` 的 `solandBaseUrl()` 与 `helpers/users.ts` 的 `ensureRegistered` / `issueDevSession` / `uniqueUser`

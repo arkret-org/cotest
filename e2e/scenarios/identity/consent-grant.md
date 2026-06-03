@@ -48,7 +48,7 @@
 5. **bob** 通过 yougen 的 `/contacts/new` 流程发起对 `alice.did` 的 contact request
    - 填入 `contact-target-input` = `alice.did`,scope 选 `invite`,点 `send-contact-request-button`
 6. 断言:bob 侧 `contact-request-status` 显示 `pending` (而不是 `accepted` / `failed`);spec §4 要求 holder 没 grant 时进入 pending,不返回 hard fail
-7. 断言:soland 侧投影出 `cx.consent.pending` 事件(可观测的事件类型,具体名以 spec §3 为准),且 `holder = alice.did`、`peer = bob.did`、`scope = invite`
+7. 断言:soland 侧投影出 `ck.consent.pending` 事件(可观测的事件类型,具体名以 spec §3 为准),且 `holder = alice.did`、`peer = bob.did`、`scope = invite`
 
 ### Phase C — alice 查看 settings 中 pending consent
 
@@ -85,7 +85,7 @@
 ## Observable assertions (合并清单)
 
 - 步骤 6:bob 侧 `contact-request-status` = `pending`
-- 步骤 7:soland 侧 `cx.consent.pending`(holder=alice, peer=bob, scope=invite)
+- 步骤 7:soland 侧 `ck.consent.pending`(holder=alice, peer=bob, scope=invite)
 - 步骤 8:alice 的 `/settings/consent` 显示 pending row
 - 步骤 11-12:`ck.consent.grant` Move 写入,or-set 添加成员
 - 步骤 13:bob 30s 内看到状态变 `accepted`
@@ -105,7 +105,7 @@
 
 ## Implementation notes
 
-- soland 侧的 `cx.consent.*` reducer 截至当前 **未实现**,因此本 scenario 的所有 test 都先用 `test.fixme` 挂起,等 reducer + projection landing 后再去掉 `.fixme`
+- soland 侧的 `ck.consent.*` reducer 截至当前 **未实现**,因此本 scenario 的所有 test 都先用 `test.fixme` 挂起,等 reducer + projection landing 后再去掉 `.fixme`
 - yougen 侧 `/settings/consent` 路由、`consent-settings-panel` / `consent-pending-row` / `grant-consent-button` / `revoke-consent-button` 等 testid 也未实现,跑测前要先确认或者补 UI
 - contact request 的发起入口当前可能是 `/contacts/new`,也可能是 DM 邀请按钮里的子流程;具体 testid 以 yougen 现有 UI 为准,先挂 TODO
 - `ck.consent.grant` / `ck.consent.revoke` 的 Move payload 字段(scope、not_before、valid_until、peer)以 spec §3 schema 为准,实现时直接对齐 schema,不要在 e2e 这边自创字段

@@ -197,7 +197,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       `claimed profile ids missing from catalog ${CATALOG_PATH}: ${JSON.stringify(orphans)}`,
     ).toEqual([]);
 
-    // unsupported_profiles[] (e.g. cx.profile.soland_limited_server.v1) are limitation
+    // unsupported_profiles[] (e.g. ck.profile.soland_limited_server.v1) are limitation
     // descriptors, not conformance claims. They MUST NOT appear in claimed_profiles
     // and they MUST NOT be required to live in the catalog.
     const unsupported = body.unsupported_profiles ?? [];
@@ -270,7 +270,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     });
     (envelope.requirements as { critical_extensions: unknown[] }).critical_extensions = [
       {
-        id: "cx.ext.audit_attestation.unimplemented.v1",
+        id: "ck.ext.audit_attestation.unimplemented.v1",
         fail_closed: true,
         extension_scope: "payload",
       },

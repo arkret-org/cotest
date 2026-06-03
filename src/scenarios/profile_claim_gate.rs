@@ -46,7 +46,7 @@ pub async fn live_describe_profile_claim_gate_from_env() -> Result<()> {
 
 pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let unknown = serde_json::json!({
-        "supported_profiles": ["cx.profile.not_registered.v1"],
+        "supported_profiles": ["ck.profile.not_registered.v1"],
         "supported_operations": [],
     });
     expect_profile_rejected(&unknown, "unknown claimed profile")?;
@@ -83,7 +83,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     expect_profile_rejected(&failed, "failed conformance results")?;
 
     let limited = serde_json::json!({
-        "supported_profiles": ["cx.profile.soland_limited_server.v1"],
+        "supported_profiles": ["ck.profile.soland_limited_server.v1"],
         "supported_operations": [],
     });
     expect_profile_rejected(&limited, "limited profile")?;

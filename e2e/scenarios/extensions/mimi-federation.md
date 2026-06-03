@@ -11,7 +11,7 @@
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §1 — MIMI Provider Facade 总览;Cokret 把外部 MIMI 网络当作一个外部 federation peer 看待
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §2 — Realm `federation_profile = "mimi_interop"` 字段语义;暴露 MIMI endpoint
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §3 — Room binding:Cokret Flow ↔ MIMI room 的双向映射;event ↔ Message 翻译
-- `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §4 — Content mapping:MIMI 标准 content type ↔ `cx.morph` content kind;未知类型 quarantine
+- `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §4 — Content mapping:MIMI 标准 content type ↔ `ck.morph` content kind;未知类型 quarantine
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §5 — Policy mapping:Cokret join_rule / history_visibility ↔ MIMI room policy
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §6 — Identity bridging:MIMI 用户 → pairwise DID;同一个 MIMI 身份在不同 Realm 中产生不同 pairwise DID
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §7 — E2EE 边界:MIMI 可能使用不同的 group encryption (MLS via IETF profile);transcript binding 或 downgrade 标记
@@ -49,7 +49,7 @@
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `joined`
-   - `cx.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
+   - `ck.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
 2. 断言:`realm-lifecycle-flow` 显示 `created ck:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
 4. alice 调 `GET /_cokret/self/realm/${realmId}/federation/mimi/endpoint`
@@ -58,8 +58,8 @@
 ### Phase B — bob_mimi 经 MIMI federation 申请加入
 
 5. mimi_facade (mock) 接收一个来自外部 MIMI 网络的 "join request",目标是 alice 的 `room_binding_id`:
-   - facade 把它翻译为 Cokret 的 `cx.invite.request` (或 knock,取决于 Realm 的 join_rule),投递到 soland
-6. 断言:soland 收到 facade 投递的请求,产生 `cx.morph.federation_inbound = "mimi"` 事件,记录 `inbound_request_id`
+   - facade 把它翻译为 Cokret 的 `ck.invite.request` (或 knock,取决于 Realm 的 join_rule),投递到 soland
+6. 断言:soland 收到 facade 投递的请求,产生 `ck.morph.federation_inbound = "mimi"` 事件,记录 `inbound_request_id`
 7. alice 的 `/realm/${realmId}/admin` 看到 inbound request,标记来源 `mimi`
    - 断言:`federation-inbound-panel` 渲染,含 `mimi` 标签;`inbound-request-item` 数量 ≥ 1
 
@@ -79,10 +79,10 @@
     - 断言:`timeline` 出现 `M1`、`write-status` 文本含 `persisted`
 14. soland 通过 facade 把 `M1` 翻译为 MIMI event,投递到 MIMI 网络
     - 断言:facade mock 记录到一条 outbound MIMI event,内容含 `M1` 的文本
-    - 断言:soland 的 message 上有 `cx.morph.federation_outbound = "mimi"`、`mimi_event_id` 字段
+    - 断言:soland 的 message 上有 `ck.morph.federation_outbound = "mimi"`、`mimi_event_id` 字段
 15. mimi_facade mock 模拟 bob_mimi 在 MIMI 网络发一条消息 `MM2 = "bob_mimi greet ${stamp}"`,facade 把它翻译为 Cokret Message 投递到 soland
 16. 断言:alice 的 `/timeline/${realmId}` 在 30s 内出现 `MM2`,发送者显示为 bob_mimi 的 pairwise DID
-17. 断言:`MM2` 上有 `cx.morph.federation_inbound = "mimi"`、`mimi_origin_event_id` 字段
+17. 断言:`MM2` 上有 `ck.morph.federation_inbound = "mimi"`、`mimi_origin_event_id` 字段
 18. **alice** 回复 `MM2`,发 `M3 = "alice reply to bob_mimi ${stamp}"`
     - 断言:`M3` 渲染、`chat-reply-indicator` 指向 `MM2`
     - 断言:facade mock 记录到第二条 outbound MIMI event,reply 关系映射到 MIMI 的 `m.in_reply_to` 等价字段
@@ -106,9 +106,9 @@
 
 ## Edge cases / sub-tests
 
-- **E5.1 MIMI endpoint 不可达 → federation fallback (本地停留)**:alice 发 `M1` 时 facade 不可达 (timeout / 5xx);消息应该正常存入 soland 本地、对 Cokret 成员可见,但不投递到 MIMI;消息上挂 `cx.morph.federation_outbound_status = "deferred"`,等 facade 恢复后重试
-- **E5.2 E2EE 在 MIMI 中的转换**:MIMI 可能使用不同的 group encryption (e.g., MLS via IETF profile);Cokret 的 E2EE message 进入 MIMI 时,要么有 transcript binding 桥(两套 group key 都能解密),要么留下明确的 `cx.morph.e2ee_downgrade = "mimi_bridge"` 标记;两种情况都不能静默泄露明文
-- **E5.3 content type 差异:unknown content kind quarantine**:bob_mimi 经 MIMI 发了一条 content type 是 Cokret 不支持的 (e.g., MIMI 特有的 `m.location.share.live`);facade 翻译时无法映射,该消息进入 soland 时被 quarantine,挂 `cx.morph.unknown_content_kind = "<mimi.type>"`;timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃也不是渲染原始 payload
+- **E5.1 MIMI endpoint 不可达 → federation fallback (本地停留)**:alice 发 `M1` 时 facade 不可达 (timeout / 5xx);消息应该正常存入 soland 本地、对 Cokret 成员可见,但不投递到 MIMI;消息上挂 `ck.morph.federation_outbound_status = "deferred"`,等 facade 恢复后重试
+- **E5.2 E2EE 在 MIMI 中的转换**:MIMI 可能使用不同的 group encryption (e.g., MLS via IETF profile);Cokret 的 E2EE message 进入 MIMI 时,要么有 transcript binding 桥(两套 group key 都能解密),要么留下明确的 `ck.morph.e2ee_downgrade = "mimi_bridge"` 标记;两种情况都不能静默泄露明文
+- **E5.3 content type 差异:unknown content kind quarantine**:bob_mimi 经 MIMI 发了一条 content type 是 Cokret 不支持的 (e.g., MIMI 特有的 `m.location.share.live`);facade 翻译时无法映射,该消息进入 soland 时被 quarantine,挂 `ck.morph.unknown_content_kind = "<mimi.type>"`;timeline 渲染为 "unsupported content from MIMI" 占位,而不是丢弃也不是渲染原始 payload
 
 后两条建议拆成独立的小 spec(`extensions/mimi-federation.e2ee`、`extensions/mimi-federation.content`),保持主 scenario 紧凑。
 

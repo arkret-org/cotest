@@ -13,7 +13,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("mls_e2ee_basic_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.mls_e2ee_basic_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.mls_e2ee_basic_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -259,7 +259,7 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
     use sha2::Sha256 as KdfSha256;
 
     let fixture = load_local_fixture("megolm_ratcheting_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.megolm_ratcheting_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.megolm_ratcheting_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -325,7 +325,7 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
                 // Re-derive: key_(N+1) = HKDF(key_N, info=...). Use a pseudo
                 // 32-byte zero seed since the fixture only carries indices.
                 let seed = [0u8; 32];
-                let info = b"cx.megolm.ratchet.v1";
+                let info = b"ck.megolm.ratchet.v1";
                 let kdf = Hkdf::<KdfSha256>::new(None, &seed);
                 let mut next = [0u8; 32];
                 kdf.expand(info, &mut next)
@@ -477,7 +477,7 @@ pub fn run_megolm_ratchet_kdf_chain_check() -> Result<()> {
     fn step(prev: &[u8; 32]) -> Result<[u8; 32]> {
         let kdf = Hkdf::<KdfSha256>::new(None, prev);
         let mut next = [0u8; 32];
-        kdf.expand(b"cx.megolm.ratchet.v1", &mut next)
+        kdf.expand(b"ck.megolm.ratchet.v1", &mut next)
             .map_err(|e| anyhow!("HKDF expand: {e}"))?;
         Ok(next)
     }
@@ -503,7 +503,7 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
     let fixture = load_local_fixture("device_message_negative_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.device_message_negative_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.device_message_negative_vectors.v1")?;
 
     let negatives = fixture
         .get("negative_vectors")

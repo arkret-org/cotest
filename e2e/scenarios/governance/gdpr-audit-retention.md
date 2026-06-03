@@ -59,7 +59,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase E — Audit log entries
 
 16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_cokret/self/audit/events?actor=alice.did`
-17. 断言:audit log 含 `cx.audit.exported`、`cx.audit.erasure_initiated`、`ck.audit.erasure_receipt`
+17. 断言:audit log 含 `ck.audit.exported`、`ck.audit.erasure_initiated`、`ck.audit.erasure_receipt`
 
 ### Phase F — Retention policy
 

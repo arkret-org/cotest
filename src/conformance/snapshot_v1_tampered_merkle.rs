@@ -27,7 +27,7 @@ use serde_json::Value;
 
 use super::{load_local_fixture_value, required_str, validate_profile};
 
-const PROFILE_ID: &str = "cx.profile.snapshot_v1_tampered_merkle_vectors.v1";
+const PROFILE_ID: &str = "ck.profile.snapshot_v1_tampered_merkle_vectors.v1";
 const EXPECTED_ERRCODE: &str = "digest_mismatch";
 
 pub fn run_snapshot_v1_tampered_merkle_suite() -> Result<()> {

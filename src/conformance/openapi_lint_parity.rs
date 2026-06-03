@@ -160,7 +160,7 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
 }
 
 /// Mirror of `lint_artifacts.py::check_vector_reference_closure` — verifies
-/// that every `cx.vector.*` id referenced from any fixture JSON resolves to a
+/// that every `ck.vector.*` id referenced from any fixture JSON resolves to a
 /// declared vector in the canonical conformance prose
 /// (`spec/v1/zh/conformance/conformance-vectors.md`) or the fixture file
 /// itself defines it.
@@ -195,7 +195,7 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
         }
         let raw = fs::read_to_string(&path)?;
         let fixture_vectors = extract_vector_tokens(&raw);
-        // Mirror cokret-spec's Python lint: any cx.vector.* token appearing
+        // Mirror cokret-spec's Python lint: any ck.vector.* token appearing
         // in a fixture JSON is part of the known-vector definition set. Some
         // fixture suites declare vectors in top-level arrays such as
         // `conformance_vectors`, not only in object-level `vector_id` fields.
@@ -205,7 +205,7 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
         }
     }
     if declared.is_empty() {
-        bail!("no cx.vector.* declarations found in fixtures or conformance prose");
+        bail!("no ck.vector.* declarations found in fixtures or conformance prose");
     }
     for vector_id in &referenced {
         if !declared.contains(vector_id) {
@@ -220,7 +220,7 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
 fn extract_vector_tokens(input: &str) -> Vec<String> {
     let mut out = Vec::new();
     let bytes = input.as_bytes();
-    let needle = b"cx.vector.";
+    let needle = b"ck.vector.";
     let mut i = 0usize;
     while i + needle.len() <= bytes.len() {
         if &bytes[i..i + needle.len()] != needle {

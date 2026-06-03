@@ -200,8 +200,8 @@ async fn send_to_device(
         "messages": {
             recipient: {
                 device_id: {
-                    "type": "cx.mls.application",
-                    "content": encrypted_envelope("cx.mls.application", ciphertext),
+                    "type": "ck.mls.application",
+                    "content": encrypted_envelope("ck.mls.application", ciphertext),
                 }
             }
         }

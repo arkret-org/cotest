@@ -2,7 +2,7 @@
 //! revoke (entrypoint).
 //!
 //! Alice owns device-A; pairs device-B via QR (synthesized API call);
-//! `ck.cross_signing.publish` + `cx.device.cross_signing_binding` +
+//! `ck.cross_signing.publish` + `ck.device.cross_signing_binding` +
 //! `ck.device.authorize` are submitted; both devices appear in the
 //! device list. Alice from device-A revokes device-B; the test asserts
 //! device-A still works, device-B's bearer is 401, a

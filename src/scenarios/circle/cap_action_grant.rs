@@ -1,8 +1,8 @@
 //! P2F.3 — every CXP-0007 capability action is well-formed.
 //!
-//! Pins the six `cx.circle.*` capability-action strings against the SDK
+//! Pins the six `ck.circle.*` capability-action strings against the SDK
 //! constants and against the well-formed-ness rules expected by the
-//! capability registry (`cx.<domain>.<verb>[.<modifier>]*`, snake_case,
+//! capability registry (`ck.<domain>.<verb>[.<modifier>]*`, snake_case,
 //! no trailing dots, no whitespace). This is the wire-shape baseline the
 //! coauth / sodmin services bind against, so a regression here breaks
 //! every grant emitted by an admin UI.
@@ -30,9 +30,9 @@ fn is_well_formed(action: &str) -> Result<()> {
     if action.is_empty() {
         return Err(anyhow!("capability action is empty"));
     }
-    if !action.starts_with("cx.") {
+    if !action.starts_with("ck.") {
         return Err(anyhow!(
-            "capability action `{action}` MUST start with `cx.`"
+            "capability action `{action}` MUST start with `ck.`"
         ));
     }
     if action.ends_with('.') {
@@ -80,9 +80,9 @@ pub async fn cap_action_grant_run() -> Result<()> {
     for action in CXP_0007_CAPABILITY_ACTIONS {
         is_well_formed(action)
             .map_err(|e| anyhow!("capability action `{action}` ill-formed: {e}"))?;
-        if !action.starts_with("cx.circle.") {
+        if !action.starts_with("ck.circle.") {
             return Err(anyhow!(
-                "CXP-0007 capability action MUST start with `cx.circle.`; got `{action}`"
+                "CXP-0007 capability action MUST start with `ck.circle.`; got `{action}`"
             ));
         }
     }

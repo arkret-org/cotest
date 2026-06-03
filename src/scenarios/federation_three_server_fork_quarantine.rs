@@ -28,7 +28,7 @@
 //!    the same initial frontier.
 //!
 //! 4. Concurrent conflicting Moves on the **same `cell_subject`**:
-//!       * alice from alpha submits a `ck.flow.move` (or `cx.space.title` cas-register Move)
+//!       * alice from alpha submits a `ck.flow.move` (or `ck.space.title` cas-register Move)
 //!         targeting `S/cell:title`.
 //!       * bob's anchor request races on beta (independent actor, same cell, conflicting value).
 //!       * charlie's on gamma (third independent value).
@@ -166,17 +166,17 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     // /_cokret/self/events endpoint so each server initially accepts its own
     // value into local frontier.
     //
-    //   let alpha_move = alice.submit_event(&space_id, "cx.space.title",
+    //   let alpha_move = alice.submit_event(&space_id, "ck.space.title",
     //                       json!({"value": "alpha-wins"})).await?;
     //   let bob = beta.register_client(
     //       "did:web:bob.ct1.cotest.local", "@bob-ct1",
     //       &new_prefixed_uuid7("ck:device:")).await?;
-    //   let beta_move = bob.submit_event(&space_id, "cx.space.title",
+    //   let beta_move = bob.submit_event(&space_id, "ck.space.title",
     //                       json!({"value": "beta-wins"})).await?;
     //   let charlie = gamma.register_client(
     //       "did:web:charlie.ct1.cotest.local", "@charlie-ct1",
     //       &new_prefixed_uuid7("ck:device:")).await?;
-    //   let gamma_move = charlie.submit_event(&space_id, "cx.space.title",
+    //   let gamma_move = charlie.submit_event(&space_id, "ck.space.title",
     //                       json!({"value": "gamma-wins"})).await?;
     //
     //   // After this point each server has a different frontier `head`:

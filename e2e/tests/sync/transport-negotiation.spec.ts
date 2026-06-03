@@ -17,9 +17,9 @@
 //     simple cases but Content-Digest / nonce window / key-rotation hint
 //     not wired through end-to-end
 //   ✗ Outbound RFC 9421 signature generation — stubbed (only logs)
-//   ✗ cx.transport.negotiate operation — slot reserved, no runtime
-//   ✗ WebSocket frame binding (cx.profile.binding.websocket.v1) — not impl
-//   ✗ TSP binding (cx.profile.binding.tsp.v1) — not impl
+//   ✗ ck.transport.negotiate operation — slot reserved, no runtime
+//   ✗ WebSocket frame binding (ck.profile.binding.websocket.v1) — not impl
+//   ✗ TSP binding (ck.profile.binding.tsp.v1) — not impl
 //   ✗ Binding fallback chain state machine — not impl
 
 import { expect, test } from "@playwright/test";
@@ -113,7 +113,7 @@ test.describe("transport negotiation", () => {
       // Phase B — WebSocket upgrade:
       //   5. soland_a reads β's /_cokret/describe → finds websocket_frame
       //      entry with upgrade_path /_cokret/peer/federation/stream
-      //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: cx.federation.v1
+      //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: ck.federation.v1
       //      and RFC 9421 Signature on the upgrade request
       //   7. β responds 101 Switching Protocols
       //   8. soland_a streams the next event (alice's timeline message) over WS
@@ -122,8 +122,8 @@ test.describe("transport negotiation", () => {
       //      websocket_frame on both sides
       //
       // Phase C — TSP binding (optional extension):
-      //  10. soland_a announces cx.profile.binding.tsp.v1 in supported_bindings
-      //  11. soland_b chooses TSP via cx.transport.negotiate
+      //  10. soland_a announces ck.profile.binding.tsp.v1 in supported_bindings
+      //  11. soland_b chooses TSP via ck.transport.negotiate
       //  12. subsequent events flow inside TSP relationship envelopes
       //      (outer wrapper carries sender/receiver VID; inner = EventEnvelope)
       //  13. RFC 9421 NOT required on TSP-wrapped traffic — envelope crypto
@@ -240,11 +240,11 @@ test.describe("transport negotiation", () => {
     async ({ request }) => {
       // spec: transport-bindings.md §3 (binding requirements — background /
       //       backpressure) + §7 (binding discovery)
-      // soland gap: cx.transport.negotiate runtime + fallback state machine
+      // soland gap: ck.transport.negotiate runtime + fallback state machine
       //             both missing.
       //
       // Acceptance criteria:
-      //   1. α calls cx.transport.negotiate against β with desired binding
+      //   1. α calls ck.transport.negotiate against β with desired binding
       //      = websocket_frame
       //   2. β intentionally does not respond (test harness blackholes the
       //      negotiation endpoint with route.fulfill delay > 30s)

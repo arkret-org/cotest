@@ -59,7 +59,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 14. yougen 提交两个动作:
     - `ck.flow.move` 把 Card 1 从 `Todo.child_order` 挪到 `InProgress.child_order`
     - `ck.flow.update`:`fields.status = "in_progress"`,这是 FSM 转换(spec §3.2 Effect: fsm)
-15. 若 yougen 把 status 建模为独立 FSM cell(`ck:cell:cx.component.flow.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
+15. 若 yougen 把 status 建模为独立 FSM cell(`ck:cell:ck.component.flow.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
 16. 断言:Card 1 在 InProgress 列;alice/bob/carol 三方视图一致
 17. bob 继续 → `in_progress → done`
 

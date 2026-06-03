@@ -210,7 +210,7 @@ fn validate_schema_registry(
     let mut ids = BTreeSet::new();
     for schema in schemas {
         let schema_id = required_str(schema, "schema_id")?;
-        if !schema_id.starts_with("cx.schema.") {
+        if !schema_id.starts_with("ck.schema.") {
             bail!("schema registry contains non-standard id {schema_id}");
         }
         if !ids.insert(schema_id.to_owned()) {
@@ -265,8 +265,8 @@ fn validate_event_kind_registry(
     let mut component_types = BTreeSet::new();
     for entry in event_kinds {
         let event_kind = required_str(entry, "event_kind")?;
-        if !event_kind.starts_with("cx.") {
-            bail!("event kind must use cx.* namespace: {event_kind}");
+        if !event_kind.starts_with("ck.") {
+            bail!("event kind must use ck.* namespace: {event_kind}");
         }
         if !ids.insert(event_kind.to_owned()) {
             bail!("duplicate event kind {event_kind}");
@@ -301,9 +301,9 @@ fn validate_event_kind_registry(
             && entry.get("cell_family").is_some()
         {
             let cell_family = required_str(entry, "cell_family")?;
-            if !cell_family.starts_with("cx.component.") {
+            if !cell_family.starts_with("ck.component.") {
                 bail!(
-                    "reducer-input kind {event_kind} cell_family {cell_family} must start with cx.component."
+                    "reducer-input kind {event_kind} cell_family {cell_family} must start with ck.component."
                 );
             }
             let lattice = required_str(entry, "lattice")?;
@@ -429,8 +429,8 @@ fn validate_operation_registry(
     let mut ids = BTreeSet::new();
     for entry in operations {
         let operation_id = required_str(entry, "operation_id")?;
-        if !operation_id.starts_with("cx.") {
-            bail!("operation id must use cx.* namespace: {operation_id}");
+        if !operation_id.starts_with("ck.") {
+            bail!("operation id must use ck.* namespace: {operation_id}");
         }
         if !ids.insert(operation_id.to_owned()) {
             bail!("duplicate operation id {operation_id}");
@@ -573,7 +573,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     // flat list of anchorer-cell profile ids) and may introduce a tiered
     // `anchor_profile_tiers` map (analogous to `profile_tiers`) keying tier
     // names to anchor-profile id arrays. When the tier map is present we
-    // validate its shape (object of string→array<cx.profile.anchor.*>) so a
+    // validate its shape (object of string→array<ck.profile.anchor.*>) so a
     // typo in a future spec snapshot doesn't slip through.
     if let Some(tiers) = registry.get("anchor_profile_tiers") {
         let map = tiers.as_object().ok_or_else(|| {
@@ -589,16 +589,16 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
             }
             let arr = tier_ids.as_array().ok_or_else(|| {
                 anyhow!(
-                    "anchor_profile_tiers.{tier_name} must be an array of cx.profile.anchor.* ids"
+                    "anchor_profile_tiers.{tier_name} must be an array of ck.profile.anchor.* ids"
                 )
             })?;
             for entry in arr {
                 let s = entry.as_str().ok_or_else(|| {
                     anyhow!("anchor_profile_tiers.{tier_name} entry must be a string profile id")
                 })?;
-                if !s.starts_with("cx.profile.anchor.") {
+                if !s.starts_with("ck.profile.anchor.") {
                     bail!(
-                        "anchor_profile_tiers.{tier_name} entry {s} must use the cx.profile.anchor.* namespace"
+                        "anchor_profile_tiers.{tier_name} entry {s} must use the ck.profile.anchor.* namespace"
                     );
                 }
             }
@@ -606,15 +606,15 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
     }
 
     // `anchor_profiles` (flat list) — when present, validate every entry is
-    // a cx.profile.anchor.* id. Spec snapshot lists 4 canonical shapes:
+    // a ck.profile.anchor.* id. Spec snapshot lists 4 canonical shapes:
     // single_did / threshold / open_set / mixed_recovery.
     if let Some(arr) = registry.get("anchor_profiles").and_then(Value::as_array) {
         for entry in arr {
             let s = entry
                 .as_str()
                 .ok_or_else(|| anyhow!("anchor_profiles entry must be a string profile id"))?;
-            if !s.starts_with("cx.profile.anchor.") {
-                bail!("anchor_profiles entry {s} must use cx.profile.anchor.* namespace");
+            if !s.starts_with("ck.profile.anchor.") {
+                bail!("anchor_profiles entry {s} must use ck.profile.anchor.* namespace");
             }
         }
     }
@@ -633,7 +633,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
                 let profile = profile.as_str().ok_or_else(|| {
                     anyhow!("conformance profile entry in {field} is not a string")
                 })?;
-                if !profile.starts_with("cx.profile.") {
+                if !profile.starts_with("ck.profile.") {
                     bail!("invalid profile id {profile}");
                 }
                 core_profiles.insert(profile.to_owned());
@@ -657,7 +657,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
                 let profile = profile.as_str().ok_or_else(|| {
                     anyhow!("conformance profile entry in {field} is not a string")
                 })?;
-                if !profile.starts_with("cx.profile.") {
+                if !profile.starts_with("ck.profile.") {
                     bail!("invalid profile id {profile}");
                 }
                 extension_profiles.insert(profile.to_owned());
@@ -665,7 +665,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         }
     }
     // Hardening lists may mix profile ids with feature-flag tokens (e.g.
-    // "service_did_authentication"). Pick out any cx.profile.* entries so the
+    // "service_did_authentication"). Pick out any ck.profile.* entries so the
     // total profile count matches the spec's published catalogue.
     for field in [
         "e2ee_hardening",
@@ -676,7 +676,7 @@ fn validate_profile_registry(registry: &Value) -> Result<(BTreeSet<String>, BTre
         if let Some(array) = registry.get(field).and_then(Value::as_array) {
             for profile in array {
                 if let Some(profile) = profile.as_str() {
-                    if profile.starts_with("cx.profile.") {
+                    if profile.starts_with("ck.profile.") {
                         extension_profiles.insert(profile.to_owned());
                     }
                 }
@@ -824,7 +824,7 @@ fn validate_profile_requirements(
             }
         }
         for extension in string_array_field(requirement, "optional_extensions")? {
-            if extension.starts_with("cx.profile.") && !profiles.contains(extension) {
+            if extension.starts_with("ck.profile.") && !profiles.contains(extension) {
                 bail!("{profile} references unknown optional profile {extension}");
             }
         }
@@ -916,7 +916,7 @@ fn collect_yaml_operation_like_values(value: &serde_yaml::Value, values: &mut BT
                 collect_yaml_operation_like_values(item, values);
             }
         }
-        serde_yaml::Value::String(text) if text.starts_with("cx.") => {
+        serde_yaml::Value::String(text) if text.starts_with("ck.") => {
             values.insert(text.to_owned());
         }
         _ => {}
@@ -989,7 +989,12 @@ fn validate_value_refs(
             // cell_subject `{"type": "composite", ...}`) remain legal.
             if map.contains_key("body") && map.contains_key("type") && !map.contains_key("kind") {
                 if let Some(t) = map.get("type").and_then(Value::as_str) {
-                    if t.starts_with("cx.content.") || t == "text" || t == "image" || t == "file" {
+                    if t.starts_with("ck.content.")
+                        || t.starts_with("ck.content.")
+                        || t == "text"
+                        || t == "image"
+                        || t == "file"
+                    {
                         bail!(
                             "{context} content_block uses legacy `type` field; spec post-2026-05-09 mandates `kind` ({t})"
                         );
@@ -1006,7 +1011,7 @@ fn validate_value_refs(
                     ("event_kind", Some(event_kind)) if !event_kinds.contains(event_kind) => {
                         bail!("{context} references unknown event kind {event_kind}");
                     }
-                    ("kind", Some(kind)) if kind.starts_with("cx.") => {
+                    ("kind", Some(kind)) if kind.starts_with("ck.") => {
                         // The recursive walk hits `kind:` fields nested in
                         // payload content blocks (e.g. `payload.content.kind`
                         // = `ck.content.text`), profile refs, feature ids,
@@ -1014,13 +1019,13 @@ fn validate_value_refs(
                         // registry. Skip namespace prefixes that are
                         // intentionally NOT event kinds; only validate
                         // top-level event-style names.
-                        let is_non_event_namespace = kind.starts_with("cx.content.")
-                            || kind.starts_with("cx.profile.")
-                            || kind.starts_with("cx.feature.")
-                            || kind.starts_with("cx.schema.")
-                            || kind.starts_with("cx.component.")
-                            || kind.starts_with("cx.vector.")
-                            || kind.starts_with("cx.reducer.");
+                        let is_non_event_namespace = kind.starts_with("ck.content.")
+                            || kind.starts_with("ck.profile.")
+                            || kind.starts_with("ck.feature.")
+                            || kind.starts_with("ck.schema.")
+                            || kind.starts_with("ck.component.")
+                            || kind.starts_with("ck.vector.")
+                            || kind.starts_with("ck.reducer.");
                         if !is_non_event_namespace && !event_kinds.contains(kind) {
                             bail!("{context} references unknown event kind {kind}");
                         }

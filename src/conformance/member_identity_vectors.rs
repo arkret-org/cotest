@@ -43,21 +43,21 @@ use cokret_core::model::{
 use cokret_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
 
-pub const VECTOR_ID_MID_UPDATE_INITIAL: &str = "cx.vector.member_identity.update_initial.v1";
+pub const VECTOR_ID_MID_UPDATE_INITIAL: &str = "ck.vector.member_identity.update_initial.v1";
 pub const VECTOR_ID_MID_UPDATE_REPLACEMENT: &str =
-    "cx.vector.member_identity.update_replacement.v1";
+    "ck.vector.member_identity.update_replacement.v1";
 pub const VECTOR_ID_MID_REPLACEMENT_DIGEST_MISMATCH: &str =
-    "cx.vector.member_identity.replacement_digest_mismatch.v1";
+    "ck.vector.member_identity.replacement_digest_mismatch.v1";
 pub const VECTOR_ID_MID_EXPECTED_STATE_DIGEST_MISMATCH: &str =
-    "cx.vector.member_identity.expected_state_digest_mismatch.v1";
-pub const VECTOR_ID_MID_PROOF_INVALID: &str = "cx.vector.member_identity.proof_invalid.v1";
+    "ck.vector.member_identity.expected_state_digest_mismatch.v1";
+pub const VECTOR_ID_MID_PROOF_INVALID: &str = "ck.vector.member_identity.proof_invalid.v1";
 pub const VECTOR_ID_MID_UNKNOWN_SEGMENT_REJECTED: &str =
-    "cx.vector.member_identity.unknown_segment_rejected.v1";
+    "ck.vector.member_identity.unknown_segment_rejected.v1";
 pub const VECTOR_ID_MID_CROSS_SUBJECT_REPLACEMENT_IGNORED: &str =
-    "cx.vector.member_identity.cross_subject_replacement_ignored.v1";
+    "ck.vector.member_identity.cross_subject_replacement_ignored.v1";
 /// VECT-COT-8 — MemberIdentity payload carrying retired handle fields.
 pub const VECTOR_ID_MID_HANDLE_FIELD_FORBIDDEN: &str =
-    "cx.vector.member_identity.handle_field_forbidden.v1";
+    "ck.vector.member_identity.handle_field_forbidden.v1";
 
 /// Wire reason code a receiver MUST surface for VECT-COT-8.
 pub const REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN: &str =
@@ -572,7 +572,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
 
 // ── VECT-COT-8 ──────────────────────────────────────────────────────────────
 
-/// VECT-COT-8 — `cx.vector.member_identity.handle_field_forbidden.v1`.
+/// VECT-COT-8 — `ck.vector.member_identity.handle_field_forbidden.v1`.
 ///
 /// R3.2 removed `primary_handle` / `handles[]` from `MemberIdentity`.
 /// A payload that re-introduces either field MUST schema-reject. We pin
@@ -640,7 +640,7 @@ pub fn run_member_identity_handle_field_forbidden_vector() -> Result<()> {
 
 // ── Suite entry-point ──────────────────────────────────────────────────────
 
-/// Run the eight `cx.vector.member_identity.*` vectors (VECT-MID-1..7 +
+/// Run the eight `ck.vector.member_identity.*` vectors (VECT-MID-1..7 +
 /// VECT-COT-8).
 pub fn run_member_identity_vector_suite() -> Result<()> {
     if ALL_MEMBER_IDENTITY_VECTOR_IDS.len() != 8 {

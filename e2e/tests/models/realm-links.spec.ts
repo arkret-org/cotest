@@ -60,7 +60,7 @@ test.describe("realm links", () => {
         await request.post(`${solandBaseUrl()}/_cokret/self/realms/${govRealmId}/events`, {
           headers: aliceAuth,
           data: {
-            kind: "cx.policy.moderation",
+            kind: "ck.policy.moderation",
             payload: { banned_keywords: [bannedKeyword], inheritable: true },
           },
         });
@@ -286,7 +286,7 @@ test.describe("realm links", () => {
         await request.post(`${solandBaseUrl()}/_cokret/self/realms/${id}/events`, {
           headers: auth,
           data: {
-            kind: "cx.policy.moderation",
+            kind: "ck.policy.moderation",
             payload: { banned_keywords: banned, inheritable: true },
           },
         });

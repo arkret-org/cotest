@@ -94,7 +94,7 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
 
 // ─── VECT-AG-3 — controller_lifecycle (agent FSM) ──────────────────────────
 
-/// Minimal in-memory FSM mirroring the `cx.agent.{pause,resume,deactivate}`
+/// Minimal in-memory FSM mirroring the `ck.agent.{pause,resume,deactivate}`
 /// reducer contract: bottom = `reject`, deactivate is terminal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AgentState {
@@ -129,7 +129,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         OP_AGENT_GRANT_DETACH,
         OP_AGENT_SIDECAR_THREAD_ENSURE,
     ] {
-        if !op.starts_with("cx.agent.") && !op.starts_with("cx.account.") {
+        if !op.starts_with("ck.agent.") && !op.starts_with("ck.account.") {
             bail!("agent op id `{op}` lost canonical namespace");
         }
     }

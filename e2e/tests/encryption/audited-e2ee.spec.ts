@@ -200,7 +200,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
       flow_id: flowIdFromRealmId(spaceId),
       track_name: "discussion",
       encrypted: true,
-      encrypted_content: encryptedEnvelope("cx.message.v1", ciphertext, spaceId, ciphertextDigest),
+      encrypted_content: encryptedEnvelope("ck.message.v1", ciphertext, spaceId, ciphertextDigest),
     },
   });
   await submitSignedEventApi(request, bobToken, message, {

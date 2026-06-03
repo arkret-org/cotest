@@ -77,7 +77,7 @@ conformance_test!(
 
 conformance_test!(
     /// Round 4 / A2 — security-closure-vectors runner contract.
-    /// Confirms the 12 `cx.vector.*` ids are present and every step
+    /// Confirms the 12 `ck.vector.*` ids are present and every step
     /// exposes the full `runner {given_state, operation, transcript,
     /// expected_state_transition, expected_external_response,
     /// expected_audit_reason}` quad.
@@ -116,7 +116,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round 4 / A2 — lint parity: every `cx.vector.*` token referenced
+    /// Round 4 / A2 — lint parity: every `ck.vector.*` token referenced
     /// from any fixture JSON resolves against the union of declared
     /// vectors across the fixture set. Best-effort cotest mirror of
     /// `check_vector_reference_closure` (the full Python pass also
@@ -336,7 +336,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-21 — Discovery profile (cx.profile.discovery.v1) advertise vs
+    /// Round-21 — Discovery profile (ck.profile.discovery.v1) advertise vs
     /// core/extension tier filtering, interop_bridge handling, and post-C16
     /// surface naming (blob_storage / realtime_media / moderation_reports).
     discovery_profile_fixture_suite_matches_reference_semantics,
@@ -369,7 +369,7 @@ conformance_test!(
     /// Round-22 — Event-kind ↔ LatticeKind dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core lattice, no cell_family appears in
-    /// two lattices, namespace is cx.component.*, bottom ∈ {reject, expose},
+    /// two lattices, namespace is ck.component.*, bottom ∈ {reject, expose},
     /// and the fixture's expected_cell_family_lattice_bindings exactly matches
     /// the registry.
     event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,

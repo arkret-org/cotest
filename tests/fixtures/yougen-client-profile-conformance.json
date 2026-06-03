@@ -1,6 +1,6 @@
 {
   "suite": "yougen_client_profile_conformance",
-  "profile": "cx.profile.yougen_client_blackbox_manifest.v1",
+  "profile": "ck.profile.yougen_client_blackbox_manifest.v1",
   "service": "yougen",
   "target_profiles": [
     "ck.profile.full_client.v1",

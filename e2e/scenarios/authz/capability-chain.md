@@ -33,20 +33,20 @@
 
 1. alice createSpace,seedMembers=[bob, carol, mallory]
 2. alice 进 `/space/${spaceId}/admin` → "Capabilities" 区
-3. 点 "Grant" → 选 grantee = bob.did,actions = `[cx.space.write_message]`,constraints = `{ expires_at: +1h }`
-4. yougen 提交 `ck.capability.grant`,event 落到 `cx.cell:cx.component.capability.<grant_id>.v1`
+3. 点 "Grant" → 选 grantee = bob.did,actions = `[ck.space.write_message]`,constraints = `{ expires_at: +1h }`
+4. yougen 提交 `ck.capability.grant`,event 落到 `ck.cell:ck.component.capability.<grant_id>.v1`
 5. 断言:`/space/${spaceId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
 
 ### Phase B — bob 用 capability 写消息
 
 6. bob 在 timeline 发消息 `M_b`
-7. reducer 校验 bob 持有 `cx.space.write_message` capability + constraint(未过期)→ 接受
+7. reducer 校验 bob 持有 `ck.space.write_message` capability + constraint(未过期)→ 接受
 8. 断言:`M_b` 渲染
 
 ### Phase C — bob delegate 给 carol(sub-constraint)
 
 9. bob 进 `/settings/capabilities` 或 space admin → "Delegate"
-10. 输入 grantee = carol.did,actions = `[cx.space.write_message]`,sub-constraints = `{ expires_at: +30min }`(在 bob 自己 expiry 之前)
+10. 输入 grantee = carol.did,actions = `[ck.space.write_message]`,sub-constraints = `{ expires_at: +30min }`(在 bob 自己 expiry 之前)
 11. yougen 提交 `ck.capability.delegate`
 12. 断言:capability tree 显示 alice → bob → carol 三层
 
@@ -67,12 +67,12 @@
 
 ### Phase F — Audit trail
 
-22. alice 查 `/space/${spaceId}/audit` 或调 `GET /_cokret/self/audit/events?space_id=<S>&kind=cx.capability.*`
+22. alice 查 `/space/${spaceId}/audit` 或调 `GET /_cokret/self/audit/events?space_id=<S>&kind=ck.capability.*`
 23. 断言:看到一行 grant、一行 delegate、一行 revoke;每行含 grantor / grantee / timestamp / actions / constraints
 
 ## Edge cases
 
-- **E20.1 over-grant**:bob 试 delegate carol 一个 bob 自己没有的 action(`cx.space.moderate`)→ reducer 拒,reason `capability_not_held`
+- **E20.1 over-grant**:bob 试 delegate carol 一个 bob 自己没有的 action(`ck.space.moderate`)→ reducer 拒,reason `capability_not_held`
 - **E20.2 over-expire**:bob 试 delegate 给 carol 一个 expiry 比 bob 自己晚的 → 拒,reason `delegation_exceeds_grantor_expiry`
 - **E20.3 mallory 无 capability 写消息**:reducer 拒,reason `missing_capability`
 - **E20.4 expiry 自动失效**:bob 的 grant 到期后,无需 explicit revoke,后续消息自动被拒
@@ -80,7 +80,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.capability.{grant,revoke,delegate}` event kinds;capability tree projection;cascade revoke;constraint evaluator(temporal + resource selector)
+- **soland 缺口**:`ck.capability.{grant,revoke,delegate}` event kinds;capability tree projection;cascade revoke;constraint evaluator(temporal + resource selector)
 - **yougen 缺口**:`/settings/capabilities` 或 space admin 的 capability UI,delegation tree viewer
 
 ## 总耗时预估

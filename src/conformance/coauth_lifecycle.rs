@@ -7,7 +7,7 @@ use super::{load_local_fixture_value, required_str, validate_profile};
 use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "coauth-account-lifecycle-fixture.json";
-const FIXTURE_PROFILE: &str = "cx.profile.coauth_account_lifecycle_vectors.v1";
+const FIXTURE_PROFILE: &str = "ck.profile.coauth_account_lifecycle_vectors.v1";
 
 const REQUIRED_PHASES: &[&str] = &[
     "oidc_callback_session_grant",

@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.canonical_dids.v1",
+  "profile": "ck.profile.canonical_dids.v1",
   "version": "2026-05-10",
   "comment": "Round 28 Q2 — shared canonical DID baseline. Most fixtures reference the same `did:web:<role>.example` DIDs; consolidating the source-of-truth here keeps fixture diffs focused on protocol semantics. Fixtures that use these DIDs SHOULD declare `inherits: [\"_shared/_canonical_dids.json\"]` for audit-trail discoverability.",
   "actors": {

@@ -1,6 +1,6 @@
 {
   "suite": "coauth_account_lifecycle",
-  "profile": "cx.profile.coauth_account_lifecycle_vectors.v1",
+  "profile": "ck.profile.coauth_account_lifecycle_vectors.v1",
   "service": "coauth",
   "cases": [
     {

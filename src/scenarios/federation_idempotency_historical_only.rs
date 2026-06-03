@@ -221,7 +221,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
         "operation": "ck.events.submit",
-        "envelopes": [{"kind": "cx.message.text", "payload": {"body": "federation-c3"}}],
+        "envelopes": [{"kind": "ck.message.text", "payload": {"body": "federation-c3"}}],
         "idempotency_key": "idem-c3-001",
     });
     let body_x_bytes = canonical_json_bytes(&body_x)

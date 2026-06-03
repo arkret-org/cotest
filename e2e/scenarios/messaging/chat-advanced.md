@@ -56,8 +56,8 @@
 
 14. alice 发 `M4 = "@bob please confirm"`
 15. yougen 客户端:
-    - 解析 `@bob` token,生成 `cx.relation.mention` payload
-    - 在 plain text space:`cx.message.create.payload.mentions = [bob.did]`
+    - 解析 `@bob` token,生成 `ck.relation.mention` payload
+    - 在 plain text space:`ck.message.create.payload.mentions = [bob.did]`
     - 在 E2EE space:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
 16. 断言:bob 收到 push notification(检查 yougen 的 in-app notification panel,或测试侧调 `GET /_cokret/self/notifications` 查 bob 的队列)
 17. 断言:carol **没**收到 mention 通知(她没被点名)
@@ -78,7 +78,7 @@
 ### Phase F — Typing indicator (ephemeral)
 
 25. bob 在 composer 输入"hi" 但不发送
-26. yougen 客户端:每 N ms 发 `cx.typing` ephemeral signal,payload `{ space_id, actor, ttl_ms: 5000 }`
+26. yougen 客户端:每 N ms 发 `ck.typing` ephemeral signal,payload `{ space_id, actor, ttl_ms: 5000 }`
 27. 断言:alice 的 timeline 上方显示 "bob is typing..." (`chat-typing-indicator` testid)
 28. bob 停止输入 5s+
 29. 断言:alice 视图的 typing 指示消失(过 ttl)
@@ -86,9 +86,9 @@
 ### Phase G — Presence
 
 30. carol 关闭 yougen tab(或假装离线)
-31. carol 的 client 在 onbeforeunload 发 `cx.presence` `{ state: "offline" }`
+31. carol 的 client 在 onbeforeunload 发 `ck.presence` `{ state: "offline" }`
 32. 断言:alice 视图 carol 的头像旁显示 offline icon(`presence-offline-indicator`)
-33. carol 重新打开 → 发 `cx.presence` `{ state: "online" }` 
+33. carol 重新打开 → 发 `ck.presence` `{ state: "online" }` 
 34. 断言:alice 视图 carol 又变 online
 
 ## Observable assertions(合并)
@@ -111,7 +111,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.content.poll{,.response}`、`cx.relation.mention`、mention sidecar hash 路由、`cx.typing` / `cx.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
+- **soland 缺口**:`ck.content.poll{,.response}`、`ck.relation.mention`、mention sidecar hash 路由、`ck.typing` / `ck.presence` ephemeral channel — 实现度未知;reactions(OR-Set)应该已有
 - **yougen 缺口**:poll UI(`poll-option-button`、`poll-close-button`、`poll-vote-count`)、typing indicator、presence indicator — 这些 testid 未确认存在
 - **测试侧**:典型测 typing 需要"无 send" 状态;Playwright 用 `composer-input.fill()` 不 click send,等 N ms 然后查 alice 视图
 

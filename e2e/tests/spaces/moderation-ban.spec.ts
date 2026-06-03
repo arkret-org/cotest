@@ -4,7 +4,7 @@
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
 //   - §2.5 Moderation MUST anchored
 //   - §3 Report
-//   - §5.1 Redact requires cx.space.moderate
+//   - §5.1 Redact requires ck.space.moderate
 //   - §5.2 Ban via ck.member.state{membership="ban"}
 
 import { expect, test } from "@playwright/test";

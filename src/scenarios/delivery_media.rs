@@ -147,8 +147,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
                 "messages": {
                     "did:web:alice.example": {
                         "dev_alice": {
-                            "type": "cx.mls.application",
-                            "content": encrypted_envelope("cx.mls.application", "opaque-to-device")
+                            "type": "ck.mls.application",
+                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device")
                         }
                     }
                 }
@@ -168,8 +168,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
                 "messages": {
                     "did:web:alice.example": {
                         "dev_alice": {
-                            "type": "cx.mls.application",
-                            "content": encrypted_envelope("cx.mls.application", "opaque-to-device")
+                            "type": "ck.mls.application",
+                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device")
                         }
                     }
                 }

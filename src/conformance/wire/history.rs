@@ -22,7 +22,7 @@ use crate::conformance::{required_str, validate_profile};
 /// Negative vectors check the rejection reason_code.
 pub fn run_history_visibility_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("history_visibility_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.history_visibility_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.history_visibility_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -55,9 +55,9 @@ pub fn run_history_visibility_fixture_suite() -> Result<()> {
         // Admin override path: validate capability gate.
         if let Some(admin) = v.get("admin_override") {
             if let Some(cap) = admin.get("capability").and_then(Value::as_str) {
-                if cap != "cx.recovery.read.history.v1" {
+                if cap != "ck.recovery.read.history.v1" {
                     bail!(
-                        "vector {name} admin_override.capability must be cx.recovery.read.history.v1"
+                        "vector {name} admin_override.capability must be ck.recovery.read.history.v1"
                     );
                 }
                 let view_mode = v
@@ -282,7 +282,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("redaction_history_visibility_fixture.json")?;
     validate_profile(
         &fixture,
-        "cx.profile.redaction_history_visibility_vectors.v1",
+        "ck.profile.redaction_history_visibility_vectors.v1",
     )?;
 
     let vectors = fixture
@@ -371,8 +371,8 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
                         );
                     }
                     let mv = v.get("unredaction_move").unwrap();
-                    if required_str(mv, "kind")? != "cx.message.unredact" {
-                        bail!("vector {name} unredaction_move kind must be cx.message.unredact");
+                    if required_str(mv, "kind")? != "ck.message.unredact" {
+                        bail!("vector {name} unredaction_move kind must be ck.message.unredact");
                     }
                     let removes = mv
                         .get("removes")
@@ -417,7 +417,7 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
 /// E6 Round 27 — redacted Move cross-server projection (round-25 MAL-14).
 pub fn run_redacted_cross_server_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("redacted_cross_server_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.redacted_cross_server_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.redacted_cross_server_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

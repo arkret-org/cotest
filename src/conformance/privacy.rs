@@ -296,6 +296,6 @@ fn resolve_private_did(proof: Option<&str>) -> Result<&'static str> {
 fn forwarded_encrypted_payload() -> Value {
     json!({
         "ciphertext": "opaque-ciphertext",
-        "content_type": "cx.mls.application"
+        "content_type": "ck.mls.application"
     })
 }

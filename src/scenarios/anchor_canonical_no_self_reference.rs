@@ -19,12 +19,12 @@
 use anyhow::{Result, anyhow};
 use chrono::TimeZone;
 use cokret_core::{
-    Anchor, AnchorId, AnchorKind, AnchorerSig, Did, Hash, Hlc, MoveId, MoveSignature, SpaceId,
+    Anchor, AnchorId, AnchorKind, AnchorerSig, Did, Hash, Hlc, MoveId, MoveSignature, RealmId,
     anchor_canonical_bytes, compute_anchor_id,
 };
 
-fn space() -> Result<SpaceId> {
-    SpaceId::new("ck:space:0196419b-0000-7000-8000-00000000014a".to_owned())
+fn space() -> Result<RealmId> {
+    RealmId::new("ck:space:0196419b-0000-7000-8000-00000000014a".to_owned())
         .map_err(|e| anyhow!("space id: {e}"))
 }
 

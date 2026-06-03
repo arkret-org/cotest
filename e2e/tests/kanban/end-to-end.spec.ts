@@ -119,7 +119,7 @@ test.describe("kanban end-to-end", () => {
       // space_id so the route resolves to the freshly-created space (plain
       // `/kanban` falls back to the first preview, which on a fresh session
       // is the hardcoded demo space the test user is NOT a member of, and
-      // every cx.flow.* event would 403 with capability_denied).
+      // every ck.flow.* event would 403 with capability_denied).
       await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await alicePage.page.getByTestId("new-board-toggle").click();
@@ -353,7 +353,7 @@ test.describe("kanban end-to-end", () => {
         .poll(
           async () => {
             const cellResp = await request.get(
-              `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(boardId)}/cells/cx.component.child_order.v1`,
+              `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(boardId)}/cells/ck.component.child_order.v1`,
               { headers: { authorization: `Bearer ${aliceToken}` } },
             );
             if (cellResp.status() !== 200) {
@@ -615,7 +615,7 @@ test.describe("kanban end-to-end", () => {
   //   1. The kanban card Discussion composer's default Send (chat.rs
   //      `send-chat-button`) ships PLAINTEXT ck.message.create unconditionally;
   //      soland accepts it (ck.message.create is not gated by the content
-  //      encryption floor — only cx.flow.* is). The encrypt path
+  //      encryption floor — only ck.flow.* is). The encrypt path
   //      (`run_local_mls_encrypt`) was additionally wasm-stubbed.
   //   2. Deeper: even when the encrypt path runs, yougen builds the message
   //      `encrypted_payload` from the loose `core::EncryptedPayload`

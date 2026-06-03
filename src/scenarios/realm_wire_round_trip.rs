@@ -3,8 +3,8 @@
 //! Phase 2 cross-project contract test for the Realm/Space reversal
 //! (R1.2). After Phase 1 the wire kinds switched as follows:
 //!
-//! - security boundary: `cx.space.*` → `cx.realm.*`
-//! - container: `cx.place.*` → `cx.space.*`
+//! - security boundary: `space.*` → `ck.realm.*`
+//! - container: `place.*` → `ck.space.*`
 //!
 //! This module builds SDK-typed [`cokret_core::Event`] envelopes for
 //! each renamed kind, canonical-encodes them via the SDK encoder, and
@@ -29,7 +29,7 @@ use serde_json::{Value, json};
 
 /// Build a minimal SDK-typed [`Event`] for a Realm/Space reversal wire
 /// vector. `realm_id` is the typed `ck:realm:...` security-boundary
-/// identifier; `cx.space.*` event kinds now describe containers inside
+/// identifier; `ck.space.*` event kinds now describe containers inside
 /// that Realm.
 fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {
     let actor_id = Did::new("did:web:alice.example".to_owned())

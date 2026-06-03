@@ -23,7 +23,7 @@ use crate::conformance::{required_str, validate_profile};
 /// * threshold geometry valid (1 <= k <= n) and members.len() == n.
 pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("threshold_multisig_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.threshold_multisig_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.threshold_multisig_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -275,7 +275,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
 /// * negative vectors cover wrong-verifying-key + tampered-canonical-body.
 pub fn run_production_signing_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("production_signing_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.production_signing_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.production_signing_vectors.v1")?;
 
     const VALID_SEED_SOURCES: &[&str] = &["configured", "ephemeral", "service_did_derived"];
     const VALID_POSITIVE_OUTCOMES: &[&str] = &[

@@ -406,11 +406,11 @@ fn validate_event_envelope(
     }
 
     let kind = match event.get("kind").and_then(Value::as_str) {
-        Some(kind) if kind.starts_with("cx.") => kind,
+        Some(kind) if kind.starts_with("ck.") => kind,
         Some(_) | None => {
             return Ok(EventEnvelopeDecision::reject(
                 "schema_violation",
-                "Event.kind MUST use registered cx.* spelling",
+                "Event.kind MUST use registered ck.* spelling",
             ));
         }
     };

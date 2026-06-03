@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.composite_state_key_encoding_vectors.v1",
+  "profile": "ck.profile.composite_state_key_encoding_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
@@ -44,7 +44,7 @@
     },
     {
       "name": "realm_member_carol",
-      "kind": "cx.realm.member",
+      "kind": "ck.realm.member",
       "components_array": ["ck:realm:01js0sp01000000000000000000", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
       "expected_canonical_json": "[\"ck:realm:01js0sp01000000000000000000\",\"did:web:carol.example\"]",

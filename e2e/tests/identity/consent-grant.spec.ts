@@ -138,7 +138,7 @@ test.describe("consent grant", () => {
     request,
   }) => {
     // Live G2.T5 API smoke: soland has a consent-adjacent MIMI surface today.
-    // The general cx.consent.* cell reducer is still not implemented, so the
+    // The general ck.consent.* cell reducer is still not implemented, so the
     // full identity consent lifecycle remains fixme below.
     const alice = uniqueUser("g2t5-consent-api-alice");
     const bob = uniqueUser("g2t5-consent-api-bob");
@@ -310,7 +310,7 @@ test.describe("consent grant", () => {
     "alice grants consent and bob can establish contact (full lifecycle)",
     async ({ browser, request }, testInfo) => {
       // spec: identity/consent-model.md §2-§4.
-      // soland gap: cx.consent.* reducer/projection 未实现.
+      // soland gap: ck.consent.* reducer/projection 未实现.
       // yougen gap: /contacts/new and /settings/consent consent UI 未实现.
       const stamp = Date.now();
       const alice = uniqueUser("consent-alice");

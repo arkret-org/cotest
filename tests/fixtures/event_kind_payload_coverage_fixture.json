@@ -189,7 +189,7 @@
   "negative_vectors": [
     {
       "name": "unknown_event_kind",
-      "event_kind": "cx.totally.fake.v1",
+      "event_kind": "ck.totally.fake.v1",
       "drift": { "kind": "unknown_kind" },
       "expected": { "outcome": "reject", "reason_code": "unknown_event_kind" }
     },

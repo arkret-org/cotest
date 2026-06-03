@@ -11,7 +11,7 @@
 //     Returns { did, public_jwk, key_package? }. Soland reads this to
 //     bind audit_disclosure_policy.audit_agent_principal_id.
 //   POST /_soland/admin/audit-agent/events  { kind, event }
-//     Forward `ck.moderation.franking_proof` / `cx.audit.report` events to the
+//     Forward `ck.moderation.franking_proof` / `ck.audit.report` events to the
 //     mock. Auto-acknowledges by recording a generated `ck.audit.accessed`
 //     envelope, fetchable via /inspect.
 //   POST /_soland/admin/audit-agent/invite { space_id, invite, mls_key_package? }
@@ -154,7 +154,7 @@ const server = createServer(async (req, res) => {
       return;
     }
     inboxLog.record({ kind: body.kind, event: body.event });
-    if (body.kind === "cx.audit.report") {
+    if (body.kind === "ck.audit.report") {
       const accessed = makeAccessedEnvelope({
         space_id: body.event?.space_id,
         source_event_id: body.event?.event_id,

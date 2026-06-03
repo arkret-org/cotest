@@ -44,7 +44,7 @@ test.describe("workflow: kanban week-in-review", () => {
       // Phase A — kanban opens against a fresh space. Navigate with the
       // explicit space_id so writes route to this space; plain `/kanban`
       // falls back to the hardcoded demo space the test user is not a
-      // member of, and every cx.flow.* event would 403.
+      // member of, and every ck.flow.* event would 403.
       const spaceId = await patPage.createSpace({
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",

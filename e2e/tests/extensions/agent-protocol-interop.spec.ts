@@ -162,7 +162,7 @@ test.describe("agent protocol interop", () => {
       //   //       audit_mode = "summary_and_artifacts"
       //
       //   // 2. Assert a human-approval gate is shown before publish-modal-confirm.
-      //   //    Click confirm → POST creates `cx.capability.grant.create`.
+      //   //    Click confirm → POST creates `ck.capability.grant.create`.
       //
       //   // 3. harness: GET soland sync; find the capability.grant.create
       //   //    event; assert payload.actions includes

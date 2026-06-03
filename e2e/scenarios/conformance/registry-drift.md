@@ -8,7 +8,7 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `cx.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
+- `cokret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `ck.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
 - `cokret-spec/spec/v1/artifacts/registry/removed-event-kinds.json` — 32 个被移除的 `cx.*` event.kind,`hard_reject` rejection level
 - `cokret-spec/spec/v1/artifacts/registry/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
 - `cokret-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json` — 被废弃的 profile id

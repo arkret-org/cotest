@@ -12,7 +12,7 @@
 //!      + capability grant MUST land in spec order; out-of-order events
 //!      MUST be rejected by the reducer.
 //!   2. [`pairing_expiry_auto_revoke`] — once a pairing's `expires_at` elapses, the agent_session
-//!      is auto-revoked and the `cx.session.grant_revoke` event MUST carry the reason
+//!      is auto-revoked and the `ck.session.grant_revoke` event MUST carry the reason
 //!      `pairing_expired`.
 //!   3. [`session_grant_replay_guard`] — replay of a session_grant with the same nonce MUST be
 //!      rejected by the reducer's replay guard.

@@ -154,8 +154,8 @@ fn base_op() -> LatticeOp {
 fn or_set_basic_add_remove_commute() -> Result<()> {
     let lattice = OrSet;
     let cref = cell(
-        "cx.component.consent.v1",
-        "cx.consent.01js0cc0000000000000000000",
+        "ck.component.consent.v1",
+        "ck.consent.01js0cc0000000000000000000",
     );
     let m1 = move_id("aa");
     let m2 = move_id("bb");
@@ -200,8 +200,8 @@ fn or_set_basic_add_remove_commute() -> Result<()> {
 fn or_set_idempotent_re_add_after_remove() -> Result<()> {
     let lattice = OrSet;
     let cref = cell(
-        "cx.component.consent.v1",
-        "cx.consent.01js0cc0000000000000000000",
+        "ck.component.consent.v1",
+        "ck.consent.01js0cc0000000000000000000",
     );
     let ops = vec![
         AnchoredOp::new(move_id("aa"), op_add("red")),
@@ -221,7 +221,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
         "ck.component.realm.policy.v1",
-        "cx.realm.01js0sp0000000000000000000",
+        "ck.realm.01js0sp0000000000000000000",
     );
     // Two anchored Moves concurrently set the cell to distinct values.
     let ops = vec![
@@ -256,7 +256,7 @@ fn cas_register_single_set_returns_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
         "ck.component.realm.policy.v1",
-        "cx.realm.01js0sp0000000000000000001",
+        "ck.realm.01js0sp0000000000000000001",
     );
     let ops = vec![AnchoredOp::new(
         move_id("dd"),
@@ -273,7 +273,7 @@ fn cas_register_single_set_returns_value() -> Result<()> {
 
 fn counter_pn_sums_increments_and_decrements() -> Result<()> {
     let lattice = Counter;
-    let cref = cell("cx.component.counter.v1", "metrics.events.received");
+    let cref = cell("ck.component.counter.v1", "metrics.events.received");
     let ops = vec![
         AnchoredOp::new(move_id("ee"), op_inc(5)),
         AnchoredOp::new(move_id("ff"), op_inc(3)),
@@ -365,8 +365,8 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
 fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
     let lattice = MvRegister;
     let cref = cell(
-        "cx.component.flow.title.v1",
-        "cx.flow.01js0fl0000000000000000000",
+        "ck.component.flow.title.v1",
+        "ck.flow.01js0fl0000000000000000000",
     );
     // MvRegister surfaces multiple concurrent values. The SDK's reference
     // implementation defaults to a Bottom-shaped result with both heads in
@@ -408,8 +408,8 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
 fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let lattice = OrderedLog;
     let cref = cell(
-        "cx.component.audit_log.v1",
-        "cx.realm.01js0sp0000000000000000000",
+        "ck.component.audit_log.v1",
+        "ck.realm.01js0sp0000000000000000000",
     );
     // Two issuers, both with monotonic issuer_seq. Join must produce a
     // deterministic linearization that includes all entries.
@@ -446,7 +446,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 fn anchorer_cell(space_suffix: &str) -> CellRef {
     cell(
         "ck.component.anchorer.v1",
-        &format!("cx.realm.01js{space_suffix}000000000000000000"),
+        &format!("ck.realm.01js{space_suffix}000000000000000000"),
     )
 }
 
@@ -578,7 +578,7 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
         "ck.component.realm.policy.v1",
-        "cx.realm.01js0sp0000000000000000000",
+        "ck.realm.01js0sp0000000000000000000",
     );
     // Anchor view AFTER recovery: only the repair Move's anchored op is in
     // scope (the earlier conflict pair was rolled back / superseded by the
@@ -604,7 +604,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
         "ck.component.realm.policy.v1",
-        "cx.realm.01js0sp0000000000000000001",
+        "ck.realm.01js0sp0000000000000000001",
     );
     // Two concurrent set-Moves where one self-references its own "winner"
     // capability remain a Bottom at the lattice layer — the cas_register
@@ -634,7 +634,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 // ──────────────────── MLS covered_frontier ────────────────────
 //
-// `ck:cell:cx.component.mls.covered_frontier.v1:<space_id>` is an or_set of
+// `ck:cell:ck.component.mls.covered_frontier.v1:<space_id>` is an or_set of
 // governance-frontier event refs each MLS commit attests to. Add-only
 // growth is the typical pattern; rotation that purges old refs is rare and
 // gated by capability. These tests confirm the lattice surfaces the union
@@ -642,8 +642,8 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 fn covered_frontier_cell(space_suffix: &str) -> CellRef {
     cell(
-        "cx.component.mls.covered_frontier.v1",
-        &format!("cx.realm.01js{space_suffix}000000000000000000"),
+        "ck.component.mls.covered_frontier.v1",
+        &format!("ck.realm.01js{space_suffix}000000000000000000"),
     )
 }
 

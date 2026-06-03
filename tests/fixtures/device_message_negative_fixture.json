@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.device_message_negative_vectors.v1",
+  "profile": "ck.profile.device_message_negative_vectors.v1",
   "version": "2026-05-09",
   "comment": "A5 Round 24 — device message / key verification / key backup negative vectors. Spec authority: extensions/device-messages.md + crypto-media/encryption-and-audit.md (encrypted-envelope shape) + authz/event-auth-state-resolution.md §B-22 (strict key_ref violations on encrypted envelopes). The negative vectors below cover: (a) malformed encrypted-envelope key_ref (B-22 strict_key_ref violation: key_ref not present in trust set, or stale, or wrong-DID-namespace); (b) unauthorized sender — the sending device's `device.authorized` content.scopes does NOT include the device-message scope; (c) expired session_grant proof; (d) replay-window violation (same envelope_id seen within the dedup window). All vectors MUST reject closed; encrypted envelope is opaque ciphertext but the OUTER frame fields (sender_device_id, recipient_device_id, key_ref, envelope_id, hlc, session_grant_proof) are validated by the recipient before any decryption is attempted.",
   "encoder": {

@@ -4,7 +4,7 @@
 //   §1 Provider Facade overview
 //   §2 Realm `federation_profile = "mimi_interop"` + endpoint exposure
 //   §3 Room binding: Cokret Flow ↔ MIMI room; event ↔ Message translation
-//   §4 Content mapping: standard MIMI content type ↔ `cx.morph` kind; unknown → quarantine
+//   §4 Content mapping: standard MIMI content type ↔ `ck.morph` kind; unknown → quarantine
 //   §5 Policy mapping: join_rule / history_visibility ↔ MIMI room policy
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
 //   §7 E2EE boundary: MLS-via-IETF profile transcript binding or explicit downgrade
@@ -37,11 +37,11 @@ test.describe("mimi federation", () => {
     "alice opens MIMI-enabled Realm; bob_mimi joins via facade; bidirectional messaging with identity bridging",
     async () => {
       // Phase A — alice 通过 /setup 创建 Realm,设
-      //   cx.realm.federation_profile = "mimi_interop"
+      //   ck.realm.federation_profile = "mimi_interop"
       // 断言 GET /_cokret/self/realm/:id/federation/mimi/endpoint 返回 mimi_endpoint_url + room_binding_id。
       //
       // Phase B — mimi_facade (mock) 模拟外部 MIMI 网络的 join request,
-      //   翻译为 Cokret 的 cx.invite.request / knock,投递到 soland;
+      //   翻译为 Cokret 的 ck.invite.request / knock,投递到 soland;
       //   alice 的 /realm/:id/admin 看到 federation-inbound-panel 含 mimi 来源标记。
       //
       // Phase C — alice approve;soland 通过 facade 验证 bob_mimi 的 MIMI identity,
@@ -51,10 +51,10 @@ test.describe("mimi federation", () => {
       //
       // Phase D — alice 在 /timeline/:realmId 发 M1;
       //   facade mock 记录到 outbound MIMI event;soland message 挂
-      //   cx.morph.federation_outbound = "mimi" + mimi_event_id。
+      //   ck.morph.federation_outbound = "mimi" + mimi_event_id。
       //   facade 把 bob_mimi 在 MIMI 网络的 MM2 翻译为 Cokret Message;
       //   alice timeline 在 30s 内出现 MM2,sender 显示为 pairwise DID;
-      //   消息挂 cx.morph.federation_inbound = "mimi" + mimi_origin_event_id。
+      //   消息挂 ck.morph.federation_inbound = "mimi" + mimi_origin_event_id。
       //   alice reply MM2 → M3;reply 关系在 MIMI ↔ Cokret 双向保留。
       //
       // Phase E — Phase B 的 approve 隐含 per-Realm consent;
@@ -72,7 +72,7 @@ test.describe("mimi federation", () => {
     async () => {
       // facade mock 主动返回 5xx / timeout;
       // alice 发 M1 应仍然 persist 到 soland 本地、对 Cokret 成员可见;
-      // message 挂 cx.morph.federation_outbound_status = "deferred";
+      // message 挂 ck.morph.federation_outbound_status = "deferred";
       // facade 恢复后,soland 自动重试投递,状态转为 "delivered"。
     },
   );
@@ -151,7 +151,7 @@ test.describe("mimi federation", () => {
     const events = await querySpaceEventsApi(request, token, spaceId);
     const downgradeEvent = eventById(events, String(downgradeBody.cokret_event_id));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
-    expect(nested(downgradeEvent, "payload", "content", "cx.morph.e2ee_downgrade")).toBe(
+    expect(nested(downgradeEvent, "payload", "content", "ck.morph.e2ee_downgrade")).toBe(
       "mimi_bridge",
     );
     expect(nested(downgradeEvent, "payload", "mimi_policy", "e2ee_boundary")).toBe(
@@ -168,7 +168,7 @@ test.describe("mimi federation", () => {
     );
   });
 
-  test("E5.3 content type 差异:MIMI 特有 content kind → quarantine + cx.morph.unknown_content_kind", async ({
+  test("E5.3 content type 差异:MIMI 特有 content kind → quarantine + ck.morph.unknown_content_kind", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -199,9 +199,9 @@ test.describe("mimi federation", () => {
 
     const events = await querySpaceEventsApi(request, token, spaceId);
     const event = eventById(events, String(body.cokret_event_id));
-    expect(nested(event, "payload", "content", "kind")).toBe("cx.content.unsupported");
+    expect(nested(event, "payload", "content", "kind")).toBe("ck.content.unsupported");
     expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
-    expect(nested(event, "payload", "content", "cx.morph.unknown_content_kind")).toBe(
+    expect(nested(event, "payload", "content", "ck.morph.unknown_content_kind")).toBe(
       "m.location.share.live",
     );
     expect(JSON.stringify(event)).not.toContain(rawLocation);

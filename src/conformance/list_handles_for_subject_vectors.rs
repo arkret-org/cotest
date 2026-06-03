@@ -22,19 +22,19 @@ use cokret_core::model::{
 };
 
 pub const VECTOR_ID_LH_HAPPY_SINGLE: &str =
-    "cx.vector.directory.list_handles_for_subject.happy_path_single_claim.v1";
+    "ck.vector.directory.list_handles_for_subject.happy_path_single_claim.v1";
 pub const VECTOR_ID_LH_SUBJECT_MISMATCH: &str =
-    "cx.vector.directory.list_handles_for_subject.subject_mismatch_rejected.v1";
+    "ck.vector.directory.list_handles_for_subject.subject_mismatch_rejected.v1";
 pub const VECTOR_ID_LH_AUDIENCE_FILTER: &str =
-    "cx.vector.directory.list_handles_for_subject.audience_filter_applied.v1";
+    "ck.vector.directory.list_handles_for_subject.audience_filter_applied.v1";
 pub const VECTOR_ID_LH_ISSUER_TRUST_FILTER: &str =
-    "cx.vector.directory.list_handles_for_subject.issuer_trust_filter.v1";
+    "ck.vector.directory.list_handles_for_subject.issuer_trust_filter.v1";
 pub const VECTOR_ID_LH_CURSOR_PAGINATION: &str =
-    "cx.vector.directory.list_handles_for_subject.cursor_pagination.v1";
+    "ck.vector.directory.list_handles_for_subject.cursor_pagination.v1";
 pub const VECTOR_ID_LH_PRIMARY_ALIGNED: &str =
-    "cx.vector.directory.list_handles_for_subject.primary_handle_field_aligned_with_3_2_1.v1";
+    "ck.vector.directory.list_handles_for_subject.primary_handle_field_aligned_with_3_2_1.v1";
 pub const VECTOR_ID_LH_AS_OF_HISTORICAL: &str =
-    "cx.vector.directory.list_handles_for_subject.as_of_historical_replay.v1";
+    "ck.vector.directory.list_handles_for_subject.as_of_historical_replay.v1";
 
 pub const ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_LH_HAPPY_SINGLE,

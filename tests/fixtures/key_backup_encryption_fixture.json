@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.key_backup_encryption_vectors.v1",
+  "profile": "ck.profile.key_backup_encryption_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and ck.schema.key_backup.v1. Client encrypts MLS history / secret-storage material with a passphrase-derived recovery key before PUT /_cokret/self/keys/backups/{backup_id}. Server stores an opaque ck.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",

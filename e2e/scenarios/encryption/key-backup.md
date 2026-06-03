@@ -2,7 +2,7 @@
 
 ## 目标
 
-完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`cx.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 passphrase 恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE space 收到的消息。
+完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ck.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 passphrase 恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE space 收到的消息。
 
 identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在**消息解密** 和 MLS epoch 重建,identity/recovery 更偏 device identity。
 

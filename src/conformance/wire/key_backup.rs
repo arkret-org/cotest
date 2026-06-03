@@ -23,7 +23,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     use sha2::Sha512 as KdfSha512;
 
     let fixture = load_local_fixture("key_backup_encryption_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.key_backup_encryption_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.key_backup_encryption_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -258,7 +258,7 @@ pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
 /// executed (or issued → expired / cancelled).
 pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("recovery_bridge_full_chain_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.recovery_bridge_full_chain_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.recovery_bridge_full_chain_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
@@ -454,7 +454,7 @@ pub fn run_recovery_ticket_state_machine_check() -> Result<()> {
 /// F-2 Round 27 — restore approval/executor/artifact full workflows.
 pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("restore_full_workflows_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.restore_full_workflows_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.restore_full_workflows_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

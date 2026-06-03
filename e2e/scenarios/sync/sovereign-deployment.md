@@ -55,8 +55,8 @@
 7. **alice_internal** 调 `POST <soland_main>/_soland/admin/deployment/realm.create` 创建 enclave Realm:
    - `realm_id = "E"`
    - `ck.realm.deployment_profile = "enclave"`
-   - `cx.realm.hosted_on = "<soland_enclave server_id>"`
-   - `cx.realm.external_invite_policy = "allowed"`
+   - `ck.realm.hosted_on = "<soland_enclave server_id>"`
+   - `ck.realm.external_invite_policy = "allowed"`
 8. 断言:`soland_main` 返回 enclave Realm 的 `realm_id`;`soland_enclave` 上 `GET /_cokret/self/realm/E` 200,profile=enclave
 9. **alice_internal** 在 enclave Realm `E` 中通过 yougen 建 space `S_enclave`(session 切到 enclave 节点上下文),记录 `enclaveSpaceId`
 

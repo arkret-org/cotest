@@ -308,7 +308,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //
       // 1) Pull soland's describe (re-use Phase A); compute pickFeature =
       //    a feature id that is in NEITHER supported_features NOR implemented_features
-      //    (e.g. "cx.feature.mimi_room_passthrough.v1" on default dev soland).
+      //    (e.g. "ck.feature.mimi_room_passthrough.v1" on default dev soland).
       // 2) POST /_cokret/self/events with envelope:
       //      { ..., requirements: { features: [pickFeature], critical_extensions: [] }, ... }
       // 3) Assert: status 4xx (likely 422 or 400),

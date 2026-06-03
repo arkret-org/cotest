@@ -8,14 +8,14 @@
 //   - conformance/scalability-constraints.md (§2 wire limits, §3 authz limits,
 //     §5 Space/Relation/View limits, §8 error semantics)
 //   - conformance/conformance-vectors.md (vector loader pattern: same as the
-//     sibling encoding-vectors suite — `cx.vector.<domain>.<scenario>.v1`
+//     sibling encoding-vectors suite — `ck.vector.<domain>.<scenario>.v1`
 //     fixtures live in cokret-spec/spec/v1/artifacts/fixtures/)
-// Fixtures: cokret-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json,
-//           cx.vector.query.*.json, cx.vector.scalability.*.json
+// Fixtures: cokret-spec/spec/v1/artifacts/fixtures/ck.vector.snapshot.*.json,
+//           ck.vector.query.*.json, ck.vector.scalability.*.json
 //
 // Phases A-E exercise soland's /_cokret/self/conformance/{snapshot,query} HTTP
 // endpoints directly. These endpoints are debug/conformance surfaces only;
-// production deployments must not advertise cx.profile.conformance.vectors.v1
+// production deployments must not advertise ck.profile.conformance.vectors.v1
 // unless they explicitly enable the route.
 //
 // The remaining tests in this file are intentionally narrow:
@@ -24,7 +24,7 @@
 //     when the fixtures directory has zero matching files today.
 //   - Phase G: optional surface probe of GET /_cokret/describe to
 //     assert the surface is *internally consistent* (does NOT claim the
-//     cx.profile.conformance.vectors.v1 profile while the endpoint is 404,
+//     ck.profile.conformance.vectors.v1 profile while the endpoint is 404,
 //     OR if it does claim it then the endpoint must respond with something
 //     other than 404). This is the same "claim ⇔ surface" sanity used by
 //     registry-drift / profile-gates.
@@ -60,9 +60,9 @@ const FIXTURES_DIR = resolve(
 // (encoding-vectors, redaction-vectors, etc.) own their own namespaces; we
 // must not accidentally count them.
 const VECTOR_PREFIXES = [
-  "cx.vector.snapshot.",
-  "cx.vector.query.",
-  "cx.vector.scalability.",
+  "ck.vector.snapshot.",
+  "ck.vector.query.",
+  "ck.vector.scalability.",
 ] as const;
 
 function listVectorFixtures(): { dir: string; exists: boolean; matches: string[] } {
@@ -114,7 +114,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       snapshot_ref: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000001:fixture",
       realm_id: "ck:realm:01904100-0000-7000-8000-000000000001",
       reducer_profile: "ck.reducer.v1",
-      schema_profile_refs: ["cx.schema.core.v1"],
+      schema_profile_refs: ["ck.schema.core.v1"],
       chunk_hashes: chunkHashes,
       created_by: "did:web:soland.conformance",
       created_at: "2026-05-31T00:00:00Z",
@@ -122,7 +122,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
     const resp = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
-        vector_id: "cx.vector.snapshot.manifest_integrity.v1",
+        vector_id: "ck.vector.snapshot.manifest_integrity.v1",
         manifest,
         chunks,
       },
@@ -136,7 +136,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
     const tampered = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
-        vector_id: "cx.vector.snapshot.tampered_chunk.v1",
+        vector_id: "ck.vector.snapshot.tampered_chunk.v1",
         manifest,
         chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
       },
@@ -154,7 +154,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       snapshot_ref: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000002:signed",
       realm_id: "ck:realm:01904100-0000-7000-8000-000000000002",
       reducer_profile: "ck.reducer.v1",
-      schema_profile_refs: ["cx.schema.core.v1"],
+      schema_profile_refs: ["ck.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),
       created_by: signerDid,
       created_at: "2026-05-31T00:00:00Z",
@@ -166,7 +166,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     };
     const resp = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
-        vector_id: "cx.vector.snapshot.signature_binding.v1",
+        vector_id: "ck.vector.snapshot.signature_binding.v1",
         manifest,
         chunks,
       },
@@ -191,7 +191,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
     const revoked = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
-        vector_id: "cx.vector.snapshot.signature_binding.revoked.v1",
+        vector_id: "ck.vector.snapshot.signature_binding.revoked.v1",
         manifest,
         chunks,
         revoked_signer_dids: [signerDid],
@@ -216,7 +216,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       limit: 2,
     };
     const first = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/query`, {
-      data: { vector_id: "cx.vector.query.page_order.v1", rows, query },
+      data: { vector_id: "ck.vector.query.page_order.v1", rows, query },
     });
     expect(first.status()).toBe(200);
     const page1 = await first.json();
@@ -227,7 +227,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(decodedCursorText(page1.next_cursor)).not.toContain("row-");
 
     const page2Req = {
-      vector_id: "cx.vector.query.page_order.v1",
+      vector_id: "ck.vector.query.page_order.v1",
       rows,
       query: { ...query, cursor: page1.next_cursor },
     };
@@ -250,11 +250,11 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   }) => {
     const rejectVectors = [
       {
-        vector_id: "cx.vector.query.unknown_filter_key.v1",
+        vector_id: "ck.vector.query.unknown_filter_key.v1",
         query: { filters: [{ field: "kind", op: "outside_registry", value: "task" }] },
       },
       {
-        vector_id: "cx.vector.query.conflicting_sort.v1",
+        vector_id: "ck.vector.query.conflicting_sort.v1",
         query: {
           order_by: [
             { field: "rank", direction: "asc" },
@@ -263,7 +263,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
         },
       },
       {
-        vector_id: "cx.vector.query.unauthorized_field.v1",
+        vector_id: "ck.vector.query.unauthorized_field.v1",
         query: { projection: ["id", "secret_notes"] },
       },
     ];
@@ -282,20 +282,20 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   }) => {
     const rejectVectors = [
       {
-        vector_id: "cx.vector.scalability.page_size_over_max.v1",
+        vector_id: "ck.vector.scalability.page_size_over_max.v1",
         query: { limit: 1001 },
       },
       {
-        vector_id: "cx.vector.scalability.batch_size_over_max.v1",
+        vector_id: "ck.vector.scalability.batch_size_over_max.v1",
         rows: Array.from({ length: 1001 }, (_, index) => ({ id: `row-${index}` })),
         query: { limit: 10 },
       },
       {
-        vector_id: "cx.vector.scalability.relation_depth_over_max.v1",
+        vector_id: "ck.vector.scalability.relation_depth_over_max.v1",
         query: { relation: { depth: 33 } },
       },
       {
-        vector_id: "cx.vector.scalability.envelope_over_1mib.v1",
+        vector_id: "ck.vector.scalability.envelope_over_1mib.v1",
         query: { limit: 1 },
       },
     ];
@@ -313,7 +313,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
 
   test("Phase F — vector loader smoke (harness-only, never touches soland)", async ({}, testInfo) => {
     // Scenario doc §"Implementation notes" → fixture-absence fallback. Today
-    // the fixtures directory has zero cx.vector.{snapshot,query,scalability}.*
+    // the fixtures directory has zero ck.vector.{snapshot,query,scalability}.*
     // files. We still want CI to log the candidate count and id list so the
     // absence is visible and so newly-added fixtures show up immediately in
     // the next run.
@@ -357,10 +357,10 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
   }, testInfo) => {
     // Optional surface probe — the assertion is "the surface is internally
     // consistent", NOT "the endpoint works". Two outcomes are acceptable:
-    //   (a) /server/describe does NOT claim cx.profile.conformance.vectors.v1
+    //   (a) /server/describe does NOT claim ck.profile.conformance.vectors.v1
     //       → any status from /_cokret/self/conformance/snapshot (incl. 404) is OK,
     //         because the server isn't promising the endpoint exists.
-    //   (b) /server/describe DOES claim cx.profile.conformance.vectors.v1
+    //   (b) /server/describe DOES claim ck.profile.conformance.vectors.v1
     //       → /_cokret/self/conformance/snapshot MUST NOT return 404 (anything else
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
     //         claim is a lie).
@@ -381,7 +381,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       ? describe.claimed_profiles
       : [];
     const claimsConformanceVectors = claimedProfiles.some(
-      (entry) => entry?.profile_id === "cx.profile.conformance.vectors.v1",
+      (entry) => entry?.profile_id === "ck.profile.conformance.vectors.v1",
     );
 
     await testInfo.attach("describe-claims-conformance-vectors", {
@@ -400,14 +400,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // / rejecting / requiring auth" (anything else).
     const probe = await request.post(`${solandBaseUrl()}/_cokret/self/conformance/snapshot`, {
       data: {
-        vector_id: "cx.vector.snapshot.surface_probe.v1",
+        vector_id: "ck.vector.snapshot.surface_probe.v1",
         manifest: {},
         chunks: [],
       },
     });
     expect(
       probe.status(),
-      `server claims cx.profile.conformance.vectors.v1 but /_cokret/self/conformance/snapshot returned 404 — surface is inconsistent`,
+      `server claims ck.profile.conformance.vectors.v1 but /_cokret/self/conformance/snapshot returned 404 — surface is inconsistent`,
     ).not.toBe(404);
   });
 });

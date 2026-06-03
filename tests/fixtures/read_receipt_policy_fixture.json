@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.read_receipt_policy_vectors.v1",
+  "profile": "ck.profile.read_receipt_policy_vectors.v1",
   "version": "2026-05-19",
   "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ck.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.scope_circle_id pointing at a Circle, per CXP-0007) whose own ck.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ck.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
   "vectors": [

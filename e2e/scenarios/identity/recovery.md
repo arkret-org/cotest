@@ -83,13 +83,13 @@
 - **E8.2 篡改 ciphertext**:测试 harness 改 backup 的 1 byte → 客户端 digest 校验失败,MUST 拒绝
 - **E8.3 错 passphrase 重试限制**:连续 N 次 commitment 不匹配 → 客户端要求 cooldown(防止暴力)
 - **E8.4 threshold recovery (3 of 5 shares)**:alice 用恢复 shares 而非 passphrase;3 个 share holder 各自签发响应,客户端拼凑出 recovery key → 解密 envelope。覆盖 `key-management.md §8`
-- **E8.5 trusted recovery service**:走第三方恢复服务(`cx.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
+- **E8.5 trusted recovery service**:走第三方恢复服务(`ck.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
 - **E8.6 Mixed-domain backup**:`mixed_secret_storage=true` only 允许在 `personal_node` profile;`high_assurance` 部署 MUST 拒(§7.1)
 - **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke(spec §5.2);Phase C 恢复仍然成功,但**新设备的 historical access 仍按当前 membership 评估**(spec §12 line 724)
 
 ## Implementation notes
 
-- **soland 缺口**:`cx.key_backup.v1` schema、recovery policy state machine、recovery proof 校验。整条 scenario 大部分 fixme。
+- **soland 缺口**:`ck.key_backup.v1` schema、recovery policy state machine、recovery proof 校验。整条 scenario 大部分 fixme。
 - **yougen 缺口**:`/settings/recovery` 设置 UI、`/onboarding` 的 Restore from backup 入口。当前不存在;参考 spec §7.1-7.3 的 client UI 暗示。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 

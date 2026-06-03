@@ -31,14 +31,14 @@
   - §7 — Retention / snapshot pruning / tombstone 上限
   - §8 — 错误语义(MUST reject vs SHOULD soft_fail / quarantine,不得静默截断)
 - `cokret-spec/spec/v1/zh/conformance/conformance-vectors.md` — vector loader pattern(同一目录 `spec/v1/artifacts/fixtures/<vector_id>.json`,`expected_*` 字段命名约定,失败时报告 actual / expected diff)
-- 关联 artifact: `cokret-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json`、`cx.vector.query.*.json`、`cx.vector.scalability.*.json`(目前尚未提交,见 Implementation notes 的 fixture absence fallback)
+- 关联 artifact: `cokret-spec/spec/v1/artifacts/fixtures/ck.vector.snapshot.*.json`、`ck.vector.query.*.json`、`ck.vector.scalability.*.json`(目前尚未提交,见 Implementation notes 的 fixture absence fallback)
 - 关联实现:soland snapshot/query 模块、`/_cokret/self/conformance/{snapshot,query}` 端点(目前未实现,见 Implementation notes)
 
 ## 拓扑
 
 - 1 × soland (principal server) — `solandBaseUrl()`,暴露(将暴露)`/_cokret/self/conformance/snapshot`、`/_cokret/self/conformance/query` 端点
 - 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使 Phase B 验证 snapshot signature 的签名者 DID 时可以拉到真实 actor signing key
-- 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `cokret-spec/spec/v1/artifacts/fixtures/` glob `cx.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
+- 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `cokret-spec/spec/v1/artifacts/fixtures/` glob `ck.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
 
 (都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/_cokret/self/conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)
 
@@ -62,10 +62,10 @@
 
 ### Phase A — Snapshot manifest integrity (snapshot-schema §2 / §3 / §4)
 
-1. **harness** 加载 `cx.vector.snapshot.manifest_integrity.v1` (若存在);vector 形如:
+1. **harness** 加载 `ck.vector.snapshot.manifest_integrity.v1` (若存在);vector 形如:
    ```json
    {
-     "vector_id": "cx.vector.snapshot.manifest_integrity.v1",
+     "vector_id": "ck.vector.snapshot.manifest_integrity.v1",
      "protocol_version": "1.0",
      "input": { "manifest": { ... }, "chunks": [ { "chunk_ref": ..., "payload": { ... } } ] },
      "expected_manifest_digest": "sha256:...",
@@ -84,7 +84,7 @@
 
 ### Phase B — Snapshot signature binding (snapshot-schema §5)
 
-5. **harness** 加载 `cx.vector.snapshot.signature_ed25519.v1`(deterministic Ed25519 vector)
+5. **harness** 加载 `ck.vector.snapshot.signature_ed25519.v1`(deterministic Ed25519 vector)
 6. `POST /_cokret/self/conformance/snapshot` with `{ vector_id, manifest, chunks }`(manifest 内含 `signature` 字段)
 7. 断言:
    - `response.signature_valid === true`
@@ -95,10 +95,10 @@
 
 ### Phase C — Query filters / sort / pagination (query-schema §2 / §3 / §6 / §8)
 
-10. **harness** 加载 `cx.vector.query.filter_sort_paginate.v1`;vector 形如:
+10. **harness** 加载 `ck.vector.query.filter_sort_paginate.v1`;vector 形如:
     ```json
     {
-      "vector_id": "cx.vector.query.filter_sort_paginate.v1",
+      "vector_id": "ck.vector.query.filter_sort_paginate.v1",
       "input": {
         "query": {
           "realm_ids": ["ck:realm:..."],
@@ -130,28 +130,28 @@
 
 ### Phase D — Query schema fail-closed (query-schema §3 / §9)
 
-17. **harness** 加载 `cx.vector.query.unknown_filter_key.v1`(filter 用了 spec §3 op 之外的字符串,例如 `"op": "bogus"`)
+17. **harness** 加载 `ck.vector.query.unknown_filter_key.v1`(filter 用了 spec §3 op 之外的字符串,例如 `"op": "bogus"`)
 18. `POST /_cokret/self/conformance/query` → MUST HTTP 4xx + `error.code === "query_schema_violation"`(或 spec 允许的等价 `schema_violation`),响应体 MUST NOT 包含 `items` / `next_cursor`(silent-empty 是失败模式)
-19. **harness** 加载 `cx.vector.query.conflicting_sort.v1`(同一 `field` 出现两次,direction 一次 asc 一次 desc)
+19. **harness** 加载 `ck.vector.query.conflicting_sort.v1`(同一 `field` 出现两次,direction 一次 asc 一次 desc)
 20. `POST .../query` → MUST 4xx + `error.code === "query_schema_violation"`,不能默认拿第一个 sort
-21. **harness** 加载 `cx.vector.query.unauthorized_field.v1`(projection 包含调用方未授权字段) → MUST reject 而不是 silent-strip(query-schema §9 "实现 MUST 拒绝访问未授权字段")
+21. **harness** 加载 `ck.vector.query.unauthorized_field.v1`(projection 包含调用方未授权字段) → MUST reject 而不是 silent-strip(query-schema §9 "实现 MUST 拒绝访问未授权字段")
 
 ### Phase E — Scalability constraints fail-closed (scalability-constraints §2 / §3 / §5 / §8)
 
-22. **harness** 加载 `cx.vector.scalability.page_size_over_max.v1`(query `limit` = 1,001,超过 §2 单次 sync / projection page 1,000 上限)
+22. **harness** 加载 `ck.vector.scalability.page_size_over_max.v1`(query `limit` = 1,001,超过 §2 单次 sync / projection page 1,000 上限)
 23. `POST /_cokret/self/conformance/query` → MUST HTTP 4xx + `error.code === "scalability_limit_exceeded"`(或等价 `payload_too_large` / `quota_exceeded`,见 §8),响应 MUST NOT 截断到 1,000 后静默接受
-24. **harness** 加载 `cx.vector.scalability.batch_size_over_max.v1`(snapshot chunk 数 > 1,000,或 events[] > 1,000)
+24. **harness** 加载 `ck.vector.scalability.batch_size_over_max.v1`(snapshot chunk 数 > 1,000,或 events[] > 1,000)
 25. `POST /_cokret/self/conformance/snapshot` → MUST 4xx + `error.code ∈ {scalability_limit_exceeded, payload_too_large}`
-26. **harness** 加载 `cx.vector.scalability.relation_depth_over_max.v1`(query.relation.depth = 33,超过 §2 关系展开深度 32)
+26. **harness** 加载 `ck.vector.scalability.relation_depth_over_max.v1`(query.relation.depth = 33,超过 §2 关系展开深度 32)
 27. `POST /_cokret/self/conformance/query` → MUST 4xx + `error.code === "scalability_limit_exceeded"`
-28. **harness** 加载 `cx.vector.scalability.envelope_over_1mib.v1`(单个 manifest canonical 编码 > 1 MiB)
+28. **harness** 加载 `ck.vector.scalability.envelope_over_1mib.v1`(单个 manifest canonical 编码 > 1 MiB)
 29. `POST /_cokret/self/conformance/snapshot` → MUST 4xx + `error.code === "payload_too_large"`(§2 envelope 1 MiB 规则)
 30. 对每条 reject vector 额外断言:响应 envelope 符合 spec §8 错误语义(`retry_after_ms` 出现仅在 `soft_fail` / `temporarily_unavailable` 路径;reject 路径不应携带 retry 提示)
 
 ### Phase F — Vector loader smoke (harness-only,no soland call)
 
 31. **harness** 解析自身位置(`fileURLToPath(import.meta.url)` → `dirname(...)`)拼出 fixtures dir 绝对路径 `<repo>/cokret-spec/spec/v1/artifacts/fixtures`
-32. `readdirSync(fixturesDir)`,过滤 `cx.vector.{snapshot,query,scalability}.*.json`,得到 candidate id 列表
+32. `readdirSync(fixturesDir)`,过滤 `ck.vector.{snapshot,query,scalability}.*.json`,得到 candidate id 列表
 33. 对每个 candidate:`JSON.parse(readFileSync(...))` MUST 不抛错(即使内容是空对象)
 34. 测试通过 `console.log` / `testInfo.attach` 输出 candidate count + id 清单,便于人工 audit;不强制 candidate count > 0(fixture 可能尚未提交,此时 count === 0 也是合法的 — assertion 用 `expect(count).toBeGreaterThanOrEqual(0)`)
 35. 这一步 **不触发任何 soland HTTP 请求**;它的目的只是让 fixture 缺失这件事在 CI 日志里立刻可见
@@ -160,8 +160,8 @@
 
 36. `GET ${solandBaseUrl()}/_cokret/describe`(无认证)
 37. 断言响应是 JSON,且内部一致:
-    - **不应** 同时存在 "claim 了 `cx.profile.conformance.vectors.v1` profile" 与 "`/_cokret/self/conformance/snapshot` 端点返回 404/501" 这对矛盾状态
-    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "cx.profile.conformance.vectors.v1"`,则对 `/_cokret/self/conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
+    - **不应** 同时存在 "claim 了 `ck.profile.conformance.vectors.v1` profile" 与 "`/_cokret/self/conformance/snapshot` 端点返回 404/501" 这对矛盾状态
+    - 具体表达:若 `claimed_profiles` 数组里有任意 entry 的 `profile_id === "ck.profile.conformance.vectors.v1"`,则对 `/_cokret/self/conformance/snapshot` 发一个 minimal POST,响应 status 必须不是 404(允许 200 / 400 / 401 / 405 / 501;但 404 = 端点根本不存在,与 profile claim 矛盾)
     - 若 `claimed_profiles` 不含该 profile,则任何状态码(包括 404)都可以接受 — 这是 "surface 内部一致" 而非 "端点已实现" 的断言
 
 ## Observable assertions (合并清单)
@@ -176,7 +176,7 @@
 
 ## Edge cases / sub-tests
 
-- **E1 unknown vector_id** / **E2 vector version skew**:`cx.vector.snapshot.bogus.v1` 与 `protocol_version="0.9"` 的旧 vector → MUST 4xx + `unknown_vector_id` / `unsupported_vector_version`,不静默走默认 canonicalizer
+- **E1 unknown vector_id** / **E2 vector version skew**:`ck.vector.snapshot.bogus.v1` 与 `protocol_version="0.9"` 的旧 vector → MUST 4xx + `unknown_vector_id` / `unsupported_vector_version`,不静默走默认 canonicalizer
 - **E3 cursor cross-query reuse**:把 Phase C 的 cursor_A 放到不同 query body 再 POST → MUST 4xx + `cursor_query_mismatch`(cursor 绑定到具体 query 形状)
 - **E4 snapshot 跨服务器一致性**(dual-soland only):同一 snapshot vector POST 给 alpha 与 beta,两边 `manifest_digest` / `chunk_hashes` MUST byte-equal;`hasDualSoland()` 为 false 时 skip
 - **E5 large snapshot streaming**:chunk 总和 > 100 MiB 时端点必须分段验证不 OOM — 建议拆为 `conformance/snapshot-query-scalability.large-payload` 独立 spec,保持主 scenario 紧凑
@@ -184,10 +184,10 @@
 ## Implementation notes
 
 - **soland 缺口**:`/_cokret/self/conformance/{snapshot,query}` 端点目前**未实现**。当前 snapshot manifest 与 query schema 的 conformance 只跑在 Rust 侧内部测试(`soland/src/snapshot/*`、reducer 集成测试),不走 HTTP。本 scenario 的价值是把同一组 vector 通过 HTTP 暴露,捕获 reducer 与 HTTP layer 之间的 serializer drift。Phase A–E 在端点落地前以 `test.fixme(...)` 钉住 spec 合约;G3.S7 着陆后可逐项 live 化。
-- **fixture 缺失 fallback**:目前 `cokret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `cx.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
+- **fixture 缺失 fallback**:目前 `cokret-spec/spec/v1/artifacts/fixtures/` 中**没有任何** `ck.vector.{snapshot,query,scalability}.*` 文件。Phase F 的 loader smoke 必须优雅降级:`readdirSync` 后命中数可以是 0,assertion 写成 `expect(count).toBeGreaterThanOrEqual(0)`(always-pass);candidate 清单与 count 用 `console.log` + `testInfo.attach` 输出,使得 (1) fixture 尚未提交时测试不红;(2) fixture 提交后日志里立刻能看到 vector 总数变化;(3) spec 作者新增 vector 时不需要改 harness。
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "cokret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。
-- **vector id 命名**(参考 encoding-vectors §1.2):`cx.vector.snapshot.<scenario>.v1` / `cx.vector.query.<scenario>.v1` / `cx.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
+- **vector id 命名**(参考 encoding-vectors §1.2):`ck.vector.snapshot.<scenario>.v1` / `ck.vector.query.<scenario>.v1` / `ck.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
 - **error codes**:`snapshot_chunk_digest_mismatch`、`snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `cokret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession`;所有 loader / assertion 写在 spec 文件局部。
 

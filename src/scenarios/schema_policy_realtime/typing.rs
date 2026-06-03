@@ -36,14 +36,14 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     )
     .await?;
     assert_eq!(typing["accepted"], true);
-    assert_eq!(typing["kind"], "cx.typing");
+    assert_eq!(typing["kind"], "ck.typing");
 
     let sync_with_typing = alice.sync().await?;
     let ephemeral = sync_with_typing["realms"][&space_id]["ephemeral"]
         .as_array()
         .unwrap();
     assert_eq!(ephemeral.len(), 1);
-    assert_eq!(ephemeral[0]["type"], "cx.typing");
+    assert_eq!(ephemeral[0]["type"], "ck.typing");
     assert_eq!(ephemeral[0]["scope_id"], "ck:thread:typing");
     assert!(
         ephemeral[0]["actors"]
@@ -129,7 +129,7 @@ fn typing_envelope(actor_id: &str, realm_id: &str, typing: bool) -> Value {
     let sent_at = Utc::now();
     let expires_at = sent_at + ChronoDuration::seconds(30);
     json!({
-        "kind": "cx.typing",
+        "kind": "ck.typing",
         "realm_id": realm_id,
         "actor_id": actor_id,
         "sent_at": sent_at,

@@ -31,7 +31,7 @@ use crate::conformance::{required_str, validate_profile};
 /// dropped-diagnostic) and asserts the recorded reason matches.
 pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("anchor_view_compaction_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.anchor_view_compaction_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.anchor_view_compaction_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -267,7 +267,7 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
 /// admission failures MUST be covered.
 pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("anchorer_cell_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.anchorer_cell_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.anchorer_cell_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -486,7 +486,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
 /// * negative vectors cover missing-recovery-capability and head_in drift.
 pub fn run_conflict_repair_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("conflict_repair_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.conflict_repair_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.conflict_repair_vectors.v1")?;
 
     let vectors = fixture
         .get("vectors")
@@ -647,7 +647,7 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("frontier_conflict_resolution_fixture.json")?;
     validate_profile(
         &fixture,
-        "cx.profile.frontier_conflict_resolution_vectors.v1",
+        "ck.profile.frontier_conflict_resolution_vectors.v1",
     )?;
     let vectors = fixture
         .get("vectors")
@@ -745,7 +745,7 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
 /// E5 Round 27 — late-arriving anchor idempotency.
 pub fn run_late_arriving_anchor_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("late_arriving_anchor_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.late_arriving_anchor_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.late_arriving_anchor_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

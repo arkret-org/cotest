@@ -7,7 +7,7 @@ use super::{load_local_fixture_value, required_str, validate_profile, value_arra
 use crate::transcripts::record_vector_event;
 
 const FIXTURE: &str = "principal-server-certification-gate.json";
-const FIXTURE_PROFILE: &str = "cx.profile.principal_server_certification_gate.v1";
+const FIXTURE_PROFILE: &str = "ck.profile.principal_server_certification_gate.v1";
 const PRINCIPAL_SERVER_PROFILE: &str = "ck.profile.principal_server.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[

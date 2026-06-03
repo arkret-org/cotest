@@ -35,7 +35,7 @@
 //!
 //! 3. From device-A, generate the cross-signing key (SSK) if alice hasn't published one already,
 //!    then submit: a. `ck.cross_signing.publish` (if needed) — binds PSK → SSK. b.
-//!    `cx.device.cross_signing_binding` — the SSK signature over device-B's `verify_key`, packaged
+//!    `ck.device.cross_signing_binding` — the SSK signature over device-B's `verify_key`, packaged
 //!    per §5.1 canonical input. c. `ck.device.authorize` for device-B with the
 //!    `cross_signing_binding` field carrying the §5.2 signature.
 //!
@@ -52,7 +52,7 @@
 //! 5. Wrap alice + a second principal (`bob`) into an E2EE space `S` so that "MLS Remove fanout"
 //!    has a non-trivial member set. device-B joins `S` via a Welcome → Commit roundtrip (today this
 //!    is also stubbed out in soland; MLS group state is not durable server-side per the `mls` grep
-//!    showing no `cx.mls.*` handlers).
+//!    showing no `ck.mls.*` handlers).
 //!
 //! 6. From device-A, revoke device-B: `POST /_cokret/self/devices/{device-B}/revoke` Assert: a.
 //!    response 200 with `revoked_device_id == device-B` and a `revoked_at` timestamp. b. device-A
@@ -257,7 +257,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //                  .map(|p| p.iter().any(|prop| prop["type"] == "remove"))
     //                  .unwrap_or(false)),
     //               "expected at least one Remove proposal in ck.mls.commit");
-    //       // device_b appears in cx.device.list_update.left[]:
+    //       // device_b appears in ck.device.list_update.left[]:
     //       let list_updates = sync["spaces"]
     //           [<principal_control_space_id>]
     //           ["timeline"]["events"]
@@ -270,7 +270,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //                  .as_array()
     //                  .map(|l| l.iter().any(|d| d == &device_b))
     //                  .unwrap_or(false)),
-    //               "expected device_b in cx.device.list_update.left[]");
+    //               "expected device_b in ck.device.list_update.left[]");
     //       Ok(())
     //   }, Duration::from_secs(5)).await?;
 

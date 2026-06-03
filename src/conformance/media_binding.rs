@@ -35,7 +35,7 @@ use cokret_core::{
 };
 
 /// Vector id pins. Hard-fails any future rename of the canonical
-/// `cx.vector.media_binding.*.v1` registry entries.
+/// `ck.vector.media_binding.*.v1` registry entries.
 pub const VECTOR_ID_FOCUS_SELECTION_OLDEST_MEMBERSHIP: &str =
     "ck.vector.media_binding.focus_selection_oldest_membership.v1";
 pub const VECTOR_ID_SESSION_FOCUS_NO_SPLIT_BRAIN: &str =
@@ -270,9 +270,9 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     let valid_scheme = PARTICIPANT_BINDING_SCHEMA;
     for bogus in [
         "",
-        "cx.media.participant_binding",
-        "cx.media.participant_binding.v0",
-        "cx.media.participant_binding.v2",
+        "ck.media.participant_binding",
+        "ck.media.participant_binding.v0",
+        "ck.media.participant_binding.v2",
     ] {
         if bogus == valid_scheme {
             bail!("participant_binding scheme leak: {bogus}");

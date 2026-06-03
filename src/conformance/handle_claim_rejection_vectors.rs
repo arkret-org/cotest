@@ -27,9 +27,9 @@ use serde_json::{Value, json};
 use super::{looks_like_sha256_digest, spec_artifacts_root};
 
 pub const VECTOR_ID_HC_SERVICE_HANDLE_REJECTED: &str =
-    "cx.vector.handle_claim.service_handle_rejected.v1";
+    "ck.vector.handle_claim.service_handle_rejected.v1";
 pub const VECTOR_ID_HC_SUBJECT_NOT_PRINCIPAL_REJECTED: &str =
-    "cx.vector.handle_claim.subject_not_principal_did_rejected.v1";
+    "ck.vector.handle_claim.subject_not_principal_did_rejected.v1";
 
 pub const ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_HC_SERVICE_HANDLE_REJECTED,

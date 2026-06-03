@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.device_cross_signing_trust_vectors.v1",
+  "profile": "ck.profile.device_cross_signing_trust_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "D5 Round 27 — device cross-signing TRUST BOUNDARY vectors. Spec authority: crypto-media/device-lifecycle.md (cross-user trust + key rotation). Builds on D2 (which covered intra-user master→self-sign→leaf). D5 covers cross-USER trust: alice's user-signing key signs bob's master (not just self-sign). Vectors: (a) alice.master signs alice.user-signing signs bob.master signs bob.self-sign signs bob.devices — full transitive chain valid; (b) once chain anchored, alice's clients trust ANY device leaf bob signs into bob.self-sign; (c) revoking alice.master invalidates alice.user-signing → cuts trust into bob (transitive invalidation); (d) bob rotating bob.user-signing requires alice to re-sign the new bob.user-signing — old anchor stale.",

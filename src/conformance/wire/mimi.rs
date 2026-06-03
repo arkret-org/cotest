@@ -18,7 +18,7 @@ use crate::conformance::{required_str, validate_profile};
 /// the facade cannot silently impersonate a standard MIMI component.
 pub fn run_mimi_components_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("mimi_components_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.mimi_components_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.mimi_components_vectors.v1")?;
 
     // §9.2 criticality round-trip
     let crit_section = fixture
@@ -143,7 +143,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
 /// fields match.
 pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("read_receipt_policy_fixture.json")?;
-    validate_profile(&fixture, "cx.profile.read_receipt_policy_vectors.v1")?;
+    validate_profile(&fixture, "ck.profile.read_receipt_policy_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)

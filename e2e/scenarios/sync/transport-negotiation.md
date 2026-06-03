@@ -71,15 +71,15 @@
 4. 断言:`POST /_cokret/peer/federation/push-operations` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
 5. 断言:bob 通过 `GET /_cokret/self/notifications` 在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
-### Phase B — WebSocket upgrade (negotiate via cx.transport.negotiate)
+### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
 
 6. **soland_a** 通过 `GET ${SOLAND_B_PUBLIC_URL}/_cokret/describe` 读取 server B 的 `supported_bindings`
-   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "cx.profile.binding.websocket.v1", upgrade_path: "/_cokret/peer/federation/stream"}`
+   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ck.profile.binding.websocket.v1", upgrade_path: "/_cokret/peer/federation/stream"}`
 7. **soland_a** 发起 WebSocket 升级:
    - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/federation/stream`(`wss://` 在生产、`ws://` 在测试)
-   - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: cx.federation.v1`
+   - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ck.federation.v1`
    - 同时携带 RFC 9421 `Signature` 对 upgrade 请求的 covered components 签名(handshake 阶段)
-8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `cx.federation.v1` subprotocol
+8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `ck.federation.v1` subprotocol
 9. **soland_a** 通过 WebSocket 帧推送下一批 federation event(例如 alice 在 space 发的消息)
    - 每个帧 body 仍然是 canonical EventEnvelope;帧本身携带 `frame_signature`(per-frame service signature) 而非 per-request RFC 9421
 10. **soland_b** 验证 frame_signature → 入库 → bob 30s 内看到消息
@@ -87,8 +87,8 @@
 
 ### Phase C — TSP binding (optional extension)
 
-12. **soland_a** 在 `GET /_cokret/describe` 中宣布支持 TSP binding(`extension_profile_required: "cx.profile.binding.tsp.v1"`)
-13. **soland_b** 选择 TSP — 通过 `cx.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
+12. **soland_a** 在 `GET /_cokret/describe` 中宣布支持 TSP binding(`extension_profile_required: "ck.profile.binding.tsp.v1"`)
+13. **soland_b** 选择 TSP — 通过 `ck.transport.negotiate` 协商把后续 federation 流量切到 TSP relationship envelope
 14. **soland_a** 通过 TSP node 向 soland_b 发送下一批事件
     - TSP envelope: outer wrapper 携带 sender/receiver VID(verifiable identifier),inner payload 是 canonical EventEnvelope
     - 不再需要 RFC 9421 — TSP envelope 自身 cryptographic binding 取代 HTTP 层签名
@@ -112,7 +112,7 @@
 - Phase A:POST `/_cokret/peer/federation/push-operations` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
 - Phase A:bob `GET /_cokret/self/notifications` 看到 invite
 - Phase B:`GET /_cokret/describe` 含 `supported_bindings[].kind=websocket_frame`
-- Phase B:WebSocket upgrade 返回 101;subprotocol = `cx.federation.v1`
+- Phase B:WebSocket upgrade 返回 101;subprotocol = `ck.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息
 - Phase C(fixme):TSP binding 出现在 `supported_bindings` 中;TSP envelope 解封成功
 - Phase D:WebSocket 断后,server A 自动回退到 HTTP/JSON;bob 仍然在 30s 内收到下一个事件
@@ -136,7 +136,7 @@
   - 断言:多 hop 的端到端签名验证成功;任一层失败整批 reject
 
 - **E8.3 binding negotiation timeout**
-  - soland_a 通过 `cx.transport.negotiate` 请求升级到 WebSocket
+  - soland_a 通过 `ck.transport.negotiate` 请求升级到 WebSocket
   - 测试 harness 让 soland_b 在 30s 内不响应(`route.fulfill` 延迟 / 不响应)
   - 30s 后 soland_a MUST:
     1. 取消 negotiation 请求
@@ -151,7 +151,7 @@
   - TSP binding 完全未实现
   - HTTP RFC 9421 入站签名验证 partial(`federation.rs` 已有 stub,但完整 RFC 9421 components / `Content-Digest` / nonce / key rotation hint 路径未完成)
   - 出站签名生成不完整(`federation.rs:548-572` 出站 push 是 logs-only stub)
-  - `cx.transport.negotiate` operation 在 contract catalog 中作为 slot 保留,无运行时实现
+  - `ck.transport.negotiate` operation 在 contract catalog 中作为 slot 保留,无运行时实现
   - binding fallback chain 是 client-side 逻辑,目前 soland 没有 fallback state machine
 
 - **测试侧**:

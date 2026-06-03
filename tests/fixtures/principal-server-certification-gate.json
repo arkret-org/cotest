@@ -1,6 +1,6 @@
 {
   "suite": "principal_server_certification_gate",
-  "profile": "cx.profile.principal_server_certification_gate.v1",
+  "profile": "ck.profile.principal_server_certification_gate.v1",
   "cases": [
     {
       "name": "soland_reports_principal_server_not_certified_with_signed_retry_boundary",
@@ -106,10 +106,10 @@
           "ck.events.query",
           "ck.snapshot.head",
           "ck.authz.check",
-          "cx.admin.device.revoke",
-          "cx.agent.task.submit",
-          "cx.applet.install",
-          "cx.media.session.offer"
+          "ck.admin.device.revoke",
+          "ck.agent.task.submit",
+          "ck.applet.install",
+          "ck.media.session.offer"
         ],
         "supported_event_kinds": [
           "ck.space.create",

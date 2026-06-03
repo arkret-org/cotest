@@ -4,7 +4,7 @@
 
 验证「举报 → moderator 决策 → 封禁 → anchored moderation_state → 后续 Move 被拒」的完整三层 gate 链路:
 
-1. **Capability** 层:owner 的 ban 动作必须先持有 `cx.space.moderate` capability,否则直接 `missing_capability` 拒
+1. **Capability** 层:owner 的 ban 动作必须先持有 `ck.space.moderate` capability,否则直接 `missing_capability` 拒
 2. **Moderation Policy** 层:ban 决策 MUST anchored,写入 `ck.component.moderation_state.v1` cell,跨 peer 一致
 3. **Personal Blocklist** 层:接收方本地 mute/block 不影响其他人的视图
 
@@ -21,7 +21,7 @@
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.2 — 举报原因枚举
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.3 — 举报的处理 (只有 moderator 可见、被举报人不通知)
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §4.1-§4.3 — 个人屏蔽是 Actor-Private,不进 cell
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.1 — `ck.message.redact` 需要 `cx.space.moderate`
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.1 — `ck.message.redact` 需要 `ck.space.moderate`
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.2 — `ck.member.state{membership="ban"}` 封禁后被封者未来 Operation 被拒
 
 ## 拓扑
@@ -32,7 +32,7 @@
 
 | 名字 | DID | 角色 | 持有的 capability |
 |---|---|---|---|
-| alice | `did:web:alice-s5-<uuid>.example` | space owner + moderator | `cx.space.moderate` |
+| alice | `did:web:alice-s5-<uuid>.example` | space owner + moderator | `ck.space.moderate` |
 | bob | `did:web:bob-s5-<uuid>.example` | 普通成员;举报人 | (默认成员 capability,无 moderate) |
 | mallory | `did:web:mallory-s5-<uuid>.example` | 普通成员;违规者 (被封禁目标) | (默认成员 capability) |
 | carol | `did:web:carol-s5-<uuid>.example` | 普通成员;旁观者,用于验证 personal blocklist 不广播 | (默认成员 capability) |
@@ -40,7 +40,7 @@
 ## Pre-conditions
 
 - 四个 DID 都注册过、都有有效 dev session token
-- alice 持有 `cx.space.moderate` (作为 owner 默认拥有,通过 yougen 或直接事件链生成)
+- alice 持有 `ck.space.moderate` (作为 owner 默认拥有,通过 yougen 或直接事件链生成)
 
 ## Steps
 
@@ -83,7 +83,7 @@
 10. **alice** 调用 `GET /_cokret/self/moderation/reports?realm_id=S` 或 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
 11. **alice** 决定 ban mallory:
     - 调用 `ck.member.state` Move,membership = `ban`,subject = mallory.did
-    - 该 Move 必须签名 + 引用 `cx.space.moderate` capability grant
+    - 该 Move 必须签名 + 引用 `ck.space.moderate` capability grant
 12. 断言 Capability 层:
     - **sub-test E5.1**:bob (没有 moderate cap) 尝试同样的 ban Move → 被拒,reason_code = `missing_capability`
     - alice 的 ban Move → 被接受
@@ -100,7 +100,7 @@
 
 ### Phase F — Tombstone redact (§5.1)
 
-17. **alice** 用 `ck.message.redact` 把原 `M_bad` redact 掉 (需要 `cx.space.moderate`,alice 持有)
+17. **alice** 用 `ck.message.redact` 把原 `M_bad` redact 掉 (需要 `ck.space.moderate`,alice 持有)
 18. 断言:三方 (alice、bob、carol) 视图中,`M_bad` 位置渲染为 `redacted-tombstone`,正文不再可见
 19. **sub-test E5.2**:bob (没有 moderate) 尝试 redact 任意他人消息 → `missing_capability`
 
@@ -132,7 +132,7 @@
 - **E5.2**:无 capability 的 redact 尝试 → `missing_capability` (在 Phase F 步骤 19)
 - **E5.3 idempotent ban**:alice 连发两次同样的 ban Move,reducer 把第二次视为 no-op (state 已 ban) 或返回幂等接受;不重复写 cell
 - **E5.4 unban + 重新加入**:alice 提交 `ck.member.state{membership="leave"}` 把 mallory 移出 ban(如果协议允许;§5.2 说 ban 后"无法重新加入",所以 unban 路径可能需要明确;查 spec `event-auth-state-resolution.md` §5)。若 spec 允许 unban,验证 mallory 重新被邀后能加入并发消息
-- **E5.5 hard_deny 模拟**:测 moderation policy 中 `action="deny_write"` 的语义 — alice 提交 `cx.space.moderation_policy` Move 把 mallory.did 标 `deny_write`,验证 mallory 在被正式 ban 之前就已经发不了消息 (capability 没 revoke,但 moderation policy 层 deny)
+- **E5.5 hard_deny 模拟**:测 moderation policy 中 `action="deny_write"` 的语义 — alice 提交 `ck.space.moderation_policy` Move 把 mallory.did 标 `deny_write`,验证 mallory 在被正式 ban 之前就已经发不了消息 (capability 没 revoke,但 moderation policy 层 deny)
 
 ## Implementation notes
 

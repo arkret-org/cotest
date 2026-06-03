@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.device_verification_vectors.v1",
+  "profile": "ck.profile.device_verification_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
   "comment": "D2 Round 24 — device verification flow vectors. Spec authority: crypto-media/device-verification.md. Three verification primitives: (a) cross-signing chain rooted at master key — each user has ONE master signing key (long-lived) that signs sub-keys for self-signing (per-device leaf sign) and user-signing (cross-user trust). (b) SAS (Short Authentication String) — Diffie-Hellman key exchange produces a short shared secret two parties compare to verify identity out-of-band. (c) Out-of-band emoji code — the SAS shared bytes map to an ordered list of emojis the two parties read/compare in person or over a trusted channel. The chain MUST validate at every link; SAS MUST agree on both sides; emoji codes MUST be deterministic from the shared secret bytes.",

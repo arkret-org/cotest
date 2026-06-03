@@ -21,7 +21,7 @@
 //!   8. **rebind handover** — model T3.3 reducer state by mutating the candidate's
 //!      `member_delivery_binding.recipient_service_did` and asserting the local allow-list model
 //!      rejects it.
-//!   9. **revocation** — model a `cx.handle.revoke` event by expiring the candidate; the validator
+//!   9. **revocation** — model a `ck.handle.revoke` event by expiring the candidate; the validator
 //!      MUST refuse subsequent operations.
 //!
 //! ## Negative cases
@@ -398,7 +398,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
 
 // ── Step 9: revocation ─────────────────────────────────────────────────────
 
-/// A `cx.handle.revoke` event in coauth invalidates the handle row, which
+/// A `ck.handle.revoke` event in coauth invalidates the handle row, which
 /// at the SDK layer is modelled by the candidate's `expires_at` falling
 /// strictly into the past. Any subsequent `member_add` MUST refuse with
 /// `Expired`.
@@ -414,7 +414,7 @@ fn step_9_revocation(original: &MemberDeliveryBindingCandidate) -> Result<()> {
         ),
         Ok(()) => bail!(
             "T8.1 step 9: a revoked (expires_at in the past) candidate was \
-             accepted — `cx.handle.revoke` had no observable effect"
+             accepted — `ck.handle.revoke` had no observable effect"
         ),
     }
 }

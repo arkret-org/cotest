@@ -1,6 +1,6 @@
 {
   "suite": "recovery_policy",
-  "profile": "cx.profile.recovery_policy_vectors.v1",
+  "profile": "ck.profile.recovery_policy_vectors.v1",
   "schema_ref": "ck.schema.recovery_policy.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/recovery-policy.schema.json",
   "cases": [

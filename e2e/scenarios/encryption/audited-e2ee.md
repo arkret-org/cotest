@@ -60,7 +60,7 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 ### Phase E — Audit-agent 私自访问被拒
 
 17. audit-agent 不在 audit_disclosure_policy 时(假设 alice 改了 policy),audit-agent 调同样的 endpoint → 拒,403
-18. 断言:soland 拒绝 + 写入 `cx.audit.rejected_access` 记录
+18. 断言:soland 拒绝 + 写入 `ck.audit.rejected_access` 记录
 
 ## Edge cases
 
@@ -74,7 +74,7 @@ E2EE space 启用 audited mode 后,服务端能记录每条消息的 franking �
 - **2026-05-25 P2-045 local close**:soland 在 audited E2EE realm 中接受 encrypted `ck.message.create` 后自动追加 `ck.moderation.franking_proof`,只记录 `ciphertext_digest`/sender/service/event digest,并提供 `/_cokret/self/audit/franking/verify` 做 tamper 校验。
 - **2026-05-25 P2-045 local close**:soland `POST /_cokret/self/moderation/report` 读取 `audit_disclosure_policy.trigger=report_filed`,通知 mock audit-agent 的 invite/events endpoints,并把 mock 返回的 `ck.audit.accessed` 记录写入 `/_cokret/self/audit/events?space_id=...&kind=ck.audit.accessed`。
 - **2026-05-25 P2-045 local close**:mock audit-agent 已具备 DID/key package、invite ack、`ck.audit.accessed` binding proof 与 `/inspect`/`/accessed` 检查面。
-- **仍待后续**:policy revoke 后的 `cx.audit.rejected_access` 细化测试保留为 E25.3 fixme;yougen space-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
+- **仍待后续**:policy revoke 后的 `ck.audit.rejected_access` 细化测试保留为 E25.3 fixme;yougen space-admin/audit UI 仍可作为 UX polish,当前 P2 以 API/audit trail 为准。
 
 ## 总耗时预估
 

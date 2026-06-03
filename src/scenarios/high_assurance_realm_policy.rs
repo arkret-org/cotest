@@ -14,14 +14,14 @@
 use anyhow::{Result, anyhow};
 use cokret_core::{
     CircleMetadataEncryptionFloor, ContentEncryptionFloor, Did, Discoverability, EncryptionProfile,
-    FederationPolicy, HistoryVisibility, JoinRule, SecurityClass, Space, SpaceId,
+    FederationPolicy, HistoryVisibility, JoinRule, RealmId, SecurityClass, Space,
     TypedTrustDomainId,
 };
 
 const REALM_ID: &str = "ck:space:01904100-0000-7000-8000-000000000aa1";
 
-fn realm_id() -> Result<SpaceId> {
-    SpaceId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
+fn realm_id() -> Result<RealmId> {
+    RealmId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 
 fn principal_id() -> Result<Did> {
@@ -41,7 +41,7 @@ fn build_realm(
     let trust_domain = TypedTrustDomainId::new("ck:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Space {
-        schema: "cx.profile.realm.v1".to_owned(),
+        schema: "ck.profile.realm.v1".to_owned(),
         id,
         title: "Compliance Vault".to_owned(),
         trust_domain,
@@ -49,7 +49,7 @@ fn build_realm(
         security_class,
         created_by: principal,
         owning_organizations: Vec::new(),
-        schema_refs: vec!["cx.profile.realm.v1".to_owned()],
+        schema_refs: vec!["ck.profile.realm.v1".to_owned()],
         policy_id: None,
         default_discoverability: Discoverability::InviteOnly,
         default_join_rule: JoinRule::Invite,

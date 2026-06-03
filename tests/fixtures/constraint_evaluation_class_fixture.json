@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.constraint_evaluation_class_vectors.v1",
+  "profile": "ck.profile.constraint_evaluation_class_vectors.v1",
   "version": "2026-05-10",
   "comment": "C2 Round 25 — evaluation_class fast-path × constraint family cross-product. Spec authority: extensions/constraint-schema.md §2.3 (evaluation_class). Each constraint family is canonically annotated with one of {stateless, grant_local, space_state, external}. The harness MUST classify per the canonical mapping to know when a constraint is fast-path-eligible (no remote lookup) vs slow-path (needs space-state fetch or external service call). This fixture pins every (family, evaluation_class) combination so any drift in the spec is caught.",
   "encoder": {

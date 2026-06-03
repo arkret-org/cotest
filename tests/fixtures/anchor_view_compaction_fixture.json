@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.anchor_view_compaction_vectors.v1",
+  "profile": "ck.profile.anchor_view_compaction_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_uuids.json"],
   "comment": "Anchor compaction round-trip vectors per spec authz/event-auth-state-resolution.md §6 (Anchor DAG, effective_anchor_view, signed compaction). Each vector pins (a) a multi-leaf Anchor DAG input, (b) the expected effective_anchor_view (pure function over leaves), (c) a signed compaction Anchor that MUST be join-equivalent (state_root, frontier) to the multi-leaf view it replaces, and (d) the bottom diagnostics that MUST survive compaction (compaction is information-preserving for ⊥ cells). Anchor ids are content-addressed hex SHA-256 digests under the ck:anchor:sha256:<hex> special form.",

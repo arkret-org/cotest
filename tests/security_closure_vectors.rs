@@ -3,7 +3,7 @@
 //! Two layers:
 //!
 //! 1. The **wire-shape gate** (always-runs): loads `security-closure-vectors.json` and confirms
-//!    every one of the 12 `cx.vector.*` ids the round-4 spec promotes is present and exposes the
+//!    every one of the 12 `ck.vector.*` ids the round-4 spec promotes is present and exposes the
 //!    typed `runner{}` contract introduced by spec commit `892c5d7 test: add security closure
 //!    runner contract`.
 //!

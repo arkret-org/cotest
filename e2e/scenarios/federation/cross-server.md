@@ -94,7 +94,7 @@
 ### Phase C — bob@β 接受 invite
 
 10. **bob** 通过 β 的 yougen 加载;客户端检测到收到一个 invite (yougen 应该有 invite 列表 UI;如果没有,scenario 注释成需要 yougen 补 UI 或者通过 API call 走)
-11. bob 触发接受;β 上产生 `ck.invite.accept` Event,refs 指向 `cx.invite.create.event_id`
+11. bob 触发接受;β 上产生 `ck.invite.accept` Event,refs 指向 `ck.invite.create.event_id`
 12. β 主动把 `ck.invite.accept` push 到 α (反向 federation push)
 13. α 校验后接受;α 上 reducer 收敛 bob 的 `membership=join`
 14. 断言:α 上 `/space/${spaceId}/admin` 的成员列表含 bob.did
@@ -123,7 +123,7 @@
 
 ### Phase G — Capability revoke fanout (sub-test E2.2)
 
-26. **alice** 在 α 撤销 `did:web:soland-beta.joint-e2e.local` 对该 Space 的服务委托 (具体事件类型按 `cx.service.delegation` 或等价)
+26. **alice** 在 α 撤销 `did:web:soland-beta.joint-e2e.local` 对该 Space 的服务委托 (具体事件类型按 `ck.service.delegation` 或等价)
 27. 撤销 fanout 推到 β (`§4.4`)
 28. **alice** 再发 `M_after_revoke = "post-revoke ${stamp}"`
 29. 断言:α **不再** 把该 event push 给 β;β 上 bob 看不到 `M_after_revoke`(spec §4.1 末尾:"撤销后的 service DID 不得继续接收非加密私有内容")

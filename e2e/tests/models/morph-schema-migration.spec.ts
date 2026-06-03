@@ -260,7 +260,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       //      schema_refs = ["ck.schema.morph.customer_risk.v1"].
       //   2. alice POSTs ck.morph.schema_migrate with:
       //        compatibility_class = "transformation"
-      //        transformation_rules[*].rule = "cx.transform.bogus.unsupported.v1"
+      //        transformation_rules[*].rule = "ck.transform.bogus.unsupported.v1"
       //      (a rule id deliberately outside the profile's
       //      transformation_rules_dialect).
       //   3. Expect HTTP 4xx (400 or 422) and error.code ∈ {
@@ -348,7 +348,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       //      transformation_rules[] (each rule.id ∈ profile
       //      transformation_rules_dialect). Expect HTTP 2xx.
       //   6. alice revokes her own ck.morph.schema.migrate capability via
-      //      cx.realm.policy.update, then re-POSTs a transformation migrate.
+      //      ck.realm.policy.update, then re-POSTs a transformation migrate.
       //      Expect HTTP 4xx, error.code = capability_denied.
       void request;
     },
@@ -365,15 +365,15 @@ test.describe("morph schema migration @fully-implemented", () => {
       //
       // Pinned fixme for two reasons:
       //   (a) cokret-spec/spec/v1/artifacts/fixtures/ does NOT currently
-      //       contain any cx.vector.morph.*.json fixtures (grep verified at
+      //       contain any ck.vector.morph.*.json fixtures (grep verified at
       //       scenario authoring time, see scenarios/models/morph-schema-migration.md
       //       Phase D step 20). Without fixtures there is no expected_output
       //       to assert against.
       //   (b) Even when fixtures land, the transformation driver path
       //       depends on soland's schema_migrate reducer (covered by Phase C).
       //
-      // Acceptance criteria (once cx.vector.morph.* fixtures land):
-      //   1. Enumerate all cx.vector.morph.*.json files under
+      // Acceptance criteria (once ck.vector.morph.* fixtures land):
+      //   1. Enumerate all ck.vector.morph.*.json files under
       //      cokret-spec/spec/v1/artifacts/fixtures/.
       //   2. For each vector v:
       //      a. Seed Morph state matching v.input.

@@ -1,5 +1,5 @@
 {
-  "profile": "cx.profile.state_resolution_quarantine_vectors.v1",
+  "profile": "ck.profile.state_resolution_quarantine_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
   "comment": "B1 Round 23 — quarantine-on-fork algorithm vectors. Spec authz/event-auth-state-resolution.md §6 + §7: when concurrent forks land on the same (kind, state_key) cell, the reducer MUST NOT pick a winner automatically (no LWW timestamp tiebreak). Instead all non-winners (or all heads, depending on lattice bottom mode) are quarantined and require admin escalation. cas-register cells with bottom=reject yield Bottom Conflict; or-set cells expose the union (no conflict); ordered-log appends both branches. The vectors below cover concurrent forks across the cas-register lattice (admin escalation REQUIRED) and confirm that the reducer never auto-resolves.",
@@ -81,7 +81,7 @@
       "ops": [
         { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "ck.profile.chat_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
         { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "ck.profile.kanban_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
-        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "cx.profile.applet.v1", "head_in": ["ck:anchor:sha256:jkl000"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "ck.profile.applet.v1", "head_in": ["ck:anchor:sha256:jkl000"] }
       ],
       "expected": {
         "outcome": "all_heads_quarantined",

@@ -29,7 +29,7 @@
 | alice | space owner,上传附件 |
 | bob | 成员,下载 + 解密 |
 | mallory | 非成员,验证 ACL |
-| audit-agent (sub-test) | `did:web:audit.example`,持 `cx.audit.read` capability |
+| audit-agent (sub-test) | `did:web:audit.example`,持 `ck.audit.read` capability |
 
 ## Pre-conditions
 
@@ -106,7 +106,7 @@
 
 ## Edge cases / sub-tests
 
-- **E12.1 message redact 后 attachment 仍可访问?**:alice redact 消息,但 `blob_ref` 在 storage 仍存在 → blob GC policy 决定何时清理。spec 暗示 redact 不立刻删 blob(`media-and-blob.md` §3),但 `cx.blob.gc` event 触发后清理
+- **E12.1 message redact 后 attachment 仍可访问?**:alice redact 消息,但 `blob_ref` 在 storage 仍存在 → blob GC policy 决定何时清理。spec 暗示 redact 不立刻删 blob(`media-and-blob.md` §3),但 `ck.blob.gc` event 触发后清理
 - **E12.2 thumbnail derivation**:E2EE 模式下,服务端**不能**生成 thumbnail(因为没明文)→ client-side 生成 + 重新加密上传(§5.3)
 - **E12.3 download_mode=provider_proxy**:大文件经过 Sync proxy 中转(防止 client 跨域)→ proxy 只见 ciphertext,不解密(spec §6)
 - **E12.4 audited e2ee**:见 Phase F

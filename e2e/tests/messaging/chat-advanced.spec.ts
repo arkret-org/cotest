@@ -310,7 +310,7 @@ test.describe("chat advanced", () => {
     const typing = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
       headers: authHeaders(fixture.aliceToken),
       data: {
-        kind: "cx.typing",
+        kind: "ck.typing",
         realm_id: fixture.spaceId,
         actor_id: fixture.alice.did,
         device_id: fixture.alice.deviceId,
@@ -577,7 +577,7 @@ test.describe("chat advanced", () => {
     // @blocking-on: soland#messaging-chat-advanced-gap
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
     // @expected-live-by: 2026Q3
-    "E14.F typing indicator (cx.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000",
+    "E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000",
     async ({ browser, request }, testInfo) => {
       // spec: profiles-presence.md §3.5
       const stamp = Date.now();
@@ -694,7 +694,7 @@ test.describe("chat advanced", () => {
           track_name: "discussion",
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],
-          encrypted_content: encryptedEnvelope("cx.message.v1", "opaque-e2ee-mention", spaceId),
+          encrypted_content: encryptedEnvelope("ck.message.v1", "opaque-e2ee-mention", spaceId),
         },
       });
       await submitSignedEventApi(request, aliceToken, envelope, {

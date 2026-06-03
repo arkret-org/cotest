@@ -27,8 +27,8 @@ async fn send_application_message(server: &CokretServer, token: &str) -> Result<
                 "messages": {
                     "did:web:alice.example": {
                         "dev_alice": {
-                            "type": "cx.mls.application",
-                            "content": encrypted_envelope("cx.mls.application", "base64url-opaque-ciphertext")
+                            "type": "ck.mls.application",
+                            "content": encrypted_envelope("ck.mls.application", "base64url-opaque-ciphertext")
                         }
                     }
                 }
@@ -51,8 +51,8 @@ async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Res
                 "messages": {
                     "did:web:alice.example": {
                         "dev_alice": {
-                            "type": "cx.mls.application",
-                            "content": encrypted_envelope("cx.mls.application", "base64url-opaque-ciphertext")
+                            "type": "ck.mls.application",
+                            "content": encrypted_envelope("ck.mls.application", "base64url-opaque-ciphertext")
                         }
                     }
                 }

@@ -41,7 +41,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // irrelevant in canonical JSON (keys are sorted), but the digest
             // changes because both the field name and the value bytes change.
             payload: json!({
-                "type": "cx.handle.claim",
+                "type": "ck.handle.claim",
                 "subject_id": "did:web:alice.example",
                 "handle": "alice:cokret.example",
                 "handle_aliases": ["acct:alice@cokret.example"],

@@ -1,6 +1,6 @@
 {
   "suite": "recovery_receipt",
-  "profile": "cx.profile.recovery_receipt_vectors.v1",
+  "profile": "ck.profile.recovery_receipt_vectors.v1",
   "schema_ref": "ck.schema.recovery_receipt.v1",
   "spec_anchor": "spec/v1/artifacts/schemas/recovery-receipt.schema.json",
   "cases": [

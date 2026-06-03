@@ -29,7 +29,7 @@ const facadeDid =
 const supportedContentKinds = new Set([
   "m.text",
   "text/plain",
-  "cx.message.text",
+  "ck.message.text",
   "ck.message.revise",
   "ck.message.redact",
 ]);

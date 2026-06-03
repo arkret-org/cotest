@@ -30,7 +30,7 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     assert_eq!(describe["did_webvh"]["method"], "did:webvh");
     assert_eq!(
         describe["did_webvh"]["profile"],
-        "cx.identity.webvh.provider.v1"
+        "ck.identity.webvh.provider.v1"
     );
     assert_eq!(
         describe["did_webvh"]["default_provider_id"],
@@ -75,7 +75,7 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
         .find(|root| root["id"] == "external.webvh")
         .expect("external starid trust root");
     assert_eq!(external_root["kind"], "external");
-    assert_eq!(external_root["profile"], "cx.identity.webvh.provider.v1");
+    assert_eq!(external_root["profile"], "ck.identity.webvh.provider.v1");
     assert_eq!(external_root["base_url"], "http://starid.cotest.local");
     assert_eq!(external_root["freshness_probe"], "/describe");
     assert!(

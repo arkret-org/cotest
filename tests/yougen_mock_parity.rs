@@ -241,7 +241,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
             // `bad_request`. Drop the optional field so the typing surface is
             // what's actually under test.
             Some(json!({
-                "kind": "cx.typing",
+                "kind": "ck.typing",
                 "realm_id": ctx.realm_id,
                 "actor_id": ctx.alice_did,
                 "sent_at": sent_at.to_rfc3339_opts(SecondsFormat::Secs, true),
