@@ -5,7 +5,7 @@
 //! fails this test before reaching the live soland surface.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     AccountabilityGrantId, AgentKeyId, AgentSessionId, CAP_ACTION_AGENT_PROVISION, Did,
     OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH,
     OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME,

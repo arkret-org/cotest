@@ -20,7 +20,7 @@
 //! This scenario covers the missing-policy_root path.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
     is_known_error_code,
 };

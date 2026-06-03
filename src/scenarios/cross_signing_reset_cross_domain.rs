@@ -22,7 +22,7 @@
 //!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_RESET_EVENT_ID_MISMATCH, EventId,
     TypedTrustDomainId, is_known_error_code,
 };

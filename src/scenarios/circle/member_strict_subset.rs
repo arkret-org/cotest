@@ -10,7 +10,7 @@
 //! to wire reason code `circle_member_must_be_realm_member`.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{Circle, CircleScopeError, Did};
+use cokret_core::{Circle, CircleScopeError, Did};
 
 fn did(local: &str) -> Result<Did> {
     format!("did:web:{local}.example")

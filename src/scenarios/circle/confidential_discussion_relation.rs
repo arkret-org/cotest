@@ -8,7 +8,7 @@
 //!   - it round-trips through `serde_json`.
 
 use anyhow::{Result, anyhow};
-use contrix_core::RelationKind;
+use cokret_core::RelationKind;
 
 pub async fn confidential_discussion_relation_run() -> Result<()> {
     let rel = RelationKind::ConfidentialDiscussionOf;

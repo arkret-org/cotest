@@ -149,7 +149,7 @@ test.describe("mimi federation", () => {
     );
 
     const events = await querySpaceEventsApi(request, token, spaceId);
-    const downgradeEvent = eventById(events, String(downgradeBody.contrix_event_id));
+    const downgradeEvent = eventById(events, String(downgradeBody.cokret_event_id));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
     expect(nested(downgradeEvent, "payload", "content", "cx.morph.e2ee_downgrade")).toBe(
       "mimi_bridge",
@@ -158,7 +158,7 @@ test.describe("mimi federation", () => {
       "explicit_downgrade",
     );
 
-    const transcriptEvent = eventById(events, String(transcriptBody.contrix_event_id));
+    const transcriptEvent = eventById(events, String(transcriptBody.cokret_event_id));
     expect(nested(transcriptEvent, "payload", "content", "body")).toBe(transcriptText);
     expect(
       nested(transcriptEvent, "payload", "content", "transcript_binding", "transcript_hash"),
@@ -198,7 +198,7 @@ test.describe("mimi federation", () => {
     );
 
     const events = await querySpaceEventsApi(request, token, spaceId);
-    const event = eventById(events, String(body.contrix_event_id));
+    const event = eventById(events, String(body.cokret_event_id));
     expect(nested(event, "payload", "content", "kind")).toBe("cx.content.unsupported");
     expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
     expect(nested(event, "payload", "content", "cx.morph.unknown_content_kind")).toBe(

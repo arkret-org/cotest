@@ -68,11 +68,11 @@ fn scan_tree_does_not_flag_legal_did_web() {
 }
 
 /// Gating: manual operator scan over sibling project trees — needs
-/// `CONTRIX_DEV_ROOT` set; not a CI gate.
+/// `COKRET_DEV_ROOT` set; not a CI gate.
 #[test]
 #[ignore = "manual: cargo test --test protocol_drift_smoke -- --ignored protocol_drift_tree_scan_other_projects --nocapture"]
 fn protocol_drift_tree_scan_other_projects() {
-    let dev_root = std::env::var("CONTRIX_DEV_ROOT")
+    let dev_root = std::env::var("COKRET_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret-dev"));

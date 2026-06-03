@@ -10,7 +10,7 @@
 //! agrees with the SDK validator on every input.
 
 use anyhow::{Result, anyhow};
-use contrix_core::Did;
+use cokret_core::Did;
 
 const LEGAL: &[&str] = &[
     "did:web:alice.example",

@@ -6,7 +6,7 @@
 //! common directory response fields) + the CXP-0011 object-addressing grammar.
 //!
 //! The vectors below are deterministic, pure unit checks against the SDK's
-//! object-addressing surface (`contrix_core::model::*`, re-exported from
+//! object-addressing surface (`cokret_core::model::*`, re-exported from
 //! `crate::model::object_address`). No live server is required for
 //! OA-COT-1..4; the live share→resolve→open leg is the `#[ignore]` companion
 //! `test_oa_cot_5_share_resolve_open_live` in
@@ -29,7 +29,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
-use contrix_core::model::{
+use cokret_core::model::{
     AddressAction, DirectoryResolveTargetResBody, LinkType, RealmRef, TargetDescriptor, TargetKind,
     build_address, build_https_landing, parse_address, target_digest, verify_token_target,
 };

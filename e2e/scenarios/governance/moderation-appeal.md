@@ -22,13 +22,13 @@
 
 1. appellant / moderator / reviewer 注册并获取 dev session。
 2. appellant 创建 Realm,写入一条 target message。
-3. moderator 调用 `POST /api/admin/v1/moderation/decision` 签发 `cx.moderation.decision`。
+3. moderator 调用 `POST /_soland/admin/moderation/decision` 签发 `cx.moderation.decision`。
 4. appellant 调用 `POST /api/v1/moderation/appeal` 提交 `cx.moderation.appeal.submit`。
 5. reviewer 依次调用:
-   - `POST /api/admin/v1/moderation/appeals/{appeal_id}/review`
-   - `POST /api/admin/v1/moderation/appeals/{appeal_id}/decision`
-   - `POST /api/admin/v1/moderation/appeals/{appeal_id}/close`
-6. `GET /api/admin/v1/moderation/appeals/{appeal_id}` 返回四段 history,状态依次为 `submitted → under_review → decided → closed`。
+   - `POST /_soland/admin/moderation/appeals/{appeal_id}/review`
+   - `POST /_soland/admin/moderation/appeals/{appeal_id}/decision`
+   - `POST /_soland/admin/moderation/appeals/{appeal_id}/close`
+6. `GET /_soland/admin/moderation/appeals/{appeal_id}` 返回四段 history,状态依次为 `submitted → under_review → decided → closed`。
 
 ## Negative paths
 

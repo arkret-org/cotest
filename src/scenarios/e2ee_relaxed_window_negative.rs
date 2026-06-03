@@ -16,7 +16,7 @@
 //! This module covers the two negative branches.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
     ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING, is_known_error_code,
 };

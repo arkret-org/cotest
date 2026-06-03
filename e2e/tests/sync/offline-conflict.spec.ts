@@ -241,7 +241,7 @@ async function listBottomCells(
   spaceId: string,
 ) {
   const response = await request.get(
-    `${solandBaseUrl()}/api/admin/v1/spaces/${encodeURIComponent(spaceId)}/bottom`,
+    `${solandBaseUrl()}/_soland/admin/spaces/${encodeURIComponent(spaceId)}/bottom`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();

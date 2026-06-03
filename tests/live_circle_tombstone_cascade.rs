@@ -26,8 +26,8 @@
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::error::REASON_CIRCLE_NOT_ACTIVE;
-use contrix_core::{
+use cokret_core::error::REASON_CIRCLE_NOT_ACTIVE;
+use cokret_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleState, CircleSymbol, Did,
     RealmId,
 };

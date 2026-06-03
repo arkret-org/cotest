@@ -258,7 +258,7 @@ test.describe("agent protocol interop", () => {
       //
       //   // 3. yougen /agents agent-incoming-result-row shows
       //   //    agent-audit-verify-badge text === "audit valid"
-      //   //    (verifies via contrix_sdk::agent_binding).
+      //   //    (verifies via cokret_sdk::agent_binding).
       //
       //   // 4. alice clicks /agents session detail (testid
       //   //    agent-session-detail) → agent-session-publish → publish
@@ -296,7 +296,7 @@ test.describe("agent protocol interop", () => {
       //   // 2. For each consecutive pair, assert event[i].prev_event_id
       //   //    === event[i-1].event_id (hash chain).
       //
-      //   // 3. Run contrix_sdk::agent_binding::verify_audit_binding_by_kind
+      //   // 3. Run cokret_sdk::agent_binding::verify_audit_binding_by_kind
       //   //    against the result event's payload. Expect
       //   //    AuditBindingVerifyOutcome::Valid (matches yougen's
       //   //    verify_agent_audit_binding helper).

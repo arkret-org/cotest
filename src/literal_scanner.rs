@@ -2,7 +2,7 @@
 //!
 //! Loads removed / deprecated / forbidden artifact registries from
 //! `cokret-spec/spec/v1/artifacts/registry/*.json` (path overridable via
-//! `CONTRIX_SPEC_DIR`) and walks a downstream tree looking for occurrences of:
+//! `COKRET_SPEC_DIR`) and walks a downstream tree looking for occurrences of:
 //!
 //! * `cx.*` event-kind or operation-id literals listed as removed
 //! * profile ids listed as deprecated
@@ -137,10 +137,10 @@ impl ArtifactRule {
 
 // ── Loader ──────────────────────────────────────────────────────────────────
 
-/// Resolve the spec directory. Honors `CONTRIX_SPEC_DIR` env var first, then
+/// Resolve the spec directory. Honors `COKRET_SPEC_DIR` env var first, then
 /// falls back to `<cotest crate root>/../cokret-spec`.
 pub fn resolve_spec_dir() -> PathBuf {
-    if let Some(value) = std::env::var_os("CONTRIX_SPEC_DIR") {
+    if let Some(value) = std::env::var_os("COKRET_SPEC_DIR") {
         return PathBuf::from(value);
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

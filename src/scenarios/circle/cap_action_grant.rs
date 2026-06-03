@@ -8,7 +8,7 @@
 //! every grant emitted by an admin UI.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     CAP_ACTION_CIRCLE_AUDIT, CAP_ACTION_CIRCLE_CREATE, CAP_ACTION_CIRCLE_MANAGE,
     CAP_ACTION_CIRCLE_MEMBER_ADD, CAP_ACTION_CIRCLE_MEMBER_ADD_OTHERS,
     CAP_ACTION_CIRCLE_MEMBER_MANAGE,

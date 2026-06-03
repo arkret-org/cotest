@@ -42,7 +42,7 @@ cokret = { path = "../cokret-rust-sdk/crates/sdk" }
 # to pin that every Cokret service hashes payloads identically.
 cokret-signatures = { path = "../cokret-rust-sdk/crates/signatures" }
 # lattice round-trip vectors: cotest exercises the SDK's
-# `contrix_core::lattice` module directly to confirm CasRegister / OrSet /
+# `cokret_core::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
 # normative join semantics.
 hkdf = "0.12.4"

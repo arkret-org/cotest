@@ -11,10 +11,10 @@
 //! - `cx.vector.media_binding.unknown_type_fail_closed.v1`
 //! - `cx.vector.media_binding.e2ee_key_source.v1`
 //! - `cx.vector.media_binding.participant_identity_unrecognised.v1`
-//! - `cx.vector.media_binding.recording_artifact_via_contrix_blob.v1`
+//! - `cx.vector.media_binding.recording_artifact_via_cokret_blob.v1`
 //!
 //! These are SDK-pure wire-shape pins. They lock the spelling of the
-//! 10 new error codes (cotest mirrors `contrix_core`'s registry), the
+//! 10 new error codes (cotest mirrors `cokret_core`'s registry), the
 //! participant_binding scheme id, the 600s TTL ceiling, the
 //! oldest-membership focus-selection contract, and the
 //! `cx.profile.media_service_binding.v1` registry id so a downstream
@@ -23,14 +23,14 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::error::{
+use cokret_core::error::{
     ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED, ERROR_CODE_FOCUS_MISMATCH,
     ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT, ERROR_CODE_PARTICIPANT_BINDING_INVALID,
     ERROR_CODE_PARTICIPANT_IDENTITY_UNRECOGNISED, ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
     ERROR_CODE_SESSION_FOCUS_ALREADY_COMMITTED, ERROR_CODE_TOKEN_ISSUER_UNAUTHORISED,
     ERROR_CODE_UNKNOWN_FOCUS_TYPE,
 };
-use contrix_core::{
+use cokret_core::{
     MEDIA_TOKEN_TTL_MAX_SECS, OP_CALL_MEDIA_TOKEN_EXCHANGE, PARTICIPANT_BINDING_SCHEMA,
 };
 
@@ -51,8 +51,8 @@ pub const VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED: &str =
 pub const VECTOR_ID_E2EE_KEY_SOURCE: &str = "cx.vector.media_binding.e2ee_key_source.v1";
 pub const VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED: &str =
     "cx.vector.media_binding.participant_identity_unrecognised.v1";
-pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_CONTRIX_BLOB: &str =
-    "cx.vector.media_binding.recording_artifact_via_contrix_blob.v1";
+pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB: &str =
+    "cx.vector.media_binding.recording_artifact_via_cokret_blob.v1";
 
 /// Canonical list of all 9 vector ids. Used by the registry / discovery
 /// gate to spot missing entries.
@@ -65,11 +65,11 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED,
     VECTOR_ID_E2EE_KEY_SOURCE,
     VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED,
-    VECTOR_ID_RECORDING_ARTIFACT_VIA_CONTRIX_BLOB,
+    VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB,
 ];
 
 /// Known media-backend type tags from `cx.realm.media_service.foci[].type`.
-/// Mirrors `contrix_sdk::media::MediaBackendType` enum (R3 SDK feature
+/// Mirrors `cokret_sdk::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
 /// minimal `cokret-core` dep slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
@@ -184,7 +184,7 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
 
 /// Validate that `remaining_secs` (token expires_at - now) is within
 /// the spec's 600s ceiling and strictly positive. Mirrors
-/// `contrix_sdk::media::validate_token_ttl` so cotest can pin the
+/// `cokret_sdk::media::validate_token_ttl` so cotest can pin the
 /// constraint at the wire layer without pulling the full-surface SDK.
 fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
     if remaining_secs <= 0 {
@@ -377,9 +377,9 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     Ok(())
 }
 
-// ─── VECT-MB-9 — recording_artifact_via_contrix_blob ───────────────────────
+// ─── VECT-MB-9 — recording_artifact_via_cokret_blob ───────────────────────
 
-pub fn run_recording_artifact_via_contrix_blob_vector() -> Result<()> {
+pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
     if ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
         bail!(
             "ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
@@ -387,11 +387,11 @@ pub fn run_recording_artifact_via_contrix_blob_vector() -> Result<()> {
     }
     // Egress MUST land on a Cokret blob endpoint. Direct S3 / GCS
     // / arbitrary http upload is bypass.
-    let is_contrix_blob = |url: &str| {
+    let is_cokret_blob = |url: &str| {
         url.starts_with("https://")
             && (url.contains("/_matrix/cokret/v1/media") || url.contains("/cokret/v1/media"))
     };
-    if !is_contrix_blob("https://server.example/cokret/v1/media/upload") {
+    if !is_cokret_blob("https://server.example/cokret/v1/media/upload") {
         bail!("legit cokret blob endpoint not accepted");
     }
     for bad in [
@@ -399,7 +399,7 @@ pub fn run_recording_artifact_via_contrix_blob_vector() -> Result<()> {
         "https://my-egress.example/dump",
         "https://storage.googleapis.com/foo",
     ] {
-        if is_contrix_blob(bad) {
+        if is_cokret_blob(bad) {
             bail!("non-cokret egress endpoint `{bad}` leaked past pipeline check");
         }
     }
@@ -423,7 +423,7 @@ pub fn run_media_binding_vector_suite() -> Result<()> {
     run_unknown_type_fail_closed_vector()?;
     run_e2ee_key_source_vector()?;
     run_participant_identity_unrecognised_vector()?;
-    run_recording_artifact_via_contrix_blob_vector()?;
+    run_recording_artifact_via_cokret_blob_vector()?;
     Ok(())
 }
 

@@ -3,8 +3,8 @@
 //!
 //! Spec: a Realm declared with `security_class=high_assurance` MUST
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`. The
-//! SDK exposes this as a struct invariant on `contrix_core::Space`'s
-//! [`validate_kind_invariants`](contrix_core::Space::validate_kind_invariants)
+//! SDK exposes this as a struct invariant on `cokret_core::Space`'s
+//! [`validate_kind_invariants`](cokret_core::Space::validate_kind_invariants)
 //! and soland enforces it at the reducer with the canonical reason
 //! code `high_assurance_federation_policy_invalid`.
 //!
@@ -12,7 +12,7 @@
 //! integration test lives at `soland/tests/high_assurance_policy.rs`.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     CircleMetadataEncryptionFloor, ContentEncryptionFloor, Did, Discoverability, EncryptionProfile,
     FederationPolicy, HistoryVisibility, JoinRule, SecurityClass, Space, SpaceId,
     TypedTrustDomainId,

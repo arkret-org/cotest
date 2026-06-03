@@ -13,7 +13,7 @@
         { "name": "prev_refs / refs constraints", "status": "implemented", "sources": ["conformance_event_envelope"], "tests": ["event_envelope_fixture_suite_matches_reference_semantics"] },
         { "name": "Event submit / fetch / batch-get / backfill / frontier", "status": "partial", "sources": ["events_backfill", "protocol_payloads", "federation_contract"], "tests": ["backfill_pages_recover_messages_missing_from_limited_client_page"] },
         { "name": "idempotent duplicate handling", "status": "implemented", "sources": ["delivery_media", "federation_contract"], "tests": [] },
-        { "name": "standard error envelope", "status": "implemented", "sources": ["api_contracts_auth", "federation_contract"], "tests": ["framework_errors_and_invalid_json_use_contrix_envelopes"] }
+        { "name": "standard error envelope", "status": "implemented", "sources": ["api_contracts_auth", "federation_contract"], "tests": ["framework_errors_and_invalid_json_use_cokret_envelopes"] }
       ]
     },
     {

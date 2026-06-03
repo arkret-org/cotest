@@ -227,7 +227,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(JSON.stringify(before)).toContain(oldBody);
 
     const sweep = await request.post(
-      `${solandBaseUrl()}/api/v1/admin/retention/sweep`,
+      `${solandBaseUrl()}/_soland/admin/retention/sweep`,
       {
         headers: authHeaders(aliceToken),
         data: { space_id: spaceId },

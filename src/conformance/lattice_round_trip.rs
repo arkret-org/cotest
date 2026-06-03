@@ -1,6 +1,6 @@
 //! C10.C lattice round-trip vectors.
 //!
-//! Exercises the SDK's [`contrix_core::lattice`] module directly against the
+//! Exercises the SDK's [`cokret_core::lattice`] module directly against the
 //! normative scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5.
 //! The fixture itself is symbolic (it describes protocol-level semantics,
 //! eliding wire-required `space_id` / `hlc` / `sig`) — this suite reifies
@@ -24,10 +24,10 @@
 //! spec's normative join semantics.
 
 use anyhow::{Result, bail};
-use contrix_core::lattice::{
+use cokret_core::lattice::{
     AnchoredOp, CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog,
 };
-use contrix_core::{CellRef, LatticeOp, LatticeOpType, MoveId};
+use cokret_core::{CellRef, LatticeOp, LatticeOpType, MoveId};
 use serde_json::json;
 
 /// Public entry point matching the cotest fixture-suite naming convention.
@@ -237,7 +237,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
             )
         }
     };
-    if !matches!(bottom.kind, contrix_core::BottomKind::Conflict) {
+    if !matches!(bottom.kind, cokret_core::BottomKind::Conflict) {
         bail!(
             "CasRegister Bottom kind expected Conflict, got {:?}",
             bottom.kind
@@ -552,7 +552,7 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
             bail!("Anchorer concurrent reconfig MUST Bottom (split anchorer is a Space-wide pause)")
         }
     };
-    if !matches!(bottom.kind, contrix_core::BottomKind::Conflict) {
+    if !matches!(bottom.kind, cokret_core::BottomKind::Conflict) {
         bail!(
             "Anchorer split Bottom kind expected Conflict, got {:?}",
             bottom.kind

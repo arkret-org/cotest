@@ -17,7 +17,7 @@
 //! (satisfies + violates).
 
 use anyhow::{Result, anyhow};
-use contrix_core::{ChildScopePolicy, CircleId, EncryptionProfile};
+use cokret_core::{ChildScopePolicy, CircleId, EncryptionProfile};
 
 /// Reducer-pure predicate for `Space.child_scope_policy` enforcement.
 ///

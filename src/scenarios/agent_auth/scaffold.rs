@@ -7,7 +7,7 @@
 //!   agent_principal DID, NOT the controller DID.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     AgentKeyId, CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
     CAP_ACTION_AGENT_ACTION_REQUEST, CAP_ACTION_AGENT_DRAFT_PROPOSE, Did,
 };

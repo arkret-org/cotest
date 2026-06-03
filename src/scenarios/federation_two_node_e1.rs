@@ -16,14 +16,14 @@
 //!
 //! C35.2 fixed the `device_id` fixture to use a wire-canonical
 //! `ck:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
-//! `contrix_identifiers::DeviceId` validator rejects), confirmed the actor
+//! `cokret_identifiers::DeviceId` validator rejects), confirmed the actor
 //! registration + space-create + message-send round-trip succeeds against
 //! a real soland, and removed the wrapper's `#[ignore]` so default
 //! `cargo test` runs the full federation scenario whenever a soland binary
 //! is locatable (and silently skips otherwise).
 
 use anyhow::{Context, Result};
-use contrix_core::identifiers::new_prefixed_uuid7;
+use cokret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -73,7 +73,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
     // ── Step 2: actor + space + message Move on server_a ────────────────
     // C35.2 — `device_id` MUST be a canonical Cokret wire DeviceId
-    // (`ck:device:<uuidv7>`) per `contrix_identifiers::DeviceId`. Mint a
+    // (`ck:device:<uuidv7>`) per `cokret_identifiers::DeviceId`. Mint a
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("ck:device:");

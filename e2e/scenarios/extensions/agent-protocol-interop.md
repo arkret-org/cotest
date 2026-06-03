@@ -88,7 +88,7 @@
 
 21. **harness** 调 `GET /api/v1/events?after=<cursor>` 拉一组事件,按 `event_kind` 过滤出本次 session_id 的全部记录,断言顺序严格为 `start → status (negotiating) → status (accepted) → status (working) → result (completed)` (不允许 status 在 start 之前出现,不允许 result 之后再有 status);
 22. 对每个事件,断言其 `prev_event_id` 与上一条的 `event_id` 一致 (audit chain hash 链);
-23. 对 `result` 事件,用 `contrix_sdk::agent_binding::verify_audit_binding_by_kind` 跑一次 in-process 校验 — 通过则证明 SDK 与 soland 签发端一致 (与 `yougen/src/views/agents.rs::verify_agent_audit_binding` 完全等价);
+23. 对 `result` 事件,用 `cokret_sdk::agent_binding::verify_audit_binding_by_kind` 跑一次 in-process 校验 — 通过则证明 SDK 与 soland 签发端一致 (与 `yougen/src/views/agents.rs::verify_agent_audit_binding` 完全等价);
 24. **alice** 在 `/agents` 顶部的 `agent-incoming-poll-tick` 出现 `tick N`,且 `agent-incoming-status` 显示 `1 result event(s) (1 new since last poll)` 至少一次,证明 yougen 的 4s 轮询拉到了刚回写的 result 事件;
 25. **harness** 把整段事件链写入测试 artifact (testInfo attach `agent-handoff-audit-chain.json`),便于人工审查。
 
@@ -116,7 +116,7 @@
   - `POST /api/v1/agents/discover` 端点目前**未实现**,需新增 (从 `cx.agent.endpoint` projection 反查 supported_protocols + agent_card_url)。
   - `POST /api/v1/agents/sessions` 与 `POST /api/v1/agents/sessions/${id}/status` 当前由 `agent_bridge.rs` 内部 fan-out 模拟 (in-process echo);真实的外部 HTTP handoff (RFC 9421 + Content-Digest + DID Document service binding 校验) 仍**未实现**,见 `agent_bridge.rs` 头注 "When the registered agent carries an `endpoint_url`, the runtime POSTs the invocation to it via reqwest"。
   - `claimed_profiles` 数组应该包含 `cx.profile.agent_runtime.v1`,但 `routing/system/describe.rs` 还没把它写进去 — 这条覆盖 Phase A 步骤 5 的 supported_protocols 列表来源。
-  - audit_binding 签名 / 校验 SDK 已有 (`contrix_sdk::agent_binding`),但 fail-closed 路径 (E1.1) 故意 absent,需要 e2e 显式钉住。
+  - audit_binding 签名 / 校验 SDK 已有 (`cokret_sdk::agent_binding`),但 fail-closed 路径 (E1.1) 故意 absent,需要 e2e 显式钉住。
 - **yougen 缺口**:
   - `/agents` 的 protocol session draft 仍需与 soland capability grant API 做真实绑定。
   - publish modal 的 "保留 remote_agent attribution" 选项 (testid `publish-modal-signer-self-with-attribution`) 需要从 protocol session result 状态进入。

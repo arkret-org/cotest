@@ -47,8 +47,8 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow};
-use contrix_core::canonical::canonical_json_bytes;
-use contrix_core::{
+use cokret_core::canonical::canonical_json_bytes;
+use cokret_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_HISTORICAL_ONLY,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
     Hash, TypedTrustDomainId, federation_trust_domain_transcript_fragment,

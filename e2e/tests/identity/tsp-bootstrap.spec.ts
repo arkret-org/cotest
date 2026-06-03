@@ -32,7 +32,7 @@ test.describe("tsp bootstrap", () => {
       //       spec §4 metadata_privacy.nested_messages, §5).
       //   D — mock (as bob_extern) decrypts outer, validates Cokret
       //       signature against alice's webvh key, ACKs with both
-      //       `tsp_authenticity = "ok"` AND `contrix_signature = "ok"`
+      //       `tsp_authenticity = "ok"` AND `cokret_signature = "ok"`
       //       (spec §5: both SHOULD be verified, and independently).
       //       soland audit log gets `tsp.message.send` with
       //       relationship_id / payload_digest / payload_type /

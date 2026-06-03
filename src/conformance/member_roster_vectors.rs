@@ -22,11 +22,11 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
-use contrix_core::model::{
+use cokret_core::model::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
     MemberRosterEntry, MembershipState, RosterHandleClaimDigestEntry, member_display_state_digest,
 };
-use contrix_core::{Did, EventId, Hash, RealmId};
+use cokret_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_ROSTER_SHAPE: &str = "cx.vector.sync.member_roster_shape.v1";

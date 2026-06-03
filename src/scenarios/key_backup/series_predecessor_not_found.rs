@@ -4,8 +4,8 @@
 //! the server MUST be rejected with 409 + `series_predecessor_not_found`.
 
 use anyhow::{Result, anyhow};
-use contrix_core::BackupSeriesId;
-use contrix_core::error::ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND;
+use cokret_core::BackupSeriesId;
+use cokret_core::error::ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND;
 
 pub async fn series_predecessor_not_found_run() -> Result<()> {
     if ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND != "series_predecessor_not_found" {

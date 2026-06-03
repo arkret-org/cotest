@@ -42,7 +42,7 @@
 //! string-based state table.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{CircleId, Did, RealmId};
+use cokret_core::{CircleId, Did, RealmId};
 use serde_json::json;
 
 /// Canonical Circle member state names per CXP-0007 §3.6. Mirrors the

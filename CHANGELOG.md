@@ -12,7 +12,7 @@ All notable changes to **cotest** are documented here.
 
 ### CXP-0011 — object addressing + `cx.directory.resolve_target`
 
-- OA-COT-1..4: eleven `cx.vector.object_addressing.*` conformance vectors over the SDK's object-addressing surface (`contrix_core::model::*`), driven from `src/conformance/object_addressing_vectors.rs`:
+- OA-COT-1..4: eleven `cx.vector.object_addressing.*` conformance vectors over the SDK's object-addressing surface (`cokret_core::model::*`), driven from `src/conformance/object_addressing_vectors.rs`:
   - **OA-COT-1 (grammar, 4 cases)** — `web+cokret:` ⇄ HTTPS-fragment equivalence (both envelopes parse to the same `ParsedAddress`; built landing/scheme forms round-trip); realm-only / flow / message hierarchy forms; fail-closed on unknown keyword, wrong hierarchy order, and flow|message missing `via`; `<realm>` disambiguation (UUIDv7 → `RealmRef::RealmId`, dotted/domain → `RealmRef::Alias`).
   - **OA-COT-2 (`target_digest` stability, 3 cases)** — adding/removing `via` / `action` / `tok` / `lt` on the same identity tuple does NOT change the digest; switching `flow_id` / `message_id` (or promoting realm→flow→message) DOES; the digest is computed over the OMITTED-key canonical shape, not a `null` shape.
   - **OA-COT-3 (scope confusion, 2 cases)** — an object-A token fails `verify_token_target` against an object-B address (cross-object replay rejected); the token's `link_type` wins over a disagreeing URL `lt` hint via the `effective_link_type` argument (no reference→invite upgrade).
@@ -174,7 +174,7 @@ commit `8b7978d spec: round 2+3 cleanup`):
 
 Wired the 10 new round 2+3 scenarios so the **wire-level checks**
 execute as real `#[tokio::test]` assertions against the SDK error
-code constants (`contrix_core::ERROR_CODE_*`) instead of returning
+code constants (`cokret_core::ERROR_CODE_*`) instead of returning
 `Ok(())` unconditionally. The full live-server e2e branches remain
 `#[ignore]` with a clear `TODO(round23-T<XX>)` for the docker /
 fixture wiring follow-up. Net test-count delta: lib went from

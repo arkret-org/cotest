@@ -483,7 +483,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(accepted.status).toBe(200);
     expect(accepted.body.status).toBe("accepted");
-    expect(String(accepted.body.contrix_event_hint)).toMatch(/^ck:event:mimi:/);
+    expect(String(accepted.body.cokret_event_hint)).toMatch(/^ck:event:mimi:/);
 
     const quarantined = await facade.injectInbound({
       realm_id: realmId,

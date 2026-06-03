@@ -11,22 +11,22 @@
     ]
   },
   "component_mapping": {
-    "comment": "Selected entries from §9.1. `direction` values: bidirectional (round-trip-safe), contrix_only (facade emits private extension, no inverse), mimi_only (Cokret has no native form, MIMI ingestion only).",
+    "comment": "Selected entries from §9.1. `direction` values: bidirectional (round-trip-safe), cokret_only (facade emits private extension, no inverse), mimi_only (Cokret has no native form, MIMI ingestion only).",
     "vectors": [
-      { "contrix_component_type": "cx.component.realm.join_rule.v1",            "contrix_kind": "cx.realm.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
-      { "contrix_component_type": "cx.component.realm.history_visibility.v1",   "contrix_kind": "cx.realm.history_visibility",   "mimi_path": "history_sharing.visibility",                "direction": "bidirectional" },
-      { "contrix_component_type": "cx.component.realm.discovery.v1",            "contrix_kind": "cx.realm.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
-      { "contrix_component_type": "cx.component.realm.history_sharing_policy.v1","contrix_kind": "cx.realm.history_sharing_policy","mimi_path": "history_sharing",                          "direction": "bidirectional" },
-      { "contrix_component_type": "cx.component.realm.asset_privacy_policy.v1", "contrix_kind": "cx.realm.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
-      { "contrix_component_type": "cx.component.realm.moderation_policy.v1",    "contrix_kind": "cx.realm.moderation_policy",    "mimi_path": "logging.abuse_report",                      "direction": "bidirectional", "mimi_extension": "moderation" },
-      { "contrix_component_type": "cx.component.realm.policy_components.v1",    "contrix_kind": "cx.realm.policy_components",    "mimi_path": "policy_components",                          "direction": "bidirectional" },
-      { "contrix_component_type": "cx.component.realm.policy.v1",               "contrix_kind": "cx.realm.policy",               "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json" },
-      { "contrix_component_type": "cx.component.realm.policy_server.v1",        "contrix_kind": "cx.realm.policy_server",        "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json" },
-      { "contrix_component_type": "cx.component.realm.plaintext_visible_services.v1", "contrix_kind": "cx.realm.plaintext_visible_services", "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json" },
-      { "contrix_component_type": "cx.component.realm.media_service.v1",        "contrix_kind": "cx.realm.media_service",        "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json" },
-      { "contrix_component_type": "cx.component.realm.schema.v1",               "contrix_kind": "cx.realm.schema",               "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json" },
-      { "contrix_component_type": "cx.component.realm.inheritance_policy.v1",   "contrix_kind": "cx.realm.inheritance_policy",   "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json" },
-      { "contrix_component_type": "cx.component.consent.grant.v1",              "contrix_kind": "cx.consent.grant",              "direction": "contrix_only", "facade_media_type": "application/vnd.cokret.component+json", "comment": "Holder-private consent cell (or-set lattice). MIMI consent operations map to grant/revoke Moves on this cell; cross-protocol semantics is the cell join, not a discrete component." }
+      { "cokret_component_type": "cx.component.realm.join_rule.v1",            "cokret_kind": "cx.realm.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
+      { "cokret_component_type": "cx.component.realm.history_visibility.v1",   "cokret_kind": "cx.realm.history_visibility",   "mimi_path": "history_sharing.visibility",                "direction": "bidirectional" },
+      { "cokret_component_type": "cx.component.realm.discovery.v1",            "cokret_kind": "cx.realm.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
+      { "cokret_component_type": "cx.component.realm.history_sharing_policy.v1","cokret_kind": "cx.realm.history_sharing_policy","mimi_path": "history_sharing",                          "direction": "bidirectional" },
+      { "cokret_component_type": "cx.component.realm.asset_privacy_policy.v1", "cokret_kind": "cx.realm.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
+      { "cokret_component_type": "cx.component.realm.moderation_policy.v1",    "cokret_kind": "cx.realm.moderation_policy",    "mimi_path": "logging.abuse_report",                      "direction": "bidirectional", "mimi_extension": "moderation" },
+      { "cokret_component_type": "cx.component.realm.policy_components.v1",    "cokret_kind": "cx.realm.policy_components",    "mimi_path": "policy_components",                          "direction": "bidirectional" },
+      { "cokret_component_type": "cx.component.realm.policy.v1",               "cokret_kind": "cx.realm.policy",               "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json" },
+      { "cokret_component_type": "cx.component.realm.policy_server.v1",        "cokret_kind": "cx.realm.policy_server",        "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json" },
+      { "cokret_component_type": "cx.component.realm.plaintext_visible_services.v1", "cokret_kind": "cx.realm.plaintext_visible_services", "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json" },
+      { "cokret_component_type": "cx.component.realm.media_service.v1",        "cokret_kind": "cx.realm.media_service",        "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json" },
+      { "cokret_component_type": "cx.component.realm.schema.v1",               "cokret_kind": "cx.realm.schema",               "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json" },
+      { "cokret_component_type": "cx.component.realm.inheritance_policy.v1",   "cokret_kind": "cx.realm.inheritance_policy",   "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json" },
+      { "cokret_component_type": "cx.component.consent.grant.v1",              "cokret_kind": "cx.consent.grant",              "direction": "cokret_only", "facade_media_type": "application/vnd.cokret.component+json", "comment": "Holder-private consent cell (or-set lattice). MIMI consent operations map to grant/revoke Moves on this cell; cross-protocol semantics is the cell join, not a discrete component." }
     ]
   }
 }

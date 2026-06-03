@@ -12,7 +12,7 @@ use anyhow::{Context, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
-use contrix_http_client::{Auth, Client as SdkClient};
+use cokret_http_client::{Auth, Client as SdkClient};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client as HttpClient, Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
@@ -1121,7 +1121,7 @@ pub(crate) fn canonical_event_digest(event: &Value) -> String {
         object.remove("proofs");
         object.remove("unsigned");
     }
-    contrix_core::canonical::canonical_sha256(&canonical).expect("event JSON is canonicalizable")
+    cokret_core::canonical::canonical_sha256(&canonical).expect("event JSON is canonicalizable")
 }
 
 /// Fill `proofs[0].event_digest` with the canonical Event digest. The canonical

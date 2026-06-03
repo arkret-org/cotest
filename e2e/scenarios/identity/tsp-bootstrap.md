@@ -83,7 +83,7 @@
 
 16. mock(作为 bob_extern)解开外层 → 用 relationship key 解密 → 拿到内层 Cokret payload
 17. mock 验证内层 Cokret event signature(alice 的 webvh key,通过 §4 resolver 拉 DID Doc)→ pass
-18. 断言:mock 把验证结果回成 TSP ACK,`verification.contrix_signature = "ok"`、`verification.tsp_authenticity = "ok"`(spec §5:两者 SHOULD 都验证,且独立)
+18. 断言:mock 把验证结果回成 TSP ACK,`verification.cokret_signature = "ok"`、`verification.tsp_authenticity = "ok"`(spec §5:两者 SHOULD 都验证,且独立)
 19. 断言:alice 侧 yougen `/settings/connections` 该 relationship 的 outbox 标记最后一条 `cx.invite.create` 为 `delivered + acked`
 20. 断言:soland audit log 出现 `tsp.message.send` 记录,包含 `relationship_id`、`payload_digest`、`payload_type: "cx.invite.create"`、`verification_result: "ok"`(spec §8)
 

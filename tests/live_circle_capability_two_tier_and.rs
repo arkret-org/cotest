@@ -29,7 +29,7 @@
 //! `bail!` when the stack cannot be bootstrapped.
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::{
+use cokret_core::{
     CAP_ACTION_CIRCLE_AUDIT, CAP_ACTION_CIRCLE_MANAGE, Circle, CircleColorToken, CircleDisplay,
     CircleGlyph, CircleId, CircleSymbol, Did, RealmId,
 };

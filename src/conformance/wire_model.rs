@@ -454,8 +454,8 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
 /// unknown-handling mapping. The cotest test cross-references every Cokret
 /// component named in the fixture against the active event-kind registry's
 /// component_type set, asserts that bidirectional vectors carry both legs
-/// (`contrix_component_type` + `mimi_path`), and asserts that
-/// `direction = contrix_only` vectors declare the private facade media-type so
+/// (`cokret_component_type` + `mimi_path`), and asserts that
+/// `direction = cokret_only` vectors declare the private facade media-type so
 /// the facade cannot silently impersonate a standard MIMI component.
 pub fn run_mimi_components_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("mimi_components_fixture.json")?;
@@ -481,11 +481,11 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         );
     }
     for (vector, (cokret, mimi)) in crit_vectors.iter().zip(expected_pairs.iter()) {
-        let actual_contrix = required_str(vector, "cokret")?;
+        let actual_cokret = required_str(vector, "cokret")?;
         let actual_mimi = required_str(vector, "mimi_unknown_handling")?;
-        if actual_contrix != *cokret || actual_mimi != *mimi {
+        if actual_cokret != *cokret || actual_mimi != *mimi {
             bail!(
-                "criticality mapping drift: expected ({cokret} <-> {mimi}), got ({actual_contrix} <-> {actual_mimi})"
+                "criticality mapping drift: expected ({cokret} <-> {mimi}), got ({actual_cokret} <-> {actual_mimi})"
             );
         }
         if vector.get("round_trip").and_then(Value::as_bool) != Some(true) {
@@ -519,9 +519,9 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     }
 
     let mut bidirectional = 0usize;
-    let mut contrix_only = 0usize;
+    let mut cokret_only = 0usize;
     for vector in component_vectors {
-        let component_type = required_str(vector, "contrix_component_type")?;
+        let component_type = required_str(vector, "cokret_component_type")?;
         if !registered_components.contains(component_type) {
             bail!("mimi component vector references unknown component_type {component_type}");
         }
@@ -531,19 +531,19 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
                 let _ = required_str(vector, "mimi_path")?;
                 bidirectional += 1;
             }
-            "contrix_only" => {
+            "cokret_only" => {
                 let media = required_str(vector, "facade_media_type")?;
                 if media != "application/vnd.cokret.component+json" {
                     bail!(
-                        "contrix_only component {component_type} must use the application/vnd.cokret.component+json media type, got {media}"
+                        "cokret_only component {component_type} must use the application/vnd.cokret.component+json media type, got {media}"
                     );
                 }
                 if vector.get("mimi_path").is_some() {
                     bail!(
-                        "contrix_only component {component_type} declared a mimi_path (cannot have a standard MIMI mapping)"
+                        "cokret_only component {component_type} declared a mimi_path (cannot have a standard MIMI mapping)"
                     );
                 }
-                contrix_only += 1;
+                cokret_only += 1;
             }
             other => {
                 bail!("mimi component vector {component_type} unknown direction {other}");
@@ -561,15 +561,15 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             "mimi component fixture must cover at least 5 bidirectional mappings, got {bidirectional}"
         );
     }
-    if contrix_only < 5 {
+    if cokret_only < 5 {
         bail!(
-            "mimi component fixture must cover at least 5 Cokret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {contrix_only}"
+            "mimi component fixture must cover at least 5 Cokret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {cokret_only}"
         );
     }
 
     // Move/Anchor/Lattice rebase (spec 2026-05-08) removed cx.component.space.host*;
     // anchorer cell governs Anchor signing instead. Anchorer-related cell families
-    // SHOULD be marked contrix_only (no direct MIMI equivalent for Anchor authority).
+    // SHOULD be marked cokret_only (no direct MIMI equivalent for Anchor authority).
     Ok(())
 }
 
@@ -1758,7 +1758,7 @@ fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
 ///
 /// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
 /// `capability_tiers`. The fixture asserts:
-///   * core surfaces are implied by claiming `cx.profile.contrix_v1.core` — events_sync /
+///   * core surfaces are implied by claiming `cx.profile.cokret_v1.core` — events_sync /
 ///     identity_registry / service_discovery MUST appear and the discovery client MAY call ops in
 ///     those surfaces;
 ///   * extension surfaces (post-C16 split: blob_storage, realtime_media, moderation_reports) MUST

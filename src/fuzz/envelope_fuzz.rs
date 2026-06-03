@@ -15,7 +15,7 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use contrix_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, ProtocolSchemaRegistry, SNAPSHOT_SCHEMA, schema};
+use cokret_core::{ANCHOR_SCHEMA, EVENT_SCHEMA, ProtocolSchemaRegistry, SNAPSHOT_SCHEMA, schema};
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -122,14 +122,14 @@ impl FuzzEventInput {
 ///      objects, etc.).
 pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<contrix_core::EventEnvelope>(data);
+        let _ = serde_json::from_slice::<cokret_core::EventEnvelope>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzEventInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), EVENT_SCHEMA, |v| {
-        let _ = serde_json::from_value::<contrix_core::EventEnvelope>(v.clone());
+        let _ = serde_json::from_value::<cokret_core::EventEnvelope>(v.clone());
     })
 }
 
@@ -201,7 +201,7 @@ impl FuzzMoveInput {
 /// on `serde_json::from_value::<Move>` to exercise the typed validator.
 pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<contrix_core::Move>(data);
+        let _ = serde_json::from_slice::<cokret_core::Move>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzMoveInput::arbitrary(&mut unstructured) else {
@@ -209,7 +209,7 @@ pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
     };
     let value = input.to_json();
     catch(|| {
-        let _ = serde_json::from_value::<contrix_core::Move>(value.clone());
+        let _ = serde_json::from_value::<cokret_core::Move>(value.clone());
     })
 }
 
@@ -250,14 +250,14 @@ impl FuzzAnchorInput {
 /// and the artifact-backed `ANCHOR_SCHEMA` validator to exercise both layers.
 pub fn fuzz_anchor_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<contrix_core::Anchor>(data);
+        let _ = serde_json::from_slice::<cokret_core::Anchor>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzAnchorInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), ANCHOR_SCHEMA, |v| {
-        let _ = serde_json::from_value::<contrix_core::Anchor>(v.clone());
+        let _ = serde_json::from_value::<cokret_core::Anchor>(v.clone());
     })
 }
 
@@ -287,14 +287,14 @@ impl FuzzSnapshotChunkInput {
 /// chunker `Deserializer::deserialize` impl unwraps internally).
 pub fn fuzz_snapshot_chunk(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<contrix_core::SnapshotChunk>(data);
+        let _ = serde_json::from_slice::<cokret_core::SnapshotChunk>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzSnapshotChunkInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), SNAPSHOT_SCHEMA, |v| {
-        let _ = serde_json::from_value::<contrix_core::SnapshotChunk>(v.clone());
+        let _ = serde_json::from_value::<cokret_core::SnapshotChunk>(v.clone());
     })
 }
 

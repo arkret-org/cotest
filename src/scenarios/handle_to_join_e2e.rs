@@ -37,7 +37,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use contrix_core::{
+use cokret_core::{
     CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
     Did, Handle, HandleHintBindingSource, MemberDeliveryBindingCandidate, RecipientServiceType,
 };

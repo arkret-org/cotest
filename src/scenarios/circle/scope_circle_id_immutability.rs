@@ -20,8 +20,8 @@
 //! locally that any future SDK helper / reducer SHOULD match bit-for-bit.
 
 use anyhow::{Result, anyhow};
-use contrix_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
-use contrix_core::{CircleId, Did, Flow, SpaceId};
+use cokret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
+use cokret_core::{CircleId, Did, Flow, SpaceId};
 use serde_json::Value;
 
 fn space_id() -> Result<SpaceId> {

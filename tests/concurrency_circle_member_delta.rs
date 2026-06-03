@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::Result;
-use contrix_core::Did;
+use cokret_core::Did;
 use serial_test::serial;
 use tokio::sync::Mutex;
 

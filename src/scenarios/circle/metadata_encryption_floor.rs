@@ -22,8 +22,8 @@
 //! future reducer SHOULD mirror.
 
 use anyhow::{Result, anyhow};
-use contrix_core::CircleMetadataEncryptionFloor;
-use contrix_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
+use cokret_core::CircleMetadataEncryptionFloor;
+use cokret_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
 
 /// Strictness rank for the three floor values: stricter → larger rank.
 fn rank(floor: CircleMetadataEncryptionFloor) -> u8 {

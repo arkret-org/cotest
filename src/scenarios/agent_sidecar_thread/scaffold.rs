@@ -9,7 +9,7 @@
 //!      publish fan-out group.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
     PROFILE_AGENT_SIDECAR_THREAD, SidecarCircleId,

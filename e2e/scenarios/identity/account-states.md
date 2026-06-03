@@ -44,7 +44,7 @@
 
 ### Phase C — Lock(安全风险)
 
-8. 模拟:测试 harness 调 admin endpoint `POST /api/v1/admin/accounts/<alice.did>/lock { reason: "suspicious_login" }`
+8. 模拟:测试 harness 调 admin endpoint `POST /_soland/admin/accounts/<alice.did>/lock { reason: "suspicious_login" }`
 9. coauth revoke alice 的所有 access token;refresh_token SHOULD revoke
 10. 断言:`/api/v1/account/me` 返 401 / 403
 11. 断言:account state = `locked`(若 spec 暴露)
@@ -53,7 +53,7 @@
 
 ### Phase D — Suspend(governance)
 
-14. admin 调 `POST /api/v1/admin/accounts/<alice.did>/suspend { reason: "abuse", duration: "30d" }`
+14. admin 调 `POST /_soland/admin/accounts/<alice.did>/suspend { reason: "abuse", duration: "30d" }`
 15. 断言:alice 任何新 token request 都拒(refresh fails);老 token 仍可用直到过期(spec §3 描述)
 16. 断言:account state = `suspended`
 17. alice 试发消息 → 401(token 过期后)
@@ -78,7 +78,7 @@
 
 ## Implementation notes
 
-- **soland 本地状态**:`/api/v1/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/api/v1/admin/accounts/<did>/status`、`/api/v1/account/deactivate`、`/account/me.state` 与 `cx.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
+- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/api/v1/account/deactivate`、`/account/me.state` 与 `cx.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
 - **yougen 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
 
 ## 总耗时预估

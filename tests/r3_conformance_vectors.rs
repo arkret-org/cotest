@@ -186,7 +186,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 
 // ─── R3.3 / OA-COT-1..4 — CXP-0011 object addressing + resolve_target ─────
 //
-// SDK-pure vectors over `contrix_core::model::*` object-addressing surface:
+// SDK-pure vectors over `cokret_core::model::*` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
 //     keyword/order/missing-via, realm-id vs alias.
 //   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks flow/message identity,
@@ -398,7 +398,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // server-side acceptance gate lands under soland P2-impl.
     use std::collections::BTreeMap;
 
-    use contrix_core::cursor::{Cursor, CursorPurpose};
+    use cokret_core::cursor::{Cursor, CursorPurpose};
     let stateless = Cursor {
         v: "1".to_owned(),
         purpose: CursorPurpose::Stream,
@@ -525,12 +525,12 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // effective-set filter that soland's MID reducer MUST mirror. An
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
-    use contrix_core::model::{
+    use cokret_core::model::{
         DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
         MemberIdentityUpdatePayload, effective_identity_events,
     };
-    use contrix_core::{Did, EventId, Hash, RealmId};
+    use cokret_core::{Did, EventId, Hash, RealmId};
 
     let realm = RealmId::new("ck:realm:01904100-0000-7000-8000-000000007007")
         .map_err(|e| anyhow!("realm: {e}"))?;
@@ -645,7 +645,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // live `#[ignore]` companion below.
     use std::collections::BTreeSet;
 
-    use contrix_core::{
+    use cokret_core::{
         CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle, HandleHintBindingSource,
         MemberDeliveryBindingCandidate, RecipientServiceType,
     };

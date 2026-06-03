@@ -13,7 +13,7 @@
 //! silently returns `Ok(())` when neither `SOLAND_BIN` is set nor the
 //! sibling-checkout binary exists, so CI runners without a built soland skip
 //! cleanly rather than failing. The `device_id` fixture was also rewritten
-//! to use a runtime-minted `ck:device:<uuidv7>` per `contrix_identifiers`
+//! to use a runtime-minted `ck:device:<uuidv7>` per `cokret_identifiers`
 //! `is_strict_typed_id` validation.
 
 use anyhow::Result;

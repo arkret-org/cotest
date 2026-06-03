@@ -109,7 +109,7 @@ test.describe("moderation and ban", () => {
     expect(bystanderReports.ok()).toBeTruthy();
     expect(JSON.stringify(await bystanderReports.json())).not.toContain(reportBody.report_id);
 
-    const targetAdminReports = await request.get(`${solandBaseUrl()}/api/v1/admin/reports`, {
+    const targetAdminReports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(malloryToken),
     });
     expect(targetAdminReports.ok()).toBeTruthy();
@@ -139,7 +139,7 @@ test.describe("moderation and ban", () => {
     expect(unauthorizedBan.status()).toBe(403);
     expect(JSON.stringify(await unauthorizedBan.json())).toContain("missing_capability");
 
-    const reports = await request.get(`${solandBaseUrl()}/api/v1/admin/reports`, {
+    const reports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(aliceToken),
     });
     expect(reports.ok()).toBeTruthy();

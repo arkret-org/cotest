@@ -21,11 +21,11 @@ use std::path::PathBuf;
 use cotest::literal_scanner::scan_tree_protocol_drift;
 
 /// Gating: manual operator scan over sibling project trees — uses
-/// `CONTRIX_DEV_ROOT` (default `D:\Works\cokret-dev`); not a CI gate.
+/// `COKRET_DEV_ROOT` (default `D:\Works\cokret-dev`); not a CI gate.
 #[test]
 #[ignore = "manual: cargo test --test protocol_drift_external_scan -- --ignored --nocapture"]
 fn protocol_drift_external_scan_all_projects() {
-    let dev_root = std::env::var("CONTRIX_DEV_ROOT")
+    let dev_root = std::env::var("COKRET_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret-dev"));

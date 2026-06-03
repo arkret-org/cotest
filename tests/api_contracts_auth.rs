@@ -3,8 +3,8 @@ use serial_test::serial;
 
 #[tokio::test]
 #[serial]
-async fn framework_errors_and_invalid_json_use_contrix_envelopes() -> Result<()> {
-    cotest::scenarios::api_contracts_auth::framework_errors_and_invalid_json_use_contrix_envelopes()
+async fn framework_errors_and_invalid_json_use_cokret_envelopes() -> Result<()> {
+    cotest::scenarios::api_contracts_auth::framework_errors_and_invalid_json_use_cokret_envelopes()
         .await
 }
 

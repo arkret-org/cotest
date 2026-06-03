@@ -25,7 +25,7 @@
 //! `bail!` when the bootstrap can't bring up the stack.
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::{
+use cokret_core::{
     Circle, CircleColorToken, CircleDisplay, CircleGlyph, CircleId, CircleSymbol, Did,
     EncryptionProfile, RealmId,
 };

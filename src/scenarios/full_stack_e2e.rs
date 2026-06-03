@@ -46,7 +46,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use contrix_core::{
+use cokret_core::{
     CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
     Did, Handle, HandleHintBindingSource, MemberDeliveryBindingCandidate, RecipientServiceType,
     sanitize_blind_payload, sanitize_blind_payload_strict,
@@ -469,8 +469,8 @@ fn negative_stable_push_id_leak_rejected() -> Result<()> {
             Err(e)
                 if matches!(
                     e.reason_code,
-                    contrix_core::BlindPayloadReasonCode::ForbiddenField
-                        | contrix_core::BlindPayloadReasonCode::SensitiveLiteral
+                    cokret_core::BlindPayloadReasonCode::ForbiddenField
+                        | cokret_core::BlindPayloadReasonCode::SensitiveLiteral
                 ) =>
             {
                 // Expected — the sanitizer correctly refused the leak.

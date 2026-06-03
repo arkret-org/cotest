@@ -63,7 +63,7 @@ test.describe("account states", () => {
     expect((await me.json()).state).toBe("active");
   });
 
-  test("admin lock: /admin/accounts/<did>/lock invalidates sessions and blocks new login", async ({
+  test("admin lock: /_soland/admin/accounts/<did>/lock invalidates sessions and blocks new login", async ({
     request,
   }) => {
     const alice = uniqueUser("s28-lock-alice");
@@ -72,7 +72,7 @@ test.describe("account states", () => {
     const aliceToken = await issueDevSession(request, alice);
     const adminToken = await issueDevSession(request, admin);
 
-    const lock = await request.post(`${solandBaseUrl()}/api/v1/admin/accounts/${alice.did}/lock`, {
+    const lock = await request.post(`${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/lock`, {
       headers: authHeaders(adminToken),
       data: { reason: "suspicious_login" },
     });
@@ -98,7 +98,7 @@ test.describe("account states", () => {
     expect(login.status()).toBe(403);
     expect(wireErrCode(await login.json())).toBe("account_locked");
 
-    const unlock = await request.post(`${solandBaseUrl()}/api/v1/admin/accounts/${alice.did}/unlock`, {
+    const unlock = await request.post(`${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/unlock`, {
       headers: authHeaders(adminToken),
       data: { reason: "recovery_complete" },
     });
@@ -116,7 +116,7 @@ test.describe("account states", () => {
     const aliceToken = await issueDevSession(request, alice);
     const adminToken = await issueDevSession(request, admin);
 
-    const suspend = await request.post(`${solandBaseUrl()}/api/v1/admin/accounts/${alice.did}/suspend`, {
+    const suspend = await request.post(`${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/suspend`, {
       headers: authHeaders(adminToken),
       data: { reason: "abuse", duration: "30d" },
     });
@@ -139,7 +139,7 @@ test.describe("account states", () => {
     expect(login.status()).toBe(403);
     expect(wireErrCode(await login.json())).toBe("account_suspended");
 
-    const unsuspend = await request.post(`${solandBaseUrl()}/api/v1/admin/accounts/${alice.did}/unsuspend`, {
+    const unsuspend = await request.post(`${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/unsuspend`, {
       headers: authHeaders(adminToken),
       data: { reason: "appeal_accepted" },
     });
@@ -245,7 +245,7 @@ test.describe("account states", () => {
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, admin)]);
     const adminToken = await issueDevSession(request, admin);
 
-    const suspend = await request.post(`${solandBaseUrl()}/api/v1/admin/accounts/${alice.did}/suspend`, {
+    const suspend = await request.post(`${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/suspend`, {
       headers: authHeaders(adminToken),
       data: { reason: "audit_probe" },
     });

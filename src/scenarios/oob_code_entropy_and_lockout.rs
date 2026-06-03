@@ -35,7 +35,7 @@
 //! / lockout coverage; a live behavioural test is a tracked follow-up.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{ERROR_CODE_NOT_FOUND, ERROR_CODE_SCHEMA_VIOLATION, is_known_error_code};
+use cokret_core::{ERROR_CODE_NOT_FOUND, ERROR_CODE_SCHEMA_VIOLATION, is_known_error_code};
 
 /// Minimum acceptable length for an offline-verifiable OOB code.
 /// 22 chars base32 ≈ 110 bits entropy with disambiguated alphabet.

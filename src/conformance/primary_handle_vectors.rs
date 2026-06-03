@@ -18,8 +18,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use cokret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
-use contrix_core::Did;
-use contrix_core::model::{Handle, HandleBindingState, HandleClaim};
+use cokret_core::Did;
+use cokret_core::model::{Handle, HandleBindingState, HandleClaim};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
     "cx.vector.primary_handle_selection.empty_candidate_fallback.v1";

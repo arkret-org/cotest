@@ -18,7 +18,7 @@
 
 use anyhow::{Result, anyhow};
 use chrono::TimeZone;
-use contrix_core::{
+use cokret_core::{
     Anchor, AnchorId, AnchorKind, AnchorerSig, Did, Hash, Hlc, MoveId, MoveSignature, SpaceId,
     anchor_canonical_bytes, compute_anchor_id,
 };

@@ -5,7 +5,7 @@
 //! reject with HTTP 409 + errcode `series_chain_broken`.
 
 use anyhow::{Result, anyhow};
-use contrix_core::error::ERROR_CODE_SERIES_CHAIN_BROKEN;
+use cokret_core::error::ERROR_CODE_SERIES_CHAIN_BROKEN;
 
 pub async fn series_chain_broken_run() -> Result<()> {
     if ERROR_CODE_SERIES_CHAIN_BROKEN != "series_chain_broken" {

@@ -407,7 +407,7 @@ fn scan_confidential_discussion_relation(
             message: format!(
                 "`ConfidentialDiscussionOf` Relation endpoints (from / to) \
                  MUST both be `ck:flow:` ids; saw `ck:{kind}:` on the same \
-                 line. See `contrix_core::model::primitives::Relation::\
+                 line. See `cokret_core::model::primitives::Relation::\
                  ConfidentialDiscussionOf`."
             ),
         });

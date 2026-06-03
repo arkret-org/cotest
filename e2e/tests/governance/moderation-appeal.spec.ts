@@ -144,7 +144,7 @@ test.describe("moderation appeal", () => {
     const appeal = await submitAppeal(request, fixture);
 
     const response = await request.post(
-      `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(
+      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
         appeal.appeal_id,
       )}/review`,
       {
@@ -173,7 +173,7 @@ test.describe("moderation appeal", () => {
     const appeal = await submitAppeal(request, fixture);
 
     const response = await request.post(
-      `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(
+      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
         appeal.appeal_id,
       )}/decision`,
       {
@@ -191,7 +191,7 @@ test.describe("moderation appeal", () => {
     await reviewAppeal(request, fixture.reviewerToken, appeal.appeal_id);
 
     const response = await request.post(
-      `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(
+      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
         appeal.appeal_id,
       )}/close`,
       {
@@ -209,7 +209,7 @@ test.describe("moderation appeal", () => {
     await reviewAppeal(request, fixture.reviewerToken, appeal.appeal_id);
 
     const response = await request.post(
-      `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(
+      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
         appeal.appeal_id,
       )}/decision`,
       {
@@ -309,7 +309,7 @@ async function issueDecision(
   realmId: string,
   targetRef: string,
 ) {
-  const response = await request.post(`${solandBaseUrl()}/api/admin/v1/moderation/decision`, {
+  const response = await request.post(`${solandBaseUrl()}/_soland/admin/moderation/decision`, {
     headers: authHeaders(token),
     data: {
       target_ref: targetRef,
@@ -372,7 +372,7 @@ async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) 
 
 async function reviewAppeal(request: APIRequestContext, token: string, appealId: string) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(appealId)}/review`,
+    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}/review`,
     { headers: authHeaders(token), data: { notes_ref: "review notes" } },
   );
   const text = await response.text();
@@ -387,7 +387,7 @@ async function decideAppeal(
   data: Record<string, unknown>,
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(appealId)}/decision`,
+    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}/decision`,
     { headers: authHeaders(token), data },
   );
   const text = await response.text();
@@ -397,7 +397,7 @@ async function decideAppeal(
 
 async function closeAppeal(request: APIRequestContext, token: string, appealId: string) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(appealId)}/close`,
+    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}/close`,
     { headers: authHeaders(token), data: { auto_closed: false } },
   );
   const text = await response.text();
@@ -412,7 +412,7 @@ async function liftDecision(
   appealId: string,
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/api/admin/v1/moderation/decision/${encodeURIComponent(decisionId)}/lift`,
+    `${solandBaseUrl()}/_soland/admin/moderation/decision/${encodeURIComponent(decisionId)}/lift`,
     {
       headers: authHeaders(token),
       data: {
@@ -428,7 +428,7 @@ async function liftDecision(
 
 async function getAppealHistory(request: APIRequestContext, token: string, appealId: string) {
   const response = await request.get(
-    `${solandBaseUrl()}/api/admin/v1/moderation/appeals/${encodeURIComponent(appealId)}`,
+    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();

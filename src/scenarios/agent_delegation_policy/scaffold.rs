@@ -11,7 +11,7 @@
 //!   4. an `accountability_grant` typed-id round-trips through the SDK validator.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     AGENT_CAPABILITY_ACTIONS, AccountabilityGrantId, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
 };

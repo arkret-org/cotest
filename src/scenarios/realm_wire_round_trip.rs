@@ -6,25 +6,25 @@
 //! - security boundary: `cx.space.*` → `cx.realm.*`
 //! - container: `cx.place.*` → `cx.space.*`
 //!
-//! This module builds SDK-typed [`contrix_core::Event`] envelopes for
+//! This module builds SDK-typed [`cokret_core::Event`] envelopes for
 //! each renamed kind, canonical-encodes them via the SDK encoder, and
 //! asserts:
 //!
 //! 1. Round-trip parses back into the same `(kind, realm_id, payload)` triple (the wire bytes any
 //!    other project — soland / yougen / federation peer — would receive).
-//! 2. [`contrix_core::events::classify_event_kind`] recognises the new kinds in their new family
+//! 2. [`cokret_core::events::classify_event_kind`] recognises the new kinds in their new family
 //!    (Realm / Space-container).
 //! Used by `tests/realm_wire_round_trip.rs`. Pure unit-style: no
 //! binary, no network — the round-trip is entirely against the SDK so
 //! we catch contract drift in CI without spinning up soland.
 
 use anyhow::{Result, anyhow};
-use contrix_core::canonical::{canonical_json_bytes, canonical_sha256};
-use contrix_core::events::{
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use cokret_core::events::{
     EventClass, REALM_CREATE, REALM_DELIVERY_BINDING_POLICY, REALM_LINK, SPACE_CREATE,
     classify_event_kind,
 };
-use contrix_core::{Did, Event, Hlc, RealmId};
+use cokret_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
 /// Build a minimal SDK-typed [`Event`] for a Realm/Space reversal wire

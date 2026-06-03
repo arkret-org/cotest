@@ -90,7 +90,7 @@ The current set:
 | `e2e::call_media::live_livekit_token_join` | Requires a live LiveKit pool; not provisionable from cotest. |
 | `e2e::call_media::live_mediasoup_token_join` | Same; requires a Mediasoup pool. |
 | `e2e::call_media::live_janus_token_join` | Same; requires a Janus instance. |
-| `e2e::call_media::live_contrix_native_token_join` | Requires a built and running Cokret-native SFU. |
+| `e2e::call_media::live_cokret_native_token_join` | Requires a built and running Cokret-native SFU. |
 | `e2e::call_media::live_sframe_key_derivation` | Requires a real MLS group across at least two participating yougen clients to exercise the exporter handoff to SFrame. |
 | `e2e::push::live_apns_dispatch` | Requires APNS credentials + a real device or sandbox-registered token. |
 | `e2e::push::live_fcm_dispatch` | Requires Firebase service account + a real device. |

@@ -22,7 +22,7 @@
 //! decrypting.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP, is_known_error_code};
+use cokret_core::{ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP, is_known_error_code};
 
 /// The canonical error code surfaced by the reducer when a late key
 /// share is accepted by a Realm whose membership for the recipient was

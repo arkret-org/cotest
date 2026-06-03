@@ -6,8 +6,8 @@
 //! provision, grant-before-pairing) MUST be rejected.
 
 use anyhow::{Result, anyhow};
-use contrix_core::events::kinds::AGENT_PAUSE;
-use contrix_core::{OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_GRANT_ATTACH, OP_AGENT_PROVISION};
+use cokret_core::events::kinds::AGENT_PAUSE;
+use cokret_core::{OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_GRANT_ATTACH, OP_AGENT_PROVISION};
 
 /// Canonical landing order. Index = step number.
 const SPEC_ORDER: &[&str] = &[

@@ -12,10 +12,10 @@
 use std::panic;
 
 use arbitrary::{Arbitrary, Unstructured};
-use contrix_core::{ANCHOR_SCHEMA, schema};
+use cokret_core::{ANCHOR_SCHEMA, schema};
 use serde_json::{Value, json};
 
-fn registry() -> contrix_core::ProtocolSchemaRegistry {
+fn registry() -> cokret_core::ProtocolSchemaRegistry {
     schema::schema_registry_from_default_spec_artifacts()
         .ok()
         .flatten()
@@ -144,7 +144,7 @@ impl FuzzAnchorDeepInput {
 ///   3. Typed `from_value::<Anchor>` deserialization.
 pub fn fuzz_anchor_deep(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<contrix_core::Anchor>(data);
+        let _ = serde_json::from_slice::<cokret_core::Anchor>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
     let Ok(input) = FuzzAnchorDeepInput::arbitrary(&mut unstructured) else {
@@ -155,7 +155,7 @@ pub fn fuzz_anchor_deep(data: &[u8]) -> Result<(), String> {
         let _ = registry().validate_value(ANCHOR_SCHEMA, &value);
     })?;
     catch(|| {
-        let _ = serde_json::from_value::<contrix_core::Anchor>(value.clone());
+        let _ = serde_json::from_value::<cokret_core::Anchor>(value.clone());
     })
 }
 

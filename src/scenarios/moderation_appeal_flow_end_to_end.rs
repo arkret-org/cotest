@@ -25,7 +25,7 @@
 //! Anchor batch → close.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{
+use cokret_core::{
     ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT, ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN,
     TypedAppealId, is_known_error_code,
 };

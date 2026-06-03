@@ -9,7 +9,7 @@
 //!
 //! Loads the six drift-detection artifacts from
 //! `cokret-spec/spec/v1/artifacts/registry/` (or `--registry-dir`, or the
-//! `CONTRIX_SPEC_DIR` env var), walks `--root`, and emits findings.
+//! `COKRET_SPEC_DIR` env var), walks `--root`, and emits findings.
 //!
 //! Exit codes:
 //! * `0` — scan completed; no unallowed violations (or `--fail-on-violation` was not supplied).

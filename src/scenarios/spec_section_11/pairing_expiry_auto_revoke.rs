@@ -7,7 +7,7 @@
 
 use anyhow::{Result, anyhow};
 use chrono::{Duration, Utc};
-use contrix_core::AgentSessionId;
+use cokret_core::AgentSessionId;
 
 pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
     let session =

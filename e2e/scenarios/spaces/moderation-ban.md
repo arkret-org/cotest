@@ -80,7 +80,7 @@
 
 ### Phase D — alice 处理:capability 检查 + anchored ban
 
-10. **alice** 调用 `GET /api/v1/moderation/reports?realm_id=S` 或 `GET /api/v1/admin/reports` → 能看到 bob 提交的这个 report
+10. **alice** 调用 `GET /api/v1/moderation/reports?realm_id=S` 或 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
 11. **alice** 决定 ban mallory:
     - 调用 `cx.member.state` Move,membership = `ban`,subject = mallory.did
     - 该 Move 必须签名 + 引用 `cx.space.moderate` capability grant
@@ -136,7 +136,7 @@
 
 ## Implementation notes
 
-- **soland report privacy**:`GET /api/v1/moderation/reports` 只向 reporter、realm owner、配置的 admin principal 返回 report;dev-mode `GET /api/v1/admin/reports` 复用同一过滤,避免被举报人或普通成员通过 admin collection 读到 report。
+- **soland report privacy**:`GET /api/v1/moderation/reports` 只向 reporter、realm owner、配置的 admin principal 返回 report;dev-mode `GET /_soland/admin/reports` 复用同一过滤,避免被举报人或普通成员通过 admin collection 读到 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `cx.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
 - **yougen owner ban UI**:`/space/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `cx.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `cx.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。

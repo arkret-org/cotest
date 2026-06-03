@@ -20,27 +20,27 @@
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
 //! SDK-pure — they exercise the canonical-bytes helpers
 //! ([`IdentityPayloadCarrier::carrier_sha256`],
-//! [`contrix_core::model::effective_identity_events`],
-//! [`contrix_core::model::member_identity_effective_set_digest`],
+//! [`cokret_core::model::effective_identity_events`],
+//! [`cokret_core::model::member_identity_effective_set_digest`],
 //! [`MemberIdentity::canonical_payload_sha256`]) plus the
 //! `member_identity_*` error-code constants exported from
-//! [`contrix_core::error`]. Live integration is layered on top in
+//! [`cokret_core::error`]. Live integration is layered on top in
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use contrix_core::error::{
+use cokret_core::error::{
     ERROR_CODE_MEMBER_IDENTITY_PROOF_INVALID,
     ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
     ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH, ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
 };
-use contrix_core::model::{
+use cokret_core::model::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
     MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,
     member_identity_effective_set_digest,
 };
-use contrix_core::{Did, EventId, Hash, RealmId};
+use cokret_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_MID_UPDATE_INITIAL: &str = "cx.vector.member_identity.update_initial.v1";

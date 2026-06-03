@@ -337,7 +337,7 @@ for f in report.violations() {
 
 The spec directory is resolved in this order:
 
-1. `CONTRIX_SPEC_DIR` env var (points at the `cokret-spec` checkout root).
+1. `COKRET_SPEC_DIR` env var (points at the `cokret-spec` checkout root).
 2. `<cotest crate root>/../cokret-spec` (default sibling layout).
 
 ### CLI

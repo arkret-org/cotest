@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
-use contrix_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
+use cokret_core::cursor::{CURSOR_HANDLE_MIN_LEN, Cursor, CursorPurpose, generate_cursor_handle};
 
 pub const VECTOR_ID_CURSOR_OPAQUE_CORE: &str = "cx.vector.encoding.cursor_opaque.core.v1";
 pub const VECTOR_ID_CURSOR_OPAQUE_STATELESS_PROFILE: &str =

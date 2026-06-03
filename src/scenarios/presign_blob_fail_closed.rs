@@ -29,7 +29,7 @@
 //! and must be tracked separately on the coverage dashboard.
 
 use anyhow::{Result, anyhow};
-use contrix_core::{ERROR_CODE_BLOB_REDACTED, ERROR_CODE_LEGAL_HOLD_ACTIVE, is_known_error_code};
+use cokret_core::{ERROR_CODE_BLOB_REDACTED, ERROR_CODE_LEGAL_HOLD_ACTIVE, is_known_error_code};
 
 pub const EXPECTED_LEGAL_HOLD: &str = "legal_hold_active";
 pub const EXPECTED_BLOB_REDACTED: &str = "blob_redacted";
