@@ -35,7 +35,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let carol = carol_actor.client();
     let dave = dave_actor.client();
 
-    let space_id = alice.create_space("Interaction Model Space").await?;
+    let space_id = alice.create_realm("Interaction Model Space").await?;
     for member in [bob, carol, dave] {
         alice.add_member(&space_id, member).await?;
     }

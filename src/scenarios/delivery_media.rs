@@ -1,12 +1,11 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 use crate::harness::{
     ContrixServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
-    register_account,
+    refresh_event_proof, register_account,
 };
 
 const BLOB_REALM_ID: &str = "cx:realm:0196419b-0000-7000-8000-00000000d101";
@@ -434,10 +433,9 @@ fn signed_event(
     let mut event = json!({
         "event_id": event_id,
         "kind": kind,
-        "schema_id": "cx.schema.event.v1",
+        "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
-        "realm_id": realm_id,
         "created_at": "2026-05-02T00:00:00Z",
         "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
@@ -448,34 +446,12 @@ fn signed_event(
             "alg": "EdDSA",
             "verification_method": format!("{actor_id}#cotest"),
             "event_digest": "",
-            "payload_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
         }],
     });
-    refresh_event_proof(&mut event)?;
+    refresh_event_proof(&mut event);
     Ok(event)
-}
-
-fn canonical_event_digest(event: &Value) -> Result<String> {
-    let mut canonical = event.clone();
-    if let Value::Object(object) = &mut canonical {
-        object.remove("proofs");
-        object.remove("unsigned");
-    }
-    sha256_json(&canonical)
-}
-
-fn refresh_event_proof(event: &mut Value) -> Result<()> {
-    let digest = canonical_event_digest(event)?;
-    event["proofs"][0]["event_digest"] = Value::String(digest.clone());
-    event["proofs"][0]["payload_digest"] = Value::String(digest);
-    Ok(())
-}
-
-fn sha256_json(value: &Value) -> Result<String> {
-    let bytes = serde_json::to_vec(value)?;
-    Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {

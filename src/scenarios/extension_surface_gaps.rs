@@ -10,7 +10,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let space_id = alice.create_space("Applet Surface Space").await?;
+    let space_id = alice.create_realm("Applet Surface Space").await?;
 
     let describe = expect_json(
         server.http().get(server.url("/api/v1/server/describe")),
@@ -50,7 +50,7 @@ pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() ->
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let space_id = alice.create_space("Agent Surface Space").await?;
+    let space_id = alice.create_realm("Agent Surface Space").await?;
 
     let describe = expect_json(
         server.http().get(server.url("/api/v1/server/describe")),

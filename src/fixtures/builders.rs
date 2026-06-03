@@ -5,7 +5,7 @@
 //! ```ignore
 //! let server = ContrixServer::spawn("my-scenario").await?;
 //! let alice = server.register_client("did:web:alice.example", "@alice", "dev_alice").await?;
-//! let space_id = alice.create_space("Some Space").await?;
+//! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
 //!
 //! …with a fluent chain:
@@ -14,10 +14,10 @@
 //! let alice = TestActorBuilder::new(&server, "@alice")
 //!     .with_did("did:web:alice.example")
 //!     .with_device("dev_alice")
-//!     .with_space("Some Space")
+//!     .with_realm("Some Realm")
 //!     .create()
 //!     .await?;
-//! let space_id = alice.first_space().expect("seeded one space");
+//! let realm_id = alice.first_realm().expect("seeded one realm");
 //! ```
 //!
 //! The builder owns the small bits of repetitive logic — handle/DID
@@ -42,14 +42,14 @@ use anyhow::{Context, Result};
 
 use crate::harness::{ContrixServer, TestActorClient};
 
-/// Tracks the spaces a scenario asked the builder to create as part of the
+/// Tracks the realms a scenario asked the builder to create as part of the
 /// fixture preamble. Each entry stores the original requested name and the
-/// allocated `cx:space:...` id so scenarios can route follow-up assertions to
-/// the right space without re-querying the server.
+/// allocated `cx:realm:...` id so scenarios can route follow-up assertions to
+/// the right realm without re-querying the server.
 #[derive(Debug, Clone)]
-pub struct SeededSpace {
+pub struct SeededRealm {
     pub name: String,
-    pub space_id: String,
+    pub realm_id: String,
 }
 
 /// The fully-realised actor fixture returned by [`TestActorBuilder::create`].
@@ -57,7 +57,7 @@ pub struct SeededSpace {
 /// Wraps the raw [`TestActorClient`] with the metadata the builder collected
 /// during the fixture preamble. The underlying client is exposed via
 /// [`TestActor::client`] so scenarios can keep using all of the existing
-/// `client.create_space(...)` / `client.post(...)` / `client.submit_event(...)`
+/// `client.create_realm(...)` / `client.post(...)` / `client.submit_event(...)`
 /// methods unchanged.
 ///
 /// `Debug` is implemented manually because [`TestActorClient`] (which embeds
@@ -69,7 +69,7 @@ pub struct TestActor {
     pub primary_device_id: String,
     pub additional_devices: Vec<String>,
     pub key_package_count: usize,
-    pub spaces: Vec<SeededSpace>,
+    pub realms: Vec<SeededRealm>,
     pub client: TestActorClient,
 }
 
@@ -81,7 +81,7 @@ impl fmt::Debug for TestActor {
             .field("primary_device_id", &self.primary_device_id)
             .field("additional_devices", &self.additional_devices)
             .field("key_package_count", &self.key_package_count)
-            .field("spaces", &self.spaces)
+            .field("realms", &self.realms)
             .field("client", &"<TestActorClient>")
             .finish()
     }
@@ -94,19 +94,19 @@ impl TestActor {
         &self.client
     }
 
-    /// Convenience accessor that returns the `cx:space:...` id of the first
-    /// space the builder seeded, if any.
-    pub fn first_space(&self) -> Option<&str> {
-        self.spaces.first().map(|seeded| seeded.space_id.as_str())
+    /// Convenience accessor that returns the `cx:realm:...` id of the first
+    /// realm the builder seeded, if any.
+    pub fn first_realm(&self) -> Option<&str> {
+        self.realms.first().map(|seeded| seeded.realm_id.as_str())
     }
 
-    /// Lookup a seeded space by the original name passed to
-    /// [`TestActorBuilder::with_space`].
-    pub fn space_by_name(&self, name: &str) -> Option<&str> {
-        self.spaces
+    /// Lookup a seeded realm by the original name passed to
+    /// [`TestActorBuilder::with_realm`].
+    pub fn realm_by_name(&self, name: &str) -> Option<&str> {
+        self.realms
             .iter()
             .find(|seeded| seeded.name == name)
-            .map(|seeded| seeded.space_id.as_str())
+            .map(|seeded| seeded.realm_id.as_str())
     }
 }
 
@@ -124,7 +124,7 @@ pub struct TestActorBuilder<'a> {
     primary_device: Option<String>,
     additional_devices: Vec<String>,
     key_packages: usize,
-    spaces: Vec<String>,
+    realms: Vec<String>,
 }
 
 impl<'a> TestActorBuilder<'a> {
@@ -143,7 +143,7 @@ impl<'a> TestActorBuilder<'a> {
             primary_device: None,
             additional_devices: Vec::new(),
             key_packages: 0,
-            spaces: Vec::new(),
+            realms: Vec::new(),
         }
     }
 
@@ -185,13 +185,13 @@ impl<'a> TestActorBuilder<'a> {
         self
     }
 
-    /// Pre-seed a space owned by this actor.
+    /// Pre-seed a realm owned by this actor.
     ///
-    /// Spaces are created in the order they are declared. The allocated
-    /// `cx:space:...` ids are returned on the resulting [`TestActor`] via
-    /// `actor.spaces` or `actor.first_space()` / `actor.space_by_name(...)`.
-    pub fn with_space(mut self, name: &str) -> Self {
-        self.spaces.push(name.to_owned());
+    /// Realms are created in the order they are declared. The allocated
+    /// `cx:realm:...` ids are returned on the resulting [`TestActor`] via
+    /// `actor.realms` or `actor.first_realm()` / `actor.realm_by_name(...)`.
+    pub fn with_realm(mut self, name: &str) -> Self {
+        self.realms.push(name.to_owned());
         self
     }
 
@@ -230,15 +230,15 @@ impl<'a> TestActorBuilder<'a> {
                 )
             })?;
 
-        let mut seeded = Vec::with_capacity(self.spaces.len());
-        for name in &self.spaces {
-            let space_id = client
-                .create_space(name)
+        let mut seeded = Vec::with_capacity(self.realms.len());
+        for name in &self.realms {
+            let realm_id = client
+                .create_realm(name)
                 .await
-                .with_context(|| format!("TestActorBuilder: create_space({name}) failed"))?;
-            seeded.push(SeededSpace {
+                .with_context(|| format!("TestActorBuilder: create_realm({name}) failed"))?;
+            seeded.push(SeededRealm {
                 name: name.clone(),
-                space_id,
+                realm_id,
             });
         }
 
@@ -248,7 +248,7 @@ impl<'a> TestActorBuilder<'a> {
             primary_device_id: primary_device,
             additional_devices: self.additional_devices,
             key_package_count: self.key_packages,
-            spaces: seeded,
+            realms: seeded,
             client,
         })
     }

@@ -117,7 +117,7 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //   // Step 2: setup actors + shared space
     //   let alice = register_account(&server, "did:web:alice.example",
     //                                "@alice", "dev_alice").await?;
-    //   let space_id = create_space(&server, &alice, "Soak Space").await?;
+    //   let space_id = create_realm(&server, &alice, "Soak Space").await?;
     //   let mut actors = Vec::with_capacity(N_ACTORS);
     //   for i in 0..N_ACTORS {
     //       let did = format!("did:web:soak{i}.example");

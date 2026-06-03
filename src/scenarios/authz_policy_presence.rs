@@ -18,7 +18,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let bob = server
         .register_client("did:web:bob-authz.example", "@bob-authz", "dev_bob")
         .await?;
-    let space_id = alice.create_space("Grant Lifecycle Space").await?;
+    let space_id = alice.create_realm("Grant Lifecycle Space").await?;
 
     let denied_before_grant = expect_json(
         server

@@ -22,7 +22,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         .await?;
     let bob_client = bob.client();
 
-    let space_id = alice.create_space("Backfill Recovery Space").await?;
+    let space_id = alice.create_realm("Backfill Recovery Space").await?;
     alice.add_member(&space_id, bob_client).await?;
 
     let sent = [

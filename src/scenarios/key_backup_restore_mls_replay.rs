@@ -113,7 +113,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
 
     // ── Step 2: alice creates E2EE space + sends 3 messages ─────────────
     //
-    //   let space_id = alice.create_space_with(json!({
+    //   let space_id = alice.create_realm_with(json!({
     //       "title": "ct11-e2ee-history",
     //       "encryption_profile": "mls_rfc9420",
     //       "plaintext_visible_services": [],

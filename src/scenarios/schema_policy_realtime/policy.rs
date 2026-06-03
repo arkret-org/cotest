@@ -15,7 +15,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         .register_client("did:web:bob-policy.example", "@bob-policy", "dev_bob")
         .await?;
 
-    let space_id = alice.create_space("Policy Document Space").await?;
+    let space_id = alice.create_realm("Policy Document Space").await?;
     alice.add_member(&space_id, &bob).await?;
 
     let initial = expect_json(alice.get("/api/v1/policies"), StatusCode::OK).await?;

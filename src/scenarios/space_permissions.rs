@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, add_member, create_space, dev_login, event_envelope, expect_api_error,
+    ContrixServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
     expect_json, register_account, send_message, submit_event,
 };
 
@@ -70,8 +70,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let space_id =
-        create_space(server, &alice, "did:web:alice.example", "Permission Space").await?;
+    let realm_id =
+        create_realm(server, &alice, "did:web:alice.example", "Permission Space").await?;
     expect_api_error(
         server
             .http()
@@ -79,7 +79,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
             .bearer_auth(&bob)
             .json(&event_envelope(
                 "did:web:bob-space.example",
-                &space_id,
+                &realm_id,
                 "cx.member.state",
                 json!({
                     "actor_id": "did:web:bob-space.example",
@@ -94,7 +94,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .delete(server.url(&format!("/api/v1/spaces/{space_id}")))
+            .delete(server.url(&format!("/api/v1/spaces/{realm_id}")))
             .bearer_auth(&alice),
         StatusCode::METHOD_NOT_ALLOWED,
         "method_not_allowed",
@@ -113,7 +113,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         .register_client("did:web:bob-visible.example", "@bob-visible", "dev_bob")
         .await?;
     let created = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Private Space",
             "summary": "Private Space",
             "discoverability": "invite_only",
@@ -121,7 +121,10 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             "plaintext_visible_services": [server.service_did()]
         }))
         .await?;
-    let space_id = created["space_id"].as_str().unwrap().to_owned();
+    let realm_id = created["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("create_realm response missing string realm_id: {created}"))?
+        .to_owned();
 
     let anonymous_search = expect_json(
         server
@@ -140,7 +143,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .bearer_auth(&bob.token)
             .json(&event_envelope(
                 "did:web:bob-visible.example",
-                &space_id,
+                &realm_id,
                 "cx.message.create",
                 json!({
                     "body": "not a member",
@@ -157,7 +160,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &server,
         &alice.token,
         "did:web:alice.example",
-        &space_id,
+        &realm_id,
         "did:web:bob-visible.example",
     )
     .await?;
@@ -165,7 +168,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &server,
         &bob.token,
         "did:web:bob-visible.example",
-        &space_id,
+        &realm_id,
         "cx:thread:space",
         "member can send",
     )
@@ -175,7 +178,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &server,
         &alice.token,
         "did:web:alice.example",
-        &space_id,
+        &realm_id,
         "cx.realm.destroy",
         json!({"reason": "owner_requested"}),
         StatusCode::OK,
@@ -188,7 +191,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .bearer_auth(&alice.token)
             .json(&event_envelope(
                 "did:web:alice.example",
-                &space_id,
+                &realm_id,
                 "cx.message.create",
                 json!({
                     "body": "after delete",

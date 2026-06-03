@@ -73,27 +73,26 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     assert_eq!(verify_bob["valid"], true);
 
     let realm_id = create_federated_realm(server_a, &alice).await?;
+    // cx.message.create payload carries only the spec `message_create_payload`
+    // fields (flow_id + track_name + content). Realm/membership metadata
+    // (discoverability, history_visibility, members, …) belongs on the Realm
+    // object and `cx.member.state`, not the message payload.
+    let flow_id = format!(
+        "cx:flow:{}",
+        realm_id.strip_prefix("cx:realm:").unwrap_or(&realm_id)
+    );
 
     let alice_message = Operation::create(
         OperationId::new(ALICE_MESSAGE_OPERATION_ID)?,
         RealmId::new(realm_id.clone())?,
         "cx.message.create",
         json!({
-            "event_id": ALICE_MESSAGE_EVENT_ID,
-            "sender": ALICE_DID,
-            "thread_id": "cx:thread:federation",
-            "space_title": "Federated Collaboration Space",
-            "space_summary": "cross server collaboration",
-            "discoverability": "invite_only",
-            "history_visibility": "shared",
-            "encryption_profile": "none",
-            "plaintext_visible_services": [server_a.service_did(), server_b.service_did()],
-            "members": [ALICE_DID, BOB_DID],
+            "flow_id": flow_id.clone(),
+            "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",
                 "body": "hello bob from server a"
-            },
-            "encrypted": false
+            }
         }),
     );
     let bob_join = Operation::create(
@@ -164,21 +163,12 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         RealmId::new(realm_id.clone())?,
         "cx.message.create",
         json!({
-            "event_id": BOB_MESSAGE_EVENT_ID,
-            "sender": BOB_DID,
-            "thread_id": "cx:thread:federation",
-            "space_title": "Federated Collaboration Space",
-            "space_summary": "cross server collaboration",
-            "discoverability": "invite_only",
-            "history_visibility": "shared",
-            "encryption_profile": "none",
-            "plaintext_visible_services": [server_a.service_did(), server_b.service_did()],
-            "members": [ALICE_DID, BOB_DID],
+            "flow_id": flow_id,
+            "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",
                 "body": "hello alice from server b"
-            },
-            "encrypted": false
+            }
         }),
     );
     let b_to_a_body = json!({

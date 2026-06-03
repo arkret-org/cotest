@@ -1,4 +1,7 @@
 use anyhow::{Result, anyhow, bail};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde_json::{Value, json};
 use url::Url;
 
@@ -76,25 +79,107 @@ pub fn run_security_negative_profile_suite() -> Result<()> {
 }
 
 fn validate_bad_signature(case: &Value) -> Result<SecurityDecision> {
-    let event = required_field(required_field(case, "input")?, "event")?;
-    let computed = canonical_event_digest(event)?;
+    let input = required_field(case, "input")?;
+    let event = required_field(input, "event")?;
+    // The signing actor's Ed25519 verifying key (resolved out-of-band from the
+    // proof's `verification_method`). Carried on the fixture case so the
+    // validator can perform a *real* signature check rather than only a digest
+    // comparison.
+    let verifying_key = parse_verifying_key(required_str(input, "signing_public_key_hex")?)?;
+
     for proof in event
         .get("proofs")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
     {
-        let Some(payload_digest) = proof.get("payload_digest").and_then(Value::as_str) else {
-            return Ok(SecurityDecision::reject("invalid_signature"));
-        };
-        if !looks_like_sha256_digest(payload_digest)
-            || payload_digest == zero_sha256()
-            || payload_digest != computed
-        {
-            return Ok(SecurityDecision::reject("invalid_signature"));
+        if let Err(error_code) = verify_event_proof_signature(event, proof, &verifying_key) {
+            return Ok(SecurityDecision::reject(error_code));
         }
     }
     Ok(SecurityDecision::accept())
+}
+
+/// Real Ed25519 detached-JWS verification of one Event proof.
+///
+/// Mirrors the SDK's `Ed25519DetachedJwsVerifier`: the signing input is
+/// `b64u(protected_header) "." b64u(canonical_event_bytes)` (RFC 7797 detached,
+/// canonical bytes = Event without `proofs`/`unsigned`). The proof's
+/// `event_digest` MUST equal `sha256(canonical_event_bytes)` AND the JWS
+/// signature MUST verify against `verifying_key`. A correct digest with a
+/// forged/empty signature is rejected — exactly the regression a bare digest
+/// comparison would miss.
+fn verify_event_proof_signature(
+    event: &Value,
+    proof: &Value,
+    verifying_key: &VerifyingKey,
+) -> std::result::Result<(), &'static str> {
+    if proof.get("alg").and_then(Value::as_str) != Some("EdDSA") {
+        return Err("invalid_signature");
+    }
+    let canonical_bytes = canonical_event_payload_string(event).map_err(|_| "invalid_signature")?;
+    let expected_digest = sha256_prefixed(canonical_bytes.as_bytes());
+    // Spec event_proof carries `event_digest` (there is no proof-level
+    // `payload_digest`); it MUST bind the canonical Event bytes.
+    let Some(event_digest) = proof.get("event_digest").and_then(Value::as_str) else {
+        return Err("invalid_signature");
+    };
+    if !looks_like_sha256_digest(event_digest)
+        || event_digest == zero_sha256()
+        || event_digest != expected_digest
+    {
+        return Err("invalid_signature");
+    }
+
+    let jws = proof.get("jws").and_then(Value::as_str).ok_or("invalid_signature")?;
+    let parts: Vec<&str> = jws.split('.').collect();
+    if parts.len() != 3 || !parts[1].is_empty() {
+        return Err("invalid_signature");
+    }
+    let header_bytes = URL_SAFE_NO_PAD.decode(parts[0]).map_err(|_| "invalid_signature")?;
+    let header: Value = serde_json::from_slice(&header_bytes).map_err(|_| "invalid_signature")?;
+    if header.get("alg").and_then(Value::as_str) != Some("EdDSA") {
+        return Err("invalid_signature");
+    }
+    let sig_bytes = URL_SAFE_NO_PAD.decode(parts[2]).map_err(|_| "invalid_signature")?;
+    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| "invalid_signature")?;
+    let signature = Signature::from_bytes(&sig_arr);
+    let signing_input = format!("{}.{}", parts[0], URL_SAFE_NO_PAD.encode(canonical_bytes.as_bytes()));
+    verifying_key
+        .verify(signing_input.as_bytes(), &signature)
+        .map_err(|_| "invalid_signature")
+}
+
+fn parse_verifying_key(hex: &str) -> Result<VerifyingKey> {
+    let raw = decode_hex_32(hex)
+        .ok_or_else(|| anyhow!("signing_public_key_hex must be 32-byte hex, got {hex:?}"))?;
+    VerifyingKey::from_bytes(&raw).map_err(|err| anyhow!("invalid Ed25519 verifying key: {err}"))
+}
+
+fn decode_hex_32(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(out)
+}
+
+/// Canonical JSON string of the Event with `proofs`/`unsigned` stripped — the
+/// bytes that the detached JWS signs and `event_digest` hashes.
+fn canonical_event_payload_string(event: &Value) -> Result<String> {
+    let object = event
+        .as_object()
+        .ok_or_else(|| anyhow!("event must be an object"))?;
+    let mut without_proofs = serde_json::Map::new();
+    for (key, value) in object {
+        if key != "proofs" && key != "unsigned" {
+            without_proofs.insert(key.clone(), value.clone());
+        }
+    }
+    canonical_json(&Value::Object(without_proofs))
 }
 
 fn validate_bad_canonical_bytes(case: &Value) -> Result<SecurityDecision> {
@@ -206,17 +291,8 @@ fn validate_query_auth_leakage(case: &Value) -> Result<SecurityDecision> {
 }
 
 fn canonical_event_digest(event: &Value) -> Result<String> {
-    let object = event
-        .as_object()
-        .ok_or_else(|| anyhow!("event must be an object"))?;
-    let mut without_proofs = serde_json::Map::new();
-    for (key, value) in object {
-        if key != "proofs" && key != "unsigned" {
-            without_proofs.insert(key.clone(), value.clone());
-        }
-    }
     Ok(sha256_prefixed(
-        canonical_json(&Value::Object(without_proofs))?.as_bytes(),
+        canonical_event_payload_string(event)?.as_bytes(),
     ))
 }
 
@@ -302,5 +378,99 @@ impl SecurityCoverage {
             bail!("security negative fixture missing categories: {missing:?}");
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+
+    fn sample_event() -> Value {
+        json!({
+            "event_id": "cx:event:01970e589d21-0001-a13f9c2e",
+            "kind": "cx.message.create",
+            "realm_id": "cx:realm:01970e589d21-7000-8000-000000000001",
+            "actor_id": "did:web:alice.example",
+            "actor_seq": 1,
+            "created_at": "2026-05-02T00:00:00Z",
+            "hlc": "01970e589d21-0001-a13f9c2e",
+            "prev_refs": [],
+            "refs": [],
+            "payload": {
+                "flow_id": "cx:flow:01970e589d21-7000-8000-000000000010",
+                "track_name": "discussion",
+                "content": {"kind": "cx.content.text", "body": "signed body"}
+            }
+        })
+    }
+
+    /// Build a valid detached JWS over the canonical Event bytes using the
+    /// same scheme as the SDK's `Ed25519DetachedJwsSigner`.
+    fn signed_proof(event: &Value, signing_key: &SigningKey) -> Value {
+        let canonical = canonical_event_payload_string(event).unwrap();
+        let header = r#"{"alg":"EdDSA","typ":"JWT"}"#;
+        let header_b64 = URL_SAFE_NO_PAD.encode(header.as_bytes());
+        let signing_input = format!("{header_b64}.{}", URL_SAFE_NO_PAD.encode(canonical.as_bytes()));
+        let sig = signing_key.sign(signing_input.as_bytes());
+        let sig_b64 = URL_SAFE_NO_PAD.encode(sig.to_bytes());
+        json!({
+            "kind": "detached_jws",
+            "alg": "EdDSA",
+            "verification_method": "did:web:alice.example#device",
+            "event_digest": sha256_prefixed(canonical.as_bytes()),
+            "created_at": "2026-05-02T00:00:00Z",
+            "jws": format!("{header_b64}..{sig_b64}"),
+        })
+    }
+
+    #[test]
+    fn verifier_accepts_valid_signature() {
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let event = sample_event();
+        let proof = signed_proof(&event, &signing_key);
+        verify_event_proof_signature(&event, &proof, &signing_key.verifying_key())
+            .expect("valid signature must verify");
+    }
+
+    #[test]
+    fn verifier_rejects_correct_digest_but_tampered_signature() {
+        // The exact regression a bare digest comparison misses: event_digest is
+        // correct, but the JWS signature bytes are garbage.
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let event = sample_event();
+        let mut proof = signed_proof(&event, &signing_key);
+        let header_b64 = proof["jws"].as_str().unwrap().split('.').next().unwrap().to_owned();
+        let forged_sig = URL_SAFE_NO_PAD.encode([0u8; 64]);
+        proof["jws"] = json!(format!("{header_b64}..{forged_sig}"));
+        assert_eq!(
+            verify_event_proof_signature(&event, &proof, &signing_key.verifying_key()),
+            Err("invalid_signature"),
+        );
+    }
+
+    #[test]
+    fn verifier_rejects_wrong_signing_key() {
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let other_key = SigningKey::from_bytes(&[9u8; 32]);
+        let event = sample_event();
+        let proof = signed_proof(&event, &signing_key);
+        assert_eq!(
+            verify_event_proof_signature(&event, &proof, &other_key.verifying_key()),
+            Err("invalid_signature"),
+        );
+    }
+
+    #[test]
+    fn verifier_rejects_mismatched_event_digest() {
+        let signing_key = SigningKey::from_bytes(&[7u8; 32]);
+        let event = sample_event();
+        let mut proof = signed_proof(&event, &signing_key);
+        proof["event_digest"] =
+            json!("sha256:1111111111111111111111111111111111111111111111111111111111111111");
+        assert_eq!(
+            verify_event_proof_signature(&event, &proof, &signing_key.verifying_key()),
+            Err("invalid_signature"),
+        );
     }
 }

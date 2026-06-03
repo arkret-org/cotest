@@ -16,38 +16,38 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .await?;
 
     let public_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Visibility Matrix Public",
             "discoverability": "public"
         }))
         .await?;
     let listed_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Visibility Matrix Listed",
             "discoverability": "listed"
         }))
         .await?;
     let restricted_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Visibility Matrix Restricted",
             "discoverability": "restricted"
         }))
         .await?;
     let unlisted_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Visibility Matrix Unlisted",
             "discoverability": "unlisted"
         }))
         .await?;
     let invite_only_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Visibility Matrix Invite Only",
             "discoverability": "invite_only",
             "invitees": [bob.actor.clone()]
         }))
         .await?;
     let secret_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Visibility Matrix Secret",
             "discoverability": "secret"
         }))

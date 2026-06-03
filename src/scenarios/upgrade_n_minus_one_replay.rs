@@ -139,7 +139,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   ).await?;
     //   let alice = register_account(&server_old, "did:web:alice.example",
     //                                "@alice", "dev_alice").await?;
-    //   let space_id = create_space(&server_old, &alice, "Upgrade Space").await?;
+    //   let space_id = create_realm(&server_old, &alice, "Upgrade Space").await?;
     //   let mut sent = Vec::new();
     //   for i in 0..16 {
     //       sent.push(send_message(&server_old, &alice, &space_id,

@@ -560,42 +560,40 @@ impl TestActorClient {
         self.http.delete(self.url(path)).bearer_auth(&self.token)
     }
 
-    pub async fn create_space(&self, title: &str) -> Result<String> {
+    pub async fn create_realm(&self, title: &str) -> Result<String> {
         let created = self
-            .create_space_with(json!({
+            .create_realm_with(json!({
                 "title": title,
                 "summary": title,
                 "public": false,
                 "plaintext_visible_services": [self.service_did.clone()]
             }))
             .await?;
-        created["space_id"]
+        created["realm_id"]
             .as_str()
             .map(ToOwned::to_owned)
-            .ok_or_else(|| anyhow!("create space response did not include space_id: {created}"))
+            .ok_or_else(|| anyhow!("create realm response did not include realm_id: {created}"))
     }
 
-    pub async fn create_space_with(&self, body: Value) -> Result<Value> {
-        let space_id = body
-            .get("space_id")
-            .or_else(|| body.get("realm_id"))
+    pub async fn create_realm_with(&self, body: Value) -> Result<Value> {
+        let realm_id = body
+            .get("realm_id")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| next_typed_id("realm"));
-        let payload = realm_create_payload(&self.actor, &self.service_did, &space_id, &body);
+        let payload = realm_create_payload(&self.actor, &self.service_did, &realm_id, &body);
         let event_response = self
-            .submit_event(&space_id, "cx.realm.create", payload)
+            .submit_event(&realm_id, "cx.realm.create", payload)
             .await?;
         Ok(json!({
-            "space_id": space_id,
-            "realm_id": space_id,
+            "realm_id": realm_id,
             "event_response": event_response,
         }))
     }
 
-    pub async fn add_member(&self, space_id: &str, member: &TestActorClient) -> Result<Value> {
+    pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
         self.submit_event(
-            space_id,
+            realm_id,
             "cx.member.state",
             json!({
                 "actor_id": member.actor,
@@ -606,9 +604,9 @@ impl TestActorClient {
         .await
     }
 
-    pub async fn send_message(&self, space_id: &str, thread_id: &str, body: &str) -> Result<Value> {
+    pub async fn send_message(&self, realm_id: &str, thread_id: &str, body: &str) -> Result<Value> {
         self.submit_event(
-            space_id,
+            realm_id,
             "cx.message.create",
             json!({
                 "body": body,
@@ -619,8 +617,8 @@ impl TestActorClient {
         .await
     }
 
-    pub async fn submit_event(&self, space_id: &str, kind: &str, payload: Value) -> Result<Value> {
-        let event = event_envelope(&self.actor, space_id, kind, payload);
+    pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
+        let event = event_envelope(&self.actor, realm_id, kind, payload);
         expect_json(self.post("/api/v1/events").json(&event), StatusCode::OK).await
     }
 
@@ -816,17 +814,17 @@ where
     }
 }
 
-pub async fn create_space(
+pub async fn create_realm(
     server: &ContrixServer,
     token: &str,
     actor: &str,
     title: &str,
 ) -> Result<String> {
-    let space_id = next_typed_id("realm");
+    let realm_id = next_typed_id("realm");
     let payload = realm_create_payload(
         actor,
         server.service_did(),
-        &space_id,
+        &realm_id,
         &json!({
             "title": title,
             "summary": title,
@@ -838,27 +836,27 @@ pub async fn create_space(
         server,
         token,
         actor,
-        &space_id,
+        &realm_id,
         "cx.realm.create",
         payload,
         StatusCode::OK,
     )
     .await?;
-    Ok(space_id)
+    Ok(realm_id)
 }
 
 pub async fn add_member(
     server: &ContrixServer,
     token: &str,
     actor: &str,
-    space_id: &str,
+    realm_id: &str,
     member: &str,
 ) -> Result<()> {
     submit_event(
         server,
         token,
         actor,
-        space_id,
+        realm_id,
         "cx.member.state",
         json!({
             "actor_id": member,
@@ -875,7 +873,7 @@ pub async fn send_message(
     server: &ContrixServer,
     token: &str,
     actor: &str,
-    space_id: &str,
+    realm_id: &str,
     thread_id: &str,
     body: &str,
 ) -> Result<Value> {
@@ -883,7 +881,7 @@ pub async fn send_message(
         server,
         token,
         actor,
-        space_id,
+        realm_id,
         "cx.message.create",
         json!({
             "body": body,
@@ -899,12 +897,12 @@ pub async fn submit_event(
     server: &ContrixServer,
     token: &str,
     actor: &str,
-    space_id: &str,
+    realm_id: &str,
     kind: &str,
     payload: Value,
     status: StatusCode,
 ) -> Result<Value> {
-    let event = event_envelope(actor, space_id, kind, payload);
+    let event = event_envelope(actor, realm_id, kind, payload);
     expect_json(
         server
             .http()
@@ -916,25 +914,23 @@ pub async fn submit_event(
     .await
 }
 
-pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Value) -> Value {
+pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Value) -> Value {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let hlc_logical = seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
     let event_id = format!("cx:event:{suffix}");
-    normalize_message_payload(kind, space_id, &mut payload);
+    normalize_message_payload(kind, realm_id, &mut payload);
     let mut event = json!({
         "event_id": event_id,
         "kind": kind,
+        "realm_id": realm_id,
         "actor_id": actor,
         "actor_seq": seq,
-        "schema_id": "cx.schema.event.v1",
-        "realm_id": space_id,
-        "space_id": space_id,
         "created_at": "2026-05-02T00:00:00Z",
         "hlc": format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"),
-        "payload": payload,
         "prev_refs": [],
         "refs": [],
+        "payload": payload,
         "unsigned": {
             "local_operation_idempotency_alias": format!("cx:operation:{suffix}"),
         },
@@ -943,7 +939,6 @@ pub fn event_envelope(actor: &str, space_id: &str, kind: &str, mut payload: Valu
             "alg": "EdDSA",
             "verification_method": format!("{actor}#cotest"),
             "event_digest": "",
-            "payload_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
         }],
@@ -1025,16 +1020,16 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
     })
 }
 
-fn normalize_message_payload(kind: &str, space_id: &str, payload: &mut Value) {
+fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
     let Some(object) = payload.as_object_mut() else {
         return;
     };
 
     match kind {
         "cx.message.create" => {
-            let flow_id = space_id
+            let flow_id = realm_id
                 .strip_prefix("cx:realm:")
-                .or_else(|| space_id.strip_prefix("cx:space:"))
+                .or_else(|| realm_id.strip_prefix("cx:space:"))
                 .map(|suffix| format!("cx:flow:{suffix}"))
                 .unwrap_or_else(|| "cx:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
             object
@@ -1117,27 +1112,26 @@ fn message_ref_from_event_ref(value: Value) -> Value {
     value
 }
 
-fn canonical_event_digest(event: &Value) -> String {
+/// Canonical `event_digest` over an Event envelope with `proofs`/`unsigned`
+/// stripped, hashed via the SDK's canonical (sorted-key, integer-number)
+/// encoding so every Contrix implementation agrees on the bytes. Shared by all
+/// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
+/// which preserves insertion order and would diverge from the SDK.
+pub(crate) fn canonical_event_digest(event: &Value) -> String {
     let mut canonical = event.clone();
     if let Value::Object(object) = &mut canonical {
         object.remove("proofs");
         object.remove("unsigned");
     }
-    sha256_json(&canonical)
+    contrix_core::canonical::canonical_sha256(&canonical).expect("event JSON is canonicalizable")
 }
 
-fn refresh_event_proof(event: &mut Value) {
+/// Fill `proofs[0].event_digest` with the canonical Event digest. The canonical
+/// `event_proof` schema (`additionalProperties:false`) only carries
+/// `event_digest`; there is no proof-level `payload_digest`.
+pub(crate) fn refresh_event_proof(event: &mut Value) {
     let digest = canonical_event_digest(event);
-    event["proofs"][0]["event_digest"] = Value::String(digest.clone());
-    event["proofs"][0]["payload_digest"] = Value::String(digest);
-}
-
-fn sha256_json(value: &Value) -> String {
-    // Hash over the SDK's canonical (sorted-key) encoding rather than
-    // `serde_json::to_vec`, which preserves insertion order and would yield a
-    // digest that diverges from every other Contrix implementation. The SDK
-    // helper returns the `sha256:<hex>` wire form directly.
-    contrix_core::canonical::canonical_sha256(value).expect("event JSON is canonicalizable")
+    event["proofs"][0]["event_digest"] = Value::String(digest);
 }
 
 pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
@@ -1566,7 +1560,9 @@ fn docker_logs(container_name: &str) -> Result<String> {
     Ok(combined)
 }
 
-fn free_port() -> Result<u16> {
+/// Bind an ephemeral loopback port and return it. Shared across the harness and
+/// the scenario `_helpers` so there is a single source of this idiom.
+pub(crate) fn free_port() -> Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     Ok(listener.local_addr()?.port())
 }

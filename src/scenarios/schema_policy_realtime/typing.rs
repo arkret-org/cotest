@@ -17,7 +17,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
         .register_client("did:web:carol-typing.example", "@carol-typing", "dev_carol")
         .await?;
 
-    let space_id = alice.create_space("Typing And Push Space").await?;
+    let space_id = alice.create_realm("Typing And Push Space").await?;
     alice.add_member(&space_id, &bob).await?;
 
     expect_api_error(

@@ -522,6 +522,7 @@ dependencies = [
  "contrix-core",
  "contrix-http-client",
  "contrix-signatures",
+ "ed25519-dalek",
  "hkdf 0.12.4",
  "jsonschema",
  "pbkdf2",

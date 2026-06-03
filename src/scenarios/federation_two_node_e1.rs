@@ -86,7 +86,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         .await
         .context("register actor on server_a")?;
     let space_id = actor_a
-        .create_space("e2-federation-two-node-space")
+        .create_realm("e2-federation-two-node-space")
         .await
         .context("create space on server_a")?;
     let _msg = actor_a

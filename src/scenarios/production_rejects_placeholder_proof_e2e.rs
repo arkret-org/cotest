@@ -106,7 +106,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{actor}#yougen"),
-            "payload_digest":
+            "event_digest":
                 "sha256:0000000000000000000000000000000000000000000000000000000000000000",
             "created_at": "2026-05-19T00:00:00.000Z",
             // The yougen pre-T1.3 placeholder. T1.3 soland MUST reject

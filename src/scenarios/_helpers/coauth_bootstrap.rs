@@ -36,7 +36,7 @@
 //! Ubuntu job only — see `.github/workflows/integration.yml`.
 
 use std::io::Write;
-use std::net::TcpListener;
+use crate::harness::free_port;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -570,10 +570,6 @@ fn docker_available() -> bool {
         .unwrap_or(false)
 }
 
-fn free_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    Ok(listener.local_addr()?.port())
-}
 
 fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
     let cutoff = Instant::now() + deadline;

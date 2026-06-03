@@ -3,14 +3,16 @@
   "profile": "cx.profile.privacy_security_vectors.v1",
   "cases": [
     {
-      "name": "bad_signature_rejects",
+      "name": "bad_signature_correct_digest_forged_jws_rejects",
       "category": "bad_signature",
       "operation_id": "cx.events.submit",
+      "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it — a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
       "input": {
+        "signing_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
         "event": {
           "event_id": "cx:event:01970e589d21-0001-a13f9c2e",
           "kind": "cx.message.create",
-          "space_id": "cx:realm:01970e589d21-7000-8000-000000000001",
+          "realm_id": "cx:realm:01970e589d21-7000-8000-000000000001",
           "actor_id": "did:web:alice.example",
           "actor_seq": 1,
           "created_at": "2026-05-02T00:00:00Z",
@@ -23,8 +25,11 @@
           },
           "proofs": [
             {
+              "kind": "detached_jws",
+              "alg": "EdDSA",
               "verification_method": "did:web:alice.example#device",
-              "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "event_digest": "sha256:6c6a1010f4d9c84a36812a9e715a067ee5f7c321777c94f2bb734784df96e9fc",
+              "created_at": "2026-05-02T00:00:00Z",
               "jws": "eyJhbGciOiJFZERTQSJ9..bad"
             }
           ]

@@ -36,7 +36,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
     let invite_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Invite Token Space",
             "discoverability": "invite_only",
             "invitees": [bob.actor.clone()]
@@ -90,7 +90,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     assert_eq!(invite_resolve["space_preview"]["realm_id"], invite_space_id);
 
     let listed_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Listed Directory Space",
             "discoverability": "listed"
         }))
@@ -107,7 +107,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     assert_eq!(listed_search["results"][0]["realm_id"], listed_space_id);
 
     let unlisted_space = alice
-        .create_space_with(json!({
+        .create_realm_with(json!({
             "title": "Unlisted Directory Space",
             "discoverability": "unlisted"
         }))
@@ -136,7 +136,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         unlisted_space["realm_id"]
     );
 
-    let shared_space_id = alice.create_space("Workflow Export Space").await?;
+    let shared_space_id = alice.create_realm("Workflow Export Space").await?;
     alice.add_member(&shared_space_id, &bob).await?;
     let sent = alice
         .send_message(

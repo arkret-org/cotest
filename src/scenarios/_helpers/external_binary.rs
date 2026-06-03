@@ -24,7 +24,7 @@
 //! that want a soft skip path (e.g. a baseline conformance row) can early-
 //! return on `None`.
 
-use std::net::TcpListener;
+use crate::harness::free_port;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -268,10 +268,6 @@ pub async fn spawn_required(spec: &ExternalBinarySpec) -> Result<SpawnedExternal
     }
 }
 
-fn free_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    Ok(listener.local_addr()?.port())
-}
 
 async fn wait_until_healthy(base_url: &str, path: &str, timeout: Duration) -> Result<Client> {
     let client = Client::builder().timeout(Duration::from_secs(2)).build()?;

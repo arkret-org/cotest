@@ -201,7 +201,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let bob = server.register_client(
     //       "did:web:bob.ct9.cotest.local", "@bob-ct9",
     //       &new_prefixed_uuid7("cx:device:")).await?;
-    //   let space_id = alice.create_space_with(json!({
+    //   let space_id = alice.create_realm_with(json!({
     //       "title": "ct9-e2ee",
     //       "encryption_profile": "mls_rfc9420",
     //       "invitees": [bob.actor],

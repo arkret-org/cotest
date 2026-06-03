@@ -327,6 +327,32 @@ fn validate_synthetic_event_envelope_negatives(
         "backdated_event_after_revoke",
     )?;
 
+    // Unknown top-level field MUST be rejected (envelope root is
+    // `additionalProperties:false`). Inject a forbidden legacy field
+    // (`space_id`) onto an otherwise-valid event and assert hard rejection.
+    let mut unknown_field_event = sample_envelope_event(
+        "cx.message.create",
+        5,
+        "01970e589d24-0001-a13f9c2e",
+        "2026-05-02T00:00:03Z",
+        json!({
+            "flow_id": "cx:flow:019a7140-0000-7000-8000-000000000000",
+            "content": {
+                "kind": "cx.content.text",
+                "body": "legacy field"
+            }
+        }),
+    );
+    unknown_field_event["space_id"] = json!("cx:space:019a7360-0000-7000-8000-000000000000");
+    let unknown_field_decision =
+        validate_event_envelope(&unknown_field_event, event_kinds, &context)?;
+    assert_event_decision(
+        &unknown_field_decision,
+        "reject",
+        Some("schema_violation"),
+        "unknown_top_level_field_rejected",
+    )?;
+
     Ok(())
 }
 
@@ -335,10 +361,47 @@ fn validate_event_envelope(
     event_kinds: &HashMap<String, EventKindInfo>,
     context: &EventEnvelopeContext,
 ) -> Result<EventEnvelopeDecision> {
-    if !event.is_object() {
+    let Some(event_object) = event.as_object() else {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "event envelope must be an object",
+        ));
+    };
+
+    // event-envelope.schema.json roots `additionalProperties:false`: any
+    // top-level field outside this set MUST be rejected. This is the hard
+    // guard against legacy/forbidden envelope fields (`schema`, `schema_id`,
+    // `space_id`, …) leaking back onto the wire.
+    const ALLOWED_TOP_LEVEL_FIELDS: &[&str] = &[
+        "event_id",
+        "kind",
+        "realm_id",
+        "effective_scope",
+        "actor_id",
+        "executed_by",
+        "authorization_ref",
+        "actor_kind",
+        "actor_seq",
+        "created_at",
+        "hlc",
+        "prev_refs",
+        "refs",
+        "preconditions",
+        "effects",
+        "anchor_ref",
+        "redacts",
+        "payload",
+        "unsigned",
+        "proofs",
+        "requirements",
+    ];
+    if let Some(unknown) = event_object
+        .keys()
+        .find(|key| !ALLOWED_TOP_LEVEL_FIELDS.contains(&key.as_str()))
+    {
+        return Ok(EventEnvelopeDecision::reject(
+            "schema_violation",
+            format!("unknown top-level Event field: {unknown}"),
         ));
     }
 
@@ -394,17 +457,6 @@ fn validate_event_envelope(
                 format!("missing required Event field {field}"),
             ));
         }
-    }
-    if event
-        .get("schema")
-        .and_then(Value::as_str)
-        .unwrap_or("cx.schema.event.v1")
-        != "cx.schema.event.v1"
-    {
-        return Ok(EventEnvelopeDecision::reject(
-            "schema_violation",
-            "Event.schema must be cx.schema.event.v1",
-        ));
     }
     if !value_field_str(event, "event_id")?.starts_with("cx:event:") {
         return Ok(EventEnvelopeDecision::reject(
@@ -557,21 +609,18 @@ fn validate_event_envelope(
         return Ok(EventEnvelopeDecision::reject("schema_violation", error));
     }
 
-    // Per spec encoding.md §3.2: proof.payload_digest ≡
-    // canonical_hash(envelope_without_proofs_unsigned). Two acceptable
-    // proof shapes coexist post-2026-05-08:
-    //   1. Direct: proof.payload_digest == canonical event payload hash.
-    //   2. Binding-object: proof signs a separate `binding_object` (`{actor_id, created_at, domain,
-    //      payload_digest, verification_method}`) and proof.payload_digest is the hash of that
-    //      binding payload. The proof carries `domain` to signal the binding-object shape.
-    //
-    // Direct-shape proofs MUST match the canonical event hash exactly.
-    // Binding-object proofs are accepted as long as `payload_digest` is a
-    // well-formed sha256 digest AND the JWS signature isn't a sentinel
-    // "all-zero" marker (a tamper indicator used by negative fixtures).
-    // Real JWS signature verification (Ed25519 signing-key check) happens
-    // at proof-verify time and is out of scope for the envelope-shape
-    // validator.
+    // Per spec encoding.md §1.6/§4 and the canonical `event_proof` schema
+    // (`additionalProperties:false`, `required` includes `event_digest`):
+    // the Event content fingerprint is carried by `proof.event_digest ≡
+    // canonical_digest(event_without_proofs_unsigned)`. There is no
+    // proof-level `payload_digest` for Event proofs. `domain`/`audience` are
+    // optional binding context folded into the signed JWS bytes, but they do
+    // NOT change `event_digest`: it MUST always equal the canonical Event
+    // digest. (The negative vector `reject_signature_event_digest_mismatch`
+    // carries `domain` yet still expects rejection on digest mismatch — so the
+    // comparison is unconditional.) Real JWS signature verification (Ed25519
+    // signing-key check) happens at proof-verify time and is out of scope for
+    // the envelope-shape validator.
     let computed_canonical = canonical_event_payload_digest(event)?;
     let zero_digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     for proof in event
@@ -580,17 +629,17 @@ fn validate_event_envelope(
         .into_iter()
         .flatten()
     {
-        let proof_hash = proof.get("payload_digest").and_then(Value::as_str);
+        let proof_hash = proof.get("event_digest").and_then(Value::as_str);
         let Some(proof_hash) = proof_hash else {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_digest missing",
+                "proof.event_digest missing",
             ));
         };
         if !looks_like_sha256_digest(proof_hash) {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_digest must be sha256:<hex>",
+                "proof.event_digest must be sha256:<hex>",
             ));
         }
         // Sentinel zero-hash always rejects — used by negative fixtures to
@@ -598,14 +647,13 @@ fn validate_event_envelope(
         if proof_hash == zero_digest {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_digest is the zero sentinel — tampered envelope",
+                "proof.event_digest is the zero sentinel — tampered envelope",
             ));
         }
-        let is_binding_object = proof.get("domain").is_some();
-        if !is_binding_object && proof_hash != computed_canonical.as_str() {
+        if proof_hash != computed_canonical.as_str() {
             return Ok(EventEnvelopeDecision::reject(
                 "invalid_signature",
-                "proof.payload_digest does not match canonical Event bytes without proofs",
+                "proof.event_digest does not match canonical Event bytes without proofs",
             ));
         }
     }
@@ -837,9 +885,9 @@ fn sample_envelope_event(
     created_at: &str,
     content: Value,
 ) -> Value {
-    // Synthetic events emit the active spec shape directly.
-    json!({
-        "schema": "cx.schema.event.v1",
+    // Synthetic events emit the active spec shape directly (top-level fields
+    // restricted to the canonical envelope property set — no `schema`).
+    let mut event = json!({
         "event_id": "cx:event:019a6b10-0000-7000-8000-000000000000",
         "kind": kind,
         "realm_id": "cx:realm:019a7360-0000-7000-8000-000000000000",
@@ -854,20 +902,24 @@ fn sample_envelope_event(
             "critical": false
         }],
         "payload": content,
-        // Synthetic placeholder proof — uses the binding-object shape
-        // (`domain` set), well-formed but non-sentinel `payload_digest`. The
-        // envelope-shape validator only checks shape; real Ed25519 verify
-        // happens elsewhere.
+        // Synthetic placeholder proof. `event_digest` is filled below with the
+        // real canonical Event digest so the envelope-shape validator's
+        // `event_digest == canonical(event_without_proofs_unsigned)` check
+        // passes. Real Ed25519 verify happens elsewhere.
         "proofs": [{
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": "did:web:alice.example#k1",
-            "payload_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "event_digest": "",
             "created_at": created_at,
             "domain": "contrix-event-v1",
             "jws": "eyJhbGciOiJFZERTQSJ9..synthetic_placeholder_signature_bytes"
         }]
-    })
+    });
+    let digest = canonical_event_payload_digest(&event)
+        .expect("synthetic event is canonicalizable");
+    event["proofs"][0]["event_digest"] = Value::String(digest);
+    event
 }
 
 fn parse_hlc_millis(hlc: &str) -> Result<u64> {

@@ -140,7 +140,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //       "@alice-ct1",
     //       &new_prefixed_uuid7("cx:device:"),
     //   ).await?;
-    //   let space_id = alice.create_space("ct1-fork-quarantine-space").await?;
+    //   let space_id = alice.create_realm("ct1-fork-quarantine-space").await?;
     //
     //   // Seed the initial frontier on beta + gamma by pushing the
     //   // space-create + first member-add Moves. This relies on

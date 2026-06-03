@@ -24,6 +24,10 @@ arbitrary = { version = "1.3", features = ["derive"] }
 base64 = "0.22.1"
 chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["alloc"] }
 chrono = "0.4.42"
+# Real Ed25519 detached-JWS verification in the security-negative conformance
+# suite (`conformance/security_negative.rs`) so a forged event with a correct
+# digest but invalid signature is actually rejected, not just digest-compared.
+ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std"] }
 contrix-http-client = { path = "../contrix-rust-sdk/crates/http-client" }
 contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
 # R3.2 (contrix-spec @ b56cab1) — the §3.2.1 primary-handle-selection,

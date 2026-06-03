@@ -7,9 +7,8 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
-use crate::harness::{ContrixServer, expect_json};
+use crate::harness::{ContrixServer, expect_json, refresh_event_proof};
 
 const ADAPTER_REALM_ID: &str = "cx:realm:0196419b-0000-7000-8000-000000000101";
 const ADAPTER_REALM_CREATE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-000000000100";
@@ -22,11 +21,11 @@ pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
 }
 
 async fn submit_adapter_event(server: &ContrixServer, token: &str) -> Result<()> {
-    let space_id = create_adapter_realm(server, token).await?;
+    let realm_id = create_adapter_realm(server, token).await?;
     let event = signed_message_event(
         ADAPTER_MESSAGE_EVENT_ID,
         2,
-        &space_id,
+        &realm_id,
         "did:web:alice.example",
         "dev_alice",
         "cx:thread:adapter",
@@ -108,10 +107,9 @@ fn signed_realm_create_event(
     let mut event = json!({
         "event_id": event_id,
         "kind": "cx.realm.create",
-        "schema_id": "cx.schema.event.v1",
+        "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
-        "realm_id": realm_id,
         "created_at": "2026-05-02T00:00:00Z",
         "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
@@ -127,19 +125,19 @@ fn signed_realm_create_event(
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{actor_id}#cotest"),
-            "payload_digest": "",
+            "event_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
         }],
     });
-    refresh_event_proof(&mut event)?;
+    refresh_event_proof(&mut event);
     Ok(event)
 }
 
 fn signed_message_event(
     event_id: &str,
     actor_seq: u64,
-    space_id: &str,
+    realm_id: &str,
     actor_id: &str,
     _device_id: &str,
     _thread_id: &str,
@@ -157,10 +155,9 @@ fn signed_message_event(
     let mut event = json!({
         "event_id": event_id,
         "kind": "cx.message.create",
-        "schema_id": "cx.schema.event.v1",
+        "realm_id": realm_id,
         "actor_id": actor_id,
         "actor_seq": actor_seq,
-        "realm_id": space_id,
         "created_at": "2026-05-02T00:00:00Z",
         "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
@@ -176,34 +173,13 @@ fn signed_message_event(
             "kind": "detached_jws",
             "alg": "EdDSA",
             "verification_method": format!("{actor_id}#cotest"),
-            "payload_digest": "",
+            "event_digest": "",
             "created_at": "2026-05-02T00:00:00Z",
             "jws": "a..b",
         }],
     });
-    refresh_event_proof(&mut event)?;
+    refresh_event_proof(&mut event);
     Ok(event)
-}
-
-fn canonical_event_digest(event: &Value) -> Result<String> {
-    let mut canonical = event.clone();
-    if let Value::Object(object) = &mut canonical {
-        object.remove("proofs");
-        object.remove("unsigned");
-    }
-    sha256_json(&canonical)
-}
-
-fn refresh_event_proof(event: &mut Value) -> Result<()> {
-    let digest = canonical_event_digest(event)?;
-    event["proofs"][0]["event_digest"] = Value::String(digest.clone());
-    event["proofs"][0]["payload_digest"] = Value::String(digest);
-    Ok(())
-}
-
-fn sha256_json(value: &Value) -> Result<String> {
-    let bytes = serde_json::to_vec(value)?;
-    Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
 }
 
 async fn upload_and_inspect_keys(server: &ContrixServer, token: &str) -> Result<()> {

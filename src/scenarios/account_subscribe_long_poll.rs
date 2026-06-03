@@ -25,7 +25,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let space_id = alice.create_space("Long-Poll Recovery Space").await?;
+    let space_id = alice.create_realm("Long-Poll Recovery Space").await?;
     alice
         .send_message(&space_id, "cx:thread:long-poll", "baseline message")
         .await?;
