@@ -17,7 +17,7 @@
       "payload": {
         "notification": {
           "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
-          "wakeup_kind": "incoming_call",
+          "wakeup_kind": "call_invite",
           "push_hint": "incoming_call"
         }
       }
@@ -59,15 +59,6 @@
         "notification": {
           "push_target_id": "abcdefghijklmnopqrstuv",
           "wakeup_kind": "message"
-        }
-      }
-    },
-    {
-      "name": "custom_wakeup_kind_snake_case",
-      "payload": {
-        "notification": {
-          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
-          "wakeup_kind": "bg_refresh"
         }
       }
     }
@@ -427,6 +418,17 @@
         "notification": {
           "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "MESSAGE"
+        }
+      }
+    },
+    {
+      "name": "rejects_custom_wakeup_kind",
+      "expected_reason_code": "invalid_field_value",
+      "expected_field_path": "wakeup_kind",
+      "payload": {
+        "notification": {
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "bg_refresh"
         }
       }
     },

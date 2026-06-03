@@ -21,14 +21,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let space_id = alice.create_realm("Grant Lifecycle Space").await?;
 
     let denied_before_grant = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/authz/check"))
-            .json(&json!({
-                "actor": bob.actor,
-                "action": "manage_space",
-                "resource": {"kind": "space", "realm_id": space_id}
-            })),
+        alice.post("/_cokret/self/authz/check").json(&json!({
+            "actor": bob.actor,
+            "action": "manage_space",
+            "resource": {"kind": "space", "realm_id": space_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -49,13 +46,10 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let manage_grant_id = manage_grant["grant_id"].as_str().unwrap().to_owned();
 
     let effective_grants = expect_json(
-        server
-            .http()
-            .get(server.url("/_cokret/self/authz/effective-grants"))
-            .query(&[
-                ("subject", bob.actor.as_str()),
-                ("space_id", space_id.as_str()),
-            ]),
+        alice.get("/_cokret/self/authz/effective-grants").query(&[
+            ("subject", bob.actor.as_str()),
+            ("space_id", space_id.as_str()),
+        ]),
         StatusCode::OK,
     )
     .await?;
@@ -63,14 +57,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert!(!effective_grants["grants"].as_array().unwrap().is_empty());
 
     let allowed_after_grant = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/authz/check"))
-            .json(&json!({
-                "actor": bob.actor,
-                "action": "manage_space",
-                "resource": {"kind": "space", "realm_id": space_id}
-            })),
+        alice.post("/_cokret/self/authz/check").json(&json!({
+            "actor": bob.actor,
+            "action": "manage_space",
+            "resource": {"kind": "space", "realm_id": space_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -82,14 +73,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     alice.add_member(&space_id, &bob).await?;
     let member_send = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/authz/check"))
-            .json(&json!({
-                "actor": bob.actor,
-                "action": "send",
-                "resource": {"kind": "space", "realm_id": space_id}
-            })),
+        alice.post("/_cokret/self/authz/check").json(&json!({
+            "actor": bob.actor,
+            "action": "send",
+            "resource": {"kind": "space", "realm_id": space_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -109,14 +97,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let deny_send_grant_id = deny_send_grant["grant_id"].as_str().unwrap().to_owned();
 
     let denied_send = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/authz/check"))
-            .json(&json!({
-                "actor": bob.actor,
-                "action": "send",
-                "resource": {"kind": "space", "realm_id": space_id}
-            })),
+        alice.post("/_cokret/self/authz/check").json(&json!({
+            "actor": bob.actor,
+            "action": "send",
+            "resource": {"kind": "space", "realm_id": space_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -131,14 +116,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(revoked_deny["revoked"], true);
 
     let send_after_revoke = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/authz/check"))
-            .json(&json!({
-                "actor": bob.actor,
-                "action": "send",
-                "resource": {"kind": "space", "realm_id": space_id}
-            })),
+        alice.post("/_cokret/self/authz/check").json(&json!({
+            "actor": bob.actor,
+            "action": "send",
+            "resource": {"kind": "space", "realm_id": space_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -152,14 +134,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(revoked_manage["revoked"], true);
 
     let denied_after_revoke = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/authz/check"))
-            .json(&json!({
-                "actor": bob.actor,
-                "action": "manage_space",
-                "resource": {"kind": "space", "realm_id": space_id}
-            })),
+        alice.post("/_cokret/self/authz/check").json(&json!({
+            "actor": bob.actor,
+            "action": "manage_space",
+            "resource": {"kind": "space", "realm_id": space_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -240,9 +219,8 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(push_unregister["ok"], true);
 
     let allow_policy = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/policy/check"))
+        alice
+            .post("/_cokret/self/policy/check")
             .json(&json!({
                 "request_id": "req-allow",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
@@ -258,9 +236,8 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(allow_policy["reason_code"], "ok");
 
     let review_policy = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/policy/check"))
+        alice
+            .post("/_cokret/self/policy/check")
             .json(&json!({
                 "request_id": "req-review",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
@@ -276,9 +253,8 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(review_policy["reason_code"], "review_required");
 
     expect_api_error(
-        server
-            .http()
-            .post(server.url("/_cokret/self/policy/check"))
+        alice
+            .post("/_cokret/self/policy/check")
             .json(&json!({
                 "request_id": "req-invalid",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",

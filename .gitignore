@@ -60,3 +60,4 @@ Thumbs.db
 **/*.rs.bk
 /_circle_rollout_baseline.md
 /_*_todos.md
+_full_test.log

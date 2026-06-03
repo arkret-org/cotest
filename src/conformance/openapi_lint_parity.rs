@@ -99,7 +99,7 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
 
 /// Mirror of `lint_artifacts.py::check_policy_check_alignment`.
 ///
-/// * `/policy/check` POST request/response MUST reference `PolicyCheckRequest` /
+/// * `/_cokret/self/policy/check` POST request/response MUST reference `PolicyCheckRequest` /
 ///   `PolicyCheckResponse` components.
 /// * `PolicyCheckRequest.required` MUST include `realm_id`.
 /// * `PolicyCheckResponse.required` MUST include `bound_to`.
@@ -109,9 +109,9 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .get("paths")
         .ok_or_else(|| anyhow!("openapi paths section missing"))?;
     let post = paths
-        .get("/policy/check")
+        .get("/_cokret/self/policy/check")
         .and_then(|p| p.get("post"))
-        .ok_or_else(|| anyhow!("/policy/check POST missing"))?;
+        .ok_or_else(|| anyhow!("/_cokret/self/policy/check POST missing"))?;
     let req_ref = post
         .get("requestBody")
         .and_then(|b| b.get("content"))
@@ -129,12 +129,12 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .and_then(YamlValue::as_str);
     if req_ref != Some("#/components/schemas/PolicyCheckRequest") {
         bail!(
-            "/policy/check requestBody must reference PolicyCheckRequest, got {req_ref:?} (round-4 lint parity)"
+            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequest, got {req_ref:?} (round-4 lint parity)"
         );
     }
     if resp_ref != Some("#/components/schemas/PolicyCheckResponse") {
         bail!(
-            "/policy/check 200 response must reference PolicyCheckResponse, got {resp_ref:?} (round-4 lint parity)"
+            "/_cokret/self/policy/check 200 response must reference PolicyCheckResponse, got {resp_ref:?} (round-4 lint parity)"
         );
     }
 
