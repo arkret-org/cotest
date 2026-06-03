@@ -1,4 +1,4 @@
-//! R3 spec-sync (contrix-spec @ b47ff6ec) — agent surface conformance
+//! R3 spec-sync (cokret-spec @ b47ff6ec) — agent surface conformance
 //! vectors (§0.11 of `_before_todos.md`).
 //!
 //! 5 vectors:

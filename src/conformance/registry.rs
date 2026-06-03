@@ -17,7 +17,7 @@ pub fn run_artifact_registry_suite() -> Result<()> {
     let operation_registry = load_artifact_json("registry/operation-registry.json")?;
     let id_kind_registry = load_artifact_json("registry/id-kind-registry.json")?;
     let conformance_profiles = load_artifact_json("profiles/conformance-profiles.json")?;
-    let openapi = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml")?;
+    let openapi = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml")?;
     let non_http_bindings = load_artifact_yaml("bindings/non-http-bindings.yaml")?;
     let registry_entries = validate_registry_manifest(&root, &registry_manifest)?;
 
@@ -505,7 +505,7 @@ fn validate_id_kind_registry(
             bail!("duplicate id kind {id_kind}");
         }
         let wire_form = required_str(kind, "wire_form")?;
-        if !wire_form.starts_with(&format!("cx:{id_kind}:")) {
+        if !wire_form.starts_with(&format!("ck:{id_kind}:")) {
             bail!("id kind {id_kind} wire_form drifted: {wire_form}");
         }
         // C19.A wire-break (spec f724863, 2026-05-09): per-id_kind wire_form
@@ -547,9 +547,9 @@ fn validate_id_kind_registry(
             "id-kind registry uuid_pattern does not look like a UUIDv7 regex (must contain 8-hex prefix and 7xxx version block): {uuid_pattern}"
         );
     }
-    if !typed_uuid_pattern.starts_with("^cx:") || !typed_uuid_pattern.contains("[89ab]") {
+    if !typed_uuid_pattern.starts_with("^ck:") || !typed_uuid_pattern.contains("[89ab]") {
         bail!(
-            "id-kind registry typed_uuid_pattern must be `^cx:<kind>:<UUIDv7>` shape (RFC 9562 variant must include [89ab]): {typed_uuid_pattern}"
+            "id-kind registry typed_uuid_pattern must be `^ck:<kind>:<UUIDv7>` shape (RFC 9562 variant must include [89ab]): {typed_uuid_pattern}"
         );
     }
 
@@ -1059,7 +1059,7 @@ fn validate_value_refs(
 }
 
 fn validate_typed_id_ref(value: &str, context: &str, id_kinds: &BTreeSet<String>) -> Result<()> {
-    let Some(rest) = value.strip_prefix("cx:") else {
+    let Some(rest) = value.strip_prefix("ck:") else {
         return Ok(());
     };
     let Some((kind, tail)) = rest.split_once(':') else {
@@ -1069,14 +1069,14 @@ fn validate_typed_id_ref(value: &str, context: &str, id_kinds: &BTreeSet<String>
         bail!("{context} references unknown typed id kind {kind}: {value}");
     }
     // Round-21 validator hardening (matches SDK round-20 typed-id validator
-    // tightening): kinds whose canonical wire_form is `cx:<kind>:<uuid>` MUST
+    // tightening): kinds whose canonical wire_form is `ck:<kind>:<uuid>` MUST
     // carry a 36-character lowercase UUIDv7 payload (RFC 9562: version=7,
     // variant ∈ {8,9,a,b}). The id-kind registry's six `special_forms` —
     // cursor (base64url), blob (sha256:<digest>), mls (<profile>:<id>),
     // pseudonym (<scope>:<random>), anchor (sha256:<digest>), cell
     // (<component>:<subject>) — are exempt: their tails are never UUIDv7.
     //
-    // This catches the stale ULID-shape literals (e.g. cx:event:01js0gv01...
+    // This catches the stale ULID-shape literals (e.g. ck:event:01js0gv01...
     // — Crockford base32, not UUID) that round-20 of the SDK started
     // rejecting at envelope-validation time. cotest fixtures and src
     // literals must mirror the same constraint.

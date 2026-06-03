@@ -261,10 +261,10 @@ fn handle_mock_coauth_request(
                 "service_account_id": "alice-session-grant",
                 "device_id": device_id,
                 "audience": audience,
-                "scopes": ["urn:contrix:principal-server:session.bind"],
+                "scopes": ["urn:cokret:principal-server:session.bind"],
                 "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
                 "revoked_at": null,
-                "revocation_ref": "cx:session:mock"
+                "revocation_ref": "ck:session:mock"
             }
         }),
     );

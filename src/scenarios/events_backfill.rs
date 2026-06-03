@@ -27,13 +27,13 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let sent = [
         alice
-            .send_message(&space_id, "cx:thread:backfill", "first event before gap")
+            .send_message(&space_id, "ck:thread:backfill", "first event before gap")
             .await?,
         alice
-            .send_message(&space_id, "cx:thread:backfill", "second event inside gap")
+            .send_message(&space_id, "ck:thread:backfill", "second event inside gap")
             .await?,
         alice
-            .send_message(&space_id, "cx:thread:backfill", "third event after gap")
+            .send_message(&space_id, "ck:thread:backfill", "third event after gap")
             .await?,
     ];
     let expected_message_ids = sent

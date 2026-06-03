@@ -30,7 +30,7 @@ test.describe("audited E2EE", () => {
     const token = await issueDevSession(request, alice);
 
     const probe = await request.get(
-      `${solandBaseUrl()}/api/v1/audit/events?space_id=cx:space:probe`,
+      `${solandBaseUrl()}/api/v1/audit/events?space_id=ck:space:probe`,
       { headers: { authorization: `Bearer ${token}` } },
     );
     expect([200, 401, 403, 404]).toContain(probe.status());
@@ -252,7 +252,7 @@ function encryptedEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.contrix.message+json",
+    content_type: "application/vnd.cokret.message+json",
     ciphertext,
     authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",

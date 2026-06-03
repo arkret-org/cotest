@@ -2,7 +2,7 @@
 //!
 //! These tests build small in-tmpdir fixture trees, point the scanner at
 //! them with a synthetic registry dir, and assert violation / allowlist
-//! behavior end-to-end (no contrix-spec fetch required).
+//! behavior end-to-end (no cokret-spec fetch required).
 
 use std::fs;
 use std::path::PathBuf;
@@ -117,7 +117,7 @@ fn magic_allow_comment_exempts_finding() {
     let tree = base.join("downstream");
     write(
         &tree.join("src").join("allowed.rs"),
-        r#"// contrix-allow: cx.flow.track.member
+        r#"// cokret-allow: cx.flow.track.member
 //
 // Intentionally references the removed kind to assert allowlist behavior.
 pub const REMOVED: &str = "cx.flow.track.member";

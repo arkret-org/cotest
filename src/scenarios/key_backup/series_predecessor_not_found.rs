@@ -15,12 +15,12 @@ pub async fn series_predecessor_not_found_run() -> Result<()> {
         ));
     }
     // UUIDv7 literal: lowercase hex, version nibble = 7, variant nibble ∈
-    // {8,9,a,b}; see `contrix-rust-sdk crates/identifiers` is_lowercase_uuidv7.
+    // {8,9,a,b}; see `cokret-rust-sdk crates/identifiers` is_lowercase_uuidv7.
     let _series =
-        BackupSeriesId::new("cx:backup_series:01999999-0000-7000-8000-00000000bbb1".to_owned())
+        BackupSeriesId::new("ck:backup_series:01999999-0000-7000-8000-00000000bbb1".to_owned())
             .map_err(|e| anyhow!("BackupSeriesId: {e}"))?;
 
-    // TODO(P4-impl): live PUT carries supersedes=cx:backup:<random>
+    // TODO(P4-impl): live PUT carries supersedes=ck:backup:<random>
     // (no envelope by that id exists on server) → expect 409
     // series_predecessor_not_found.
     Ok(())

@@ -90,7 +90,7 @@ conformance_test!(
     /// Round 4 / A2 — drift allowlist refresh: new capability action
     /// (`cx.morph.create`), error codes (`delivery_binding_stale`,
     /// `delivery_binding_handed_over`, `historical_only`), id_kinds
-    /// (`cx:space:`), and new schemas / OpenAPI components are present
+    /// (`ck:space:`), and new schemas / OpenAPI components are present
     /// in the canonical registry.
     protocol_artifact_allowlist_suite_matches_canonical_registry,
     "protocol_artifact_allowlist",
@@ -187,7 +187,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C10.C — exercises the SDK's `contrix-lattice` crate against the normative
+    /// C10.C — exercises the SDK's `cokret-lattice` crate against the normative
     /// scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5 by reifying
     /// the symbolic ops as real `LatticeOp` + `AnchoredOp` values and asserting
     /// the spec's join semantics (CasRegister conflict → Bottom, OrSet
@@ -625,7 +625,7 @@ conformance_test!(
     /// chime / floria / SDK implementations stay aligned on the allow /
     /// block lists for blind wakeup payloads (`push_target_id`,
     /// `wakeup_kind`, `push_hint`, counts; everything else forbidden;
-    /// no `did:` / `cx:` literal in any other slot).
+    /// no `did:` / `ck:` literal in any other slot).
     blind_payload_sanitizer_vectors,
     "blind_payload_sanitizer",
     cotest::conformance::run_blind_payload_sanitizer_suite,

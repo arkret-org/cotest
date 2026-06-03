@@ -33,7 +33,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
         alice
             .post(&format!("/api/v1/spaces/{space_id}/applets"))
             .json(&json!({
-                "applet_id": "cx:applet:board",
+                "applet_id": "ck:applet:board",
                 "manifest": {"name": "Board"}
             })),
         StatusCode::NOT_FOUND,

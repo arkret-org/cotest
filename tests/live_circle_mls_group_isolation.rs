@@ -53,9 +53,9 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
             glyph: CircleGlyph::Key,
         },
     };
-    let circle_id = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007mls001".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007mls001".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
-    let realm_id = RealmId::new("cx:realm:0196419b-0000-7000-8000-cxp0007mls000".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007mls000".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
     let circle = Circle::new(
         circle_id.clone(),

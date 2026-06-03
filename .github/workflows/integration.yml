@@ -33,8 +33,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: cokret-dev/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: circle-rollout
       # P5.1 — upstream checkout failures MUST hard-fail the job. The previous
       # `continue-on-error: true` markers were a circle-rollout bootstrap
@@ -42,17 +42,17 @@ jobs:
       # job has no business green-lighting a partial bringup.
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/soland
+          repository: cokret-dev/soland
           path: soland
           ref: circle-rollout
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/coauth
+          repository: cokret-dev/coauth
           path: coauth
           ref: circle-rollout
       - uses: actions/checkout@v4
         with:
-          repository: contrix-dev/floria
+          repository: cokret-dev/floria
           path: floria
           ref: circle-rollout
       - uses: dtolnay/rust-toolchain@master

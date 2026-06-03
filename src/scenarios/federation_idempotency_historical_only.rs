@@ -1,7 +1,7 @@
 //! C3 — multi-server federation idempotency + historical_only
 //! scenario.
 //!
-//! Spec: `contrix-spec` `2a4d39b..a77b995` — commit `f9bd7eb`
+//! Spec: `cokret-spec` `2a4d39b..a77b995` — commit `f9bd7eb`
 //! (`harden protocol review closures`) plus commit `7fae9ba` (which
 //! introduces the `historical_only` (200 diagnostic) error code).
 //!
@@ -9,8 +9,8 @@
 //! services):
 //!
 //! 1. **Server A** constructs a `federation_transaction` request:
-//!    - `Source-Trust-Domain = cx:trust_domain:a`
-//!    - `Destination-Trust-Domain = cx:trust_domain:b`
+//!    - `Source-Trust-Domain = ck:trust_domain:a`
+//!    - `Destination-Trust-Domain = ck:trust_domain:b`
 //!    - `Request-Canonical-Digest = sha256:<hash>`
 //!    - request body `X`, carrying `idempotency_key=idem-c3-001`
 //! 2. **Server B** receives the request, runs the cache key composition (`source_did + dest_did +
@@ -213,9 +213,9 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     // Server A → Server B identifiers.
     let source_did = "did:web:server-a.example".to_owned();
     let dest_did = "did:web:server-b.example".to_owned();
-    let source_td = TypedTrustDomainId::new("cx:trust_domain:a")
+    let source_td = TypedTrustDomainId::new("ck:trust_domain:a")
         .map_err(|e| anyhow!("typed source trust domain construction failed: {e}"))?;
-    let dest_td = TypedTrustDomainId::new("cx:trust_domain:b")
+    let dest_td = TypedTrustDomainId::new("ck:trust_domain:b")
         .map_err(|e| anyhow!("typed destination trust domain construction failed: {e}"))?;
 
     // Request body X — canonical-JSON over a small federation_transaction.
@@ -300,7 +300,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     }
 
     // Drive Server B against the scenario.
-    let mut server_b = SimulatedFederationReceiver::new("cx:trust_domain:b");
+    let mut server_b = SimulatedFederationReceiver::new("ck:trust_domain:b");
 
     // 1) First push — fresh accept.
     let first = server_b.receive(&initial_key, dest_td.as_str(), || {
@@ -378,7 +378,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     //    cross_domain_replay_rejected.
     let wrong_dest = server_b.receive(
         &post_rotation_key,
-        "cx:trust_domain:wrong",
+        "ck:trust_domain:wrong",
         || json!({"unreachable": true}),
     );
     match wrong_dest {
@@ -416,8 +416,8 @@ mod tests {
     /// driver runs entirely against an in-memory simulated receiver.
     #[test]
     fn federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values() {
-        let source_td = TypedTrustDomainId::new("cx:trust_domain:a").unwrap();
-        let dest_td = TypedTrustDomainId::new("cx:trust_domain:b").unwrap();
+        let source_td = TypedTrustDomainId::new("ck:trust_domain:a").unwrap();
+        let dest_td = TypedTrustDomainId::new("ck:trust_domain:b").unwrap();
         let request_canonical_digest = Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
         let fragment = federation_trust_domain_transcript_fragment(
             &source_td,
@@ -512,8 +512,8 @@ mod tests {
     #[test]
     #[ignore = "TODO(federation-idempotency-e2e-docker): needs live soland + teabay + key rotation harness"]
     fn live_multi_server_federation_historical_only_docker_e2e() {
-        // 1. Boot a 2-service test rig (soland-A + teabay-B) with `cx:trust_domain:a` and
-        //    `cx:trust_domain:b` respectively.
+        // 1. Boot a 2-service test rig (soland-A + teabay-B) with `ck:trust_domain:a` and
+        //    `ck:trust_domain:b` respectively.
         // 2. soland-A signs and POSTs a federation_transaction request to teabay-B carrying
         //    Source-/Destination-Trust-Domain headers + Request-Canonical-Digest + Idempotency-Key.
         // 3. Confirm teabay-B caches the response (200 accepted), side effects fire (directory row

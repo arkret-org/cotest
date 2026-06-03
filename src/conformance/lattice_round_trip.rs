@@ -60,7 +60,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
 // ──────────────────────────── helpers ────────────────────────────────
 
 fn cell(family: &str, subject: &str) -> CellRef {
-    CellRef::new(format!("cx:cell:{family}:{subject}"))
+    CellRef::new(format!("ck:cell:{family}:{subject}"))
         .expect("test fixture cell id should be valid")
 }
 
@@ -436,7 +436,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 
 // ──────────────────── Anchorer cell ────────────────────
 //
-// `cx:cell:cx.component.anchorer.v1:<space_id>` is a cas_register holding the
+// `ck:cell:cx.component.anchorer.v1:<space_id>` is a cas_register holding the
 // `AnchorerValue` (single_did | threshold(k/n) | open_set | mixed). Each
 // happy-path test below confirms a single anchored Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
@@ -634,7 +634,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 // ──────────────────── MLS covered_frontier ────────────────────
 //
-// `cx:cell:cx.component.mls.covered_frontier.v1:<space_id>` is an or_set of
+// `ck:cell:cx.component.mls.covered_frontier.v1:<space_id>` is an or_set of
 // governance-frontier event refs each MLS commit attests to. Add-only
 // growth is the typical pattern; rotation that purges old refs is rare and
 // gated by capability. These tests confirm the lattice surfaces the union
@@ -655,15 +655,15 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     let ops = vec![
         AnchoredOp::new(
             move_id("c1"),
-            op_add("cx:event:01970e58-0007-7000-8000-000000000001"),
+            op_add("ck:event:01970e58-0007-7000-8000-000000000001"),
         ),
         AnchoredOp::new(
             move_id("c2"),
-            op_add("cx:event:01970e58-0007-7000-8000-000000000002"),
+            op_add("ck:event:01970e58-0007-7000-8000-000000000002"),
         ),
         AnchoredOp::new(
             move_id("c3"),
-            op_add("cx:event:01970e58-0007-7000-8000-000000000001"),
+            op_add("ck:event:01970e58-0007-7000-8000-000000000001"),
         ), // duplicate add
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -674,8 +674,8 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000001")
-        || !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000002")
+    if !serialized.contains("ck:event:01970e58-0007-7000-8000-000000000001")
+        || !serialized.contains("ck:event:01970e58-0007-7000-8000-000000000002")
     {
         bail!("covered_frontier did not surface both governance refs: {serialized}");
     }
@@ -693,15 +693,15 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     let ops = vec![
         AnchoredOp::new(
             move_id("c4"),
-            op_add("cx:event:01970e58-0007-7000-8000-000000000003"),
+            op_add("ck:event:01970e58-0007-7000-8000-000000000003"),
         ),
         AnchoredOp::new(
             move_id("c5"),
-            op_add("cx:event:01970e58-0007-7000-8000-000000000004"),
+            op_add("ck:event:01970e58-0007-7000-8000-000000000004"),
         ),
         AnchoredOp::new(
             move_id("c6"),
-            op_remove("cx:event:01970e58-0007-7000-8000-000000000003"),
+            op_remove("ck:event:01970e58-0007-7000-8000-000000000003"),
         ),
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -712,12 +712,12 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("cx:event:01970e58-0007-7000-8000-000000000004") {
+    if !serialized.contains("ck:event:01970e58-0007-7000-8000-000000000004") {
         bail!(
             "covered_frontier should keep `still_valid` ref visible after rotation: {serialized}"
         );
     }
-    if serialized.contains("cx:event:01970e58-0007-7000-8000-000000000003") {
+    if serialized.contains("ck:event:01970e58-0007-7000-8000-000000000003") {
         bail!("covered_frontier should drop the rotated ref after causal remove: {serialized}");
     }
     Ok(())

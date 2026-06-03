@@ -62,7 +62,7 @@ e2e/
 
 1. **Spec-contract first** — 每条 fixme 都标了 scenario 引用 + 当前 owner gap。删除 `.fixme` 前必须走 [`docs/fixme-promotion-checklist.md`](../../docs/fixme-promotion-checklist.md)。
 2. **UI 层 + 业务流程** — 每个 scenario 模拟真实多用户业务,不是单页 smoke。例外是 `harness/mocks-selftest`(纯 harness 自检)与 `spaces/admin-section-route`(yougen routing probe),两条都显式标注为 harness/probe-only。
-3. **Spec-mirrored 目录** — 按 contrix-spec 的域划分(`identity/`、`encryption/`、`sync/` 等),scenario 路径直接对应 spec 路径,导航零成本。
+3. **Spec-mirrored 目录** — 按 cokret-spec 的域划分(`identity/`、`encryption/`、`sync/` 等),scenario 路径直接对应 spec 路径,导航零成本。
 4. **Mock services 解锁外部依赖** — 9 个 mock 把所有外部依赖(OIDC、email、witness、audit agent、policy server、push gateway、applet registry、TSP endpoint、MIMI facade)mock 化,默认不启动,通过 `-StartMocks` 一次拉起。
 
 ## Mock services
@@ -96,16 +96,16 @@ e2e/
 
 ```pwsh
 # 单服务器、无 mocks
-& "D:\Works\contrix-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -RunProfile joint-full
+& "D:\Works\cokret-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -RunProfile joint-full
 
 # 单服务器 + 全部 mocks
-& "D:\Works\contrix-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -StartMocks -RunProfile joint-full
+& "D:\Works\cokret-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -StartMocks -RunProfile joint-full
 
 # 双服务器 + 全部 mocks(最大覆盖)
-& "D:\Works\contrix-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -DualSoland -StartMocks -RunProfile joint-full
+& "D:\Works\cokret-dev\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -DualSoland -StartMocks -RunProfile joint-full
 
 # cotest 本地 dual-soland profile(只跑 federation matrix)
-& "D:\Works\contrix-dev\cotest\scripts\run-cotest.ps1" -Profile dual-soland
+& "D:\Works\cokret-dev\cotest\scripts\run-cotest.ps1" -Profile dual-soland
 
 # 单个领域
 & "..." -StartCoauth -Grep "encryption/"

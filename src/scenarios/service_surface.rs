@@ -6,7 +6,7 @@ use crate::harness::{expect_json, expect_status};
 
 pub async fn server_exposes_core_service_surface() -> Result<()> {
     // CT-12: TestScaffold::fresh — server is the same per-process
-    // isolated `ContrixServer` the scenario used before. The scaffold
+    // isolated `CokretServer` the scenario used before. The scaffold
     // adds a process-unique suffix to `service-surface` so two
     // copies of this scenario (e.g. under `--test-threads > 1`) get
     // distinct service DIDs and on-disk artifact names.

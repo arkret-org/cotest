@@ -1,15 +1,15 @@
 //! Circle-rollout (CXP-0007) structural drift rules.
 //!
-//! contrix-spec commit `2b0d70d` (range `9cb47c1..2b0d70d`) introduces the
+//! cokret-spec commit `2b0d70d` (range `9cb47c1..2b0d70d`) introduces the
 //! **Circle primitive** as the new intra-Realm security boundary. The spec
 //! hard-removes [`Flow.discussion_realm_ref`] and a handful of `_ref` /
 //! `_id` naming legacies in favour of:
 //!
 //! * `scope_circle_id` (and `default_scope_circle_id`) on Flow / Space / Morph / GrantConstraint,
-//!   typed `cx:circle:<uuidv7>`.
+//!   typed `ck:circle:<uuidv7>`.
 //! * `EffectiveScope { kind: realm | circle, realm_id, circle_id? }` on every v1 event envelope
 //!   (`$defs.effective_scope`).
-//! * A new `confidential_discussion_of` Relation between two `cx:flow:` identifiers
+//! * A new `confidential_discussion_of` Relation between two `ck:flow:` identifiers
 //!   (broad-composition + narrow-discussion duo).
 //! * 7 new event kinds (`cx.circle.create`, `cx.circle.update`, `cx.circle.archive`,
 //!   `cx.circle.restore`, `cx.circle.tombstone`, `cx.circle.member.state`,
@@ -48,8 +48,8 @@ use serde::Serialize;
 pub const CIRCLE_ALLOW_MARKER: &str = "CIRCLE-ALLOW";
 
 /// Canonical `cx.circle.*` event-kind allowlist. Mirrors
-/// `contrix-core::events::kinds` (`CIRCLE_*` constants) and
-/// `contrix-spec/spec/v1/artifacts/registry/event-kind-registry.json`.
+/// `cokret-core::events::kinds` (`CIRCLE_*` constants) and
+/// `cokret-spec/spec/v1/artifacts/registry/event-kind-registry.json`.
 pub const CIRCLE_EVENT_KINDS: &[&str] = &[
     "cx.circle.create",
     "cx.circle.update",
@@ -61,8 +61,8 @@ pub const CIRCLE_EVENT_KINDS: &[&str] = &[
 ];
 
 /// Canonical `cx.circle.*` capability-action allowlist. Mirrors
-/// `contrix-core::model::constants` (`CAP_ACTION_CIRCLE_*`) and
-/// `contrix-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
+/// `cokret-core::model::constants` (`CAP_ACTION_CIRCLE_*`) and
+/// `cokret-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
 pub const CIRCLE_CAPABILITY_ACTIONS: &[&str] = &[
     "cx.circle.create",
     "cx.circle.manage",
@@ -73,7 +73,7 @@ pub const CIRCLE_CAPABILITY_ACTIONS: &[&str] = &[
 ];
 
 /// CXP-0007 reason codes (sub-codes of `failed_precondition` /
-/// `schema_violation`). Mirrors `contrix-core::error::KNOWN_REASON_CODES_CXP_0007`
+/// `schema_violation`). Mirrors `cokret-core::error::KNOWN_REASON_CODES_CXP_0007`
 /// plus the 6th top-level `delivery_binding_handed_over` code.
 pub const CIRCLE_REASON_CODES: &[&str] = &[
     "circle_realm_mismatch",
@@ -96,7 +96,7 @@ pub enum CircleRule {
     /// only via the constant list [`CIRCLE_REASON_CODES`].
     UnknownCircleErrorCode,
     /// A `Relation::ConfidentialDiscussionOf` literal whose visible
-    /// `from` / `to` operands do not both look like `cx:flow:` ids.
+    /// `from` / `to` operands do not both look like `ck:flow:` ids.
     ConfidentialDiscussionEndpointsNotFlow,
     /// A literal `EffectiveScope::Circle { ... }` or
     /// `"kind": "circle"` envelope scope that does not also mention
@@ -225,8 +225,8 @@ fn scan_discussion_realm_ref(
             rule: CircleRule::DiscussionRealmRef,
             matched_literal: token.to_string(),
             message: format!(
-                "`{token}` is hard-removed by CXP-0007 (contrix-spec 2b0d70d). \
-                 Replacement: `scope_circle_id` (typed `cx:circle:<uuidv7>`). \
+                "`{token}` is hard-removed by CXP-0007 (cokret-spec 2b0d70d). \
+                 Replacement: `scope_circle_id` (typed `ck:circle:<uuidv7>`). \
                  The legacy field MUST NOT appear in any wire payload, \
                  fixture, or schema literal."
             ),
@@ -353,7 +353,7 @@ fn scan_effective_scope_circle(
     });
 }
 
-// ── Rule 4: confidential_discussion_of endpoints MUST be cx:flow: ids ───────
+// ── Rule 4: confidential_discussion_of endpoints MUST be ck:flow: ids ───────
 
 fn scan_confidential_discussion_relation(
     path: &Path,
@@ -363,8 +363,8 @@ fn scan_confidential_discussion_relation(
 ) {
     // Heuristic: a line that mentions `ConfidentialDiscussionOf` (Rust)
     // OR `"confidential_discussion_of"` (JSON) should — when it also
-    // contains a Contrix typed-id literal — only reference `cx:flow:` ids
-    // for that Relation's from/to. Any non-flow `cx:<kind>:` literal on
+    // contains a Cokret typed-id literal — only reference `ck:flow:` ids
+    // for that Relation's from/to. Any non-flow `ck:<kind>:` literal on
     // the same line is a violation.
     let mentions = line.contains("ConfidentialDiscussionOf")
         || line.contains("\"confidential_discussion_of\"");
@@ -372,7 +372,7 @@ fn scan_confidential_discussion_relation(
         return;
     }
     // Bail when no typed-id literal is visible (e.g. doc-comment line).
-    let needle = "cx:";
+    let needle = "ck:";
     let mut i = 0usize;
     let bytes = line.as_bytes();
     let mut bad: Option<String> = None;
@@ -397,16 +397,16 @@ fn scan_confidential_discussion_relation(
         i = (j + 1).max(i + 1);
     }
     if let Some(kind) = bad {
-        let col = line.find("cx:").unwrap_or(0);
+        let col = line.find("ck:").unwrap_or(0);
         out.push(CircleFinding {
             path: path.to_path_buf(),
             line: line_idx + 1,
             column: col + 1,
             rule: CircleRule::ConfidentialDiscussionEndpointsNotFlow,
-            matched_literal: format!("cx:{kind}:"),
+            matched_literal: format!("ck:{kind}:"),
             message: format!(
                 "`ConfidentialDiscussionOf` Relation endpoints (from / to) \
-                 MUST both be `cx:flow:` ids; saw `cx:{kind}:` on the same \
+                 MUST both be `ck:flow:` ids; saw `ck:{kind}:` on the same \
                  line. See `contrix_core::model::primitives::Relation::\
                  ConfidentialDiscussionOf`."
             ),
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn flags_confidential_discussion_with_realm_id() {
         let f = scan(
-            r#"add_relation(Relation::ConfidentialDiscussionOf, "cx:realm:abc", "cx:flow:def");"#,
+            r#"add_relation(Relation::ConfidentialDiscussionOf, "ck:realm:abc", "ck:flow:def");"#,
         );
         assert!(
             f.iter()
@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn allows_confidential_discussion_with_two_flows() {
         let f =
-            scan(r#"add_relation(Relation::ConfidentialDiscussionOf, "cx:flow:a", "cx:flow:b");"#);
+            scan(r#"add_relation(Relation::ConfidentialDiscussionOf, "ck:flow:a", "ck:flow:b");"#);
         assert!(
             f.iter()
                 .all(|r| r.rule != CircleRule::ConfidentialDiscussionEndpointsNotFlow),

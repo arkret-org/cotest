@@ -6,10 +6,10 @@ import {
 import { solandBaseUrl } from "./env";
 import { createSpaceApi } from "./soland-api";
 
-export let DEMO_REALM_ID = "cx:realm:0196419b-0000-7000-8000-000000000000";
+export let DEMO_REALM_ID = "ck:realm:0196419b-0000-7000-8000-000000000000";
 export const DEMO_ALICE_DID = "did:web:alice.example";
 export const DEMO_ALICE_DEVICE_ID =
-  "cx:device:01904100-0000-7000-8000-a11ce0000001";
+  "ck:device:01904100-0000-7000-8000-a11ce0000001";
 
 export const CALL_SIGNAL_TYPES = [
   "offer",
@@ -70,7 +70,7 @@ export async function createCallSession(
   );
   expect(response.status(), "create WebRTC session").toBe(200);
   const body = await response.json();
-  expect(body.session_id).toMatch(/^cx:call:/);
+  expect(body.session_id).toMatch(/^ck:call:/);
   expect(body.participants).toContain(DEMO_ALICE_DID);
   return body.session_id as string;
 }

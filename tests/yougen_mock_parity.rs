@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, SecondsFormat, Utc};
-use cotest::harness::{ContrixServer, register_account};
+use cotest::harness::{CokretServer, register_account};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -79,7 +79,7 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         );
     }
 
-    let server = ContrixServer::spawn("yougen-mock-parity").await?;
+    let server = CokretServer::spawn("yougen-mock-parity").await?;
     let alice_token = register_account(
         &server,
         "did:web:alice-mock-parity.example",
@@ -91,8 +91,8 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token,
         service_did: server.service_did().to_owned(),
-        realm_id: "cx:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "cx:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ck:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
 
     let contract_path = locate_yougen_contract(&root)?
@@ -155,8 +155,8 @@ fn yougen_mock_contract_format_smoke() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
         service_did: "did:web:soland.mock-parity-smoke.local".to_owned(),
-        realm_id: "cx:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "cx:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ck:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_format(&contract_path, &fixture, &ctx)
 }
@@ -168,7 +168,7 @@ fn locate_yougen_contract(root: &Path) -> Result<Option<PathBuf>> {
         .join("yougen")
         .join("tests")
         .join("e2e")
-        .join("mockContrixContract.ts");
+        .join("mockCokretContract.ts");
     Ok(path.is_file().then_some(path))
 }
 
@@ -215,19 +215,19 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
     match case.body_template.as_deref() {
         Some("realm_create_event") => Some(realm_create_event(
             ctx,
-            "cx:realm:01999999-0000-7000-8000-000000000451",
+            "ck:realm:01999999-0000-7000-8000-000000000451",
             "Mock parity setup",
             9_000_000_000_000_451,
         )),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
-            "cx:realm:01999999-0000-7000-8000-000000000452",
+            "ck:realm:01999999-0000-7000-8000-000000000452",
             "Mock Parity Realm",
             9_000_000_000_000_452,
         )),
         Some("realm_create_event_3") => Some(realm_create_event(
             ctx,
-            "cx:realm:01999999-0000-7000-8000-000000000453",
+            "ck:realm:01999999-0000-7000-8000-000000000453",
             "Mock Parity Space",
             9_000_000_000_000_453,
         )),
@@ -235,7 +235,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
             let sent_at = Utc::now();
             let expires_at = sent_at + Duration::seconds(30);
             // EphemeralEnvelope's `device_id` is typed as `DeviceId` in the SDK
-            // and must match the `cx:device:<ULID>` shape. `dev_alice_mock_parity`
+            // and must match the `ck:device:<ULID>` shape. `dev_alice_mock_parity`
             // is a dev-login identifier accepted by `/auth/dev-login`, but it
             // would make this envelope fail salvo's deserializer with
             // `bad_request`. Drop the optional field so the typing surface is
@@ -289,13 +289,13 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 }
 
 fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_seq: u64) -> Value {
-    let cell = format!("cx:cell:cx.component.realm.create.v1:{realm_id}");
+    let cell = format!("ck:cell:cx.component.realm.create.v1:{realm_id}");
     let payload = json!({
         "object": {
             "id": realm_id,
             "schema": "cx.schema.realm.v1",
             "title": title,
-            "trust_domain": "cx:trust_domain:mock-parity.cotest.local",
+            "trust_domain": "ck:trust_domain:mock-parity.cotest.local",
             "created_by": ctx.alice_did,
             "schema_refs": ["cx.schema.realm.v1"],
             "summary": "created by T-P0-04 parity baseline",
@@ -318,9 +318,9 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         }
     });
     let event_id = format!(
-        "cx:event:{}",
+        "ck:event:{}",
         realm_id
-            .strip_prefix("cx:realm:")
+            .strip_prefix("ck:realm:")
             .unwrap_or("01999999-0000-7000-8000-000000000451")
     );
     json!({
@@ -352,7 +352,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             }
         }],
         "unsigned": {
-            "local_operation_idempotency_alias": format!("cx:operation:{}", realm_id.strip_prefix("cx:realm:").unwrap_or("01999999-0000-7000-8000-000000000451")),
+            "local_operation_idempotency_alias": format!("ck:operation:{}", realm_id.strip_prefix("ck:realm:").unwrap_or("01999999-0000-7000-8000-000000000451")),
             "local_target_ref": realm_id
         },
         "proofs": [{
@@ -395,13 +395,13 @@ const source = fs
 const context = { __input: input, __result: undefined, console };
 vm.createContext(context);
 vm.runInContext(`${source}
-if (typeof mockContrixContract !== "function") {
-  throw new Error("mockContrixContract export was not a function after stripping ESM exports");
+if (typeof mockCokretContract !== "function") {
+  throw new Error("mockCokretContract export was not a function after stripping ESM exports");
 }
 if (typeof canonicalPath !== "function") {
   throw new Error("canonicalPath export was not a function after stripping ESM exports");
 }
-__result = mockContrixContract(__input);`, context, { filename: contractPath });
+__result = mockCokretContract(__input);`, context, { filename: contractPath });
 process.stdout.write(JSON.stringify(context.__result ?? null));
 "#;
     let mut child = Command::new("node")
@@ -441,7 +441,7 @@ process.stdout.write(JSON.stringify(context.__result ?? null));
 }
 
 async fn call_live_soland(
-    server: &ContrixServer,
+    server: &CokretServer,
     case: &ParityCase,
     ctx: &TemplateContext,
     rendered_path: &str,
@@ -628,16 +628,16 @@ fn is_dynamic_key(key: &str) -> bool {
 }
 
 fn normalize_string(value: &str) -> String {
-    if value.starts_with("cx:space:") {
-        "<cx:space>".to_owned()
-    } else if value.starts_with("cx:realm:") {
-        "<cx:realm>".to_owned()
-    } else if value.starts_with("cx:event:") {
-        "<cx:event>".to_owned()
-    } else if value.starts_with("cx:operation:") {
-        "<cx:operation>".to_owned()
-    } else if value.starts_with("cx:backup:") {
-        "<cx:backup>".to_owned()
+    if value.starts_with("ck:space:") {
+        "<ck:space>".to_owned()
+    } else if value.starts_with("ck:realm:") {
+        "<ck:realm>".to_owned()
+    } else if value.starts_with("ck:event:") {
+        "<ck:event>".to_owned()
+    } else if value.starts_with("ck:operation:") {
+        "<ck:operation>".to_owned()
+    } else if value.starts_with("ck:backup:") {
+        "<ck:backup>".to_owned()
     } else if value.starts_with("did:web:") {
         "<did:web>".to_owned()
     } else if value.starts_with("http://127.0.0.1:") {

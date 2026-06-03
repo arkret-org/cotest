@@ -432,7 +432,7 @@ async function createKanbanBoardListAndCard(
   const boardId = await page
     .getByTestId("board-space-select")
     .evaluate((node) => (node as HTMLSelectElement).value);
-  expect(boardId).toMatch(/^cx:space:/);
+  expect(boardId).toMatch(/^ck:space:/);
 
   await page.getByTestId("new-column-input").fill(listTitle);
   await page.getByTestId("add-column-button").click();
@@ -495,6 +495,6 @@ function sameActorFreshDevice(user: JointUser, label: string): JointUser {
   return {
     ...user,
     name: `${user.name}-${label}`,
-    deviceId: `cx:device:01904100-0000-7000-8000-${suffix}`,
+    deviceId: `ck:device:01904100-0000-7000-8000-${suffix}`,
   };
 }

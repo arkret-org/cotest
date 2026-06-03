@@ -3,16 +3,16 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, expect_account_subscribe_delta, expect_api_error, expect_audit_action,
+    CokretServer, expect_account_subscribe_delta, expect_api_error, expect_audit_action,
     expect_json, expect_status,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
-    let server = ContrixServer::spawn("authz-grants").await?;
+    let server = CokretServer::spawn("authz-grants").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "cx:device:01904100-0000-7000-8000-a11ce0000001",
+            "ck:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
     let bob = server
@@ -174,11 +174,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 }
 
 pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
-    let server = ContrixServer::spawn("presence-policy").await?;
+    let server = CokretServer::spawn("presence-policy").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
-            "cx:device:01904100-0000-7000-8000-a11ce0000001",
+            "ck:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
 
@@ -237,7 +237,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "req-allow",
-                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "cx.message.create",
                 "actor": "did:web:alice.example",
@@ -255,7 +255,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "req-review",
-                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "space.delete",
                 "actor": "did:web:alice.example",
@@ -273,7 +273,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             .post(server.url("/api/v1/policy/check"))
             .json(&json!({
                 "request_id": "req-invalid",
-                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "cx.message.create",
                 "actor": "alice",
@@ -285,9 +285,9 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
 
     let ice = expect_json(
-        alice.post("/contrix/v1/ice-config").json(&json!({
-            "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-            "call_id": "cx:call:01964137-0000-7000-8000-000000000001",
+        alice.post("/cokret/v1/ice-config").json(&json!({
+            "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+            "call_id": "ck:call:01964137-0000-7000-8000-000000000001",
             "actor_id": alice.actor.as_str(),
             "device_id": alice.device_id.as_str()
         })),

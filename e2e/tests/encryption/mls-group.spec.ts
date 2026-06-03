@@ -56,7 +56,7 @@ async function createEncryptedRealm(
           schema: "cx.schema.realm.v1",
           title,
           created_by: ownerDid,
-          trust_domain: "cx:trust_domain:soland.local",
+          trust_domain: "ck:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",
@@ -163,7 +163,7 @@ test.describe("MLS group encryption", () => {
               schema: "cx.schema.realm.v1",
               title: `S11 MLS incompatible ${stamp}`,
               created_by: alice.did,
-              trust_domain: "cx:trust_domain:soland.local",
+              trust_domain: "ck:trust_domain:soland.local",
               schema_refs: ["cx.schema.realm.v1"],
               default_discoverability: "listed",
               default_join_rule: "invite",
@@ -353,7 +353,7 @@ test.describe("MLS group encryption", () => {
         context: "submit MLS welcome",
       },
     );
-    expect(welcomeBody.event_id).toMatch(/^cx:event:/);
+    expect(welcomeBody.event_id).toMatch(/^ck:event:/);
 
     const commitPayload = (label: string, nextEpoch = 1) => ({
       group_id: groupId,
@@ -401,7 +401,7 @@ test.describe("MLS group encryption", () => {
         context: "submit MLS commit",
       },
     );
-    expect(commitBody.event_id).toMatch(/^cx:event:/);
+    expect(commitBody.event_id).toMatch(/^ck:event:/);
 
     const pendingAfterWelcome = await request.get(
       `${solandBaseUrl()}/api/v1/keys/keypackages/welcomes/pending`,

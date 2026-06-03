@@ -1,12 +1,12 @@
-// Mock applet-registry — simulates the Contrix Applet Registry that
+// Mock applet-registry — simulates the Cokret Applet Registry that
 // (1) accepts signed applet manifest registrations, (2) mints per-applet
 // bot actor DIDs as the registry-backed issuing authority, and (3) acts as
 // a ghost-actor factory binding external_id → ghost_actor_did with the
 // registry recorded as the accountability anchor.
 //
 // Spec references:
-//   contrix-spec/spec/v1/zh/extensions/applet-integration.md
-//   contrix-spec/spec/v1/zh/extensions/applet-schema.md
+//   cokret-spec/spec/v1/zh/extensions/applet-integration.md
+//   cokret-spec/spec/v1/zh/extensions/applet-schema.md
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
 // harness wires soland (and other consumers) to MOCK_APPLET_REGISTRY_DID so
@@ -121,7 +121,7 @@ function currentAppletSchemaHash() {
   for (;;) {
     const candidate = path.join(
       cursor,
-      "contrix-spec",
+      "cokret-spec",
       "spec",
       "v1",
       "artifacts",

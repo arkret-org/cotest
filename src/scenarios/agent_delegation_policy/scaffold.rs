@@ -78,10 +78,10 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
 
     // (4) accountability_grant typed-id well-formedness.
     let grant_id = AccountabilityGrantId::new(
-        "cx:accountability_grant:01999999-0000-7000-8000-0000000ab001".to_owned(),
+        "ck:accountability_grant:01999999-0000-7000-8000-0000000ab001".to_owned(),
     )
     .map_err(|e| anyhow!("AccountabilityGrantId: {e}"))?;
-    if !grant_id.as_str().starts_with("cx:accountability_grant:") {
+    if !grant_id.as_str().starts_with("ck:accountability_grant:") {
         return Err(anyhow!(
             "AccountabilityGrantId lost canonical prefix: {grant_id}"
         ));

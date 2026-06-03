@@ -321,7 +321,7 @@ const server = createServer(async (req, res) => {
     const accepted = {
       ...common,
       status: "accepted",
-      contrix_event_hint: `cx:event:mimi:${randomUUID()}`,
+      contrix_event_hint: `ck:event:mimi:${randomUUID()}`,
     };
     inboundLog.record(accepted);
     recordEvent({ direction: "inbound", kind: "message", ...accepted });

@@ -11,7 +11,7 @@
       "method": "POST",
       "path": "/api/v1/events",
       "auth": "alice",
-      "headers": { "x-contrix-request-id": "mock-parity-events-submit" },
+      "headers": { "x-cokret-request-id": "mock-parity-events-submit" },
       "body_template": "realm_create_event"
     },
     {

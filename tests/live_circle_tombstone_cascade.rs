@@ -82,9 +82,9 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
         .register_client("did:web:bob.cxp0007.example", "@bob", "dev_bob")
         .await?;
 
-    let realm_id = RealmId::new("cx:realm:0196419b-0000-7000-8000-cxp0007tomb01".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007tomb01".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007tomb02".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007tomb02".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let actor_admin: Did = "did:web:admin.cxp0007.example"
         .parse()

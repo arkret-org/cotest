@@ -85,13 +85,13 @@
         "threshold": 2,
         "signatures": [
           {
-            "device_id": "cx:device:alice-1",
-            "signed_by": "did:cx:dev:alice-1#leaf",
+            "device_id": "ck:device:alice-1",
+            "signed_by": "did:ck:dev:alice-1#leaf",
             "signature_b64": "U0lHX0FMSUNFXREVWMV9SRVNFVF8wMDAwMDAwMDA"
           },
           {
-            "device_id": "cx:device:alice-2",
-            "signed_by": "did:cx:dev:alice-2#leaf",
+            "device_id": "ck:device:alice-2",
+            "signed_by": "did:ck:dev:alice-2#leaf",
             "signature_b64": "U0lHX0FMSUNFXREVWMl9SRVNFVF8wMDAwMDAwMDA"
           }
         ]

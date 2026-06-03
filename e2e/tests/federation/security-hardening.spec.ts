@@ -50,7 +50,7 @@ test.describe("federation security hardening", () => {
       payload: {
         event_id: typedId("event"),
         sender: "did:web:alice.alpha.example",
-        thread_id: "cx:thread:federation-security",
+        thread_id: "ck:thread:federation-security",
         content: { kind: "cx.content.text", body: "denylisted inbound" },
       },
     });

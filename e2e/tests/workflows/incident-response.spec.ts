@@ -179,8 +179,8 @@ test.describe("workflow: incident response", () => {
               timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
             }),
           );
-          expect(String(payload.flow_id ?? "")).toMatch(/^cx:flow:/);
-          expect(String(payload.incident_id ?? "")).toMatch(/^cx:flow:/);
+          expect(String(payload.flow_id ?? "")).toMatch(/^ck:flow:/);
+          expect(String(payload.incident_id ?? "")).toMatch(/^ck:flow:/);
         }
       } finally {
         await page.close();

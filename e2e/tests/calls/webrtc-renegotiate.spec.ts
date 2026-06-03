@@ -23,7 +23,7 @@ test.describe("cx.call.signal renegotiation", () => {
     const sessionId = await createCallSession(request, token);
     try {
       const ice = await request.post(
-        `${solandBaseUrl()}/contrix/v1/ice-config`,
+        `${solandBaseUrl()}/cokret/v1/ice-config`,
         {
           headers: authHeaders(token),
           data: {

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use contrix::http_signature::{
+use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use contrix_core::canonical::{canonical_json_bytes, canonical_sha256};
@@ -9,11 +9,11 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::harness::{ContrixServer, dev_login, expect_api_error, expect_json, expect_response};
+use crate::harness::{CokretServer, dev_login, expect_api_error, expect_json, expect_response};
 
 fn with_federation_trust_headers(
     builder: reqwest::RequestBuilder,
-    server: &ContrixServer,
+    server: &CokretServer,
     body: &Value,
 ) -> Result<reqwest::RequestBuilder> {
     let request_canonical_digest = canonical_sha256(body)?;
@@ -33,7 +33,7 @@ fn with_signed_federation_request(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    destination: &ContrixServer,
+    destination: &CokretServer,
     source_service_did: &str,
     body: &Value,
 ) -> Result<reqwest::RequestBuilder> {
@@ -100,12 +100,12 @@ fn trust_domain_from_service_did(service_did: &str) -> String {
         .unwrap_or(service_did)
         .to_ascii_lowercase()
         .replace(':', ".");
-    format!("cx:trust_domain:{scope}")
+    format!("ck:trust_domain:{scope}")
 }
 
 fn development_service_signing_key(
     service_did: &str,
-) -> contrix::http_signature::Ed25519SigningKey {
+) -> cokret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:anchorer-ephemeral:");
     hasher.update(service_did.as_bytes());
@@ -131,7 +131,7 @@ fn account_delta_from_text(ndjson: &str) -> Result<Value> {
 }
 
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
-    let server = ContrixServer::spawn("federation-invalid").await?;
+    let server = CokretServer::spawn("federation-invalid").await?;
 
     expect_api_error(
         server
@@ -210,14 +210,14 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
 }
 
 pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result<()> {
-    let server = ContrixServer::spawn("federation-replay").await?;
-    let realm_id = "cx:realm:0196419b-0000-7000-8000-00000000fed0";
-    let replay_operation_id = "cx:operation:0196419b-0000-7000-8000-00000000f001";
-    let replay_event_id = "cx:event:0196419b-0000-7000-8000-00000000f101";
-    let invalid_operation_id = "cx:operation:0196419b-0000-7000-8000-00000000f002";
-    let invalid_event_id = "cx:event:0196419b-0000-7000-8000-00000000f102";
-    let redaction_operation_id = "cx:operation:0196419b-0000-7000-8000-00000000f003";
-    let redaction_event_id = "cx:event:0196419b-0000-7000-8000-00000000f103";
+    let server = CokretServer::spawn("federation-replay").await?;
+    let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fed0";
+    let replay_operation_id = "ck:operation:0196419b-0000-7000-8000-00000000f001";
+    let replay_event_id = "ck:event:0196419b-0000-7000-8000-00000000f101";
+    let invalid_operation_id = "ck:operation:0196419b-0000-7000-8000-00000000f002";
+    let invalid_event_id = "ck:event:0196419b-0000-7000-8000-00000000f102";
+    let redaction_operation_id = "ck:operation:0196419b-0000-7000-8000-00000000f003";
+    let redaction_event_id = "ck:event:0196419b-0000-7000-8000-00000000f103";
 
     let operation = Operation::create(
         OperationId::new(replay_operation_id)?,
@@ -226,7 +226,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         json!({
             "event_id": replay_event_id,
             "actor_id": "did:web:remote.example",
-            "flow_id": realm_id.replacen("cx:realm:", "cx:flow:", 1),
+            "flow_id": realm_id.replacen("ck:realm:", "ck:flow:", 1),
             "track_name": "discussion",
             "content": {"kind": "cx.content.text", "body": "from federation"}
         }),
@@ -408,11 +408,11 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 }
 
 pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<()> {
-    let server = ContrixServer::spawn("federation-project").await?;
+    let server = CokretServer::spawn("federation-project").await?;
     let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
-    let realm_id = "cx:realm:0196419b-0000-7000-8000-00000000fe20";
-    let operation_id = "cx:operation:0196419b-0000-7000-8000-00000000fe21";
-    let event_id = "cx:event:0196419b-0000-7000-8000-00000000fe22";
+    let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fe20";
+    let operation_id = "ck:operation:0196419b-0000-7000-8000-00000000fe21";
+    let event_id = "ck:event:0196419b-0000-7000-8000-00000000fe22";
     let operation = Operation::create(
         OperationId::new(operation_id)?,
         RealmId::new(realm_id.to_owned())?,
@@ -420,7 +420,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         json!({
             "event_id": event_id,
             "actor_id": "did:web:alice.example",
-            "flow_id": realm_id.replacen("cx:realm:", "cx:flow:", 1),
+            "flow_id": realm_id.replacen("ck:realm:", "ck:flow:", 1),
             "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",

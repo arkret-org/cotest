@@ -75,7 +75,7 @@ fn protocol_drift_tree_scan_other_projects() {
     let dev_root = std::env::var("CONTRIX_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"D:\Works\contrix-dev"));
+        .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret-dev"));
     if !dev_root.exists() {
         eprintln!("[skip] dev root does not exist: {}", dev_root.display());
         return;
@@ -89,7 +89,7 @@ fn protocol_drift_tree_scan_other_projects() {
         "coauth",
         "sodmin",
         "starid",
-        "contrix-rust-sdk",
+        "cokret-rust-sdk",
     ];
     let mut total = 0usize;
     for proj in projects {

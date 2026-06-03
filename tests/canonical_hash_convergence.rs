@@ -1,6 +1,6 @@
 //! T5.3 (Round 22, 2026-05-20) — canonical-JSON convergence vectors.
 //!
-//! Every Contrix service (coauth / soland / starid / yougen / floria) now
+//! Every Cokret service (coauth / soland / starid / yougen / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
 //! the SDK's `contrix_core::canonical` module and the
 //! `contrix_signatures::EventProofBuilder` facade. This test pins a
@@ -32,19 +32,19 @@ fn vectors() -> Vec<CanonicalVector> {
         CanonicalVector {
             label: "coauth handle_claim digest input",
             // Mirrors coauth's `HandleClaimDigestInput` shape from
-            // `crates/backend/src/handlers/contrix.rs`. RFC 3339 UTC strings
+            // `crates/backend/src/handlers/cokret.rs`. RFC 3339 UTC strings
             // for timestamps; integer-only numbers; all-string scalar fields.
             //
-            // R3.1 wire rename (contrix-spec @ 7157ee8): the previous
-            // `handle_uri: "contrix://contrix.example/users/alice"` field
-            // is now `handle: "alice:contrix.example"`. Field order is
+            // R3.1 wire rename (cokret-spec @ 7157ee8): the previous
+            // `handle_uri: "cokret://cokret.example/users/alice"` field
+            // is now `handle: "alice:cokret.example"`. Field order is
             // irrelevant in canonical JSON (keys are sorted), but the digest
             // changes because both the field name and the value bytes change.
             payload: json!({
                 "type": "cx.handle.claim",
                 "subject_id": "did:web:alice.example",
-                "handle": "alice:contrix.example",
-                "handle_aliases": ["acct:alice@contrix.example"],
+                "handle": "alice:cokret.example",
+                "handle_aliases": ["acct:alice@cokret.example"],
                 "issuer_service_did": "did:web:coauth.example",
                 "audience": "https://soland.example/api/v1",
                 "member_delivery_binding": {
@@ -72,8 +72,8 @@ fn vectors() -> Vec<CanonicalVector> {
             // stripping `proofs` / `unsigned` from the on-wire envelope.
             payload: json!({
                 "actor_id": "did:web:alice.example",
-                "event_id": "cx:event:01970e589d21-0001-a13f9c2e",
-                "realm_id": "cx:realm:01904100-0000-7000-8000-668e2181b41d",
+                "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
+                "realm_id": "ck:realm:01904100-0000-7000-8000-668e2181b41d",
                 "kind": "cx.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
@@ -81,7 +81,7 @@ fn vectors() -> Vec<CanonicalVector> {
                         "kind": "cx.content.text",
                         "body": "hello"
                     },
-                    "flow_id": "cx:flow:01904100-0000-7000-8000-6c663fa0205f",
+                    "flow_id": "ck:flow:01904100-0000-7000-8000-6c663fa0205f",
                     "track_name": "discussion",
                 },
                 "schema_version": 1,
@@ -170,7 +170,7 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 
 /// Every service ultimately goes through one of two SDK entry points:
 /// the low-level `contrix_core::canonical::canonical_sha256` (used by
-/// `coauth::handlers::contrix::canonical_json_sha256`, soland's
+/// `coauth::handlers::cokret::canonical_json_sha256`, soland's
 /// `validate_event_proofs`, and starid's `proof::canonical_bytes`), or
 /// the high-level `contrix_signatures::EventProofBuilder` (used by
 /// yougen / floria when emitting a fresh detached-JWS proof). Both
@@ -199,7 +199,7 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
     }
 }
 
-// ─── R3.2 (contrix-spec @ b56cab1) — MemberIdentity / roster digests ──────
+// ─── R3.2 (cokret-spec @ b56cab1) — MemberIdentity / roster digests ──────
 //
 // VECT-COT-5: the R3.2 wire-breaking rename split the single
 // `identity_state_digest` into three distinct digests with distinct
@@ -223,11 +223,11 @@ fn pinned_r3_2_inputs() -> (
     };
     use contrix_core::{Did, EventId, Hash, RealmId};
 
-    let realm = RealmId::new("cx:realm:01904100-0000-7000-8000-000000000001").unwrap();
+    let realm = RealmId::new("ck:realm:01904100-0000-7000-8000-000000000001").unwrap();
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {
-            event_id: EventId::new("cx:event:01904100-0000-7000-8000-000000000a01").unwrap(),
+            event_id: EventId::new("ck:event:01904100-0000-7000-8000-000000000a01").unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -235,7 +235,7 @@ fn pinned_r3_2_inputs() -> (
             .unwrap(),
         },
         EffectiveIdentityEntry {
-            event_id: EventId::new("cx:event:01904100-0000-7000-8000-000000000a02").unwrap(),
+            event_id: EventId::new("ck:event:01904100-0000-7000-8000-000000000a02").unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:2222222222222222222222222222222222222222222222222222222222222222",

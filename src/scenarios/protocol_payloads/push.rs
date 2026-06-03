@@ -8,15 +8,15 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_json};
+use crate::harness::{CokretServer, expect_json};
 
-pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
+pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     register_device(server, token).await?;
     notify_blind_wakeup(server).await?;
     Ok(())
 }
 
-async fn register_device(server: &ContrixServer, token: &str) -> Result<()> {
+async fn register_device(server: &CokretServer, token: &str) -> Result<()> {
     let push = expect_json(
         server
             .http()
@@ -36,7 +36,7 @@ async fn register_device(server: &ContrixServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn notify_blind_wakeup(server: &ContrixServer) -> Result<()> {
+async fn notify_blind_wakeup(server: &CokretServer) -> Result<()> {
     let notify = expect_json(
         server
             .http()

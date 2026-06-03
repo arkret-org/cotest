@@ -1,4 +1,4 @@
-//! R3.2 spec-sync (contrix-spec @ b56cab1) — handle-claim rejection
+//! R3.2 spec-sync (cokret-spec @ b56cab1) — handle-claim rejection
 //! conformance vectors (VECT-COT-6 / VECT-COT-7).
 //!
 //! Spec source: `artifacts/schemas/handle-claim.schema.json` +
@@ -7,7 +7,7 @@
 //! R3.2 wire-breaking cleanup:
 //!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
 //!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
-//!   * `subject` MUST be a holder/principal DID. A `cx:actor:` / `cx:account:` typed id or a
+//!   * `subject` MUST be a holder/principal DID. A `ck:actor:` / `ck:account:` typed id or a
 //!     non-DID resource id MUST reject (VECT-COT-7), enforced by
 //!     [`contrix_core::model::validate_handle_claim_subject`] and by the schema `subject` pattern.
 //!
@@ -37,7 +37,7 @@ pub const ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS: &[&str] = &[
 ];
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://contrix.io/artifacts/";
+const SCHEMA_ID_PREFIX: &str = "https://cokret.io/artifacts/";
 const HANDLE_CLAIM_SCHEMA_FILE: &str = "schemas/handle-claim.schema.json";
 
 /// Compile the `handle-claim.schema.json` artifact with the full schema
@@ -165,8 +165,8 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
 
     // SDK validator: typed-id subjects MUST reject.
     for typed in [
-        "cx:actor:01904100-0000-7000-8000-000000000001",
-        "cx:account:01904100-0000-7000-8000-000000000002",
+        "ck:actor:01904100-0000-7000-8000-000000000001",
+        "ck:account:01904100-0000-7000-8000-000000000002",
     ] {
         let did = Did::new(typed.to_owned());
         // Some typed ids may not even parse as a Did; if they do, the
@@ -187,11 +187,11 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         .map_err(|e| anyhow!("VECT-COT-7: a principal DID MUST pass the subject validator: {e}"))?;
 
     // Schema layer: the `subject` pattern requires `did:<method>:...`. A
-    // typed `cx:actor:` / `cx:account:` id or a bare resource id MUST
+    // typed `ck:actor:` / `ck:account:` id or a bare resource id MUST
     // schema-reject.
     for bad_subject in [
-        "cx:actor:01904100-0000-7000-8000-000000000001",
-        "cx:account:01904100-0000-7000-8000-000000000002",
+        "ck:actor:01904100-0000-7000-8000-000000000001",
+        "ck:account:01904100-0000-7000-8000-000000000002",
         "resource-handle-7",
     ] {
         let mut claim = base_claim();

@@ -41,7 +41,7 @@
 3. 客户端:
    - Argon2id KDF 生成 derived_key(salt + memoryCost + iterations,固化在 envelope)
    - 用 XChaCha20-Poly1305 加密 `{ self_signing_key, user_signing_key, MLS history backup key }`
-   - 计算 `key_commitment = SHA256(HKDF(derived_key, info="contrix-key-backup-commitment-v1"))`
+   - 计算 `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
 4. `PUT /api/v1/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "secret_storage", kdf_params, ciphertext, ciphertext_digest, key_commitment }`
 5. 服务端**只能存** ciphertext,不接受明文 passphrase
 6. 断言:`GET /api/v1/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext

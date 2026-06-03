@@ -1,8 +1,8 @@
-// TSP relationship bootstrap and Contrix-over-TSP envelope
+// TSP relationship bootstrap and Cokret-over-TSP envelope
 // Contract: e2e/scenarios/identity/tsp-bootstrap.md
 // Spec refs:
 //   - identity/tsp-integration.md §2 (TSP applicability), §3 (VID/Endpoint/Relationship mapping)
-//   - §4 (cx.service.tsp endpoint declaration), §5 (Contrix over TSP rules)
+//   - §4 (cx.service.tsp endpoint declaration), §5 (Cokret over TSP rules)
 //   - §8 (Security requirements: VID verification, audit log fields)
 
 import { test } from "@playwright/test";
@@ -14,7 +14,7 @@ test.describe("tsp bootstrap", () => {
     // @blocking-on: soland#identity-tsp-bootstrap-gap
     // @user-promise: e2e/scenarios/identity/tsp-bootstrap.md
     // @expected-live-by: 2026Q3
-    "alice and bob_extern bootstrap TSP relationship; alice sends Contrix invite via TSP; bob_extern verifies + ACKs",
+    "alice and bob_extern bootstrap TSP relationship; alice sends Cokret invite via TSP; bob_extern verifies + ACKs",
     async () => {
       // Main flow covers tsp-bootstrap.md Phase A-E:
       //   A — both VIDs' DID Documents declare `cx.service.tsp` endpoint
@@ -25,12 +25,12 @@ test.describe("tsp bootstrap", () => {
       //       MOCK_TSP_ENDPOINT_VID); mock returns relationship_id + remote
       //       pubkey; alice's /settings/connections shows the new relationship
       //       with trust_level="verified" (spec §8).
-      //   C — alice wraps `cx.invite.create` (with inner Contrix event
+      //   C — alice wraps `cx.invite.create` (with inner Cokret event
       //       signature) as a TSP application payload using nested mode
-      //       (content_type="application/contrix+json"; outer envelope
+      //       (content_type="application/cokret+json"; outer envelope
       //       carries only pairwise VID, real `vid_local` hidden inside;
       //       spec §4 metadata_privacy.nested_messages, §5).
-      //   D — mock (as bob_extern) decrypts outer, validates Contrix
+      //   D — mock (as bob_extern) decrypts outer, validates Cokret
       //       signature against alice's webvh key, ACKs with both
       //       `tsp_authenticity = "ok"` AND `contrix_signature = "ok"`
       //       (spec §5: both SHOULD be verified, and independently).
@@ -62,7 +62,7 @@ test.describe("tsp bootstrap", () => {
       // MLS DM; TSP is opt-in). Drop the mock TSP endpoint (kill the process
       // bound to MOCK_TSP_ENDPOINT_PORT or use route.block) before alice
       // sends the second `cx.invite.create`; the client MUST degrade to the
-      // default Contrix v1 core transport rather than fail-closed.
+      // default Cokret v1 core transport rather than fail-closed.
       //
       // soland gap: cx.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
     },
@@ -100,7 +100,7 @@ test.describe("tsp bootstrap", () => {
       // intermediary observes; assert the inner VID + inner operation
       // name + inner payload bytes are all absent from that view, while
       // bob_extern (the terminus) still successfully decrypts and
-      // executes the inner Contrix payload.
+      // executes the inner Cokret payload.
       //
       // soland gap: cx.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
     },

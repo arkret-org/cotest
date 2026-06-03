@@ -4,11 +4,11 @@
       "Bash(mkdir -p /tmp/t1)",
       "Read(//tmp/**)",
       "Bash(rm -rf *)",
-      "Bash(unzip -o /d/Works/contrix-dev/cotest/artifacts/runs/20260516-085542/joint-e2e/playwright-output/messaging-triad-collaborat-99f05-bility-and-redact-tombstone-chrome/trace.zip)",
+      "Bash(unzip -o /d/Works/cokret-dev/cotest/artifacts/runs/20260516-085542/joint-e2e/playwright-output/messaging-triad-collaborat-99f05-bility-and-redact-tombstone-chrome/trace.zip)",
       "Read(//tmp/t1/**)",
       "Bash(mkdir -p /tmp/t2)",
-      "Bash(unzip -o /d/Works/contrix-dev/cotest/artifacts/runs/20260516-085542/joint-e2e/playwright-output/spaces-moderation-ban-mode-275ae-cted-→-tombstone-via-redact-chrome/trace.zip)",
-      "Bash(unzip -o /d/Works/contrix-dev/cotest/artifacts/runs/20260516-091140/joint-e2e/playwright-output/messaging-triad-collaborat-99f05-bility-and-redact-tombstone-chrome/trace.zip)",
+      "Bash(unzip -o /d/Works/cokret-dev/cotest/artifacts/runs/20260516-085542/joint-e2e/playwright-output/spaces-moderation-ban-mode-275ae-cted-→-tombstone-via-redact-chrome/trace.zip)",
+      "Bash(unzip -o /d/Works/cokret-dev/cotest/artifacts/runs/20260516-091140/joint-e2e/playwright-output/messaging-triad-collaborat-99f05-bility-and-redact-tombstone-chrome/trace.zip)",
       "Bash(sed -n '/Page snapshot/,$p' artifacts/runs/20260516-091140/joint-e2e/playwright-output/messaging-triad-collaborat-99f05-bility-and-redact-tombstone-chrome/error-context.md)"
     ]
   }

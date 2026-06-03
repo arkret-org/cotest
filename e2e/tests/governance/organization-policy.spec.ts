@@ -112,7 +112,7 @@ test.describe("organization policy inheritance", () => {
             organization_approval: {
               organization_id: orgDid,
               approved: true,
-              decision_id: `cx:org-approval:${Date.now()}`,
+              decision_id: `ck:org-approval:${Date.now()}`,
             },
           },
         },
@@ -149,7 +149,7 @@ test.describe("organization policy inheritance", () => {
         {
           headers: authHeaders(aliceToken),
           data: {
-            policy_id: `cx:org-policy:fanout-${Date.now()}`,
+            policy_id: `ck:org-policy:fanout-${Date.now()}`,
             targets: [
               {
                 kind: "actor",
@@ -274,7 +274,7 @@ async function setupAcmeOrg(request: APIRequestContext, label: string) {
     {
       headers: authHeaders(aliceToken),
       data: {
-        policy_id: `cx:org-policy:${label}-${stamp}`,
+        policy_id: `ck:org-policy:${label}-${stamp}`,
         targets: [{ kind: "actor", did: mallory.did, action: "deny_join" }],
         appeal: { enabled: true, endpoint: "/api/v1/moderation/appeals" },
       },

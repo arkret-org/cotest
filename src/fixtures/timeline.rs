@@ -55,7 +55,7 @@ impl TimelineEntry {
         let method = request.get("method").and_then(Value::as_str).unwrap_or("?");
         let url = request.get("url").and_then(Value::as_str).unwrap_or("?");
 
-        // Extract envelope fields if the body looks like a Contrix event.
+        // Extract envelope fields if the body looks like a Cokret event.
         let mut sender = String::from("-");
         let mut op_id = format!("{method} {url}");
         let mut kind = String::from("http");
@@ -250,7 +250,7 @@ pub fn install_failure_dump_hook() {
 mod tests {
     use super::*;
 
-    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/api/v1/events","headers":{},"body":{"event_id":"cx:event:01999999-0000-7000-8000-000000000001","kind":"cx.message.create","actor_id":"did:web:alice.example","realm_id":"cx:realm:abc","prev_refs":["cx:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"cx:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
+    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/api/v1/events","headers":{},"body":{"event_id":"ck:event:01999999-0000-7000-8000-000000000001","kind":"cx.message.create","actor_id":"did:web:alice.example","realm_id":"ck:realm:abc","prev_refs":["ck:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ck:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
     const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/api/v1/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
 
     #[test]
@@ -261,10 +261,10 @@ mod tests {
 
         let first = &timeline.events[0];
         assert_eq!(first.sender, "did:web:alice.example");
-        assert_eq!(first.op_id, "cx:event:01999999-0000-7000-8000-000000000001");
+        assert_eq!(first.op_id, "ck:event:01999999-0000-7000-8000-000000000001");
         assert_eq!(first.kind, "cx.message.create");
         assert_eq!(first.event_digest, "sha256:deadbeef");
-        assert_eq!(first.depends_on, vec!["cx:event:prev-1".to_owned()]);
+        assert_eq!(first.depends_on, vec!["ck:event:prev-1".to_owned()]);
         assert_eq!(first.status, Some(200));
 
         let second = &timeline.events[1];
@@ -286,7 +286,7 @@ mod tests {
         assert!(rendered.contains("did:web:alice.example"));
         assert!(rendered.contains("cx.message.create"));
         assert!(rendered.contains("sha256:deadbeef"));
-        assert!(rendered.contains("cx:event:prev-1"));
+        assert!(rendered.contains("ck:event:prev-1"));
         assert!(rendered.contains("401"));
     }
 

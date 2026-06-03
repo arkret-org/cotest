@@ -1,4 +1,4 @@
-//! R3.2 spec-sync (contrix-spec @ b56cab1) — §3.8 mention rendering
+//! R3.2 spec-sync (cokret-spec @ b56cab1) — §3.8 mention rendering
 //! conformance vectors (VECT-COT-2).
 //!
 //! Spec source: `models/flow-and-message.md §9.4` +
@@ -11,13 +11,13 @@
 //! handle / display strings are audit metadata.
 //!
 //! Rendering (§3.8.2) is driven through the SDK
-//! [`contrix::identity::render_mention`] helper, which runs §3.2.1 over the
+//! [`cokret::identity::render_mention`] helper, which runs §3.2.1 over the
 //! Realm-scoped claim projection then walks the degraded fallback ladder
 //! `Verified → Cached → NameOnly → Unresolved`.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use contrix::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
+use cokret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
 use contrix_core::Did;
 use contrix_core::model::{Handle, HandleBindingState, HandleClaim, Mention};
 use serde_json::json;
@@ -142,7 +142,7 @@ pub fn run_render_step1_unique_success_vector() -> Result<()> {
 
 pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "cx:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
     // Two candidates: the Realm-scoped projection is "not unique" until the
     // live audience context discriminates. With context set, §3.2.1 picks
     // the audience-matched claim deterministically (the §3.8.2 step-2 live

@@ -29,7 +29,7 @@ pub async fn act_on_behalf_attribution_run() -> Result<()> {
     let executed_by = Did::new("did:web:agent.example.com".to_owned())
         .map_err(|e| anyhow!("executed_by DID: {e}"))?;
     let authorization_ref = AccountabilityGrantId::new(
-        "cx:accountability_grant:01999999-0000-7000-8000-00000000b005".to_owned(),
+        "ck:accountability_grant:01999999-0000-7000-8000-00000000b005".to_owned(),
     )
     .map_err(|e| anyhow!("authorization_ref: {e}"))?;
     if !executed_by.as_str().starts_with("did:") {
@@ -37,7 +37,7 @@ pub async fn act_on_behalf_attribution_run() -> Result<()> {
     }
     if !authorization_ref
         .as_str()
-        .starts_with("cx:accountability_grant:")
+        .starts_with("ck:accountability_grant:")
     {
         return Err(anyhow!(
             "authorization_ref must be an accountability_grant typed id"

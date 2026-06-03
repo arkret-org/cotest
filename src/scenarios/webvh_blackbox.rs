@@ -3,7 +3,7 @@
 //! Spawns a real `starid` binary on a random local port and exercises 5 webvh
 //! conformance vectors via plain HTTP. The binary is located via the
 //! `STARID_BIN` env var (explicit override) or the conventional sibling
-//! checkout path (`contrix-dev/starid/target/debug/starid[.exe]`).
+//! checkout path (`cokret-dev/starid/target/debug/starid[.exe]`).
 //!
 //! The thin test wrapper at `tests/webvh_blackbox.rs` is `#[ignore]`'d so CI
 //! runners without a built starid binary do not flake; locally, run with

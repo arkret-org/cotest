@@ -1,6 +1,6 @@
 //! Cotest profile gate registry.
 //!
-//! Loads `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json`
+//! Loads `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json`
 //! at runtime and produces a per-profile gate report. Two profile classes are
 //! handled:
 //!

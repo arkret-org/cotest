@@ -90,9 +90,9 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     let admin_did: Did = "did:web:admin.cxp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
-    let realm_id = RealmId::new("cx:realm:0196419b-0000-7000-8000-cxp0007cap001".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007cap001".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007cap002".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007cap002".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let display = CircleDisplay {
         short_name: "Cap".to_owned(),

@@ -41,7 +41,7 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
         let items = value_array(required_field(group, "items")?, "group.items")?;
         for item in items {
             let object = required_field(item, "object")?;
-            if !value_field_str(object, "id")?.starts_with("cx:flow:") {
+            if !value_field_str(object, "id")?.starts_with("ck:flow:") {
                 bail!("sync artifact collection item object id was not a flow");
             }
             let position = required_field(item, "position")?;
@@ -49,7 +49,7 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
             if model != "relation" && model != "relation_container" {
                 bail!("sync artifact collection item position model was invalid");
             }
-            if !value_field_str(position, "relation_id")?.starts_with("cx:relation:") {
+            if !value_field_str(position, "relation_id")?.starts_with("ck:relation:") {
                 bail!("sync artifact collection item relation id was invalid");
             }
         }
@@ -59,20 +59,20 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
 
 fn validate_flow_discussion_timeline(value: &Value) -> Result<()> {
     let timeline = required_field(value, "flow_discussion_timeline")?;
-    if !value_field_str(timeline, "flow_id")?.starts_with("cx:flow:") {
+    if !value_field_str(timeline, "flow_id")?.starts_with("ck:flow:") {
         bail!("sync artifact flow discussion timeline flow id was invalid");
     }
-    if !value_field_str(timeline, "next_cursor")?.starts_with("cx:cursor:") {
+    if !value_field_str(timeline, "next_cursor")?.starts_with("ck:cursor:") {
         bail!("sync artifact flow discussion timeline cursor was invalid");
     }
     for entry in value_array(
         required_field(timeline, "entries")?,
         "flow_discussion_timeline.entries",
     )? {
-        if !value_field_str(entry, "event_id")?.starts_with("cx:event:") {
+        if !value_field_str(entry, "event_id")?.starts_with("ck:event:") {
             bail!("sync artifact flow discussion timeline event id was invalid");
         }
-        if !value_field_str(entry, "message_id")?.starts_with("cx:message:") {
+        if !value_field_str(entry, "message_id")?.starts_with("ck:message:") {
             bail!("sync artifact flow discussion timeline message id was invalid");
         }
     }

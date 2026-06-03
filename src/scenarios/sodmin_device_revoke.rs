@@ -1,7 +1,7 @@
 //! SOD-1 — Sodmin device revoke cascade workflow.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/identity/account-lifecycle.md` §3 (device lifecycle), §9 (session
+//!   - `cokret-spec/spec/v1/zh/identity/account-lifecycle.md` §3 (device lifecycle), §9 (session
 //!     revocation): "撤销 device MUST 产生 device list update. E2EE 客户端 MUST 停止向 revoked
 //!     device 分享新密钥." Revocation MUST also invalidate any soland session bound to that device.
 //!
@@ -30,7 +30,7 @@
 //!     `cotest/e2e/` (TypeScript), driven by `scripts/run-joint-e2e.ps1`; there is no Rust harness
 //!     for headless-browser-driving sodmin from inside a `cargo test`. The existing playwright
 //!     scenarios under `cotest/e2e/tests/` are separate from the Rust cotest suite.
-//!   * No coauth+sodmin joint bootstrap from `ContrixServer` / `TestServerGroup`. The
+//!   * No coauth+sodmin joint bootstrap from `CokretServer` / `TestServerGroup`. The
 //!     `_helpers/coauth_bootstrap.rs` module handles coauth alone, not sodmin.
 //!   * Sodmin device revoke flow itself: the admin route `POST
 //!     /api/admin/v1/accounts/{account_id}/devices/{device_id}/revoke` exists in coauth (per

@@ -144,11 +144,11 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
             "--name",
             &container_name,
             "-e",
-            "POSTGRES_USER=contrix",
+            "POSTGRES_USER=cokret",
             "-e",
-            "POSTGRES_PASSWORD=contrix",
+            "POSTGRES_PASSWORD=cokret",
             "-e",
-            "POSTGRES_DB=contrix",
+            "POSTGRES_DB=cokret",
             "-p",
             &format!("{host_port}:5432"),
             "postgres:16-alpine",
@@ -162,7 +162,7 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
     }
 
     let pg = EphemeralPg {
-        connect_url: format!("postgresql://contrix:contrix@127.0.0.1:{host_port}/contrix"),
+        connect_url: format!("postgresql://cokret:cokret@127.0.0.1:{host_port}/cokret"),
         container_name,
         cleanup: true,
     };
@@ -580,9 +580,9 @@ fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
                 &pg.container_name,
                 "pg_isready",
                 "-U",
-                "contrix",
+                "cokret",
                 "-d",
-                "contrix",
+                "cokret",
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -619,9 +619,9 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
     let docker = DOCKER.get_or_init(Cli::default);
 
     let image = GenericImage::new("postgres", "16-alpine")
-        .with_env_var("POSTGRES_USER", "contrix")
-        .with_env_var("POSTGRES_PASSWORD", "contrix")
-        .with_env_var("POSTGRES_DB", "contrix")
+        .with_env_var("POSTGRES_USER", "cokret")
+        .with_env_var("POSTGRES_PASSWORD", "cokret")
+        .with_env_var("POSTGRES_DB", "cokret")
         .with_wait_for(WaitFor::message_on_stderr(
             "database system is ready to accept connections",
         ));
@@ -634,7 +634,7 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
     std::mem::forget(container);
 
     let pg = EphemeralPg {
-        connect_url: format!("postgresql://contrix:contrix@127.0.0.1:{host_port}/contrix"),
+        connect_url: format!("postgresql://cokret:cokret@127.0.0.1:{host_port}/cokret"),
         container_name,
         cleanup: true,
     };

@@ -9,7 +9,7 @@
 //! Rules are grouped below by the protocol surface they guard. They are
 //! intentionally conservative (false negatives are acceptable; false
 //! positives must remain rare). Spec-side counterparts live in
-//! `contrix-spec/tools/lint_artifacts.py::check_*`.
+//! `cokret-spec/tools/lint_artifacts.py::check_*`.
 //!
 //! ## DID method segment
 //! * **`LegacyDidMethodSegment`** — DID strings whose method-name segment (between `did:` and the
@@ -872,7 +872,7 @@ mod tests {
 
     #[test]
     fn flags_discussion_space_ref() {
-        let f = scan("let json = r##\"{\"discussion_space_ref\":\"cx:realm:...\"}\"##;");
+        let f = scan("let json = r##\"{\"discussion_space_ref\":\"ck:realm:...\"}\"##;");
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::ForbiddenWireField)

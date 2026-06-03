@@ -11,10 +11,10 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/governance/content-moderation.md` §4 — Personal blocklist 概念、与 quarantine 的边界
-- `contrix-spec/spec/v1/zh/governance/content-moderation.md` §5 — Mute vs block 语义差异
-- `contrix-spec/spec/v1/zh/governance/content-moderation.md` §6 — Federation 中的 block propagation(server hint,非 PII 泄露)
-- `contrix-spec/spec/v1/zh/discovery/client-preferences.md` §2 — account_data 写 blocklist entry 的 schema(`cx.account.blocklist`)
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §4 — Personal blocklist 概念、与 quarantine 的边界
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5 — Mute vs block 语义差异
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §6 — Federation 中的 block propagation(server hint,非 PII 泄露)
+- `cokret-spec/spec/v1/zh/discovery/client-preferences.md` §2 — account_data 写 blocklist entry 的 schema(`cx.account.blocklist`)
 
 ## 拓扑
 

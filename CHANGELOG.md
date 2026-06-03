@@ -2,29 +2,29 @@
 
 All notable changes to **cotest** are documented here.
 
-## R3.4 — Spec sync 2026-05-31 (contrix-spec @ c2848a4)
+## R3.4 — Spec sync 2026-05-31 (cokret-spec @ c2848a4)
 
-- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `cx:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
+- Synced protocol-facing names and fixtures to `c2848a4`: event envelope schema naming, `_ids` grant constraints, accountability principal vocabulary, `ck:rtc_participant:` media participants, agent session start fields, and key-backup signature algorithm naming where applicable.
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 
-## R3.3 — Spec sync 2026-05-28 (contrix-spec @ cced4b8)
+## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
 
 ### CXP-0011 — object addressing + `cx.directory.resolve_target`
 
 - OA-COT-1..4: eleven `cx.vector.object_addressing.*` conformance vectors over the SDK's object-addressing surface (`contrix_core::model::*`), driven from `src/conformance/object_addressing_vectors.rs`:
-  - **OA-COT-1 (grammar, 4 cases)** — `web+contrix:` ⇄ HTTPS-fragment equivalence (both envelopes parse to the same `ParsedAddress`; built landing/scheme forms round-trip); realm-only / flow / message hierarchy forms; fail-closed on unknown keyword, wrong hierarchy order, and flow|message missing `via`; `<realm>` disambiguation (UUIDv7 → `RealmRef::RealmId`, dotted/domain → `RealmRef::Alias`).
+  - **OA-COT-1 (grammar, 4 cases)** — `web+cokret:` ⇄ HTTPS-fragment equivalence (both envelopes parse to the same `ParsedAddress`; built landing/scheme forms round-trip); realm-only / flow / message hierarchy forms; fail-closed on unknown keyword, wrong hierarchy order, and flow|message missing `via`; `<realm>` disambiguation (UUIDv7 → `RealmRef::RealmId`, dotted/domain → `RealmRef::Alias`).
   - **OA-COT-2 (`target_digest` stability, 3 cases)** — adding/removing `via` / `action` / `tok` / `lt` on the same identity tuple does NOT change the digest; switching `flow_id` / `message_id` (or promoting realm→flow→message) DOES; the digest is computed over the OMITTED-key canonical shape, not a `null` shape.
   - **OA-COT-3 (scope confusion, 2 cases)** — an object-A token fails `verify_token_target` against an object-B address (cross-object replay rejected); the token's `link_type` wins over a disagreeing URL `lt` hint via the `effective_link_type` argument (no reference→invite upgrade).
   - **OA-COT-4 (`resolve_target` shape, 2 cases)** — `DirectoryResolveTargetResBody` deserializes the §9.1 common fields (`as_of`, `source_refs`, `via_services`) + `target_kind`; a realm target carries `realm_preview` (pure (de)serialization, no live server).
 - OA-COT-5: `test_oa_cot_5_share_resolve_open_live` scaffold — live share→resolve→open integration gated `#[ignore]` pending teabay's flow/message access-gate.
-- Consumes the base SDK at `../contrix-rust-sdk` @ cf6b640 via local path-deps (no SDK changes).
+- Consumes the base SDK at `../cokret-rust-sdk` @ cf6b640 via local path-deps (no SDK changes).
 
 > No version tag, no crates.io / Docker Hub / npm publish — git commit only.
 
-## R3 — Spec sync 2026-05-27 (contrix-spec @ b47ff6ec)
+## R3 — Spec sync 2026-05-27 (cokret-spec @ b47ff6ec)
 
-- VECT-MB-1..9: nine `cx.vector.media_binding.*` conformance vectors covering oldest-membership focus selection, write-once `session_focus`, minimal token shape (`participant_binding.v1`, TTL `<=600s`), unauthorised issuer, missing / invalid binding, unknown focus type, MLS-Exporter-only E2EE key source, unrecognised participant identity, and recording artifacts via Contrix blob.
+- VECT-MB-1..9: nine `cx.vector.media_binding.*` conformance vectors covering oldest-membership focus selection, write-once `session_focus`, minimal token shape (`participant_binding.v1`, TTL `<=600s`), unauthorised issuer, missing / invalid binding, unknown focus type, MLS-Exporter-only E2EE key source, unrecognised participant identity, and recording artifacts via Cokret blob.
 - VECT-AG-1..5 / VECT-SC-1..4: full agent (`provision`, `pairing_expiry`, `controller_lifecycle`, `act_on_behalf`, `session_grant.replay`) and sidecar (`ensure_idempotent`, `eligibility_states`, `existence_privacy`, `multi_agent_publish`) vector sets.
 - VECT-CUR-1 / VECT-CUR-2 / FIX-1: cursor `core` vector now stateful and `stateless_profile` vector profile-gated; `fixtures/` extended with `recovery-policy.json`, `recovery-receipt.json`, `agent_payloads.json`.
 - TEST-1..6: scaffolded scenarios for agent FSM (active → paused → active → deactivated terminal), media token exchange happy + 4 negative paths, `accountable_principals.strict_reject` profile toggle, cursor opaque round-trip, recovery policy state machine, and handle homograph reject — live integrations gated `#[ignore]` pending R3.1 server wiring.
@@ -33,7 +33,7 @@ All notable changes to **cotest** are documented here.
 
 ## [Unreleased]
 
-### CXP-0007 Circle primitive rollout (contrix-spec `2b0d70d`)
+### CXP-0007 Circle primitive rollout (cokret-spec `2b0d70d`)
 
 - **Fixed (P2F.1)** — purged `discussion_realm_ref` from the e2e
   Playwright suite (`e2e/tests/messaging/discussion-upgrade.spec.ts`),
@@ -68,13 +68,13 @@ All notable changes to **cotest** are documented here.
   journey-coverage.json artifact upload). No release artefacts produced.
 - Notes: version number unchanged; this round is not released.
 
-### Round R4 — protocol review closures (2026-05-20, contrix-spec `2a4d39b..a77b995`)
+### Round R4 — protocol review closures (2026-05-20, cokret-spec `2a4d39b..a77b995`)
 
 Closes the round-4 protocol-review commits on the test-harness surface.
 See [`../_todos.md`](../_todos.md) for the workstream context.
 
 - **Added** 12 new executable security-closure vectors from
-  `contrix-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`:
+  `cokret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`:
   `federation.idempotency_after_key_revoke`,
   `webrtc.media_plaintext_downgrade`,
   `identity_link.eager_invalidation`,
@@ -92,7 +92,7 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
   exercised against `schema_ref`.
 - **Added** drift-validator allowlist updates — capability action
   `cx.morph.create`; error codes `delivery_binding_stale` /
-  `delivery_binding_handed_over` / `historical_only`; `cx:space:` joins
+  `delivery_binding_handed_over` / `historical_only`; `ck:space:` joins
   the `object_ref` id-kind context; new schema `$defs`
   (`EventsSubscribeFrame`, `SnapshotBootstrap`,
   `EventsFrontier{Account,Federation,AnonymousHealth}Response`,
@@ -107,11 +107,11 @@ See [`../_todos.md`](../_todos.md) for the workstream context.
 
 ### Added
 
-Track contrix-spec round 2+3 (commit range `f3c3bad..2a4d39b`, principal
+Track cokret-spec round 2+3 (commit range `f3c3bad..2a4d39b`, principal
 commit `8b7978d spec: round 2+3 cleanup`):
 
 - **15 new error codes** baseline-loaded from
-  `contrix-spec/spec/v1/artifacts/registry/error-code-registry.json`:
+  `cokret-spec/spec/v1/artifacts/registry/error-code-registry.json`:
   `relaxed_window_exceeds_ceiling`,
   `e2ee_relaxed_disallowed_in_compliance_profile`,
   `cross_domain_replay_rejected`, `reset_event_id_mismatch`,
@@ -127,8 +127,8 @@ commit `8b7978d spec: round 2+3 cleanup`):
   `cx.schema.moderation_appeal.v1`,
   `cx.schema.attestation_evidence.v1` auto-picked from the schema
   registry.
-- **2 new typed ID kinds**: `cx:trust_domain:<scope>` and
-  `cx:appeal:<uuidv7>` validated by the id-kind registry suite.
+- **2 new typed ID kinds**: `ck:trust_domain:<scope>` and
+  `ck:appeal:<uuidv7>` validated by the id-kind registry suite.
 - **2 new capability actions**: `cx.moderation.appeal.submit` and
   `cx.moderation.appeal.review`.
 - **`src/round23_rules.rs`** — structural literal-scanner rules:
@@ -160,8 +160,8 @@ commit `8b7978d spec: round 2+3 cleanup`):
 
 - Fixtures (`move-anchor-lattice-fixture`, `encoding-fixture`,
   `privacy-security-fixture`) are loaded directly from the
-  `contrix-spec` artifacts path; cotest does not mirror them locally,
-  so the round 2+3 refreshes (cursor `cx:realm:` ids and 2099
+  `cokret-spec` artifacts path; cotest does not mirror them locally,
+  so the round 2+3 refreshes (cursor `ck:realm:` ids and 2099
   timestamps) are picked up automatically.
 - Several new scenarios are stubs with `// TODO(round23-T<XX>)` markers
   pending downstream fixture wiring (soland reducers, SDK helpers, SFU
@@ -217,15 +217,15 @@ Scenarios still gated `#[ignore]` (need live-server fixtures):
 - `full_soland_consent_cascade_and_cache_invalidation` (T17)
 
 Also added `tests/round23_tree_scan.rs` — a manual `#[ignore]`
-driver that walks the contrix-dev sibling projects (soland, floria,
-chime, yougen, teabay, coauth, sodmin, starid, contrix-rust-sdk,
+driver that walks the cokret-dev sibling projects (soland, floria,
+chime, yougen, teabay, coauth, sodmin, starid, cokret-rust-sdk,
 e2e, logos) with `scan_tree_round23` and prints residual structural
 findings. Invoke with `cargo test --test round23_tree_scan --
 --ignored --nocapture`.
 
 Baseline note: `cargo test --test conformance_fixtures` still
 reports the **70 passed / 1 failed** pre-existing
-`artifact_registry_suite` failure (a `cx:trust_domain:did.webvh.example`
-non-UUIDv7 payload in a contrix-spec fixture file from before this
+`artifact_registry_suite` failure (a `ck:trust_domain:did.webvh.example`
+non-UUIDv7 payload in a cokret-spec fixture file from before this
 pass). That failure is unrelated to the round 2+3 scenario wiring
 and is not introduced or fixed here.

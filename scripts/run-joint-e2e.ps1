@@ -547,9 +547,9 @@ function Start-EphemeralPostgres {
         "--rm",
         "-d",
         "--name", $containerName,
-        "-e", "POSTGRES_USER=contrix",
-        "-e", "POSTGRES_PASSWORD=contrix",
-        "-e", "POSTGRES_DB=contrix",
+        "-e", "POSTGRES_USER=cokret",
+        "-e", "POSTGRES_PASSWORD=cokret",
+        "-e", "POSTGRES_DB=cokret",
         "-p", "127.0.0.1:$port`:5432",
         $Image
     )
@@ -560,12 +560,12 @@ function Start-EphemeralPostgres {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
-        $readyOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @("exec", $containerName, "pg_isready", "-U", "contrix", "-d", "contrix")
+        $readyOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @("exec", $containerName, "pg_isready", "-U", "cokret", "-d", "cokret")
         if ($LASTEXITCODE -eq 0) {
             return [pscustomobject]@{
                 ContainerName = $containerName
                 HostPort = $port
-                Url = "postgresql://contrix:contrix@127.0.0.1:$port/contrix"
+                Url = "postgresql://cokret:cokret@127.0.0.1:$port/cokret"
             }
         }
         $lastError = $readyOutput -join "`n"

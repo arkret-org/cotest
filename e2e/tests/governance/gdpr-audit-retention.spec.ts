@@ -315,8 +315,8 @@ test.describe("GDPR / audit / retention", () => {
             betaInvite = invites.find(
               (invite) =>
                 invite.invitee === bob.did &&
-                invite.space_id.replace(/^cx:space:/, "cx:realm:") ===
-                  spaceId.replace(/^cx:space:/, "cx:realm:"),
+                invite.space_id.replace(/^ck:space:/, "ck:realm:") ===
+                  spaceId.replace(/^ck:space:/, "ck:realm:"),
             );
             return Boolean(betaInvite);
           },

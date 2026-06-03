@@ -159,7 +159,7 @@ test.describe("world_readable history @fully-implemented", () => {
 });
 
 function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string, unknown> {
-  const realmId = `cx:realm:${uuidV7()}`;
+  const realmId = `ck:realm:${uuidV7()}`;
   const createdAt = canonicalTimestamp();
   const payload = {
     object: {
@@ -167,7 +167,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       schema: "cx.schema.realm.v1",
       title: `incompat ${Date.now()}`,
       created_by: actorDid,
-      trust_domain: "cx:trust_domain:soland.local",
+      trust_domain: "ck:trust_domain:soland.local",
       schema_refs: ["cx.schema.realm.v1"],
       default_discoverability: "listed",
       default_join_rule: "invite",
@@ -182,7 +182,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
     },
   };
   return {
-    event_id: `cx:event:${uuidV7()}`,
+    event_id: `ck:event:${uuidV7()}`,
     kind: "cx.realm.create",
     realm_id: realmId,
     actor_id: actorDid,

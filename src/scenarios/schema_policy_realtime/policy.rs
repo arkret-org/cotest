@@ -2,12 +2,12 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_api_error, expect_json};
+use crate::harness::{CokretServer, expect_api_error, expect_json};
 
 const REQUEST_HASH: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()> {
-    let server = ContrixServer::spawn("policy-documents").await?;
+    let server = CokretServer::spawn("policy-documents").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
@@ -35,7 +35,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     )
     .await?;
     let policy_id = policy["policy_id"].as_str().unwrap().to_owned();
-    assert!(policy_id.starts_with("cx:policy:"));
+    assert!(policy_id.starts_with("ck:policy:"));
     assert_eq!(policy["owner"], alice.actor);
 
     let listed = expect_json(
@@ -65,7 +65,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .http()
             .post(server.url("/api/v1/policy/check"))
             .json(&json!({
-                "request_id": "cx:request:policy-deny",
+                "request_id": "ck:request:policy-deny",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "cx.message.create",
                 "actor": bob.actor,
@@ -101,7 +101,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .http()
             .post(server.url("/api/v1/policy/check"))
             .json(&json!({
-                "request_id": "cx:request:policy-allow",
+                "request_id": "ck:request:policy-allow",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "cx.message.create",
                 "actor": bob.actor,

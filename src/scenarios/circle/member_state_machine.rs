@@ -37,7 +37,7 @@
 //! round-trip on the canonical `cx.circle.member.state` payload to keep
 //! the SDK wire shape stable.
 //!
-//! When `contrix-core` later grows a typed `CircleMemberState` enum, this
+//! When `cokret-core` later grows a typed `CircleMemberState` enum, this
 //! scenario should be migrated to import it directly and drop the local
 //! string-based state table.
 
@@ -137,12 +137,12 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
 }
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("cx:realm:0196419b-0000-7000-8000-000000000501".to_owned())
+    RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000501".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000502".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000502".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 

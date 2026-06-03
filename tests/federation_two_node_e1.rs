@@ -7,13 +7,13 @@
 //! helper (`TestServerGroup::try_multi_external`) so the test runs against
 //! the pre-built `soland.exe` without paying the `cargo run` startup cost
 //! per server. Locate the binary via `SOLAND_BIN=...` or by building the
-//! sibling `contrix-dev/soland` checkout.
+//! sibling `cokret-dev/soland` checkout.
 //!
 //! C35.2 promoted the test out of `#[ignore]`: the in-scenario binary lookup
 //! silently returns `Ok(())` when neither `SOLAND_BIN` is set nor the
 //! sibling-checkout binary exists, so CI runners without a built soland skip
 //! cleanly rather than failing. The `device_id` fixture was also rewritten
-//! to use a runtime-minted `cx:device:<uuidv7>` per `contrix_identifiers`
+//! to use a runtime-minted `ck:device:<uuidv7>` per `contrix_identifiers`
 //! `is_strict_typed_id` validation.
 
 use anyhow::Result;

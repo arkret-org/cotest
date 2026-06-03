@@ -80,7 +80,7 @@ export async function createSpaceViaApi(
           title: opts.title,
           summary: opts.summary,
           created_by: opts.ownerDid!,
-          trust_domain: "cx:trust_domain:soland.local",
+          trust_domain: "ck:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability: "public",
           default_join_rule: "invite",
@@ -216,7 +216,7 @@ export async function sendPlaintextMessageViaApi(
     realmId: spaceId,
     kind: "cx.message.create",
     payload: {
-      flow_id: `cx:flow:${spaceId.replace(/^cx:(realm|space):/, "")}`,
+      flow_id: `ck:flow:${spaceId.replace(/^ck:(realm|space):/, "")}`,
       track_name: "discussion",
       content: {
         kind: "cx.content.text",

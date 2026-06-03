@@ -6,9 +6,9 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/governance/content-moderation.md` — moderation appeal 和职责分离
-- `contrix-spec/spec/v1/zh/models/governance-objects.md` — moderation decision / appeal event family
-- `contrix-spec/spec/v1/zh/sync/operations-sync.md` — durable event / state transition 语义
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` — moderation appeal 和职责分离
+- `cokret-spec/spec/v1/zh/models/governance-objects.md` — moderation decision / appeal event family
+- `cokret-spec/spec/v1/zh/sync/operations-sync.md` — durable event / state transition 语义
 
 ## 拓扑
 

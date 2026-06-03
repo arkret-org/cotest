@@ -3,7 +3,7 @@
 //! Each constant lists the **new** identifiers introduced by the spec
 //! change set (`2a4d39b..a77b9958e3c6535a39bf468d661a23ae5d38cb10`).
 //! The pinned sets are cross-checked against the live canonical registry
-//! files inside `contrix-spec` so any drop / rename / typo fails cotest
+//! files inside `cokret-spec` so any drop / rename / typo fails cotest
 //! loudly.
 //!
 //! Surfaces refreshed:
@@ -11,7 +11,7 @@
 //! * **capability action allowlist**: `cx.morph.create`
 //! * **error code allowlist**: `delivery_binding_stale`, `delivery_binding_handed_over`,
 //!   `historical_only`
-//! * **id_kind allowlist** for `object_ref` context: `cx:space:` joins the accepted set
+//! * **id_kind allowlist** for `object_ref` context: `ck:space:` joins the accepted set
 //! * **schema $defs / OpenAPI component allowlist**: `EventsSubscribeFrame`, `SnapshotBootstrap`,
 //!   `EventsFrontierAccountClientResponse`, `EventsFrontierFederationPeerResponse`,
 //!   `EventsFrontierAnonymousHealthResponse`, `PolicyCheckRequest`, `PolicyCheckResponse`,
@@ -164,7 +164,7 @@ fn check_schema_defs_present(required: &[&str]) -> Result<()> {
     // Also accept identifiers that appear in the OpenAPI components map
     // (some round-4 names are OpenAPI-side, e.g. EventsSubscribeFrame can
     // double-up as both).
-    if let Ok(openapi) = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml") {
+    if let Ok(openapi) = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml") {
         if let Some(components) = openapi
             .get("components")
             .and_then(|c| c.get("schemas"))
@@ -188,7 +188,7 @@ fn check_schema_defs_present(required: &[&str]) -> Result<()> {
 }
 
 fn check_openapi_components_present(required: &[&str]) -> Result<()> {
-    let openapi = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml")?;
+    let openapi = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml")?;
     let components = openapi
         .get("components")
         .and_then(|c| c.get("schemas"))

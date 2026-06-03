@@ -9,13 +9,13 @@
 //!
 //! C33.4 wired the spawn through the reusable `external_binary` helper:
 //! `TestServerGroup::try_multi_external` resolves `SOLAND_BIN` (or sibling-
-//! checkout `contrix-dev/soland/target/debug/soland[.exe]`) and spawns the
+//! checkout `cokret-dev/soland/target/debug/soland[.exe]`) and spawns the
 //! pre-built binary directly — no `cargo run` slow path. When neither is
 //! available the scenario silently returns `Ok(())` so CI runners that have
 //! not built soland do not flake.
 //!
 //! C35.2 fixed the `device_id` fixture to use a wire-canonical
-//! `cx:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
+//! `ck:device:<uuidv7>` (was `"device-alice-e2"`, which the strict
 //! `contrix_identifiers::DeviceId` validator rejects), confirmed the actor
 //! registration + space-create + message-send round-trip succeeds against
 //! a real soland, and removed the wrapper's `#[ignore]` so default
@@ -39,7 +39,7 @@ use crate::harness::{TestServerGroup, expect_json, expect_response};
 ///   5. server_b's `/api/v1/federation/anchors` reports the pushed leaves
 ///
 /// Returns `Ok(())` early when neither `SOLAND_BIN` is set nor a sibling
-/// `contrix-dev/soland/target/debug/soland[.exe]` exists (silent skip path).
+/// `cokret-dev/soland/target/debug/soland[.exe]` exists (silent skip path).
 pub async fn two_node_federation_harness_starts() -> Result<()> {
     let Some(group) = TestServerGroup::try_multi_external("e2-federation-two-node", 2).await?
     else {
@@ -72,11 +72,11 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     );
 
     // ── Step 2: actor + space + message Move on server_a ────────────────
-    // C35.2 — `device_id` MUST be a canonical Contrix wire DeviceId
-    // (`cx:device:<uuidv7>`) per `contrix_identifiers::DeviceId`. Mint a
+    // C35.2 — `device_id` MUST be a canonical Cokret wire DeviceId
+    // (`ck:device:<uuidv7>`) per `contrix_identifiers::DeviceId`. Mint a
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
-    let device_alice = new_prefixed_uuid7("cx:device:");
+    let device_alice = new_prefixed_uuid7("ck:device:");
     let actor_a = server_a
         .register_client(
             "did:web:alice.e2.federation.cotest.local",

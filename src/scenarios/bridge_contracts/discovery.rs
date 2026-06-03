@@ -1,10 +1,10 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{ContrixServer, expect_json};
+use crate::harness::{CokretServer, expect_json};
 
 pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
-    let server = ContrixServer::spawn("bridge-contracts").await?;
+    let server = CokretServer::spawn("bridge-contracts").await?;
 
     let integration = expect_json(
         server
@@ -15,7 +15,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     .await?;
     assert_eq!(
         integration["contract"],
-        "contrix.rest.integration_manifest.v1"
+        "cokret.rest.integration_manifest.v1"
     );
     assert_eq!(integration["service"], "soland");
     assert_eq!(integration["service_kind"], "principal_server");
@@ -53,7 +53,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(auth_bridge["contract"], "contrix.rest.principal_bridge.v1");
+    assert_eq!(auth_bridge["contract"], "cokret.rest.principal_bridge.v1");
     assert_eq!(
         auth_bridge["auth"]["session_grant_exchange_path"],
         "/api/v1/auth/session-grant/exchange"
@@ -80,7 +80,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     .await?;
     assert_eq!(
         push_bridge["contract"],
-        "contrix.rest.outbound_push_bridge.v1"
+        "cokret.rest.outbound_push_bridge.v1"
     );
     assert_eq!(
         push_bridge["gateway_contract"]["resolve_path"],

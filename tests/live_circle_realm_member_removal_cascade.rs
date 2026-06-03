@@ -95,11 +95,11 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .register_client("did:web:x.cxp0007.example", "@xeno", "dev_x")
         .await?;
 
-    let realm_id = RealmId::new("cx:realm:0196419b-0000-7000-8000-cxp0007memb01".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007memb01".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let alpha_id = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007alpha".to_owned())
+    let alpha_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007alpha".to_owned())
         .map_err(|e| anyhow!("alpha id: {e}"))?;
-    let beta_id = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007beta0".to_owned())
+    let beta_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007beta0".to_owned())
         .map_err(|e| anyhow!("beta id: {e}"))?;
 
     // Build SDK Circle structs so the wire payload's schema id, display,

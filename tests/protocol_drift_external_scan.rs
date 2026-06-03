@@ -21,14 +21,14 @@ use std::path::PathBuf;
 use cotest::literal_scanner::scan_tree_protocol_drift;
 
 /// Gating: manual operator scan over sibling project trees — uses
-/// `CONTRIX_DEV_ROOT` (default `D:\Works\contrix-dev`); not a CI gate.
+/// `CONTRIX_DEV_ROOT` (default `D:\Works\cokret-dev`); not a CI gate.
 #[test]
 #[ignore = "manual: cargo test --test protocol_drift_external_scan -- --ignored --nocapture"]
 fn protocol_drift_external_scan_all_projects() {
     let dev_root = std::env::var("CONTRIX_DEV_ROOT")
         .ok()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"D:\Works\contrix-dev"));
+        .unwrap_or_else(|| PathBuf::from(r"D:\Works\cokret-dev"));
     assert!(
         dev_root.exists(),
         "dev root does not exist: {}",
@@ -36,7 +36,7 @@ fn protocol_drift_external_scan_all_projects() {
     );
 
     let projects = [
-        "contrix-rust-sdk",
+        "cokret-rust-sdk",
         "soland",
         "coauth",
         "sodmin",

@@ -80,8 +80,8 @@ async function waitForInvite(
         found = invites.find(
           (invite) =>
             invite.invitee === inviteeDid &&
-            invite.space_id.replace(/^cx:space:/, "cx:realm:") ===
-              spaceId.replace(/^cx:space:/, "cx:realm:"),
+            invite.space_id.replace(/^ck:space:/, "ck:realm:") ===
+              spaceId.replace(/^ck:space:/, "ck:realm:"),
         );
         return Boolean(found);
       },
@@ -158,7 +158,7 @@ test.describe("cross-server federation", () => {
     expect(pushProbe.status()).not.toBe(404);
 
     const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/api/v1/federation/pull-operations?space_id=cx:space:probe`,
+      `${solandBaseUrl("beta")}/api/v1/federation/pull-operations?space_id=ck:space:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
   });
@@ -330,7 +330,7 @@ test.describe("cross-server federation", () => {
       ),
     ).toHaveLength(1);
 
-    const projectedRealmId = spaceId.replace(/^cx:space:/, "cx:realm:");
+    const projectedRealmId = spaceId.replace(/^ck:space:/, "ck:realm:");
     const invites = await listInvitesApi(request, bobToken, { server: "beta" });
     const invite = invites.find(
       (item) =>

@@ -1,8 +1,8 @@
 # cotest Test Strategy
 
-`cotest` is a black-box Contrix server conformance suite. Each scenario starts
+`cotest` is a black-box Cokret server conformance suite. Each scenario starts
 the server processes it needs, creates test actors through public APIs, and
-asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
+asserts only public HTTP behavior plus limited `cokret-rust-sdk` smoke paths.
 
 ## Harness Model
 
@@ -22,7 +22,7 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
   the project remains the test harness, not a pile of ad hoc integration files.
 - The harness now supports both local process spawning and Docker-backed SUT
   spawning from the same scenario code.
-- `ContrixServer` is the one-instance lifecycle unit; `TestServerGroup` is the
+- `CokretServer` is the one-instance lifecycle unit; `TestServerGroup` is the
   multi-instance lifecycle unit.
 - In Docker mode, `TestServerGroup::multi` creates one isolated network per
   scenario group so federated tests exercise real cross-container addressing
@@ -77,7 +77,7 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 
 ## SDK Usage Policy
 
-- Use `contrix-rust-sdk` for typed protocol objects, commit construction, and
+- Use `cokret-rust-sdk` for typed protocol objects, commit construction, and
   generic client smoke coverage.
 - Prefer raw HTTP assertions for authoritative server-contract checks when the
   current SDK wire model lags the server's live JSON surface.
@@ -213,7 +213,7 @@ The coauth/soland test mapping is fixed by the runner:
 
 - soland audience/service DID: `did:web:soland.joint-e2e.local`
 - coauth service/issuer DID: `did:web:coauth.joint-e2e.local`
-- coauth publishes soland under `contrix.principal_servers`
+- coauth publishes soland under `cokret.principal_servers`
 - soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
 - soland introspects session grants at
   `<coauth>/api/v1/session-grants/introspect`
@@ -315,20 +315,20 @@ comment for temporary local regression containment.
 ## Per-test state isolation
 
 CT-12 (2026-05-18): cotest already gives each scenario complete state
-isolation through the per-spawn lifecycle in `ContrixServer`:
+isolation through the per-spawn lifecycle in `CokretServer`:
 
-- `ContrixServer::spawn*` allocates a fresh `127.0.0.1:<free-port>`, a
+- `CokretServer::spawn*` allocates a fresh `127.0.0.1:<free-port>`, a
   fresh `temp_dir().join("cotest-{name}-{port}-blobs")` blob root, and a
   fresh `did:web:{name}.cotest.local` service DID per call.
 - `soland` keeps `AccountRecord`, `SpaceMetaRecord`, and
   `ProjectionState` in process-local memory — there is no shared database
   or filesystem anchor that survives the per-test process drop.
-- `Drop for ContrixServer` kills the spawned child (or removes the docker
+- `Drop for CokretServer` kills the spawned child (or removes the docker
   container) and deletes the blob root.
 - `TestServerGroup::multi` extends the same per-process isolation across
   every node in a federation scenario.
 
-That means a fresh `ContrixServer::spawn(label)` is already equivalent to
+That means a fresh `CokretServer::spawn(label)` is already equivalent to
 "per-test fresh DB / state snapshot" — there is no shared `AccountRecord`
 or `SpaceMetaRecord` to snapshot and restore because the records never
 outlive the spawned process. The only process-global state cotest itself
@@ -341,14 +341,14 @@ interleaved when several tests run in parallel).
 
 `src/fixtures/scaffold.rs` ships `TestScaffold::fresh(label)` and
 `TestScaffold::fresh_multi(label, count)`, ergonomic wrappers over
-`ContrixServer::spawn` / `TestServerGroup::multi` that suffix the label
+`CokretServer::spawn` / `TestServerGroup::multi` that suffix the label
 with a `p<pid>-<seq>` token. The suffix guarantees that two parallel
 runs of the same scenario produce distinct service DIDs, transcript
 files, per-service log files, and on-disk blob roots without the
 scenario author having to coordinate names.
 
 Recommended migration cadence: when a scenario is touched for any other
-reason, swap `ContrixServer::spawn(label)` →
+reason, swap `CokretServer::spawn(label)` →
 `TestScaffold::fresh(label).server()`. Drop the surrounding
 `#[serial]` only after auditing that the test does not depend on the
 process-shared `transcript.ndjson` ordering — most scenarios do not.
@@ -475,7 +475,7 @@ gap-coverage gaps deferred to R4.
   stubbed vectors flip to active.
 - **Live media-backend conformance** — call_media vectors run against
   the SDK's typed builders and a soland-stub backend. Live LiveKit /
-  Mediasoup / Janus / Contrix-native conformance is gated on R4 and
+  Mediasoup / Janus / Cokret-native conformance is gated on R4 and
   marked `#[ignore]` in the suite (see `docs/local-stub-runs.md`).
 
 ### Vector ↔ error-code map

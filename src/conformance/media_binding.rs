@@ -1,4 +1,4 @@
-//! R3 spec-sync (contrix-spec @ b47ff6ec) — CXP-0010 media-binding
+//! R3 spec-sync (cokret-spec @ b47ff6ec) — CXP-0010 media-binding
 //! conformance vectors.
 //!
 //! 9 vectors covering [§0.11 of `_before_todos.md`]:
@@ -71,12 +71,12 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
 /// Known media-backend type tags from `cx.realm.media_service.foci[].type`.
 /// Mirrors `contrix_sdk::media::MediaBackendType` enum (R3 SDK feature
 /// `full-surface`) — kept local so the vector suite runs under cotest's
-/// minimal `contrix-core` dep slice.
+/// minimal `cokret-core` dep slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
     "livekit",
     "mediasoup",
     "janus",
-    "contrix-native",
+    "cokret-native",
     "moq-relay",
 ];
 
@@ -116,12 +116,12 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
     let alice = CallMember {
         actor_id: "did:web:alice.example",
         joined_at_unix_ms: 1_700_000_000_000,
-        foci_preferred: &["focus.livekit.lhr", "focus.contrix.lhr"],
+        foci_preferred: &["focus.livekit.lhr", "focus.cokret.lhr"],
     };
     let bob = CallMember {
         actor_id: "did:web:bob.example",
         joined_at_unix_ms: 1_700_000_005_000,
-        foci_preferred: &["focus.contrix.lhr", "focus.livekit.lhr"],
+        foci_preferred: &["focus.cokret.lhr", "focus.livekit.lhr"],
     };
     let expected_focus = alice.foci_preferred[0];
     let members = [alice, bob];
@@ -164,7 +164,7 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
     let mut cell = SessionFocusCell::default();
     cell.commit("focus.livekit.lhr")
         .map_err(|e| anyhow!("first commit unexpectedly failed: {e}"))?;
-    let second = cell.commit("focus.contrix.lhr");
+    let second = cell.commit("focus.cokret.lhr");
     match second {
         Err(code) if code == ERROR_CODE_SESSION_FOCUS_ALREADY_COMMITTED => {}
         other => bail!("second write must surface session_focus_already_committed, got {other:?}"),
@@ -363,14 +363,14 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
     // The backend MUST signal only identities that match an entry in
     // `cx.call.state.participants[]`. Unknown identities fail closed
     // — clients MUST NOT trust them.
-    let known: &[&str] = &["cx:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
-    let unknown = "cx:rtc_participant:01999999-0000-7000-8000-deadbeefdead";
+    let known: &[&str] = &["ck:rtc_participant:01999999-0000-7000-8000-00000000abcd"];
+    let unknown = "ck:rtc_participant:01999999-0000-7000-8000-deadbeefdead";
     if known.contains(&unknown) {
         bail!("participant identity leak: unknown id in known set");
     }
-    // `rtc_participant` id-kind MUST keep the canonical `cx:rtc_participant:` prefix.
+    // `rtc_participant` id-kind MUST keep the canonical `ck:rtc_participant:` prefix.
     for id in known {
-        if !id.starts_with("cx:rtc_participant:") {
+        if !id.starts_with("ck:rtc_participant:") {
             bail!("rtcpart id lost canonical prefix: {id}");
         }
     }
@@ -385,14 +385,14 @@ pub fn run_recording_artifact_via_contrix_blob_vector() -> Result<()> {
             "ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
         );
     }
-    // Egress MUST land on a Contrix blob endpoint. Direct S3 / GCS
+    // Egress MUST land on a Cokret blob endpoint. Direct S3 / GCS
     // / arbitrary http upload is bypass.
     let is_contrix_blob = |url: &str| {
         url.starts_with("https://")
-            && (url.contains("/_matrix/contrix/v1/media") || url.contains("/contrix/v1/media"))
+            && (url.contains("/_matrix/cokret/v1/media") || url.contains("/cokret/v1/media"))
     };
-    if !is_contrix_blob("https://server.example/contrix/v1/media/upload") {
-        bail!("legit contrix blob endpoint not accepted");
+    if !is_contrix_blob("https://server.example/cokret/v1/media/upload") {
+        bail!("legit cokret blob endpoint not accepted");
     }
     for bad in [
         "https://s3.amazonaws.com/bucket/recording.mp4",
@@ -400,7 +400,7 @@ pub fn run_recording_artifact_via_contrix_blob_vector() -> Result<()> {
         "https://storage.googleapis.com/foo",
     ] {
         if is_contrix_blob(bad) {
-            bail!("non-contrix egress endpoint `{bad}` leaked past pipeline check");
+            bail!("non-cokret egress endpoint `{bad}` leaked past pipeline check");
         }
     }
     Ok(())

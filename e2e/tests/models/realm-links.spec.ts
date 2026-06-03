@@ -55,7 +55,7 @@ test.describe("realm links", () => {
         expect(govRes.status()).toBe(201);
         const govBody = await govRes.json();
         const govRealmId: string = govBody.realm_id;
-        expect(govRealmId).toMatch(/^cx:realm:/);
+        expect(govRealmId).toMatch(/^ck:realm:/);
 
         await request.post(`${solandBaseUrl()}/api/v1/realms/${govRealmId}/events`, {
           headers: aliceAuth,

@@ -97,8 +97,8 @@ test.describe("workflow: kanban week-in-review", () => {
         .getAttribute("data-flow-id");
       const prFlowIdValue = prFlowId ?? "";
       const specFlowIdValue = specFlowId ?? "";
-      expect(prFlowIdValue).toMatch(/^cx:flow:/);
-      expect(specFlowIdValue).toMatch(/^cx:flow:/);
+      expect(prFlowIdValue).toMatch(/^ck:flow:/);
+      expect(specFlowIdValue).toMatch(/^ck:flow:/);
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
       // Phase C — archive two finished tasks.
@@ -160,7 +160,7 @@ test.describe("workflow: kanban week-in-review", () => {
       const todayListId = await today
         .getByTestId("list-archive-button")
         .getAttribute("data-space-container-id");
-      expect(todayListId ?? "").toMatch(/^cx:space:/);
+      expect(todayListId ?? "").toMatch(/^ck:space:/);
       await expect
         .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue))
         .toBe("active");

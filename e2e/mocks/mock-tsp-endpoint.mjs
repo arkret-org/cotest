@@ -1,12 +1,12 @@
 // Mock TSP endpoint — simulates a remote Trust Spanning Protocol endpoint
-// for cross-VID messaging (spec: contrix-spec/spec/v1/zh/identity/
+// for cross-VID messaging (spec: cokret-spec/spec/v1/zh/identity/
 // tsp-integration.md).
 //
 // TSP is the trusted message channel that bridges heterogeneous VID
 // systems. In the joint-e2e harness, this mock plays the role of an
 // *external* organization's TSP endpoint: soland (or another local
 // service) bootstraps a TSP relationship against this mock, then exchanges
-// Contrix-over-TSP envelopes that carry `cx.*` operations across the
+// Cokret-over-TSP envelopes that carry `cx.*` operations across the
 // trust boundary.
 //
 // The mock fakes two stages of the TSP contract:

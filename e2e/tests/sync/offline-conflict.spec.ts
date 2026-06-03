@@ -130,7 +130,7 @@ test.describe("offline sync + conflict repair", () => {
       });
       await fixture.bobPage.page.getByTestId("prefer-safer-side-button").click();
       await expect(fixture.bobPage.page.getByTestId("repair-target-cell-input")).toHaveValue(
-        /cx:cell:cx\.component\.realm\.organization\.v1:/,
+        /ck:cell:cx\.component\.realm\.organization\.v1:/,
       );
       await expect(fixture.bobPage.page.getByTestId("repair-winner-json-input")).toHaveValue(
         new RegExp(fixture.aliceTitle),
@@ -199,7 +199,7 @@ async function createBottomConflictFixture(
       historyVisibility: "shared",
     },
   );
-  const basis = `cx:anchor:sha256:${"0".repeat(64)}`;
+  const basis = `ck:anchor:sha256:${"0".repeat(64)}`;
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
   await submitRealmTitleUpdate(request, aliceToken, alice.did, spaceId, aliceTitle, basis);

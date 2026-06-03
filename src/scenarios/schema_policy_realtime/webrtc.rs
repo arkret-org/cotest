@@ -2,10 +2,10 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_api_error, expect_json};
+use crate::harness::{CokretServer, expect_api_error, expect_json};
 
 pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
-    let server = ContrixServer::spawn("webrtc-signaling").await?;
+    let server = CokretServer::spawn("webrtc-signaling").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
@@ -16,7 +16,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
         .register_client("did:web:dave-webrtc.example", "@dave-webrtc", "dev_dave")
         .await?;
 
-    let space_id = "cx:realm:0196419b-0000-7000-8000-000000000000";
+    let space_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
 
     expect_api_error(
         dave.post("/api/v1/webrtc/sessions").json(&json!({
@@ -38,7 +38,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
     )
     .await?;
     let session_id = session["session_id"].as_str().unwrap().to_owned();
-    assert!(session_id.starts_with("cx:call:"));
+    assert!(session_id.starts_with("ck:call:"));
     assert_eq!(session["participants"].as_array().unwrap().len(), 1);
 
     expect_api_error(

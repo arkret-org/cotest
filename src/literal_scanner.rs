@@ -1,7 +1,7 @@
-//! Repo-level literal scanner for Contrix v1 protocol-drift detection.
+//! Repo-level literal scanner for Cokret v1 protocol-drift detection.
 //!
 //! Loads removed / deprecated / forbidden artifact registries from
-//! `contrix-spec/spec/v1/artifacts/registry/*.json` (path overridable via
+//! `cokret-spec/spec/v1/artifacts/registry/*.json` (path overridable via
 //! `CONTRIX_SPEC_DIR`) and walks a downstream tree looking for occurrences of:
 //!
 //! * `cx.*` event-kind or operation-id literals listed as removed
@@ -16,9 +16,9 @@
 //! * **Path glob** — file path matches one of `**/compat/**`, `**/interop_matrix/**`,
 //!   `**/legacy_negative/**`, `**/legacy_migration/**`, `**/changelog/**`, `**/CHANGELOG*`,
 //!   `**/migrations/**`.
-//! * **Magic comment** — anywhere in the file, a line `// contrix-allow: <artifact_id>` (or `#
-//!   contrix-allow: ...` / `<!-- contrix-allow: ... -->`) exempts that specific id.
-//! * **Wildcard magic comment** — `// contrix-allow: *` exempts every artifact inside that file
+//! * **Magic comment** — anywhere in the file, a line `// cokret-allow: <artifact_id>` (or `#
+//!   cokret-allow: ...` / `<!-- cokret-allow: ... -->`) exempts that specific id.
+//! * **Wildcard magic comment** — `// cokret-allow: *` exempts every artifact inside that file
 //!   (use sparingly; only for whole-file legacy fixtures).
 //!
 //! The scanner is intentionally a single-crate module so the binary
@@ -138,14 +138,14 @@ impl ArtifactRule {
 // ── Loader ──────────────────────────────────────────────────────────────────
 
 /// Resolve the spec directory. Honors `CONTRIX_SPEC_DIR` env var first, then
-/// falls back to `<cotest crate root>/../contrix-spec`.
+/// falls back to `<cotest crate root>/../cokret-spec`.
 pub fn resolve_spec_dir() -> PathBuf {
     if let Some(value) = std::env::var_os("CONTRIX_SPEC_DIR") {
         return PathBuf::from(value);
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
-        .join("contrix-spec")
+        .join("cokret-spec")
 }
 
 /// Build the absolute path to the `registry/` directory containing the
@@ -405,21 +405,21 @@ fn allowed_path_reason(path: &Path) -> Option<&'static str> {
 }
 
 /// Extract magic-comment allowlist tokens from the file's contents. Recognizes
-/// `// contrix-allow:`, `# contrix-allow:`, `<!-- contrix-allow:`. A bare `*`
+/// `// cokret-allow:`, `# cokret-allow:`, `<!-- cokret-allow:`. A bare `*`
 /// means the entire file is allowlisted.
 fn magic_allow_tokens(contents: &str) -> BTreeSet<String> {
     let mut tokens = BTreeSet::new();
     for line in contents.lines() {
         let trimmed = line.trim();
-        let payload = if let Some(rest) = trimmed.strip_prefix("// contrix-allow:") {
+        let payload = if let Some(rest) = trimmed.strip_prefix("// cokret-allow:") {
             Some(rest.trim().trim_end_matches("*/").trim())
-        } else if let Some(rest) = trimmed.strip_prefix("# contrix-allow:") {
+        } else if let Some(rest) = trimmed.strip_prefix("# cokret-allow:") {
             Some(rest.trim())
-        } else if let Some(rest) = trimmed.strip_prefix("<!-- contrix-allow:") {
+        } else if let Some(rest) = trimmed.strip_prefix("<!-- cokret-allow:") {
             Some(rest.trim().trim_end_matches("-->").trim())
         } else {
             trimmed
-                .strip_prefix("/* contrix-allow:")
+                .strip_prefix("/* cokret-allow:")
                 .map(|rest| rest.trim().trim_end_matches("*/").trim())
         };
         if let Some(payload) = payload {
@@ -773,7 +773,7 @@ mod tests {
         scan_file_contents(
             Path::new("src/foo.rs"),
             FileKind::Rust,
-            "// contrix-allow: cx.flow.track.member\nlet k = \"cx.flow.track.member\";\n",
+            "// cokret-allow: cx.flow.track.member\nlet k = \"cx.flow.track.member\";\n",
             &dummy_rules(),
             &mut out,
         );

@@ -2,10 +2,10 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{ContrixServer, expect_json};
+use crate::harness::{CokretServer, expect_json};
 
 pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
-    let server = ContrixServer::spawn_with_env(
+    let server = CokretServer::spawn_with_env(
         "starid-optional",
         &[
             ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,key,webvh"),
@@ -79,7 +79,7 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     assert!(
         external_root["expected_trust_domain"]
             .as_str()
-            .is_some_and(|trust_domain| trust_domain.starts_with("cx:trust_domain:")),
+            .is_some_and(|trust_domain| trust_domain.starts_with("ck:trust_domain:")),
         "external starid trust root must bind the expected trust domain: {external_root}"
     );
     assert!(

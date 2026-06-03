@@ -22,7 +22,7 @@ if (-not $DockerfilePath) {
 
 $requiredPaths = @(
     (Join-Path $WorkspaceRoot "soland"),
-    (Join-Path $WorkspaceRoot "contrix-rust-sdk"),
+    (Join-Path $WorkspaceRoot "cokret-rust-sdk"),
     $DockerfilePath
 )
 

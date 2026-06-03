@@ -1,4 +1,4 @@
-//! R3 spec-sync (contrix-spec @ b47ff6ec) — integration entrypoints for
+//! R3 spec-sync (cokret-spec @ b47ff6ec) — integration entrypoints for
 //! the new conformance vectors and scenario scaffolds. SDK-pure vector
 //! suites run unconditionally; integration-target scenarios are
 //! `#[ignore]`-gated on R3.1 reducer / signing wiring.
@@ -214,7 +214,7 @@ fn object_addressing_vector_suite_runs_clean() {
 #[ignore = "R3.3-followup: needs teabay flow/message access-gate"]
 fn test_oa_cot_5_share_resolve_open_live() {
     // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
-    //   1. Author shares a flow as `web+contrix:realm/<r>/flow/<f>?via=<teabay>
+    //   1. Author shares a flow as `web+cokret:realm/<r>/flow/<f>?via=<teabay>
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
     //   2. Recipient POSTs `cx.directory.resolve_target { address, token }`.
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
@@ -532,7 +532,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     };
     use contrix_core::{Did, EventId, Hash, RealmId};
 
-    let realm = RealmId::new("cx:realm:01904100-0000-7000-8000-000000007007")
+    let realm = RealmId::new("ck:realm:01904100-0000-7000-8000-000000007007")
         .map_err(|e| anyhow!("realm: {e}"))?;
     let alice = Did::new("did:web:alice.acme.example".to_owned())?;
     let subject = Did::new("did:web:alice.principal.example".to_owned())?;
@@ -565,8 +565,8 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     let v1 = make_identity("Alice v1")?;
     let v2 = make_identity("Alice v2 (display_name changed)")?;
-    let event_a = EventId::new("cx:event:01904100-0000-7000-8000-000000007a01")?;
-    let event_b = EventId::new("cx:event:01904100-0000-7000-8000-000000007a02")?;
+    let event_a = EventId::new("ck:event:01904100-0000-7000-8000-000000007a01")?;
+    let event_b = EventId::new("ck:event:01904100-0000-7000-8000-000000007a02")?;
     let carrier_a = IdentityPayloadCarrier::MemberIdentity {
         member_identity: v1,
     };
@@ -674,10 +674,10 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             policy_event_ref: None,
         },
         issuer_service_did: principal,
-        audience: "cx:realm:01904100-0000-7000-8000-test8audience".to_owned(),
+        audience: "ck:realm:01904100-0000-7000-8000-test8audience".to_owned(),
         expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
         issued_at: Some(chrono::Utc::now()),
-        source_refs: vec!["cx:event:01904100-0000-7000-8000-test8source01".to_owned()],
+        source_refs: vec!["ck:event:01904100-0000-7000-8000-test8source01".to_owned()],
         proofs: vec![serde_json::json!({
             "kind": "detached_jws",
             "alg": "EdDSA",
@@ -685,7 +685,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             "payload_digest":
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",
             "created_at": "2026-05-27T00:00:00Z",
-            "audience": "cx:realm:01904100-0000-7000-8000-test8audience",
+            "audience": "ck:realm:01904100-0000-7000-8000-test8audience",
             "jws": "test8.real.shaped.jws"
         })],
         claim_digest: None,

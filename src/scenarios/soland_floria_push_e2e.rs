@@ -1,6 +1,6 @@
 //! CT-7 — Soland + Floria push gateway end-to-end.
 //!
-//! Spec: `contrix-spec/spec/v1/zh/discovery/push-notifications.md` §3 (push
+//! Spec: `cokret-spec/spec/v1/zh/discovery/push-notifications.md` §3 (push
 //! device registration) and §4 (push rule engine + blind wakeup invariants).
 //!
 //! Goal:

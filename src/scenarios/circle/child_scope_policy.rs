@@ -82,12 +82,12 @@ fn enforce_child_scope_policy(
 }
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000701".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000701".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000702".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000702".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

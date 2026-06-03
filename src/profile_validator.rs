@@ -45,7 +45,7 @@ use serde_json::Value;
 use crate::conformance::spec_artifacts_root;
 
 /// Role partition for profile claims. Mirrors
-/// `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json#/profile_roles`.
+/// `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json#/profile_roles`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ServiceRole {
     Client,

@@ -128,15 +128,15 @@
       "preferences": {
         "default": { "send": true },
         "spaces": {
-          "cx:realm:01JS0SP00000000000000RR000": { "send": false }
+          "ck:realm:01JS0SP00000000000000RR000": { "send": false }
         },
         "child_spaces": {
-          "cx:realm:01JS1CS00000000000000RR000": { "send": true }
+          "ck:realm:01JS1CS00000000000000RR000": { "send": true }
         }
       },
       "scope_lookup": {
-        "realm_id": "cx:realm:01JS0SP00000000000000RR000",
-        "child_space_id": "cx:realm:01JS1CS00000000000000RR000"
+        "realm_id": "ck:realm:01JS0SP00000000000000RR000",
+        "child_space_id": "ck:realm:01JS1CS00000000000000RR000"
       },
       "expected": {
         "decision": "send",
@@ -156,11 +156,11 @@
       "preferences": {
         "default": { "send": true },
         "spaces": {
-          "cx:realm:01JS0SP00000000000000RR000": { "send": false }
+          "ck:realm:01JS0SP00000000000000RR000": { "send": false }
         }
       },
       "scope_lookup": {
-        "realm_id": "cx:realm:01JS0SP00000000000000RR000"
+        "realm_id": "ck:realm:01JS0SP00000000000000RR000"
       },
       "expected": {
         "decision": "skip",

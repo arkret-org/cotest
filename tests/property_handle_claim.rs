@@ -3,7 +3,7 @@
 //! invariants the conformance suite asserts on the wire are also
 //! exercised on randomly-generated inputs.
 //!
-//! Invariants pinned (post R3.1 wire rename — contrix-spec @ 7157ee8):
+//! Invariants pinned (post R3.1 wire rename — cokret-spec @ 7157ee8):
 //!
 //!  1. **Canonical round-trip.** Any valid `<localpart>:<domain>` handle survives parse → canonical
 //!     without re-shape.

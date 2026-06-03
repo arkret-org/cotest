@@ -3,17 +3,17 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ContrixServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
+    CokretServer, TestActorClient, dev_login, encrypted_envelope, expect_api_error,
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
     refresh_event_proof, register_account,
 };
 
-const BLOB_REALM_ID: &str = "cx:realm:0196419b-0000-7000-8000-00000000d101";
-const BLOB_REALM_CREATE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-00000000d100";
-const BLOB_REALM_MEMBER_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-00000000d102";
+const BLOB_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-00000000d101";
+const BLOB_REALM_CREATE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000000d100";
+const BLOB_REALM_MEMBER_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000000d102";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
-    let server = ContrixServer::spawn("delivery-keys").await?;
+    let server = CokretServer::spawn("delivery-keys").await?;
     let token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
 
     expect_api_error(
@@ -111,7 +111,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
 }
 
 pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Result<()> {
-    let server = ContrixServer::spawn("device-delivery").await?;
+    let server = CokretServer::spawn("device-delivery").await?;
     let token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
 
     expect_api_error(
@@ -214,7 +214,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
 }
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
-    let server = ContrixServer::spawn("blob-media").await?;
+    let server = CokretServer::spawn("blob-media").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
@@ -241,7 +241,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .post(server.url("/api/v1/blob/upload"))
             .bearer_auth(&alice.token)
             .header(
-                "x-contrix-content-digest",
+                "x-cokret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .body("blob-bytes"),
@@ -255,7 +255,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .http()
             .post(server.url("/api/v1/blob/upload"))
             .bearer_auth(&alice.token)
-            .header("x-contrix-space-id", &space_id)
+            .header("x-cokret-space-id", &space_id)
             .header("content-type", "text/plain")
             .body("encrypted-bytes"),
         StatusCode::OK,
@@ -307,7 +307,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
         carol.get(&format!(
             "/api/v1/blob/get?blob_ref={blob_ref}&purpose=message.attachment"
         )),
-        carol.get("/api/v1/blob/get?blob_ref=cx:blob:sha256:missing&purpose=message.attachment"),
+        carol.get("/api/v1/blob/get?blob_ref=ck:blob:sha256:missing&purpose=message.attachment"),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -367,7 +367,7 @@ fn signed_realm_create_event(
             "schema": "cx.schema.realm.v1",
             "title": title,
             "summary": title,
-            "trust_domain": "cx:trust_domain:delivery-media.cotest.local",
+            "trust_domain": "ck:trust_domain:delivery-media.cotest.local",
             "created_by": actor_id,
             "schema_refs": ["cx.schema.realm.v1"],
             "default_discoverability": "public",
@@ -455,7 +455,7 @@ fn signed_event(
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
-    let server = ContrixServer::spawn("push-moderation").await?;
+    let server = CokretServer::spawn("push-moderation").await?;
     let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
     let bob = register_account(
         &server,
@@ -506,8 +506,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/api/v1/moderation/report"))
             .json(&json!({
-                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "cx:event:demo",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+                "target_ref": "ck:event:demo",
                 "reason": "spam",
                 "reporter": "did:web:alice.example"
             })),
@@ -521,8 +521,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/api/v1/moderation/report"))
             .bearer_auth(&alice)
             .json(&json!({
-                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "cx:event:demo",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+                "target_ref": "ck:event:demo",
                 "reason": "spam",
                 "reporter": "did:web:bob-delivery.example"
             })),
@@ -536,8 +536,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/api/v1/moderation/report"))
             .bearer_auth(&bob)
             .json(&json!({
-                "realm_id": "cx:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "cx:event:demo",
+                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+                "target_ref": "ck:event:demo",
                 "reason": "spam",
                 "reporter": "did:web:bob-delivery.example"
             })),

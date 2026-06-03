@@ -152,7 +152,7 @@ test.describe("key backup restore live path", () => {
       {
         headers: {
           ...authHeaders(aliceToken),
-          "x-contrix-key-backup-delete-proof": deleteProof(alice.did, backupId),
+          "x-cokret-key-backup-delete-proof": deleteProof(alice.did, backupId),
         },
       },
     );
@@ -256,7 +256,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function backupIdFor(label: string): string {
-  return `cx:backup:${label}-${randomUUID()}`;
+  return `ck:backup:${label}-${randomUUID()}`;
 }
 
 function sha256Ref(value: string): string {

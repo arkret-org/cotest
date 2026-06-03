@@ -1,14 +1,14 @@
 //! CT-1 — Three-server federation fork quarantine.
 //!
 //! Spec references:
-//!   - `contrix-spec/spec/v1/zh/sync/federation.md` §4.5 "Fork Detection / Frontier Exchange":
+//!   - `cokret-spec/spec/v1/zh/sync/federation.md` §4.5 "Fork Detection / Frontier Exchange":
 //!       * federation peers periodically exchange `{space_id, heads[], max_hlc,
 //!         witness_receipts[]}` frontier digests.
 //!       * "若两端历史包含相同 `event_id` 但不同 hash，接收方 MUST quarantine 并以
 //!         `duplicate_conflict` 报告。"
 //!       * "可疑 remote 输入 MAY 在 quarantine 队列中暂存，直到签名、 schema、capability、fork
 //!         resolution 与 operator policy 全部 通过。"
-//!   - `contrix-spec/spec/v1/zh/models/space-and-place.md` (Space cell- family lattice rules —
+//!   - `cokret-spec/spec/v1/zh/models/space-and-place.md` (Space cell- family lattice rules —
 //!     concurrent cas-register / mv-register Moves on the same `cell_subject` MUST converge via the
 //!     lattice merge rule, and conflicting "winning" branches are determined by the
 //!     `state_resolution` profile, not by acceptance order).
@@ -138,7 +138,7 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //   let alice = alpha.register_client(
     //       "did:web:alice.ct1.cotest.local",
     //       "@alice-ct1",
-    //       &new_prefixed_uuid7("cx:device:"),
+    //       &new_prefixed_uuid7("ck:device:"),
     //   ).await?;
     //   let space_id = alice.create_realm("ct1-fork-quarantine-space").await?;
     //
@@ -170,12 +170,12 @@ pub async fn three_server_fork_quarantine_run() -> Result<()> {
     //                       json!({"value": "alpha-wins"})).await?;
     //   let bob = beta.register_client(
     //       "did:web:bob.ct1.cotest.local", "@bob-ct1",
-    //       &new_prefixed_uuid7("cx:device:")).await?;
+    //       &new_prefixed_uuid7("ck:device:")).await?;
     //   let beta_move = bob.submit_event(&space_id, "cx.space.title",
     //                       json!({"value": "beta-wins"})).await?;
     //   let charlie = gamma.register_client(
     //       "did:web:charlie.ct1.cotest.local", "@charlie-ct1",
-    //       &new_prefixed_uuid7("cx:device:")).await?;
+    //       &new_prefixed_uuid7("ck:device:")).await?;
     //   let gamma_move = charlie.submit_event(&space_id, "cx.space.title",
     //                       json!({"value": "gamma-wins"})).await?;
     //

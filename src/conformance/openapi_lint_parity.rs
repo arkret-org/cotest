@@ -1,7 +1,7 @@
 //! OpenAPI / vector lint parity (cotest-side mirrors of the
 //! straightforward `check_service_describe_alignment`,
 //! `check_policy_check_alignment`, and `check_vector_reference_closure`
-//! rules from `contrix-spec/tools/lint_artifacts.py`).
+//! rules from `cokret-spec/tools/lint_artifacts.py`).
 //!
 //! Each rule pins a structural invariant the cotest harness can check from
 //! canonical artifacts and the conformance prose.
@@ -21,7 +21,7 @@ use super::{load_artifact_json, load_artifact_yaml};
 ///   `/directory/describe`, `/applet/describe` 200 response MUST reference
 ///   `#/components/schemas/ServiceDescribe`.
 pub fn run_service_describe_alignment_check() -> Result<()> {
-    let openapi = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml")?;
+    let openapi = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml")?;
     let schema = load_artifact_json("schemas/service-describe.schema.json")?;
 
     let component = openapi
@@ -104,7 +104,7 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
 /// * `PolicyCheckRequest.required` MUST include `realm_id`.
 /// * `PolicyCheckResponse.required` MUST include `bound_to`.
 pub fn run_policy_check_alignment_check() -> Result<()> {
-    let openapi = load_artifact_yaml("openapi/contrix-service-api.openapi.yaml")?;
+    let openapi = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml")?;
     let paths = openapi
         .get("paths")
         .ok_or_else(|| anyhow!("openapi paths section missing"))?;
@@ -195,7 +195,7 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
         }
         let raw = fs::read_to_string(&path)?;
         let fixture_vectors = extract_vector_tokens(&raw);
-        // Mirror contrix-spec's Python lint: any cx.vector.* token appearing
+        // Mirror cokret-spec's Python lint: any cx.vector.* token appearing
         // in a fixture JSON is part of the known-vector definition set. Some
         // fixture suites declare vectors in top-level arrays such as
         // `conformance_vectors`, not only in object-level `vector_id` fields.

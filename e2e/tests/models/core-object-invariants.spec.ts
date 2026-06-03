@@ -52,14 +52,14 @@ test.describe("core object invariants", () => {
           joinRule: "invite",
           historyVisibility: "joined",
         });
-        expect(spaceId).toMatch(/^cx:realm:/);
+        expect(spaceId).toMatch(/^ck:realm:/);
         await stepShot(alicePage.page, testInfo, "A-alice-space-created");
 
         // ── Step 3: read back the Space via the soland API and verify the
         // spec §3 common-field equivalents on the SpaceLifecycleResponse
         // serializer. Current wire shape (soland/src/wire.rs
         // SpaceLifecycleResponse): { ok, space_id, owner, members, deleted }.
-        //   - space_id  ↔ spec `id`              (typed cx:realm: prefix)
+        //   - space_id  ↔ spec `id`              (typed ck:realm: prefix)
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
@@ -75,9 +75,9 @@ test.describe("core object invariants", () => {
           members?: string[];
           deleted?: boolean;
         };
-        // Common-field 1: `id` (typed cx:realm: prefix).
+        // Common-field 1: `id` (typed ck:realm: prefix).
         expect(spaceBody.space_id).toBe(spaceId);
-        expect(spaceBody.space_id).toMatch(/^cx:realm:/);
+        expect(spaceBody.space_id).toMatch(/^ck:realm:/);
         // Common-field 2: actor reference (`created_by` equivalent → `owner`).
         expect(spaceBody.owner).toBe(alice.did);
         // Membership invariant: owner must always appear in members.
@@ -117,7 +117,7 @@ test.describe("core object invariants", () => {
           events.find((event) => event.event_kind?.startsWith("cx.realm.")) ?? events[0];
         expect(lifecycleEvent).toBeTruthy();
         // Common-field (Event Envelope §2.2): event_id.
-        expect(lifecycleEvent.event_id).toMatch(/^cx:event:/);
+        expect(lifecycleEvent.event_id).toMatch(/^ck:event:/);
         // Common-field (§2.2 / §3): created_at (RFC 3339, MUST end with Z).
         expect(lifecycleEvent.created_at).toMatch(
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
@@ -174,7 +174,7 @@ test.describe("core object invariants", () => {
       });
       expect(flowRes.status()).toBe(201);
       const flowId = (await flowRes.json()).flow_id as string;
-      expect(flowId).toMatch(/^cx:flow:/);
+      expect(flowId).toMatch(/^ck:flow:/);
 
       // 2. Submit an update with a STALE precondition (claims status == "closed"
       //    when it's actually "open"). Expect 4xx + failed_precondition.
@@ -184,13 +184,13 @@ test.describe("core object invariants", () => {
           kind: "cx.flow.update",
           preconditions: [
             {
-              cell: `cx:cell:cx.component.flow.fields.v1:${flowId}`,
+              cell: `ck:cell:cx.component.flow.fields.v1:${flowId}`,
               predicate: { op: "head_eq", value: { "fields.status": "closed" } },
             },
           ],
           effects: [
             {
-              cell: `cx:cell:cx.component.flow.fields.v1:${flowId}`,
+              cell: `ck:cell:cx.component.flow.fields.v1:${flowId}`,
               op: { kind: "set", value: { "fields.status": "done" } },
             },
           ],
@@ -430,7 +430,7 @@ test.describe("core object invariants", () => {
       const projBody = await proj.json();
       expect(projBody.kind).toBe("collection");
       expect(projBody.renderer).toBe("board");
-      expect(projBody.view_id).toMatch(/^cx:view:/);
+      expect(projBody.view_id).toMatch(/^ck:view:/);
       expect(Array.isArray(projBody.frontier)).toBe(true);
       expect(Array.isArray(projBody.groups)).toBe(true);
 

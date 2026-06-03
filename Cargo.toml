@@ -28,19 +28,19 @@ chrono = "0.4.42"
 # suite (`conformance/security_negative.rs`) so a forged event with a correct
 # digest but invalid signature is actually rejected, not just digest-compared.
 ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std"] }
-contrix-http-client = { path = "../contrix-rust-sdk/crates/http-client" }
-contrix-core = { path = "../contrix-rust-sdk/crates/core", features = ["client"] }
-# R3.2 (contrix-spec @ b56cab1) — the §3.2.1 primary-handle-selection,
+cokret-http-client = { path = "../cokret-rust-sdk/crates/http-client" }
+cokret-core = { path = "../cokret-rust-sdk/crates/core", features = ["client"] }
+# R3.2 (cokret-spec @ b56cab1) — the §3.2.1 primary-handle-selection,
 # `claim_digest`, and §3.8.2 mention-render helpers live in the high-level
-# `contrix` facade (`contrix::identity::*`). cotest's primary-handle /
+# `cokret` facade (`cokret::identity::*`). cotest's primary-handle /
 # mention vectors drive these directly so every implementation agrees on
 # the deterministic selection + canonical claim digest.
-contrix = { path = "../contrix-rust-sdk/crates/sdk" }
+cokret = { path = "../cokret-rust-sdk/crates/sdk" }
 # T5.3 (Round 22) — canonical hash convergence vectors in
 # `tests/canonical_hash_convergence.rs` exercise the high-level
 # `EventProofBuilder` facade alongside the low-level canonical helpers
-# to pin that every Contrix service hashes payloads identically.
-contrix-signatures = { path = "../contrix-rust-sdk/crates/signatures" }
+# to pin that every Cokret service hashes payloads identically.
+cokret-signatures = { path = "../cokret-rust-sdk/crates/signatures" }
 # lattice round-trip vectors: cotest exercises the SDK's
 # `contrix_core::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's

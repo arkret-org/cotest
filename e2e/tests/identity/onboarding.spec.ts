@@ -50,7 +50,7 @@ test.describe("account onboarding", () => {
     expect(bridge.todos).toEqual([]);
     expect(bridge.oauth.supported_flows).toContain("authorization_code_pkce_browser");
     expect(bridge.passkey.register_start_path).toBe("/api/v1/auth/passkey/register/start");
-    expect(bridge.contrix.session_grants_introspect_path).toBe(
+    expect(bridge.cokret.session_grants_introspect_path).toBe(
       "/api/v1/session-grants/introspect",
     );
 
@@ -145,7 +145,7 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "alice's did:webvh entry 0 is published; SCID derived; DID Document resolves and exposes ContrixPrincipalServer service endpoint",
+    "alice's did:webvh entry 0 is published; SCID derived; DID Document resolves and exposes CokretPrincipalServer service endpoint",
     async () => {
       // spec: identity-did.md §2.1, §3.4
       // soland gap: did:webvh genesis writer; DID Document publishing endpoint.

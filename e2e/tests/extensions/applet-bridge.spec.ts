@@ -57,7 +57,7 @@ test.describe("applet bridge", () => {
       const registration = await registerApplet(request, aliceToken, signed, `register-${stamp}`);
       expect(registration.status).toBe("registered");
       expect(registration.bot_actor_did).toMatch(/^did:web:bot-bridge-demo-/);
-      expect(registration.portal_realm_id).toMatch(/^cx:realm:portal:bridge-demo-/);
+      expect(registration.portal_realm_id).toMatch(/^ck:realm:portal:bridge-demo-/);
 
       const spaceId = await createSpaceApi(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
@@ -87,7 +87,7 @@ test.describe("applet bridge", () => {
       const externalBody = await external.json();
       const ghostActorDid = String(externalBody.ghost_actor_did);
       expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
-      expect(String(externalBody.message_id)).toMatch(/^cx:message:/);
+      expect(String(externalBody.message_id)).toMatch(/^ck:message:/);
 
       const events = await querySpaceEventsApi(request, aliceToken, spaceId);
       expect(JSON.stringify(events)).toContain(text);

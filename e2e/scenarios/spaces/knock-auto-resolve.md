@@ -30,7 +30,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 ### Phase A — alice 配置 knock_restricted + 全 auto-resolve gates
 
 1. alice createSpace `S`,`join_rule=knock_restricted`
-2. alice 通过 API 写 `cx:cell:space.join_policy.v1:<S>`:
+2. alice 通过 API 写 `ck:cell:space.join_policy.v1:<S>`:
    ```json
    {
      "gates": [

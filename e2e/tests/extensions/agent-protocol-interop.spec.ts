@@ -240,11 +240,11 @@ test.describe("agent protocol interop", () => {
       //   //    {
       //   //      session_id, status: "completed",
       //   //      result_objects: [{ object_type: "flow",
-      //   //                         object_ref: "cx:flow:<uuid>",
+      //   //                         object_ref: "ck:flow:<uuid>",
       //   //                         track: "synthesis",
       //   //                         role: "primary_result" }],
       //   //      artifacts: [{ artifact_type: "text",
-      //   //                    object_ref: "cx:morph:<uuid>",
+      //   //                    object_ref: "ck:morph:<uuid>",
       //   //                    hash: "sha256:<hex>" }],
       //   //      external_transcript_digest: "sha256:<hex>",
       //   //      completed_at: "<iso>"
@@ -283,7 +283,7 @@ test.describe("agent protocol interop", () => {
     "Phase E — audit chain start → status* → result is contiguous and verifiable",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5 (full event
-      // family), §9 (audit modes), §13 (Contrix is durable
+      // family), §9 (audit modes), §13 (Cokret is durable
       // coordination / authorization / audit layer).
       //
       // Pseudo:

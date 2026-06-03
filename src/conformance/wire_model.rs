@@ -82,7 +82,7 @@ fn expected_reason(vector: &Value) -> Option<&str> {
 ///
 /// Spec: `identity/consent-model.md` + `authz/event-auth-state-resolution.md`
 /// (Move/Anchor/Lattice). Each grant Move adds a `(peer, scope)` tag to the
-/// holder-keyed or-set cell `cx:cell:cx.component.consent.grant.v1:<holder>`.
+/// holder-keyed or-set cell `ck:cell:cx.component.consent.grant.v1:<holder>`.
 /// Each revoke Move issues a causal `or_set_remove` against the prior grant
 /// Move's id. The cell join (active set) is the lookup surface for
 /// `consent_active` preconditions on downstream invite / message Moves.
@@ -130,9 +130,9 @@ pub fn run_consent_fixture_suite() -> Result<()> {
         for mv in moves {
             let kind = required_str(mv, "kind")?;
             let move_id = required_str(mv, "move_id")?;
-            if !move_id.starts_with("cx:event:") {
+            if !move_id.starts_with("ck:event:") {
                 bail!(
-                    "vector {name} move_id {move_id} must use typed cx:event:<uuidv7> form (C19 wire-break)"
+                    "vector {name} move_id {move_id} must use typed ck:event:<uuidv7> form (C19 wire-break)"
                 );
             }
             let outcome = expected_outcome(mv, name)?;
@@ -150,7 +150,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("cx:cell:cx.component.consent.grant.v1:") {
+                        if !cell.starts_with("ck:cell:cx.component.consent.grant.v1:") {
                             bail!(
                                 "vector {name} grant effect cell must be the consent.grant.v1 cell, got {cell}"
                             );
@@ -169,7 +169,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                             .entry(cell.to_owned())
                             .or_default()
                             .insert(move_id.to_owned(), (peer.to_owned(), scope.to_owned()));
-                        if peer.starts_with("did:cx:psd-") {
+                        if peer.starts_with("did:ck:psd-") {
                             covered_pseudonym = true;
                         }
                         if scope == "any" {
@@ -188,7 +188,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     let mut removed_anything = false;
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("cx:cell:cx.component.consent.grant.v1:") {
+                        if !cell.starts_with("ck:cell:cx.component.consent.grant.v1:") {
                             bail!(
                                 "vector {name} revoke effect cell must be the consent.grant.v1 cell, got {cell}"
                             );
@@ -250,7 +250,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                         let holder = required_str(pre, "holder")?;
                         let peer = required_str(pre, "peer")?;
                         let scope = required_str(pre, "scope")?;
-                        let cell = format!("cx:cell:cx.component.consent.grant.v1:{holder}");
+                        let cell = format!("ck:cell:cx.component.consent.grant.v1:{holder}");
                         let active_tags = or_set.get(&cell);
                         let resolved = active_tags
                             .map(|tags| {
@@ -449,9 +449,9 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
 
 /// W8 — MIMI Room Policy Component round-trip matrix.
 ///
-/// Spec extensions/mimi-interop.md §9.1 defines the Contrix `component_type`
+/// Spec extensions/mimi-interop.md §9.1 defines the Cokret `component_type`
 /// ↔ MIMI policy-component mapping; §9.2 defines the criticality ↔ MIMI
-/// unknown-handling mapping. The cotest test cross-references every Contrix
+/// unknown-handling mapping. The cotest test cross-references every Cokret
 /// component named in the fixture against the active event-kind registry's
 /// component_type set, asserts that bidirectional vectors carry both legs
 /// (`contrix_component_type` + `mimi_path`), and asserts that
@@ -480,17 +480,17 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             crit_vectors.len()
         );
     }
-    for (vector, (contrix, mimi)) in crit_vectors.iter().zip(expected_pairs.iter()) {
-        let actual_contrix = required_str(vector, "contrix")?;
+    for (vector, (cokret, mimi)) in crit_vectors.iter().zip(expected_pairs.iter()) {
+        let actual_contrix = required_str(vector, "cokret")?;
         let actual_mimi = required_str(vector, "mimi_unknown_handling")?;
-        if actual_contrix != *contrix || actual_mimi != *mimi {
+        if actual_contrix != *cokret || actual_mimi != *mimi {
             bail!(
-                "criticality mapping drift: expected ({contrix} <-> {mimi}), got ({actual_contrix} <-> {actual_mimi})"
+                "criticality mapping drift: expected ({cokret} <-> {mimi}), got ({actual_contrix} <-> {actual_mimi})"
             );
         }
         if vector.get("round_trip").and_then(Value::as_bool) != Some(true) {
             bail!(
-                "criticality mapping {contrix} must declare round_trip=true (no information loss)"
+                "criticality mapping {cokret} must declare round_trip=true (no information loss)"
             );
         }
     }
@@ -533,9 +533,9 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
             }
             "contrix_only" => {
                 let media = required_str(vector, "facade_media_type")?;
-                if media != "application/vnd.contrix.component+json" {
+                if media != "application/vnd.cokret.component+json" {
                     bail!(
-                        "contrix_only component {component_type} must use the application/vnd.contrix.component+json media type, got {media}"
+                        "contrix_only component {component_type} must use the application/vnd.cokret.component+json media type, got {media}"
                     );
                 }
                 if vector.get("mimi_path").is_some() {
@@ -563,7 +563,7 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
     }
     if contrix_only < 5 {
         bail!(
-            "mimi component fixture must cover at least 5 Contrix-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {contrix_only}"
+            "mimi component fixture must cover at least 5 Cokret-only components (anchorer, plaintext_visible_services, covered_frontier, ...), got {contrix_only}"
         );
     }
 
@@ -820,7 +820,7 @@ fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Re
 ///   `signed_compaction.bottom_diagnostics` MUST be a superset of
 ///   `expected_effective_anchor_view.bottom_diagnostics` (compaction is information-preserving for
 ///   ⊥ cells; dropping one is a structural error).
-/// * **compaction Anchor id is content-addressed** — id starts with `cx:anchor:sha256:` and the
+/// * **compaction Anchor id is content-addressed** — id starts with `ck:anchor:sha256:` and the
 ///   digest is 64 lowercase hex chars.
 ///
 /// Negative vectors carry a `drift_compaction` with `expected_rejection_reason`
@@ -1046,8 +1046,8 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
 }
 
 fn validate_anchor_id_shape(id: &str, ctx: &str) -> Result<()> {
-    let Some(rest) = id.strip_prefix("cx:anchor:sha256:") else {
-        bail!("{ctx} anchor id {id} must use cx:anchor:sha256:<hex> special form");
+    let Some(rest) = id.strip_prefix("ck:anchor:sha256:") else {
+        bail!("{ctx} anchor id {id} must use ck:anchor:sha256:<hex> special form");
     };
     if rest.len() != 64
         || !rest
@@ -1090,7 +1090,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
         let name = required_str(vector, "name")?;
         let shape = required_str(vector, "shape")?;
         let cell_id = required_str(vector, "cell_id")?;
-        if !cell_id.starts_with("cx:cell:cx.component.anchorer.v1:") {
+        if !cell_id.starts_with("ck:cell:cx.component.anchorer.v1:") {
             bail!("vector {name} cell_id must be the anchorer.v1 cell, got {cell_id}");
         }
         match name {
@@ -1181,9 +1181,9 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                 let mut seen_move_ids = std::collections::BTreeSet::new();
                 for op in ops {
                     let move_id = required_str(op, "move_id")?;
-                    if !move_id.starts_with("cx:event:") {
+                    if !move_id.starts_with("ck:event:") {
                         bail!(
-                            "vector {name} concurrent op move_id {move_id} must use cx:event:<UUIDv7> form"
+                            "vector {name} concurrent op move_id {move_id} must use ck:event:<UUIDv7> form"
                         );
                     }
                     if !seen_move_ids.insert(move_id.to_owned()) {
@@ -1486,7 +1486,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
         match name {
             "covered_frontier_accumulates_governance_refs_idempotent" => {
                 let cell_id = required_str(vector, "cell_id")?;
-                if !cell_id.starts_with("cx:cell:cx.component.mls.covered_frontier.v1:") {
+                if !cell_id.starts_with("ck:cell:cx.component.mls.covered_frontier.v1:") {
                     bail!("vector {name} cell_id wrong family: {cell_id}");
                 }
                 let ops = vector
@@ -1607,7 +1607,7 @@ pub fn run_mls_move_covered_frontier_fixture_suite() -> Result<()> {
                 for effect in effects {
                     let cell = required_str(effect, "cell")?;
                     let family = cell
-                        .strip_prefix("cx:cell:")
+                        .strip_prefix("ck:cell:")
                         .and_then(|tail| tail.split(':').next())
                         .ok_or_else(|| anyhow!("vector {name} cell {cell} malformed"))?;
                     cell_families.insert(family);
@@ -4000,8 +4000,8 @@ pub fn run_device_message_negative_fixture_suite() -> Result<()> {
             .get("envelope")
             .ok_or_else(|| anyhow!("vector {name} missing envelope"))?;
         let envelope_id = required_str(envelope, "envelope_id")?;
-        if !envelope_id.starts_with("cx:envelope:") {
-            bail!("vector {name} envelope_id {envelope_id} must use cx:envelope:<uuidv7> form");
+        if !envelope_id.starts_with("ck:envelope:") {
+            bail!("vector {name} envelope_id {envelope_id} must use ck:envelope:<uuidv7> form");
         }
         let sender = required_str(envelope, "sender_device_id")?;
         let key_ref = required_str(envelope, "key_ref")?;
@@ -4782,7 +4782,7 @@ pub fn run_device_verification_fixture_suite() -> Result<()> {
 ///
 /// Spec: `data-structures/history-visibility.md` +
 /// `authz/event-auth-state-resolution.md`. The history_visibility cell
-/// (cas-register `cx:cell:cx.component.realm.history_visibility.v1:<space_id>`)
+/// (cas-register `ck:cell:cx.component.realm.history_visibility.v1:<space_id>`)
 /// holds one of {joined, invited, world_readable, shared}. The reducer
 /// projects the timeline differently per viewer based on
 /// (membership_state, history_visibility, event_origin_ts vs viewer_join_ts /
@@ -6062,7 +6062,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
         let name = required_str(v, "name")?;
         let outcome = expected_outcome(v, name)?;
         let trust_anchor_actor = required_str(v, "trust_anchor_actor_did")?;
-        if !trust_anchor_actor.starts_with("did:web:") && !trust_anchor_actor.starts_with("did:cx:")
+        if !trust_anchor_actor.starts_with("did:web:") && !trust_anchor_actor.starts_with("did:ck:")
         {
             bail!("vector {name} trust_anchor_actor_did must be a did: form");
         }
@@ -6076,7 +6076,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
             }
         }
         if let Some(aus) = v.get("alice_user_signing") {
-            if required_str(aus, "signed_by")? != "did:cx:user:alice#master" {
+            if required_str(aus, "signed_by")? != "did:ck:user:alice#master" {
                 bail!("vector {name} alice_user_signing.signed_by must be alice#master");
             }
         }
@@ -6086,19 +6086,19 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                 let bm = v
                     .get("bob_master")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_master"))?;
-                if required_str(bm, "signed_by")? != "did:cx:user:alice#user-signing" {
+                if required_str(bm, "signed_by")? != "did:ck:user:alice#user-signing" {
                     bail!("vector {name} bob_master must be signed by alice#user-signing");
                 }
                 let bss = v
                     .get("bob_self_signing")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_self_signing"))?;
-                if required_str(bss, "signed_by")? != "did:cx:user:bob#master" {
+                if required_str(bss, "signed_by")? != "did:ck:user:bob#master" {
                     bail!("vector {name} bob_self_signing must be signed by bob#master");
                 }
                 let bdl = v
                     .get("bob_device_leaf")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_device_leaf"))?;
-                if required_str(bdl, "signed_by")? != "did:cx:user:bob#self-signing" {
+                if required_str(bdl, "signed_by")? != "did:ck:user:bob#self-signing" {
                     bail!("vector {name} bob_device_leaf must be signed by bob#self-signing");
                 }
                 let path: Vec<&str> = v
@@ -6121,7 +6121,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                 let bdl = v
                     .get("bob_device_leaf")
                     .ok_or_else(|| anyhow!("vector {name} missing bob_device_leaf"))?;
-                if required_str(bdl, "signed_by")? != "did:cx:user:bob#self-signing" {
+                if required_str(bdl, "signed_by")? != "did:ck:user:bob#self-signing" {
                     bail!("vector {name} new device must be signed by bob#self-signing");
                 }
                 let trans = v

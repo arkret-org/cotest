@@ -59,11 +59,11 @@ The harness reads these environment variables:
 
 ### Docker image contract
 
-The default image asset is [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1).
+The default image asset is [docker/soland.Dockerfile](/E:/Works/cokret-dev/cotest/docker/soland.Dockerfile:1).
 It is built from the workspace root one level above `cotest`, because `soland`
-depends on the sibling checkout `contrix-rust-sdk`. The workspace root
+depends on the sibling checkout `cokret-rust-sdk`. The workspace root
 `.dockerignore` trims the build context so Docker only receives the `soland`,
-`contrix-rust-sdk`, and `cotest/docker` trees instead of the whole workspace.
+`cokret-rust-sdk`, and `cotest/docker` trees instead of the whole workspace.
 
 The image contract is intentionally simple:
 
@@ -77,7 +77,7 @@ The current implementation source-builds `soland` inside Docker:
 
 - build stage: `rust:1.92-bookworm`
 - runtime stage: `rust:1.92-bookworm`
-- copied source trees: `soland` and `contrix-rust-sdk`
+- copied source trees: `soland` and `cokret-rust-sdk`
 - build command: `cargo build --release`
 
 The image does not define an in-container `HEALTHCHECK`. Instead, the harness
@@ -94,9 +94,9 @@ identical between `process` and `docker` modes.
 
 This script:
 
-- uses `E:\Works\contrix-dev` as the Docker build context by default
-- reads [docker/soland.Dockerfile](/E:/Works/contrix-dev/cotest/docker/soland.Dockerfile:1)
-- expects sibling `soland` and `contrix-rust-sdk` checkouts to exist
+- uses `E:\Works\cokret-dev` as the Docker build context by default
+- reads [docker/soland.Dockerfile](/E:/Works/cokret-dev/cotest/docker/soland.Dockerfile:1)
+- expects sibling `soland` and `cokret-rust-sdk` checkouts to exist
 - produces `cotest-soland:latest` unless `-ImageTag` overrides it
 - accepts Docker cache controls through `-CacheFrom`, `-CacheTo`, `-Pull`, and
   `-NoCache`
@@ -151,7 +151,7 @@ then stops those processes after the run:
 ```powershell
 .\scripts\run-compose.ps1 `
   -FloriaBaseUrl http://127.0.0.1:5000 `
-  -FloriaCommand '$env:FLORIA_CONF="D:\Works\contrix-dev\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\contrix-dev\floria\Cargo.toml'
+  -FloriaCommand '$env:FLORIA_CONF="D:\Works\cokret-dev\floria\floria.sample.kdl"; cargo run --manifest-path D:\Works\cokret-dev\floria\Cargo.toml'
 ```
 
 ### Run in Docker mode
@@ -193,7 +193,7 @@ limited to the selected profile's `required_coverage_profiles`, unless
 
 ## Startup and shutdown model
 
-- `ContrixServer` is the single entrypoint for one SUT instance.
+- `CokretServer` is the single entrypoint for one SUT instance.
 - `TestServerGroup` is the single entrypoint for multi-server scenarios.
 - In `process` mode, each server is a child `cargo run` process with its own
   temp blob root.

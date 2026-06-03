@@ -12,15 +12,15 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/models/private-objects.md` §2 — Private object 总览:read marker 属于
+- `cokret-spec/spec/v1/zh/models/private-objects.md` §2 — Private object 总览:read marker 属于
   actor-scope account data;与 Event 链解耦,只在 actor 自己的 device 之间复制
-- `contrix-spec/spec/v1/zh/models/private-objects.md` §3 — Read marker schema(`last_read_at` 时间锚 +
+- `cokret-spec/spec/v1/zh/models/private-objects.md` §3 — Read marker schema(`last_read_at` 时间锚 +
   optional `last_read_anchor` event_id);to-device propagation;eventual consistency 窗口
-- `contrix-spec/spec/v1/zh/discovery/read-receipts.md` — server 不持久化 per-message read state;
+- `cokret-spec/spec/v1/zh/discovery/read-receipts.md` — server 不持久化 per-message read state;
   marker 是单点游标,inbox unread 一律由 marker 衍生
-- `contrix-spec/spec/v1/zh/discovery/push-notifications.md` §2-§4 — notification 是 client-side
+- `cokret-spec/spec/v1/zh/discovery/push-notifications.md` §2-§4 — notification 是 client-side
   projection,read marker 推进后该 device 的 inbox 清零
-- `contrix-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §7 — to-device queue,marker 同步走这条
+- `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §7 — to-device queue,marker 同步走这条
   通道
 
 ## 拓扑
@@ -35,8 +35,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 | 名字 | 设备 | DID / device_id | 角色 |
 |---|---|---|---|
-| alice | alice-device-1 (laptop) | `did:web:alice-s11-<uuid>.example` / `cx:device:...-d1` | reader,首次记录 read marker |
-| alice | alice-device-2 (phone)  | 同上 actor,不同 device_id `cx:device:...-d2` | 第二台 device,接收 to-device 同步;最后触发 mark-all-read |
+| alice | alice-device-1 (laptop) | `did:web:alice-s11-<uuid>.example` / `ck:device:...-d1` | reader,首次记录 read marker |
+| alice | alice-device-2 (phone)  | 同上 actor,不同 device_id `ck:device:...-d2` | 第二台 device,接收 to-device 同步;最后触发 mark-all-read |
 | bob   | bob 默认设备            | `did:web:bob-s11-<uuid>.example`              | sender,在共享 space 里发 M1/M2/M3/M4 |
 
 ## Pre-conditions
@@ -59,7 +59,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
    - title = `"models/private-read-cursor S ${stamp}"`
    - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
    - seed_members = `[bob.did]`
-3. 断言:`space-lifecycle-flow` 含 `created cx:space:...`,记录 `spaceId`
+3. 断言:`space-lifecycle-flow` 含 `created ck:space:...`,记录 `spaceId`
 4. bob 通过 `acceptInvite(spaceId)` 加入空间
 
 ### Phase B — bob 发 M1, M2, M3
@@ -109,7 +109,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Observable assertions(合并清单)
 
-- Phase A 步骤 3:`spaceId` 形如 `cx:space:...`
+- Phase A 步骤 3:`spaceId` 形如 `ck:space:...`
 - Phase B 步骤 6:M1/M2/M3 三条都 persisted
 - Phase C 步骤 10:`last_read_at` 写入成功,`unread_count` 反映 M3 未读
 - Phase D 步骤 12:device-1 settings 上 marker 文本可见

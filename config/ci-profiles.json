@@ -107,7 +107,7 @@
     },
     {
       "profile_id": "mock-parity",
-      "description": "T-P1-10 gate: compare yougen's mocked Contrix contract against a live soland baseline; any non-allowlisted drift fails.",
+      "description": "T-P1-10 gate: compare yougen's mocked Cokret contract against a live soland baseline; any non-allowlisted drift fails.",
       "include_all_tests": false,
       "cargo_filters": [
         "yougen_mock_contract_matches_live_soland_baseline"

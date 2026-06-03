@@ -61,7 +61,7 @@ async function accountSubscribeTimelineEvents(
   });
   expect(subscribe.status()).toBe(200);
   const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
-  const realmId = spaceId.replace(/^cx:space:/, "cx:realm:");
+  const realmId = spaceId.replace(/^ck:space:/, "ck:realm:");
   const realmFrame = frame.realms[realmId] ?? frame.realms[spaceId];
   expect(realmFrame, `sync realm frame for ${spaceId}`).toBeTruthy();
   expect(Array.isArray(realmFrame.timeline?.events)).toBe(true);
@@ -78,7 +78,7 @@ test.describe("chat advanced", () => {
       `reaction target ${Date.now()}`,
       { actorDid: fixture.alice.did },
     );
-    const messageRef = message.event_id.replace(/^cx:event:/, "cx:message:");
+    const messageRef = message.event_id.replace(/^ck:event:/, "ck:message:");
 
     await submitSignedEventApi(
       request,
@@ -131,7 +131,7 @@ test.describe("chat advanced", () => {
       `root ${Date.now()}`,
       { actorDid: fixture.alice.did },
     );
-    const rootMessageRef = root.event_id.replace(/^cx:event:/, "cx:message:");
+    const rootMessageRef = root.event_id.replace(/^ck:event:/, "ck:message:");
     const replyBody = `reply ${Date.now()}`;
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
@@ -227,7 +227,7 @@ test.describe("chat advanced", () => {
     });
     await submitSignedEventApi(request, fixture.aliceToken, root, { context: "root mention" });
     const rootEventId = String(root.event_id);
-    const rootMessageRef = rootEventId.replace(/^cx:event:/, "cx:message:");
+    const rootMessageRef = rootEventId.replace(/^ck:event:/, "ck:message:");
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.spaceId,
@@ -329,7 +329,7 @@ test.describe("chat advanced", () => {
     });
     expect(subscribe.status()).toBe(200);
     const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
-    const realmId = fixture.spaceId.replace(/^cx:space:/, "cx:realm:");
+    const realmId = fixture.spaceId.replace(/^ck:space:/, "ck:realm:");
     const realmFrame = frame.realms[realmId] ?? frame.realms[fixture.spaceId];
     const ephemeral = realmFrame.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
@@ -729,7 +729,7 @@ function encryptedEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.contrix.message+json",
+    content_type: "application/vnd.cokret.message+json",
     ciphertext,
     authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",

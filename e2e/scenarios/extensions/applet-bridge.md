@@ -2,16 +2,16 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 contrix 时的完整生命周期:applet 提交 signed manifest 注册 → soland 验证 manifest + 颁发 `bot_actor_did` → bot 加入 space → applet 接到外部 webhook → 为外部用户生成 `ghost_actor_did` → 以 ghost 身份在 portal realm 写消息 → space 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet 权限后,后续 ghost 消息被拒。
+验证一个外部集成服务以 **applet** 形态接入 cokret 时的完整生命周期:applet 提交 signed manifest 注册 → soland 验证 manifest + 颁发 `bot_actor_did` → bot 加入 space → applet 接到外部 webhook → 为外部用户生成 `ghost_actor_did` → 以 ghost 身份在 portal realm 写消息 → space 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet 权限后,后续 ghost 消息被拒。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/extensions/applet-integration.md` §3 — Applet manifest 结构(`manifest_id`、`namespace`、`capabilities`、`signing_key`)
-- `contrix-spec/spec/v1/zh/extensions/applet-integration.md` §4 — 注册流程与 `bot_actor_did` 颁发
-- `contrix-spec/spec/v1/zh/extensions/applet-integration.md` §5 — Ghost actor 的 accountability 模型(`actor_id = ghost_actor_did`、DID Document 的 `accountability` 指向 bot + registry)
-- `contrix-spec/spec/v1/zh/extensions/applet-schema.md` — Manifest JSON schema、portal realm 路由约定
+- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §3 — Applet manifest 结构(`manifest_id`、`namespace`、`capabilities`、`signing_key`)
+- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §4 — 注册流程与 `bot_actor_did` 颁发
+- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §5 — Ghost actor 的 accountability 模型(`actor_id = ghost_actor_did`、DID Document 的 `accountability` 指向 bot + registry)
+- `cokret-spec/spec/v1/zh/extensions/applet-schema.md` — Manifest JSON schema、portal realm 路由约定
 
 ## 拓扑
 
@@ -53,7 +53,7 @@
 3. 测试以 alice 的 admin token 调 soland `POST /api/v1/extensions/applets/register`,body = `{ manifest, signature }`
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_did, portal_realm_id }`
    - 记录 `applet_id`、`bot_actor_did`、`portal_realm_id`
-4. **断言**:`bot_actor_did` 形如 `did:web:bot-bridge-demo-...`;`portal_realm_id` 形如 `cx:realm:portal:...`
+4. **断言**:`bot_actor_did` 形如 `did:web:bot-bridge-demo-...`;`portal_realm_id` 形如 `ck:realm:portal:...`
 
 ### Phase B — bot 加入 space
 
@@ -63,7 +63,7 @@
    - join_rule = `invite`
    - history_visibility = `joined`
    - seed_members = `[]`(bot 走 admin invite 通道,不走 seed)
-6. 断言:`space-lifecycle-flow` 显示 `created cx:space:...`,记录 `spaceId`
+6. 断言:`space-lifecycle-flow` 显示 `created ck:space:...`,记录 `spaceId`
 7. **alice** 在 `/space/${spaceId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_did`
    - 断言:`space-admin-panel` 状态文本含 `invited ${bot_actor_did}`
 8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ space_id: spaceId }`
@@ -117,7 +117,7 @@
 ## Observable assertions (合并清单)
 
 - 步骤 3-4:applet register 返回 201,`bot_actor_did` / `portal_realm_id` 形式正确
-- 步骤 6:`spaceId` 形如 `cx:space:...`
+- 步骤 6:`spaceId` 形如 `ck:space:...`
 - 步骤 8-9:bot 出现在 space members
 - 步骤 11-13:外部事件 30s 内在 alice timeline 出现
 - 步骤 14:UI 上 ghost 消息有 ghost badge,actor_id 是 ghost_actor_did

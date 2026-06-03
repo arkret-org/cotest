@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::fixtures::TestScaffold;
-use crate::harness::{ContrixServer, expect_api_error, expect_json, expect_status};
+use crate::harness::{CokretServer, expect_api_error, expect_json, expect_status};
 
 pub async fn framework_errors_and_invalid_json_use_contrix_envelopes() -> Result<()> {
     // CT-12: scaffold-driven, parallel-safe.
@@ -39,7 +39,7 @@ pub async fn framework_errors_and_invalid_json_use_contrix_envelopes() -> Result
 }
 
 pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
-    let server = ContrixServer::spawn("account-auth").await?;
+    let server = CokretServer::spawn("account-auth").await?;
 
     expect_api_error(
         server
@@ -135,7 +135,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 }
 
 pub async fn contact_edges_are_rejected() -> Result<()> {
-    let server = ContrixServer::spawn("contact-edges").await?;
+    let server = CokretServer::spawn("contact-edges").await?;
     let alice = expect_json(
         server
             .http()

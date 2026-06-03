@@ -31,7 +31,7 @@ test.describe("calls", () => {
     const token = await issueDevSession(request, alice);
 
     const iceProbe = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
-      data: { call_id: "cx:call:probe", device_id: alice.deviceId, mode: "p2p" },
+      data: { call_id: "ck:call:probe", device_id: alice.deviceId, mode: "p2p" },
     });
     // Unauthenticated must be rejected (or endpoint absent → 404, or 405
     // when the path is routed but POST is not allowed yet).
@@ -39,7 +39,7 @@ test.describe("calls", () => {
 
     const iceAuth = await request.post(`${solandBaseUrl()}/api/v1/calls/ice-config`, {
       headers: { authorization: `Bearer ${token}` },
-      data: { call_id: "cx:call:probe", device_id: alice.deviceId, mode: "p2p" },
+      data: { call_id: "ck:call:probe", device_id: alice.deviceId, mode: "p2p" },
     });
     // With auth: either implemented (200 with stun/turn) or absent (404). 5xx is bug.
     expect(iceAuth.status()).toBeLessThan(500);
@@ -71,7 +71,7 @@ test.describe("calls", () => {
       });
       expect(session.ok()).toBeTruthy();
       const sessionBody = await session.json();
-      expect(sessionBody.session_id).toMatch(/^cx:call:/);
+      expect(sessionBody.session_id).toMatch(/^ck:call:/);
       expect(sessionBody.participants).toEqual(expect.arrayContaining([alice.did, bob.did]));
       expect(sessionBody.call_state).toBe("ringing");
       const sessionId = sessionBody.session_id as string;
@@ -251,7 +251,7 @@ test.describe("calls", () => {
       expect(recording.ok).toBe(true);
       expect(recording.recording_started_by).toBe(carol.did);
       expect(recording.recording_policy).toBe("allow");
-      expect(recording.recording_blob_ref).toMatch(/^cx:blob:sha256:/);
+      expect(recording.recording_blob_ref).toMatch(/^ck:blob:sha256:/);
 
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
@@ -269,7 +269,7 @@ test.describe("calls", () => {
         );
         await expect(alicePage.page.getByTestId("webrtc-recording-indicator")).toBeVisible();
         await expect(alicePage.page.getByTestId("webrtc-recording-blob-ref")).toContainText(
-          /^cx:blob:sha256:/,
+          /^ck:blob:sha256:/,
         );
       } finally {
         await alicePage.close();
@@ -391,7 +391,7 @@ async function startUiCall(page: Page, spaceId: string, peerDid: string): Promis
     .poll(async () => page.getByTestId("webrtc-session-id").getAttribute("data-session-id"), {
       timeout: 30_000,
     })
-    .toMatch(/^cx:call:/);
+    .toMatch(/^ck:call:/);
   const sessionId = (await page.getByTestId("webrtc-session-id").getAttribute("data-session-id"))!;
   await page.getByTestId("webrtc-call-connect-button").click();
   await expect(page.getByTestId("call-status-connecting")).toBeVisible();
@@ -413,7 +413,7 @@ async function startUiGroupCall(page: Page, spaceId: string, participantDids: st
     .poll(async () => page.getByTestId("webrtc-session-id").getAttribute("data-session-id"), {
       timeout: 30_000,
     })
-    .toMatch(/^cx:call:/);
+    .toMatch(/^ck:call:/);
   return (await page.getByTestId("webrtc-session-id").getAttribute("data-session-id"))!;
 }
 

@@ -6,7 +6,7 @@
 //!
 //! Marked `#[ignore]` because the test spawns a real `starid` binary and CI
 //! runners may not have one built. Locate the binary via `STARID_BIN=...` or
-//! by building the sibling `contrix-dev/starid` checkout, then run with:
+//! by building the sibling `cokret-dev/starid` checkout, then run with:
 //!
 //!   cargo test --test webvh_blackbox -- --ignored
 //!

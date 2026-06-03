@@ -38,7 +38,7 @@ export function authHeaders(token: string): Record<string, string> {
 }
 
 export function typedId(kind: OperationKind): string {
-  return `cx:${kind}:${uuidV7()}`;
+  return `ck:${kind}:${uuidV7()}`;
 }
 
 export function b64url(value: string): string {
@@ -138,7 +138,7 @@ export async function createSpaceApi(
           title: data.title,
           summary: data.summary,
           created_by: ownerDid,
-          trust_domain: "cx:trust_domain:soland.local",
+          trust_domain: "ck:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability:
             data.discoverability ?? (data.public ? "public" : "listed"),
@@ -306,7 +306,7 @@ export async function querySpaceEventsApi(
   spaceId: string,
   opts: { server?: SolandKey; limit?: number } = {},
 ) {
-  const queryParam = spaceId.startsWith("cx:realm:") ? "realms" : "space_id";
+  const queryParam = spaceId.startsWith("ck:realm:") ? "realms" : "space_id";
   const response = await request.get(
     `${solandBaseUrl(opts.server)}/api/v1/events?${queryParam}=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
     { headers: authHeaders(token) },
@@ -427,12 +427,12 @@ export async function submitSignedEventApi(
 }
 
 export function flowIdFromRealmId(realmId: string): string {
-  const suffix = realmId.replace(/^cx:(realm|space):/, "");
-  return `cx:flow:${suffix}`;
+  const suffix = realmId.replace(/^ck:(realm|space):/, "");
+  return `ck:flow:${suffix}`;
 }
 
 export function sameRealmOrSpaceId(left: string, right: string): boolean {
-  return left.replace(/^cx:space:/, "cx:realm:") === right.replace(/^cx:space:/, "cx:realm:");
+  return left.replace(/^ck:space:/, "ck:realm:") === right.replace(/^ck:space:/, "ck:realm:");
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {
@@ -461,7 +461,7 @@ export function makeOperation(args: {
 }
 
 function realmIdForOperation(spaceId: string): string {
-  return spaceId.replace(/^cx:space:/, "cx:realm:");
+  return spaceId.replace(/^ck:space:/, "ck:realm:");
 }
 
 export async function pushFederationOperations(
@@ -696,7 +696,7 @@ function trustDomainFromServiceDid(serviceDid: string): string {
     .replace(/^did:(web|key|webvh):/, "")
     .toLowerCase()
     .replace(/:/g, ".");
-  return `cx:trust_domain:${scope || "local"}`;
+  return `ck:trust_domain:${scope || "local"}`;
 }
 
 function stringValue(value: unknown): string | undefined {

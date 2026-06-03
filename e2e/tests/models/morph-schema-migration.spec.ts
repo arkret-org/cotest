@@ -4,10 +4,10 @@
 //       §4.0 (decision matrix — schema evolution row),
 //       §6 (schema evolution generic constraints).
 // Profile: cx.profile.morph.schema_migration_transformations.v1
-//   defined in contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json
+//   defined in cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json
 //   — opt-in Realm profile permitting cx.morph.schema_migrate events with
 //     compatibility_class ∈ {breaking, transformation}.
-// Decision table (canonical): contrix-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
+// Decision table (canonical): cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json
 //   — 4 precedence sources for "what a Morph is and what it allows" merge.
 // Event kind: cx.morph.schema_migrate (event-kind-registry.json, category=morph,
 //             status=active, reducer_input=true).
@@ -35,10 +35,10 @@ import { expect, test } from "@playwright/test";
 // Artifact loader (mirrors the G1.T4 registry-drift pattern)
 // ---------------------------------------------------------------------------
 // From cotest/e2e/tests/models/<spec>.spec.ts → four levels up to the repo
-// root, then down into contrix-spec/spec/v1/artifacts. cwd-independent.
+// root, then down into cokret-spec/spec/v1/artifacts. cwd-independent.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const artifactsRoot = resolve(__dirname, "../../../../contrix-spec/spec/v1/artifacts");
+const artifactsRoot = resolve(__dirname, "../../../../cokret-spec/spec/v1/artifacts");
 const registryRoot = resolve(artifactsRoot, "registry");
 const profilesRoot = resolve(artifactsRoot, "profiles");
 
@@ -127,7 +127,7 @@ test.describe("morph schema migration @fully-implemented", () => {
     // spec: morph.md §4 (four sources merge precedence) + the artifact
     //       itself which is marked source_of_truth=true.
     expect(decisionTable.source_of_truth).toBe(true);
-    expect(decisionTable.applies_to).toBe("cx:morph:");
+    expect(decisionTable.applies_to).toBe("ck:morph:");
 
     // §4 lists exactly four declaration sources (1 schema_refs[], 2 realm
     // profile, 3 morph_type, 4 facets). The artifact MUST mirror that.
@@ -364,7 +364,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       //       .deterministic_transformation_must.
       //
       // Pinned fixme for two reasons:
-      //   (a) contrix-spec/spec/v1/artifacts/fixtures/ does NOT currently
+      //   (a) cokret-spec/spec/v1/artifacts/fixtures/ does NOT currently
       //       contain any cx.vector.morph.*.json fixtures (grep verified at
       //       scenario authoring time, see scenarios/models/morph-schema-migration.md
       //       Phase D step 20). Without fixtures there is no expected_output
@@ -374,7 +374,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       //
       // Acceptance criteria (once cx.vector.morph.* fixtures land):
       //   1. Enumerate all cx.vector.morph.*.json files under
-      //      contrix-spec/spec/v1/artifacts/fixtures/.
+      //      cokret-spec/spec/v1/artifacts/fixtures/.
       //   2. For each vector v:
       //      a. Seed Morph state matching v.input.
       //      b. POST cx.morph.schema_migrate with v.input.payload

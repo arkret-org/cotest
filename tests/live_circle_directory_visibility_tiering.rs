@@ -61,13 +61,13 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
             glyph: CircleGlyph::Globe,
         },
     };
-    let realm_id = RealmId::new("cx:realm:0196419b-0000-7000-8000-cxp0007vis000".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007vis000".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let cid_members = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007vis001".to_owned())
+    let cid_members = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007vis001".to_owned())
         .map_err(|e| anyhow!("cid_members: {e}"))?;
-    let cid_realm = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007vis002".to_owned())
+    let cid_realm = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007vis002".to_owned())
         .map_err(|e| anyhow!("cid_realm: {e}"))?;
-    let cid_default = CircleId::new("cx:circle:0196419b-0000-7000-8000-cxp0007vis003".to_owned())
+    let cid_default = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007vis003".to_owned())
         .map_err(|e| anyhow!("cid_default: {e}"))?;
 
     let circle_members = {

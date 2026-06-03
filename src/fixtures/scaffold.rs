@@ -1,6 +1,6 @@
 //! Per-test isolation scaffold.
 //!
-//! CT-12 (2026-05-18): audit established that `ContrixServer::spawn*` already
+//! CT-12 (2026-05-18): audit established that `CokretServer::spawn*` already
 //! gives each scenario complete isolation:
 //!
 //! - a brand-new SUT process (or docker container) on a freshly-allocated `free_port()`,
@@ -9,7 +9,7 @@
 //! - a unique `did:web:{name}.cotest.local` service DID,
 //! - in-memory persistence inside `soland` so all `AccountRecord` / `SpaceMetaRecord` /
 //!   `ProjectionState` lives inside the spawned process and is destroyed by `Drop for
-//!   ContrixServer`.
+//!   CokretServer`.
 //!
 //! That means AccountRecord / SpaceMetaRecord / ProjectionState **already**
 //! cannot leak between tests; there is no shared database or filesystem
@@ -31,11 +31,11 @@
 //!
 //! 1. derives a per-call unique scenario name (`label-<seq>`) so transcript and per-service log
 //!    files do not collide when several tests run in parallel,
-//! 2. spawns a fresh `ContrixServer` (single-node) — already isolated as described above,
+//! 2. spawns a fresh `CokretServer` (single-node) — already isolated as described above,
 //! 3. returns the server inside a guard that the scenario can keep on the stack; when the scenario
-//!    returns, the `Drop` impl on `ContrixServer` tears the process and blob root down.
+//!    returns, the `Drop` impl on `CokretServer` tears the process and blob root down.
 //!
-//! Existing scenarios that call `ContrixServer::spawn(label)` directly
+//! Existing scenarios that call `CokretServer::spawn(label)` directly
 //! remain valid — the harness contract already isolates them. The scaffold
 //! is purely an ergonomic + name-uniqueness wrapper. The tests below also
 //! exercise the wrapper as a smoke check that two `TestScaffold::fresh`
@@ -45,22 +45,22 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 
-use crate::harness::{ContrixServer, TestServerGroup};
+use crate::harness::{CokretServer, TestServerGroup};
 
 static SCAFFOLD_SEQ: AtomicU64 = AtomicU64::new(1);
 
-/// Per-test scaffold that owns one freshly-spawned `ContrixServer`.
+/// Per-test scaffold that owns one freshly-spawned `CokretServer`.
 ///
-/// The server inside is identical to what `ContrixServer::spawn(label)`
+/// The server inside is identical to what `CokretServer::spawn(label)`
 /// returns — see the module-level docs for why that is already sufficient
 /// for AccountRecord / SpaceMetaRecord / ProjectionState isolation.
 ///
-/// Scaffolds are not `Clone`: the embedded `ContrixServer`'s `Drop` impl is
+/// Scaffolds are not `Clone`: the embedded `CokretServer`'s `Drop` impl is
 /// the lifecycle anchor that tears down the spawned process and removes the
 /// blob root, so each scaffold corresponds to exactly one running SUT.
 pub struct TestScaffold {
     label: String,
-    server: ContrixServer,
+    server: CokretServer,
 }
 
 impl TestScaffold {
@@ -72,7 +72,7 @@ impl TestScaffold {
     /// and on-disk blob roots.
     pub async fn fresh(label: &str) -> Result<Self> {
         let unique = unique_label(label);
-        let server = ContrixServer::spawn(&unique).await?;
+        let server = CokretServer::spawn(&unique).await?;
         Ok(Self {
             label: unique,
             server,
@@ -97,8 +97,8 @@ impl TestScaffold {
         &self.label
     }
 
-    /// Borrow the underlying server for normal `ContrixServer` API use.
-    pub fn server(&self) -> &ContrixServer {
+    /// Borrow the underlying server for normal `CokretServer` API use.
+    pub fn server(&self) -> &CokretServer {
         &self.server
     }
 }
@@ -118,7 +118,7 @@ impl MultiScaffold {
         &self.group
     }
 
-    pub fn server(&self, index: usize) -> &ContrixServer {
+    pub fn server(&self, index: usize) -> &CokretServer {
         self.group.server(index)
     }
 

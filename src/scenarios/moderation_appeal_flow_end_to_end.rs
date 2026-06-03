@@ -9,7 +9,7 @@
 //!   * `cx.moderation.appeal.close`
 //!
 //! Schema: `cx.schema.moderation_appeal.v1`. Typed ID:
-//! `cx:appeal:<uuidv7>`. Cell state machine:
+//! `ck:appeal:<uuidv7>`. Cell state machine:
 //!
 //!   `none → submitted → under_review → decided → closed`
 //!
@@ -38,7 +38,7 @@ pub const APPEAL_KIND_CLOSE: &str = "cx.moderation.appeal.close";
 pub const DECISION_LIFT_KIND: &str = "cx.moderation.decision.lift";
 
 pub const APPEAL_SCHEMA: &str = "cx.schema.moderation_appeal.v1";
-pub const APPEAL_ID_PREFIX: &str = "cx:appeal:";
+pub const APPEAL_ID_PREFIX: &str = "ck:appeal:";
 
 /// Error codes the reducer SHOULD surface on the negative branches.
 pub const EXPECTED_OVERTURN_MISSING_LIFT: &str = "appeal_overturn_missing_lift";
@@ -47,7 +47,7 @@ pub const EXPECTED_SELF_REVIEW_FORBIDDEN: &str = "appeal_self_review_forbidden";
 /// Wire-level executable check: the SDK's appeal-related error code
 /// constants agree with the cotest pins and the canonical registry
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
-/// `cx:appeal:<uuidv7>` wire form round-trips through the SDK.
+/// `ck:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_flow_end_to_end_run() -> Result<()> {
     if ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
         return Err(anyhow!(
@@ -74,7 +74,7 @@ pub async fn moderation_appeal_flow_end_to_end_run() -> Result<()> {
         ));
     }
     // Typed appeal id round-trip.
-    let appeal = TypedAppealId::new("cx:appeal:01904100-0000-7000-8000-000000000aaa")
+    let appeal = TypedAppealId::new("ck:appeal:01904100-0000-7000-8000-000000000aaa")
         .map_err(|e| anyhow!("SDK rejected well-formed TypedAppealId: {e}"))?;
     if !appeal.as_str().starts_with(APPEAL_ID_PREFIX) {
         return Err(anyhow!(

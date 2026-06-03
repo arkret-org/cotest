@@ -33,7 +33,7 @@ test.describe("sovereign deployment", () => {
         did: `did:web:rogue-${fixture.stamp}.evil`,
         handle: `@rogue${fixture.short}`,
         display_name: "Rogue",
-        device_id: `cx:device:01904100-0000-7000-8000-${fixture.short}00000001`,
+        device_id: `ck:device:01904100-0000-7000-8000-${fixture.short}00000001`,
       },
     });
     expect(rogue.status()).toBe(403);
@@ -155,7 +155,7 @@ test.describe("sovereign deployment", () => {
         did: fixture.bobDid,
         handle: `@direct${fixture.short}`,
         display_name: "Direct Bob",
-        device_id: `cx:device:01904100-0000-7000-8000-${fixture.short}00000002`,
+        device_id: `ck:device:01904100-0000-7000-8000-${fixture.short}00000002`,
       },
     });
     expect(mainReject.status()).toBe(403);
@@ -169,7 +169,7 @@ test.describe("sovereign deployment", () => {
       `${solandBaseUrl("beta")}/api/v1/account/accept-external-invite`,
       {
         data: {
-          invite_token: `cx:external_invite:${fixture.short}-rogue`,
+          invite_token: `ck:external_invite:${fixture.short}-rogue`,
           actor_did: `did:web:rogue-${fixture.stamp}.evil`,
           target_realm: fixture.enclaveRealmId,
           target_host: solandBaseUrl("beta"),
@@ -186,8 +186,8 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const short = stamp.slice(-12);
   const aliceDid = `did:web:alice-int-${label}-${stamp}.example`;
   const bobDid = `did:web:bob-ext-${label}-${stamp}.example.org`;
-  const enclaveRealmId = `cx:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
-  const internalSpaceId = `cx:space:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
+  const enclaveRealmId = `ck:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
+  const internalSpaceId = `ck:space:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
 
   await postJson(request, "alpha", "/api/v1/deployment/configure", {
     profile: "sovereign_main",

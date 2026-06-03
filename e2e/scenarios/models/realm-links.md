@@ -8,11 +8,11 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/models/realm-links.md` §2 — 设计原则（有向图、无隐式级联、narrow-only 继承）
-- `contrix-spec/spec/v1/zh/models/realm-links.md` §3 — 标准 link kind 表（`governed_by` / `inherits_policy_from` / `confidential_extension_of` / `discoverable_from` 等）
-- `contrix-spec/spec/v1/zh/models/realm-links.md` §4 — Link 状态机（`active` / `rejected` / `tombstoned`，派生 `confirmed` / `unconfirmed_link`）
-- `contrix-spec/spec/v1/zh/models/realm-links.md` §5 — 禁止隐式级联清单（membership / capability / history / E2EE key / policy / notification …）
-- `contrix-spec/spec/v1/zh/models/realm-links.md` §6 — 显式继承（`cx.realm.inheritance_policy` opt-in，narrow-only，本地 deny 覆盖，`max_depth=1`）
+- `cokret-spec/spec/v1/zh/models/realm-links.md` §2 — 设计原则（有向图、无隐式级联、narrow-only 继承）
+- `cokret-spec/spec/v1/zh/models/realm-links.md` §3 — 标准 link kind 表（`governed_by` / `inherits_policy_from` / `confidential_extension_of` / `discoverable_from` 等）
+- `cokret-spec/spec/v1/zh/models/realm-links.md` §4 — Link 状态机（`active` / `rejected` / `tombstoned`，派生 `confirmed` / `unconfirmed_link`）
+- `cokret-spec/spec/v1/zh/models/realm-links.md` §5 — 禁止隐式级联清单（membership / capability / history / E2EE key / policy / notification …）
+- `cokret-spec/spec/v1/zh/models/realm-links.md` §6 — 显式继承（`cx.realm.inheritance_policy` opt-in，narrow-only，本地 deny 覆盖，`max_depth=1`）
 
 ## 拓扑
 
@@ -43,7 +43,7 @@
    - title = `"models/realm-links Gov Realm ${stamp}"`
    - realm_kind = `governance`（profile 标签；在没有专用 UI 时由测试直接调 soland API 创建）
 2. **alice** 在 G 中写一条 moderation policy（`cx.policy.moderation`），含 `banned_keywords = ["forbidden-word-${stamp}"]`，并在同一 Realm 内发 `cx.realm.inheritance_policy` 允许下游 `governed_by` 子 Realm 继承该 moderation rule（narrow-only）。
-3. 断言：`realm-overview-panel` 显示 `realmId` 形如 `cx:realm:...`，记录 `govRealmId`；G 的 effective policy 中含 `banned_keywords` 且 `inheritable = true`。
+3. 断言：`realm-overview-panel` 显示 `realmId` 形如 `ck:realm:...`，记录 `govRealmId`；G 的 effective policy 中含 `banned_keywords` 且 `inheritable = true`。
 
 ### Phase B — 创建 team Realm T + 声明 governed_by link
 
@@ -91,7 +91,7 @@
 
 ## Observable assertions (合并清单)
 
-- 步骤 3：`govRealmId` 形如 `cx:realm:...`，G 的 inheritable policy 可被下游引用
+- 步骤 3：`govRealmId` 形如 `ck:realm:...`，G 的 inheritable policy 可被下游引用
 - 步骤 7：T 的 outbound link 列表含一条 `governed_by → govRealmId`
 - 步骤 8-9：T 的 effective policy include G 的 keyword；T 本地 policy 不含（验证是合并产物）
 - 步骤 12-13：bob 的违规消息被 inherited rule 拦截，decision 标注 source = G

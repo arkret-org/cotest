@@ -67,21 +67,21 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
     //     round materializes are well-formed under the SDK validators.
     Did::new("did:web:agent.example".to_owned())
         .map_err(|e| anyhow!("agent principal DID construction: {e}"))?;
-    AgentKeyId::new("cx:agent_key:01999999-0000-7000-8000-000000000002".to_owned())
+    AgentKeyId::new("ck:agent_key:01999999-0000-7000-8000-000000000002".to_owned())
         .map_err(|e| anyhow!("AgentKeyId construction: {e}"))?;
-    AgentSessionId::new("cx:agent_session:01999999-0000-7000-8000-000000000003".to_owned())
+    AgentSessionId::new("ck:agent_session:01999999-0000-7000-8000-000000000003".to_owned())
         .map_err(|e| anyhow!("AgentSessionId construction: {e}"))?;
     AccountabilityGrantId::new(
-        "cx:accountability_grant:01999999-0000-7000-8000-000000000004".to_owned(),
+        "ck:accountability_grant:01999999-0000-7000-8000-000000000004".to_owned(),
     )
     .map_err(|e| anyhow!("AccountabilityGrantId construction: {e}"))?;
 
     // (d) ill-formed DID / typed-ids MUST be rejected. This is the
     //     wire-form fail-closed gate for downstream parsers.
-    let bad_principal = Did::new("cx:agent:not-a-uuidv7".to_owned());
+    let bad_principal = Did::new("ck:agent:not-a-uuidv7".to_owned());
     if bad_principal.is_ok() {
         return Err(anyhow!(
-            "Did accepted ill-formed agent principal value `cx:agent:not-a-uuidv7`"
+            "Did accepted ill-formed agent principal value `ck:agent:not-a-uuidv7`"
         ));
     }
 

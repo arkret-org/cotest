@@ -11,7 +11,7 @@ use contrix_core::AgentSessionId;
 
 pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
     let session =
-        AgentSessionId::new("cx:agent_session:01999999-0000-7000-8000-00000000e001".to_owned())
+        AgentSessionId::new("ck:agent_session:01999999-0000-7000-8000-00000000e001".to_owned())
             .map_err(|e| anyhow!("AgentSessionId: {e}"))?;
     // A past `expires_at` deterministically marks the session as
     // pairing-expired.
@@ -21,7 +21,7 @@ pub async fn pairing_expiry_auto_revoke_run() -> Result<()> {
             "expected expired_at < now; got {expired_at} >= now"
         ));
     }
-    if !session.as_str().starts_with("cx:agent_session:") {
+    if !session.as_str().starts_with("ck:agent_session:") {
         return Err(anyhow!("AgentSessionId lost canonical prefix"));
     }
     // TODO(P4-impl): once soland persists agent_session rows, drive

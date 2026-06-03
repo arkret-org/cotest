@@ -1,13 +1,13 @@
 {
   "suite": "blind_payload_sanitizer",
   "version": 1,
-  "description": "T1.1 conformance vectors for the unified push blind-payload sanitizer (contrix-rust-sdk / chime / floria). Positive cases must pass `sanitize_blind_payload`; negative cases must fail with the documented `reason_code` and (where given) `field_path`.",
+  "description": "T1.1 conformance vectors for the unified push blind-payload sanitizer (cokret-rust-sdk / chime / floria). Positive cases must pass `sanitize_blind_payload`; negative cases must fail with the documented `reason_code` and (where given) `field_path`.",
   "positive_cases": [
     {
       "name": "minimal_blind_wakeup",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message"
         }
       }
@@ -16,7 +16,7 @@
       "name": "with_push_hint_literal",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "incoming_call",
           "push_hint": "incoming_call"
         }
@@ -26,7 +26,7 @@
       "name": "with_push_hint_l10n_key",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "mention",
           "push_hint": "l10n_key:message.new"
         }
@@ -36,7 +36,7 @@
       "name": "with_badge_and_unread_count",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "badge": 1,
           "unread_count": 3
@@ -47,7 +47,7 @@
       "name": "with_counts_object",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "counts": { "unread": 4 }
         }
@@ -66,7 +66,7 @@
       "name": "custom_wakeup_kind_snake_case",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "bg_refresh"
         }
       }
@@ -79,9 +79,9 @@
       "expected_field_path": "event_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "event_id": "cx:event:01JS0EV000000000000000000"
+          "event_id": "ck:event:01JS0EV000000000000000000"
         }
       }
     },
@@ -91,9 +91,9 @@
       "expected_field_path": "message_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "message_id": "cx:message:01JS0MS000000000000000000"
+          "message_id": "ck:message:01JS0MS000000000000000000"
         }
       }
     },
@@ -103,9 +103,9 @@
       "expected_field_path": "flow_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "flow_id": "cx:flow:01JS0FL000000000000000000"
+          "flow_id": "ck:flow:01JS0FL000000000000000000"
         }
       }
     },
@@ -115,9 +115,9 @@
       "expected_field_path": "space_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "space_id": "cx:space:01JS0SP000000000000000000"
+          "space_id": "ck:space:01JS0SP000000000000000000"
         }
       }
     },
@@ -127,9 +127,9 @@
       "expected_field_path": "realm_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "realm_id": "cx:realm:01JS0RM000000000000000000"
+          "realm_id": "ck:realm:01JS0RM000000000000000000"
         }
       }
     },
@@ -139,7 +139,7 @@
       "expected_field_path": "thread_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "thread_id": "thread-abc"
         }
@@ -151,7 +151,7 @@
       "expected_field_path": "correlation_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "correlation_id": "corr-1"
         }
@@ -163,7 +163,7 @@
       "expected_field_path": "sender_did",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "sender_did": "did:web:alice.example"
         }
@@ -175,7 +175,7 @@
       "expected_field_path": "sender_handle",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "sender_handle": "@alice"
         }
@@ -187,7 +187,7 @@
       "expected_field_path": "sender_display_name",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "sender_display_name": "Alice"
         }
@@ -199,7 +199,7 @@
       "expected_field_path": "display_name",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "display_name": "Alice"
         }
@@ -211,7 +211,7 @@
       "expected_field_path": "device_did",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "device_did": "did:web:device.example#fcm-1"
         }
@@ -223,7 +223,7 @@
       "expected_field_path": "device_url",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "device_url": "https://fcm.example/devices/1"
         }
@@ -235,7 +235,7 @@
       "expected_field_path": "body",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "body": "you have a new message"
         }
@@ -247,7 +247,7 @@
       "expected_field_path": "content",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "content": { "body": "..." }
         }
@@ -259,7 +259,7 @@
       "expected_field_path": "title",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "title": "Secret"
         }
@@ -271,7 +271,7 @@
       "expected_field_path": "reaction_value",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "reaction_value": "thumbs_up"
         }
@@ -283,7 +283,7 @@
       "expected_field_path": "attachment_filename",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "attachment_filename": "secret.pdf"
         }
@@ -295,7 +295,7 @@
       "expected_field_path": "provider_payload",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "provider_payload": { "aps": {} }
         }
@@ -307,7 +307,7 @@
       "expected_field_path": "sdp",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "incoming_call",
           "sdp": "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n"
         }
@@ -319,7 +319,7 @@
       "expected_field_path": "view_renderer",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "view_renderer": "preview-block"
         }
@@ -331,7 +331,7 @@
       "expected_field_path": "custom_extension",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "custom_extension": "anything"
         }
@@ -343,7 +343,7 @@
       "expected_field_path": "trace.parent",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message"
         },
         "trace": { "parent": "did:web:alice.example" }
@@ -355,7 +355,7 @@
       "expected_field_path": "unread_count",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "unread_count": 100000
         }
@@ -367,7 +367,7 @@
       "expected_field_path": "unread_count",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "unread_count": -1
         }
@@ -390,7 +390,7 @@
       "expected_field_path": "push_target_id",
       "payload": {
         "notification": {
-          "push_target_id": "cx:device:01HYZ8Z000000000000000",
+          "push_target_id": "ck:device:01HYZ8Z000000000000000",
           "wakeup_kind": "message"
         }
       }
@@ -401,7 +401,7 @@
       "expected_field_path": "push_hint",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "push_hint": "l10n_key:did:web:alice"
         }
@@ -413,7 +413,7 @@
       "expected_field_path": "push_hint",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
           "push_hint": "you have new mail"
         }
@@ -425,7 +425,7 @@
       "expected_field_path": "wakeup_kind",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "MESSAGE"
         }
       }
@@ -448,7 +448,7 @@
       "expected_field_path": "wakeup_kind",
       "payload": {
         "notification": {
-          "push_target_id": "cx:pseudonym:push:01HYZ8Z000000000000000"
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000"
         }
       }
     }

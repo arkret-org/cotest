@@ -325,7 +325,7 @@ test.describe("notifications", () => {
       const bobDevice2 = {
         ...bob,
         name: `${bob.name}-device2`,
-        deviceId: `cx:device:01904100-0000-7000-8000-${String(stamp).padStart(12, "0").slice(-12)}`,
+        deviceId: `ck:device:01904100-0000-7000-8000-${String(stamp).padStart(12, "0").slice(-12)}`,
       };
       await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
       const [aliceToken, bobToken1, bobToken2] = await Promise.all([
@@ -388,7 +388,7 @@ function encryptedEnvelope(
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
-    content_type: "application/vnd.contrix.message+json",
+    content_type: "application/vnd.cokret.message+json",
     ciphertext,
     authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",

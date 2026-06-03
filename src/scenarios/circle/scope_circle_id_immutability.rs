@@ -25,17 +25,17 @@ use contrix_core::{CircleId, Did, Flow, SpaceId};
 use serde_json::Value;
 
 fn space_id() -> Result<SpaceId> {
-    SpaceId::new("cx:space:0196419b-0000-7000-8000-000000000602".to_owned())
+    SpaceId::new("ck:space:0196419b-0000-7000-8000-000000000602".to_owned())
         .map_err(|e| anyhow!("space id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000603".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000603".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000604".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000604".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

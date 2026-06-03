@@ -8,19 +8,19 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ContrixServer, expect_json, refresh_event_proof};
+use crate::harness::{CokretServer, expect_json, refresh_event_proof};
 
-const ADAPTER_REALM_ID: &str = "cx:realm:0196419b-0000-7000-8000-000000000101";
-const ADAPTER_REALM_CREATE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-000000000100";
-const ADAPTER_MESSAGE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-000000000001";
+const ADAPTER_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-000000000101";
+const ADAPTER_REALM_CREATE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-000000000100";
+const ADAPTER_MESSAGE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-000000000001";
 
-pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
+pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     submit_adapter_event(server, token).await?;
     upload_and_inspect_keys(server, token).await?;
     Ok(())
 }
 
-async fn submit_adapter_event(server: &ContrixServer, token: &str) -> Result<()> {
+async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> {
     let realm_id = create_adapter_realm(server, token).await?;
     let event = signed_message_event(
         ADAPTER_MESSAGE_EVENT_ID,
@@ -28,7 +28,7 @@ async fn submit_adapter_event(server: &ContrixServer, token: &str) -> Result<()>
         &realm_id,
         "did:web:alice.example",
         "dev_alice",
-        "cx:thread:adapter",
+        "ck:thread:adapter",
         "hello",
     )?;
 
@@ -47,7 +47,7 @@ async fn submit_adapter_event(server: &ContrixServer, token: &str) -> Result<()>
     Ok(())
 }
 
-async fn create_adapter_realm(server: &ContrixServer, token: &str) -> Result<String> {
+async fn create_adapter_realm(server: &CokretServer, token: &str) -> Result<String> {
     let event = signed_realm_create_event(
         ADAPTER_REALM_CREATE_EVENT_ID,
         1,
@@ -83,7 +83,7 @@ fn signed_realm_create_event(
             "schema": "cx.schema.realm.v1",
             "title": title,
             "summary": title,
-            "trust_domain": "cx:trust_domain:protocol-payloads.cotest.local",
+            "trust_domain": "ck:trust_domain:protocol-payloads.cotest.local",
             "created_by": actor_id,
             "schema_refs": ["cx.schema.realm.v1"],
             "default_discoverability": "public",
@@ -117,8 +117,8 @@ fn signed_realm_create_event(
         "payload": payload,
         "unsigned": {
             "local_operation_idempotency_alias": format!(
-                "cx:operation:{}",
-                event_id.trim_start_matches("cx:event:")
+                "ck:operation:{}",
+                event_id.trim_start_matches("ck:event:")
             )
         },
         "proofs": [{
@@ -144,7 +144,7 @@ fn signed_message_event(
     body: &str,
 ) -> Result<Value> {
     let payload = json!({
-        "flow_id": "cx:flow:0196419b-0000-7000-8000-000000000001",
+        "flow_id": "ck:flow:0196419b-0000-7000-8000-000000000001",
         "track_name": "discussion",
         "content": {
             "kind": "cx.content.text",
@@ -165,8 +165,8 @@ fn signed_message_event(
         "payload": payload,
         "unsigned": {
             "local_operation_idempotency_alias": format!(
-                "cx:operation:{}",
-                event_id.trim_start_matches("cx:event:")
+                "ck:operation:{}",
+                event_id.trim_start_matches("ck:event:")
             )
         },
         "proofs": [{
@@ -182,7 +182,7 @@ fn signed_message_event(
     Ok(event)
 }
 
-async fn upload_and_inspect_keys(server: &ContrixServer, token: &str) -> Result<()> {
+async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<()> {
     let upload_keys = expect_json(
         server
             .http()

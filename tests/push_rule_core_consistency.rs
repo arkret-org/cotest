@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow, bail};
-use contrix::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
+use cokret::push_rule_core::{self, EventContext, ShouldNotify, WatchLevel};
 use serde::Deserialize;
 
 const FIXTURE: &str = include_str!("fixtures/push_rule_core_vectors.json");

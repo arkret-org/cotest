@@ -46,7 +46,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 3. 客户端:
    - Argon2id(salt=random 16 bytes, memoryCost=64MB, iterations=3)→ `derived_key`
    - XChaCha20-Poly1305 加密 `{ self_signing_key, user_signing_key, mls_history_backup_key }`
-   - `key_commitment = SHA256(HKDF(derived_key, info="contrix-key-backup-commitment-v1"))`
+   - `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
 4. `PUT /api/v1/keys/backups/<backup_id>` body 含:
    - `backup_class: "secret_storage"`
    - `kdf_params: { algorithm: "argon2id", salt, memory_cost, iterations }`

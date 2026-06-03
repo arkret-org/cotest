@@ -1,13 +1,13 @@
 //! CT-5 — `did:webvh` witness offline >24h + emergency recovery.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/identity/identity-did.md` §4.2.1 — `did:webvh` health states
+//!   - `cokret-spec/spec/v1/zh/identity/identity-did.md` §4.2.1 — `did:webvh` health states
 //!     (`healthy`, `degraded_no_witness`, `stale_history`, `write_unavailable`, `untrusted`). 24h
 //!     hard cap for `degraded_no_witness`; past it resolver MUST fail closed for new high-risk
 //!     writes.
-//!   - `contrix-spec/spec/v1/zh/identity/identity-did.md` §8.2 (numbered in the spec under §5+,
+//!   - `cokret-spec/spec/v1/zh/identity/identity-did.md` §8.2 (numbered in the spec under §5+,
 //!     key-management threshold path) — emergency recovery when remaining quorum < threshold.
-//!   - `contrix-spec/spec/v1/zh/identity/key-management.md` §3.3 — rotation kinds (`scheduled` /
+//!   - `cokret-spec/spec/v1/zh/identity/key-management.md` §3.3 — rotation kinds (`scheduled` /
 //!     `emergency`) and the requirement that emergency rotations are tagged and audited distinctly.
 //!
 //! Scenario walk-through (when fully wired):

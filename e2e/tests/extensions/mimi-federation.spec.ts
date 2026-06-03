@@ -3,7 +3,7 @@
 // Spec: extensions/mimi-interop.md §1-§7
 //   §1 Provider Facade overview
 //   §2 Realm `federation_profile = "mimi_interop"` + endpoint exposure
-//   §3 Room binding: Contrix Flow ↔ MIMI room; event ↔ Message translation
+//   §3 Room binding: Cokret Flow ↔ MIMI room; event ↔ Message translation
 //   §4 Content mapping: standard MIMI content type ↔ `cx.morph` kind; unknown → quarantine
 //   §5 Policy mapping: join_rule / history_visibility ↔ MIMI room policy
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
@@ -41,7 +41,7 @@ test.describe("mimi federation", () => {
       // 断言 GET /api/v1/realm/:id/federation/mimi/endpoint 返回 mimi_endpoint_url + room_binding_id。
       //
       // Phase B — mimi_facade (mock) 模拟外部 MIMI 网络的 join request,
-      //   翻译为 Contrix 的 cx.invite.request / knock,投递到 soland;
+      //   翻译为 Cokret 的 cx.invite.request / knock,投递到 soland;
       //   alice 的 /realm/:id/admin 看到 federation-inbound-panel 含 mimi 来源标记。
       //
       // Phase C — alice approve;soland 通过 facade 验证 bob_mimi 的 MIMI identity,
@@ -52,10 +52,10 @@ test.describe("mimi federation", () => {
       // Phase D — alice 在 /timeline/:realmId 发 M1;
       //   facade mock 记录到 outbound MIMI event;soland message 挂
       //   cx.morph.federation_outbound = "mimi" + mimi_event_id。
-      //   facade 把 bob_mimi 在 MIMI 网络的 MM2 翻译为 Contrix Message;
+      //   facade 把 bob_mimi 在 MIMI 网络的 MM2 翻译为 Cokret Message;
       //   alice timeline 在 30s 内出现 MM2,sender 显示为 pairwise DID;
       //   消息挂 cx.morph.federation_inbound = "mimi" + mimi_origin_event_id。
-      //   alice reply MM2 → M3;reply 关系在 MIMI ↔ Contrix 双向保留。
+      //   alice reply MM2 → M3;reply 关系在 MIMI ↔ Cokret 双向保留。
       //
       // Phase E — Phase B 的 approve 隐含 per-Realm consent;
       //   bob_mimi 的 pairwise DID 只对当前 Realm 有效,
@@ -71,7 +71,7 @@ test.describe("mimi federation", () => {
     "E5.1 MIMI endpoint 不可达 → federation fallback: 消息本地保留 + outbound 状态标记 deferred,facade 恢复后重试",
     async () => {
       // facade mock 主动返回 5xx / timeout;
-      // alice 发 M1 应仍然 persist 到 soland 本地、对 Contrix 成员可见;
+      // alice 发 M1 应仍然 persist 到 soland 本地、对 Cokret 成员可见;
       // message 挂 cx.morph.federation_outbound_status = "deferred";
       // facade 恢复后,soland 自动重试投递,状态转为 "delivered"。
     },

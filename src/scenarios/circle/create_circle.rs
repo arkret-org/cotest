@@ -23,12 +23,12 @@ fn display() -> CircleDisplay {
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000201".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000201".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("cx:realm:0196419b-0000-7000-8000-000000000200".to_owned())
+    RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000200".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 

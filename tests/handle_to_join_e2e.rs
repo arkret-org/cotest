@@ -3,7 +3,7 @@
 //! Stitches the four pieces shipped in T3.1–T3.4:
 //!
 //!   - T3.1 ships `MemberDeliveryBindingCandidate` + typed SDK validator.
-//!   - T3.2 wires `handle_claim` issuance in coauth (canonical `contrix://...` URI +
+//!   - T3.2 wires `handle_claim` issuance in coauth (canonical `cokret://...` URI +
 //!     `member_delivery_binding`).
 //!   - T3.3 lands the soland `delivery_binding_policy` reducer (`recipient_service_not_allowed` /
 //!     `binding_source_not_allowed`).

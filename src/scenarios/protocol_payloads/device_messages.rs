@@ -5,9 +5,9 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, encrypted_envelope, expect_json};
+use crate::harness::{CokretServer, encrypted_envelope, expect_json};
 
-pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
+pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     send_application_message(server, token).await?;
     duplicate_send_is_idempotent(server, token).await?;
     list_delivered_keeps_ciphertext_only(server, token).await?;
@@ -16,7 +16,7 @@ pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn send_application_message(server: &ContrixServer, token: &str) -> Result<()> {
+async fn send_application_message(server: &CokretServer, token: &str) -> Result<()> {
     let send = expect_json(
         server
             .http()
@@ -40,7 +40,7 @@ async fn send_application_message(server: &ContrixServer, token: &str) -> Result
     Ok(())
 }
 
-async fn duplicate_send_is_idempotent(server: &ContrixServer, token: &str) -> Result<()> {
+async fn duplicate_send_is_idempotent(server: &CokretServer, token: &str) -> Result<()> {
     let duplicate_send = expect_json(
         server
             .http()
@@ -64,7 +64,7 @@ async fn duplicate_send_is_idempotent(server: &ContrixServer, token: &str) -> Re
     Ok(())
 }
 
-async fn list_delivered_keeps_ciphertext_only(server: &ContrixServer, token: &str) -> Result<()> {
+async fn list_delivered_keeps_ciphertext_only(server: &CokretServer, token: &str) -> Result<()> {
     let delivered = expect_json(
         server
             .http()
@@ -79,7 +79,7 @@ async fn list_delivered_keeps_ciphertext_only(server: &ContrixServer, token: &st
     Ok(())
 }
 
-async fn describe_contract_is_stable(server: &ContrixServer, token: &str) -> Result<()> {
+async fn describe_contract_is_stable(server: &CokretServer, token: &str) -> Result<()> {
     let device_messages_describe = expect_json(
         server
             .http()
@@ -90,7 +90,7 @@ async fn describe_contract_is_stable(server: &ContrixServer, token: &str) -> Res
     .await?;
     assert_eq!(
         device_messages_describe["contract"],
-        "contrix.rest.device_messages_describe.v1"
+        "cokret.rest.device_messages_describe.v1"
     );
     assert_eq!(
         device_messages_describe["schema"],
@@ -99,7 +99,7 @@ async fn describe_contract_is_stable(server: &ContrixServer, token: &str) -> Res
     Ok(())
 }
 
-async fn send_verification_message(server: &ContrixServer, token: &str) -> Result<()> {
+async fn send_verification_message(server: &CokretServer, token: &str) -> Result<()> {
     let verification_send = expect_json(
         server
             .http()

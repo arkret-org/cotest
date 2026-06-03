@@ -1,5 +1,5 @@
 use anyhow::Result;
-use contrix::http_signature::{
+use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use contrix_core::canonical::{canonical_json_bytes, canonical_sha256};
@@ -10,17 +10,17 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    ContrixServer, TestServerGroup, encrypted_envelope, expect_account_subscribe_delta,
+    CokretServer, TestServerGroup, encrypted_envelope, expect_account_subscribe_delta,
     expect_json, expect_text, register_account, submit_event,
 };
 
 const ALICE_DID: &str = "did:web:cotest-fed-alice.example";
 const BOB_DID: &str = "did:web:cotest-fed-bob-b.example";
-const ALICE_MESSAGE_OPERATION_ID: &str = "cx:operation:01904100-0000-7000-8000-fedc00000001";
-const BOB_JOIN_OPERATION_ID: &str = "cx:operation:01904100-0000-7000-8000-fedc00000002";
-const BOB_MESSAGE_OPERATION_ID: &str = "cx:operation:01904100-0000-7000-8000-fedc00000003";
-const ALICE_MESSAGE_EVENT_ID: &str = "cx:event:01904100-0000-7000-8000-fedc00000001";
-const BOB_MESSAGE_EVENT_ID: &str = "cx:event:01904100-0000-7000-8000-fedc00000003";
+const ALICE_MESSAGE_OPERATION_ID: &str = "ck:operation:01904100-0000-7000-8000-fedc00000001";
+const BOB_JOIN_OPERATION_ID: &str = "ck:operation:01904100-0000-7000-8000-fedc00000002";
+const BOB_MESSAGE_OPERATION_ID: &str = "ck:operation:01904100-0000-7000-8000-fedc00000003";
+const ALICE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000001";
+const BOB_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000003";
 
 pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
@@ -80,8 +80,8 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     // (discoverability, history_visibility, members, encryption_profile, …)
     // belongs on the Realm object and `cx.member.state`, not the message.
     let flow_id = format!(
-        "cx:flow:{}",
-        realm_id.strip_prefix("cx:realm:").unwrap_or(&realm_id)
+        "ck:flow:{}",
+        realm_id.strip_prefix("ck:realm:").unwrap_or(&realm_id)
     );
 
     let alice_message = Operation::create(
@@ -325,8 +325,8 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     Ok(())
 }
 
-async fn create_federated_realm(server: &ContrixServer, alice: &str) -> Result<String> {
-    let realm_id = "cx:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
+async fn create_federated_realm(server: &CokretServer, alice: &str) -> Result<String> {
+    let realm_id = "ck:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
     let created = submit_event(
         server,
         alice,
@@ -339,7 +339,7 @@ async fn create_federated_realm(server: &ContrixServer, alice: &str) -> Result<S
                 "schema": "cx.schema.realm.v1",
                 "title": "Federated Collaboration Space",
                 "summary": "cross server collaboration",
-                "trust_domain": "cx:trust_domain:federation-collaboration.cotest.local",
+                "trust_domain": "ck:trust_domain:federation-collaboration.cotest.local",
                 "created_by": ALICE_DID,
                 "schema_refs": ["cx.schema.realm.v1"],
                 "default_discoverability": "invite_only",
@@ -372,8 +372,8 @@ fn with_federation_trust_headers(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
-    source: &ContrixServer,
-    destination: &ContrixServer,
+    source: &CokretServer,
+    destination: &CokretServer,
     body: &Value,
 ) -> Result<reqwest::RequestBuilder> {
     let body_bytes = canonical_json_bytes(body)?;
@@ -434,14 +434,14 @@ fn with_federation_trust_headers(
 
 fn trust_domain_for(service_did: &str) -> String {
     format!(
-        "cx:trust_domain:{}",
+        "ck:trust_domain:{}",
         service_did.trim_start_matches("did:web:").replace(':', ".")
     )
 }
 
 fn development_service_signing_key(
     service_did: &str,
-) -> contrix::http_signature::Ed25519SigningKey {
+) -> cokret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
     hasher.update(b"soland:anchorer-ephemeral:");
     hasher.update(service_did.as_bytes());

@@ -56,9 +56,9 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
     for case in fixture.cases.proof_payload {
         let event = json!({
-            "event_id": "cx:event:01970e58-0003-7000-8000-000000000010",
+            "event_id": "ck:event:01970e58-0003-7000-8000-000000000010",
             "kind": "cx.message.create",
-            "realm_id": "cx:realm:01970e58-0003-7000-8000-000000000011",
+            "realm_id": "ck:realm:01970e58-0003-7000-8000-000000000011",
             "content": {"kind": "cx.content.text", "body": "covered"},
             "proofs": [{"alg": "none"}],
             "unsigned": {"hint": "not covered"}
@@ -97,9 +97,9 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
     for case in fixture.cases.cursor {
         let encoded = encode_cursor_shape(&case.shape)?;
-        if !encoded.starts_with("cx:cursor:") {
+        if !encoded.starts_with("ck:cursor:") {
             bail!(
-                "encoding fixture {} did not produce cx:cursor prefix",
+                "encoding fixture {} did not produce ck:cursor prefix",
                 case.name
             );
         }
@@ -241,10 +241,10 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
         }),
         json!({
             "model": "relation_container",
-            "scope_container_id": "cx:place:019640b6-8000-7000-8000-000000000000",
-            "container_id": "cx:place:019640c0-8000-7000-8000-000000000000",
+            "scope_container_id": "ck:place:019640b6-8000-7000-8000-000000000000",
+            "container_id": "ck:place:019640c0-8000-7000-8000-000000000000",
             "relation_kind": "contains",
-            "relation_id": "cx:relation:01970e58-0002-7000-8000-000000000001",
+            "relation_id": "ck:relation:01970e58-0002-7000-8000-000000000001",
             "rank": "V"
         }),
         json!({
@@ -270,7 +270,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
 
     let invalid = json!({
         "model": "relation_container",
-        "container_id": "cx:place:019640c0-8000-7000-8000-000000000000",
+        "container_id": "ck:place:019640c0-8000-7000-8000-000000000000",
         "relation_kind": "contains",
         "rank": "F"
     });
@@ -294,7 +294,7 @@ pub(crate) fn validate_projection_position(position: &Value) -> Result<()> {
             require_position_field(position, "container_id")?;
             require_position_field(position, "relation_kind")?;
             let relation_id = require_position_field(position, "relation_id")?;
-            if !relation_id.starts_with("cx:relation:") {
+            if !relation_id.starts_with("ck:relation:") {
                 bail!("relation_container position relation_id was invalid");
             }
             require_rank(position)?;

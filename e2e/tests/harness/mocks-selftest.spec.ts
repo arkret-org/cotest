@@ -199,7 +199,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
-    const spaceId = `cx:space:selftest:${Date.now()}`;
+    const spaceId = `ck:space:selftest:${Date.now()}`;
     const invite = await request.post(`${baseUrl}/api/v1/audit-agent/invite`, {
       data: { space_id: spaceId, invite: { event_id: "evt-selftest" } },
     });
@@ -432,7 +432,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(identity.identities.some((entry: { mimi_handle: string }) => entry.mimi_handle === "bob_mimi")).toBe(true);
 
     const stamp = Date.now();
-    const realmId = `cx:realm:mimi-selftest:${stamp}`;
+    const realmId = `ck:realm:mimi-selftest:${stamp}`;
     const roomBindingId = `mimi-room-selftest-${stamp}`;
     const join = await facade.createJoinRequest({
       room_binding_id: roomBindingId,
@@ -483,7 +483,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
     expect(accepted.status).toBe(200);
     expect(accepted.body.status).toBe("accepted");
-    expect(String(accepted.body.contrix_event_hint)).toMatch(/^cx:event:mimi:/);
+    expect(String(accepted.body.contrix_event_hint)).toMatch(/^ck:event:mimi:/);
 
     const quarantined = await facade.injectInbound({
       realm_id: realmId,

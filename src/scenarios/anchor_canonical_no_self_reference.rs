@@ -7,7 +7,7 @@
 //! anchorer signature. The receiver MUST:
 //!
 //!   (a) recompute `H = sha256(canonical_bytes)`; the embedded `id`
-//!       MUST satisfy `id == "cx:anchor:" || base32(H)` (form per
+//!       MUST satisfy `id == "ck:anchor:" || base32(H)` (form per
 //!       deployment), and
 //!   (b) verify `anchorer_signature` covers exactly `canonical_bytes` (i.e.
 //!       the byte stream with `id` / `anchorer_signature` removed).
@@ -24,7 +24,7 @@ use contrix_core::{
 };
 
 fn space() -> Result<SpaceId> {
-    SpaceId::new("cx:space:0196419b-0000-7000-8000-00000000014a".to_owned())
+    SpaceId::new("ck:space:0196419b-0000-7000-8000-00000000014a".to_owned())
         .map_err(|e| anyhow!("space id: {e}"))
 }
 
@@ -35,7 +35,7 @@ fn move_id(hex_byte: u8) -> Result<MoveId> {
 
 fn anchor_id(hex_byte: u8) -> Result<AnchorId> {
     let hex = format!("{hex_byte:02x}").repeat(32);
-    AnchorId::new(format!("cx:anchor:sha256:{hex}")).map_err(|e| anyhow!("anchor id: {e}"))
+    AnchorId::new(format!("ck:anchor:sha256:{hex}")).map_err(|e| anyhow!("anchor id: {e}"))
 }
 
 fn hash(hex_byte: u8) -> Result<Hash> {

@@ -12,7 +12,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         .await?;
     let space_id = create_test_realm(
         &alice,
-        "cx:realm:01999999-0000-7000-8000-00000000e101",
+        "ck:realm:01999999-0000-7000-8000-00000000e101",
         "Event Idempotency Replay",
     )
     .await?;
@@ -21,7 +21,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         &space_id,
         "cx.message.create",
         json!({
-            "flow_id": "cx:flow:01999999-0000-7000-8000-00000000feed",
+            "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
             "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",
@@ -72,7 +72,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         .await?;
     let space_id = create_test_realm(
         &alice,
-        "cx:realm:01999999-0000-7000-8000-00000000e102",
+        "ck:realm:01999999-0000-7000-8000-00000000e102",
         "Event Idempotency Edit Redact",
     )
     .await?;
@@ -81,7 +81,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         &space_id,
         "cx.message.create",
         json!({
-            "flow_id": "cx:flow:01999999-0000-7000-8000-00000000feed",
+            "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
             "track_name": "discussion",
             "content": {
                 "kind": "cx.content.text",
@@ -93,7 +93,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
 
     let created = submit_and_duplicate(&alice, &create_event).await?;
     let create_event_id = json_string(&created, "event_id")?;
-    let message_ref = create_event_id.replacen("cx:event:", "cx:message:", 1);
+    let message_ref = create_event_id.replacen("ck:event:", "ck:message:", 1);
 
     assert_projected_kind_count(&alice, &space_id, "cx.message.create", 1).await?;
 
@@ -164,7 +164,7 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
                 "schema": "cx.schema.realm.v1",
                 "title": title,
                 "summary": title,
-                "trust_domain": "cx:trust_domain:event-idempotency.cotest.local",
+                "trust_domain": "ck:trust_domain:event-idempotency.cotest.local",
                 "created_by": &alice.actor,
                 "schema_refs": ["cx.schema.realm.v1"],
                 "default_discoverability": "public",

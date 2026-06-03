@@ -8,24 +8,24 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/sync/service-surface.md` §2.3 — 接口必须天然支持幂等重试
-- `contrix-spec/spec/v1/zh/sync/service-surface.md` §2.4 — 服务必须公布自己的实现 profile
-- `contrix-spec/spec/v1/zh/sync/service-surface.md` §3 — `GET /api/v1/server/describe` canonical shape
-- `contrix-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels(`supported_operations` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` / `development_mode`)
-- `contrix-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`cx:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
-- `contrix-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
-- `contrix-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
-- `contrix-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`cx.server.*` / `cx.events.*` / `cx.sync.*` 等)
-- `contrix-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `cx.schema.service_describe.v1` wire schema
-- `contrix-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
-- 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/contrix.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
+- `cokret-spec/spec/v1/zh/sync/service-surface.md` §2.3 — 接口必须天然支持幂等重试
+- `cokret-spec/spec/v1/zh/sync/service-surface.md` §2.4 — 服务必须公布自己的实现 profile
+- `cokret-spec/spec/v1/zh/sync/service-surface.md` §3 — `GET /api/v1/server/describe` canonical shape
+- `cokret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels(`supported_operations` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` / `development_mode`)
+- `cokret-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ck:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
+- `cokret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
+- `cokret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
+- `cokret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`cx.server.*` / `cx.events.*` / `cx.sync.*` 等)
+- `cokret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `cx.schema.service_describe.v1` wire schema
+- `cokret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
+- 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/cokret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
 
 ## 拓扑
 
@@ -74,7 +74,7 @@
    - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `cx.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
    - `auth_metadata.oauth_issuer` / `auth_metadata.supported_auth_methods` 至少其一存在(coauth 是 auth server)
    - 同样 §3.0 六个 claim-level 字段都存在
-5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `cx:trust_domain:` 前缀
+5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `ck:trust_domain:` 前缀
 
 ### Phase B — Standard error envelope(§5 / §5.2)
 
@@ -99,14 +99,14 @@
 13. `GET ${solandBaseUrl()}/api/v1/events?limit=2`(或等价 list endpoint;`limit` 故意小于总数以强制分页)
 14. 断言响应形状(api-conventions §7.1):
     - `items` 是数组,长度 ≤ 2
-    - `next_cursor` 是字符串,匹配 `^cx:cursor:[A-Za-z0-9_-]+$`(opaque base64url,见 §7)
+    - `next_cursor` 是字符串,匹配 `^ck:cursor:[A-Za-z0-9_-]+$`(opaque base64url,见 §7)
     - `has_more === true`(因为播种了 ≥5 条)
 15. 用 `next_cursor` 取第二页:`GET .../events?limit=2&after=${next_cursor_1}`
 16. 用第二页的 `next_cursor` 取第三页
 17. 断言:
     - 三页 `items` 的 ID 集合两两不相交(no overlap)
     - 三页 union 至少覆盖 step 12 播种的全部 ID(no gap)
-    - 任意页的 cursor `base64url_decode(cursor.slice("cx:cursor:".length))` 不抛错,且 decoded 字节中**不含**任何 event_id / item id 的明文子串(opacity:客户端不得据此推断排序/权限)
+    - 任意页的 cursor `base64url_decode(cursor.slice("ck:cursor:".length))` 不抛错,且 decoded 字节中**不含**任何 event_id / item id 的明文子串(opacity:客户端不得据此推断排序/权限)
 18. **Cursor expiry 子断言**:把 step 14 的 `next_cursor` 篡改一个字符(保持 base64url 合法),POST 给 list endpoint
 19. 断言:`error.code ∈ { "invalid_param", "cursor_expired" }` 且 HTTP 4xx;**不得** 静默从头返回 page 1
 
@@ -138,7 +138,7 @@
 
 - Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_type` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
 - Phase B:未知路径 → 404 `unrecognized_endpoint`;错误 method → 405 `method_not_allowed`;两者都符合 §5 错误 envelope,不返回 HTML/栈信息
-- Phase C:list 响应符合 §7.1 形状;`cursor` 是 `cx:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
+- Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ck:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
 - Phase D:同键同 body → 与首次等价;同键不同 body → `duplicate_conflict` / 409;副作用只发生一次
 - Phase E:`requirements.features[]` 引用未实现 feature → `unsupported_feature` / 4xx;event 未落库;不被泛 code 替代
 
@@ -153,7 +153,7 @@
 ## Implementation notes
 
 - **soland describe 已实现**:`soland/src/routing/system/describe.rs` + `soland/src/wire.rs` 已经写入 `claimed_profiles` / `verified_profiles` / `implemented_features` 等字段;Phase A 在 soland 侧可以**直接 live**
-- **coauth describe 已实现**:`coauth/crates/backend/src/handlers/contrix.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
+- **coauth describe 已实现**:`coauth/crates/backend/src/handlers/cokret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
 - **`/sync/operations` 不存在**:Phase C 的实际 list endpoint 取决于哪些 list-style endpoint 在当前 soland 已落地。当前已知的 list endpoint 例如 `/api/v1/authz/invites`、`/api/v1/events?after=...` 可作为 fallback;但 spec §7.1 的 `items` / `next_cursor` / `has_more` 形状未必所有现有 list endpoint 都满足。Phase C 整体保持 fixme 直到至少一个 list endpoint 符合 §7.1 wire shape
 - **idempotency 在 soland 当前路径**:soland 当前依赖 `event_id` 幂等(spec §4.2);独立的 `Idempotency-Key` header 路径未必所有 write endpoint 都已实现 — Phase D 整体 fixme,直到 `Idempotency-Key` header 被 events / authz write 路径接受
 - **`unsupported_feature` 触发条件**:spec §5.1 要求该 code 用于 `Event.requirements.features[]`;具体是否在当前 reducer 路径上被严格执行需要 probe — Phase E 整体 fixme,等 soland 在 envelope validation 阶段返回该 code

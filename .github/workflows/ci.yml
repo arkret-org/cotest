@@ -26,12 +26,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: cotest
-      # contrix-rust-sdk is a path dependency; check it out as a sibling so
-      # `cargo check` resolves crates/* under ../contrix-rust-sdk.
+      # cokret-rust-sdk is a path dependency; check it out as a sibling so
+      # `cargo check` resolves crates/* under ../cokret-rust-sdk.
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
@@ -84,8 +84,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -103,8 +103,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
@@ -136,8 +136,8 @@ jobs:
           path: cotest
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
@@ -178,15 +178,15 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-rust-sdk
-          path: contrix-rust-sdk
+          repository: ${{ github.repository_owner }}/cokret-rust-sdk
+          path: cokret-rust-sdk
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/contrix-spec
-          path: contrix-spec
+          repository: ${{ github.repository_owner }}/cokret-spec
+          path: cokret-spec
           ref: main
           token: ${{ secrets.CI_REPO_TOKEN }}
 

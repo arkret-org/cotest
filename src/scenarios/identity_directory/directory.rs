@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_api_error, expect_json};
+use crate::harness::{CokretServer, expect_api_error, expect_json};
 
 /// Extract the `realm_id` string from a `create_realm` response, turning a
 /// missing/non-string field into a located error instead of a context-free
@@ -17,7 +17,7 @@ fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
 }
 
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
-    let server = ContrixServer::spawn("directory-privacy").await?;
+    let server = CokretServer::spawn("directory-privacy").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;

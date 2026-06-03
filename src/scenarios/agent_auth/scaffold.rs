@@ -42,7 +42,7 @@ pub async fn agent_auth_run() -> Result<()> {
     let agent_principal_id = Did::new("did:web:agent.example".to_owned())
         .map_err(|e| anyhow!("agent_principal_id: {e}"))?;
     let agent_key_id =
-        AgentKeyId::new("cx:agent_key:01999999-0000-7000-8000-00000000a002".to_owned())
+        AgentKeyId::new("ck:agent_key:01999999-0000-7000-8000-00000000a002".to_owned())
             .map_err(|e| anyhow!("agent_key_id: {e}"))?;
 
     let verification_method = format!(

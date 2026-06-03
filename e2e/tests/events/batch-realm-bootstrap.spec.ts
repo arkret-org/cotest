@@ -45,7 +45,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
           title: `Batch bootstrap ${Date.now()}`,
           summary: "cotest batch realm bootstrap fixture",
           created_by: alice.did,
-          trust_domain: "cx:trust_domain:soland.local",
+          trust_domain: "ck:trust_domain:soland.local",
           schema_refs: ["cx.schema.realm.v1"],
           default_discoverability: "listed",
           default_join_rule: "invite",

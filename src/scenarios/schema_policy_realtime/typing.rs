@@ -3,10 +3,10 @@ use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ContrixServer, expect_api_error, expect_json};
+use crate::harness::{CokretServer, expect_api_error, expect_json};
 
 pub async fn typing_and_push_rules_flow_work() -> Result<()> {
-    let server = ContrixServer::spawn("typing-push-rules").await?;
+    let server = CokretServer::spawn("typing-push-rules").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
@@ -44,7 +44,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
         .unwrap();
     assert_eq!(ephemeral.len(), 1);
     assert_eq!(ephemeral[0]["type"], "cx.typing");
-    assert_eq!(ephemeral[0]["scope_id"], "cx:thread:typing");
+    assert_eq!(ephemeral[0]["scope_id"], "ck:thread:typing");
     assert!(
         ephemeral[0]["actors"]
             .as_array()
@@ -135,7 +135,7 @@ fn typing_envelope(actor_id: &str, realm_id: &str, typing: bool) -> Value {
         "sent_at": sent_at,
         "expires_at": expires_at,
         "payload": {
-            "scope_id": "cx:thread:typing",
+            "scope_id": "ck:thread:typing",
             "typing": typing
         }
     })

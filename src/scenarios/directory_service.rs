@@ -70,7 +70,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     assert_array_contains(&describe, "accepted_resource_kinds", "handle");
     assert_array_contains(&describe, "ingest_modes", "push");
 
-    let openapi = get_json(&http, directory.url("/.well-known/contrix/openapi.json")).await?;
+    let openapi = get_json(&http, directory.url("/.well-known/cokret/openapi.json")).await?;
     for path in [
         "/api/v1/directory/describe",
         "/api/v1/directory/search-realms",

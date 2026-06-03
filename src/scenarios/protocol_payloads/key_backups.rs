@@ -7,11 +7,11 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_json};
+use crate::harness::{CokretServer, expect_json};
 
-pub const BACKUP_ID: &str = "cx:backup:01964137-0000-7000-8000-000000000000";
+pub const BACKUP_ID: &str = "ck:backup:01964137-0000-7000-8000-000000000000";
 
-pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
+pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     put_backup(server, token).await?;
     list_backups(server, token).await?;
     describe_backup_surfaces(server, token).await?;
@@ -19,7 +19,7 @@ pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
+async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
     let backup_put = expect_json(
         server
             .http()
@@ -28,8 +28,8 @@ async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
             .json(&json!({
                 "backup_id": BACKUP_ID,
                 "actor_id": "did:web:alice.example",
-                "device_id": "cx:device:01964137-0000-7000-8000-000000000000",
-                "series_id": "cx:backup_series:01964137-0000-7000-8000-000000000000",
+                "device_id": "ck:device:01964137-0000-7000-8000-000000000000",
+                "series_id": "ck:backup_series:01964137-0000-7000-8000-000000000000",
                 "series_seq": 0,
                 "backup_class": "mls_history",
                 "backup_version": "kb_1",
@@ -57,7 +57,7 @@ async fn put_backup(server: &ContrixServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn list_backups(server: &ContrixServer, token: &str) -> Result<()> {
+async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
     let backup_list = expect_json(
         server
             .http()
@@ -70,7 +70,7 @@ async fn list_backups(server: &ContrixServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn describe_backup_surfaces(server: &ContrixServer, token: &str) -> Result<()> {
+async fn describe_backup_surfaces(server: &CokretServer, token: &str) -> Result<()> {
     let key_backups_describe = expect_json(
         server
             .http()
@@ -81,14 +81,14 @@ async fn describe_backup_surfaces(server: &ContrixServer, token: &str) -> Result
     .await?;
     assert_eq!(
         key_backups_describe["contract"],
-        "contrix.rest.key_backups_describe.v1"
+        "cokret.rest.key_backups_describe.v1"
     );
     assert_eq!(key_backups_describe["schema"], "cx.schema.key_backup.v1");
     assert_eq!(key_backups_describe["operations"][0], "cx.keys.backups.put");
     Ok(())
 }
 
-async fn get_backup(server: &ContrixServer, token: &str) -> Result<()> {
+async fn get_backup(server: &CokretServer, token: &str) -> Result<()> {
     let backup_get = expect_json(
         server
             .http()

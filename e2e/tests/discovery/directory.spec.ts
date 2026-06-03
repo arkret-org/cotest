@@ -196,7 +196,7 @@ test.describe("discovery", () => {
     request,
   }) => {
     // spec: discovery/discovery-directory.md §2 — directory exposes the
-    // organization axis; the demo deployment seeds a `cx:org:demo`
+    // organization axis; the demo deployment seeds a `ck:org:demo`
     // organization that MUST surface in `tab-organizations` results with
     // a stable name and an actor_count member figure.
     const stamp = Date.now();
@@ -207,7 +207,7 @@ test.describe("discovery", () => {
     // API surface check — yougen renders the same response payload.
     const orgResp = await request.post(`${solandBaseUrl()}/api/v1/directory/search-organizations`, {
       headers: { authorization: `Bearer ${aliceToken}` },
-      data: { query: "Contrix" },
+      data: { query: "Cokret" },
     });
     expect(orgResp.status()).toBe(200);
     const body = await orgResp.json();
@@ -215,7 +215,7 @@ test.describe("discovery", () => {
     expect(body.results.length).toBeGreaterThanOrEqual(1);
     const demo = body.results.find(
       (r: { organization_id?: string; handle?: string }) =>
-        r.organization_id === "cx:org:demo" || r.handle === "@contrix-demo",
+        r.organization_id === "ck:org:demo" || r.handle === "@cokret-demo",
     );
     expect(demo, "demo organization must appear in search results").toBeTruthy();
     expect(typeof demo.name).toBe("string");
@@ -227,10 +227,10 @@ test.describe("discovery", () => {
     try {
       await alicePage.gotoDirectory();
       await alicePage.page.getByTestId("tab-organizations").click();
-      await alicePage.page.getByTestId("directory-search-input").fill("Contrix");
+      await alicePage.page.getByTestId("directory-search-input").fill("Cokret");
       await alicePage.page.getByTestId("directory-search-button").click();
       await expect(alicePage.page.getByTestId("org-result")).toBeVisible({ timeout: 30_000 });
-      await expect(alicePage.page.getByTestId("org-result")).toContainText("Contrix Demo");
+      await expect(alicePage.page.getByTestId("org-result")).toContainText("Cokret Demo");
     } finally {
       await alicePage.close();
     }

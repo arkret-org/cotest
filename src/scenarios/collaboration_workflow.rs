@@ -4,14 +4,14 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ContrixServer, TestActorClient, expect_json, expect_status};
+use crate::harness::{CokretServer, TestActorClient, expect_json, expect_status};
 
 const ALICE_DID: &str = "did:web:cotest-collab-alice.example";
 const BOB_DID: &str = "did:web:cotest-collab-bob.example";
 const BOB_HANDLE: &str = "@cotest-collab-bob";
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
-    let server = ContrixServer::spawn("collaboration-workflow").await?;
+    let server = CokretServer::spawn("collaboration-workflow").await?;
     let alice = server
         .register_client(ALICE_DID, "@cotest-collab-alice", "dev_alice")
         .await?;
@@ -134,12 +134,12 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let sent = alice
         .send_message(
             &space_id,
-            "cx:thread:collaboration",
+            "ck:thread:collaboration",
             "hello from collaboration workflow",
         )
         .await?;
     assert_eq!(sent["status"], "accepted");
-    assert!(sent["event_id"].as_str().unwrap().starts_with("cx:event:"));
+    assert!(sent["event_id"].as_str().unwrap().starts_with("ck:event:"));
 
     let bob_sync = bob.sync().await?;
     let bob_events = timeline_events(&bob_sync, &space_id)?;
@@ -153,7 +153,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let bob_reply = bob
         .send_message(
             &space_id,
-            "cx:thread:collaboration",
+            "ck:thread:collaboration",
             "hello alice from collaboration workflow",
         )
         .await?;
@@ -162,7 +162,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         bob_reply["event_id"]
             .as_str()
             .unwrap()
-            .starts_with("cx:event:")
+            .starts_with("ck:event:")
     );
 
     let alice_sync = alice.sync().await?;
@@ -191,7 +191,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         snapshot["snapshot_ref"]
             .as_str()
             .unwrap()
-            .starts_with("cx:snapshot:")
+            .starts_with("ck:snapshot:")
     );
     assert!(
         snapshot["frontier"]["message_count"]
@@ -269,7 +269,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 }
 
 async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
-    let realm_id = "cx:realm:01904100-0000-7000-8000-c011ab000001".to_owned();
+    let realm_id = "ck:realm:01904100-0000-7000-8000-c011ab000001".to_owned();
     let created = alice
         .submit_event(
             &realm_id,
@@ -280,7 +280,7 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
                     "schema": "cx.schema.realm.v1",
                     "title": "Collaboration Workflow Space",
                     "summary": "single server collaboration",
-                    "trust_domain": "cx:trust_domain:collaboration-workflow.cotest.local",
+                    "trust_domain": "ck:trust_domain:collaboration-workflow.cotest.local",
                     "created_by": &alice.actor,
                     "schema_refs": ["cx.schema.realm.v1"],
                     "default_discoverability": "invite_only",

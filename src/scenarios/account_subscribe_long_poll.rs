@@ -27,7 +27,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
         .await?;
     let space_id = alice.create_realm("Long-Poll Recovery Space").await?;
     alice
-        .send_message(&space_id, "cx:thread:long-poll", "baseline message")
+        .send_message(&space_id, "ck:thread:long-poll", "baseline message")
         .await?;
 
     // Full sync establishes the baseline + a cursor the rest of the
@@ -101,7 +101,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     let waker = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
         alice_for_wake
-            .send_message(&space_id_for_wake, "cx:thread:long-poll", "wake the poll")
+            .send_message(&space_id_for_wake, "ck:thread:long-poll", "wake the poll")
             .await
     });
 

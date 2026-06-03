@@ -1,5 +1,5 @@
-// Mock policy-server — implements the Contrix Policy Server contract
-// (spec: contrix-spec/spec/v1/zh/authz/policy-server.md).
+// Mock policy-server — implements the Cokret Policy Server contract
+// (spec: cokret-spec/spec/v1/zh/authz/policy-server.md).
 //
 // The mock evaluates authorization decisions for the joint-e2e harness:
 // callers POST {action, actor, target, context} to /api/v1/policy/check

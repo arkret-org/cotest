@@ -35,7 +35,7 @@
    Compiling rfc6979 v0.4.0
    Compiling pbkdf2 v0.12.2
    Compiling chacha20poly1305 v0.10.1
-   Compiling contrix-identifiers v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\identifiers)
+   Compiling cokret-identifiers v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\identifiers)
    Compiling digest v0.11.3
    Compiling aes-gcm v0.10.3
    Compiling hmac v0.13.0
@@ -44,7 +44,7 @@
    Compiling elliptic-curve v0.13.8
    Compiling x25519-dalek v2.0.1
    Compiling ed25519-dalek v2.2.0
-   Compiling contrix-core v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\core)
+   Compiling cokret-core v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\core)
    Compiling primeorder v0.13.6
    Compiling ecdsa v0.16.9
    Compiling k256 v0.13.4
@@ -53,15 +53,15 @@
    Compiling hpke-rs-rust-crypto v0.6.1
    Compiling openmls_basic_credential v0.5.0 (https://github.com/openmls/openmls.git?branch=main#d5a3aa7b)
    Compiling openmls_rust_crypto v0.5.1 (https://github.com/openmls/openmls.git?branch=main#d5a3aa7b)
-   Compiling contrix-signatures v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\signatures)
-   Compiling contrix-html v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\html)
-   Compiling contrix-ffi v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\ffi)
-   Compiling contrix-http-client v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\http-client)
-   Compiling contrix-crypto v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\crypto)
-   Compiling contrix-contracts v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\contracts)
-   Compiling contrix-testing v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\testing)
-   Compiling contrix v1.0.0 (D:\Works\contrix-dev\contrix-rust-sdk\crates\sdk)
-   Compiling cotest v0.1.0 (D:\Works\contrix-dev\cotest)
+   Compiling cokret-signatures v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\signatures)
+   Compiling cokret-html v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\html)
+   Compiling cokret-ffi v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\ffi)
+   Compiling cokret-http-client v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\http-client)
+   Compiling cokret-crypto v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\crypto)
+   Compiling cokret-contracts v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\contracts)
+   Compiling cokret-testing v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\testing)
+   Compiling cokret v1.0.0 (D:\Works\cokret-dev\cokret-rust-sdk\crates\sdk)
+   Compiling cotest v0.1.0 (D:\Works\cokret-dev\cotest)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 51s
   Executable unittests src\lib.rs (target\debug\deps\cotest-368099af1c1d8f9b.exe)
   Executable unittests src\main.rs (target\debug\deps\cotest-1580bdb4dcbac69d.exe)

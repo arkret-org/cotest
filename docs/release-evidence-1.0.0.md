@@ -4,7 +4,7 @@ Generated: 2026-05-27 — bundle for the CXP-0007 circle-rollout milestone.
 
 > **Note**: `cotest` is `publish = false` and the milestone explicitly
 > bans `git tag` / `cargo publish` / `docker push` (`_todos_all.md` §0).
-> "1.0.0" here is the *spec / contract surface* identifier (`contrix-spec
+> "1.0.0" here is the *spec / contract surface* identifier (`cokret-spec
 > v1.0.0`) — not a cotest crate version. The evidence pack below is the
 > auditable bundle that proves the SDK + servers + harness collectively
 > satisfy the v1.0.0 contract before the milestone closes.

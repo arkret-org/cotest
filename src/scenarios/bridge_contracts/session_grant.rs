@@ -2,12 +2,12 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_json};
+use crate::harness::{CokretServer, expect_json};
 use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
 
 pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Result<()> {
     let principal_id = "did:web:alice-session-grant.example";
-    let device_id = "cx:device:0196419b-0000-7000-8000-000000000501";
+    let device_id = "ck:device:0196419b-0000-7000-8000-000000000501";
     let coauth = MockCoauthIntrospectionServer::spawn(principal_id, device_id)?;
     let _env = EnvOverride::set(&[
         ("SOLAND_SESSION_GRANT_INTROSPECTION_URL", Some(coauth.url())),
@@ -16,7 +16,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
             Some("principal-token".to_owned()),
         ),
     ]);
-    let server = ContrixServer::spawn("session-grant-exchange").await?;
+    let server = CokretServer::spawn("session-grant-exchange").await?;
 
     expect_json(
         server
@@ -72,10 +72,10 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
         server
             .http()
             .post(server.url("/api/v1/push/register-device"))
-            .header("X-Contrix-Session-Grant", "coauth.session.jwt")
-            .header("X-Contrix-Session-Grant-Challenge", "soland-push-challenge")
+            .header("X-Cokret-Session-Grant", "coauth.session.jwt")
+            .header("X-Cokret-Session-Grant-Challenge", "soland-push-challenge")
             .header(
-                "X-Contrix-Session-Grant-Proof",
+                "X-Cokret-Session-Grant-Proof",
                 "client.session-key.push-proof.jwt",
             )
             .json(&json!({
@@ -85,14 +85,14 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
                 "push_gateway": "https://floria.example/api/v1/push/notify",
                 "push_key": "webpush:opaque-token",
                 "platform": "web",
-                "request_id": "cx:request:push-session-grant",
+                "request_id": "ck:request:push-session-grant",
                 "proof": {"kind": "push-register-proof-placeholder"}
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(push["ok"], true);
-    assert_eq!(push["registration_id"], format!("cx:push:{device_id}"));
+    assert_eq!(push["registration_id"], format!("ck:push:{device_id}"));
 
     let requests = coauth.requests();
     assert_eq!(requests.len(), 2);

@@ -322,7 +322,7 @@ test.describe("kanban end-to-end", () => {
       const boardId = await alicePage.page
         .getByTestId("board-space-select")
         .evaluate((node) => (node as HTMLSelectElement).value);
-      expect(boardId).toMatch(/^cx:space:/);
+      expect(boardId).toMatch(/^ck:space:/);
 
       for (const columnName of [first, second, third]) {
         await alicePage.page.getByTestId("new-column-input").fill(columnName);
@@ -626,7 +626,7 @@ test.describe("kanban end-to-end", () => {
   //      rejected with schema_violation. (kanban flow content "works" only
   //      because flow patch values aren't validated against that envelope
   //      schema.) The conforming builder exists in the SDK
-  //      (contrix-rust-sdk crates/sdk/src/mls.rs MessageCrypto::encrypt_with_aad);
+  //      (cokret-rust-sdk crates/sdk/src/mls.rs MessageCrypto::encrypt_with_aad);
   //      yougen's chat send must be wired to it. Promote once that lands.
   test("alice posts a flow discussion comment on a freshly-created MLS-encrypted realm; soland accepts the encrypted cx.message.create", async ({
     browser,

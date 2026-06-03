@@ -58,7 +58,7 @@
 
 6. alice 进 `/settings/account` 应看到:
    - DID 形如 `did:webvh:<scid>:...`
-   - 当前设备列表只有这一台(显示 `cx:device:...` + cross-signing fingerprint)
+   - 当前设备列表只有这一台(显示 `ck:device:...` + cross-signing fingerprint)
    - Principal control space ID 已记录(可能不在 UI,但 yougen 客户端状态有)
 7. 测试用 alice 的 session_token 调 `GET /api/v1/account/me`,断言返回 `did`、`handle`、device 信息一致
 
@@ -68,7 +68,7 @@
 9. 断言:
    - `id` = alice.did
    - `verificationMethod` 含 alice 的 inception key
-   - `service.ContrixPrincipalServer.serviceEndpoint` = soland 的 base URL
+   - `service.CokretPrincipalServer.serviceEndpoint` = soland 的 base URL
 10. 验证 history chain:GET `did.jsonl`,断言至少一个 entry,SCID 一致
 
 ### Phase D — bob 通过 OIDC 注册
@@ -101,7 +101,7 @@
 - **E7.1**:重复用同一 passkey 注册 → coauth 拒绝(`account_already_registered`)
 - **E7.2**:OIDC ID token 过期 → 注册失败,UI 显示 token expired
 - **E7.3**:email verification 链接已用过 → 拒绝,UI 显示 already consumed
-- **E7.4**:WebVH host 不可达(DNS 故障)→ resolver 进入 `degraded_no_witness` 状态(≤24h)([identity-did.md §4.2.1](../../../contrix-spec/spec/v1/zh/identity/identity-did.md))
+- **E7.4**:WebVH host 不可达(DNS 故障)→ resolver 进入 `degraded_no_witness` 状态(≤24h)([identity-did.md §4.2.1](../../../cokret-spec/spec/v1/zh/identity/identity-did.md))
 - **E7.5**:handle conflict (`@alice-s7` 已被占)→ coauth 拒绝 `handle_already_claimed`,客户端要求另选
 
 ## Implementation notes

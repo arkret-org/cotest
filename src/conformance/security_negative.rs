@@ -388,9 +388,9 @@ mod tests {
 
     fn sample_event() -> Value {
         json!({
-            "event_id": "cx:event:01970e589d21-0001-a13f9c2e",
+            "event_id": "ck:event:01970e589d21-0001-a13f9c2e",
             "kind": "cx.message.create",
-            "realm_id": "cx:realm:01970e589d21-7000-8000-000000000001",
+            "realm_id": "ck:realm:01970e589d21-7000-8000-000000000001",
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
             "created_at": "2026-05-02T00:00:00Z",
@@ -398,7 +398,7 @@ mod tests {
             "prev_refs": [],
             "refs": [],
             "payload": {
-                "flow_id": "cx:flow:01970e589d21-7000-8000-000000000010",
+                "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
                 "track_name": "discussion",
                 "content": {"kind": "cx.content.text", "body": "signed body"}
             }

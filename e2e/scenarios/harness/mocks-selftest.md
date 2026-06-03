@@ -10,7 +10,7 @@
 
 ## Spec 锚点
 
-本 scenario 没有直接的 `contrix-spec/` § 锚点;它锚定的是 cotest 自己定义的 mock 协议层,与各业务 scenario 对应:
+本 scenario 没有直接的 `cokret-spec/` § 锚点;它锚定的是 cotest 自己定义的 mock 协议层,与各业务 scenario 对应:
 
 | Mock | 文件 | 业务 scenario 锚点(被本 mock 解锁的 cotest scenarios) |
 |---|---|---|

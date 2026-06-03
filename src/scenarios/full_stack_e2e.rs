@@ -63,18 +63,18 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 const ALICE_DID: &str = "did:web:alice.acme.example";
 const BOB_DID: &str = "did:web:bob.acme.example";
-/// R3.1 canonical handle `<localpart>:<domain>` (contrix-spec @ 7157ee8).
+/// R3.1 canonical handle `<localpart>:<domain>` (cokret-spec @ 7157ee8).
 const ALICE_HANDLE: &str = "alice:acme.example";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
-const TARGET_SPACE_ID: &str = "cx:realm:0196419b-0000-7000-8000-fullstacke2e1";
-const STABLE_FLOW_ID: &str = "cx:flow:0196419b-0000-7000-8000-fullstackflow";
-const STABLE_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-fullstackevt0";
-const SOURCE_REF_EVENT_ID: &str = "cx:event:0196419b-0000-7000-8000-srcref0000001";
+const TARGET_SPACE_ID: &str = "ck:realm:0196419b-0000-7000-8000-fullstacke2e1";
+const STABLE_FLOW_ID: &str = "ck:flow:0196419b-0000-7000-8000-fullstackflow";
+const STABLE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-fullstackevt0";
+const SOURCE_REF_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-srcref0000001";
 
 /// Opaque push pseudonym used by the blind-wakeup mock. Matches the
-/// `cx:pseudonym:push:<token>` shape required by the sanitizer.
-const PUSH_TARGET_ID: &str = "cx:pseudonym:push:fullstack-e2e-target-001";
+/// `ck:pseudonym:push:<token>` shape required by the sanitizer.
+const PUSH_TARGET_ID: &str = "ck:pseudonym:push:fullstack-e2e-target-001";
 
 // ── Top-level entry-point ──────────────────────────────────────────────────
 
@@ -154,11 +154,11 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
              `<localpart>:<domain>` handles (R3.1); got `{canonical}`"
         );
     }
-    if canonical.starts_with("contrix://") || canonical.starts_with("acct:") {
+    if canonical.starts_with("cokret://") || canonical.starts_with("acct:") {
         bail!(
             "T8.1 step 2: coauth handle_claim leaked a retired URI form \
-             (`{canonical}`); the `contrix://` form was retired at \
-             contrix-spec @ 7157ee8."
+             (`{canonical}`); the `cokret://` form was retired at \
+             cokret-spec @ 7157ee8."
         );
     }
     if !candidate
@@ -294,7 +294,7 @@ fn step_6_floria_blind_payload(_inbound: &Value) -> Result<Value> {
     // Build the outbound blind payload floria emits to its `custom`
     // pushkin / OS push provider. The sanitizer treats this object as
     // both wrapper and notification — both layers MUST be free of `did:` /
-    // `cx:` literals and any forbidden correlation key. The push wrapper's
+    // `ck:` literals and any forbidden correlation key. The push wrapper's
     // routing metadata (`destination_service_did`, `operation_id`) is
     // attached at the soland→floria hop and stripped before egress; what
     // reaches the provider is the wakeup-only object below.
@@ -653,9 +653,9 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(
-                "cx:event:0196419b-0000-7000-8000-acceptance01".to_owned(),
+                "ck:event:0196419b-0000-7000-8000-acceptance01".to_owned(),
             ),
-            policy_event_ref: Some("cx:event:0196419b-0000-7000-8000-policyref001".to_owned()),
+            policy_event_ref: Some("ck:event:0196419b-0000-7000-8000-policyref001".to_owned()),
         },
         issuer_service_did: principal,
         audience: TARGET_SPACE_ID.to_owned(),

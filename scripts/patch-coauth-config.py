@@ -142,8 +142,8 @@ def main() -> int:
         )
         src = replace_top_level_section(src, "email", email)
 
-    contrix = (
-        "contrix:\n"
+    cokret = (
+        "cokret:\n"
         "  principal_servers:\n"
         "  - name: soland\n"
         f"    audience: {yaml_string(args.soland_service_did)}\n"
@@ -159,7 +159,7 @@ def main() -> int:
         f"  admin_audience: {yaml_string(admin_audience)}\n"
         f"  principal_server_url: {yaml_string(soland_base)}\n"
     )
-    src = replace_top_level_section(src, "contrix", contrix)
+    src = replace_top_level_section(src, "cokret", cokret)
 
     args.output_config.parent.mkdir(parents=True, exist_ok=True)
     args.output_config.write_text(src, encoding="utf-8")

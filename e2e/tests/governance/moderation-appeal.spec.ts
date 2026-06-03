@@ -72,7 +72,7 @@ test.describe("moderation appeal", () => {
       `Moderation decision: account restricted pending appeal ${stamp}`,
       { actorDid: reviewer.did },
     );
-    const targetRef = decisionNotice.event_id.replace(/^cx:event:/, "cx:message:");
+    const targetRef = decisionNotice.event_id.replace(/^ck:event:/, "ck:message:");
     const decision = await issueDecision(request, reviewerToken, realmId, targetRef);
 
     const appellantPage = await openUserPage(browser, appellant, { sessionToken: appellantToken });
@@ -288,7 +288,7 @@ async function createAppealFixture(
     `appeal target ${label} ${stamp}`,
     { actorDid: appellant.did },
   );
-  const targetRef = message.event_id.replace(/^cx:event:/, "cx:message:");
+  const targetRef = message.event_id.replace(/^ck:event:/, "ck:message:");
   const decision = await issueDecision(request, moderatorToken, realmId, targetRef);
   return {
     appellant,
@@ -356,7 +356,7 @@ function appealPayload(fixture: AppealFixture) {
     target_ref: fixture.targetRef,
     realm_id: fixture.realmId,
     reason_text_ref: "appeal narrative",
-    evidence_refs: [`cx:evidence:${fixture.decisionId}`],
+    evidence_refs: [`ck:evidence:${fixture.decisionId}`],
   };
 }
 

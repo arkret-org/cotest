@@ -1,7 +1,7 @@
 //! CT-9 — Multi-device QR pairing + cross-signing + MLS Remove on revoke.
 //!
 //! Spec references:
-//!   - `contrix-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 "配对流程 (无密码登录)" — QR
+//!   - `cokret-spec/spec/v1/zh/crypto-media/device-lifecycle.md` §2.1 "配对流程 (无密码登录)" — QR
 //!     pairing handshake:
 //!       * new device generates local Ed25519 device key + displays QR containing public key +
 //!         challenge nonce.
@@ -26,9 +26,9 @@
 //!
 //! 1. Create alice on a single soland with device-A. (The `TestActorBuilder` from CT-13 would make
 //!    this DRY across the three new scenarios; until it lands we use the existing
-//!    `ContrixServer::register_client` helper.)
+//!    `CokretServer::register_client` helper.)
 //!
-//! 2. Generate a fresh `cx:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
+//! 2. Generate a fresh `ck:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
 //!    The QR payload itself is a yougen-side UI concern (`verify-device` flow); cotest synthesizes
 //!    the equivalent API calls without driving the QR code itself — this matches the spec note that
 //!    "QR is the transport, not the trust primitive".
@@ -99,7 +99,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     let _group = TestServerGroup::single("ct9-qr-pairing").await?;
     // let server = group.server(0);
     //
-    //   let device_a = new_prefixed_uuid7("cx:device:");
+    //   let device_a = new_prefixed_uuid7("ck:device:");
     //   let alice = server.register_client(
     //       "did:web:alice.ct9.cotest.local",
     //       "@alice-ct9",
@@ -108,7 +108,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
 
     // ── Step 2: synthesize device-B's keypair + QR payload ──────────────
     //
-    //   let device_b = new_prefixed_uuid7("cx:device:");
+    //   let device_b = new_prefixed_uuid7("ck:device:");
     //   let device_b_signing_key = ed25519_dalek::SigningKey::generate(
     //       &mut rand::rngs::OsRng);
     //   let device_b_verify_key = device_b_signing_key.verifying_key();
@@ -200,7 +200,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //
     //   let bob = server.register_client(
     //       "did:web:bob.ct9.cotest.local", "@bob-ct9",
-    //       &new_prefixed_uuid7("cx:device:")).await?;
+    //       &new_prefixed_uuid7("ck:device:")).await?;
     //   let space_id = alice.create_realm_with(json!({
     //       "title": "ct9-e2ee",
     //       "encryption_profile": "mls_rfc9420",

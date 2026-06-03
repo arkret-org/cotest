@@ -14,16 +14,16 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.2 — Join Policy 设计原则 (gate 是组合的、申请材料对外不可见、审核决策必须上链、密码学绑定到 join、capability 是 allow 唯一来源)
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.3 — Cell Family `cx:cell:space.join_policy.v1:<space_id>`、JoinPolicy schema 字段表
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.3.1 — Gate 类型表 (`application_form`、`manual_review`、`cooldown`)
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.3.3 — `application_form.questions[]` schema
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.4 — `default_join_rule` 与 join policy 的交叉表 (knock 行)
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.6 — 申请-审核路径四阶段
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.6.2 — `member.application` 字段
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.6.3 — `member.application.review` 字段
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.6.5 — 接受后的 invite 链
-- `contrix-spec/spec/v1/zh/models/space-and-place.md` §3.11 — 反滥用约束 (含 cooldown)
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.2 — Join Policy 设计原则 (gate 是组合的、申请材料对外不可见、审核决策必须上链、密码学绑定到 join、capability 是 allow 唯一来源)
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.3 — Cell Family `ck:cell:space.join_policy.v1:<space_id>`、JoinPolicy schema 字段表
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.3.1 — Gate 类型表 (`application_form`、`manual_review`、`cooldown`)
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.3.3 — `application_form.questions[]` schema
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.4 — `default_join_rule` 与 join policy 的交叉表 (knock 行)
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.6 — 申请-审核路径四阶段
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.6.2 — `member.application` 字段
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.6.3 — `member.application.review` 字段
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.6.5 — 接受后的 invite 链
+- `cokret-spec/spec/v1/zh/models/space-and-place.md` §3.11 — 反滥用约束 (含 cooldown)
 
 ## 拓扑
 
@@ -53,7 +53,7 @@
    - join_rule = `knock`
    - history_visibility = `joined`
    - seed_members = `[eve.did]`
-2. **alice** 写入 `cx:cell:space.join_policy.v1:<spaceId>` cell,value:
+2. **alice** 写入 `ck:cell:space.join_policy.v1:<spaceId>` cell,value:
    ```json
    {
      "gates": [
@@ -172,7 +172,7 @@
 
 ## Implementation notes
 
-- **JoinPolicy cell 写入路径**:soland 当前是否暴露写 `cx:cell:space.join_policy.v1:<space_id>` 的 endpoint 需要先查;若没有,测试要么直接调底层 cell write API,要么 yougen 要补 join policy 编辑 UI
+- **JoinPolicy cell 写入路径**:soland 当前是否暴露写 `ck:cell:space.join_policy.v1:<space_id>` 的 endpoint 需要先查;若没有,测试要么直接调底层 cell write API,要么 yougen 要补 join policy 编辑 UI
 - **yougen UI 缺口可能很大**:
   - knock 申请的 UI(applicant 端填表)
   - 审核队列 UI(reviewer 端看待审 application)
@@ -183,7 +183,7 @@
 
 ## 风险 / 前置依赖
 
-- spec §3.1 明确说 "当前 v1 core 的 active 机器 contract 仍以 `cx.space.join_rule`、`cx.space.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 registry"。也就是说 **`cx:cell:space.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 v1 registry 里是候选状态**,soland 实现到没到这一步是开放问题。
+- spec §3.1 明确说 "当前 v1 core 的 active 机器 contract 仍以 `cx.space.join_rule`、`cx.space.policy_components`、capability 与 invite 状态机为准;独立 join-policy Event.kind / schema 尚未进入 registry"。也就是说 **`ck:cell:space.join_policy.v1` / `member.application.v1` / `member.application.review.v1` 在 v1 registry 里是候选状态**,soland 实现到没到这一步是开放问题。
 - 如果 soland 没实现,这条 scenario 只能停在 spec 文档,等 soland 跟进。**写测试代码之前必须先确认 soland 这边的实现度**。
 
 ## 总耗时预估

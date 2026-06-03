@@ -67,7 +67,7 @@ test.describe("moderation and ban", () => {
     const postBan = `S5 after ban ${stamp}`;
 
     const sent = await sendMessageApi(request, malloryToken, spaceId, abusive);
-    expect(sent.event_id).toMatch(/^cx:event:/);
+    expect(sent.event_id).toMatch(/^ck:event:/);
 
     const beforeRedaction = await querySpaceEventsApi(request, aliceToken, spaceId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
@@ -85,7 +85,7 @@ test.describe("moderation and ban", () => {
     });
     expect(reportResp.ok()).toBeTruthy();
     const reportBody = await reportResp.json();
-    expect(reportBody.report_id).toMatch(/^cx:report:/);
+    expect(reportBody.report_id).toMatch(/^ck:report:/);
     expect(reportBody.status).toBe("queued");
 
     const reporterReports = await request.get(

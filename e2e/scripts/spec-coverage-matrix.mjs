@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // spec-coverage-matrix.mjs
 //
-// Produces a *spec-first* coverage matrix: walks every contrix-spec spec file
-// under `contrix-spec/spec/v1/zh/` and maps each one to:
+// Produces a *spec-first* coverage matrix: walks every cokret-spec spec file
+// under `cokret-spec/spec/v1/zh/` and maps each one to:
 //
 //   - the cotest scenario doc(s) that cite it     (many-to-many)
 //   - the cotest spec.ts file(s) that cite it     (many-to-many)
 //   - an aggregate status                         (live / fixme / missing / meta)
 //
 // The point is to surface NEW spec files as "missing e2e" the moment they
-// land in contrix-spec, without anyone having to update a catalog by hand.
+// land in cokret-spec, without anyone having to update a catalog by hand.
 //
 // USAGE:
 //   node scripts/spec-coverage-matrix.mjs              # markdown report on stdout
@@ -34,7 +34,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const E2E_ROOT = dirname(SCRIPT_DIR);
 const COTEST_ROOT = dirname(E2E_ROOT);
 const REPO_ROOT = dirname(COTEST_ROOT);
-const SPEC_ROOT = join(REPO_ROOT, 'contrix-spec', 'spec', 'v1', 'zh');
+const SPEC_ROOT = join(REPO_ROOT, 'cokret-spec', 'spec', 'v1', 'zh');
 const SCENARIOS_DIR = join(E2E_ROOT, 'scenarios');
 const TESTS_DIR = join(E2E_ROOT, 'tests');
 
@@ -86,7 +86,7 @@ function parseArgs(argv) {
   return out;
 }
 
-const HELP = `spec-coverage-matrix.mjs — map every contrix-spec spec to its cotest coverage
+const HELP = `spec-coverage-matrix.mjs — map every cokret-spec spec to its cotest coverage
 
 Usage:
   node scripts/spec-coverage-matrix.mjs [--json] [--quiet] [--domain NAME] [--check]
@@ -111,7 +111,7 @@ Status derivation:
                      spec-map page (heuristic on filename and document title).
 
 Paths:
-  - spec files:  contrix-spec/spec/v1/zh/**/*.md
+  - spec files:  cokret-spec/spec/v1/zh/**/*.md
   - scenarios:   cotest/e2e/scenarios/**/*.md
   - tests:       cotest/e2e/tests/**/*.spec.ts
 `;
@@ -140,7 +140,7 @@ function rel(base, full) {
 // Spec discovery
 // ---------------------------------------------------------------------------
 
-// A spec entry is `contrix-spec/spec/v1/zh/<...>/<name>.md`. We index by the
+// A spec entry is `cokret-spec/spec/v1/zh/<...>/<name>.md`. We index by the
 // relative posix path with `.md` stripped, e.g. `identity/account-lifecycle`.
 function discoverSpecs() {
   const files = walk(SPEC_ROOT, (full, name) => name.endsWith('.md'));
@@ -376,7 +376,7 @@ function totalsLine(t) {
 function renderMarkdown(report, { quiet, domain }) {
   const { totals, perDomain, rows, newlyMissing } = report;
   const lines = [];
-  lines.push(`# contrix-spec → cotest e2e coverage matrix`);
+  lines.push(`# cokret-spec → cotest e2e coverage matrix`);
   lines.push('');
   lines.push(`Totals: ${totalsLine(totals)}`);
   if (quiet) {
@@ -434,7 +434,7 @@ function renderMarkdown(report, { quiet, domain }) {
   lines.push('## Newly missing');
   lines.push('');
   lines.push('Spec files with NO scenario doc AND NO spec.ts. These are the highest-priority gaps —');
-  lines.push('every new contrix-spec file will appear here until cotest catches up.');
+  lines.push('every new cokret-spec file will appear here until cotest catches up.');
   lines.push('');
   if (newlyMissing.length === 0) {
     lines.push('- _(none — every non-meta spec has at least a scenario or a spec.ts)_');
@@ -478,7 +478,7 @@ function main() {
 
   if (!existsSync(SPEC_ROOT)) {
     console.error(`spec root not found: ${SPEC_ROOT}`);
-    console.error(`(expected layout: <repo>/contrix-spec/spec/v1/zh/)`);
+    console.error(`(expected layout: <repo>/cokret-spec/spec/v1/zh/)`);
     return 2;
   }
 

@@ -18,7 +18,7 @@ use contrix_core::{
     TypedTrustDomainId,
 };
 
-const REALM_ID: &str = "cx:space:01904100-0000-7000-8000-000000000aa1";
+const REALM_ID: &str = "ck:space:01904100-0000-7000-8000-000000000aa1";
 
 fn realm_id() -> Result<SpaceId> {
     SpaceId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
@@ -38,7 +38,7 @@ fn build_realm(
     // TODO(sdk-trust-domain-dep): A1 added required `trust_domain` to Space.
     // Cotest uses a fixed canonical trust domain id here so the high-assurance
     // policy scenario stays representative.
-    let trust_domain = TypedTrustDomainId::new("cx:trust_domain:example.net".to_owned())
+    let trust_domain = TypedTrustDomainId::new("ck:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Space {
         schema: "cx.profile.realm.v1".to_owned(),

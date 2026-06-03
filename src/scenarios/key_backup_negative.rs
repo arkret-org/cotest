@@ -2,11 +2,11 @@ use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ContrixServer, TestServerGroup, expect_json, expect_response};
+use crate::harness::{CokretServer, TestServerGroup, expect_json, expect_response};
 
-const BACKUP_ID: &str = "cx:backup:01975510-0000-7000-8000-0000000000d3";
-const DEVICE_A: &str = "cx:device:01975510-0000-7000-8000-0000000000a1";
-const DEVICE_B: &str = "cx:device:01975510-0000-7000-8000-0000000000b2";
+const BACKUP_ID: &str = "ck:backup:01975510-0000-7000-8000-0000000000d3";
+const DEVICE_A: &str = "ck:device:01975510-0000-7000-8000-0000000000a1";
+const DEVICE_B: &str = "ck:device:01975510-0000-7000-8000-0000000000b2";
 
 pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let group = TestServerGroup::single("d3-key-backup-negative").await?;
@@ -35,7 +35,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let body_id_mismatch = backup_body(
         &alice.actor,
         DEVICE_A,
-        "cx:backup:01975510-0000-7000-8000-0000000000ff",
+        "ck:backup:01975510-0000-7000-8000-0000000000ff",
     );
     expect_backup_error(
         alice
@@ -82,11 +82,11 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 }
 
 async fn reject_wrong_device_on_put(
-    server: &ContrixServer,
+    server: &CokretServer,
     token: &str,
     actor: &str,
 ) -> Result<()> {
-    let id = "cx:backup:01975510-0000-7000-8000-0000000000d4";
+    let id = "ck:backup:01975510-0000-7000-8000-0000000000d4";
     let body = backup_body(actor, DEVICE_B, id);
     expect_backup_error(
         server
@@ -101,11 +101,11 @@ async fn reject_wrong_device_on_put(
 }
 
 async fn reject_digest_mismatch_on_put(
-    server: &ContrixServer,
+    server: &CokretServer,
     token: &str,
     actor: &str,
 ) -> Result<()> {
-    let id = "cx:backup:01975510-0000-7000-8000-0000000000d5";
+    let id = "ck:backup:01975510-0000-7000-8000-0000000000d5";
     let mut body = backup_body(actor, DEVICE_A, id);
     body["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
     body["ciphertext_digest"] = Value::String(
@@ -123,7 +123,7 @@ async fn reject_digest_mismatch_on_put(
     .await
 }
 
-async fn reject_wrong_device_on_get(server: &ContrixServer, actor: &str) -> Result<()> {
+async fn reject_wrong_device_on_get(server: &CokretServer, actor: &str) -> Result<()> {
     let device_b_token = crate::harness::dev_login(server, actor, DEVICE_B).await?;
     expect_backup_error(
         server
@@ -141,7 +141,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
         "backup_id": backup_id,
         "actor_id": actor,
         "device_id": device_id,
-        "series_id": backup_id.replacen("cx:backup:", "cx:backup_series:", 1),
+        "series_id": backup_id.replacen("ck:backup:", "ck:backup_series:", 1),
         "series_seq": 0,
         "backup_class": "mls_history",
         "backup_version": "kb_1",

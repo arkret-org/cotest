@@ -10,12 +10,12 @@ use contrix_core::{CircleId, EffectiveScope, RealmId};
 use serde_json::json;
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("cx:realm:0196419b-0000-7000-8000-000000000301".to_owned())
+    RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000301".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("cx:circle:0196419b-0000-7000-8000-000000000302".to_owned())
+    CircleId::new("ck:circle:0196419b-0000-7000-8000-000000000302".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 

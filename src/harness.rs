@@ -18,7 +18,7 @@ use reqwest::{Client as HttpClient, Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
 
-pub struct ContrixServer {
+pub struct CokretServer {
     handle: SutHandle,
     base_url: Url,
     service_did: String,
@@ -27,7 +27,7 @@ pub struct ContrixServer {
 }
 
 pub struct TestServerGroup {
-    servers: Vec<ContrixServer>,
+    servers: Vec<CokretServer>,
     docker_network: Option<String>,
 }
 
@@ -63,7 +63,7 @@ enum SutRuntimeMode {
     Docker,
 }
 
-impl ContrixServer {
+impl CokretServer {
     pub async fn spawn(name: &str) -> Result<Self> {
         Self::spawn_with_env(name, &[]).await
     }
@@ -405,7 +405,7 @@ impl ContrixServer {
     }
 }
 
-impl Drop for ContrixServer {
+impl Drop for CokretServer {
     fn drop(&mut self) {
         match &mut self.handle {
             SutHandle::Local(child) => {
@@ -429,7 +429,7 @@ impl Drop for ContrixServer {
 impl TestServerGroup {
     pub async fn single(name: &str) -> Result<Self> {
         Ok(Self {
-            servers: vec![ContrixServer::spawn(name).await?],
+            servers: vec![CokretServer::spawn(name).await?],
             docker_network: None,
         })
     }
@@ -454,7 +454,7 @@ impl TestServerGroup {
 
         let mut servers = Vec::with_capacity(count);
         for index in 0..count {
-            match ContrixServer::spawn_external_binary(&format!("{name}-{index}"), &bin_path).await
+            match CokretServer::spawn_external_binary(&format!("{name}-{index}"), &bin_path).await
             {
                 Ok(server) => servers.push(server),
                 Err(error) => {
@@ -484,7 +484,7 @@ impl TestServerGroup {
         };
         let mut servers = Vec::with_capacity(count);
         for index in 0..count {
-            match ContrixServer::spawn_with_network(
+            match CokretServer::spawn_with_network(
                 &format!("{name}-{index}"),
                 docker_network.as_deref(),
             )
@@ -506,7 +506,7 @@ impl TestServerGroup {
         })
     }
 
-    pub fn server(&self, index: usize) -> &ContrixServer {
+    pub fn server(&self, index: usize) -> &CokretServer {
         &self.servers[index]
     }
 
@@ -667,7 +667,7 @@ impl RecordedResponse {
 }
 
 pub async fn register_account(
-    server: &ContrixServer,
+    server: &CokretServer,
     did: &str,
     handle: &str,
     device_id: &str,
@@ -689,7 +689,7 @@ pub async fn register_account(
     dev_login(server, did, device_id).await
 }
 
-pub async fn dev_login(server: &ContrixServer, actor: &str, device_id: &str) -> Result<String> {
+pub async fn dev_login(server: &CokretServer, actor: &str, device_id: &str) -> Result<String> {
     let login = expect_json(
         server
             .http()
@@ -807,7 +807,7 @@ where
 }
 
 pub async fn create_realm(
-    server: &ContrixServer,
+    server: &CokretServer,
     token: &str,
     actor: &str,
     title: &str,
@@ -838,7 +838,7 @@ pub async fn create_realm(
 }
 
 pub async fn add_member(
-    server: &ContrixServer,
+    server: &CokretServer,
     token: &str,
     actor: &str,
     realm_id: &str,
@@ -858,7 +858,7 @@ pub async fn add_member(
 }
 
 pub async fn send_message(
-    server: &ContrixServer,
+    server: &CokretServer,
     token: &str,
     actor: &str,
     realm_id: &str,
@@ -882,7 +882,7 @@ pub async fn send_message(
 }
 
 pub async fn submit_event(
-    server: &ContrixServer,
+    server: &CokretServer,
     token: &str,
     actor: &str,
     realm_id: &str,
@@ -906,7 +906,7 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Valu
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     let hlc_logical = seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{seq:012x}");
-    let event_id = format!("cx:event:{suffix}");
+    let event_id = format!("ck:event:{suffix}");
     normalize_message_payload(kind, realm_id, &mut payload);
     let mut event = json!({
         "event_id": event_id,
@@ -920,7 +920,7 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Valu
         "refs": [],
         "payload": payload,
         "unsigned": {
-            "local_operation_idempotency_alias": format!("cx:operation:{suffix}"),
+            "local_operation_idempotency_alias": format!("ck:operation:{suffix}"),
         },
         "proofs": [{
             "kind": "detached_jws",
@@ -947,7 +947,7 @@ pub(crate) fn member_join_payload(actor_id: &str) -> Value {
 
 fn next_typed_id(kind: &str) -> String {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("cx:{kind}:01999999-0000-7000-8000-{seq:012x}")
+    format!("ck:{kind}:01999999-0000-7000-8000-{seq:012x}")
 }
 
 fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &Value) -> Value {
@@ -993,7 +993,7 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
             "title": title,
             "summary": summary,
             "created_by": actor,
-            "trust_domain": "cx:trust_domain:soland.local",
+            "trust_domain": "ck:trust_domain:soland.local",
             "schema_refs": ["cx.schema.realm.v1"],
             "default_discoverability": discoverability,
             "default_join_rule": join_rule,
@@ -1026,10 +1026,10 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
     match kind {
         "cx.message.create" => {
             let flow_id = realm_id
-                .strip_prefix("cx:realm:")
-                .or_else(|| realm_id.strip_prefix("cx:space:"))
-                .map(|suffix| format!("cx:flow:{suffix}"))
-                .unwrap_or_else(|| "cx:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
+                .strip_prefix("ck:realm:")
+                .or_else(|| realm_id.strip_prefix("ck:space:"))
+                .map(|suffix| format!("ck:flow:{suffix}"))
+                .unwrap_or_else(|| "ck:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
             object
                 .entry("flow_id".to_owned())
                 .or_insert_with(|| Value::String(flow_id));
@@ -1058,15 +1058,15 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
                 if let Some(event_id) = object.get("event_id").cloned() {
                     object.insert("target_event_id".to_owned(), event_id);
                 } else if let Some(target_ref) = object.get("target_ref").and_then(Value::as_str) {
-                    if target_ref.starts_with("cx:event:") {
+                    if target_ref.starts_with("ck:event:") {
                         object.insert(
                             "target_event_id".to_owned(),
                             Value::String(target_ref.to_owned()),
                         );
-                    } else if let Some(suffix) = target_ref.strip_prefix("cx:message:") {
+                    } else if let Some(suffix) = target_ref.strip_prefix("ck:message:") {
                         object.insert(
                             "target_event_id".to_owned(),
-                            Value::String(format!("cx:event:{suffix}")),
+                            Value::String(format!("ck:event:{suffix}")),
                         );
                     }
                 }
@@ -1103,16 +1103,16 @@ fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
 
 fn message_ref_from_event_ref(value: Value) -> Value {
     if let Some(event_id) = value.as_str()
-        && let Some(suffix) = event_id.strip_prefix("cx:event:")
+        && let Some(suffix) = event_id.strip_prefix("ck:event:")
     {
-        return Value::String(format!("cx:message:{suffix}"));
+        return Value::String(format!("ck:message:{suffix}"));
     }
     value
 }
 
 /// Canonical `event_digest` over an Event envelope with `proofs`/`unsigned`
 /// stripped, hashed via the SDK's canonical (sorted-key, integer-number)
-/// encoding so every Contrix implementation agrees on the bytes. Shared by all
+/// encoding so every Cokret implementation agrees on the bytes. Shared by all
 /// cotest event builders — do not re-implement a `serde_json::to_vec` variant,
 /// which preserves insertion order and would diverge from the SDK.
 pub(crate) fn canonical_event_digest(event: &Value) -> String {
@@ -1136,7 +1136,7 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
     json!({
         "scheme": "mls-rfc9420",
         "version": 1,
-        "group_id": "cx:mls:test",
+        "group_id": "ck:mls:test",
         "epoch": 1,
         "content_type": content_type,
         "ciphertext": ciphertext,

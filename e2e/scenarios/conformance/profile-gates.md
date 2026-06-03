@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 Contrix `claimed_profiles` / `verified_profiles` 在 wire 层的分区语义与 fail-closed
+验证 Cokret `claimed_profiles` / `verified_profiles` 在 wire 层的分区语义与 fail-closed
 守门:soland / coauth 的 `/server/describe` 输出 MUST 把 `self_claimed` 与 cotest-verified
 entries 严格分开;dev mode MUST 让 `verified_profiles=[]`;声明里的 profile id MUST 都
 在 `artifacts/profiles/conformance-profiles.json` 目录中存在;声明 profile 范围之外的标准
@@ -16,7 +16,7 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/conformance/conformance-profiles.md`
+- `cokret-spec/spec/v1/zh/conformance/conformance-profiles.md`
   - §2 / §2.1 — Profile 命名与 v1 MVP 分层(`v1_profile_catalog` /
     `v1_minimal_interop_floor` / `extension_profile_implementation`);写入接收方收到不在
     声明 profile 内的 active 标准 Event kind 时 MUST 返回 `unsupported_event_kind` /
@@ -25,19 +25,19 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
     conformance lint 机读来源
   - §3 — 通用强制要求(标准 `cx.*` kind MUST 注册、auth 不可豁免、`causal` 关系
     fail-closed)
-- `contrix-spec/spec/v1/zh/sync/service-surface.md` §3.0 — `claimed_profiles` /
+- `cokret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — `claimed_profiles` /
   `verified_profiles` 分区 wire 形态、`claim_kind` 枚举、`development_mode=true` MUST
   `verified_profiles=[]`
 - 关联 artifact:
-  - `contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json` —
+  - `cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json` —
     `implementation_profiles[]` / `profile_tiers.v1_profile_catalog` /
     `extension_profile_implementation` / `default_unsupported_behavior`
-  - `contrix-spec/spec/v1/artifacts/registry/event-kind-registry.json` — Phase B 用来挑
+  - `cokret-spec/spec/v1/artifacts/registry/event-kind-registry.json` — Phase B 用来挑
     "在目录中但不在 soland 声明范围内" 的标准 kind
 - 关联实现:
   - `soland/src/routing/system/describe.rs::apply_claim_level_partition` —
     `claimed_profiles` 4 条 self_claimed,`verified_profiles=[]`
-  - `coauth/crates/backend/src/handlers/contrix.rs` (T6.3) —
+  - `coauth/crates/backend/src/handlers/cokret.rs` (T6.3) —
     `claimed_profiles=Vec::new()` + `verified_profiles=Vec::new()`,coauth 不假 claim
     `cx.profile.identity_registry.v1` (跟踪项 `_codex_test_gaps.md` G3.C3)
 
@@ -64,7 +64,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
   (`implemented_features` / `claimed_profiles` / `verified_profiles` /
   `experimental_features` / `compat_surfaces`)
 - soland 启动时 `development_mode=true`(cotest harness 默认配置)
-- catalog 通过 `path.resolve(__dirname, "../../../../contrix-spec/spec/v1/artifacts/profiles/conformance-profiles.json")`
+- catalog 通过 `path.resolve(__dirname, "../../../../cokret-spec/spec/v1/artifacts/profiles/conformance-profiles.json")`
   解析(相对于 `cotest/e2e/tests/conformance/`)
 - 当 coauth 测试运行时,`COTEST_COAUTH_BASE_URL` 已就位
 

@@ -1,4 +1,4 @@
-//! R3.2 spec-sync (contrix-spec @ b56cab1) — `cx.directory.list_handles_for_subject`
+//! R3.2 spec-sync (cokret-spec @ b56cab1) — `cx.directory.list_handles_for_subject`
 //! conformance vectors (VECT-COT-3).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.0` +
@@ -14,7 +14,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
-use contrix::identity::{PrimaryHandleSelectInput, select_primary_handle};
+use cokret::identity::{PrimaryHandleSelectInput, select_primary_handle};
 use contrix_core::Did;
 use contrix_core::model::{
     DirectoryListHandlesForSubjectReqBody, DirectoryListHandlesForSubjectResBody, Handle,
@@ -165,8 +165,8 @@ pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
 
 pub fn run_audience_filter_applied_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "cx:realm:01904100-0000-7000-8000-0000000000aa";
-    let other_ctx = "cx:realm:01904100-0000-7000-8000-0000000000bb";
+    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
+    let other_ctx = "ck:realm:01904100-0000-7000-8000-0000000000bb";
 
     // Directory has two claims; one is scoped to a different audience.
     let in_scope = claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?;
@@ -243,7 +243,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
         as_of: now_anchor(),
-        next_cursor: Some("cx:cursor:eyJ2IjoiMSIsIngiOjF9".to_owned()),
+        next_cursor: Some("ck:cursor:eyJ2IjoiMSIsIngiOjF9".to_owned()),
         has_more: true,
     };
     page1
@@ -253,8 +253,8 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
         .next_cursor
         .as_deref()
         .ok_or_else(|| anyhow!("has_more=true MUST carry next_cursor"))?;
-    if !cursor.starts_with("cx:cursor:") {
-        bail!("next_cursor MUST be an opaque `cx:cursor:` token; got `{cursor}`");
+    if !cursor.starts_with("ck:cursor:") {
+        bail!("next_cursor MUST be an opaque `ck:cursor:` token; got `{cursor}`");
     }
 
     // A follow-up request echoes the cursor.
@@ -299,7 +299,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
 
 pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "cx:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ck:realm:01904100-0000-7000-8000-0000000000aa";
     let snapshot = vec![
         claim_for("alice:other.example", &s, OTHER_ISSUER, None)?,
         claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?,

@@ -3,10 +3,10 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
-use crate::harness::{ContrixServer, expect_json, expect_response, expect_status};
+use crate::harness::{CokretServer, expect_json, expect_response, expect_status};
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
-    let server = ContrixServer::spawn("interaction-messages").await?;
+    let server = CokretServer::spawn("interaction-messages").await?;
     // Alice is the demo identity the server pre-seeds at boot; the builder is
     // for fresh accounts only.
     let alice = server
@@ -41,7 +41,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     }
 
     let sent = alice
-        .send_message(&space_id, "cx:thread:interaction", "hello interaction")
+        .send_message(&space_id, "ck:thread:interaction", "hello interaction")
         .await?;
 
     expect_status(
@@ -91,11 +91,11 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(removed_reaction["status"], "accepted");
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
-    // thread's root *message* (`cx:message:<uuidv7>`), not an opaque
-    // `cx:thread:` string. Derive it from the root message's event id.
+    // thread's root *message* (`ck:message:<uuidv7>`), not an opaque
+    // `ck:thread:` string. Derive it from the root message's event id.
     let thread_root_ref = sent["event_id"]
         .as_str()
-        .map(|event_id| event_id.replacen("cx:event:", "cx:message:", 1))
+        .map(|event_id| event_id.replacen("ck:event:", "ck:message:", 1))
         .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
     let marker = expect_json(
         dave.post("/api/v1/read-cursors").json(&json!({
@@ -135,7 +135,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                 "body": "edited interaction",
                 "content": {"body": "edited interaction"},
                 "target_event_id": sent["event_id"],
-                "thread_id": "cx:thread:interaction",
+                "thread_id": "ck:thread:interaction",
             }),
         )
         .await?;

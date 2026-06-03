@@ -28,7 +28,7 @@ use contrix_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
 /// Build a minimal SDK-typed [`Event`] for a Realm/Space reversal wire
-/// vector. `realm_id` is the typed `cx:realm:...` security-boundary
+/// vector. `realm_id` is the typed `ck:realm:...` security-boundary
 /// identifier; `cx.space.*` event kinds now describe containers inside
 /// that Realm.
 fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {
@@ -81,7 +81,7 @@ fn positive_vectors() -> Vec<WireVector> {
             kind: REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
-                "target_realm_id": "cx:realm:01904100-0000-7000-8000-668e2181b41d",
+                "target_realm_id": "ck:realm:01904100-0000-7000-8000-668e2181b41d",
             }),
             expected_class: EventClass::Realm,
         },
@@ -89,7 +89,7 @@ fn positive_vectors() -> Vec<WireVector> {
 }
 
 fn fixture_realm_id() -> Result<RealmId> {
-    RealmId::new("cx:realm:01904100-0000-7000-8000-000000000a01".to_owned())
+    RealmId::new("ck:realm:01904100-0000-7000-8000-000000000a01".to_owned())
         .map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 

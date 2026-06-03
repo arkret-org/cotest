@@ -21,14 +21,14 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tokio::task::JoinSet;
 
-use crate::harness::{ContrixServer, TestActorClient, dev_login, event_envelope, expect_json};
+use crate::harness::{CokretServer, TestActorClient, dev_login, event_envelope, expect_json};
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
 
 const TEST_NAME: &str = "chaos-midwrite";
 const ACTOR_DID: &str = "did:web:chaos-midwrite.cotest.local";
 const DEVICE_ID: &str = "dev_chaos_midwrite";
 const SERVICE_DID: &str = "did:web:chaos-midwrite.cotest.local";
-const REALM_ID: &str = "cx:realm:019e5fbd-0000-7000-8000-000000000016";
+const REALM_ID: &str = "ck:realm:019e5fbd-0000-7000-8000-000000000016";
 
 pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let Some(database) = ChaosDatabase::provision()? else {
@@ -42,7 +42,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     let event = chaos_message_event();
     let operation_id = operation_id_from_event(&event)?;
 
-    let mut server = ContrixServer::spawn_with_database_url(
+    let mut server = CokretServer::spawn_with_database_url(
         TEST_NAME,
         &database.url,
         &[
@@ -78,7 +78,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     server.kill_immediately().await?;
     assert_midflight_post_was_cut(tasks).await?;
 
-    let server = ContrixServer::spawn_with_database_url(
+    let server = CokretServer::spawn_with_database_url(
         TEST_NAME,
         &database.url,
         &[("SOLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1")],
@@ -146,7 +146,7 @@ fn chaos_realm_event() -> Value {
                 "schema": "cx.schema.realm.v1",
                 "title": "Chaos Midwrite",
                 "summary": "Chaos Midwrite",
-                "trust_domain": "cx:trust_domain:chaos-midwrite.cotest.local",
+                "trust_domain": "ck:trust_domain:chaos-midwrite.cotest.local",
                 "created_by": ACTOR_DID,
                 "schema_refs": ["cx.schema.realm.v1"],
                 "default_discoverability": "public",
@@ -182,7 +182,7 @@ fn chaos_message_event() -> Value {
                 "kind": "cx.content.text",
                 "body": "doomed"
             },
-            "thread_id": "cx:thread:chaos-midwrite"
+            "thread_id": "ck:thread:chaos-midwrite"
         }),
     )
 }

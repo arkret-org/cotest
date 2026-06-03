@@ -10,11 +10,11 @@
 //! on replay is a release-blocker bug.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/state/event-log.md` — event log is the source of truth; projections
+//!   - `cokret-spec/spec/v1/zh/state/event-log.md` — event log is the source of truth; projections
 //!     are derived and disposable.
-//!   - `contrix-spec/spec/v1/zh/conformance/event-schemas.md` — event-kind versioning +
+//!   - `cokret-spec/spec/v1/zh/conformance/event-schemas.md` — event-kind versioning +
 //!     forward-compat reducer rules.
-//!   - `contrix-spec/spec/v1/zh/state/snapshot-schema.md` — when a snapshot from N-1 is restored
+//!   - `cokret-spec/spec/v1/zh/state/snapshot-schema.md` — when a snapshot from N-1 is restored
 //!     under N, the snapshot schema must either be exactly compatible OR auto-migrate.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@
 //!       - the test is parameterised by an arbitrary commit hash via env
 //!         (`COTEST_UPGRADE_BASE_REV=<sha>`), trading "release compat" for "any-two-commits
 //!         compat".
-//!   * **No cross-version build helper in the cotest harness.** Today `ContrixServer::spawn` builds
+//!   * **No cross-version build helper in the cotest harness.** Today `CokretServer::spawn` builds
 //!     the live tree's binary on demand (via `cargo run` under the hood) and doesn't know how to
 //!     build a different revision. Need a `BuildSpec { rev, target_dir, features }` helper that:
 //!       1. Creates / reuses a `git worktree` under `cotest/.cache/` for the requested rev.
@@ -78,7 +78,7 @@
 //!   * **No schema-migration manifest.** Today there is no machine-readable list of "event kind X
 //!     changed shape between v0.4.0 and v0.5.0; here's the migrator". Without one, step 6 can only
 //!     do a strict byte-equality check, which makes the test fail every time any reducer touches
-//!     the projection shape — defeating the point. A `contrix-spec/state/migrations/*.json`
+//!     the projection shape — defeating the point. A `cokret-spec/state/migrations/*.json`
 //!     manifest (or a Rust `inventory!`-style registry) would close this.
 //!   * **Per-rev data dir / DB schema isolation.** The N-1 binary and the N binary MUST share the
 //!     same on-disk state, but two concurrent CT-17 invocations MUST NOT share. Need a `Pg
@@ -95,7 +95,7 @@
 //!      semantically meaningful tags are preferred).
 //!   2. Add `cotest::scenarios::_helpers::cross_version_build` with worktree management + caching.
 //!   3. Add a migration manifest schema + at least an empty manifest under
-//!      `contrix-spec/state/migrations/`.
+//!      `cokret-spec/state/migrations/`.
 //!   4. Add `spawn_with_postgres` to the harness (shared with CT-16).
 //!   5. Replace each `unimplemented!("step N: …")` below with the real call.
 //!
@@ -132,7 +132,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   let pg_schema = format!("ct17_{}", short_hash(&previous_tag));
     //   provision_pg_schema(&pg_schema).await?;
     //
-    //   let server_old = ContrixServer::spawn_explicit_binary(
+    //   let server_old = CokretServer::spawn_explicit_binary(
     //       n_minus_one,
     //       data_dir.path(),
     //       &[("DATABASE_URL", &pg_url_for(&pg_schema))],
@@ -151,7 +151,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   server_old.graceful_stop().await?;
     //
     //   // Step 5: spawn current-build soland against the SAME data dir / DB
-    //   let server_new = ContrixServer::spawn_with_postgres_existing(
+    //   let server_new = CokretServer::spawn_with_postgres_existing(
     //       "ct17-upgraded", data_dir.path(),
     //       &pg_url_for(&pg_schema),
     //   ).await?;
@@ -167,7 +167,7 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   let new_msg = send_message(&server_new, &alice, &space_id,
     //                              "post-upgrade ping").await?;
     //   server_new.graceful_stop().await?;
-    //   let server_new2 = ContrixServer::spawn_with_postgres_existing(
+    //   let server_new2 = CokretServer::spawn_with_postgres_existing(
     //       "ct17-upgraded-restart", data_dir.path(),
     //       &pg_url_for(&pg_schema),
     //   ).await?;

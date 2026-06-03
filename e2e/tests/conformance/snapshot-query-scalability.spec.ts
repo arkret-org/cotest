@@ -9,8 +9,8 @@
 //     §5 Space/Relation/View limits, §8 error semantics)
 //   - conformance/conformance-vectors.md (vector loader pattern: same as the
 //     sibling encoding-vectors suite — `cx.vector.<domain>.<scenario>.v1`
-//     fixtures live in contrix-spec/spec/v1/artifacts/fixtures/)
-// Fixtures: contrix-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json,
+//     fixtures live in cokret-spec/spec/v1/artifacts/fixtures/)
+// Fixtures: cokret-spec/spec/v1/artifacts/fixtures/cx.vector.snapshot.*.json,
 //           cx.vector.query.*.json, cx.vector.scalability.*.json
 //
 // Phases A-E exercise soland's /api/v1/conformance/{snapshot,query} HTTP
@@ -41,15 +41,15 @@ const __filename_ = fileURLToPath(import.meta.url);
 const __dirname_ = dirname(__filename_);
 
 // From cotest/e2e/tests/conformance/<this-file>.spec.ts walk up four levels
-// (conformance → tests → e2e → cotest) to reach the contrix-dev root, then
-// into contrix-spec/spec/v1/artifacts/fixtures.
+// (conformance → tests → e2e → cotest) to reach the cokret-dev root, then
+// into cokret-spec/spec/v1/artifacts/fixtures.
 const FIXTURES_DIR = resolve(
   __dirname_,
   "..",
   "..",
   "..",
   "..",
-  "contrix-spec",
+  "cokret-spec",
   "spec",
   "v1",
   "artifacts",
@@ -110,7 +110,7 @@ function expectNoResultPayload(body: unknown) {
 }
 
 function decodedCursorText(cursor: string): string {
-  const payload = cursor.replace(/^cx:cursor:/, "");
+  const payload = cursor.replace(/^ck:cursor:/, "");
   return Buffer.from(payload, "base64url").toString("utf8");
 }
 
@@ -126,8 +126,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
     const chunkHashes = chunks.map(chunkDigest);
     const manifest = {
-      snapshot_ref: "cx:snapshot:cx:realm:01904100-0000-7000-8000-000000000001:fixture",
-      realm_id: "cx:realm:01904100-0000-7000-8000-000000000001",
+      snapshot_ref: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000001:fixture",
+      realm_id: "ck:realm:01904100-0000-7000-8000-000000000001",
       reducer_profile: "cx.reducer.v1",
       schema_profile_refs: ["cx.schema.core.v1"],
       chunk_hashes: chunkHashes,
@@ -166,8 +166,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const signerDid = "did:web:soland.conformance-signer";
     const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
     const manifest = {
-      snapshot_ref: "cx:snapshot:cx:realm:01904100-0000-7000-8000-000000000002:signed",
-      realm_id: "cx:realm:01904100-0000-7000-8000-000000000002",
+      snapshot_ref: "ck:snapshot:ck:realm:01904100-0000-7000-8000-000000000002:signed",
+      realm_id: "ck:realm:01904100-0000-7000-8000-000000000002",
       reducer_profile: "cx.reducer.v1",
       schema_profile_refs: ["cx.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),
@@ -237,8 +237,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const page1 = await first.json();
     expect(page1.items.map((row: { id: string }) => row.id)).toEqual(["row-1", "row-2"]);
     expect(page1.has_more).toBe(true);
-    expect(page1.next_cursor).toMatch(/^cx:cursor:/);
-    expect(page1.frontier.barrier_cursor).toMatch(/^cx:cursor:/);
+    expect(page1.next_cursor).toMatch(/^ck:cursor:/);
+    expect(page1.frontier.barrier_cursor).toMatch(/^ck:cursor:/);
     expect(decodedCursorText(page1.next_cursor)).not.toContain("row-");
 
     const page2Req = {

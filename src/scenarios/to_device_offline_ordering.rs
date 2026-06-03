@@ -1,9 +1,9 @@
 //! CT-10 — To-device queue offline ordering.
 //!
 //! Spec:
-//!   - `contrix-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device` cursor / position progresses
+//!   - `cokret-spec/spec/v1/zh/sync/client-sync.md` §2 — `to_device` cursor / position progresses
 //!     monotonically per (actor, device).
-//!   - `contrix-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued to-device messages preserve
+//!   - `cokret-spec/spec/v1/zh/sync/operations-sync.md` §2.1 — queued to-device messages preserve
 //!     send order across disconnect / reconnect; cursor-acked eviction ensures no replay or skip.
 //!
 //! Scenario walk-through:
@@ -35,11 +35,11 @@ use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ContrixServer, dev_login, encrypted_envelope, expect_json, register_account};
+use crate::harness::{CokretServer, dev_login, encrypted_envelope, expect_json, register_account};
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
-    let server = ContrixServer::spawn("to-device-offline-ordering").await?;
+    let server = CokretServer::spawn("to-device-offline-ordering").await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
     let alice_token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
@@ -188,7 +188,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
 }
 
 async fn send_to_device(
-    server: &ContrixServer,
+    server: &CokretServer,
     sender_token: &str,
     recipient: &str,
     device_id: &str,
@@ -218,7 +218,7 @@ async fn send_to_device(
 }
 
 async fn poll_to_device(
-    server: &ContrixServer,
+    server: &CokretServer,
     recipient_token: &str,
     from: Option<&str>,
 ) -> Result<Value> {

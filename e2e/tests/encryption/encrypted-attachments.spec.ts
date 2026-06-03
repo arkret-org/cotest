@@ -44,7 +44,7 @@ test.describe("encrypted attachments", () => {
     // Probe endpoints
     const putResp = await request.post(`${solandBaseUrl()}/api/v1/blob/put`, {
       headers: { authorization: `Bearer ${token}` },
-      data: { space_id: "cx:space:probe", media_type: "application/octet-stream" },
+      data: { space_id: "ck:space:probe", media_type: "application/octet-stream" },
     });
     // Either 4xx for missing body, or 404 if endpoint absent. 5xx is a bug.
     expect(putResp.status()).toBeLessThan(500);
@@ -90,7 +90,7 @@ test.describe("encrypted attachments", () => {
     const envelope = {
       algorithm: "mls-rfc9420+xchacha20poly1305",
       nonce: "test-nonce",
-      key_ref: { group_id: "cx:mls:group:s12", epoch: 1 },
+      key_ref: { group_id: "ck:mls:group:s12", epoch: 1 },
       ciphertext_digest: ciphertextDigest,
       media_type: "application/octet-stream",
     };
@@ -99,11 +99,11 @@ test.describe("encrypted attachments", () => {
       headers: {
         ...authHeaders(aliceToken),
         "content-type": "image/png",
-        "x-contrix-filename": "cat.png",
-        "x-contrix-space-id": spaceId,
-        "x-contrix-blob-encrypted": "true",
-        "x-contrix-attachment-envelope": JSON.stringify(envelope),
-        "x-contrix-content-digest": ciphertextDigest,
+        "x-cokret-filename": "cat.png",
+        "x-cokret-space-id": spaceId,
+        "x-cokret-blob-encrypted": "true",
+        "x-cokret-attachment-envelope": JSON.stringify(envelope),
+        "x-cokret-content-digest": ciphertextDigest,
       },
       data: ciphertext,
     });
@@ -155,7 +155,7 @@ test.describe("encrypted attachments", () => {
 
     const missing = await request.get(
       `${solandBaseUrl()}/api/v1/blob/get?blob_ref=${encodeURIComponent(
-        "cx:blob:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "ck:blob:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       )}&purpose=message_attachment`,
       { headers: authHeaders(malloryToken) },
     );

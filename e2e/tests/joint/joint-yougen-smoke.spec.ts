@@ -123,7 +123,7 @@ async function submitMessageEvent(
   spaceId: string,
   body: string,
 ) {
-  const eventId = `cx:event:${uuidV7()}`;
+  const eventId = `ck:event:${uuidV7()}`;
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const payload = {
     flow_id: flowIdFromSpaceId(spaceId),
@@ -161,8 +161,8 @@ async function submitMessageEvent(
 }
 
 function flowIdFromSpaceId(spaceId: string): string {
-  const suffix = spaceId.replace(/^cx:(realm|space):/, "");
-  return `cx:flow:${suffix}`;
+  const suffix = spaceId.replace(/^ck:(realm|space):/, "");
+  return `ck:flow:${suffix}`;
 }
 
 function uuidV7(): string {

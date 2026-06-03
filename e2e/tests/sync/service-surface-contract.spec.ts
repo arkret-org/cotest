@@ -8,7 +8,7 @@
 //       sync/service-api-schema.mdx §2 (canonical ServiceDescribe required fields)
 //
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
-// (`coauth/crates/backend/src/handlers/contrix.rs::server_describe`) already serve
+// (`coauth/crates/backend/src/handlers/cokret.rs::server_describe`) already serve
 // `GET /api/v1/server/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase B (error envelope) is also live on
 // soland. Phases C (pagination cursor), D (idempotency key) and E
@@ -48,7 +48,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
     error: { code: "unrecognized_endpoint" },
   });
   expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
-  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^cx:[a-z_]+:/);
+  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^ck:[a-z_]+:/);
 
   const wrongMethod = await request.post(`${solandBaseUrl()}/api/v1/server/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
@@ -62,7 +62,7 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
     error: { code: "method_not_allowed" },
   });
   expect(wrongMethodBody.error?.message, "wrong method error message").toBeTruthy();
-  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^cx:[a-z_]+:/);
+  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^ck:[a-z_]+:/);
 }
 
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
@@ -85,7 +85,7 @@ test.describe("describes soland surface @fully-implemented", () => {
 
     // §17 — canonical ServiceDescribe required fields
     expect(body.service_did, "service_did").toBeTruthy();
-    expect(body.trust_domain, "trust_domain").toMatch(/^cx:trust_domain:/);
+    expect(body.trust_domain, "trust_domain").toMatch(/^ck:trust_domain:/);
     expect(body.service_type, "service_type").toBe("principal_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
     expect(Array.isArray(body.supported_profiles), "supported_profiles is array").toBe(true);
@@ -233,26 +233,26 @@ test.describe("service surface contract — error envelope, pagination, idempote
     // @expected-live-by: 2026Q3
     "Phase C: list endpoint pagination cursor is opaque, gap-free, and non-overlapping across pages",
     async () => {
-      // spec: api-conventions.md §7 (cursor opaque; wire form `cx:cursor:<base64url>`;
+      // spec: api-conventions.md §7 (cursor opaque; wire form `ck:cursor:<base64url>`;
       //         invalid → invalid_param; expired → cursor_expired; TTL ≤ 7d for stream cursors),
       //       §7.1 (list pagination response: { items, next_cursor, has_more }).
       //
       // 1) Seed ≥5 list-visible items as alice (via POST /api/v1/events or seed helper).
       // 2) GET /api/v1/events?limit=2 (or whichever list endpoint reaches
       //    §7.1 shape first) → page1.
-      //    Assert: items.length <= 2, next_cursor matches /^cx:cursor:[A-Za-z0-9_-]+$/,
+      //    Assert: items.length <= 2, next_cursor matches /^ck:cursor:[A-Za-z0-9_-]+$/,
       //            has_more === true.
       // 3) Follow next_cursor through page2 + page3.
       //    Assert: union(pageN.items.ids) covers seeded ids (no gap);
       //            pairwise intersection is empty (no overlap);
-      //            Buffer.from(cursor.slice("cx:cursor:".length), "base64url").toString("utf8")
+      //            Buffer.from(cursor.slice("ck:cursor:".length), "base64url").toString("utf8")
       //              does NOT contain any seeded item id (cursor opacity).
       // 4) Tamper next_cursor by flipping one char → POST again.
       //    Assert: status 4xx, error.code ∈ {"invalid_param", "cursor_expired"}.
       //
       // Blocked on: §7.1 wire shape is not yet uniformly applied to list endpoints
       // in soland; current /authz/invites etc. don't all emit `{items, next_cursor,
-      // has_more}` with `cx:cursor:` token form. Pin until at least one list
+      // has_more}` with `ck:cursor:` token form. Pin until at least one list
       // endpoint matches the spec shape exactly.
     },
   );

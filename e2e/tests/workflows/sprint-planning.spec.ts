@@ -173,7 +173,7 @@ test.describe("workflow: sprint planning", () => {
       const boardId = await meiPage.page
         .getByTestId("board-space-select")
         .evaluate((node) => (node as HTMLSelectElement).value);
-      expect(boardId).toMatch(/^cx:space:/);
+      expect(boardId).toMatch(/^ck:space:/);
 
       for (const columnName of [backlog, todo, doing, done]) {
         await meiPage.page.getByTestId("new-column-input").fill(columnName);

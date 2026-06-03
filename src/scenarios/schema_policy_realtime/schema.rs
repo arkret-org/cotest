@@ -2,10 +2,10 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ContrixServer, expect_api_error};
+use crate::harness::{CokretServer, expect_api_error};
 
 pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
-    let server = ContrixServer::spawn("schema-registry").await?;
+    let server = CokretServer::spawn("schema-registry").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;

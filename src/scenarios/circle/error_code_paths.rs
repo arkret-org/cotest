@@ -1,4 +1,4 @@
-//! P2F.3 — every CXP-0007 reason code is reachable from `contrix-core`.
+//! P2F.3 — every CXP-0007 reason code is reachable from `cokret-core`.
 //!
 //! Eight of the nine CXP-0007 error codes are `failed_precondition` /
 //! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)

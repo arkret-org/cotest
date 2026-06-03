@@ -16,7 +16,7 @@
       "name": "concurrent_cas_register_move_resolves_to_bottom",
       "comment": "Peer_a writes display_name=\"Alice\", peer_b writes display_name=\"Alicia\" to the same cas-register cell concurrently. After both peers see each other's anchor, the register joins to Bottom and the cell is flagged as conflicted; clients display the conflict-resolution UI.",
       "cell_kind": "cas_register",
-      "cell_id": "cx:cell:cx.component.profile.display_name.v1:did:web:alice.example",
+      "cell_id": "ck:cell:cx.component.profile.display_name.v1:did:web:alice.example",
       "concurrent_moves": [
         {"peer": "peer_a", "value": "Alice", "ts": 1700000000},
         {"peer": "peer_b", "value": "Alicia", "ts": 1700000001}
@@ -32,7 +32,7 @@
       "name": "concurrent_or_set_adds_union",
       "comment": "Peer_a adds tag=\"red\", peer_b adds tag=\"blue\" to the same or-set cell concurrently. After Anchor pull, the or-set holds both tags — union is commutative.",
       "cell_kind": "or_set",
-      "cell_id": "cx:cell:cx.component.tags.v1:item_42",
+      "cell_id": "ck:cell:cx.component.tags.v1:item_42",
       "concurrent_moves": [
         {"peer": "peer_a", "op": "or_set_add", "tag": "red"},
         {"peer": "peer_b", "op": "or_set_add", "tag": "blue"}
@@ -48,7 +48,7 @@
       "name": "concurrent_counter_pn_increments_sum",
       "comment": "Peer_a +5, peer_b +3 on the same PN counter cell. After Anchor pull, the counter joins to +8 (sum).",
       "cell_kind": "counter_pn",
-      "cell_id": "cx:cell:cx.component.like_count.v1:post_99",
+      "cell_id": "ck:cell:cx.component.like_count.v1:post_99",
       "concurrent_moves": [
         {"peer": "peer_a", "op": "pn_increment", "delta": 5},
         {"peer": "peer_b", "op": "pn_increment", "delta": 3}
@@ -64,7 +64,7 @@
       "name": "anchor_pull_idempotent_after_conflict_resolution",
       "comment": "After the conflict resolves to Bottom, peer_a pulls peer_b's Anchor a second time. Result is identical — re-applying the same anchor is a no-op (idempotent).",
       "cell_kind": "cas_register",
-      "cell_id": "cx:cell:cx.component.profile.display_name.v1:did:web:alice.example",
+      "cell_id": "ck:cell:cx.component.profile.display_name.v1:did:web:alice.example",
       "concurrent_moves": [
         {"peer": "peer_a", "value": "Alice", "ts": 1700000000},
         {"peer": "peer_b", "value": "Alicia", "ts": 1700000001}

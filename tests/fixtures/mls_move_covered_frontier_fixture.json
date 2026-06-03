@@ -4,7 +4,7 @@
   "vectors": [
     {
       "name": "covered_frontier_accumulates_governance_refs_idempotent",
-      "cell_id": "cx:cell:cx.component.mls.covered_frontier.v1:demo-space",
+      "cell_id": "ck:cell:cx.component.mls.covered_frontier.v1:demo-space",
       "anchored_ops": [
         { "op": "or_set_add", "tag": "anchor-a" },
         { "op": "or_set_add", "tag": "anchor-a" },
@@ -41,9 +41,9 @@
       "mls_commit_move": {
         "covered_frontier_attests_to": "epoch-2",
         "effects": [
-          { "cell": "cx:cell:cx.component.mls.covered_frontier.v1:demo-space" },
-          { "cell": "cx:cell:cx.component.mls.epoch.v1:demo-space" },
-          { "cell": "cx:cell:cx.component.mls.group_state.v1:demo-space" }
+          { "cell": "ck:cell:cx.component.mls.covered_frontier.v1:demo-space" },
+          { "cell": "ck:cell:cx.component.mls.epoch.v1:demo-space" },
+          { "cell": "ck:cell:cx.component.mls.group_state.v1:demo-space" }
         ]
       },
       "expected": {

@@ -8,7 +8,7 @@
 //! ```
 //!
 //! Loads the six drift-detection artifacts from
-//! `contrix-spec/spec/v1/artifacts/registry/` (or `--registry-dir`, or the
+//! `cokret-spec/spec/v1/artifacts/registry/` (or `--registry-dir`, or the
 //! `CONTRIX_SPEC_DIR` env var), walks `--root`, and emits findings.
 //!
 //! Exit codes:

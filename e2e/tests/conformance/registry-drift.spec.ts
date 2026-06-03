@@ -3,12 +3,12 @@
 // Spec: conformance/schema-registry.md §1 (真源声明) / §3 (event type 约束) /
 //       §6 (演进约束 + critical extension fail-closed)
 // Artifacts (machine-readable source-of-truth):
-//   - contrix-spec/spec/v1/artifacts/registry/removed-event-kinds.json
-//   - contrix-spec/spec/v1/artifacts/registry/removed-operation-ids.json
-//   - contrix-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json
-//   - contrix-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json
-//   - contrix-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
-//   - contrix-spec/spec/v1/artifacts/registry/operation-registry.json
+//   - cokret-spec/spec/v1/artifacts/registry/removed-event-kinds.json
+//   - cokret-spec/spec/v1/artifacts/registry/removed-operation-ids.json
+//   - cokret-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json
+//   - cokret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json
+//   - cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
+//   - cokret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
 // Treat the artifacts as the source-of-truth and walk soland's live
 // `/api/v1/server/describe` for drift. The three LIVE phases below (C / D / E)
@@ -36,10 +36,10 @@ import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
 // ---------------------------------------------------------------------------
 // Resolves relative to this spec file so cwd doesn't matter. From
 // cotest/e2e/tests/conformance/<spec>.spec.ts that's four levels up to land at
-// the repo root, then down into contrix-spec/spec/v1/artifacts.
+// the repo root, then down into cokret-spec/spec/v1/artifacts.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const artifactsRoot = resolve(__dirname, "../../../../contrix-spec/spec/v1/artifacts");
+const artifactsRoot = resolve(__dirname, "../../../../cokret-spec/spec/v1/artifacts");
 const registryRoot = resolve(artifactsRoot, "registry");
 
 function loadRegistryJson<T = unknown>(name: string): T {
@@ -329,7 +329,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "cx:realm:01904100-0000-7000-8000-000000000998",
+      realmId: "ck:realm:01904100-0000-7000-8000-000000000998",
       kind: removed!.id,
       payload: {},
     });

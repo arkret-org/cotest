@@ -7,22 +7,22 @@
 use anyhow::Result;
 use reqwest::StatusCode;
 
-use crate::harness::{ContrixServer, expect_json, expect_status, expect_text};
+use crate::harness::{CokretServer, expect_json, expect_status, expect_text};
 
-pub async fn run(server: &ContrixServer, token: &str) -> Result<()> {
+pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     sha_mismatch_is_rejected(server, token).await?;
     upload_then_range_get(server, token).await?;
     Ok(())
 }
 
-async fn sha_mismatch_is_rejected(server: &ContrixServer, token: &str) -> Result<()> {
+async fn sha_mismatch_is_rejected(server: &CokretServer, token: &str) -> Result<()> {
     expect_status(
         server
             .http()
             .post(server.url("/api/v1/blob/upload"))
             .bearer_auth(token)
             .header(
-                "x-contrix-content-digest",
+                "x-cokret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
             .body("encrypted-bytes"),
@@ -32,7 +32,7 @@ async fn sha_mismatch_is_rejected(server: &ContrixServer, token: &str) -> Result
     Ok(())
 }
 
-async fn upload_then_range_get(server: &ContrixServer, token: &str) -> Result<()> {
+async fn upload_then_range_get(server: &CokretServer, token: &str) -> Result<()> {
     let blob = expect_json(
         server
             .http()
@@ -48,7 +48,7 @@ async fn upload_then_range_get(server: &ContrixServer, token: &str) -> Result<()
         blob["blob_ref"]
             .as_str()
             .unwrap()
-            .starts_with("cx:blob:sha256:")
+            .starts_with("ck:blob:sha256:")
     );
 
     let range = expect_text(

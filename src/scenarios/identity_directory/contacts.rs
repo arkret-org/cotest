@@ -3,12 +3,12 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
+    CokretServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
     expect_response, expect_status,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
-    let server = ContrixServer::spawn("directory-workflow").await?;
+    let server = CokretServer::spawn("directory-workflow").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
@@ -74,7 +74,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/api/v1/directory/resolve-realm"))
-            .json(&json!({"invite_token": "cx:invite-token:invalid"})),
+            .json(&json!({"invite_token": "ck:invite-token:invalid"})),
         StatusCode::NOT_FOUND,
     )
     .await?;
@@ -141,7 +141,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let sent = alice
         .send_message(
             &shared_space_id,
-            "cx:thread:directory-workflow",
+            "ck:thread:directory-workflow",
             "hello directory workflow",
         )
         .await?;
@@ -156,7 +156,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         sent["event_id"]
             .as_str()
             .unwrap()
-            .replacen("cx:event:", "cx:operation:", 1);
+            .replacen("ck:event:", "ck:operation:", 1);
     assert!(
         exported["operations"]
             .as_array()
@@ -168,7 +168,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let waited_sync = expect_response(
         alice
             .get("/api/v1/account/subscribe?catchup=true")
-            .header("x-contrix-wait-for", sent["sync_token"].as_str().unwrap())
+            .header("x-cokret-wait-for", sent["sync_token"].as_str().unwrap())
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )
@@ -176,7 +176,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     assert_eq!(
         waited_sync
             .headers
-            .get("x-contrix-wait-for-satisfied")
+            .get("x-cokret-wait-for-satisfied")
             .and_then(|value| value.to_str().ok()),
         Some("true")
     );
@@ -194,7 +194,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     expect_status(
         alice
             .get("/api/v1/account/subscribe?catchup=true")
-            .header("x-contrix-wait-for", "not-a-sync-token")
+            .header("x-cokret-wait-for", "not-a-sync-token")
             .header("accept", "application/x-ndjson"),
         StatusCode::BAD_REQUEST,
     )

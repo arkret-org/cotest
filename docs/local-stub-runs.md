@@ -13,7 +13,7 @@ For the spec-coverage matrix see
 A "stub run" exercises cotest's e2e vectors against:
 
 - **SDK builders, in-process** — every wire shape goes through
-  `contrix-rust-sdk`'s typed builders and codecs.
+  `cokret-rust-sdk`'s typed builders and codecs.
 - **soland-stub** — a minimal in-process soland-shaped backend that
   implements just enough of the wire surface (reducer, FSM lattices,
   audit projection) for vectors to assert.
@@ -23,7 +23,7 @@ A "stub run" exercises cotest's e2e vectors against:
 A stub run does **not** exercise:
 
 - Real APNS / FCM / OEM push providers.
-- Real LiveKit / Mediasoup / Janus / Contrix-native media backends.
+- Real LiveKit / Mediasoup / Janus / Cokret-native media backends.
 - Real network transports (everything is in-process; transport-layer
   failures must be injected via the test harness).
 - Cross-region replication latency or partition behavior.
@@ -90,7 +90,7 @@ The current set:
 | `e2e::call_media::live_livekit_token_join` | Requires a live LiveKit pool; not provisionable from cotest. |
 | `e2e::call_media::live_mediasoup_token_join` | Same; requires a Mediasoup pool. |
 | `e2e::call_media::live_janus_token_join` | Same; requires a Janus instance. |
-| `e2e::call_media::live_contrix_native_token_join` | Requires a built and running Contrix-native SFU. |
+| `e2e::call_media::live_contrix_native_token_join` | Requires a built and running Cokret-native SFU. |
 | `e2e::call_media::live_sframe_key_derivation` | Requires a real MLS group across at least two participating yougen clients to exercise the exporter handoff to SFrame. |
 | `e2e::push::live_apns_dispatch` | Requires APNS credentials + a real device or sandbox-registered token. |
 | `e2e::push::live_fcm_dispatch` | Requires Firebase service account + a real device. |

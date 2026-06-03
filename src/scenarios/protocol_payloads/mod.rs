@@ -20,13 +20,13 @@
 //! - [`moderation`] — `/api/v1/moderation/report` queueing.
 //!
 //! No private cross-phase helpers exist — every phase function takes only
-//! `(&ContrixServer, &str)` (or just `&ContrixServer` when no auth is
+//! `(&CokretServer, &str)` (or just `&CokretServer` when no auth is
 //! required) so the orchestrator can read top-to-bottom as a sequence of
 //! protocol phases.
 
 use anyhow::Result;
 
-use crate::harness::{ContrixServer, dev_login};
+use crate::harness::{CokretServer, dev_login};
 
 mod backup_delete;
 mod blob;
@@ -37,7 +37,7 @@ mod moderation;
 mod push;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
-    let server = ContrixServer::spawn("protocol-payloads").await?;
+    let server = CokretServer::spawn("protocol-payloads").await?;
     let token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
 
     events_keys_setup::run(&server, &token).await?;

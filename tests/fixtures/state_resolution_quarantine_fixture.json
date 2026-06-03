@@ -14,15 +14,15 @@
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "actor": "did:web:alice.example", "value": "invite", "head_in": ["cx:anchor:sha256:abc123"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114201", "actor": "did:web:bob.example", "value": "public", "head_in": ["cx:anchor:sha256:abc123"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "actor": "did:web:alice.example", "value": "invite", "head_in": ["ck:anchor:sha256:abc123"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114201", "actor": "did:web:bob.example", "value": "public", "head_in": ["ck:anchor:sha256:abc123"] }
       ],
       "expected": {
         "outcome": "all_heads_quarantined",
         "reducer_picks_winner": false,
         "admin_escalation_required": true,
         "cell_state": "Bottom",
-        "quarantined_op_ids": ["cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114201"]
+        "quarantined_op_ids": ["ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114200", "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114201"]
       }
     },
     {
@@ -31,9 +31,9 @@
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114210", "actor": "did:web:alice.example", "value": "shared", "head_in": ["cx:anchor:sha256:def456"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114211", "actor": "did:web:bob.example", "value": "joined", "head_in": ["cx:anchor:sha256:def456"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114212", "actor": "did:web:carol.example", "value": "world_readable", "head_in": ["cx:anchor:sha256:def456"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114210", "actor": "did:web:alice.example", "value": "shared", "head_in": ["ck:anchor:sha256:def456"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114211", "actor": "did:web:bob.example", "value": "joined", "head_in": ["ck:anchor:sha256:def456"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114212", "actor": "did:web:carol.example", "value": "world_readable", "head_in": ["ck:anchor:sha256:def456"] }
       ],
       "expected": {
         "outcome": "all_heads_quarantined",
@@ -41,9 +41,9 @@
         "admin_escalation_required": true,
         "cell_state": "Bottom",
         "quarantined_op_ids": [
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114210",
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114211",
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114212"
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114210",
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114211",
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114212"
         ]
       }
     },
@@ -53,16 +53,16 @@
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220", "actor": "did:web:alice.example", "value": "policy_a", "head_in": ["cx:anchor:sha256:ghi789"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114221", "actor": "did:web:bob.example", "value": "policy_b", "head_in": ["cx:anchor:sha256:ghi789"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114220", "actor": "did:web:alice.example", "value": "policy_a", "head_in": ["ck:anchor:sha256:ghi789"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114221", "actor": "did:web:bob.example", "value": "policy_b", "head_in": ["ck:anchor:sha256:ghi789"] }
       ],
       "admin_escalation": {
         "kind": "anchorer_endorse_repair_move",
-        "repair_op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114222",
-        "endorsed_winner_op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220",
+        "repair_op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114222",
+        "endorsed_winner_op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114220",
         "head_in": [
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114220",
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114221"
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114220",
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114221"
         ]
       },
       "expected": {
@@ -70,7 +70,7 @@
         "reducer_picks_winner": false,
         "admin_escalation_required": true,
         "cell_state_after_repair": "Value(policy_a)",
-        "quarantined_op_ids": ["cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114221"]
+        "quarantined_op_ids": ["ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114221"]
       }
     },
     {
@@ -79,9 +79,9 @@
       "lattice": "cas_register",
       "bottom": "reject",
       "ops": [
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "cx.profile.chat_mvp.v1", "head_in": ["cx:anchor:sha256:jkl000"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "cx.profile.kanban_mvp.v1", "head_in": ["cx:anchor:sha256:jkl000"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "cx.profile.applet.v1", "head_in": ["cx:anchor:sha256:jkl000"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114230", "actor": "did:web:alice.example", "value": "cx.profile.chat_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114231", "actor": "did:web:bob.example", "value": "cx.profile.kanban_mvp.v1", "head_in": ["ck:anchor:sha256:jkl000"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114232", "actor": "did:web:carol.example", "value": "cx.profile.applet.v1", "head_in": ["ck:anchor:sha256:jkl000"] }
       ],
       "expected": {
         "outcome": "all_heads_quarantined",
@@ -89,9 +89,9 @@
         "admin_escalation_required": true,
         "cell_state": "Bottom",
         "quarantined_op_ids": [
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114230",
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114231",
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114232"
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114230",
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114231",
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114232"
         ]
       }
     },
@@ -101,8 +101,8 @@
       "lattice": "fsm",
       "bottom": "reject",
       "ops": [
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114240", "actor": "did:web:alice.example", "value": "join", "prev_state": "leave", "head_in": ["cx:anchor:sha256:mno000"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114241", "actor": "did:web:admin.example", "value": "ban", "prev_state": "leave", "head_in": ["cx:anchor:sha256:mno000"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114240", "actor": "did:web:alice.example", "value": "join", "prev_state": "leave", "head_in": ["ck:anchor:sha256:mno000"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114241", "actor": "did:web:admin.example", "value": "ban", "prev_state": "leave", "head_in": ["ck:anchor:sha256:mno000"] }
       ],
       "expected": {
         "outcome": "all_heads_quarantined",
@@ -110,8 +110,8 @@
         "admin_escalation_required": true,
         "cell_state": "Bottom",
         "quarantined_op_ids": [
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114240",
-          "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114241"
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114240",
+          "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114241"
         ]
       }
     },
@@ -121,8 +121,8 @@
       "lattice": "or_set",
       "bottom": "expose",
       "ops": [
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114250", "actor": "did:web:alice.example", "value": { "peer": "did:web:bob.example", "scope": "messaging" }, "head_in": ["cx:anchor:sha256:pqr000"] },
-        { "op_id": "cx:event:7fd5ae82-44e2-7a8a-9a4b-885799114251", "actor": "did:web:alice.example", "value": { "peer": "did:web:carol.example", "scope": "messaging" }, "head_in": ["cx:anchor:sha256:pqr000"] }
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114250", "actor": "did:web:alice.example", "value": { "peer": "did:web:bob.example", "scope": "messaging" }, "head_in": ["ck:anchor:sha256:pqr000"] },
+        { "op_id": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114251", "actor": "did:web:alice.example", "value": { "peer": "did:web:carol.example", "scope": "messaging" }, "head_in": ["ck:anchor:sha256:pqr000"] }
       ],
       "expected": {
         "outcome": "or_set_union",

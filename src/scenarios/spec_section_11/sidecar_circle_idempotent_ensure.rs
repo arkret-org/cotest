@@ -20,7 +20,7 @@ fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<S
         .map_err(|e| anyhow!("hkdf expand: {e}"))?;
     // Render okm as a canonical RFC 9562 UUIDv7
     // (`xxxxxxxx-xxxx-7xxx-Nxxx-xxxxxxxxxxxx`, N ∈ {8,9,a,b}) so the
-    // typed-id validator accepts the resulting `cx:sidecar_circle:` id.
+    // typed-id validator accepts the resulting `ck:sidecar_circle:` id.
     // The version nibble at position 12 is forced to '7', and the
     // variant nibble at position 16 is forced to '8'.
     let hex: String = okm.iter().map(|b| format!("{b:02x}")).collect();
@@ -30,7 +30,7 @@ fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<S
     let seg4_rest = &hex[17..20];
     let seg5 = &hex[20..32];
     Ok(format!(
-        "cx:sidecar_circle:{seg1}-{seg2}-7{seg3_rest}-8{seg4_rest}-{seg5}"
+        "ck:sidecar_circle:{seg1}-{seg2}-7{seg3_rest}-8{seg4_rest}-{seg5}"
     ))
 }
 

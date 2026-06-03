@@ -1,6 +1,6 @@
 //! CT-4 — Knock + member.application + cooldown matrix.
 //!
-//! Spec: `contrix-spec/spec/v1/zh/models/space-and-place.md`
+//! Spec: `cokret-spec/spec/v1/zh/models/space-and-place.md`
 //!   - §3.3 — `default_join_rule` enum + gate composition
 //!   - §3.6.2 — `member.application` schema
 //!   - §3.6.3 — `member.application.review` (accept / reject / request_changes)
@@ -62,7 +62,7 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     // When ready: spawn soland, create space with knock policy, run the
     // 8-step matrix above. Skeleton sketch retained for the implementor:
     //
-    //   let server = ContrixServer::spawn("knock-cooldown-matrix").await?;
+    //   let server = CokretServer::spawn("knock-cooldown-matrix").await?;
     //   let alice = register_account(&server, "did:web:alice.example",
     //                                "@alice", "dev_alice").await?;
     //   let bob   = register_account(&server, "did:web:bob.example",

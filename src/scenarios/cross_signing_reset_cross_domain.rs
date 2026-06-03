@@ -4,8 +4,8 @@
 //! Spec (round 2+3 cleanup, T08):
 //!
 //! `cross-signing-reset.schema.json` now requires two new payload fields:
-//!   * `trust_domain: TypedTrustDomainId` (`cx:trust_domain:<scope>`)
-//!   * `reset_event_id: TypedEventId` (`cx:event:<uuidv7>`)
+//!   * `trust_domain: TypedTrustDomainId` (`ck:trust_domain:<scope>`)
+//!   * `reset_event_id: TypedEventId` (`ck:event:<uuidv7>`)
 //!
 //! The receiver MUST validate in this strict order:
 //!   1. `trust_domain` matches the receiver's deployment trust domain → otherwise
@@ -15,8 +15,8 @@
 //!
 //! This module covers two scenarios:
 //!
-//! * `cross_signing_reset_cross_domain_run` — proof minted against `cx:trust_domain:A` replayed
-//!   against deployment `cx:trust_domain:B`; MUST be rejected with `cross_domain_replay_rejected`.
+//! * `cross_signing_reset_cross_domain_run` — proof minted against `ck:trust_domain:A` replayed
+//!   against deployment `ck:trust_domain:B`; MUST be rejected with `cross_domain_replay_rejected`.
 //!
 //! * `cross_signing_reset_event_id_mismatch_run` — payload carries `reset_event_id != Event.id`;
 //!   MUST be rejected with `reset_event_id_mismatch`.
@@ -30,7 +30,7 @@ use contrix_core::{
 pub const EXPECTED_CROSS_DOMAIN_REPLAY: &str = "cross_domain_replay_rejected";
 pub const EXPECTED_RESET_EVENT_ID_MISMATCH: &str = "reset_event_id_mismatch";
 
-pub const TRUST_DOMAIN_ID_PREFIX: &str = "cx:trust_domain:";
+pub const TRUST_DOMAIN_ID_PREFIX: &str = "ck:trust_domain:";
 
 /// Wire-level executable check: the SDK's `TypedTrustDomainId` validator
 /// MUST accept two distinct, well-formed trust domain ids — replaying a
@@ -53,9 +53,9 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
     }
     // Validate the SDK accepts two well-formed trust domain ids and that
     // they are distinct (cross-domain replay precondition).
-    let domain_a = TypedTrustDomainId::new("cx:trust_domain:alpha.example")
+    let domain_a = TypedTrustDomainId::new("ck:trust_domain:alpha.example")
         .map_err(|e| anyhow!("SDK rejected well-formed trust domain id alpha: {e}"))?;
-    let domain_b = TypedTrustDomainId::new("cx:trust_domain:beta.example")
+    let domain_b = TypedTrustDomainId::new("ck:trust_domain:beta.example")
         .map_err(|e| anyhow!("SDK rejected well-formed trust domain id beta: {e}"))?;
     if domain_a.as_str() == domain_b.as_str() {
         return Err(anyhow!(
@@ -90,9 +90,9 @@ pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
             "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_RESET_EVENT_ID_MISMATCH}"
         ));
     }
-    let id_a = EventId::new("cx:event:01904100-0000-7000-8000-000000000001")
+    let id_a = EventId::new("ck:event:01904100-0000-7000-8000-000000000001")
         .map_err(|e| anyhow!("SDK rejected well-formed EventId a: {e}"))?;
-    let id_b = EventId::new("cx:event:01904100-0000-7000-8000-000000000002")
+    let id_b = EventId::new("ck:event:01904100-0000-7000-8000-000000000002")
         .map_err(|e| anyhow!("SDK rejected well-formed EventId b: {e}"))?;
     if id_a.as_str() == id_b.as_str() {
         return Err(anyhow!("EventId equality broke: a and b must be distinct"));

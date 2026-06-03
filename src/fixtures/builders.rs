@@ -3,7 +3,7 @@
 //! `TestActorBuilder` replaces the per-scenario boilerplate of:
 //!
 //! ```ignore
-//! let server = ContrixServer::spawn("my-scenario").await?;
+//! let server = CokretServer::spawn("my-scenario").await?;
 //! let alice = server.register_client("did:web:alice.example", "@alice", "dev_alice").await?;
 //! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
@@ -26,7 +26,7 @@
 //!
 //! ## Design notes
 //!
-//! - The builder accepts a borrowed [`ContrixServer`] rather than a higher `TestHarness` wrapper
+//! - The builder accepts a borrowed [`CokretServer`] rather than a higher `TestHarness` wrapper
 //!   (which the cotest crate does not currently define). When a wrapper type is introduced the
 //!   builder can be retargeted without changing call sites — only the type bound moves.
 //! - The builder is intentionally `async`-free until `create()` so callers can inspect / mutate the
@@ -36,11 +36,11 @@ use std::fmt;
 
 use anyhow::{Context, Result};
 
-use crate::harness::{ContrixServer, TestActorClient};
+use crate::harness::{CokretServer, TestActorClient};
 
 /// Tracks the realms a scenario asked the builder to create as part of the
 /// fixture preamble. Each entry stores the original requested name and the
-/// allocated `cx:realm:...` id so scenarios can route follow-up assertions to
+/// allocated `ck:realm:...` id so scenarios can route follow-up assertions to
 /// the right realm without re-querying the server.
 #[derive(Debug, Clone)]
 pub struct SeededRealm {
@@ -86,7 +86,7 @@ impl TestActor {
         &self.client
     }
 
-    /// Convenience accessor that returns the `cx:realm:...` id of the first
+    /// Convenience accessor that returns the `ck:realm:...` id of the first
     /// realm the builder seeded, if any.
     pub fn first_realm(&self) -> Option<&str> {
         self.realms.first().map(|seeded| seeded.realm_id.as_str())
@@ -104,13 +104,13 @@ impl TestActor {
 
 /// Fluent builder for [`TestActor`].
 ///
-/// Holds a borrow of the [`ContrixServer`] under test so multiple actors can
+/// Holds a borrow of the [`CokretServer`] under test so multiple actors can
 /// be assembled against the same instance without re-cloning server-state. The
 /// builder is `#[must_use]` because building a spec without calling
 /// [`Self::create`] is almost always a mistake.
 #[must_use = "TestActorBuilder must end in `.create().await` to actually register the actor"]
 pub struct TestActorBuilder<'a> {
-    server: &'a ContrixServer,
+    server: &'a CokretServer,
     handle: String,
     did: Option<String>,
     primary_device: Option<String>,
@@ -124,7 +124,7 @@ impl<'a> TestActorBuilder<'a> {
     /// form (`@alice`) — both shapes appear in existing scenarios. The default
     /// DID is derived as `did:web:<bare-handle>.example` and the default
     /// primary device id as `dev_<bare-handle>`, both overridable.
-    pub fn new(server: &'a ContrixServer, handle: &str) -> Self {
+    pub fn new(server: &'a CokretServer, handle: &str) -> Self {
         let handle = handle.to_owned();
         Self {
             server,
@@ -156,7 +156,7 @@ impl<'a> TestActorBuilder<'a> {
     /// Pre-seed a realm owned by this actor.
     ///
     /// Realms are created in the order they are declared. The allocated
-    /// `cx:realm:...` ids are returned on the resulting [`TestActor`] via
+    /// `ck:realm:...` ids are returned on the resulting [`TestActor`] via
     /// `actor.realms` or `actor.first_realm()` / `actor.realm_by_name(...)`.
     pub fn with_realm(mut self, name: &str) -> Self {
         self.realms.push(name.to_owned());
@@ -223,7 +223,7 @@ impl<'a> TestActorBuilder<'a> {
 #[cfg(test)]
 mod tests {
     // These tests are pure builder-state checks; they intentionally do NOT
-    // call `create()` because that would require a live ContrixServer.
+    // call `create()` because that would require a live CokretServer.
     // Scenario-level coverage of `create()` lives in the migrated scenarios
     // (e.g. `tests/events_backfill.rs`).
 
@@ -231,10 +231,10 @@ mod tests {
     fn defaults_derive_did_and_device_from_handle() {
         // Build the spec without driving create() so we can assert the
         // derivations the builder applies. We use a dummy server reference
-        // by leaking a never-spawned ContrixServer through a builder method
+        // by leaking a never-spawned CokretServer through a builder method
         // that does not touch it — `with_*` methods are all pure setters.
         //
-        // Note: we cannot construct a ContrixServer in a unit test, so we
+        // Note: we cannot construct a CokretServer in a unit test, so we
         // instead verify the derivation logic directly via the same helpers
         // create() uses.
         let raw = "@alice";

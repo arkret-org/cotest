@@ -99,12 +99,12 @@ pub fn run_federation_fixture_suite() -> Result<()> {
             "fork_quarantine" => {
                 let first = register_history_head(
                     &mut fork_table,
-                    "cx:realm:01970e58-0006-7000-8000-000000000001",
+                    "ck:realm:01970e58-0006-7000-8000-000000000001",
                     "sha256:a",
                 );
                 let second = register_history_head(
                     &mut fork_table,
-                    "cx:realm:01970e58-0006-7000-8000-000000000001",
+                    "ck:realm:01970e58-0006-7000-8000-000000000001",
                     "sha256:b",
                 );
                 if first != FederationVerdict::Accepted || second != FederationVerdict::Quarantined
@@ -114,7 +114,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 record_vector_event(
                     "federation.fork_quarantine",
                     &json!({
-                        "realm_id": "cx:realm:01970e58-0006-7000-8000-000000000001",
+                        "realm_id": "ck:realm:01970e58-0006-7000-8000-000000000001",
                         "head_a": "sha256:a",
                         "head_b": "sha256:b",
                     }),

@@ -8,14 +8,14 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/sync/transport-bindings.md` §2 — 分层:semantic operation vs transport binding;v1 core 锁定 HTTP/JSON
-- `contrix-spec/spec/v1/zh/sync/transport-bindings.md` §3 — Binding Requirements:认证、授权上下文、幂等、流式、错误、背压
-- `contrix-spec/spec/v1/zh/sync/transport-bindings.md` §4 — Canonical Operation IDs (federation push 复用 `cx.events.submit` + service_signature)
-- `contrix-spec/spec/v1/zh/sync/service-http-binding.md` §3 — 通用认证 / RFC 9421 / 服务间签名要求
-- `contrix-spec/spec/v1/zh/sync/service-http-binding.md` §4 — 服务间 origin/destination service DID 绑定
-- `contrix-spec/spec/v1/zh/sync/service-http-binding.md` §5 — 错误 envelope、404 unrecognized_endpoint、405 method_not_allowed
-- `contrix-spec/spec/v1/zh/sync/federation.md` §3.2 — RFC 9421 HTTP Message Signature 在 federation 调用上的具体要求
-- `contrix-spec/spec/v1/zh/sync/federation.md` §4.1 — push 协议(复用 `POST /api/v1/federation/push-operations` 在当前 implementation 路径下)
+- `cokret-spec/spec/v1/zh/sync/transport-bindings.md` §2 — 分层:semantic operation vs transport binding;v1 core 锁定 HTTP/JSON
+- `cokret-spec/spec/v1/zh/sync/transport-bindings.md` §3 — Binding Requirements:认证、授权上下文、幂等、流式、错误、背压
+- `cokret-spec/spec/v1/zh/sync/transport-bindings.md` §4 — Canonical Operation IDs (federation push 复用 `cx.events.submit` + service_signature)
+- `cokret-spec/spec/v1/zh/sync/service-http-binding.md` §3 — 通用认证 / RFC 9421 / 服务间签名要求
+- `cokret-spec/spec/v1/zh/sync/service-http-binding.md` §4 — 服务间 origin/destination service DID 绑定
+- `cokret-spec/spec/v1/zh/sync/service-http-binding.md` §5 — 错误 envelope、404 unrecognized_endpoint、405 method_not_allowed
+- `cokret-spec/spec/v1/zh/sync/federation.md` §3.2 — RFC 9421 HTTP Message Signature 在 federation 调用上的具体要求
+- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 — push 协议(复用 `POST /api/v1/federation/push-operations` 在当前 implementation 路径下)
 
 ## 拓扑
 

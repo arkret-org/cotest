@@ -13,17 +13,17 @@
     {
       "name": "flow_track_member_alice",
       "kind": "cx.flow.track.member",
-      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
       "expected_state_subject": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
     },
     {
       "name": "flow_track_history_visibility_main",
       "kind": "cx.flow.track.history_visibility",
-      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[flow_id, track]",
-      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
       "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34"
     },
     {
@@ -37,25 +37,25 @@
     {
       "name": "realm_policy_default",
       "kind": "cx.realm.policy",
-      "components_array": ["cx:realm:01js0sp01000000000000000000", "default"],
+      "components_array": ["ck:realm:01js0sp01000000000000000000", "default"],
       "components_order_source": "[realm_id, policy_name]",
-      "expected_canonical_json": "[\"cx:realm:01js0sp01000000000000000000\",\"default\"]",
+      "expected_canonical_json": "[\"ck:realm:01js0sp01000000000000000000\",\"default\"]",
       "expected_state_subject": "KKLQELTQ04MGrcVGKngqHBPgWwYt1D7C4t8iMqgu_k8"
     },
     {
       "name": "realm_member_carol",
       "kind": "cx.realm.member",
-      "components_array": ["cx:realm:01js0sp01000000000000000000", "did:web:carol.example"],
+      "components_array": ["ck:realm:01js0sp01000000000000000000", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
-      "expected_canonical_json": "[\"cx:realm:01js0sp01000000000000000000\",\"did:web:carol.example\"]",
+      "expected_canonical_json": "[\"ck:realm:01js0sp01000000000000000000\",\"did:web:carol.example\"]",
       "expected_state_subject": "XDmQTBsZ8oCrNEgL52vPBGrYLSSAf8GLTEv2nHef0V0"
     },
     {
       "name": "flow_track_member_alice_distinct_track",
       "kind": "cx.flow.track.member",
-      "components_array": ["cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
       "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
       "expected_state_subject": "OP0EsF38fyKuP7qED_VpUC1vAdmNU2oZ12AKpiKenOU",
       "comment": "Same flow_id + actor_id as flow_track_member_alice but different track segment — must produce a distinct state_subject."
     }
@@ -64,7 +64,7 @@
     {
       "name": "wrong_component_order_must_differ",
       "kind": "cx.flow.track.member",
-      "components_array": ["main", "cx:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
+      "components_array": ["main", "ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "Component reordering (track before flow_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
       "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
     }
@@ -82,7 +82,7 @@
     },
     {
       "name": "compaction_reserved_rejected",
-      "components_array": ["cx:realm:01js0sp01000000000000000000", "__compaction__"],
+      "components_array": ["ck:realm:01js0sp01000000000000000000", "__compaction__"],
       "comment": "`__compaction__` is the spec-reserved compaction-marker surface name. Even when not the sole component, ANY position MUST trigger rejection.",
       "expected": {
         "outcome": "reject",

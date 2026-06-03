@@ -168,9 +168,9 @@ export class JointUserPage {
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await createButton.click();
 
-    await expect(flow).toContainText(/created cx:realm:/, { timeout: 30_000 });
+    await expect(flow).toContainText(/created ck:realm:/, { timeout: 30_000 });
     const text = await flow.innerText();
-    const match = text.match(/created (cx:realm:[^\s]+)/);
+    const match = text.match(/created (ck:realm:[^\s]+)/);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];
   }
@@ -189,7 +189,7 @@ export class JointUserPage {
       { timeout: 30_000 },
     );
     const text = await this.page.getByTestId("space-admin-panel").innerText();
-    const match = text.match(/cx:invite:[a-zA-Z0-9:-]+/);
+    const match = text.match(/ck:invite:[a-zA-Z0-9:-]+/);
     expect(match, `invite id after inviting ${targetDid}: ${text}`).not.toBeNull();
     return match![0];
   }
@@ -317,7 +317,7 @@ export function uniqueUser(prefix: string): JointUser {
   return {
     name: slug,
     did: `did:web:${slug}.example`,
-    deviceId: `cx:device:01904100-0000-7000-8000-${deviceSuffix}`,
+    deviceId: `ck:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
   };

@@ -156,7 +156,7 @@ test.describe("consent grant", () => {
     const openBody = await open.json();
     expect(openBody.ok).toBe(true);
     expect(openBody.state).toBe("requested");
-    expect(openBody.consent_id).toMatch(/^cx:mimi_consent:/);
+    expect(openBody.consent_id).toMatch(/^ck:mimi_consent:/);
     expect(openBody.receipt?.operation_id).toBe("cx.mimi.request_consent");
     expect(openBody.receipt?.extra?.privacy_state).toBe("holder_private");
     expect(openBody.receipt?.extra?.consent_grants_space_capability).toBe(false);
@@ -196,7 +196,7 @@ test.describe("consent grant", () => {
     const pending = await requestContactApi(request, bobToken, alice.did, "message");
     expect(pending.status).toBe("pending");
 
-    const consentId = typedId("operation").replace("cx:operation:", "cx:consent:");
+    const consentId = typedId("operation").replace("ck:operation:", "ck:consent:");
     const grantEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
@@ -221,7 +221,7 @@ test.describe("consent grant", () => {
       "message",
       "granted",
     );
-    expect(granted.cell_id).toBe(`cx:cell:cx.component.consent.grant.v1:${consentId}`);
+    expect(granted.cell_id).toBe(`ck:cell:cx.component.consent.grant.v1:${consentId}`);
     expect(granted.grant_dots).toContain(grantDot);
     const accepted = await requestContactApi(request, bobToken, alice.did, "message");
     expect(accepted.status).toBe("accepted");

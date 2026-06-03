@@ -203,7 +203,7 @@ test.describe("Document Morph collaboration", () => {
       await alicePage.page.getByTestId("document-link-incident-input").fill(realmId);
       await alicePage.page.getByTestId("save-document-button").click();
       await expect(alicePage.page.getByTestId("document-status")).toContainText(
-        /document cx:morph:/i,
+        /document ck:morph:/i,
         { timeout: 45_000 },
       );
       const morphId = await waitForDocumentMorphId(request, aliceToken, realmId, title);
@@ -263,11 +263,11 @@ test.describe("Document Morph collaboration", () => {
 });
 
 function documentMorphId(): string {
-  return typedId("operation").replace("cx:operation:", "cx:morph:");
+  return typedId("operation").replace("ck:operation:", "ck:morph:");
 }
 
 function documentRelationId(): string {
-  return typedId("operation").replace("cx:operation:", "cx:relation:");
+  return typedId("operation").replace("ck:operation:", "ck:relation:");
 }
 
 function paragraphDocumentBody(body: string) {

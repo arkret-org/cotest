@@ -2,19 +2,19 @@
   "profile": "cx.profile.consent_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `cx:cell:cx.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `require_consent` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `cx:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
+  "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `ck:cell:cx.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `require_consent` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `ck:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
   "vectors": [
     {
       "name": "grant_then_invite_accepts",
       "comment": "Holder grants consent for `invite` scope to peer; the or-set cell join contains (bob, invite). The subsequent invite Move's `require_consent` precondition resolves true and Move is accepted.",
       "moves": [
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000001",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000001",
           "kind": "cx.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -22,7 +22,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000002",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000002",
           "kind": "cx.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -43,12 +43,12 @@
       "comment": "Causal remove of the prior grant op (or-set or_set_remove referencing the grant move_id). After Move 2, the cell join no longer contains (bob, invite); Move 3's `consent_active` precondition resolves false and the Move is rejected with consent_required.",
       "moves": [
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000010",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000010",
           "kind": "cx.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -56,20 +56,20 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000011",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000011",
           "kind": "cx.consent.revoke",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_remove",
-              "removes": ["cx:event:01970e58-0000-7000-8000-000000000010"]
+              "removes": ["ck:event:01970e58-0000-7000-8000-000000000010"]
             }
           ],
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000012",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000012",
           "kind": "cx.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -90,12 +90,12 @@
       "comment": "scope=any tag in the or-set covers all consent scopes (invite, direct_message, voice_call, video_call, presence). A call invite under any-scope is accepted without an explicit voice_call tag.",
       "moves": [
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000020",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000020",
           "kind": "cx.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "any" }
             }
@@ -103,7 +103,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000021",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000021",
           "kind": "cx.call.invite",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -124,15 +124,15 @@
       "comment": "Pseudonym DID peers are valid or-set tag values. Cell join is identity-provenance-agnostic.",
       "moves": [
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000030",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000030",
           "kind": "cx.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_add",
               "tag": {
-                "peer": "did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9",
+                "peer": "did:ck:psd-z9z9z9z9z9z9z9z9z9z9z9",
                 "scope": "direct_message"
               }
             }
@@ -140,14 +140,14 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000031",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000031",
           "kind": "cx.message.create",
-          "actor_id": "did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9",
+          "actor_id": "did:ck:psd-z9z9z9z9z9z9z9z9z9z9z9",
           "preconditions": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
-              "peer": "did:cx:psd-z9z9z9z9z9z9z9z9z9z9z9",
+              "peer": "did:ck:psd-z9z9z9z9z9z9z9z9z9z9z9",
               "scope": "direct_message"
             }
           ],
@@ -161,7 +161,7 @@
       "comment": "When the receiving Space pins the require_consent component, the invite Move's `consent_active` precondition fails closed because the holder's or-set has no matching tag. Move is rejected with consent_required.",
       "moves": [
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000040",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000040",
           "kind": "cx.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -182,12 +182,12 @@
       "comment": "Causal or-set: a fresh grant Move after a revoke creates a new tag op_id distinct from the previously-removed op. The cell join now contains the new tag, and the invite is accepted again.",
       "moves": [
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000050",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000050",
           "kind": "cx.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -195,25 +195,25 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000051",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000051",
           "kind": "cx.consent.revoke",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_remove",
-              "removes": ["cx:event:01970e58-0000-7000-8000-000000000050"]
+              "removes": ["ck:event:01970e58-0000-7000-8000-000000000050"]
             }
           ],
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000052",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000052",
           "kind": "cx.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
-              "cell": "cx:cell:cx.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ck:cell:cx.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -221,7 +221,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "cx:event:01970e58-0000-7000-8000-000000000053",
+          "move_id": "ck:event:01970e58-0000-7000-8000-000000000053",
           "kind": "cx.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [

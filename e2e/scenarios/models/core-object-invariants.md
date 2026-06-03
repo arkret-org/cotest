@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 Contrix 协作图 **所有 canonical object** 在线必须维持的五条核心不变量：
+验证 Cokret 协作图 **所有 canonical object** 在线必须维持的五条核心不变量：
 
 1. **公共字段完整性** — 任何 durable Event 与 Materialized Object 在 wire 上 MUST 携带 `common-fields.md` §3 列出的公共字段（`id` / typed prefix、`created_at`、actor 主体引用、`lifecycle_state` 等价物），不允许在 happy-path serializer 上"省略"以节省字节。
 2. **Patch precondition (CAS)** — 任何携带 `preconditions[].head_eq` 的 Move/patch 在 pre-state 与 actor 声明值不一致时 MUST `failed_precondition`，并且 **不得** 对目标 cell 执行 `effects[]`（不能"先写后报错"）。
@@ -14,17 +14,17 @@
 
 ## Spec 锚点
 
-- `contrix-spec/spec/v1/zh/models/common-fields.md` §3 — Common Object Fields 表（`id` / `created_at` / `created_by` / `state` / `state_changed_at` / `schema`）
-- `contrix-spec/spec/v1/zh/models/common-fields.md` §5、§5.1 — Lifecycle state 枚举与 canonical state-transition 表（`<kind>_not_active` / `<kind>_already_terminal` / 同 state self-transition 禁止）
-- `contrix-spec/spec/v1/zh/models/event-and-patch.md` §2.2 — Event Envelope 必填字段（`event_id` / `kind` / `actor_id` / `actor_seq` / `created_at` / `prev_refs` / `refs` / `payload` / `proofs`）
-- `contrix-spec/spec/v1/zh/models/event-and-patch.md` §2.6 — `actor_seq` fork 约束（同 `(actor_id, actor_seq)` sibling fork 上限）
-- `contrix-spec/spec/v1/zh/models/event-and-patch.md` §4.2.3 / §4.2.4 / §4.2.5 — Patch selector 语义、redactable 字段保护、reducer-managed 字段保护、`preconditions[].head_eq` CAS 不匹配时 `failed_precondition`
-- `contrix-spec/spec/v1/zh/models/realm-and-space.md` §2.5 / §2.5.1 — Realm tombstone vs destroy；destroy 后 `realm_terminal_state` / child cascade / erasure receipt
-- `contrix-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`cx.space.archive` 不级联子 Space、`cx.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
-- `contrix-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
-- `contrix-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
-- `contrix-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → flow 派生，不依赖预先注册 View
-- `contrix-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionResponse` 形状（`view_id` 缺失时仍能返回派生 projection）
+- `cokret-spec/spec/v1/zh/models/common-fields.md` §3 — Common Object Fields 表（`id` / `created_at` / `created_by` / `state` / `state_changed_at` / `schema`）
+- `cokret-spec/spec/v1/zh/models/common-fields.md` §5、§5.1 — Lifecycle state 枚举与 canonical state-transition 表（`<kind>_not_active` / `<kind>_already_terminal` / 同 state self-transition 禁止）
+- `cokret-spec/spec/v1/zh/models/event-and-patch.md` §2.2 — Event Envelope 必填字段（`event_id` / `kind` / `actor_id` / `actor_seq` / `created_at` / `prev_refs` / `refs` / `payload` / `proofs`）
+- `cokret-spec/spec/v1/zh/models/event-and-patch.md` §2.6 — `actor_seq` fork 约束（同 `(actor_id, actor_seq)` sibling fork 上限）
+- `cokret-spec/spec/v1/zh/models/event-and-patch.md` §4.2.3 / §4.2.4 / §4.2.5 — Patch selector 语义、redactable 字段保护、reducer-managed 字段保护、`preconditions[].head_eq` CAS 不匹配时 `failed_precondition`
+- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §2.5 / §2.5.1 — Realm tombstone vs destroy；destroy 后 `realm_terminal_state` / child cascade / erasure receipt
+- `cokret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`cx.space.archive` 不级联子 Space、`cx.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
+- `cokret-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
+- `cokret-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
+- `cokret-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → flow 派生，不依赖预先注册 View
+- `cokret-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionResponse` 形状（`view_id` 缺失时仍能返回派生 projection）
 
 ## 拓扑
 
@@ -55,7 +55,7 @@
 1. **alice** 通过 `JointUserPage.createSpace({...})` 走 `/setup` 多步向导建空间 `S`
    - title = `"models/core-object-invariants Space ${stamp}"`
    - discoverability = `listed`，join_rule = `invite`，history_visibility = `joined`
-2. 断言：`space-lifecycle-flow` 含 `created cx:space:...`，记录 `spaceId`
+2. 断言：`space-lifecycle-flow` 含 `created ck:space:...`，记录 `spaceId`
 3. **alice** 调 `GET /api/v1/spaces/${spaceId}`，断言返回 JSON 至少包含以下 wire 字段（spec §3 公共字段在 soland 当前 serializer 上的等价表达）：
    - `space_id` — `id:space` typed prefix，对应 spec `id`
    - `owner` — Space 的 owner DID，对应 spec `created_by` / actor 主体引用
@@ -102,8 +102,8 @@
 21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionResponse`：
     - `kind = "collection"`
     - `renderer = "board"`
-    - `view_id` 为派生默认（典型实现：`cx:view:default:${spaceId}` 或服务端临时 id；测试侧只断言字段存在 + 是 `cx:view:` typed prefix，不 hardcode 具体 uuid）
-    - `frontier` 至少有一项 `cx:event:...`（这个 Space 至少有 create event）
+    - `view_id` 为派生默认（典型实现：`ck:view:default:${spaceId}` 或服务端临时 id；测试侧只断言字段存在 + 是 `ck:view:` typed prefix，不 hardcode 具体 uuid）
+    - `frontier` 至少有一项 `ck:event:...`（这个 Space 至少有 create event）
     - `groups[]` 是数组（可以为空，因为没有 List Space / Flow placement，但字段必须存在 — spec §2.2 View.kind 是响应族）
 22. 再请求同一 endpoint 但用一个 spec 没注册的 renderer：`?renderer=bogus_renderer_${stamp}`：断言 HTTP 4xx + `error_code = "unknown_renderer"`（或类似），**MUST NOT** 静默回退到 `board`——fallback 只对"未注册 View"生效，不对"未注册 renderer"生效。这是 spec §2.2 "保留 5 个 View.kind 作为 response family" 与 §11 "未声明 renderer MUST fail-closed" 的边界。
 

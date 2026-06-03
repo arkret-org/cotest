@@ -1,4 +1,4 @@
-//! R3 spec-sync (contrix-spec @ b47ff6ec) — cursor opaque vectors
+//! R3 spec-sync (cokret-spec @ b47ff6ec) — cursor opaque vectors
 //! (§0.11 of `_before_todos.md`).
 //!
 //! 2 vectors:

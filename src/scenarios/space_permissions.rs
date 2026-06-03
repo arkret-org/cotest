@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ContrixServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
+    CokretServer, add_member, create_realm, dev_login, event_envelope, expect_api_error,
     expect_json, register_account, send_message, submit_event,
 };
 
@@ -25,7 +25,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let unauth_realm_id = "cx:realm:01904100-0000-7000-8000-5pace0000001";
+    let unauth_realm_id = "ck:realm:01904100-0000-7000-8000-5pace0000001";
     expect_api_error(
         server
             .http()
@@ -41,7 +41,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                         "title": "No Auth",
                         "summary": "No Auth",
                         "created_by": "did:web:alice.example",
-                        "trust_domain": "cx:trust_domain:soland.local",
+                        "trust_domain": "ck:trust_domain:soland.local",
                         "schema_refs": ["cx.schema.realm.v1"],
                         "default_discoverability": "invite_only",
                         "default_join_rule": "invite",
@@ -105,7 +105,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 }
 
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
-    let server = ContrixServer::spawn("space-visibility").await?;
+    let server = CokretServer::spawn("space-visibility").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
@@ -148,7 +148,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                 json!({
                     "body": "not a member",
                     "content": {"body": "not a member"},
-                    "thread_id": "cx:thread:space-denied",
+                    "thread_id": "ck:thread:space-denied",
                 }),
             )),
         StatusCode::FORBIDDEN,
@@ -169,7 +169,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         &bob.token,
         "did:web:bob-visible.example",
         &realm_id,
-        "cx:thread:space",
+        "ck:thread:space",
         "member can send",
     )
     .await?;
@@ -196,7 +196,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                 json!({
                     "body": "after delete",
                     "content": {"body": "after delete"},
-                    "thread_id": "cx:thread:space",
+                    "thread_id": "ck:thread:space",
                 }),
             )),
         StatusCode::CONFLICT,

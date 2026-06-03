@@ -1,10 +1,10 @@
 # cotest
 
-> **Spec target**: [contrix-spec @ c2848a4](../contrix-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
 
-`cotest` is an out-of-repository black-box Contrix server test harness modeled
+`cotest` is an out-of-repository black-box Cokret server test harness modeled
 after Complement. It starts real server processes or real server containers,
-drives public HTTP endpoints, and uses `contrix-rust-sdk` where typed protocol
+drives public HTTP endpoints, and uses `cokret-rust-sdk` where typed protocol
 helpers and client smoke coverage are useful.
 
 ## Pre-commit hook setup
@@ -18,7 +18,7 @@ git config core.hooksPath .githooks
 The hook runs `cargo fmt --all -- --check` and `cargo clippy --no-deps -- -D
 warnings` on staged Rust changes. If `.githooks/pre-commit` is missing on
 a branch, copy it from
-[`contrix-rust-sdk`](https://github.com/contrix-dev/contrix-rust-sdk) and
+[`cokret-rust-sdk`](https://github.com/cokret-dev/cokret-rust-sdk) and
 adapt to your local toolchain.
 
 The current default server under test is the sibling
@@ -39,7 +39,7 @@ back-compat aliases stay covered.
 
 ## Round R4 (protocol review closures)
 
-Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) adds:
+Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds:
 
 - **12 new security-closure vectors** (`cx.vector.*` from
   `security-closure-vectors.json`) driven through a runner contract
@@ -55,7 +55,7 @@ Spec round 4 (`contrix-spec` range `2a4d39b..a77b995`, 8 commits) adds:
 - **Drift-validator allowlists extended** for the new capability action
   `cx.morph.create`, the three new error codes
   (`delivery_binding_stale` / `_handed_over` / `historical_only`), the
-  `cx:space:` id-kind in `object_ref`, and the new schema `$defs`
+  `ck:space:` id-kind in `object_ref`, and the new schema `$defs`
   (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
   `EventsFrontier*Response` variants, `PolicyCheck{Request,Response}`,
   `FederationServiceBindingRef`, `EventsSubmit{Batch,Federation}Request`,
@@ -90,7 +90,7 @@ Recommended entrypoints:
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
-  `soland` plus the sibling `contrix-rust-sdk` checkout using the workspace
+  `soland` plus the sibling `cokret-rust-sdk` checkout using the workspace
   root as Docker build context.
 - Each scripted run writes `raw.log`, `transcript.ndjson`, `summary.json`,
   `summary.md`, `summary.html`, `junit.xml`, coverage/gap reports, and
@@ -141,7 +141,7 @@ the `TEABAY_BIN`/sibling-binary convention.
 - `docker`: spawn the SUT from `COTEST_SUT_IMAGE` with Docker while the Rust
   tests remain host-side, similar to Complement.
 
-See [docs/runtime-workflow.md](/E:/Works/contrix-dev/cotest/docs/runtime-workflow.md:1)
+See [docs/runtime-workflow.md](/E:/Works/cokret-dev/cotest/docs/runtime-workflow.md:1)
 for the full startup model, Docker image contract, and result artifacts.
 
 ## Layout
@@ -149,7 +149,7 @@ for the full startup model, Docker image contract, and result artifacts.
 - `src/harness.rs`: process lifecycle, test actor helpers, and shared HTTP
   assertion utilities.
 - `src/conformance.rs`: artifact-driven offline conformance runner wired to
-  `contrix-spec/spec/v1/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
+  `cokret-spec/spec/v1/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
   bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
@@ -158,7 +158,7 @@ for the full startup model, Docker image contract, and result artifacts.
 - `config/coverage-profiles.json`: machine-readable profile-to-suite coverage
   mapping used by the runner.
 - `docs/test-strategy.md`: harness model and suite grouping.
-- `docs/complement-map.md`: how Complement concepts map onto Contrix.
+- `docs/complement-map.md`: how Complement concepts map onto Cokret.
 - `docs/runtime-workflow.md`: runtime modes, Docker image flow, runner scripts,
   and result presentation.
 
@@ -169,7 +169,7 @@ for the full startup model, Docker image contract, and result artifacts.
   permissions, payload contracts, and extension surface gaps.
 - Offline conformance surface: Event Envelope, encoding, redaction,
   capability, sync, federation, privacy/security, and state-resolution fixtures
-  loaded from `contrix-spec/spec/v1/artifacts`.
+  loaded from `cokret-spec/spec/v1/artifacts`.
 - Multi-server surface: federation readiness, contract validation, and
   cross-server collaboration flows.
 
@@ -297,7 +297,7 @@ on-call engineer chases.
 
 For the runtime model comparison against Complement, including image creation,
 Docker networking, host-side execution, and result formatting, see
-[docs/complement-map.md](/E:/Works/contrix-dev/cotest/docs/complement-map.md:1).
+[docs/complement-map.md](/E:/Works/cokret-dev/cotest/docs/complement-map.md:1).
 
 The suite is organized by protocol and behavior, not milestone folders.
 
@@ -305,7 +305,7 @@ The suite is organized by protocol and behavior, not milestone folders.
 
 `cotest` ships a repo-level literal scanner that reads the canonical
 drift-detection artifacts shipped under
-`contrix-spec/spec/v1/artifacts/registry/`:
+`cokret-spec/spec/v1/artifacts/registry/`:
 
 - `removed-event-kinds.json`
 - `deprecated-profile-ids.json`
@@ -337,8 +337,8 @@ for f in report.violations() {
 
 The spec directory is resolved in this order:
 
-1. `CONTRIX_SPEC_DIR` env var (points at the `contrix-spec` checkout root).
-2. `<cotest crate root>/../contrix-spec` (default sibling layout).
+1. `CONTRIX_SPEC_DIR` env var (points at the `cokret-spec` checkout root).
+2. `<cotest crate root>/../cokret-spec` (default sibling layout).
 
 ### CLI
 
@@ -347,7 +347,7 @@ A standalone binary is provided as `src/bin/literal_scanner.rs`:
 ```powershell
 cargo run --bin literal_scanner -- --root ..\yougen --format text
 cargo run --bin literal_scanner -- --root ..\soland --format json --fail-on-violation
-cargo run --bin literal_scanner -- --root ..\yougen --registry-dir ..\contrix-spec\spec\v1\artifacts\registry
+cargo run --bin literal_scanner -- --root ..\yougen --registry-dir ..\cokret-spec\spec\v1\artifacts\registry
 ```
 
 Exit codes: `0` clean, `1` violations found (only with `--fail-on-violation`),
@@ -364,9 +364,9 @@ A finding is marked `allowed_context_match = true` when **either**:
 2. The file contains a magic comment that exempts the artifact id:
 
    ```rust
-   // contrix-allow: cx.flow.track.member
-   // contrix-allow: cx.flow.track.member, flow_branch
-   // contrix-allow: *      // exempt every artifact in this file
+   // cokret-allow: cx.flow.track.member
+   // cokret-allow: cx.flow.track.member, flow_branch
+   // cokret-allow: *      // exempt every artifact in this file
    ```
 
    `#`, `<!-- -->`, and `/* */` comment forms are all recognized so the same
@@ -388,5 +388,5 @@ backlog of legacy literals.
 
 <!-- circle-rollout milestone pointer -->
 > **Active milestone tracking** (local-only, gitignored): see
-> `_cotest_todos.md` in the parent `contrix-dev/` directory for the
+> `_cotest_todos.md` in the parent `cokret-dev/` directory for the
 > circle-rollout (CXP-0007) work item list and per-stage checkpoints.
