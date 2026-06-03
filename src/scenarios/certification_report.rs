@@ -74,7 +74,14 @@ const SERVICE_SPECS: &[ServiceSpec] = &[
 ];
 
 pub async fn live_stack_certification_report_from_env() -> Result<StackCertificationReport> {
-    let client = reqwest::Client::new();
+    // Bound every probe so a describe endpoint that accepts the connection but
+    // never responds can't hang the report (and the CI job) indefinitely —
+    // matches the 5s convention used by teabay_resolve_space / starid_replay.
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .context("building certification-report HTTP client")?;
     let mut services = Vec::new();
     for spec in SERVICE_SPECS {
         let Some(url) = describe_url_from_env(*spec)? else {

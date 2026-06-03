@@ -34,9 +34,14 @@ pub const EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE: &str =
 ///
 /// This is the cotest-side wire pin for T09 — it does not need a live
 /// soland to validate that the ABI between SDK / cotest / soland agrees
-/// on the exact reason code string. The full end-to-end test that
-/// drives the soland reducer with a payload of `relaxed_window_max_ms =
-/// 400_000` is gated under `#[ignore]` below.
+/// on the exact reason code string.
+///
+/// SCOPE: this is a *wire pin only* (constant ⇆ SDK ⇆ registry agreement). It
+/// does NOT drive the soland reducer and therefore does NOT verify the
+/// fail-closed behaviour (`relaxed_window_max_ms > 300_000` is actually
+/// rejected). A behavioural end-to-end test that spawns soland and submits a
+/// `relaxed_window_max_ms = 400_000` payload is not yet implemented; do not
+/// count this pin as behavioural fail-closed coverage.
 pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
     if ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING != EXPECTED_RELAXED_EXCEEDS_CEILING {
         return Err(anyhow!(

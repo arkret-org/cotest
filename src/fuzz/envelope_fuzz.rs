@@ -59,7 +59,7 @@ fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
 pub struct FuzzEventInput {
     pub event_id: String,
     pub kind: String,
-    pub space_id: String,
+    pub realm_id: String,
     pub actor_id: String,
     pub actor_seq: u64,
     pub created_at: String,
@@ -88,7 +88,7 @@ impl FuzzEventInput {
         let mut envelope = json!({
             "event_id": self.event_id,
             "kind": self.kind,
-            "space_id": self.space_id,
+            "realm_id": self.realm_id,
             "actor_id": self.actor_id,
             "actor_seq": self.actor_seq,
             "created_at": self.created_at,
@@ -139,7 +139,7 @@ pub fn fuzz_event_envelope(data: &[u8]) -> Result<(), String> {
 pub struct FuzzMoveInput {
     pub id: String,
     pub issuer: String,
-    pub space_id: String,
+    pub realm_id: String,
     pub anchor_ref: String,
     pub hlc_physical_ms: u64,
     pub hlc_logical: u32,
@@ -177,7 +177,7 @@ impl FuzzMoveInput {
         json!({
             "id": self.id,
             "issuer": self.issuer,
-            "space_id": self.space_id,
+            "realm_id": self.realm_id,
             "preconditions": self.preconditions.iter().map(|v| &v.0).collect::<Vec<_>>(),
             "effects": self.effects.iter().map(|v| &v.0).collect::<Vec<_>>(),
             "anchor_ref": self.anchor_ref,

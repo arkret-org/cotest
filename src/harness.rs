@@ -592,16 +592,8 @@ impl TestActorClient {
     }
 
     pub async fn add_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
-        self.submit_event(
-            realm_id,
-            "cx.member.state",
-            json!({
-                "actor_id": member.actor,
-                "membership": "join",
-                "delivery_status": "unroutable"
-            }),
-        )
-        .await
+        self.submit_event(realm_id, "cx.member.state", member_join_payload(&member.actor))
+            .await
     }
 
     pub async fn send_message(&self, realm_id: &str, thread_id: &str, body: &str) -> Result<Value> {
@@ -858,11 +850,7 @@ pub async fn add_member(
         actor,
         realm_id,
         "cx.member.state",
-        json!({
-            "actor_id": member,
-            "membership": "join",
-            "delivery_status": "unroutable"
-        }),
+        member_join_payload(member),
         StatusCode::OK,
     )
     .await?;
@@ -945,6 +933,16 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Valu
     });
     refresh_event_proof(&mut event);
     event
+}
+
+/// Canonical `cx.member.state` join payload shared by the harness `add_member`
+/// helpers so the member.state default shape lives in one place.
+pub(crate) fn member_join_payload(actor_id: &str) -> Value {
+    json!({
+        "actor_id": actor_id,
+        "membership": "join",
+        "delivery_status": "unroutable"
+    })
 }
 
 fn next_typed_id(kind: &str) -> String {

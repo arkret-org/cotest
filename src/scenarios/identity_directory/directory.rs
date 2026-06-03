@@ -6,6 +6,16 @@ use serde_json::json;
 
 use crate::harness::{ContrixServer, expect_api_error, expect_json};
 
+/// Extract the `realm_id` string from a `create_realm` response, turning a
+/// missing/non-string field into a located error instead of a context-free
+/// `unwrap()` panic (the response originates from the service under test).
+fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
+    created["realm_id"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("{label} create_realm response missing string realm_id: {created}"))
+}
+
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let server = ContrixServer::spawn("directory-privacy").await?;
     let alice = server
@@ -53,12 +63,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         }))
         .await?;
 
-    let public_space_id = public_space["realm_id"].as_str().unwrap().to_owned();
-    let listed_space_id = listed_space["realm_id"].as_str().unwrap().to_owned();
-    let restricted_space_id = restricted_space["realm_id"].as_str().unwrap().to_owned();
-    let unlisted_space_id = unlisted_space["realm_id"].as_str().unwrap().to_owned();
-    let invite_only_space_id = invite_only_space["realm_id"].as_str().unwrap().to_owned();
-    let secret_space_id = secret_space["realm_id"].as_str().unwrap().to_owned();
+    let public_space_id = realm_id_from(&public_space, "public")?;
+    let listed_space_id = realm_id_from(&listed_space, "listed")?;
+    let restricted_space_id = realm_id_from(&restricted_space, "restricted")?;
+    let unlisted_space_id = realm_id_from(&unlisted_space, "unlisted")?;
+    let invite_only_space_id = realm_id_from(&invite_only_space, "invite_only")?;
+    let secret_space_id = realm_id_from(&secret_space, "secret")?;
 
     let invite_event = alice
         .submit_event(

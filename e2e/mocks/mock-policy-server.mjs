@@ -14,7 +14,7 @@
 //   3. `${action}:*:${target}`
 //   4. `${action}:*:*`
 //   5. `*:*:*`
-//   6. defaultDecision (initially "allow")
+//   6. defaultDecision (initially "deny" — fail-closed)
 //
 // Endpoints:
 //   POST /api/v1/policy/check  { action, actor, target, context }
@@ -22,7 +22,7 @@
 //   POST /scenarios  { rules: [{action, actor, target, decision, reason,
 //                                obligations}], default }
 //     Replace-or-merge the rule table. `default` overrides defaultDecision.
-//   DELETE /scenarios → clear rules, defaultDecision = "allow"
+//   DELETE /scenarios → clear rules, defaultDecision = "deny"
 //   GET    /scenarios → dump current rules + default
 //   GET    /api/v1/policy/health → { status: "ok" }
 //   GET    /jwks → policy-server public key
@@ -54,8 +54,15 @@ const publicJwk = publicKey.export({ format: "jwk" });
 
 // In-memory rule table. Keys are `${action}:${actor}:${target}` with `*`
 // allowed in any position. Values are {decision, reason, obligations}.
+//
+// Default decision is fail-closed (`deny`): an authorization scenario that
+// forgets to configure an explicit allow rule via `POST /scenarios` gets a
+// signed *deny* rather than a silent allow, so a "policy was never consulted"
+// regression surfaces instead of passing green. Scenarios that genuinely want
+// a permissive default opt in explicitly with `POST /scenarios { default:
+// "allow" }`.
 const decisionRules = new Map();
-let defaultDecision = "allow";
+let defaultDecision = "deny";
 
 const checksLog = new InspectLog("checks");
 const scenariosLog = new InspectLog("scenarios");
@@ -232,7 +239,7 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/scenarios" && req.method === "DELETE") {
     decisionRules.clear();
-    defaultDecision = "allow";
+    defaultDecision = "deny";
     scenariosLog.record({ action: "clear", default: defaultDecision });
     res.end(JSON.stringify({ ok: true, default: defaultDecision }));
     return;

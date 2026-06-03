@@ -176,28 +176,42 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (body.entry_timestamp) {
-      const entryAtMs = Date.parse(body.entry_timestamp);
-      if (Number.isFinite(entryAtMs)) {
-        const ageSeconds = (Date.now() - entryAtMs) / 1000;
-        if (ageSeconds > staleAfterSeconds) {
-          signLog.record({
-            scid: body.scid,
-            entry_number: body.entry_number,
-            error: "entry_timestamp_stale",
-            age_seconds: ageSeconds,
-          });
-          res.statusCode = 422;
-          res.end(
-            JSON.stringify({
-              error: "entry_timestamp_stale",
-              age_seconds: ageSeconds,
-              max_age_seconds: staleAfterSeconds,
-            }),
-          );
-          return;
-        }
-      }
+    // Freshness gate is fail-closed: an entry that omits `entry_timestamp`
+    // (or carries an unparseable one) MUST NOT be witnessed, otherwise a stale
+    // entry could bypass the staleness check simply by dropping the field.
+    const entryAtMs = Date.parse(body.entry_timestamp ?? "");
+    if (!Number.isFinite(entryAtMs)) {
+      signLog.record({
+        scid: body.scid,
+        entry_number: body.entry_number,
+        error: "entry_timestamp_required",
+      });
+      res.statusCode = 422;
+      res.end(
+        JSON.stringify({
+          error: "entry_timestamp_required",
+          detail: "entry_timestamp is required and must be an RFC 3339 instant",
+        }),
+      );
+      return;
+    }
+    const ageSeconds = (Date.now() - entryAtMs) / 1000;
+    if (ageSeconds > staleAfterSeconds) {
+      signLog.record({
+        scid: body.scid,
+        entry_number: body.entry_number,
+        error: "entry_timestamp_stale",
+        age_seconds: ageSeconds,
+      });
+      res.statusCode = 422;
+      res.end(
+        JSON.stringify({
+          error: "entry_timestamp_stale",
+          age_seconds: ageSeconds,
+          max_age_seconds: staleAfterSeconds,
+        }),
+      );
+      return;
     }
 
     chains.set(body.scid, {

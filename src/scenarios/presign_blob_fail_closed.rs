@@ -17,6 +17,16 @@
 //!   * No logging of the presign URL query string in plaintext.
 //!
 //! This module covers the legal-hold and redacted paths.
+//!
+//! SCOPE (see `_code_review/cotest/02_security.md` #2): the functions here are
+//! **wire pins only** — they assert that the SDK reason-code constants /
+//! header literals agree with the cotest pins and the registry. They do NOT
+//! spawn a presign endpoint and therefore do NOT verify the fail-closed
+//! *behaviour* (that legal-hold / redacted / E2EE / actor-private blobs are
+//! actually refused a signed URL). Do not count these pins as behavioural
+//! fail-closed coverage; a live behavioural test (spawn soland, request a
+//! presign for each blob class, assert refusal + reason code) is a follow-up
+//! and must be tracked separately on the coverage dashboard.
 
 use anyhow::{Result, anyhow};
 use contrix_core::{ERROR_CODE_BLOB_REDACTED, ERROR_CODE_LEGAL_HOLD_ACTIVE, is_known_error_code};

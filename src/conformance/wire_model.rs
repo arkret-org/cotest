@@ -632,13 +632,16 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 let parent = policy
                     .get("parent")
                     .ok_or_else(|| anyhow!("vector {name} child_space missing parent"))?;
-                let branch = policy
-                    .get("branch")
-                    .ok_or_else(|| anyhow!("vector {name} child_space missing branch"))?;
+                // `child_scope` (not `branch`, which is a forbidden Flow-track
+                // wire term) is the child Space's own read-receipt policy that
+                // composes against the parent via tighten-only rules.
+                let child_scope = policy
+                    .get("child_scope")
+                    .ok_or_else(|| anyhow!("vector {name} child_space missing child_scope"))?;
                 let parent_disclosure = required_str(parent, "disclosure")?;
-                let branch_disclosure = required_str(branch, "disclosure")?;
+                let branch_disclosure = required_str(child_scope, "disclosure")?;
                 let parent_visibility = required_str(parent, "visibility")?;
-                let branch_visibility = required_str(branch, "visibility")?;
+                let branch_visibility = required_str(child_scope, "visibility")?;
                 let overrides_allowed = parent
                     .get("scope_overrides_allowed")
                     .and_then(Value::as_bool)

@@ -46,7 +46,7 @@ fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
 #[derive(Debug, Arbitrary)]
 pub struct FuzzSnapshotManifestInput {
     pub snapshot_id: String,
-    pub space_id: String,
+    pub realm_id: String,
     pub root_anchor_ref: String,
     pub chunk_count: u32,
     pub total_bytes: u64,
@@ -62,7 +62,7 @@ impl FuzzSnapshotManifestInput {
     fn to_json(&self) -> Value {
         let mut envelope = json!({
             "snapshot_id": self.snapshot_id,
-            "space_id": self.space_id,
+            "realm_id": self.realm_id,
             "root_anchor_ref": self.root_anchor_ref,
             "chunk_count": self.chunk_count,
             "total_bytes": self.total_bytes,

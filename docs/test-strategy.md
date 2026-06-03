@@ -14,7 +14,7 @@ asserts only public HTTP behavior plus limited `contrix-rust-sdk` smoke paths.
 - Reusable fixture builders live in `src/fixtures/`. See the
   [Fixture builders](#fixture-builders) section below for the
   `TestActorBuilder` fluent API that replaces the per-scenario
-  `register_account` + `dev_login` + `create_space` boilerplate.
+  `register_account` + `dev_login` + `create_realm` boilerplate.
 - The same module hosts [`EventTimeline`](#failure-event-timeline) — a
   rendered view of the harness's `transcript.ndjson` that panic hooks dump to
   stderr when a scenario assertion fails.
@@ -385,7 +385,7 @@ the common "register actor + login + pre-seed spaces" preamble. Replaces:
 let bob = server
     .register_client("did:web:bob.example", "@bob", "dev_bob")
     .await?;
-let bob_space = bob.create_space("Some Space").await?;
+let bob_realm = bob.create_realm("Some Space").await?;
 ```
 
 with:
@@ -394,10 +394,10 @@ with:
 let bob = TestActorBuilder::new(&server, "@bob")
     .with_did("did:web:bob.example")
     .with_device("dev_bob")
-    .with_space("Some Space")
+    .with_realm("Some Space")
     .create()
     .await?;
-let bob_space = bob.first_space().expect("seeded space");
+let bob_realm = bob.first_realm().expect("seeded realm");
 let bob_client = bob.client(); // reuse existing TestActorClient API
 ```
 
@@ -405,7 +405,7 @@ Defaults the builder applies when fields are omitted:
 
 - DID: `did:web:<bare-handle>.example` (handle's leading `@` stripped)
 - primary device id: `dev_<bare-handle>`
-- spaces: none (`with_space` is opt-in)
+- spaces: none (`with_realm` is opt-in)
 - `with_key_package(n)` records the requested KeyPackage count on the
   returned `TestActor` for scenarios that want to assert provisioning shape;
   the harness does not yet expose a publish endpoint, so no MLS key material

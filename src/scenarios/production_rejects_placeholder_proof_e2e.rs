@@ -156,15 +156,31 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
              response carries no errcode. body: {body}"
         );
     }
-    // Accept either the dedicated `dev_proof_in_production` reason code
-    // (proof check fired) or the generic `unauthenticated` (auth wall
-    // fired first because dev-login is disabled in production). Both
-    // confirm the production stance is healthy.
+    // LIMITATION (see _code_review/cotest/02_security.md #3): this request
+    // uses a deliberately-bogus bearer, so production soland's auth wall almost
+    // always fires *before* the proof-guard, returning `unauthenticated`. That
+    // path only proves the auth wall exists — it does NOT independently
+    // exercise the `dev_proof_in_production` proof-guard. Only the
+    // `dev_proof_in_production` errcode confirms the proof-guard is wired.
+    // Acquiring a real production session to force the guard is not possible
+    // here (production disables dev-login — verified below), so the independent
+    // proof-guard regression test lives in soland's own repo
+    // (`validate_event_proofs` unit tests). We accept both codes but surface
+    // which one fired so a CI reader can tell whether the guard was actually
+    // hit this run.
     if errcode != "dev_proof_in_production" && errcode != "unauthenticated" {
         bail!(
             "production soland rejected placeholder proof but with an \
              unexpected errcode `{errcode}` (expected `dev_proof_in_production` \
              or `unauthenticated`). status={status} body={body}"
+        );
+    }
+    if errcode == "unauthenticated" {
+        eprintln!(
+            "[production_rejects_placeholder_proof] NOTE: auth wall fired first \
+             (`unauthenticated`); the `dev_proof_in_production` proof-guard was \
+             NOT independently exercised this run. See soland in-repo \
+             `validate_event_proofs` tests for the dedicated guard regression."
         );
     }
 

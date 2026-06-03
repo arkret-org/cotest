@@ -233,7 +233,7 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
         CellState::Bottom(b) => b,
         CellState::Value(_) => {
             bail!(
-                "CasRegister concurrent set must produce Bottom (cas-register conflict semantics)"
+                "CasRegister concurrent set must produce Bottom (cas_register conflict semantics)"
             )
         }
     };
@@ -436,7 +436,7 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 
 // ──────────────────── Anchorer cell ────────────────────
 //
-// `cx:cell:cx.component.anchorer.v1:<space_id>` is a cas-register holding the
+// `cx:cell:cx.component.anchorer.v1:<space_id>` is a cas_register holding the
 // `AnchorerValue` (single_did | threshold(k/n) | open_set | mixed). Each
 // happy-path test below confirms a single anchored Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
@@ -566,7 +566,7 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
 // Per spec, conflict-repair Moves carry a `head_in [head_a, head_b]`
 // precondition + `recovery_capability` ref. The repair Move itself just
 // writes a NEW, single value to the conflicting cell — provided the writer
-// is authorised by recovery_capability, the cas-register sees a single
+// is authorised by recovery_capability, the cas_register sees a single
 // post-anchor op and returns Value, clearing the prior Bottom.
 //
 // At the lattice level (this layer), the test reduces to: a third anchored
@@ -607,7 +607,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
         "cx.realm.01js0sp0000000000000000001",
     );
     // Two concurrent set-Moves where one self-references its own "winner"
-    // capability remain a Bottom at the lattice layer — the cas-register
+    // capability remain a Bottom at the lattice layer — the cas_register
     // doesn't peek at payload semantics, it just sees concurrent writes.
     // Self-authorisation prevention is enforced at verify_move (auth layer)
     // ABOVE the lattice; here we confirm the lattice itself doesn't pick a
@@ -634,7 +634,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 // ──────────────────── MLS covered_frontier ────────────────────
 //
-// `cx:cell:cx.component.mls.covered_frontier.v1:<space_id>` is an or-set of
+// `cx:cell:cx.component.mls.covered_frontier.v1:<space_id>` is an or_set of
 // governance-frontier event refs each MLS commit attests to. Add-only
 // growth is the typical pattern; rotation that purges old refs is rare and
 // gated by capability. These tests confirm the lattice surfaces the union
@@ -651,7 +651,7 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     let lattice = OrSet;
     let cref = covered_frontier_cell("c1");
     // Two MLS commits attest to overlapping governance frontier refs; the
-    // or-set surfaces the union without bottom.
+    // or_set surfaces the union without bottom.
     let ops = vec![
         AnchoredOp::new(
             move_id("c1"),
@@ -668,7 +668,7 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("covered_frontier or-set must accumulate refs without Bottom; got {resolved:?}");
+        bail!("covered_frontier or_set must accumulate refs without Bottom; got {resolved:?}");
     }
     let serialized = match &resolved {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),

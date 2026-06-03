@@ -29,10 +29,6 @@
 //! - The builder accepts a borrowed [`ContrixServer`] rather than a higher `TestHarness` wrapper
 //!   (which the cotest crate does not currently define). When a wrapper type is introduced the
 //!   builder can be retargeted without changing call sites — only the type bound moves.
-//! - `with_key_package(n)` is reserved for future KeyPackage publication. The server currently does
-//!   not expose a KeyPackage publish endpoint in the dev-login fast path; storing the requested
-//!   count lets scenarios assert the value once the wire surface exists, without having to revisit
-//!   the builder shape.
 //! - The builder is intentionally `async`-free until `create()` so callers can inspect / mutate the
 //!   spec without holding a future.
 
@@ -67,8 +63,6 @@ pub struct TestActor {
     pub handle: String,
     pub did: String,
     pub primary_device_id: String,
-    pub additional_devices: Vec<String>,
-    pub key_package_count: usize,
     pub realms: Vec<SeededRealm>,
     pub client: TestActorClient,
 }
@@ -79,8 +73,6 @@ impl fmt::Debug for TestActor {
             .field("handle", &self.handle)
             .field("did", &self.did)
             .field("primary_device_id", &self.primary_device_id)
-            .field("additional_devices", &self.additional_devices)
-            .field("key_package_count", &self.key_package_count)
             .field("realms", &self.realms)
             .field("client", &"<TestActorClient>")
             .finish()
@@ -122,8 +114,6 @@ pub struct TestActorBuilder<'a> {
     handle: String,
     did: Option<String>,
     primary_device: Option<String>,
-    additional_devices: Vec<String>,
-    key_packages: usize,
     realms: Vec<String>,
 }
 
@@ -141,8 +131,6 @@ impl<'a> TestActorBuilder<'a> {
             handle,
             did: None,
             primary_device: None,
-            additional_devices: Vec::new(),
-            key_packages: 0,
             realms: Vec::new(),
         }
     }
@@ -154,34 +142,14 @@ impl<'a> TestActorBuilder<'a> {
         self
     }
 
-    /// Register a device label for this actor.
-    ///
-    /// The first call sets the primary device id (the one passed to
-    /// `register_client` / `dev_login`). Subsequent calls are recorded in
-    /// `TestActor::additional_devices` for scenarios that want to assert how
-    /// many devices they declared. The server does not yet provision the
-    /// additional devices automatically — scenarios that need real per-device
-    /// clients should call `server.demo_client(did, device_id)` directly with
-    /// the labels stored on the returned `TestActor`.
+    /// Set the primary device label for this actor (the one passed to
+    /// `register_client` / `dev_login`). The first call wins; additional
+    /// devices are not provisioned by the builder — scenarios that need real
+    /// per-device clients call `server.demo_client(did, device_id)` directly.
     pub fn with_device(mut self, label: &str) -> Self {
         if self.primary_device.is_none() {
             self.primary_device = Some(label.to_owned());
-        } else {
-            self.additional_devices.push(label.to_owned());
         }
-        self
-    }
-
-    /// Record the number of MLS KeyPackages the scenario expects this actor
-    /// to publish.
-    ///
-    /// The cotest harness does not currently expose a KeyPackage publish API,
-    /// so the count is stored as metadata for scenarios that want to assert
-    /// the requested provisioning shape. When a publish endpoint lands the
-    /// `create()` flow will pre-seed `count` KeyPackages without changing the
-    /// builder surface.
-    pub fn with_key_package(mut self, count: usize) -> Self {
-        self.key_packages = count;
         self
     }
 
@@ -246,8 +214,6 @@ impl<'a> TestActorBuilder<'a> {
             handle: display_handle,
             did,
             primary_device_id: primary_device,
-            additional_devices: self.additional_devices,
-            key_package_count: self.key_packages,
             realms: seeded,
             client,
         })

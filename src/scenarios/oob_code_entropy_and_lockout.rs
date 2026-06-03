@@ -25,6 +25,14 @@
 //! * `oob_code_lookup_three_strike_invalidate_run` — caller submits three wrong lookup codes → the
 //!   binding is invalidated and the fourth (correct or wrong) attempt MUST receive the same unified
 //!   non-enumerable response as a never-existed code.
+//!
+//! SCOPE (see `_code_review/cotest/02_security.md` #2): the functions here are
+//! **wire pins only** — they assert SDK reason-code constants / entropy and
+//! timing-budget literals agree with the cotest pins and the registry. They do
+//! NOT drive a live OOB endpoint and therefore do NOT verify the *behaviour*
+//! (3-strike invalidation, byte-identical non-enumerable response, ≤50 ms
+//! timing side-channel). Do not count these pins as behavioural anti-enumeration
+//! / lockout coverage; a live behavioural test is a tracked follow-up.
 
 use anyhow::{Result, anyhow};
 use contrix_core::{ERROR_CODE_NOT_FOUND, ERROR_CODE_SCHEMA_VIOLATION, is_known_error_code};

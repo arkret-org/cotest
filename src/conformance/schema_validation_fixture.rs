@@ -20,7 +20,6 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use jsonschema::{Registry, Resource};
@@ -353,12 +352,6 @@ fn inline_openapi_refs_inner(
         }
         other => Ok(other.clone()),
     }
-}
-
-/// Internal helper kept for future callers that need the raw fixture path.
-#[allow(dead_code)]
-pub fn fixture_full_path() -> PathBuf {
-    fixture_path(SCHEMA_VALIDATION_FIXTURE)
 }
 
 #[cfg(test)]

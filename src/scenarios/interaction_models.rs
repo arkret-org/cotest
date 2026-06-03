@@ -90,12 +90,19 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .await?;
     assert_eq!(removed_reaction["status"], "accepted");
 
+    // Per read-cursor.schema.json, a `kind="thread"` read scope references the
+    // thread's root *message* (`cx:message:<uuidv7>`), not an opaque
+    // `cx:thread:` string. Derive it from the root message's event id.
+    let thread_root_ref = sent["event_id"]
+        .as_str()
+        .map(|event_id| event_id.replacen("cx:event:", "cx:message:", 1))
+        .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
     let marker = expect_json(
         dave.post("/api/v1/read-cursors").json(&json!({
             "realm_id": space_id,
             "read_scope": {
                 "kind": "thread",
-                "ref": "cx:thread:interaction"
+                "ref": thread_root_ref
             },
             "position": {
                 "event_id": sent["event_id"],
@@ -107,7 +114,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     .await?;
     assert_eq!(marker["position"]["event_id"], sent["event_id"]);
     assert_eq!(marker["read_scope"]["kind"], "thread");
-    assert_eq!(marker["read_scope"]["ref"], "cx:thread:interaction");
+    assert_eq!(marker["read_scope"]["ref"], thread_root_ref);
 
     let markers = expect_json(
         dave.get(&format!("/api/v1/read-cursors?realm_id={space_id}")),

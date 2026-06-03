@@ -73,10 +73,12 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     assert_eq!(verify_bob["valid"], true);
 
     let realm_id = create_federated_realm(server_a, &alice).await?;
-    // cx.message.create payload carries only the spec `message_create_payload`
-    // fields (flow_id + track_name + content). Realm/membership metadata
-    // (discoverability, history_visibility, members, …) belongs on the Realm
-    // object and `cx.member.state`, not the message payload.
+    // Federation cx.message.create operation payload carries the message
+    // addressing/identity fields soland's federation projection consumes
+    // (event_id, actor_id, flow_id, track_name, content). The forbidden wire
+    // field `sender` is replaced by `actor_id`; Realm/membership metadata
+    // (discoverability, history_visibility, members, encryption_profile, …)
+    // belongs on the Realm object and `cx.member.state`, not the message.
     let flow_id = format!(
         "cx:flow:{}",
         realm_id.strip_prefix("cx:realm:").unwrap_or(&realm_id)
@@ -87,6 +89,8 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         RealmId::new(realm_id.clone())?,
         "cx.message.create",
         json!({
+            "event_id": ALICE_MESSAGE_EVENT_ID,
+            "actor_id": ALICE_DID,
             "flow_id": flow_id.clone(),
             "track_name": "discussion",
             "content": {
@@ -163,6 +167,8 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         RealmId::new(realm_id.clone())?,
         "cx.message.create",
         json!({
+            "event_id": BOB_MESSAGE_EVENT_ID,
+            "actor_id": BOB_DID,
             "flow_id": flow_id,
             "track_name": "discussion",
             "content": {

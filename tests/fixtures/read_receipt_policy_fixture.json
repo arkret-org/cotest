@@ -69,7 +69,7 @@
           "visibility": "members",
           "scope_overrides_allowed": false
         },
-        "branch": {
+        "child_scope": {
           "disclosure": "required",
           "visibility": "private",
           "scope_overrides_allowed": false
@@ -97,7 +97,7 @@
           "visibility": "private",
           "scope_overrides_allowed": false
         },
-        "branch": {
+        "child_scope": {
           "disclosure": "optional",
           "visibility": "public",
           "scope_overrides_allowed": false

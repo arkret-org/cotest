@@ -2,7 +2,7 @@
 //!
 //! Validates `tests/fixtures/lattice_mixed_kinds.json`, which exercises
 //! Contrix state resolution when a single Space has cells of different
-//! lattice types (cas-register + or-set + mv-register) updating
+//! lattice types (cas_register + or_set + mv_register) updating
 //! concurrently in the same Move batch or across the same Anchor frontier.
 //!
 //! Spec authority:
@@ -91,12 +91,12 @@ fn check_cas_or_set_coexist(vector: &Value) -> Result<()> {
             .ok_or_else(|| anyhow!("vector {name} effect missing op.kind"))?;
         kinds.insert(op_kind);
     }
-    // `set` (cas-register) + `add` (or-set) must both appear.
+    // `set` (cas_register) + `add` (or_set) must both appear.
     if !kinds.contains("set") {
-        bail!("vector {name} must include a cas-register `set` effect");
+        bail!("vector {name} must include a cas_register `set` effect");
     }
     if !kinds.contains("add") {
-        bail!("vector {name} must include an or-set `add` effect");
+        bail!("vector {name} must include an or_set `add` effect");
     }
     let atomicity = vector
         .pointer("/expected/atomicity")
@@ -117,7 +117,7 @@ fn check_cas_or_set_coexist(vector: &Value) -> Result<()> {
         surface_lattices.insert(lat);
     }
     if !surface_lattices.contains("cas_register") || !surface_lattices.contains("or_set") {
-        bail!("vector {name} cell_states must include cas-register + or-set lattices");
+        bail!("vector {name} cell_states must include cas_register + or_set lattices");
     }
     Ok(())
 }
@@ -129,14 +129,14 @@ fn check_mv_concurrent(vector: &Value) -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("vector {name} missing lattice.type"))?;
     if lattice_type != "mv_register" {
-        bail!("vector {name} lattice.type must be 'mv-register'");
+        bail!("vector {name} lattice.type must be 'mv_register'");
     }
     let bottom = vector
         .pointer("/lattice/bottom")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("vector {name} missing lattice.bottom"))?;
     if bottom != "expose" {
-        bail!("vector {name} lattice.bottom must be 'expose' (mv-register normal case)");
+        bail!("vector {name} lattice.bottom must be 'expose' (mv_register normal case)");
     }
     let moves = vector
         .get("concurrent_moves")
@@ -164,7 +164,7 @@ fn check_mv_concurrent(vector: &Value) -> Result<()> {
         .and_then(Value::as_str);
     if status != Some("conflict") {
         bail!(
-            "vector {name} expected.query.status must be 'conflict' (mv-register exposes heads, not a single winner)"
+            "vector {name} expected.query.status must be 'conflict' (mv_register exposes heads, not a single winner)"
         );
     }
     let heads = vector
@@ -183,7 +183,7 @@ fn check_mv_concurrent(vector: &Value) -> Result<()> {
         .and_then(Value::as_bool);
     if lww != Some(false) {
         bail!(
-            "vector {name} expected.last_write_wins must be false — mv-register does not pick a winner"
+            "vector {name} expected.last_write_wins must be false — mv_register does not pick a winner"
         );
     }
     Ok(())

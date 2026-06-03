@@ -672,6 +672,12 @@ function base64urlJson(value: unknown): string {
   return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
 }
 
+// FIXTURE ONLY — publicly derivable, MUST NOT be trusted by any non-test code.
+// The private key is `sha256("soland:anchorer-ephemeral:" + serviceDid)`, so
+// anyone who knows the serviceDid can recompute it. This intentionally mirrors
+// soland's *dev* anchorer-ephemeral derivation (soland: federation.rs /
+// state.rs) so the mock's federation signatures verify against a dev soland —
+// production soland MUST reject keys produced by this convention.
 function developmentServicePrivateKey(serviceDid: string) {
   const seed = createHash("sha256")
     .update("soland:anchorer-ephemeral:")
