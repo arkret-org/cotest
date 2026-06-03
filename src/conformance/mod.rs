@@ -37,7 +37,6 @@ mod sync;
 mod wire_model;
 mod yougen_client;
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -490,33 +489,13 @@ pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
 }
 
 pub(crate) fn canonical_json(value: &Value) -> Result<String> {
-    match value {
-        Value::Object(map) => {
-            let mut ordered = BTreeMap::new();
-            for (key, value) in map {
-                ordered.insert(key, canonical_json(value)?);
-            }
-            let mut out = String::from("{");
-            for (index, (key, value)) in ordered.iter().enumerate() {
-                if index > 0 {
-                    out.push(',');
-                }
-                out.push_str(&serde_json::to_string(key)?);
-                out.push(':');
-                out.push_str(value);
-            }
-            out.push('}');
-            Ok(out)
-        }
-        Value::Array(items) => {
-            let canonical_items = items
-                .iter()
-                .map(canonical_json)
-                .collect::<Result<Vec<_>>>()?;
-            Ok(format!("[{}]", canonical_items.join(",")))
-        }
-        _ => Ok(serde_json::to_string(value)?),
-    }
+    // Delegate to the SDK's canonical encoder so every Contrix implementation
+    // sorts keys / encodes numbers identically. `canonical_json_bytes` is the
+    // single normative source of canonical bytes (spec encoding.md §9.5); the
+    // bytes are valid UTF-8 so the historical `String` return type is preserved.
+    let bytes = contrix_core::canonical::canonical_json_bytes(value)
+        .map_err(|err| anyhow!("canonical JSON encoding failed: {err}"))?;
+    String::from_utf8(bytes).map_err(|err| anyhow!("canonical JSON produced invalid UTF-8: {err}"))
 }
 
 pub(crate) fn sha256_prefixed(bytes: &[u8]) -> String {

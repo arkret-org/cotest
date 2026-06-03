@@ -16,7 +16,6 @@ use contrix_http_client::{Auth, Client as SdkClient};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client as HttpClient, Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use url::Url;
 
 pub struct ContrixServer {
@@ -1134,8 +1133,11 @@ fn refresh_event_proof(event: &mut Value) {
 }
 
 fn sha256_json(value: &Value) -> String {
-    let bytes = serde_json::to_vec(value).expect("JSON value serializes");
-    format!("sha256:{:x}", Sha256::digest(bytes))
+    // Hash over the SDK's canonical (sorted-key) encoding rather than
+    // `serde_json::to_vec`, which preserves insertion order and would yield a
+    // digest that diverges from every other Contrix implementation. The SDK
+    // helper returns the `sha256:<hex>` wire form directly.
+    contrix_core::canonical::canonical_sha256(value).expect("event JSON is canonicalizable")
 }
 
 pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
