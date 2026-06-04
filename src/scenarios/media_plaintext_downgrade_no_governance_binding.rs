@@ -18,7 +18,7 @@
 //!     `plaintext_visible_services[]`
 //!
 //! This scenario covers the missing-policy_root path plus the SEC-03
-//! `webrtc-signaling.md §10.5.1` negative-vector (d) leg: a member's
+//! `media-service-binding.md §8.2` negative-vector (d) leg: a member's
 //! independent recomputation of the `media_service_decrypts` fact from the
 //! MLS transcript disagrees with the `discussion_metadata_digest` the
 //! governance binding covers ⇒ the member MUST treat the binding as stale and
@@ -88,7 +88,7 @@ fn honest_media_decrypt_policy_value() -> Result<MediaDecryptPolicyValue> {
     })
 }
 
-/// SEC-03 negative vector (d) — `webrtc-signaling.md §10.5.1` rule 5.
+/// SEC-03 negative vector (d) — `media-service-binding.md §8.2` rule 5.
 ///
 /// A member independently recomputes the `media_service_decrypts` fact from
 /// its own view of the MLS transcript and compares it against the

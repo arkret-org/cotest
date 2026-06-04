@@ -96,7 +96,7 @@ struct CallMember<'a> {
     foci_preferred: &'a [&'a str],
 }
 
-/// Spec rule (webrtc-signaling.md §6.4): `session_focus` is decided by
+/// Spec rule (media-service-binding.md §5): `session_focus` is decided by
 /// the oldest member's `foci_preferred[0]`. Late-joining members do NOT
 /// re-elect. Off-focus token requests MUST fail closed with
 /// `focus_mismatch`.

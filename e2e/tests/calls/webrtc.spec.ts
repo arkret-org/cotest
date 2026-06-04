@@ -1,10 +1,10 @@
 // Calls (1:1 + group + mute + screen share + recording policy)
 // Contract: e2e/scenarios/calls/webrtc.md
 // Spec refs:
-//   - crypto-media/webrtc-signaling.md §2-§4 (design, modes, Call Morph)
-//   - §5 (call.start/join/screen_share/record/moderate capabilities)
-//   - §6-§6.3 (ICE config, pairwise pseudonym, mid-call refresh)
-//   - §7-§8 (signaling envelope, 1:1 payloads)
+//   - crypto-media/webrtc-signaling.md §2 (design); crypto-media/call-state.md §2-§3 (modes, Call Morph)
+//   - webrtc-signaling.md §3 (ck.call.* capabilities: join/signal.send/screen_share/record/moderate)
+//   - webrtc-signaling.md §4-§4.1 (ICE config, pairwise pseudonym, mid-call refresh)
+//   - webrtc-signaling.md §5-§6 (signaling envelope, 1:1 payloads)
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -48,7 +48,7 @@ test.describe("calls", () => {
   test(
     "alice initiates 1:1 call to bob; Call Morph state transitions ringing → connecting → active via ck.call.signal frames",
     async ({ browser, request }) => {
-      // spec: webrtc-signaling.md §3 + §4
+      // spec: call-state.md §2 + §3
       const stamp = Date.now();
       const alice = uniqueUser(`s18-call-alice-${stamp}`);
       const bob = uniqueUser(`s18-call-bob-${stamp}`);
@@ -153,7 +153,7 @@ test.describe("calls", () => {
   test(
     "alice mutes mic: ck.call.signal{kind=mute_state, muted=true} routes to bob; bob's UI shows muted indicator",
     async ({ browser, request }) => {
-      // spec: webrtc-signaling.md §7 + §8
+      // spec: webrtc-signaling.md §5 + §6
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-mute");
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
@@ -180,7 +180,7 @@ test.describe("calls", () => {
   test(
     "alice shares screen: getDisplayMedia track added; ck.call.signal{kind=media_state, screen_share=true} routes",
     async ({ browser, request }) => {
-      // spec: webrtc-signaling.md §5 call.screen_share capability
+      // spec: webrtc-signaling.md §3 ck.call.screen_share capability
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-screen");
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
@@ -209,7 +209,7 @@ test.describe("calls", () => {
   test(
     "hangup terminates peer connections; Call Morph state=ended; duration persisted",
     async ({ browser, request }) => {
-      // spec: webrtc-signaling.md §4
+      // spec: call-state.md §3
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-hangup");
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
@@ -235,7 +235,7 @@ test.describe("calls", () => {
   test(
     "group call mode=sfu: alice+bob+carol join; recording_policy=allow lets carol start recording (writes recording_blob_ref)",
     async ({ browser, request }) => {
-      // spec: webrtc-signaling.md §3 + §5 call.record capability
+      // spec: call-state.md §2 + webrtc-signaling.md §3 ck.call.record capability
       const { alice, aliceToken, bob, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-allow");
       const session = await createWebrtcSession(request, aliceToken, {
         space_id: spaceId,
@@ -280,7 +280,7 @@ test.describe("calls", () => {
   test(
     "E18.E recording_policy=none rejects carol's recording attempt with failed_precondition reason=recording_policy_violation",
     async ({ request }) => {
-      // spec: webrtc-signaling.md §5
+      // spec: webrtc-signaling.md §3
       const { aliceToken, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-deny");
       const session = await createWebrtcSession(request, aliceToken, {
         space_id: spaceId,
@@ -304,7 +304,7 @@ test.describe("calls", () => {
   test(
     "E18.F mid-call TURN credential refresh: long calls renew credentials before expiry; call does not drop",
     async ({ request }) => {
-      // spec: webrtc-signaling.md §6.3
+      // spec: webrtc-signaling.md §4.1
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-turn-refresh");
       const session = await createWebrtcSession(request, aliceToken, {
         space_id: spaceId,
@@ -343,7 +343,7 @@ test.describe("calls", () => {
   test(
     "E18.7 pairwise pseudonym in TURN credentials: username does not contain alice.did plaintext (spec §6 pseudonymization)",
     async ({ request }) => {
-      // spec: webrtc-signaling.md §6 (pairwise pseudonym)
+      // spec: webrtc-signaling.md §4.1 (pairwise pseudonym)
       const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-turn-pseudonym");
       const session = await createWebrtcSession(request, aliceToken, {
         space_id: spaceId,

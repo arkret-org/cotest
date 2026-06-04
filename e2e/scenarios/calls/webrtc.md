@@ -9,12 +9,12 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ## Spec 锚点
 
 - `crypto-media/webrtc-signaling.md` §2 — 设计:ephemeral 信令 + media vs trust path
-- `crypto-media/webrtc-signaling.md` §3 — Call modes(`p2p` / `sfu` / `mcu`)
-- `crypto-media/webrtc-signaling.md` §4 — Call Morph(state、recording_policy)
-- `crypto-media/webrtc-signaling.md` §5 — Permissions(`call.start`、`call.join`、`call.screen_share`、`call.record`、`call.moderate`、`call.end_for_all`)
-- `crypto-media/webrtc-signaling.md` §6-§6.3 — ICE Server Discovery(pairwise pseudonym + credential refresh)
-- `crypto-media/webrtc-signaling.md` §7 — Signaling envelope(`ck.call.signal`)
-- `crypto-media/webrtc-signaling.md` §8 — 1:1 信令 payload(offer/answer/candidate/hangup)
+- `crypto-media/call-state.md` §2 — Call modes(`p2p` / `sfu` / `mcu`)
+- `crypto-media/call-state.md` §3 — Call Morph(state、recording_policy)
+- `crypto-media/webrtc-signaling.md` §3 — Permissions(canonical `ck.call.*`:`ck.call.join`、`ck.call.signal.send`、`ck.call.screen_share`、`ck.call.record`、`ck.call.moderate` 等)
+- `crypto-media/webrtc-signaling.md` §4-§4.1 — ICE Server Discovery(pairwise pseudonym + credential refresh)
+- `crypto-media/webrtc-signaling.md` §5 — Signaling envelope(`ck.call.signal`)
+- `crypto-media/webrtc-signaling.md` §6 — 1:1 信令 payload(offer/answer/candidate/hangup)
 
 ## 拓扑
 
