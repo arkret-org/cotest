@@ -21,12 +21,20 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
-use cokret_core::{CircleId, Did, Flow, RealmId};
+use cokret_core::{CircleId, Did, Flow, FlowId, RealmId};
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {
     RealmId::new("ck:realm:0196419b-0000-7000-8000-000000000602".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
+}
+
+fn flow_id() -> Result<FlowId> {
+    // `Flow::new` now takes a typed `FlowId` (was a raw String). The id MUST be
+    // a strict `ck:flow:<uuid7>` literal; all four prev/next states below share
+    // the same entity id so the scope-rebind helper compares the same Flow.
+    FlowId::new("ck:flow:0196419b-0000-7000-8000-000000000605".to_owned())
+        .map_err(|e| anyhow!("flow id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
@@ -86,7 +94,7 @@ fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) ->
 pub async fn scope_circle_id_immutability_run() -> Result<()> {
     // ── Build a Flow with scope_circle_id=Some(circle_a) and confirm it
     //    serialises to wire shape with the field set.
-    let mut flow_a = Flow::new("flow-ckp-0007", realm_id()?, "Quarterly review", actor()?);
+    let mut flow_a = Flow::new(flow_id()?, realm_id()?, "Quarterly review", actor()?);
     flow_a.scope_circle_id = Some(circle_a()?);
 
     let json_a: Value =
@@ -120,7 +128,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
 
     // ── circle_a → circle_a (build a sibling next-state Flow): accept.
     let mut flow_a_next = Flow::new(
-        "flow-ckp-0007",
+        flow_id()?,
         realm_id()?,
         "Quarterly review v2",
         actor()?,
@@ -134,7 +142,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
 
     // ── Rebind: circle_a → circle_b: reject with scope_rebind_forbidden.
     let mut flow_b = Flow::new(
-        "flow-ckp-0007",
+        flow_id()?,
         realm_id()?,
         "Quarterly review v3",
         actor()?,
@@ -160,7 +168,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     }
 
     // ── Rebind: circle_a → None: reject (Circle → Realm-default).
-    let mut flow_none = Flow::new("flow-ckp-0007", realm_id()?, "downgrade", actor()?);
+    let mut flow_none = Flow::new(flow_id()?, realm_id()?, "downgrade", actor()?);
     flow_none.scope_circle_id = None;
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),

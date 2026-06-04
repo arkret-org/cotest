@@ -3,8 +3,8 @@
 //!
 //! Spec: a Realm declared with `security_class=high_assurance` MUST
 //! keep `federation_policy ∈ {closed, restricted, quarantine}`. The
-//! SDK exposes this as a struct invariant on `cokret_core::Space`'s
-//! [`validate_kind_invariants`](cokret_core::Space::validate_kind_invariants)
+//! SDK exposes this as a struct invariant on `cokret_core::Realm`'s
+//! [`validate_kind_invariants`](cokret_core::Realm::validate_kind_invariants)
 //! and soland enforces it at the reducer with the canonical reason
 //! code `high_assurance_federation_policy_invalid`.
 //!
@@ -14,7 +14,7 @@
 use anyhow::{Result, anyhow};
 use cokret_core::{
     CircleMetadataEncryptionFloor, ContentEncryptionFloor, Did, Discoverability, EncryptionProfile,
-    FederationPolicy, HistoryVisibility, JoinRule, RealmId, SecurityClass, Space,
+    FederationPolicy, HistoryVisibility, JoinRule, Realm, RealmId, SecurityClass,
     TypedTrustDomainId,
 };
 
@@ -32,7 +32,7 @@ fn principal_id() -> Result<Did> {
 fn build_realm(
     security_class: Option<SecurityClass>,
     federation_policy: Option<FederationPolicy>,
-) -> Result<Space> {
+) -> Result<Realm> {
     let id = realm_id()?;
     let principal = principal_id()?;
     // TODO(sdk-trust-domain-dep): A1 added required `trust_domain` to Space.
@@ -40,7 +40,7 @@ fn build_realm(
     // policy scenario stays representative.
     let trust_domain = TypedTrustDomainId::new("ck:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
-    Ok(Space {
+    Ok(Realm {
         schema: "ck.profile.realm.v1".to_owned(),
         id,
         title: "Compliance Vault".to_owned(),
