@@ -399,6 +399,18 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// S-13 (cokret-spec 653ffb2) — Applet install/package surface + audit
+    /// intersection. Pins the new ck.applet.install/preview/revoke operations,
+    /// the ck.schema.applet_package.v1 schema, the now-required
+    /// registration_epoch field, the reshaped ck.applet.bridge_error payload,
+    /// and the ck.audit.applet_binding / ck.audit.release event kinds against
+    /// the live spec artifacts.
+    applet_audit_surface_matches_live_artifacts,
+    "applet_audit_surface",
+    cotest::conformance::run_applet_audit_surface_check,
+);
+
+conformance_test!(
     /// Round-23 B1 — quarantine-on-fork algorithm.
     state_resolution_quarantine_fixture_suite_matches_reference_semantics,
     "state_resolution_quarantine_fixture",

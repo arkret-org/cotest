@@ -57,6 +57,24 @@
       "expected": { "outcome": "tier_match", "tier": "interop_bridge" }
     },
     {
+      "name": "applet_install_preview_is_extension",
+      "scope": "live_registry",
+      "operation_id": "ck.applet.install.preview",
+      "expected": { "outcome": "tier_match", "tier": "extension" }
+    },
+    {
+      "name": "applet_install_is_extension",
+      "scope": "live_registry",
+      "operation_id": "ck.applet.install",
+      "expected": { "outcome": "tier_match", "tier": "extension" }
+    },
+    {
+      "name": "applet_revoke_is_extension",
+      "scope": "live_registry",
+      "operation_id": "ck.applet.revoke",
+      "expected": { "outcome": "tier_match", "tier": "extension" }
+    },
+    {
       "name": "admin_get_server_status_is_deployment_local",
       "scope": "live_registry",
       "operation_id": "ck.admin.get_server_status",

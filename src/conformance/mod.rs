@@ -186,7 +186,8 @@ pub use state_resolution::{
 pub use sync::run_sync_fixture_suite;
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
-    run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
+    run_applet_audit_surface_check, run_composite_state_key_encoding_fixture_suite,
+    run_composite_state_subject_fixture_suite,
     run_conflict_repair_fixture_suite, run_consent_fixture_suite,
     run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
     run_cross_signing_reset_fixture_suite, run_device_cross_signing_trust_fixture_suite,

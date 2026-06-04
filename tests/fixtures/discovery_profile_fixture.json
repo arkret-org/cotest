@@ -24,7 +24,8 @@
       "agent_runtime",
       "device_and_keys",
       "push",
-      "projection_lifecycle"
+      "projection_lifecycle",
+      "applet_install"
     ],
     "interop_bridge": [
       "applet",
