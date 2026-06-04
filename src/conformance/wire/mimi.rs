@@ -185,7 +185,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 // cx.flow.track.read_receipt_policy), track-level read-receipt
                 // overrides are not in v1. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
-                // independent child scope (Flow.scope_circle_id, CXP-0007)
+                // independent child scope (Flow.scope_circle_id, CKP-0007)
                 // whose own ck.realm.read_receipt_policy composes against the
                 // parent Space policy via the same tighten-only rules.
                 let parent = policy

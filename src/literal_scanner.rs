@@ -287,7 +287,7 @@ pub fn scan_tree_protocol_drift(
     Ok(out)
 }
 
-/// Walk `root` and scan for circle-rollout (CXP-0007) structural drift
+/// Walk `root` and scan for circle-rollout (CKP-0007) structural drift
 /// rules (see [`crate::circle_rules`]). Detects the hard-removed
 /// `discussion_realm_ref` field and any unknown `cx.circle.*` literal that
 /// is not on the 7-event-kind / 6-capability-action allowlist.

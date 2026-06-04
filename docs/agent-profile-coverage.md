@@ -95,7 +95,7 @@ projection of the SDK-pure side.
 |---------|-------------------:|----------------:|----------------------------------------------------|
 | P-1     | 3                  | 3               | All three pass under `cargo test --workspace`.     |
 | P-2     | 5                  | 5               | V-3 (replay guard) is the high-risk gate.          |
-| P-3     | 5                  | 5               | V-5 + V-8 are CXP-0008 / §11 normative gates.      |
+| P-3     | 5                  | 5               | V-5 + V-8 are CKP-0008 / §11 normative gates.      |
 | P-4     | 4                  | 4               | V-6 idempotency is the key sidecar invariant.      |
 
 Total: 17 normative cells, 17 currently green; 0 deferred to live-stack.

@@ -40,7 +40,7 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
     }
 
     // (4) The 3 sidecar actions form the canonical ensure/write/publish
-    //     trio (CXP-0009 §3 invariant 10).
+    //     trio (CKP-0009 §3 invariant 10).
     let trio = [
         CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
         CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,

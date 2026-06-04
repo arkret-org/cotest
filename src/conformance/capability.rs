@@ -118,7 +118,7 @@ struct BoundaryFixture {
     alphabet: Alphabet,
     /// Whether the fixture expects acceptance (`Allow`) or rejection
     /// (`Deny`). The evaluator below treats empty / control-char targets
-    /// as deny per CXP-0007 §4.2 "no anti-enumeration via blank handles".
+    /// as deny per CKP-0007 §4.2 "no anti-enumeration via blank handles".
     expected: Decision,
 }
 

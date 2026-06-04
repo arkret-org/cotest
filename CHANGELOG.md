@@ -10,7 +10,7 @@ All notable changes to **cotest** are documented here.
 
 ## R3.3 — Spec sync 2026-05-28 (cokret-spec @ cced4b8)
 
-### CXP-0011 — object addressing + `cx.directory.resolve_target`
+### CKP-0011 — object addressing + `cx.directory.resolve_target`
 
 - OA-COT-1..4: eleven `cx.vector.object_addressing.*` conformance vectors over the SDK's object-addressing surface (`cokret_core::model::*`), driven from `src/conformance/object_addressing_vectors.rs`:
   - **OA-COT-1 (grammar, 4 cases)** — `web+cokret:` ⇄ HTTPS-fragment equivalence (both envelopes parse to the same `ParsedAddress`; built landing/scheme forms round-trip); realm-only / flow / message hierarchy forms; fail-closed on unknown keyword, wrong hierarchy order, and flow|message missing `via`; `<realm>` disambiguation (UUIDv7 → `RealmRef::RealmId`, dotted/domain → `RealmRef::Alias`).
@@ -33,7 +33,7 @@ All notable changes to **cotest** are documented here.
 
 ## [Unreleased]
 
-### CXP-0007 Circle primitive rollout (cokret-spec `2b0d70d`)
+### CKP-0007 Circle primitive rollout (cokret-spec `2b0d70d`)
 
 - **Fixed (P2F.1)** — purged `discussion_realm_ref` from the e2e
   Playwright suite (`e2e/tests/messaging/discussion-upgrade.spec.ts`),
@@ -41,7 +41,7 @@ All notable changes to **cotest** are documented here.
   `tests/fixtures/read_receipt_policy_fixture.json`),
   `src/conformance/wire_model.rs` and `src/round23_rules.rs`. The
   discussion-upgrade flow now promotes to a Circle via `scope_circle_id`
-  (per CXP-0007); the legacy field is hard-rejected.
+  (per CKP-0007); the legacy field is hard-rejected.
 - **Added (P2F.2)** — `src/circle_rules.rs` literal-scanner module with
   four rules: `DiscussionRealmRef` (hard-reject), `UnknownCircleEventKind`
   (allowlist of 7 event kinds + 6 capability actions),
@@ -140,7 +140,7 @@ commit `8b7978d spec: round 2+3 cleanup`):
     (T09).
   - Cursor handle literals shorter than 22 chars flagged (T03).
   - `discussion_space_ref` flagged as legacy of `discussion_realm_ref`
-    (R1.x rename); both names are now forbidden — CXP-0007 replaces them
+    (R1.x rename); both names are now forbidden — CKP-0007 replaces them
     with `scope_circle_id` on the modern wire.
 - **12 new scenarios** under `src/scenarios/`:
   - `late_key_recovery_removed_actor` (T16)

@@ -1,6 +1,6 @@
 //! P4-C.4 — first-backup gate (positive + negative).
 //!
-//! Per CXP-0008 §1.3 + key-management.md §5.2, inception key retire
+//! Per CKP-0008 §1.3 + key-management.md §5.2, inception key retire
 //! MUST be hard-blocked until a `backup_class=did_recovery` envelope
 //! has been published (or an offline-sealed `recovery_receipt`
 //! captured). The gate fails closed: any retire attempt before the

@@ -1,7 +1,7 @@
 //! P4-B — `conformance-vectors.md` §11 (personal agent + sidecar).
 //!
 //! 9 new conformance vectors that cover the cross-server invariants
-//! introduced by CXP-0008 / CXP-0009. Each vector is a single
+//! introduced by CKP-0008 / CKP-0009. Each vector is a single
 //! happy-path scenario that exercises (a) the relevant soland endpoint
 //! (when live) and (b) the SDK envelope shape (always). Deep
 //! cryptographic assertions are marked `TODO(P4-impl)`.

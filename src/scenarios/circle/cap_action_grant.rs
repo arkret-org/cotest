@@ -1,4 +1,4 @@
-//! P2F.3 — every CXP-0007 capability action is well-formed.
+//! P2F.3 — every CKP-0007 capability action is well-formed.
 //!
 //! Pins the six `ck.circle.*` capability-action strings against the SDK
 //! constants and against the well-formed-ness rules expected by the
@@ -14,10 +14,10 @@ use cokret_core::{
     CAP_ACTION_CIRCLE_MEMBER_MANAGE,
 };
 
-/// The canonical CXP-0007 capability-action allowlist. MUST match
+/// The canonical CKP-0007 capability-action allowlist. MUST match
 /// `crate::circle_rules::CIRCLE_CAPABILITY_ACTIONS` and
 /// `capability-action-registry.json`.
-pub const CXP_0007_CAPABILITY_ACTIONS: &[&str] = &[
+pub const CKP_0007_CAPABILITY_ACTIONS: &[&str] = &[
     CAP_ACTION_CIRCLE_CREATE,
     CAP_ACTION_CIRCLE_MANAGE,
     CAP_ACTION_CIRCLE_MEMBER_ADD,
@@ -62,27 +62,27 @@ fn is_well_formed(action: &str) -> Result<()> {
 }
 
 pub async fn cap_action_grant_run() -> Result<()> {
-    if CXP_0007_CAPABILITY_ACTIONS.len() != 6 {
+    if CKP_0007_CAPABILITY_ACTIONS.len() != 6 {
         return Err(anyhow!(
-            "CXP-0007 advertises exactly 6 capability actions; got {}",
-            CXP_0007_CAPABILITY_ACTIONS.len()
+            "CKP-0007 advertises exactly 6 capability actions; got {}",
+            CKP_0007_CAPABILITY_ACTIONS.len()
         ));
     }
     // Detect duplicates.
-    let mut sorted = CXP_0007_CAPABILITY_ACTIONS.to_vec();
+    let mut sorted = CKP_0007_CAPABILITY_ACTIONS.to_vec();
     sorted.sort_unstable();
     sorted.dedup();
-    if sorted.len() != CXP_0007_CAPABILITY_ACTIONS.len() {
+    if sorted.len() != CKP_0007_CAPABILITY_ACTIONS.len() {
         return Err(anyhow!(
-            "duplicate capability action constants: {CXP_0007_CAPABILITY_ACTIONS:?}"
+            "duplicate capability action constants: {CKP_0007_CAPABILITY_ACTIONS:?}"
         ));
     }
-    for action in CXP_0007_CAPABILITY_ACTIONS {
+    for action in CKP_0007_CAPABILITY_ACTIONS {
         is_well_formed(action)
             .map_err(|e| anyhow!("capability action `{action}` ill-formed: {e}"))?;
         if !action.starts_with("ck.circle.") {
             return Err(anyhow!(
-                "CXP-0007 capability action MUST start with `ck.circle.`; got `{action}`"
+                "CKP-0007 capability action MUST start with `ck.circle.`; got `{action}`"
             ));
         }
     }

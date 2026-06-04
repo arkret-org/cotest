@@ -1,5 +1,5 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CXP-0007 §Tombstone / Cascade Lifecycle;
+//! Live-stack integration test for CKP-0007 §Tombstone / Cascade Lifecycle;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_tombstone_cascade -- --ignored`).
 //!
@@ -11,11 +11,11 @@
 //!   5. Issue `ck.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
 //!      the projection, b) any further write into the Circle is rejected with `failed_precondition`
 //!      / sub-reason `circle_not_active`, c) child Flow projections surface as unavailable through
-//!      the sync API (`history_visibility` clamped, deliverability flag cleared) per CXP-0007
+//!      the sync API (`history_visibility` clamped, deliverability flag cleared) per CKP-0007
 //!      cascade rules, d) Circle members see the Circle in their client-side list as `tombstoned`
 //!      (not silently disappeared).
 //!   6. Repeat the exercise one level up: tombstone the parent Realm with a *fresh* Realm + Circle
-//!      and assert every Circle in that Realm is cascade-tombstoned (CXP-0007: Realm tombstone
+//!      and assert every Circle in that Realm is cascade-tombstoned (CKP-0007: Realm tombstone
 //!      implies Circle tombstone for every Circle whose `realm_id` matches).
 //!
 //! Gating mirrors `tests/soland_teabay_directory_sync.rs` / `full_stack_e2e.rs`:
@@ -37,9 +37,9 @@ use serial_test::serial;
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CXP-0007 (Circle tombstone cascade)
+/// Issue: CKP-0007 (Circle tombstone cascade)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CXP-0007 Circle tombstone cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "CKP-0007 Circle tombstone cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circles() -> Result<()>
 {
@@ -54,7 +54,7 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
     }
 
     // ── 1. Bootstrap the live stack (soft-skip when prereqs absent) ─────
-    let stack = try_bootstrap(FourServiceConfig::new("cxp0007-tombstone")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-tombstone")).await?;
     if stack.coauth.is_none() {
         bail!(
             "live tombstone cascade scenario requires coauth (membership state writes); \
@@ -71,22 +71,22 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
     // in development mode; alice + bob are the future Circle members.
     let admin = stack
         .soland
-        .register_client("did:web:admin.cxp0007.example", "@admin", "dev_admin")
+        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
         .await?;
     let alice = stack
         .soland
-        .register_client("did:web:alice.cxp0007.example", "@alice", "dev_alice")
+        .register_client("did:web:alice.ckp0007.example", "@alice", "dev_alice")
         .await?;
     let bob = stack
         .soland
-        .register_client("did:web:bob.cxp0007.example", "@bob", "dev_bob")
+        .register_client("did:web:bob.ckp0007.example", "@bob", "dev_bob")
         .await?;
 
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007tomb01".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007tomb01".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007tomb02".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007tomb02".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
-    let actor_admin: Did = "did:web:admin.cxp0007.example"
+    let actor_admin: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
 
@@ -113,7 +113,7 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
 
     // ── 3. Drive the live wire: create Realm + Circle + Flows ───────────
     //
-    // The remaining wire steps require soland's CXP-0007 surface:
+    // The remaining wire steps require soland's CKP-0007 surface:
     //   - POST /_cokret/self/realms                       (ck.realm.create)
     //   - POST /_cokret/self/realms/<id>/circles          (ck.circle.create)
     //   - POST /_cokret/self/circles/<id>/members         (ck.circle.member.state→active)
@@ -137,7 +137,7 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CXP-0007): live-stack wiring for Circle tombstone cascade is \
+        "TODO(P5/CKP-0007): live-stack wiring for Circle tombstone cascade is \
          scaffolded; finalise once soland exposes `ck.realm.tombstone` and \
          `ck.circle.tombstone` over the public REST surface. Expected assertions \
          (see doc comment): \

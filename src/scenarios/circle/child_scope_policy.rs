@@ -1,4 +1,4 @@
-//! P2F.3 — Space `child_scope_policy` reducer-pure enforcement (CXP-0007 §3.4.2).
+//! P2F.3 — Space `child_scope_policy` reducer-pure enforcement (CKP-0007 §3.4.2).
 //!
 //! Spec §3.4.2 normative rules:
 //!
@@ -46,7 +46,7 @@ fn enforce_child_scope_policy(
                 _ => Err(anyhow!(
                     "child_scope_policy=require_e2ee but child is Realm-default \
                      and Realm.encryption_profile=`{realm_encryption_profile:?}` is \
-                     not MLS-backed (CXP-0007 §3.4.2)"
+                     not MLS-backed (CKP-0007 §3.4.2)"
                 )),
             },
         },
@@ -58,7 +58,7 @@ fn enforce_child_scope_policy(
             } else {
                 Err(anyhow!(
                     "child_scope_policy=require_same_scope: child scope={child_s:?} \
-                     differs from parent Space scope={parent_s:?} (CXP-0007 §3.4.2)"
+                     differs from parent Space scope={parent_s:?} (CKP-0007 §3.4.2)"
                 ))
             }
         }
@@ -68,13 +68,13 @@ fn enforce_child_scope_policy(
             Some(child) if child.as_str() == scope_circle_id.as_str() => Ok(()),
             Some(child) => Err(anyhow!(
                 "child_scope_policy=require_scope_circle_id (required={}) \
-                 but child scope_circle_id={} (CXP-0007 §3.4.2)",
+                 but child scope_circle_id={} (CKP-0007 §3.4.2)",
                 scope_circle_id.as_str(),
                 child.as_str()
             )),
             None => Err(anyhow!(
                 "child_scope_policy=require_scope_circle_id (required={}) \
-                 but child has no scope_circle_id (CXP-0007 §3.4.2)",
+                 but child has no scope_circle_id (CKP-0007 §3.4.2)",
                 scope_circle_id.as_str()
             )),
         },

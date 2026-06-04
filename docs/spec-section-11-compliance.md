@@ -4,7 +4,7 @@ Generated: 2026-05-27 — pairs with
 [`agent-profile-coverage.md`](agent-profile-coverage.md).
 
 `conformance-vectors.md` §11 (personal agent + sidecar) declares 9
-normative cross-server invariants introduced by CXP-0008 + CXP-0009.
+normative cross-server invariants introduced by CKP-0008 + CKP-0009.
 This page is the one-stop compliance attestation: for every §11 vector,
 the (a) cotest scenario module, (b) test entrypoint, and (c) gating output
 that proves compliance.

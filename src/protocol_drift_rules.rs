@@ -672,7 +672,7 @@ fn scan_discussion_space_ref(
             matched_literal: token.to_string(),
             message: format!(
                 "`{token}` is forbidden on the wire (Realm/Space inversion); \
-                 CXP-0007 also hard-removed its successor `discussion_realm_ref`. \
+                 CKP-0007 also hard-removed its successor `discussion_realm_ref`. \
                  Use `scope_circle_id` (Flow / Space / Morph)."
             ),
         });

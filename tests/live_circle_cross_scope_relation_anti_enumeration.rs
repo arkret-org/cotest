@@ -1,5 +1,5 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CXP-0007 §Cross-Scope Relation
+//! Live-stack integration test for CKP-0007 §Cross-Scope Relation
 //! Anti-Enumeration; defaults to ignored — set `COTEST_LIVE_STACK=1` to
 //! enable (or invoke with
 //! `cargo test --test live_circle_cross_scope_relation_anti_enumeration -- --ignored`).
@@ -10,7 +10,7 @@
 //!        - F1: Realm-scoped *public* Flow (`scope_circle_id` unset).
 //!        - F2: Circle-scoped *private* Flow whose `scope_circle_id` binds to a Circle inside the
 //!          same Realm.
-//!   3. Establish `Relation::ConfidentialDiscussionOf` (F1 → F2). Per CXP-0007 spec, this is the
+//!   3. Establish `Relation::ConfidentialDiscussionOf` (F1 → F2). Per CKP-0007 spec, this is the
 //!      canonical cross-scope edge.
 //!   4. Query F1 from two client identities: a) `circle_member` — actor in the Circle: MUST see the
 //!      F1 → F2 edge with the `confidential_discussion_of` kind AND a presence hint (e.g.
@@ -37,9 +37,9 @@ use serial_test::serial;
 
 /// Gating: live soland + teabay stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CXP-0007 (Circle cross-scope Relation anti-enumeration)
+/// Issue: CKP-0007 (Circle cross-scope Relation anti-enumeration)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CXP-0007 Circle cross-scope Relation anti-enumeration — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "CKP-0007 Circle cross-scope Relation anti-enumeration — live soland + teabay stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Result<()> {
     // ── 0. SDK-level invariant: the relation kind serialises to the
@@ -60,7 +60,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
 
     // ── 1. Bootstrap soland + teabay (teabay is required for the
     //       directory projection assertion).
-    let stack = try_bootstrap(FourServiceConfig::new("cxp0007-rel-antienum")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-rel-antienum")).await?;
     if stack.teabay.is_none() {
         bail!(
             "live anti-enumeration scenario requires teabay (directory projection); \
@@ -78,28 +78,28 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     //       probe.
     let admin = stack
         .soland
-        .register_client("did:web:admin.cxp0007.example", "@admin", "dev_admin")
+        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
         .await?;
     let circle_member = stack
         .soland
-        .register_client("did:web:incircle.cxp0007.example", "@incircle", "dev_in")
+        .register_client("did:web:incircle.ckp0007.example", "@incircle", "dev_in")
         .await?;
     let realm_only = stack
         .soland
         .register_client(
-            "did:web:realm-only.cxp0007.example",
+            "did:web:realm-only.ckp0007.example",
             "@realm-only",
             "dev_realm_only",
         )
         .await?;
     let _ = (circle_member.actor.as_str(), realm_only.actor.as_str());
 
-    let admin_did: Did = "did:web:admin.cxp0007.example"
+    let admin_did: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007rel001".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007rel001".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007rel002".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007rel002".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let display = CircleDisplay {
         short_name: "Rel".to_owned(),
@@ -155,7 +155,7 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CXP-0007): live-stack wiring for `confidential_discussion_of` \
+        "TODO(P5/CKP-0007): live-stack wiring for `confidential_discussion_of` \
          cross-scope anti-enumeration is scaffolded; finalise once soland \
          publishes Flow + Relation endpoints carrying scope_circle_id projection \
          tiers and teabay's directory projection honours Circle membership in \

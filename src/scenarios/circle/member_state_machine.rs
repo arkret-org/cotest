@@ -1,6 +1,6 @@
-//! P2F.3 — Circle member state machine (CXP-0007 §3.6).
+//! P2F.3 — Circle member state machine (CKP-0007 §3.6).
 //!
-//! CXP-0007 normative spec defines a 4-state Circle membership lifecycle —
+//! CKP-0007 normative spec defines a 4-state Circle membership lifecycle —
 //! `invited`, `active`, `left`, `banned` — together with the `none`
 //! pseudo-state for actors who never appeared. The SDK does not (yet)
 //! expose a typed `CircleMemberState` enum nor a `validate_transition`
@@ -45,7 +45,7 @@ use anyhow::{Result, anyhow};
 use cokret_core::{CircleId, Did, RealmId};
 use serde_json::json;
 
-/// Canonical Circle member state names per CXP-0007 §3.6. Mirrors the
+/// Canonical Circle member state names per CKP-0007 §3.6. Mirrors the
 /// `ck.circle.member.state` payload `membership` field enum.
 const STATES: &[&str] = &["invited", "active", "left", "banned"];
 
@@ -63,7 +63,7 @@ const JOIN_RULE_INVITE: &str = "invite";
 ///
 /// `from = "none"` denotes an actor who has never had a Circle membership
 /// row. Returns `Err(reason)` for illegal edges, where `reason` matches
-/// the spec's CXP-0007 §3.6 transition rationale.
+/// the spec's CKP-0007 §3.6 transition rationale.
 fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<()> {
     // Terminal-edge guard: `banned` is a hard wall against direct
     // promotion to `active`. Admin MUST un-ban (banned → left | invited)
@@ -72,7 +72,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Err(anyhow!(
             "illegal transition banned → active: admin MUST un-ban via \
              banned → {{left, invited}} before promotion to active \
-             (CXP-0007 §3.6)"
+             (CKP-0007 §3.6)"
         ));
     }
     // `none → active` requires `join_rule=open`; otherwise the actor MUST
@@ -81,7 +81,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Err(anyhow!(
             "illegal transition none → active with join_rule=`{join_rule}`: \
              only `join_rule=open` permits self-join without prior invite \
-             (CXP-0007 §3.6)"
+             (CKP-0007 §3.6)"
         ));
     }
     // Active actors cannot regress to `invited`; the spec table has no
@@ -89,7 +89,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
     if from == "active" && to == "invited" {
         return Err(anyhow!(
             "illegal transition active → invited: regression not in the \
-             CXP-0007 §3.6 transition table"
+             CKP-0007 §3.6 transition table"
         ));
     }
     // `left → active` directly is illegal: actor MUST be re-invited
@@ -100,7 +100,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Err(anyhow!(
             "illegal transition left → active with join_rule=`{join_rule}`: \
              actor MUST be re-invited (left → invited) before becoming \
-             active (CXP-0007 §3.6)"
+             active (CKP-0007 §3.6)"
         ));
     }
     // No-op: `from == to` is not a real transition; treat as illegal so
@@ -108,7 +108,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
     if from == to {
         return Err(anyhow!(
             "illegal transition {from} → {to}: self-loop is not a member.state \
-             transition (CXP-0007 §3.6)"
+             transition (CKP-0007 §3.6)"
         ));
     }
     // Catalogue the remaining (from, to) tuples that the spec table
@@ -131,7 +131,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
         return Ok(());
     }
     Err(anyhow!(
-        "illegal transition {from} → {to}: not in the CXP-0007 §3.6 \
+        "illegal transition {from} → {to}: not in the CKP-0007 §3.6 \
          transition table"
     ))
 }

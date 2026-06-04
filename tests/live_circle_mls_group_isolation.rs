@@ -1,12 +1,12 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CXP-0007 §MLS Group Isolation;
+//! Live-stack integration test for CKP-0007 §MLS Group Isolation;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_mls_group_isolation -- --ignored`).
 //!
 //! Scenario (Phase B scaffold):
 //!   1. Boot soland (via `FourServiceStack`; coauth/starid/teabay are best-effort optional but
 //!      soland is required).
-//!   2. Create a Realm — soland MUST bind a Realm-default MLS group at creation time (CXP-0007
+//!   2. Create a Realm — soland MUST bind a Realm-default MLS group at creation time (CKP-0007
 //!      §Realm.encryption_profile=mls_rfc9420).
 //!   3. Create a Circle in that Realm. Soland MUST bind a NEW MLS group to the Circle whose
 //!      `group_id` is distinct from the Realm's default group.
@@ -35,15 +35,15 @@ use serial_test::serial;
 
 /// Gating: live soland stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CXP-0007 (Circle / Realm-default MLS group isolation)
+/// Issue: CKP-0007 (Circle / Realm-default MLS group isolation)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CXP-0007 Circle / Realm-default MLS group isolation — live soland stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "CKP-0007 Circle / Realm-default MLS group isolation — live soland stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     // ── 0. SDK-level invariant: a freshly-constructed Circle declares
     //       `EncryptionProfile::MlsRfc9420` (the only profile that has a
     //       distinct MLS group). The reducer MUST honour this.
-    let admin_did: Did = "did:web:admin.cxp0007.example"
+    let admin_did: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
     let display = CircleDisplay {
@@ -53,9 +53,9 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
             glyph: CircleGlyph::Key,
         },
     };
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007mls001".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007mls001".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007mls000".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007mls000".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
     let circle = Circle::new(
         circle_id.clone(),
@@ -80,7 +80,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     }
 
     // ── 1. Bootstrap soland (coauth optional for this scenario) ─────────
-    let stack = try_bootstrap(FourServiceConfig::new("cxp0007-mls-iso")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-mls-iso")).await?;
     stack
         .assert_healthy()
         .await
@@ -92,12 +92,12 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     //       requirement for cryptographic-isolation verification).
     let admin = stack
         .soland
-        .register_client("did:web:admin.cxp0007.example", "@admin", "dev_admin")
+        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
         .await?;
     let client_realm_default = stack
         .soland
         .register_client(
-            "did:web:probe.cxp0007.example",
+            "did:web:probe.ckp0007.example",
             "@probe-realm",
             "dev_probe_realm",
         )
@@ -105,7 +105,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     let client_circle_only = stack
         .soland
         .register_client(
-            "did:web:probe.cxp0007.example",
+            "did:web:probe.ckp0007.example",
             "@probe-circle",
             "dev_probe_circle",
         )
@@ -146,8 +146,8 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CXP-0007): live-stack wiring for Circle / Realm-default MLS \
-         isolation is scaffolded; finalise once soland's CXP-0007 surface returns \
+        "TODO(P5/CKP-0007): live-stack wiring for Circle / Realm-default MLS \
+         isolation is scaffolded; finalise once soland's CKP-0007 surface returns \
          (a) `default_mls_group_ref` on `ck.realm.create` responses and \
          (b) `mls_group_ref` on `ck.circle.create` / Circle projection. \
          Expected assertions: \

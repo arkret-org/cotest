@@ -1,5 +1,5 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CXP-0007 §Membership Cascade;
+//! Live-stack integration test for CKP-0007 §Membership Cascade;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_realm_member_removal_cascade -- --ignored`).
 //!
@@ -11,7 +11,7 @@
 //!      (`ck.circle.member.state → active`).
 //!   4. Admin issues `ck.realm.ck.member.state → left` for actor X. Assert: a) X's Realm membership
 //!      flips to `left` in soland's projection, b) X's membership in BOTH `circle_alpha` AND
-//!      `circle_beta` is auto-flipped to `left` (CXP-0007 strict-subset cascade: any Circle
+//!      `circle_beta` is auto-flipped to `left` (CKP-0007 strict-subset cascade: any Circle
 //!      membership is invalid when the actor leaves the parent Realm, so the reducer MUST emit
 //!      synthetic `ck.circle.member.state → left` events), c) each Circle's MLS group emits a
 //!      *remove proposal* + commit pair: verify the Circle's `mls_group_ref` epoch advanced (the
@@ -33,19 +33,19 @@ use serial_test::serial;
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or pass `--ignored`) once the P5 stack is up.
-/// Issue: CXP-0007 (Realm-member-removal → Circle cascade)
+/// Issue: CKP-0007 (Realm-member-removal → Circle cascade)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CXP-0007 Realm-member-removal → Circle cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "CKP-0007 Realm-member-removal → Circle cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     // ── 0. SDK-level invariant: strict subset breaks the moment a Circle
     //       still references a non-Realm member; cascade exists precisely
     //       to keep this invariant whole. Confirm the SDK helper flags
     //       the violation we expect the reducer to prevent post-cascade.
-    let alice: Did = "did:web:alice.cxp0007.example"
+    let alice: Did = "did:web:alice.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("alice did: {e}"))?;
-    let x: Did = "did:web:x.cxp0007.example"
+    let x: Did = "did:web:x.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("x did: {e}"))?;
     let realm_members = vec![alice.clone()]; // X has already 'left'.
@@ -65,7 +65,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     }
 
     // ── 1. Bootstrap the live stack ────────────────────────────────────
-    let stack = try_bootstrap(FourServiceConfig::new("cxp0007-member-cascade")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-member-cascade")).await?;
     if stack.coauth.is_none() {
         bail!(
             "live cascade scenario requires coauth (membership state writes); coauth \
@@ -80,26 +80,26 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     // ── 2. Register admin + alice (stays) + bob (Circle-only proxy) + X.
     let admin = stack
         .soland
-        .register_client("did:web:admin.cxp0007.example", "@admin", "dev_admin")
+        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
         .await?;
     let _alice_client = stack
         .soland
-        .register_client("did:web:alice.cxp0007.example", "@alice", "dev_alice")
+        .register_client("did:web:alice.ckp0007.example", "@alice", "dev_alice")
         .await?;
     let _bob_client = stack
         .soland
-        .register_client("did:web:bob.cxp0007.example", "@bob", "dev_bob")
+        .register_client("did:web:bob.ckp0007.example", "@bob", "dev_bob")
         .await?;
     let _x_client = stack
         .soland
-        .register_client("did:web:x.cxp0007.example", "@xeno", "dev_x")
+        .register_client("did:web:x.ckp0007.example", "@xeno", "dev_x")
         .await?;
 
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007memb01".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007memb01".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let alpha_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007alpha".to_owned())
+    let alpha_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007alpha".to_owned())
         .map_err(|e| anyhow!("alpha id: {e}"))?;
-    let beta_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007beta0".to_owned())
+    let beta_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007beta0".to_owned())
         .map_err(|e| anyhow!("beta id: {e}"))?;
 
     // Build SDK Circle structs so the wire payload's schema id, display,
@@ -109,7 +109,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         color_token: CircleColorToken::Indigo,
         symbol: CircleSymbol::Glyph { glyph },
     };
-    let admin_did: Did = "did:web:admin.cxp0007.example"
+    let admin_did: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
     let _alpha = Circle::new(
@@ -157,7 +157,7 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CXP-0007): live-stack wiring for Realm-member-left → Circle cascade \
+        "TODO(P5/CKP-0007): live-stack wiring for Realm-member-left → Circle cascade \
          is scaffolded; finalise once soland exposes the `ck.realm.ck.member.state` \
          and `ck.circle.member.state` projections + MLS epoch field. Expected \
          assertions: (a) X.realm.state=left, (b/c) X.circle.alpha.state=left + \

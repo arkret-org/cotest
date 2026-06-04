@@ -1,5 +1,5 @@
 //! P2F.3 — Circle effective history visibility takes the stricter of
-//! `(realm_floor, circle_setting)` (CXP-0007 §3.4).
+//! `(realm_floor, circle_setting)` (CKP-0007 §3.4).
 //!
 //! Spec text:
 //!
@@ -44,10 +44,10 @@ fn compute_effective_history_visibility(
     circle_setting: HistoryVisibility,
 ) -> Result<HistoryVisibility> {
     let r = strictness_rank(&realm_floor).ok_or_else(|| {
-        anyhow!("realm floor `restricted` is not in the linear floor space (CXP-0007 §3.4)")
+        anyhow!("realm floor `restricted` is not in the linear floor space (CKP-0007 §3.4)")
     })?;
     let c = strictness_rank(&circle_setting).ok_or_else(|| {
-        anyhow!("circle setting `restricted` is not in the linear floor space (CXP-0007 §3.4)")
+        anyhow!("circle setting `restricted` is not in the linear floor space (CKP-0007 §3.4)")
     })?;
     Ok(if r >= c { realm_floor } else { circle_setting })
 }

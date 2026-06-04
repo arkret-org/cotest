@@ -1,11 +1,11 @@
-//! P2F.3 — every CXP-0007 reason code is reachable from `cokret-core`.
+//! P2F.3 — every CKP-0007 reason code is reachable from `cokret-core`.
 //!
-//! Eight of the nine CXP-0007 error codes are `failed_precondition` /
+//! Eight of the nine CKP-0007 error codes are `failed_precondition` /
 //! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)
-//! is a top-level wire error code introduced in CXP-0006 and re-used by the
+//! is a top-level wire error code introduced in CKP-0006 and re-used by the
 //! Circle delivery binding migration path. This scenario pins:
 //!
-//!   - the sub-reason set [`KNOWN_REASON_CODES_CXP_0007`] is exactly 8,
+//!   - the sub-reason set [`KNOWN_REASON_CODES_CKP_0007`] is exactly 8,
 //!   - each sub-reason string is non-empty, lowercase, snake_case, and does not duplicate a known
 //!     reason from another release,
 //!   - the top-level `ERROR_CODE_DELIVERY_BINDING_HANDED_OVER` is registered via
@@ -16,7 +16,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::error::{
-    KNOWN_REASON_CODES_CXP_0007, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
+    KNOWN_REASON_CODES_CKP_0007, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
     REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER, REASON_CIRCLE_NOT_ACTIVE,
     REASON_CIRCLE_REALM_MISMATCH, REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
     REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED, REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
@@ -36,15 +36,15 @@ fn is_snake_case_lowercase(s: &str) -> bool {
 }
 
 pub async fn error_code_paths_run() -> Result<()> {
-    if KNOWN_REASON_CODES_CXP_0007.len() != 8 {
+    if KNOWN_REASON_CODES_CKP_0007.len() != 8 {
         return Err(anyhow!(
-            "CXP-0007 reason-code set MUST be exactly 8; got {} ({:?})",
-            KNOWN_REASON_CODES_CXP_0007.len(),
-            KNOWN_REASON_CODES_CXP_0007
+            "CKP-0007 reason-code set MUST be exactly 8; got {} ({:?})",
+            KNOWN_REASON_CODES_CKP_0007.len(),
+            KNOWN_REASON_CODES_CKP_0007
         ));
     }
 
-    // Spot-pin every CXP-0007 reason code spelling against the constant.
+    // Spot-pin every CKP-0007 reason code spelling against the constant.
     for (constant, expected) in [
         (REASON_CIRCLE_REALM_MISMATCH, "circle_realm_mismatch"),
         (REASON_CIRCLE_NOT_ACTIVE, "circle_not_active"),
@@ -72,12 +72,12 @@ pub async fn error_code_paths_run() -> Result<()> {
     ] {
         if constant != expected {
             return Err(anyhow!(
-                "CXP-0007 reason code spelling drifted: constant=`{constant}` expected=`{expected}`"
+                "CKP-0007 reason code spelling drifted: constant=`{constant}` expected=`{expected}`"
             ));
         }
         if !is_snake_case_lowercase(constant) {
             return Err(anyhow!(
-                "CXP-0007 reason code `{constant}` is not snake_case lowercase"
+                "CKP-0007 reason code `{constant}` is not snake_case lowercase"
             ));
         }
     }
@@ -92,12 +92,12 @@ pub async fn error_code_paths_run() -> Result<()> {
         REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED,
         REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
     ] {
-        if !KNOWN_REASON_CODES_CXP_0007.contains(&code) {
-            return Err(anyhow!("KNOWN_REASON_CODES_CXP_0007 missing `{code}`"));
+        if !KNOWN_REASON_CODES_CKP_0007.contains(&code) {
+            return Err(anyhow!("KNOWN_REASON_CODES_CKP_0007 missing `{code}`"));
         }
     }
 
-    // Sixth CXP-0007 code is a top-level wire error.
+    // Sixth CKP-0007 code is a top-level wire error.
     if !is_known_error_code(ERROR_CODE_DELIVERY_BINDING_HANDED_OVER) {
         return Err(anyhow!(
             "ERROR_CODE_DELIVERY_BINDING_HANDED_OVER (`{ERROR_CODE_DELIVERY_BINDING_HANDED_OVER}`) \
@@ -119,7 +119,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn cxp_0007_reason_codes_well_formed_and_registered() {
+    async fn ckp_0007_reason_codes_well_formed_and_registered() {
         error_code_paths_run().await.unwrap();
     }
 }

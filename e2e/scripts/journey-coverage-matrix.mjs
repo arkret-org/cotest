@@ -57,12 +57,12 @@ const JOURNEYS = [
   },
   {
     id: 'UJ-I',
-    title: 'Circle lifecycle and anti-enumeration (CXP-0007)',
+    title: 'Circle lifecycle and anti-enumeration (CKP-0007)',
     patterns: ['circle/*', 'directory/anti-enumeration'],
   },
   {
     id: 'UJ-J',
-    title: 'Personal agent + sidecar (CXP-0008 / CXP-0009)',
+    title: 'Personal agent + sidecar (CKP-0008 / CKP-0009)',
     patterns: ['profile/*', 'spec-section-11/*', 'legacy-alias/*', 'did/format-normalization'],
   },
 ];

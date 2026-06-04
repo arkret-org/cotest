@@ -1,6 +1,6 @@
 //! P2F.3 — `Relation::ConfidentialDiscussionOf` two-Flow round-trip.
 //!
-//! CXP-0007 introduces a Relation between the broad-synthesis Flow and
+//! CKP-0007 introduces a Relation between the broad-synthesis Flow and
 //! the narrow-discussion Flow that lives in a Circle scope. This
 //! scenario pins:
 //!   - the `RelationKind::ConfidentialDiscussionOf` variant exists,

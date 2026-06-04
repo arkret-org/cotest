@@ -100,7 +100,7 @@ in fixme-debt and are all live-stack-dependent. They were not promoted to
 and inherit the P5 bulk-defer disposition documented in `fixme-debt.md`.
 
 GATE-E pass criterion: "cotest全 journey ≥ 90% 覆盖". This is satisfied for
-UJ-E + UJ-F + UJ-G + UJ-I (the journeys directly impacted by CXP-0007 Circle
+UJ-E + UJ-F + UJ-G + UJ-I (the journeys directly impacted by CKP-0007 Circle
 work) and explicitly deferred for the four legacy journeys via the
 P5-disposition note in `fixme-debt.md`. The decision: do not block
 GATE-E on legacy gaps that owner projects already deferred to the next
@@ -131,7 +131,7 @@ the catalog against the live tree:
 ### 5.A cotest baseline drifts
 
 5 conformance fixture tests fail with pre-existing baseline drift,
-independent of CXP-0007 work:
+independent of CKP-0007 work:
 
 - `federation_fixture_suite_matches_reference_semantics` — unknown
   federation fixture case `http_message_signature_digest`

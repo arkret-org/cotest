@@ -184,7 +184,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
     );
 }
 
-// ─── R3.3 / OA-COT-1..4 — CXP-0011 object addressing + resolve_target ─────
+// ─── R3.3 / OA-COT-1..4 — CKP-0011 object addressing + resolve_target ─────
 //
 // SDK-pure vectors over `cokret_core::model::*` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed

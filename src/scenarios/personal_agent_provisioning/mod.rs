@@ -1,6 +1,6 @@
 //! P4-A.1 — `ck.profile.personal_agent_provisioning.v1` coverage.
 //!
-//! Spec (CXP-0008 + spec head 37ce729) gates: provisioning emits a
+//! Spec (CKP-0008 + spec head 37ce729) gates: provisioning emits a
 //! `ck.agent.provision` event that materializes (a) an `agent_principal`
 //! typed-id, (b) a controller DID binding, (c) a freshly authorized
 //! `agent_key`, and (d) the first `accountability_grant` attaching the

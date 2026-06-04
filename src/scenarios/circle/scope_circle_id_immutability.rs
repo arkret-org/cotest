@@ -1,6 +1,6 @@
 //! P2F.3 — `scope_circle_id` is reducer-immutable (`scope_rebind_forbidden`).
 //!
-//! CXP-0007 §3.4 normative spec:
+//! CKP-0007 §3.4 normative spec:
 //!
 //! > 改绑 `scope_circle_id` 默认 reducer 拒绝
 //! > (`failed_precondition` `reason="scope_rebind_forbidden"`); profile MAY
@@ -66,17 +66,17 @@ fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) ->
         (Some(a), Some(b)) if a.as_str() == b.as_str() => Ok(()),
         (None, Some(b)) => Err(anyhow!(
             "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
-             from Realm-default to circle_id={} forbidden (CXP-0007 §3.4)",
+             from Realm-default to circle_id={} forbidden (CKP-0007 §3.4)",
             b.as_str()
         )),
         (Some(a), None) => Err(anyhow!(
             "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
-             from circle_id={} to Realm-default forbidden (CXP-0007 §3.4)",
+             from circle_id={} to Realm-default forbidden (CKP-0007 §3.4)",
             a.as_str()
         )),
         (Some(a), Some(b)) => Err(anyhow!(
             "reason={REASON_SCOPE_REBIND_FORBIDDEN}: scope_circle_id rebind \
-             from circle_id={} to circle_id={} forbidden (CXP-0007 §3.4)",
+             from circle_id={} to circle_id={} forbidden (CKP-0007 §3.4)",
             a.as_str(),
             b.as_str()
         )),
@@ -86,7 +86,7 @@ fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) ->
 pub async fn scope_circle_id_immutability_run() -> Result<()> {
     // ── Build a Flow with scope_circle_id=Some(circle_a) and confirm it
     //    serialises to wire shape with the field set.
-    let mut flow_a = Flow::new("flow-cxp-0007", realm_id()?, "Quarterly review", actor()?);
+    let mut flow_a = Flow::new("flow-ckp-0007", realm_id()?, "Quarterly review", actor()?);
     flow_a.scope_circle_id = Some(circle_a()?);
 
     let json_a: Value =
@@ -120,7 +120,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
 
     // ── circle_a → circle_a (build a sibling next-state Flow): accept.
     let mut flow_a_next = Flow::new(
-        "flow-cxp-0007",
+        "flow-ckp-0007",
         realm_id()?,
         "Quarterly review v2",
         actor()?,
@@ -134,7 +134,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
 
     // ── Rebind: circle_a → circle_b: reject with scope_rebind_forbidden.
     let mut flow_b = Flow::new(
-        "flow-cxp-0007",
+        "flow-ckp-0007",
         realm_id()?,
         "Quarterly review v3",
         actor()?,
@@ -160,7 +160,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     }
 
     // ── Rebind: circle_a → None: reject (Circle → Realm-default).
-    let mut flow_none = Flow::new("flow-cxp-0007", realm_id()?, "downgrade", actor()?);
+    let mut flow_none = Flow::new("flow-ckp-0007", realm_id()?, "downgrade", actor()?);
     flow_none.scope_circle_id = None;
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),

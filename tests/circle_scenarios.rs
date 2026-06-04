@@ -1,4 +1,4 @@
-//! Integration entrypoints for the CXP-0007 Circle conformance
+//! Integration entrypoints for the CKP-0007 Circle conformance
 //! scenarios (P2F.3). These tests drive the SDK types directly through
 //! the per-scenario `..._run()` functions; they do NOT require a live
 //! soland / coauth / floria stack. Cross-project joint tests live in
@@ -65,7 +65,7 @@ async fn circle_error_code_paths() {
         .expect("error_code_paths scenario");
 }
 
-// ── CXP-0007 Phase A invariant scenarios (P2F.3.2).
+// ── CKP-0007 Phase A invariant scenarios (P2F.3.2).
 
 #[tokio::test]
 async fn circle_member_state_machine() {

@@ -1,11 +1,11 @@
-// Discussion track upgrade to a Circle-scoped Flow (CXP-0007).
+// Discussion track upgrade to a Circle-scoped Flow (CKP-0007).
 // Contract: e2e/scenarios/messaging/discussion-upgrade.md
 // Spec refs:
 //   - models/flow-and-message.md §5, §5.1 (scope_circle_id on Flow)
 //   - models/circle.md (Circle primitive, encryption boundary)
 //   - models/space-hierarchy.md §3-§4 (parent/child confirmed edge)
 //   - discovery/read-receipts.md §2.5 (scope override)
-// History: prior to CXP-0007 the same upgrade lived under Flow.discussion_realm_ref;
+// History: prior to CKP-0007 the same upgrade lived under Flow.discussion_realm_ref;
 // that field is hard-removed and no longer accepted on the wire.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
@@ -657,8 +657,8 @@ async function setFlowScopeCircleViaApi(
   flowId: string,
   circleId: string,
 ) {
-  // CXP-0007: promoting a Flow to its own confidential scope binds the
-  // Flow to a Circle via `scope_circle_id`. The pre-CXP-0007 wire field
+  // CKP-0007: promoting a Flow to its own confidential scope binds the
+  // Flow to a Circle via `scope_circle_id`. The pre-CKP-0007 wire field
   // `discussion_realm_ref` is in `forbidden-wire-fields` (hard_reject).
   await submitSignedEventApi(
     request,

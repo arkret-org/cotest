@@ -1,4 +1,4 @@
-//! Circle-rollout (CXP-0007) structural drift rules.
+//! Circle-rollout (CKP-0007) structural drift rules.
 //!
 //! cokret-spec commit `2b0d70d` (range `9cb47c1..2b0d70d`) introduces the
 //! **Circle primitive** as the new intra-Realm security boundary. The spec
@@ -16,8 +16,8 @@
 //!   `ck.circle.anchor_commit`).
 //! * 6 new capability actions (`ck.circle.create`, `ck.circle.manage`, `ck.circle.member.add`,
 //!   `ck.circle.member.manage`, `ck.circle.member.add.others`, `ck.circle.audit`).
-//! * 6 new reason / error codes (5 CXP-0007 sub-reasons plus `delivery_binding_handed_over`
-//!   registered in CXP-0006).
+//! * 6 new reason / error codes (5 CKP-0007 sub-reasons plus `delivery_binding_handed_over`
+//!   registered in CKP-0006).
 //!
 //! This module hosts the **literal-scanner** counterparts that protect the
 //! downstream tree from silently regressing on those wire-shape decisions.
@@ -28,12 +28,12 @@
 //! Rules emitted here:
 //!
 //! 1. **`DiscussionRealmRef`** — any occurrence of the deleted `discussion_realm_ref` field as a
-//!    Rust / TS / JSON identifier or string literal. Spec status: hard-removed (CXP-0007).
+//!    Rust / TS / JSON identifier or string literal. Spec status: hard-removed (CKP-0007).
 //!    Replacement: `scope_circle_id`.
 //! 2. **`UnknownCircleEventKind`** — any string literal beginning with `cx.circle.` whose tail is
 //!    **not** on the canonical allowlist (7 event kinds + 6 capability actions registered by
-//!    CXP-0007).
-//! 3. **`UnknownCircleErrorCode`** — any string literal whose value is one of the CXP-0007 reason
+//!    CKP-0007).
+//! 3. **`UnknownCircleErrorCode`** — any string literal whose value is one of the CKP-0007 reason
 //!    code names (we still want the canonical spelling to be the only spelling). Unknown variants
 //!    surface here.
 //!
@@ -72,8 +72,8 @@ pub const CIRCLE_CAPABILITY_ACTIONS: &[&str] = &[
     "ck.circle.audit",
 ];
 
-/// CXP-0007 reason codes (sub-codes of `failed_precondition` /
-/// `schema_violation`). Mirrors `cokret-core::error::KNOWN_REASON_CODES_CXP_0007`
+/// CKP-0007 reason codes (sub-codes of `failed_precondition` /
+/// `schema_violation`). Mirrors `cokret-core::error::KNOWN_REASON_CODES_CKP_0007`
 /// plus the 6th top-level `delivery_binding_handed_over` code.
 pub const CIRCLE_REASON_CODES: &[&str] = &[
     "circle_realm_mismatch",
@@ -87,12 +87,12 @@ pub const CIRCLE_REASON_CODES: &[&str] = &[
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CircleRule {
-    /// `discussion_realm_ref` is hard-removed (CXP-0007).
+    /// `discussion_realm_ref` is hard-removed (CKP-0007).
     DiscussionRealmRef,
     /// A `cx.circle.*` literal not on the canonical allowlist.
     UnknownCircleEventKind,
     /// Reserved for future expansion — string-literal reason codes that
-    /// look like CXP-0007 codes but are mis-spelled. Currently surfaced
+    /// look like CKP-0007 codes but are mis-spelled. Currently surfaced
     /// only via the constant list [`CIRCLE_REASON_CODES`].
     UnknownCircleErrorCode,
     /// A `Relation::ConfidentialDiscussionOf` literal whose visible
@@ -225,7 +225,7 @@ fn scan_discussion_realm_ref(
             rule: CircleRule::DiscussionRealmRef,
             matched_literal: token.to_string(),
             message: format!(
-                "`{token}` is hard-removed by CXP-0007 (cokret-spec 2b0d70d). \
+                "`{token}` is hard-removed by CKP-0007 (cokret-spec 2b0d70d). \
                  Replacement: `scope_circle_id` (typed `ck:circle:<uuidv7>`). \
                  The legacy field MUST NOT appear in any wire payload, \
                  fixture, or schema literal."
@@ -293,7 +293,7 @@ fn scan_circle_dotted_string(
                 rule: CircleRule::UnknownCircleEventKind,
                 matched_literal: full,
                 message: format!(
-                    "Unknown `cx.circle.*` identifier — not in the CXP-0007 \
+                    "Unknown `cx.circle.*` identifier — not in the CKP-0007 \
                      allowlist of {event_n} event kinds or {cap_n} capability \
                      actions. Suppress with a `{CIRCLE_ALLOW_MARKER}` marker \
                      comment when the literal is a known scanner test or \
@@ -506,31 +506,31 @@ mod tests {
 
     #[test]
     fn reason_code_list_is_six() {
-        // CIRCLE-ALLOW: documenting the canonical CXP-0007 count.
+        // CIRCLE-ALLOW: documenting the canonical CKP-0007 count.
         assert_eq!(
             CIRCLE_REASON_CODES.len(),
             6,
-            "CXP-0007 advertises exactly six reason codes (5 sub + 1 top-level)",
+            "CKP-0007 advertises exactly six reason codes (5 sub + 1 top-level)",
         );
     }
 
     #[test]
     fn event_kinds_match_sdk_count() {
-        // CIRCLE-ALLOW: documenting the canonical CXP-0007 count.
+        // CIRCLE-ALLOW: documenting the canonical CKP-0007 count.
         assert_eq!(
             CIRCLE_EVENT_KINDS.len(),
             7,
-            "CXP-0007 introduces exactly 7 cx.circle.* event kinds",
+            "CKP-0007 introduces exactly 7 cx.circle.* event kinds",
         );
     }
 
     #[test]
     fn capability_actions_match_sdk_count() {
-        // CIRCLE-ALLOW: documenting the canonical CXP-0007 count.
+        // CIRCLE-ALLOW: documenting the canonical CKP-0007 count.
         assert_eq!(
             CIRCLE_CAPABILITY_ACTIONS.len(),
             6,
-            "CXP-0007 introduces exactly 6 cx.circle.* capability actions",
+            "CKP-0007 introduces exactly 6 cx.circle.* capability actions",
         );
     }
 

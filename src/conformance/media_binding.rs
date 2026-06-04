@@ -1,4 +1,4 @@
-//! R3 spec-sync (cokret-spec @ b47ff6ec) — CXP-0010 media-binding
+//! R3 spec-sync (cokret-spec @ b47ff6ec) — CKP-0010 media-binding
 //! conformance vectors.
 //!
 //! 9 vectors covering [§0.11 of `_before_todos.md`]:

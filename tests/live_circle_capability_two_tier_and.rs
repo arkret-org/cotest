@@ -1,9 +1,9 @@
 #![allow(clippy::doc_overindented_list_items, clippy::doc_lazy_continuation)]
-//! Live-stack integration test for CXP-0007 §Capability Two-Tier AND;
+//! Live-stack integration test for CKP-0007 §Capability Two-Tier AND;
 //! defaults to ignored — set `COTEST_LIVE_STACK=1` to enable (or invoke with
 //! `cargo test --test live_circle_capability_two_tier_and -- --ignored`).
 //!
-//! CXP-0007 evaluates a Circle write as
+//! CKP-0007 evaluates a Circle write as
 //!
 //!     allowed = grant_present(cap) AND (scope == null OR actor ∈ Circle.members)
 //!
@@ -39,13 +39,13 @@ use serial_test::serial;
 
 /// Gating: live soland + coauth stack — default-ignored, set
 /// `COTEST_LIVE_STACK=1` (or `--ignored`) once P5 stack is up.
-/// Issue: CXP-0007 (Circle capability two-tier AND)
+/// Issue: CKP-0007 (Circle capability two-tier AND)
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "CXP-0007 Circle capability two-tier AND — live soland + coauth stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
+#[ignore = "CKP-0007 Circle capability two-tier AND — live soland + coauth stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
 async fn circle_write_requires_both_capability_grant_and_membership() -> Result<()> {
     // ── 0. SDK-level invariants: the cap actions we exercise live in
-    //       the canonical CXP-0007 allow-list. A spelling drift here
+    //       the canonical CKP-0007 allow-list. A spelling drift here
     //       would mask the live wire assertion.
     if CAP_ACTION_CIRCLE_MANAGE != "ck.circle.manage" {
         bail!(
@@ -61,7 +61,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     }
 
     // ── 1. Bootstrap soland + coauth (coauth is hard-required for cap grants).
-    let stack = try_bootstrap(FourServiceConfig::new("cxp0007-cap-and")).await?;
+    let stack = try_bootstrap(FourServiceConfig::new("ckp0007-cap-and")).await?;
     if stack.coauth.is_none() {
         bail!(
             "live capability AND scenario requires coauth (session-grant issuer); \
@@ -79,20 +79,20 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     //       starts with zero grants.
     let admin = stack
         .soland
-        .register_client("did:web:admin.cxp0007.example", "@admin", "dev_admin")
+        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
         .await?;
     let actor_y = stack
         .soland
-        .register_client("did:web:y.cxp0007.example", "@y", "dev_y")
+        .register_client("did:web:y.ckp0007.example", "@y", "dev_y")
         .await?;
     let _ = actor_y.actor.as_str();
 
-    let admin_did: Did = "did:web:admin.cxp0007.example"
+    let admin_did: Did = "did:web:admin.ckp0007.example"
         .parse()
         .map_err(|e| anyhow!("admin did: {e}"))?;
-    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-cxp0007cap001".to_owned())
+    let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007cap001".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))?;
-    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-cxp0007cap002".to_owned())
+    let circle_id = CircleId::new("ck:circle:0196419b-0000-7000-8000-ckp0007cap002".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))?;
     let display = CircleDisplay {
         short_name: "Cap".to_owned(),
@@ -142,7 +142,7 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
         .map_err(|e| anyhow!("realm create probe failed: {e}"))?;
 
     bail!(
-        "TODO(P5/CXP-0007): live-stack wiring for the two-tier capability \
+        "TODO(P5/CKP-0007): live-stack wiring for the two-tier capability \
          (grant ∧ membership) evaluation is scaffolded; finalise once soland \
          publishes the `ck.circle.update` REST surface and coauth's \
          session-grant issue/revoke endpoints are reachable from cotest. \
