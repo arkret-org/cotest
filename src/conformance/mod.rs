@@ -376,14 +376,19 @@ pub(crate) fn fixture_path(file_name: &str) -> PathBuf {
         .join(file_name)
 }
 
-pub(crate) fn local_fixture_path(file_name: &str) -> PathBuf {
+/// Resolve a fixture that lives in cotest's own `tests/fixtures/` tree (as
+/// opposed to [`fixture_path`], which resolves cokret-spec artifact fixtures).
+/// Exposed to the integration-test crate so `tests/*.rs` can share one local
+/// loader instead of re-deriving the root.
+pub fn local_fixture_path(file_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fixtures")
         .join(file_name)
 }
 
-pub(crate) fn load_local_fixture_value(file_name: &str) -> Result<Value> {
+/// Read and parse a cotest-local fixture (`tests/fixtures/<file_name>`).
+pub fn load_local_fixture_value(file_name: &str) -> Result<Value> {
     let path = local_fixture_path(file_name);
     let raw = fs::read_to_string(&path)?;
     serde_json::from_str(&raw)

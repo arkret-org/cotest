@@ -233,34 +233,40 @@ fn rank_order_entry_id(entry: &Value) -> Result<String> {
 // ── Projection position discriminator fixture suite ─────────────────────────
 
 pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
+    // Mirrors `models/views.md §3.3 CollectionGrouping`: discriminator field is
+    // `mode`, enumerated `none | field | relation_container | time_bucket |
+    // matrix`. `relation_container` binds a board Space via `board_space_id`
+    // (`ck:space:` typed-id) plus `container_relation_kind` / `item_relation_kind`.
     let positions = [
         json!({
-            "model": "field_value",
-            "container_id": "todo",
+            "mode": "none",
             "rank": "F"
         }),
         json!({
-            "model": "relation_container",
-            "scope_container_id": "ck:place:019640b6-8000-7000-8000-000000000000",
-            "container_id": "ck:place:019640c0-8000-7000-8000-000000000000",
-            "relation_kind": "contains",
-            "relation_id": "ck:relation:01970e58-0002-7000-8000-000000000001",
+            "mode": "field",
+            "field": "fields.status",
+            "lanes": [
+                { "key": "todo" },
+                { "key": "in_progress" }
+            ],
+            "rank": "F"
+        }),
+        json!({
+            "mode": "relation_container",
+            "board_space_id": "ck:space:019640b6-8000-7000-8000-000000000000",
+            "container_relation_kind": "contains",
+            "item_relation_kind": "contains",
             "rank": "V"
         }),
         json!({
-            "model": "time_bucket",
+            "mode": "time_bucket",
             "start_field": "fields.starts_at",
-            "bucket": "week",
-            "timezone": "UTC",
-            "bucket_start": "2026-04-27T00:00:00Z",
             "rank": "k"
         }),
         json!({
-            "model": "matrix_cell",
+            "mode": "matrix",
             "rows_by": "fields.assignee",
             "columns_by": "fields.status",
-            "row_key": "did:web:alice.example",
-            "column_key": "todo",
             "rank": "F"
         }),
     ];
@@ -269,13 +275,12 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
     }
 
     let invalid = json!({
-        "model": "relation_container",
-        "container_id": "ck:place:019640c0-8000-7000-8000-000000000000",
-        "relation_kind": "contains",
+        "mode": "relation_container",
+        "container_relation_kind": "contains",
         "rank": "F"
     });
     if validate_projection_position(&invalid).is_ok() {
-        bail!("projection position suite accepted incomplete relation_container position");
+        bail!("projection position suite accepted incomplete relation_container grouping");
     }
 
     Ok(())
@@ -284,39 +289,39 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
 // ── Shared validation helpers (encoding/projection) ─────────────────────────
 
 pub(crate) fn validate_projection_position(position: &Value) -> Result<()> {
-    match value_field_str(position, "model")? {
-        "field_value" => {
-            require_position_field(position, "container_id")?;
+    // `CollectionGrouping` per `models/views.md §3.3`. The discriminator is
+    // `mode`; per-mode conditional fields follow the spec table.
+    match value_field_str(position, "mode")? {
+        "none" => {
+            require_rank(position)?;
+        }
+        "field" => {
+            require_position_field(position, "field")?;
+            if !position.get("lanes").map(Value::is_array).unwrap_or(false) {
+                bail!("field grouping requires a `lanes` array");
+            }
             require_rank(position)?;
         }
         "relation_container" => {
-            require_position_field(position, "scope_container_id")?;
-            require_position_field(position, "container_id")?;
-            require_position_field(position, "relation_kind")?;
-            let relation_id = require_position_field(position, "relation_id")?;
-            if !relation_id.starts_with("ck:relation:") {
-                bail!("relation_container position relation_id was invalid");
+            let board_space_id = require_position_field(position, "board_space_id")?;
+            if !board_space_id.starts_with("ck:space:") {
+                bail!("relation_container grouping board_space_id must be a ck:space: id");
             }
+            // `container_relation_kind` is optional (defaults to `contains`);
+            // `item_relation_kind` is mandatory and MUST NOT be inferred.
+            require_position_field(position, "item_relation_kind")?;
             require_rank(position)?;
         }
         "time_bucket" => {
             require_position_field(position, "start_field")?;
-            require_position_field(position, "bucket")?;
-            require_position_field(position, "timezone")?;
-            let bucket_start = require_position_field(position, "bucket_start")?;
-            if !bucket_start.ends_with('Z') {
-                bail!("time_bucket position bucket_start must be UTC timestamp");
-            }
             require_rank(position)?;
         }
-        "matrix_cell" => {
+        "matrix" => {
             require_position_field(position, "rows_by")?;
             require_position_field(position, "columns_by")?;
-            require_position_field(position, "row_key")?;
-            require_position_field(position, "column_key")?;
             require_rank(position)?;
         }
-        other => bail!("unknown projection position model {other}"),
+        other => bail!("unknown projection grouping mode {other}"),
     }
     Ok(())
 }

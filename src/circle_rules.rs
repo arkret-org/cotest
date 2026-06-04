@@ -30,9 +30,11 @@
 //! 1. **`DiscussionRealmRef`** — any occurrence of the deleted `discussion_realm_ref` field as a
 //!    Rust / TS / JSON identifier or string literal. Spec status: hard-removed (CKP-0007).
 //!    Replacement: `scope_circle_id`.
-//! 2. **`UnknownCircleEventKind`** — any string literal beginning with `cx.circle.` whose tail is
+//! 2. **`UnknownCircleEventKind`** — any string literal beginning with `ck.circle.` whose tail is
 //!    **not** on the canonical allowlist (7 event kinds + 6 capability actions registered by
-//!    CKP-0007).
+//!    CKP-0007). The legacy `cx.circle.*` brand prefix is rejected separately by
+//!    `literal_scanner`'s cx-brand rule, so this rule scans the canonical `ck.circle.` prefix in
+//!    order to catch genuinely mis-spelled tails such as `ck.circle.bogus`.
 //! 3. **`UnknownCircleErrorCode`** — any string literal whose value is one of the CKP-0007 reason
 //!    code names (we still want the canonical spelling to be the only spelling). Unknown variants
 //!    surface here.
@@ -47,7 +49,7 @@ use serde::Serialize;
 /// the immediately preceding non-blank line.
 pub const CIRCLE_ALLOW_MARKER: &str = "CIRCLE-ALLOW";
 
-/// Canonical `cx.circle.*` event-kind allowlist. Mirrors
+/// Canonical `ck.circle.*` event-kind allowlist. Mirrors
 /// `cokret-core::events::kinds` (`CIRCLE_*` constants) and
 /// `cokret-spec/spec/v1/artifacts/registry/event-kind-registry.json`.
 pub const CIRCLE_EVENT_KINDS: &[&str] = &[
@@ -60,7 +62,7 @@ pub const CIRCLE_EVENT_KINDS: &[&str] = &[
     "ck.circle.anchor_commit",
 ];
 
-/// Canonical `cx.circle.*` capability-action allowlist. Mirrors
+/// Canonical `ck.circle.*` capability-action allowlist. Mirrors
 /// `cokret-core::model::constants` (`CAP_ACTION_CIRCLE_*`) and
 /// `cokret-spec/spec/v1/artifacts/registry/capability-action-registry.json`.
 pub const CIRCLE_CAPABILITY_ACTIONS: &[&str] = &[
@@ -89,7 +91,7 @@ pub const CIRCLE_REASON_CODES: &[&str] = &[
 pub enum CircleRule {
     /// `discussion_realm_ref` is hard-removed (CKP-0007).
     DiscussionRealmRef,
-    /// A `cx.circle.*` literal not on the canonical allowlist.
+    /// A `ck.circle.*` literal not on the canonical allowlist.
     UnknownCircleEventKind,
     /// Reserved for future expansion — string-literal reason codes that
     /// look like CKP-0007 codes but are mis-spelled. Currently surfaced
@@ -234,7 +236,7 @@ fn scan_discussion_realm_ref(
     }
 }
 
-// ── Rule 2: `cx.circle.*` event-kind / capability-action allowlist ──────────
+// ── Rule 2: `ck.circle.*` event-kind / capability-action allowlist ──────────
 
 fn scan_circle_dotted_string(
     path: &Path,
@@ -242,9 +244,12 @@ fn scan_circle_dotted_string(
     line: &str,
     out: &mut Vec<CircleFinding>,
 ) {
-    // Find every occurrence of `cx.circle.` and extract the following
-    // dotted-identifier tail until a non-identifier-non-dot char or quote.
-    let needle = "cx.circle.";
+    // Find every occurrence of the canonical `ck.circle.` prefix and extract
+    // the following dotted-identifier tail until a non-identifier-non-dot char
+    // or quote. The legacy `cx.circle.` brand prefix is handled by
+    // `literal_scanner`'s cx-brand rule, so scanning `ck.circle.` here lets us
+    // catch genuinely mis-spelled tails like `ck.circle.bogus`.
+    let needle = "ck.circle.";
     let bytes = line.as_bytes();
     let mut i = 0usize;
     while i + needle.len() <= bytes.len() {
@@ -275,14 +280,14 @@ fn scan_circle_dotted_string(
             continue;
         }
         // Skip when the tail ends with a trailing `.` (likely a sentence
-        // fragment in prose like "the `cx.circle.` family"). Trim trailing
+        // fragment in prose like "the `ck.circle.` family"). Trim trailing
         // dots before checking.
         let tail_trimmed = tail.trim_end_matches('.');
         if tail_trimmed.is_empty() {
             i = j.max(i + 1);
             continue;
         }
-        let full = format!("cx.circle.{tail_trimmed}");
+        let full = format!("ck.circle.{tail_trimmed}");
         let on_event_allowlist = CIRCLE_EVENT_KINDS.contains(&full.as_str());
         let on_capability_allowlist = CIRCLE_CAPABILITY_ACTIONS.contains(&full.as_str());
         if !(on_event_allowlist || on_capability_allowlist) {
@@ -293,7 +298,7 @@ fn scan_circle_dotted_string(
                 rule: CircleRule::UnknownCircleEventKind,
                 matched_literal: full,
                 message: format!(
-                    "Unknown `cx.circle.*` identifier — not in the CKP-0007 \
+                    "Unknown `ck.circle.*` identifier — not in the CKP-0007 \
                      allowlist of {event_n} event kinds or {cap_n} capability \
                      actions. Suppress with a `{CIRCLE_ALLOW_MARKER}` marker \
                      comment when the literal is a known scanner test or \
@@ -474,7 +479,7 @@ mod tests {
 
     #[test]
     fn flags_unknown_circle_event_kind() {
-        let f = scan(r#"const KIND: &str = "cx.circle.bogus.action";"#);
+        let f = scan(r#"const KIND: &str = "ck.circle.bogus.action";"#);
         assert!(
             f.iter()
                 .any(|r| r.rule == CircleRule::UnknownCircleEventKind),
@@ -520,7 +525,7 @@ mod tests {
         assert_eq!(
             CIRCLE_EVENT_KINDS.len(),
             7,
-            "CKP-0007 introduces exactly 7 cx.circle.* event kinds",
+            "CKP-0007 introduces exactly 7 ck.circle.* event kinds",
         );
     }
 
@@ -530,7 +535,7 @@ mod tests {
         assert_eq!(
             CIRCLE_CAPABILITY_ACTIONS.len(),
             6,
-            "CKP-0007 introduces exactly 6 cx.circle.* capability actions",
+            "CKP-0007 introduces exactly 6 ck.circle.* capability actions",
         );
     }
 

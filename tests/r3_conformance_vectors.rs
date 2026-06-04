@@ -4,8 +4,6 @@
 //! `#[ignore]`-gated on R3.1 reducer / signing wiring.
 
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::PathBuf;
 
 use anyhow::{Result, anyhow, bail};
 use cotest::conformance::{
@@ -13,27 +11,13 @@ use cotest::conformance::{
     ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
     ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
-    run_agent_vector_suite, run_cursor_vector_suite, run_handle_claim_rejection_vector_suite,
-    run_list_handles_for_subject_vector_suite, run_media_binding_vector_suite,
-    run_member_identity_vector_suite, run_member_roster_vector_suite,
-    run_mention_rendering_vector_suite, run_object_addressing_vector_suite,
-    run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    load_local_fixture_value, run_agent_vector_suite, run_cursor_vector_suite,
+    run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
+    run_media_binding_vector_suite, run_member_identity_vector_suite,
+    run_member_roster_vector_suite, run_mention_rendering_vector_suite,
+    run_object_addressing_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 use serde_json::Value;
-
-fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(name)
-}
-
-fn load_fixture_value(name: &str) -> Result<Value> {
-    let path = fixture_path(name);
-    let raw =
-        fs::read_to_string(&path).map_err(|e| anyhow!("failed to read {}: {e}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|e| anyhow!("failed to parse {}: {e}", path.display()))
-}
 
 // ─── P0 / VECT-MB-1..9 — media binding vectors ─────────────────────────────
 
@@ -280,7 +264,7 @@ fn test_cot_1_mention_render_fallback_transitions_live() {
 
 #[test]
 fn recovery_policy_fixture_loads_and_has_canonical_shape() {
-    let value = load_fixture_value("recovery-policy.json").expect("recovery-policy.json");
+    let value = load_local_fixture_value("recovery-policy.json").expect("recovery-policy.json");
     assert_eq!(
         value.get("schema_ref").and_then(Value::as_str),
         Some("ck.schema.recovery_policy.v1")
@@ -294,7 +278,7 @@ fn recovery_policy_fixture_loads_and_has_canonical_shape() {
 
 #[test]
 fn recovery_receipt_fixture_loads_and_has_canonical_shape() {
-    let value = load_fixture_value("recovery-receipt.json").expect("recovery-receipt.json");
+    let value = load_local_fixture_value("recovery-receipt.json").expect("recovery-receipt.json");
     assert_eq!(
         value.get("schema_ref").and_then(Value::as_str),
         Some("ck.schema.recovery_receipt.v1")
@@ -308,7 +292,7 @@ fn recovery_receipt_fixture_loads_and_has_canonical_shape() {
 
 #[test]
 fn agent_payloads_fixture_loads_and_has_canonical_shape() {
-    let value = load_fixture_value("agent_payloads.json").expect("agent_payloads.json");
+    let value = load_local_fixture_value("agent_payloads.json").expect("agent_payloads.json");
     let cases = value
         .get("cases")
         .and_then(Value::as_array)
@@ -426,7 +410,7 @@ fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
 
 #[test]
 fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
-    let value = load_fixture_value("recovery-policy.json")?;
+    let value = load_local_fixture_value("recovery-policy.json")?;
     let cases = value
         .get("cases")
         .and_then(Value::as_array)
@@ -475,7 +459,7 @@ fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
     }
     // Witness-revoke-lagging negative path is present in the receipt
     // fixture.
-    let receipt = load_fixture_value("recovery-receipt.json")?;
+    let receipt = load_local_fixture_value("recovery-receipt.json")?;
     let has_lagging = receipt
         .get("cases")
         .and_then(Value::as_array)
