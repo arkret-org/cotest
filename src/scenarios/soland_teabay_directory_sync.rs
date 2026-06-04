@@ -13,7 +13,7 @@
 //!   1. Boot soland (principal server) and teabay (directory) with teabay's discovery ingest
 //!      subscribed to soland's announce stream (push mode per directory describe).
 //!   2. Register alice on soland; alice updates her profile via `POST
-//!      /_cokret/self/account/profile` with new `display_name` and `bio` (the soland endpoint
+//!      /_soland/self/account/profile` with new `display_name` and `bio` (the soland endpoint
 //!      exists today — `soland/src/routing/identity/account.rs::update_profile`).
 //!   3. Soland persists the update and emits the announce event; teabay's ingest worker picks it
 //!      up.
@@ -87,7 +87,7 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
     // Drive the profile update on soland (`alice.post` bearer-auths
     // automatically with the registered dev token).
     let profile_resp = alice
-        .post("/_cokret/self/account/profile")
+        .post("/_soland/self/account/profile")
         .json(&json!({
             "display_name": "Alice Wonderland",
             "bio": "Down the rabbit hole.",

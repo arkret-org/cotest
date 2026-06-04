@@ -31,7 +31,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase B — alice 导出 GDPR 数据
 
 2. alice 进 `/settings/account` → "Export my data"
-3. yougen 调 `POST /_cokret/self/account/export`
+3. yougen 调 `POST /_soland/self/account/export`
 4. soland 异步生成 zip 包(可能 base64 inline 或返回 download URL)
 5. 断言:返回 200 + `export_id` + (可选)`download_url`
 6. alice 下载并解压 → 内含 JSON:`{ account: { did, handle, profile }, spaces: [...], messages: [...], devices: [...], audit_log: [...] }`
@@ -40,7 +40,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase C — alice 触发 erasure
 
 8. alice 进 `/settings/account` → "Erase my account"
-9. 确认对话框 → 提交 `POST /_cokret/self/account/erase`,可能要二次密码确认
+9. 确认对话框 → 提交 `POST /_soland/self/account/erase`,可能要二次密码确认
 10. soland 返回 `state="erased"`，并在响应中带 `ck.schema.erasure_receipt.v1`
 11. soland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
@@ -58,7 +58,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ### Phase E — Audit log entries
 
-16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_cokret/self/audit/events?actor=alice.did`
+16. alice (用 admin / 测试 harness 的特殊 token) 查 `/_soland/self/audit/events?actor=alice.did`
 17. 断言:audit log 含 `ck.audit.exported`、`ck.audit.erasure_initiated`、`ck.audit.erasure_receipt`
 
 ### Phase F — Retention policy

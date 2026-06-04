@@ -92,7 +92,7 @@ test.describe("moderation appeal", () => {
         decision.decision_id,
       );
       const spaceAfterBan = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(reviewerToken) },
       );
       expect(spaceAfterBan.ok()).toBeTruthy();

@@ -256,13 +256,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
 
     expect_json(
         alice
-            .post("/_cokret/self/contacts/request")
+            .post("/_soland/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/_cokret/self/contacts/respond").json(&json!({
+        bob.post("/_soland/self/contacts/respond").json(&json!({
             "requester": alice.actor,
             "action": "accept"
         })),

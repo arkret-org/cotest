@@ -34,10 +34,10 @@
 
 ## Pre-conditions
 
-- alice 已通过 `POST /_cokret/self/account/register` 注册;DID 形如 `did:webvh:<scid>:...`,entry 0 已发布
+- alice 已通过 `POST /_soland/self/account/register` 注册;DID 形如 `did:webvh:<scid>:...`,entry 0 已发布
 - alice 的 DID Document v0 中的 `service` 数组**已包含**一项 `ck.service.tsp` endpoint,`serviceEndpoint` 指向 `http://127.0.0.1:${MOCK_TSP_ENDPOINT_PORT}/tsp`
 - bob_extern 的 `did:web` document 同样包含 `ck.service.tsp` endpoint,指向同一个 mock(mock 通过 `MOCK_TSP_ENDPOINT_VID` 区分入站消息归属哪个 VID)
-- alice 持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
+- alice 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
 - alice browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
 - alice 与 bob_extern **之间没有现成的 TSP relationship**(mock 启动时 relationship table 为空)
 
@@ -61,7 +61,7 @@
 7. 客户端把 bootstrap message POST 到 bob_extern 的 `ck.service.tsp` endpoint(=mock,端口 `MOCK_TSP_ENDPOINT_PORT`)
 8. mock(以 `MOCK_TSP_ENDPOINT_VID === bob_extern` 的身份)接收 → 校验 alice 的 VID(`did:webvh` resolve + signature 验证) → 返回 `relationship_id` + bob_extern 的 pubkey
 9. 断言:alice 侧 `/settings/connections` 出现一行 TSP relationship,字段含 `relationship_id`、`remote_vid = bob_extern.did`、`support_system = "did:webvh / did:web"`、`trust_level = "verified"`
-10. 断言:soland audit log (`GET /_cokret/self/audit/tsp` 或等价 endpoint) 至少有一条 `tsp.relationship.bootstrap` 记录,包含 `remote_vid`、`relationship_id`、`verification_result: "ok"`(spec §8 要求)
+10. 断言:soland audit log (`GET /_soland/self/audit/tsp` 或等价 endpoint) 至少有一条 `tsp.relationship.bootstrap` 记录,包含 `remote_vid`、`relationship_id`、`verification_result: "ok"`(spec §8 要求)
 
 ### Phase C — alice 通过 TSP 发送 Cokret invite operation
 
@@ -105,7 +105,7 @@
 
 ## Edge cases / sub-tests
 
-- **E2.1 TSP endpoint unreachable → fallback 到直接 HTTPS**:测试 harness 把 mock TSP endpoint 端口下掉(`process.kill(MOCK_TSP_ENDPOINT_PID)` 或 `route.block`);alice 再次尝试发 `ck.invite.create`;客户端应当**降级**到 Cokret v1 core 默认的 HTTPS JWE transport(spec 顶部 status 行:v1 core 默认走 HTTPS JWE / MLS DM),soland 通过 alice 的常规 `/_cokret/self/spaces/{id}/invite` 路径接收。断言:invite 仍然送达 bob_extern(或在 soland 端进入 outbound queue 等待 bob_extern 上线),并且 audit log 出现一条 `transport.fallback{from: "tsp", to: "https-jwe", reason: "endpoint_unreachable"}` 记录
+- **E2.1 TSP endpoint unreachable → fallback 到直接 HTTPS**:测试 harness 把 mock TSP endpoint 端口下掉(`process.kill(MOCK_TSP_ENDPOINT_PID)` 或 `route.block`);alice 再次尝试发 `ck.invite.create`;客户端应当**降级**到 Cokret v1 core 默认的 HTTPS JWE transport(spec 顶部 status 行:v1 core 默认走 HTTPS JWE / MLS DM),soland 通过 alice 的常规 `/_soland/self/spaces/{id}/invite` 路径接收。断言:invite 仍然送达 bob_extern(或在 soland 端进入 outbound queue 等待 bob_extern 上线),并且 audit log 出现一条 `transport.fallback{from: "tsp", to: "https-jwe", reason: "endpoint_unreachable"}` 记录
 - **E2.2 VID resolver degraded(no witness)→ TSP relationship 降级**:把 alice 的 webvh witness service 下掉(沿用 webvh-rotation 的 `degraded_no_witness` 机制),让 bob_extern 解析 alice VID 时进入 degraded 状态;bob_extern 仍然能用 alice 的 update key 验证 signature,但 trust level 下降。断言:Phase B 第 9 步的 `trust_level` 字段从 `"verified"` 变成 `"degraded"`,UI 显示 ⚠ 标记;Phase D 第 18 步的 ACK 中 `verification.tsp_authenticity = "ok"`,但 `verification.vid_trust = "degraded_no_witness"`(spec §8:记录 support system 与 trust assessment result)
 - **E2.3 metadata privacy (nested message)**:同 Phase C 的 nested mode,但显式引入一个 routing intermediary(mock 增加一个 `relay` 角色);intermediary 收到外层 envelope 后,只能看见 pairwise VID 与 `payload_digest`,看不到 `vid_local`(真实 alice DID)、看不到内层 `operation` 字段、也看不到 `payload` 明文。断言:`GET mock://relay-view?relationship_id=...` 返回的相关字段都被打码或缺失;唯有 bob_extern 这一终点能解出内层(spec §5:nested 隐藏内层 VID;intermediary 不应被视为可信授权方)
 

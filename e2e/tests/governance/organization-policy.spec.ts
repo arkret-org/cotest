@@ -53,7 +53,7 @@ test.describe("organization policy inheritance", () => {
       expect(policyBody.applies_to_spaces).toContain(spaceId);
 
       const effective = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/effective-policy`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       expect(effective.ok()).toBeTruthy();
@@ -92,7 +92,7 @@ test.describe("organization policy inheritance", () => {
       expect(JSON.stringify(await deniedJoin.json())).toContain("organization_policy_denied");
 
       const noApproval = await request.post(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/moderation-policy`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -104,7 +104,7 @@ test.describe("organization policy inheritance", () => {
       expect(wireErrCode(await noApproval.json())).toBe("requires_organization_approval");
 
       const withApproval = await request.post(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/moderation-policy`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -121,7 +121,7 @@ test.describe("organization policy inheritance", () => {
 
       await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
       const space = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
         { headers: authHeaders(aliceToken) },
       );
       expect(space.ok()).toBeTruthy();
@@ -164,7 +164,7 @@ test.describe("organization policy inheritance", () => {
 
       for (const spaceId of [first, second]) {
         const effective = await request.get(
-          `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/effective-policy`,
+          `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/effective-policy`,
           { headers: authHeaders(aliceToken) },
         );
         expect(effective.ok()).toBeTruthy();

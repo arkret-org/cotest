@@ -32,13 +32,13 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const exportProbe = await request.post(`${solandBaseUrl()}/_cokret/self/account/export`, {
+    const exportProbe = await request.post(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
     expect(exportProbe.status()).toBeLessThan(500);
 
-    const eraseProbe = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
+    const eraseProbe = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
@@ -58,7 +58,7 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.post(`${solandBaseUrl()}/_cokret/self/account/export`, {
+    const exportResp = await request.post(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
@@ -85,7 +85,7 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const erase = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
+    const erase = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
@@ -96,7 +96,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(eraseBody.erasure_receipt?.outcome).toBe("completed");
 
     // Subsequent /account/me with the same bearer returns 401 account_erased.
-    const me = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const me = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${aliceToken}` },
     });
     expect(me.status()).toBe(401);
@@ -116,11 +116,11 @@ test.describe("GDPR / audit / retention", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // bob and alice connect so bob's directory search can see alice pre-erase.
-    await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
+    await request.post(`${solandBaseUrl()}/_soland/self/contacts/request`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { target: alice.did },
     });
-    await request.post(`${solandBaseUrl()}/_cokret/self/contacts/respond`, {
+    await request.post(`${solandBaseUrl()}/_soland/self/contacts/respond`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { requester: bob.did, action: "accept" },
     });
@@ -137,7 +137,7 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(true);
 
     // alice erases.
-    const erase = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
+    const erase = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
@@ -165,12 +165,12 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.post(`${solandBaseUrl()}/_cokret/self/account/export`, {
+    const exportResp = await request.post(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
     expect(exportResp.status()).toBe(200);
-    const eraseResp = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
+    const eraseResp = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: {},
     });
@@ -358,7 +358,7 @@ test.describe("GDPR / audit / retention", () => {
       expect(beforeJson).toContain(alice.did);
       expect(beforeJson).toContain(aliceBody);
 
-      const erase = await request.post(`${solandBaseUrl("alpha")}/_cokret/self/account/erase`, {
+      const erase = await request.post(`${solandBaseUrl("alpha")}/_soland/self/account/erase`, {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: {},
       });

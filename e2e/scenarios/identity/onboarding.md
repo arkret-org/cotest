@@ -60,7 +60,7 @@
    - DID 形如 `did:webvh:<scid>:...`
    - 当前设备列表只有这一台(显示 `ck:device:...` + cross-signing fingerprint)
    - Principal control space ID 已记录(可能不在 UI,但 yougen 客户端状态有)
-7. 测试用 alice 的 session_token 调 `GET /_cokret/self/account/me`,断言返回 `did`、`handle`、device 信息一致
+7. 测试用 alice 的 session_token 调 `GET /_soland/self/account/me`,断言返回 `did`、`handle`、device 信息一致
 
 ### Phase C — alice 的 DID Document 可被外部解析
 
@@ -92,7 +92,7 @@
 - 三个 actor 的 DID 都形如 `did:webvh:`,SCID 各异
 - 每个 DID 都有可解析的 `did.jsonl` history chain
 - 三个 actor 的 service endpoint 都指向 soland alpha
-- 每个 actor 都有有效 session token,能调 `/_cokret/self/account/me`
+- 每个 actor 都有有效 session token,能调 `/_soland/self/account/me`
 - 每个 actor 的 principal control space 已创建,device 列表只有 1 台
 - 三个 actor 都已发布 cross-signing 三对密钥
 

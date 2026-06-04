@@ -62,7 +62,7 @@
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
 13. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
 14. 提交到 soland;soland 校验 recovery policy → 接受
-15. 断言:device-2 上 `GET /_cokret/self/account/me` 返回 alice.did,设备列表新增 device-2
+15. 断言:device-2 上 `GET /_soland/self/account/me` 返回 alice.did,设备列表新增 device-2
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 

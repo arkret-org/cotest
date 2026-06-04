@@ -64,7 +64,7 @@ test.describe("core object invariants", () => {
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
         const spaceRes = await request.get(
-          `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
+          `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
           { headers: aliceAuth },
         );
         expect(spaceRes.status()).toBe(200);
@@ -231,7 +231,7 @@ test.describe("core object invariants", () => {
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
       // Create parent space + a child Flow as a live dependent.
-      const parentRes = await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
+      const parentRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants parent ${stamp}` },
       });
@@ -286,7 +286,7 @@ test.describe("core object invariants", () => {
       const aliceToken = await issueDevSession(request, alice);
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
-      const spaceRes = await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
+      const spaceRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants D ${stamp}` },
       });
@@ -364,7 +364,7 @@ test.describe("core object invariants", () => {
       // Step 19 — cross-Realm contains MUST fail (spec §4.4).
       const otherSpace = (
         await (
-          await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
+          await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
             headers: aliceAuth,
             data: { title: `other-realm ${stamp}` },
           })
@@ -396,7 +396,7 @@ test.describe("core object invariants", () => {
   );
 
   // ── Phase E — View projection fallback.
-  // soland gap: /_cokret/self/spaces/{id}/views/projection endpoint for the
+  // soland gap: /_soland/self/spaces/{id}/views/projection endpoint for the
   // derived board response family does not exist. Once soland exposes it
   // (returning a CollectionProjectionResponse even when no user-defined
   // View has been registered), drop the fixme.
@@ -412,7 +412,7 @@ test.describe("core object invariants", () => {
       const aliceToken = await issueDevSession(request, alice);
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
-      const spaceRes = await request.post(`${solandBaseUrl()}/_cokret/self/spaces`, {
+      const spaceRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants E ${stamp}` },
       });
@@ -423,7 +423,7 @@ test.describe("core object invariants", () => {
       // derived (kind=collection, renderer=board) from query → contains →
       // flow, not 404.
       const proj = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
         { headers: aliceAuth },
       );
       expect(proj.status()).toBe(200);
@@ -437,7 +437,7 @@ test.describe("core object invariants", () => {
       // Step 22 — unknown renderer MUST fail-closed (spec §2.2 — only the
       // 5 canonical View.kind / known renderers are valid response families).
       const bogus = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
         { headers: aliceAuth },
       );
       expect(bogus.status()).toBeGreaterThanOrEqual(400);

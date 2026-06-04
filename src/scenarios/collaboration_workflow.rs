@@ -22,7 +22,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/_cokret/self/account/register"))
+            .post(server.url("/_soland/self/account/register"))
             .json(&json!({
                 "did": BOB_DID,
                 "handle": BOB_HANDLE,
@@ -50,7 +50,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let me = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/account/me"))
+            .get(server.url("/_soland/self/account/me"))
             .bearer_auth(&bob.token),
         StatusCode::OK,
     )
@@ -59,7 +59,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let requested = expect_json(
         alice
-            .post("/_cokret/self/contacts/request")
+            .post("/_soland/self/contacts/request")
             .json(&json!({"target": BOB_DID})),
         StatusCode::CREATED,
     )
@@ -67,7 +67,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert_eq!(requested["status"], "pending");
 
     let accepted = expect_json(
-        bob.post("/_cokret/self/contacts/respond")
+        bob.post("/_soland/self/contacts/respond")
             .json(&json!({"requester": ALICE_DID, "action": "accept"})),
         StatusCode::OK,
     )
@@ -91,7 +91,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let space_id = create_collaboration_realm(&alice).await?;
     let created_space = expect_json(
-        alice.get(&format!("/_cokret/self/spaces/{space_id}")),
+        alice.get(&format!("/_soland/self/spaces/{space_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -119,7 +119,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_join["status"], "accepted");
     let with_bob = expect_json(
-        alice.get(&format!("/_cokret/self/spaces/{space_id}")),
+        alice.get(&format!("/_soland/self/spaces/{space_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -212,7 +212,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_ban["status"], "accepted");
     let removed = expect_json(
-        alice.get(&format!("/_cokret/self/spaces/{space_id}")),
+        alice.get(&format!("/_soland/self/spaces/{space_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -249,7 +249,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let logout = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/auth/logout"))
+            .post(server.url("/_soland/gate/auth/logout"))
             .bearer_auth(&bob.token),
         StatusCode::OK,
     )
@@ -259,7 +259,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     expect_status(
         server
             .http()
-            .get(server.url("/_cokret/self/account/me"))
+            .get(server.url("/_soland/self/account/me"))
             .bearer_auth(&bob.token),
         StatusCode::UNAUTHORIZED,
     )

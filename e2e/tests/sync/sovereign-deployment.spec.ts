@@ -28,7 +28,7 @@ test.describe("sovereign deployment", () => {
     expect(enclaveInfo.profile).toBe("enclave");
     expect(enclaveInfo.upstream_main).toBe(solandBaseUrl("alpha"));
 
-    const rogue = await request.post(`${solandBaseUrl("alpha")}/_cokret/self/account/register`, {
+    const rogue = await request.post(`${solandBaseUrl("alpha")}/_soland/self/account/register`, {
       data: {
         did: `did:web:rogue-${fixture.stamp}.evil`,
         handle: `@rogue${fixture.short}`,
@@ -69,7 +69,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/_cokret/self/space/${encodeURIComponent(fixture.internalSpaceId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
+      `${solandBaseUrl("alpha")}/_soland/self/space/${encodeURIComponent(fixture.internalSpaceId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(direct.status()).toBe(403);
     await expectErrorCode(direct, "external_user_no_main_access");
@@ -86,7 +86,7 @@ test.describe("sovereign deployment", () => {
       data: {
         actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
-        path: `/_cokret/self/space/${fixture.internalSpaceId}`,
+        path: `/_soland/self/space/${fixture.internalSpaceId}`,
       },
     });
     expect(proxy.status()).toBe(403);
@@ -150,7 +150,7 @@ test.describe("sovereign deployment", () => {
   }) => {
     const fixture = await setupSovereignFixture(request, "trust");
 
-    const mainReject = await request.post(`${solandBaseUrl("alpha")}/_cokret/self/account/register`, {
+    const mainReject = await request.post(`${solandBaseUrl("alpha")}/_soland/self/account/register`, {
       data: {
         did: fixture.bobDid,
         handle: `@direct${fixture.short}`,
@@ -166,7 +166,7 @@ test.describe("sovereign deployment", () => {
     expect(accepted.session_metadata.actor).toBe(fixture.bobDid);
 
     const enclaveReject = await request.post(
-      `${solandBaseUrl("beta")}/_cokret/self/account/accept-external-invite`,
+      `${solandBaseUrl("beta")}/_soland/self/account/accept-external-invite`,
       {
         data: {
           invite_token: `ck:external_invite:${fixture.short}-rogue`,
@@ -223,7 +223,7 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
     invitee: bobDid,
     inviter: aliceDid,
   });
-  const acceptBody = await postJson(request, "beta", "/_cokret/self/account/accept-external-invite", {
+  const acceptBody = await postJson(request, "beta", "/_soland/self/account/accept-external-invite", {
     invite_token: invite.invite_token,
     actor_did: bobDid,
     target_realm: invite.target_realm,

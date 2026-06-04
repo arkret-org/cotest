@@ -39,7 +39,7 @@
 ## Pre-conditions
 
 - 两个 soland 实例 `/health` 返回 200(通过 `hasDualSoland()` gate)
-- alice 在 soland_a 上 `POST /_cokret/self/account/register` + `POST /_cokret/gate/auth/dev-login` 完成
+- alice 在 soland_a 上 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 完成
 - bob 在 soland_b 上完成同样的注册 + dev session
 - 两侧 DID 文档暴露 `service` 数组,其中包含 `ck.profile.principal_server.v1` 条目和 `supported_bindings`(至少 `http_json`)
 - alice 已经在 soland_a 上 createSpace,该 space 的 `service_binding_ref` 包含 soland_b 为允许的 federation peer
@@ -69,7 +69,7 @@
    - 验证 `Destination-Service-DID` 是自身 DID
    - 验证 nonce / `created` ts 在窗口内(防 replay)
 4. 断言:`POST /_cokret/peer/federation/push-operations` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
-5. 断言:bob 通过 `GET /_cokret/self/notifications` 在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
+5. 断言:bob 通过 `GET /_soland/self/notifications` 在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
 ### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
 
@@ -110,7 +110,7 @@
 ## Observable assertions (合并清单)
 
 - Phase A:POST `/_cokret/peer/federation/push-operations` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
-- Phase A:bob `GET /_cokret/self/notifications` 看到 invite
+- Phase A:bob `GET /_soland/self/notifications` 看到 invite
 - Phase B:`GET /_cokret/describe` 含 `supported_bindings[].kind=websocket_frame`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ck.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息

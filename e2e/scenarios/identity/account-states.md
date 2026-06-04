@@ -32,13 +32,13 @@
 ### Phase A — Active baseline
 
 1. alice 完成 onboarding(假设 identity/onboarding 已通过),持有 access token + refresh token
-2. 断言:`GET /_cokret/self/account/me` 返回 `state: "active"`
+2. 断言:`GET /_soland/self/account/me` 返回 `state: "active"`
 
 ### Phase B — Soft logout
 
 3. alice yougen 点 "Log out"
 4. 客户端:revoke access token(coauth)、清 localStorage 的 session_token、保留 refresh_token
-5. 断言:`/_cokret/self/account/me` with old access token → 401
+5. 断言:`/_soland/self/account/me` with old access token → 401
 6. 断言:account state 仍 `active`(soft_logged_out 是客户端语义;spec 可能也建模为 server state,要查)
 7. alice 用 refresh_token 走 `/_cokret/gate/auth/refresh` → 拿新 access token,回到正常
 
@@ -46,7 +46,7 @@
 
 8. 模拟:测试 harness 调 admin endpoint `POST /_soland/admin/accounts/<alice.did>/lock { reason: "suspicious_login" }`
 9. coauth revoke alice 的所有 access token;refresh_token SHOULD revoke
-10. 断言:`/_cokret/self/account/me` 返 401 / 403
+10. 断言:`/_soland/self/account/me` 返 401 / 403
 11. 断言:account state = `locked`(若 spec 暴露)
 12. alice 重新 login 触发 lock check → 客户端 UI 显示 "Account locked, contact support"
 13. alice 通过 recovery 流程或 admin 解锁后 → state 回 `active`
@@ -62,9 +62,9 @@
 ### Phase E — Deactivate(用户或 admin)
 
 19. alice 进 `/settings/account` → "Deactivate my account"
-20. 提交 `POST /_cokret/self/account/deactivate`(可能需要密码)
+20. 提交 `POST /_soland/self/account/deactivate`(可能需要密码)
 21. coauth 把所有 token revoke;所有 device 标 `revoked`
-22. 断言:`/_cokret/self/account/me` 永久 401
+22. 断言:`/_soland/self/account/me` 永久 401
 23. 断言:account state = `deactivated`
 24. alice 的 messages 在 spaces 中仍然可见(deactivated ≠ erasure;PII 保留,active session 没了)
 
@@ -78,7 +78,7 @@
 
 ## Implementation notes
 
-- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/_cokret/self/account/deactivate`、`/account/me.state` 与 `ck.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
+- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/_soland/self/account/deactivate`、`/account/me.state` 与 `ck.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
 - **yougen 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
 
 ## 总耗时预估

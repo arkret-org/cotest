@@ -163,7 +163,7 @@ test.describe("moderation and ban", () => {
     expect(banPush.accepted).toContain(banOperation.operation_id);
 
     const spaceAfterBan = await request.get(
-      `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(spaceAfterBan.ok()).toBeTruthy();
@@ -200,7 +200,7 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(afterRedactionCarol)).not.toContain(abusive);
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/export`,
+      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
@@ -254,7 +254,7 @@ test.describe("moderation and ban", () => {
     });
     expect(second.accepted).toContain(secondBan.operation_id);
 
-    const space = await request.get(`${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`, {
+    const space = await request.get(`${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`, {
       headers: authHeaders(aliceToken),
     });
     expect(space.ok()).toBeTruthy();
@@ -293,7 +293,7 @@ test.describe("moderation and ban", () => {
       });
 
       const space = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
         { headers: authHeaders(aliceToken) },
       );
       expect(space.ok()).toBeTruthy();

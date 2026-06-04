@@ -48,7 +48,7 @@
    - 写 `ck.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
    - 写 `ck.space.create` Move,关联 genesis
 3. 断言:`/space/${spaceId}/admin/security` 显示 MLS 管理控件
-4. 断言:`GET /_cokret/self/spaces/${spaceId}` 返回 `encryption_profile = "mls_rfc9420"`
+4. 断言:`GET /_soland/self/spaces/${spaceId}` 返回 `encryption_profile = "mls_rfc9420"`
 
 ### Phase B — bob 加入(Welcome)
 
@@ -68,7 +68,7 @@
 11. soland Sync Service:**只**用 plaintext metadata 路由,不解 `encrypted_payload`(关键 invariant)
 12. bob 拉 sync → 用 epoch 1 application key 解密 → timeline 渲染 `"alice greet"`
 13. 断言:bob timeline 包含 `"alice greet"`
-14. 测试 harness 直接 `GET /_cokret/self/spaces/${spaceId}/events?include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
+14. 测试 harness 直接 `GET /_soland/self/spaces/${spaceId}/events?include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
 15. bob 反向发 `M_b`,alice 同步可见,断言对称
 
 ### Phase D — carol 加入触发 epoch advance
@@ -93,7 +93,7 @@
 
 ### Phase F — Non-member ciphertext-only
 
-29. mallory(非成员)调 `GET /_cokret/self/spaces/${spaceId}/events` → soland 应拒(403 / not a member)
+29. mallory(非成员)调 `GET /_soland/self/spaces/${spaceId}/events` → soland 应拒(403 / not a member)
 30. 即使 mallory 拿到 raw event(假设泄漏),没有 epoch key → 无法解密
 
 ## Observable assertions(合并)

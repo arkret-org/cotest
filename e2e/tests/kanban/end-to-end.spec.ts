@@ -353,7 +353,7 @@ test.describe("kanban end-to-end", () => {
         .poll(
           async () => {
             const cellResp = await request.get(
-              `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(boardId)}/cells/ck.component.child_order.v1`,
+              `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(boardId)}/cells/ck.component.child_order.v1`,
               { headers: { authorization: `Bearer ${aliceToken}` } },
             );
             if (cellResp.status() !== 200) {

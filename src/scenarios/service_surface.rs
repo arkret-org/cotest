@@ -94,7 +94,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     let index = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/index/describe")),
+            .get(server.url("/_soland/self/index/describe")),
         StatusCode::OK,
     )
     .await?;

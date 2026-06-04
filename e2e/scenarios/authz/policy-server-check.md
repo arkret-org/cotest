@@ -34,8 +34,8 @@
 
 ## Pre-conditions
 
-- alice 和 bob 都通过 `POST /_cokret/self/account/register` 注册过(与现有 `ensureRegistered` 行为一致)
-- alice 和 bob 都持有有效 dev session token(`POST /_cokret/gate/auth/dev-login`)
+- alice 和 bob 都通过 `POST /_soland/self/account/register` 注册过(与现有 `ensureRegistered` 行为一致)
+- alice 和 bob 都持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
 - alice 拥有 realm-admin capability(由 cotest harness boot 时种入)
 - `process.env.MOCK_POLICY_SERVER_PORT` 已设置,且 `GET http://127.0.0.1:${MOCK_POLICY_SERVER_PORT}/inspect` 返回 200
 
@@ -95,7 +95,7 @@
 17. **alice** 再次邀请(同 bob 或一个新 user 都行)
 18. soland 收到 deny + obligation,**先**执行 obligation(写一条 `kind = policy.deny` 的 audit log,target_action = `ck.invite.create`),**再**返回 `412`
 19. 断言:
-    - `GET /_cokret/self/audit/events?actor=${alice.did}&action=policy.deny` 返回至少一条 entry
+    - `GET /_soland/self/audit/events?actor=${alice.did}&action=policy.deny` 返回至少一条 entry
     - 该 entry 的 `target.category = "policy_block"`、`target.severity = "info"`、`target.upstream_reason = "external_policy_blocks_user"`
 20. `${MOCK_POLICY_SERVER_PORT}/inspect.checks` 中本次 request 的 `obligations_executed = true`
 

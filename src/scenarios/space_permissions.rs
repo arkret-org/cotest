@@ -18,7 +18,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .post(server.url("/_cokret/self/spaces"))
+            .post(server.url("/_soland/self/spaces"))
             .json(&json!({"title": "No Auth"})),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
@@ -94,7 +94,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     expect_api_error(
         server
             .http()
-            .delete(server.url(&format!("/_cokret/self/spaces/{realm_id}")))
+            .delete(server.url(&format!("/_soland/self/spaces/{realm_id}")))
             .bearer_auth(&alice),
         StatusCode::METHOD_NOT_ALLOWED,
         "method_not_allowed",

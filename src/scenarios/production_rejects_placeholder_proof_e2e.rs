@@ -31,7 +31,7 @@
 //! 1. The proof check fires (`dev_proof_in_production`) — preferred, since it directly proves the
 //!    T1.3 soland guard is wired.
 //! 2. The auth wall fires first (`unauthenticated`) — also acceptable. Production-mode soland does
-//!    not expose `POST /_cokret/gate/auth/dev-login`, so without a real OAuth bearer the request
+//!    not expose `POST /_soland/gate/auth/dev-login`, so without a real OAuth bearer the request
 //!    never makes it to the proof check. That itself is the production safety posture working as
 //!    intended.
 //!
@@ -184,16 +184,15 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
         );
     }
 
-    // Belt-and-braces positive control: production soland MUST NOT
-    // expose `POST /_cokret/gate/auth/dev-login` (a 404 here doubles as a
-    // sanity check that we really did boot in production mode).
-    let dev_login_url = proc.url("/_cokret/gate/auth/dev-login");
+    // Belt-and-braces positive control: production soland MUST NOT expose
+    // the deployment-local dev-login compatibility route.
+    let dev_login_url = proc.url("/_soland/gate/auth/dev-login");
     let dev_login_resp = client
         .post(&dev_login_url)
         .json(&json!({"actor": actor, "device_id": "cotest-dev"}))
         .send()
         .await
-        .context("POST /_cokret/gate/auth/dev-login probe on production soland")?;
+        .context("POST /_soland/gate/auth/dev-login probe on production soland")?;
     let dev_login_status = dev_login_resp.status();
     // dev-login in production returns `AppError::not_found` → 404.
     // Anything other than 4xx here means we are not in production mode.

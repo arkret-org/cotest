@@ -69,60 +69,70 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
             .is_empty()
     );
 
-    let initial_rules = expect_json(bob.get("/_cokret/edge/push/rules"), StatusCode::OK).await?;
-    assert!(initial_rules["rules"].as_array().unwrap().is_empty());
+    let initial_sync = bob.sync().await?;
+    assert!(
+        account_data_entry(&initial_sync, "ck.push_rules").is_none(),
+        "initial account subscribe must not include ck.push_rules: {initial_sync}"
+    );
 
-    let default_rule = expect_json(
-        bob.post("/_cokret/edge/push/rules").json(&json!({
-            "rule_id": "global.default"
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(default_rule["rule"]["actions"][0], "notify");
+    let rules_written = bob
+        .submit_event(
+            &space_id,
+            "ck.account_data.set",
+            json!({
+                "key": "ck.push_rules",
+                "owner": bob.actor.as_str(),
+                "body": {
+                    "rules": [
+                        {"rule_id": "global.default"},
+                        {
+                            "rule_id": "global.mute.messages",
+                            "actions": ["dont_notify"],
+                            "conditions": [{"field": "notification.type", "equals": "message"}]
+                        }
+                    ]
+                },
+                "updated_at": Utc::now()
+            }),
+        )
+        .await?;
+    assert_eq!(rules_written["status"], "accepted");
 
-    let mute_rule = expect_json(
-        bob.post("/_cokret/edge/push/rules").json(&json!({
-            "rule_id": "global.mute.messages",
-            "actions": ["dont_notify"],
-            "conditions": [{"field": "notification.type", "equals": "message"}]
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(mute_rule["rule"]["actions"][0], "dont_notify");
+    let listed_sync = bob.sync().await?;
+    let listed_rules =
+        account_data_entry(&listed_sync, "ck.push_rules").expect("ck.push_rules account_data row");
+    let rules = listed_rules["content"]["rules"].as_array().unwrap();
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0]["rule_id"], "global.default");
+    assert_eq!(rules[1]["actions"][0], "dont_notify");
 
-    let listed_rules = expect_json(bob.get("/_cokret/edge/push/rules"), StatusCode::OK).await?;
-    assert_eq!(listed_rules["rules"].as_array().unwrap().len(), 2);
+    let deleted_rules = bob
+        .submit_event(
+            &space_id,
+            "ck.account_data.set",
+            json!({
+                "key": "ck.push_rules",
+                "owner": bob.actor.as_str(),
+                "tombstone": true,
+                "updated_at": Utc::now()
+            }),
+        )
+        .await?;
+    assert_eq!(deleted_rules["status"], "accepted");
 
-    expect_api_error(
-        bob.post("/_cokret/edge/push/rules").json(&json!({
-            "rule_id": "global.invalid",
-            "actions": ["explode"]
-        })),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-
-    let deleted_mute = expect_json(
-        bob.delete("/_cokret/edge/push/rules/global.mute.messages"),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(deleted_mute["ok"], true);
-
-    let deleted_default = expect_json(
-        bob.delete("/_cokret/edge/push/rules/global.default"),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(deleted_default["ok"], true);
-
-    let final_rules = expect_json(bob.get("/_cokret/edge/push/rules"), StatusCode::OK).await?;
-    assert!(final_rules["rules"].as_array().unwrap().is_empty());
+    let final_sync = bob.sync().await?;
+    assert!(
+        account_data_entry(&final_sync, "ck.push_rules").is_none(),
+        "tombstoned ck.push_rules must not appear in account subscribe: {final_sync}"
+    );
 
     Ok(())
+}
+
+fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value> {
+    sync["account_data"]["events"]
+        .as_array()
+        .and_then(|events| events.iter().find(|event| event["data_type"] == data_type))
 }
 
 fn typing_envelope(actor_id: &str, realm_id: &str, typing: bool) -> Value {

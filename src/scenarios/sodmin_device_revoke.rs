@@ -9,7 +9,7 @@
 //!   1. Boot soland + coauth + sodmin (admin UI) in the same docker network. Register alice on
 //!      coauth with device dev_A; alice logs in via soland's dev-login on dev_A and obtains an
 //!      access token.
-//!   2. Smoke: GET /_cokret/self/account/me on soland with alice's token → 200. GET coauth
+//!   2. Smoke: GET /_soland/self/account/me on soland with alice's token → 200. GET coauth
 //!      `/api/admin/v1/accounts/{alice}/devices` lists dev_A with `is_revoked=false`.
 //!   3. Open sodmin (Dioxus admin UI) in playwright; sign in as admin; navigate to alice's account
 //!      → devices panel.
@@ -17,7 +17,7 @@
 //!   5. Assert coauth state via API (no UI scraping):
 //!        - GET /api/admin/v1/accounts/{alice}/devices → dev_A `is_revoked=true` with a
 //!          `revoked_at` timestamp.
-//!   6. Assert cascade to soland session: GET /_cokret/self/account/me on soland with alice's old
+//!   6. Assert cascade to soland session: GET /_soland/self/account/me on soland with alice's old
 //!      token → 401 `unauthenticated` (soland MUST observe the device revocation and reject the
 //!      session).
 //!   7. (Optional) Re-login on dev_A → still 401 / device revoked (depending on whether
@@ -62,7 +62,7 @@ pub async fn sodmin_device_revoke_cascade_run() -> Result<()> {
     //
     //   // Step 2: smoke
     //   expect_json(stack.soland.http()
-    //                  .get(stack.soland.url("/_cokret/self/account/me"))
+    //                  .get(stack.soland.url("/_soland/self/account/me"))
     //                  .bearer_auth(&alice_token),
     //               StatusCode::OK).await?;
     //   let devices = expect_json(stack.coauth_http()
@@ -96,7 +96,7 @@ pub async fn sodmin_device_revoke_cascade_run() -> Result<()> {
     //
     //   // Step 6: cascade — alice's old soland session is now invalid
     //   expect_status(
-    //       stack.soland.http().get(stack.soland.url("/_cokret/self/account/me"))
+    //       stack.soland.http().get(stack.soland.url("/_soland/self/account/me"))
     //                   .bearer_auth(&alice_token),
     //       StatusCode::UNAUTHORIZED,
     //   ).await?;

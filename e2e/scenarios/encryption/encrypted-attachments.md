@@ -91,7 +91,7 @@
 
 24. 重新建一个 audit-enabled space `S_audit`(`audit_disclosure_policy` 含 audit-agent 的 DID)
 25. alice 在 `S_audit` 发加密附件 — 同 Phase A
-26. audit-agent 拉 `GET /_cokret/self/audit/events?space_id=<S_audit>` → 应当看到 `ck.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
+26. audit-agent 拉 `GET /_soland/self/audit/events?space_id=<S_audit>` → 应当看到 `ck.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
 27. audit-agent **不能** 直接拿到 plaintext attachment;若要审,需要触发 `ck.audit.accessed`(spec §4),记录到 audit trail
 
 ## Observable assertions(合并)

@@ -43,7 +43,7 @@
 
 - soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
 - harness 能 ESM resolve `cokret-spec/spec/v1/artifacts/{registry,profiles}/*.json`(相对 `tests/models/*.spec.ts` 向上 4 级到 repo root)
-- alice 通过 `POST /_cokret/self/account/register` + `POST /_cokret/gate/auth/dev-login` 拿到 bearer token
+- alice 通过 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 拿到 bearer token
 - alice 已创建一个 test Realm `R`,记录 `realmId`,作为 Morph 容器
 
 ## Steps
@@ -79,7 +79,7 @@
 8. 断言:
    - HTTP 2xx,Morph 当前 `schema_refs[]` = new set
    - 后续 `GET /_cokret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
-   - audit log(`GET /_cokret/self/audit/recent` 或等价)含一条 `schema_evolution` entry,记录 issuer + old/new schema_refs + authorization_ref
+   - audit log(`GET /_soland/self/audit/recent` 或等价)含一条 `schema_evolution` entry,记录 issuer + old/new schema_refs + authorization_ref
 9. **alice** 再发一条 `ck.morph.schema_migrate`,`compatibility_class = "additive"`:
    - to_schema_refs 在 v2 的 optional 扩展位上再叠一层
    - 不需要 profile opt-in,reducer MUST 接受(spec §4.1 S3 additive 段)

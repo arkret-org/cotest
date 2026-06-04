@@ -2,14 +2,13 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 cokret 时的完整生命周期:applet 提交 signed manifest 注册 → soland 验证 manifest + 颁发 `bot_actor_did` → bot 加入 space → applet 接到外部 webhook → 为外部用户生成 `ghost_actor_did` → 以 ghost 身份在 portal realm 写消息 → space 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet 权限后,后续 ghost 消息被拒。
+验证一个外部集成服务以 **applet** 形态接入 cokret 时的完整生命周期:applet registry 提交 controller-signed `ck.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ck.applet.registration`、颁发 `bot_actor_did` 与 capability grant → applet transaction 为外部用户生成 `ghost_actor_did` 并写 portal 消息 → space 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet install 后,后续 transaction 被拒。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §3 — Applet manifest 结构(`manifest_id`、`namespace`、`capabilities`、`signing_key`)
-- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §4 — 注册流程与 `bot_actor_did` 颁发
+- `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §3–§4b — Applet Package、install preview/commit/revoke 与 `bot_actor_did` 颁发
 - `cokret-spec/spec/v1/zh/extensions/applet-integration.md` §5 — Ghost actor 的 accountability 模型(`actor_id = ghost_actor_did`、DID Document 的 `accountability` 指向 bot + registry)
 - `cokret-spec/spec/v1/zh/extensions/applet-schema.md` — Manifest JSON schema、portal realm 路由约定
 
@@ -33,27 +32,27 @@
 
 ## Pre-conditions
 
-- alice 通过 `POST /_cokret/self/account/register` 注册过(`ensureRegistered`)
-- alice 持有有效 dev session token(`POST /_cokret/gate/auth/dev-login`)
+- alice 通过 `POST /_soland/self/account/register` 注册过(`ensureRegistered`)
+- alice 持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
 - alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_token
 - `process.env.COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 存在;mock-applet-registry 已经 ready(健康检查 `GET /healthz` 返回 200)
 - mock-applet-registry 内置 `applet_service` 的签名密钥;测试只需要调它的 HTTP API,不直接持有密钥
 
 ## Steps
 
-### Phase A — applet 注册 + bot 颁发
+### Phase A — applet package install + bot 颁发
 
-1. **applet_service** (通过 mock-applet-registry) 构造 signed manifest:
-   - `manifest_id = "applet:bridge:demo-${stamp}"`
+1. **applet_service** (通过 mock-applet-registry) 构造 signed applet package:
+   - `applet_id = "applet:bridge:demo-${stamp}"`
    - `namespace = "bridge.demo"`
    - `display_name = "Demo Bridge Applet"`
-   - `capabilities = ["realm:portal", "message:write", "actor:provision-ghost"]`
-   - `signing_key` 由 mock 内置
-2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-manifest` 返回 `{ manifest, signature, signing_did }`
-3. 测试以 alice 的 admin token 调 soland `POST /_cokret/edge/applet/register`,body = `{ manifest, signature }`
-   - 断言:`status = 201`,返回 `{ applet_id, bot_actor_did, portal_realm_id }`
-   - 记录 `applet_id`、`bot_actor_did`、`portal_realm_id`
-4. **断言**:`bot_actor_did` 形如 `did:web:bot-bridge-demo-...`;`portal_realm_id` 形如 `ck:realm:portal:...`
+   - `requested_scopes = ["ck.message.create", "ck.applet.ghost.provision"]`
+   - `proof` 由 mock 内置 controller key 生成
+2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
+3. 测试以 alice 的 admin token 调 soland `POST /_cokret/self/applets/install/preview`,再用返回的 `plan_digest` 调 `POST /_cokret/self/applets/install`
+   - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
+   - 记录 `applet_id`、`bot_actor_id`、`registration_epoch`
+4. **断言**:`bot_actor_id` 形如 `did:web:bot-bridge-demo-...`;projection events 中出现 `ck.applet.registration`
 
 ### Phase B — bot 加入 space
 
@@ -67,7 +66,7 @@
 7. **alice** 在 `/space/${spaceId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_did`
    - 断言:`space-admin-panel` 状态文本含 `invited ${bot_actor_did}`
 8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ space_id: spaceId }`
-   - mock 内部会用 bot 的 session token 调 soland `POST /_cokret/self/spaces/${spaceId}/invite/accept`
+   - mock 内部会用 bot 的 session token 调 soland `POST /_soland/self/spaces/${spaceId}/invite/accept`
    - 断言:返回 `{ status: "joined" }`
 9. **alice** 同步 `/space/${spaceId}/admin/members`,断言 members 列表包含 `bot_actor_did`
 
@@ -83,8 +82,8 @@
     }
     ```
 11. mock 内部:
-    - 如果该 `external_user.id` 没有对应 ghost,调 soland `POST /_cokret/edge/applet/${applet_id}/ghosts` 颁发 `ghost_actor_did`(DID Document 的 `accountability` 数组里包含 `bot_actor_did` + `applet_service.did`)
-    - 用 ghost session token 在 `portal_realm_id` 内写消息(`POST /_cokret/self/realms/${portal_realm_id}/messages`,带 `space_id` 路由)
+    - 调 soland `POST /_cokret/edge/applet/transactions`,携带 `applet_id`、`realm_id`、`external_user` 和 message payload
+    - soland 若该 `external_user.id` 没有对应 ghost,在 install record 下颁发 `ghost_actor_did`(DID Document 的 `accountability` 数组里包含 `bot_actor_id` + `applet_service.did`)
     - 返回 `{ ghost_actor_did, message_id }`
 12. 断言:返回的 `ghost_actor_did` 形如 `did:web:ghost-ext-user-x-...`
 13. **alice** 进 `/timeline/${spaceId}`,timeline 包含 `"hi from outside ${stamp}"` 文本
@@ -104,7 +103,7 @@
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
 17. **alice** 在 `/space/${spaceId}/admin/access` 或 `/settings/applets`(以 yougen 实际路由为准)对 `applet_id` 执行 revoke:
-    - 调 soland `POST /_cokret/edge/applet/${applet_id}/revoke`,带 alice token
+    - 调 soland `POST /_cokret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope` 和 `registration_epoch`
     - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
     - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
@@ -116,7 +115,7 @@
 
 ## Observable assertions (合并清单)
 
-- 步骤 3-4:applet register 返回 201,`bot_actor_did` / `portal_realm_id` 形式正确
+- 步骤 3-4:applet install 返回 201,`bot_actor_id` 形式正确,并写入 `ck.applet.registration` projection
 - 步骤 6:`spaceId` 形如 `ck:space:...`
 - 步骤 8-9:bot 出现在 space members
 - 步骤 11-13:外部事件 30s 内在 alice timeline 出现
@@ -128,18 +127,18 @@
 
 ## Edge cases / sub-tests
 
-- **E4.1 namespace 冲突**:Phase A 之后,mock 再用一个不同的 `manifest_id` 但相同 `namespace = "bridge.demo"` 注册;soland 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
-- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图直接 `POST /_cokret/edge/applet/${applet_id}/bot/messages` 也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
-- **E4.3 idempotency**:同一 `manifest_id` 用相同 `Idempotency-Key` 重复 register 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_did }`;不同 `Idempotency-Key` 但相同 `manifest_id` 返回 `409 applet_already_registered`
+- **E4.1 namespace 冲突**:Phase A 之后,mock 再生成一个不同的 `package_id` 但相同 `namespace = "bridge.demo"` 的 package;soland install preview/commit 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
+- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图通过 `POST /_cokret/edge/applet/transactions` 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
+- **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;相同 key 但不同 body 返回 `409 idempotency_key_conflict`
 
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建空间或共用 Phase A,以避免 namespace 状态干扰。
 
 ## Implementation notes
 
-- soland 已提供 `/_cokret/edge/applet/*` runnable surface:manifest register、ghost provisioning、bot direct message、revoke,以及 `GET /_cokret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
+- soland 已提供 canonical applet runnable surface:`/_cokret/self/applets/install/preview`、`/_cokret/self/applets/install`、`/_cokret/self/applets/{applet_id}/revoke`、`/_cokret/edge/applet/transactions`,以及 `GET /_cokret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
-  - `POST /sign-manifest` → `{ manifest, signature, signing_did }`
+  - `POST /sign-package` → `{ applet_package, package_digest }`
   - `POST /bot/:applet_id/accept-invite` → `{ status }`
   - `POST /external-event` → `{ ghost_actor_did, message_id }` 或错误
 - `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 由 cotest harness 在启动 mock 时注入;mock 自身仍用 `MOCK_APPLET_REGISTRY_PORT` 绑定本地监听端口

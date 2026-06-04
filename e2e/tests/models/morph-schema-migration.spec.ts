@@ -301,7 +301,7 @@ test.describe("morph schema migration @fully-implemented", () => {
       //      new schema ids (overlap window — spec §4.1 S2).
       //   3. Expect HTTP 2xx. GET the Morph: schema_refs[] is the new set;
       //      v1 fields still present.
-      //   4. Pull /_cokret/self/audit/recent (or equivalent). Assert there is one
+      //   4. Pull /_soland/self/audit/recent (or equivalent). Assert there is one
       //      schema_evolution entry recording issuer, schema_refs old/new,
       //      authorization_ref.
       //   5. alice POSTs ck.morph.schema_migrate with

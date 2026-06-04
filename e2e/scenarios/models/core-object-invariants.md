@@ -43,8 +43,8 @@
 
 ## Pre-conditions
 
-- 两个 DID 都通过 `POST /_cokret/self/account/register` 注册过（与现有 `ensureRegistered` 行为一致）
-- 两个 actor 都持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
+- 两个 DID 都通过 `POST /_soland/self/account/register` 注册过（与现有 `ensureRegistered` 行为一致）
+- 两个 actor 都持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
 - alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
 - Phase B–E 不需要 browser context，纯 soland HTTP API 直调即可
 
@@ -56,7 +56,7 @@
    - title = `"models/core-object-invariants Space ${stamp}"`
    - discoverability = `listed`，join_rule = `invite`，history_visibility = `joined`
 2. 断言：`space-lifecycle-flow` 含 `created ck:space:...`，记录 `spaceId`
-3. **alice** 调 `GET /_cokret/self/spaces/${spaceId}`，断言返回 JSON 至少包含以下 wire 字段（spec §3 公共字段在 soland 当前 serializer 上的等价表达）：
+3. **alice** 调 `GET /_soland/self/spaces/${spaceId}`，断言返回 JSON 至少包含以下 wire 字段（spec §3 公共字段在 soland 当前 serializer 上的等价表达）：
    - `space_id` — `id:space` typed prefix，对应 spec `id`
    - `owner` — Space 的 owner DID，对应 spec `created_by` / actor 主体引用
    - `members` — 数组，至少含 `owner`
@@ -78,7 +78,7 @@
 ### Phase C — Cascade / archive / delete（fixme，需要 soland lifecycle reducer）
 
 10. **alice** 在 `spaceId` 下再建一个 child Space `S_child`（如果当前 soland 不支持嵌套 Space 拓扑，则改成在 `spaceId` 内创建一个 Flow `F_child` 作为 "live dependent" 的代理）。
-11. **alice** 提交 `ck.space.archive` 指向 `spaceId`，断言 HTTP 200。再调 `GET /_cokret/self/spaces/${spaceId}`：
+11. **alice** 提交 `ck.space.archive` 指向 `spaceId`，断言 HTTP 200。再调 `GET /_soland/self/spaces/${spaceId}`：
     - 断言：`spaceId` 的 lifecycle 状态翻到 `archived`（wire 上当前是 `deleted=false` + 额外的 `state="archived"` 字段，或 soland 后续在 `SpaceLifecycleResponse` 中补充 `lifecycle_state`）
     - 断言：child `S_child` / `F_child` **没有**自动跟随翻成 `archived`（spec §3.4 — `ck.space.archive` 不自动 archive child）
 12. **alice** 在 child 仍 live 的情况下提交 `ck.space.tombstone` 指向 `spaceId`：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "space_has_live_dependents"`（spec §3.4 错误码表）。
@@ -98,7 +98,7 @@
 
 ### Phase E — View projection fallback（fixme，需要 soland board projection endpoint）
 
-20. **alice** 在新建的 `spaceId` 上请求一个"用户从未注册过"的 view：`GET /_cokret/self/spaces/${spaceId}/views/projection?renderer=board`（或 `?kind=collection&renderer=board`）。这是一个全新 Space，没有调用过 `ck.view.create`，因此**不存在**任何 user-defined View 对象。
+20. **alice** 在新建的 `spaceId` 上请求一个"用户从未注册过"的 view：`GET /_soland/self/spaces/${spaceId}/views/projection?renderer=board`（或 `?kind=collection&renderer=board`）。这是一个全新 Space，没有调用过 `ck.view.create`，因此**不存在**任何 user-defined View 对象。
 21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionResponse`：
     - `kind = "collection"`
     - `renderer = "board"`
@@ -109,7 +109,7 @@
 
 ## Observable assertions（合并清单）
 
-- Phase A 步骤 3：`/_cokret/self/spaces/${spaceId}` 返回 `space_id` / `owner` / `members` / `deleted` 四字段齐全
+- Phase A 步骤 3：`/_soland/self/spaces/${spaceId}` 返回 `space_id` / `owner` / `members` / `deleted` 四字段齐全
 - Phase A 步骤 4：`/_cokret/self/events?spaces=${spaceId}` 返回的 event item 含 `event_id` / `created_at` / `sender` / `event_kind` 四字段
 - Phase B 步骤 8-9：陈旧 precondition Move 返回 `failed_precondition` 且 cell head 未变
 - Phase C 步骤 11：archive 不级联子 Space
@@ -132,11 +132,11 @@
 
 ## Implementation notes
 
-- **soland 当前覆盖**：Phase A 的 `GET /_cokret/self/spaces/{space_id}` 走 `SpaceLifecycleResponse`（`wire.rs`），实际 wire 字段是 `ok` / `space_id` / `owner` / `members` / `deleted`，**不**包含 `created_at` 与显式 `lifecycle_state`——这些字段从 events query (`/_cokret/self/events?spaces=...`) 中的 event item 上读 `created_at` / `sender` / `event_kind` 三项，再加 `event_id`，凑齐 spec §3 公共字段语义的最低 4 项。后续若 soland 在 `SpaceLifecycleResponse` 中补 `created_at` / `state` 字段，Phase A 的 assertion 应直接迁移到 spaces endpoint，不再依赖 events query 兜底。
+- **soland 当前覆盖**：Phase A 的 `GET /_soland/self/spaces/{space_id}` 走 `SpaceLifecycleResponse`（`wire.rs`），实际 wire 字段是 `ok` / `space_id` / `owner` / `members` / `deleted`，**不**包含 `created_at` 与显式 `lifecycle_state`——这些字段从 events query (`/_cokret/self/events?spaces=...`) 中的 event item 上读 `created_at` / `sender` / `event_kind` 三项，再加 `event_id`，凑齐 spec §3 公共字段语义的最低 4 项。后续若 soland 在 `SpaceLifecycleResponse` 中补 `created_at` / `state` 字段，Phase A 的 assertion 应直接迁移到 spaces endpoint，不再依赖 events query 兜底。
 - **soland gap**：Phase B 的 patch precondition 路径需要 soland 暴露通用 Move endpoint（带 `preconditions[].head_eq`）；当前只有零散的 cell 更新通道，未统一到 `ck.events` 提交路径。主流程标 `test.fixme`，并在 fixme body 中以 `request.post(...)` 形态 sketch 出预期调用。
 - **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
 - **soland gap**：Phase D Relation cardinality 检查需要 soland 实现 `ck.relation.create` reducer 与 `has_default_view` 基数表；当前 `routing/spaces/relation.rs` 存在但 cardinality enforcement 弱。整 phase 标 fixme。
-- **soland gap**：Phase E `/_cokret/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → flow 派生"的 path。整 phase 标 fixme。
+- **soland gap**：Phase E `/_soland/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → flow 派生"的 path。整 phase 标 fixme。
 - **不需要新 helper**：Phase A 复用 `JointUserPage.createSpace()`、`ensureRegistered`、`issueDevSession`、`openUserPage`，与 `messaging/triad-collaboration` 完全一致。Phase B–E 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。
 

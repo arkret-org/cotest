@@ -51,8 +51,8 @@
 
 ## Pre-conditions
 
-- `alice` 通过 `POST /_cokret/self/account/register` 注册过 (`ensureRegistered`)
-- `alice` 持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
+- `alice` 通过 `POST /_soland/self/account/register` 注册过 (`ensureRegistered`)
+- `alice` 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
 - harness 可访问 `cokret-spec/spec/v1/artifacts/fixtures/` 目录(从 spec test 文件位置 `cotest/e2e/tests/conformance/*.spec.ts` 解析为 `../../../../cokret-spec/spec/v1/artifacts/fixtures`,见 Implementation notes)
 - soland 暴露以下 conformance 端点 (gap,见 Implementation notes):
   - `POST /_cokret/self/conformance/snapshot` — body `{ vector_id, manifest, chunks }` → `{ manifest_digest, chunk_hashes[], signature_valid, signer_did }`

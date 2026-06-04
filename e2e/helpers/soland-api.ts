@@ -317,13 +317,64 @@ export async function querySpaceEventsApi(
   );
 }
 
+export async function accountSubscribeDeltaApi(
+  request: APIRequestContext,
+  token: string,
+  opts: { server?: SolandKey } = {},
+): Promise<Record<string, unknown>> {
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/_cokret/self/account/subscribe?catchup=true`,
+    { headers: { ...authHeaders(token), accept: "application/x-ndjson" } },
+  );
+  const text = await response.text();
+  expect(response.status(), `account subscribe returned ${response.status()}: ${text}`).toBe(200);
+  const frames = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  const delta = frames.find((frame) => frame.kind === "delta") ?? frames[0];
+  expect(delta, "account subscribe delta frame").toBeTruthy();
+  return delta;
+}
+
+export async function putAccountDataViaEventApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  key: string,
+  body: Record<string, unknown>,
+  opts: { server?: SolandKey; context?: string } = {},
+) {
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.account_data.set",
+      payload: {
+        key,
+        owner: actorDid,
+        body,
+        updated_at: canonicalTimestamp(),
+      },
+    }),
+    {
+      server: opts.server,
+      context: opts.context ?? `set account_data ${key}`,
+    },
+  );
+}
+
 export async function currentActorDidApi(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/account/me`,
+    `${solandBaseUrl(opts.server)}/_soland/self/account/me`,
     {
       headers: authHeaders(token),
     },

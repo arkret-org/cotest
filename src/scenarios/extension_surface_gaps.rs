@@ -31,7 +31,7 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
 
     expect_api_error(
         alice
-            .post(&format!("/_cokret/self/spaces/{space_id}/applets"))
+            .post(&format!("/_soland/self/spaces/{space_id}/applets"))
             .json(&json!({
                 "applet_id": "ck:applet:board",
                 "manifest": {"name": "Board"}
@@ -71,7 +71,7 @@ pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() ->
 
     expect_api_error(
         alice
-            .post(&format!("/_cokret/self/spaces/{space_id}/agents"))
+            .post(&format!("/_soland/self/spaces/{space_id}/agents"))
             .json(&json!({
                 "agent_id": "did:web:agent.example",
                 "display_name": "Planner"

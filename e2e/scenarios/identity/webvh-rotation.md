@@ -44,7 +44,7 @@
 
 1. bob 调 `GET https://<host>/.well-known/did/webvh/<scid>` 解析 alice 的 DID Document v0(应当 cache)
 2. bob 收到的 alice 历史事件:每条用 alice entry 0 的 key 签;bob 用 v0 DID Doc 的 `verificationMethod` 验签 → 全通过
-3. 断言:`/_cokret/self/spaces/S_a/timeline` 上的 alice 事件签名状态都是 ✓
+3. 断言:`/_soland/self/spaces/S_a/timeline` 上的 alice 事件签名状态都是 ✓
 
 ### Phase B — alice 触发轮换
 

@@ -30,7 +30,7 @@ test.describe("account onboarding", () => {
     const token = await issueDevSession(request, alice);
     expect(token).toBeTruthy();
 
-    const meResp = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const meResp = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(meResp.ok()).toBeTruthy();

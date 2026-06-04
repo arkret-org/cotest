@@ -18,7 +18,7 @@ test.describe("handle management @fully-implemented", () => {
     const alice = uniqueUser("s29-baseline");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const meResp = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const meResp = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(meResp.ok()).toBeTruthy();
@@ -26,7 +26,7 @@ test.describe("handle management @fully-implemented", () => {
     expect(me.handle).toBe(alice.handle);
   });
 
-  test("alice claims a new handle via POST /_cokret/self/account/handle; profile.handle updates; directory resolve_handle finds alice", async ({
+  test("alice claims a new handle via POST /_soland/self/account/handle; profile.handle updates; directory resolve_handle finds alice", async ({
     request,
   }) => {
     // spec: identity/identity-handles.md §2 — handle claim updates the
@@ -39,7 +39,7 @@ test.describe("handle management @fully-implemented", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const newHandle = `@alice-renamed-${stamp}`;
-    const claim = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const claim = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { handle: newHandle },
     });
@@ -49,7 +49,7 @@ test.describe("handle management @fully-implemented", () => {
     expect(claimBody.previous_handle).toBe(alice.handle.toLowerCase());
 
     // /account/me reflects the new handle.
-    const me = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const me = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${aliceToken}` },
     });
     expect(me.ok()).toBeTruthy();
@@ -74,7 +74,7 @@ test.describe("handle management @fully-implemented", () => {
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, mallory)]);
     const malloryToken = await issueDevSession(request, mallory);
 
-    const claim = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const claim = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${malloryToken}` },
       data: { handle: alice.handle },
     });
@@ -88,7 +88,7 @@ test.describe("handle management @fully-implemented", () => {
   }) => {
     // spec: identity/identity-handles.md — handle transfer is a dual
     // operation: source clears, target receives. Verified via
-    // `POST /_cokret/self/account/handle/transfer`.
+    // `POST /_soland/self/account/handle/transfer`.
     const stamp = Date.now();
     const alice = uniqueUser(`s29-transfer-alice-${stamp}`);
     const bob = uniqueUser(`s29-transfer-bob-${stamp}`);
@@ -98,7 +98,7 @@ test.describe("handle management @fully-implemented", () => {
 
     const transferred = alice.handle; // alice's handle string at registration time.
     const transfer = await request.post(
-      `${solandBaseUrl()}/_cokret/self/account/handle/transfer`,
+      `${solandBaseUrl()}/_soland/self/account/handle/transfer`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: { target_did: bob.did },
@@ -113,11 +113,11 @@ test.describe("handle management @fully-implemented", () => {
     expect(transferBody.from_handle).not.toBe(transferred.toLowerCase());
 
     // /account/me on each side reflects the new mapping.
-    const aliceMe = await (await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const aliceMe = await (await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${aliceToken}` },
     })).json();
     expect(aliceMe.handle).not.toBe(transferred.toLowerCase());
-    const bobMe = await (await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const bobMe = await (await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${bobToken}` },
     })).json();
     expect(bobMe.handle).toBe(transferred.toLowerCase());
@@ -138,14 +138,14 @@ test.describe("handle management @fully-implemented", () => {
 
     const releasedHandle = alice.handle;
     // alice renames → original handle is released into grace.
-    const rename = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const rename = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { handle: `@alice-renamed-${stamp}` },
     });
     expect(rename.status()).toBe(200);
 
     // mallory's immediate claim is rejected with handle_in_grace_period.
-    const immediate = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const immediate = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${malloryToken}` },
       data: { handle: releasedHandle },
     });
@@ -155,7 +155,7 @@ test.describe("handle management @fully-implemented", () => {
 
     // After the grace window (5s) mallory's claim succeeds.
     await new Promise((resolve) => setTimeout(resolve, 6000));
-    const afterGrace = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const afterGrace = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${malloryToken}` },
       data: { handle: releasedHandle },
     });
@@ -172,7 +172,7 @@ test.describe("handle management @fully-implemented", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     // "@" alone normalizes to "@" which fails is_valid_handle (len > 1).
-    const tooShort = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const tooShort = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { handle: "@" },
     });
@@ -181,7 +181,7 @@ test.describe("handle management @fully-implemented", () => {
     expect(wireErrCode(tooShortBody)).toBe("handle_invalid_format");
 
     // Disallowed character (`!`) fails the alnum + -_. allowlist.
-    const badChar = await request.post(`${solandBaseUrl()}/_cokret/self/account/handle`, {
+    const badChar = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { handle: `@bad!handle-${stamp}` },
     });
@@ -199,7 +199,7 @@ test.describe("handle management @fully-implemented", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const transfer = await request.post(
-      `${solandBaseUrl()}/_cokret/self/account/handle/transfer`,
+      `${solandBaseUrl()}/_soland/self/account/handle/transfer`,
       {
         headers: { authorization: `Bearer ${aliceToken}` },
         data: { target_did: `did:web:ghost-${stamp}.example` },

@@ -110,7 +110,7 @@ test.describe("MLS group encryption", () => {
 
       // Non-member access to raw events MUST be rejected.
       const eventsResp = await request.get(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/events`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/events`,
         { headers: { authorization: `Bearer ${malloryToken}` } },
       );
       expect([401, 403, 404, 405]).toContain(eventsResp.status());
@@ -138,7 +138,7 @@ test.describe("MLS group encryption", () => {
     });
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/export`,
+      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();

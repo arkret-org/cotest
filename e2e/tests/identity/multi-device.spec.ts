@@ -38,10 +38,10 @@ test.describe("multi-device pairing + revocation", () => {
       await device1.gotoHome();
       await device2.gotoHome();
       // Both sessions independently read /account/me successfully.
-      const me1 = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+      const me1 = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
         headers: { authorization: `Bearer ${token1}` },
       });
-      const me2 = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+      const me2 = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
         headers: { authorization: `Bearer ${token2}` },
       });
       expect(me1.ok()).toBeTruthy();

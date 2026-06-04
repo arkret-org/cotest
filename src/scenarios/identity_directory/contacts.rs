@@ -18,13 +18,13 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     expect_json(
         alice
-            .post("/_cokret/self/contacts/request")
+            .post("/_soland/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/_cokret/self/contacts/respond").json(&json!({
+        bob.post("/_soland/self/contacts/respond").json(&json!({
             "requester": alice.actor,
             "action": "accept"
         })),
@@ -32,7 +32,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
 
-    let contacts = expect_json(bob.get("/_cokret/self/contacts"), StatusCode::OK).await?;
+    let contacts = expect_json(bob.get("/_soland/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
     let invite_space = alice
@@ -147,7 +147,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await?;
 
     let exported = expect_json(
-        alice.get(&format!("/_cokret/self/spaces/{shared_space_id}/export")),
+        alice.get(&format!("/_soland/self/spaces/{shared_space_id}/export")),
         StatusCode::OK,
     )
     .await?;
@@ -201,14 +201,14 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     .await?;
 
     let audit_events = expect_json(
-        alice.get("/_cokret/self/audit/events?limit=20"),
+        alice.get("/_soland/self/audit/events?limit=20"),
         StatusCode::OK,
     )
     .await?;
     let _ = expect_audit_action(&audit_events, "events.submit")?;
 
     expect_status(
-        alice.get(&format!("/_cokret/self/audit/events?actor={}", bob.actor)),
+        alice.get(&format!("/_soland/self/audit/events?actor={}", bob.actor)),
         StatusCode::FORBIDDEN,
     )
     .await?;

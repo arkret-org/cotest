@@ -30,7 +30,7 @@ test.describe("audited E2EE", () => {
     const token = await issueDevSession(request, alice);
 
     const probe = await request.get(
-      `${solandBaseUrl()}/_cokret/self/audit/events?space_id=ck:space:probe`,
+      `${solandBaseUrl()}/_soland/self/audit/events?space_id=ck:space:probe`,
       { headers: { authorization: `Bearer ${token}` } },
     );
     expect([200, 401, 403, 404]).toContain(probe.status());
@@ -43,7 +43,7 @@ test.describe("audited E2EE", () => {
       const setup = await setupAuditedMessage(request, "s25-frank");
 
       const audit = await request.get(
-        `${solandBaseUrl()}/_cokret/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -59,7 +59,7 @@ test.describe("audited E2EE", () => {
       expect(proofText).not.toContain("plaintext");
       expect(proofText).toContain("proof_digest");
 
-      const verify = await request.post(`${solandBaseUrl()}/_cokret/self/audit/franking/verify`, {
+      const verify = await request.post(`${solandBaseUrl()}/_soland/self/audit/franking/verify`, {
         headers: authHeaders(setup.aliceToken),
         data: (proof as Record<string, unknown>).payload,
       });
@@ -91,7 +91,7 @@ test.describe("audited E2EE", () => {
       const report = await fileModerationReport(request, setup);
 
       const accessed = await request.get(
-        `${solandBaseUrl()}/_cokret/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.audit.accessed`,
+        `${solandBaseUrl()}/_soland/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.audit.accessed`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const accessedText = await accessed.text();
@@ -108,7 +108,7 @@ test.describe("audited E2EE", () => {
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-tamper");
       const audit = await request.get(
-        `${solandBaseUrl()}/_cokret/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -120,7 +120,7 @@ test.describe("audited E2EE", () => {
         ciphertext_digest:
           "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       };
-      const verify = await request.post(`${solandBaseUrl()}/_cokret/self/audit/franking/verify`, {
+      const verify = await request.post(`${solandBaseUrl()}/_soland/self/audit/franking/verify`, {
         headers: authHeaders(setup.aliceToken),
         data: tampered,
       });

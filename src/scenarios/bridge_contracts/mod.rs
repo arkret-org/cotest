@@ -3,9 +3,9 @@
 //!
 //! Each submodule is single-responsibility:
 //! - [`discovery`] — `/_cokret/gate/auth/bridge/describe` +
-//!   `/_cokret/edge/push/outbound/bridge/describe` smoke check
+//!   `/_soland/edge/push/outbound/bridge/describe` smoke check
 //!   (`principal_bridge_contracts_are_discoverable`).
-//! - [`session_grant`] — coauth-backed `/_cokret/gate/auth/session-grant/exchange` flow
+//! - [`session_grant`] — coauth-backed `/_cokret/gate/account/session-grants` flow
 //!   (`session_grant_exchange_uses_configured_coauth_introspection`).
 //! - [`starid`] — optional `did:webvh` resolver profile discoverability
 //!   (`starid_optional_resolver_profile_is_discoverable`).

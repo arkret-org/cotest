@@ -97,34 +97,62 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .as_str()
         .map(|event_id| event_id.replacen("ck:event:", "ck:message:", 1))
         .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
-    let marker = expect_json(
-        dave.post("/_cokret/self/read-cursors").json(&json!({
-            "realm_id": space_id,
-            "read_scope": {
-                "kind": "thread",
-                "ref": thread_root_ref
-            },
-            "position": {
-                "event_id": sent["event_id"],
-                "hlc": "019041000000-0001-1dae0001"
-            }
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(marker["position"]["event_id"], sent["event_id"]);
-    assert_eq!(marker["read_scope"]["kind"], "thread");
-    assert_eq!(marker["read_scope"]["ref"], thread_root_ref);
+    let marker = dave
+        .submit_event(
+            &space_id,
+            "ck.read_cursor.advance",
+            json!({
+                "id": sent["event_id"]
+                    .as_str()
+                    .expect("sent event id")
+                    .replacen("ck:event:", "ck:read_cursor:", 1),
+                "schema": "ck.schema.read_cursor.v1",
+                "actor_id": dave.actor,
+                "device_id": dave.device_id,
+                "realm_id": space_id,
+                "read_scope": {
+                    "kind": "thread",
+                    "ref": thread_root_ref
+                },
+                "position": {
+                    "event_id": sent["event_id"],
+                    "hlc": "019041000000-0001-1dae0001"
+                },
+                "updated_at": "2026-05-02T00:00:00Z"
+            }),
+        )
+        .await?;
+    assert_eq!(marker["status"], "accepted");
+    assert_eq!(
+        marker["event"]["payload"]["position"]["event_id"],
+        sent["event_id"]
+    );
+    assert_eq!(marker["event"]["payload"]["read_scope"]["kind"], "thread");
+    assert_eq!(
+        marker["event"]["payload"]["read_scope"]["ref"],
+        thread_root_ref
+    );
 
     let markers = expect_json(
-        dave.get(&format!("/_cokret/self/read-cursors?realm_id={space_id}")),
+        dave.get(&format!("/_cokret/self/events?realms={space_id}&limit=50")),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(markers["markers"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        markers["markers"][0]["position"]["event_id"],
-        sent["event_id"]
+    let marker_events = markers["events"]
+        .as_array()
+        .expect("events query response includes events")
+        .iter()
+        .filter(|event| {
+            event["kind"] == "ck.read_cursor.advance"
+                || event["event_kind"] == "ck.read_cursor.advance"
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        marker_events.iter().any(|event| {
+            event["payload"]["position"]["event_id"] == sent["event_id"]
+                && event["payload"]["read_scope"]["ref"] == thread_root_ref
+        }),
+        "events query did not include accepted read cursor marker: {markers}"
     );
 
     let revised = alice

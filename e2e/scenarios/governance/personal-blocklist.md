@@ -30,7 +30,7 @@
 
 ## Pre-conditions
 
-- alice / bob 都通过 `POST /_cokret/self/account/register` 注册
+- alice / bob 都通过 `POST /_soland/self/account/register` 注册
 - alice / bob 都持有有效 dev session token
 - 两个 actor 的 browser context 都注入了 `yougen.config.v1` localStorage
 
@@ -57,12 +57,12 @@
    - 断言:`blocked-users-list` 新增一条 `blocked-user-row`,显示 bob.handle / bob.did
    - 断言:`write-status` 含 `blocklist updated` 或等效文本
 
-### Phase D — client 写 account_data blocklist entry
+### Phase D — client 提交 account_data blocklist event
 
-8. alice 的 yougen client 应该把这次 block 持久化到 soland 的 actor-private account_data:
-   - 调用:`PUT /_cokret/self/account_data/ck.account.blocklist`,payload `{ version: 1, entries: [{ target: { kind: "actor", did: bob.did }, mode: "block", applies_to: ["messages", "mentions", "dm", "calls", "presence", "notifications", "directory"], created_at: <ts> }] }`
-   - 断言 (HTTP 层):`PUT` 返回 200
-   - 断言 (跨设备 sync):`GET /_cokret/self/account_data/ck.account.blocklist` 返回同样的 entries
+8. alice 的 yougen client 应该把这次 block 持久化为 soland 的 actor-private account_data event:
+   - 调用:`POST /_cokret/self/events`,提交 `ck.account_data.set`,payload `{ key: "ck.account.blocklist", owner: alice.did, body: { version: 1, entries: [{ target: { kind: "actor", did: bob.did }, mode: "block", applies_to: ["messages", "mentions", "dm", "calls", "presence", "notifications", "directory"], created_at: <ts> }] }, updated_at: <ts> }`
+   - 断言 (HTTP 层):events submit 返回 `status=accepted`
+   - 断言 (跨设备 sync):`GET /_cokret/self/account/subscribe?catchup=true` 的 `account_data.events` 返回同样的 entries
    - 备注:这是 actor-private — 只对 alice 自己的 device 同步,bob 拿不到
 
 ### Phase E — bob 发 M2,alice 看不到(client-side filter)
@@ -79,7 +79,7 @@
 
 12. **alice** 回 `/settings/blocked-users`,在 bob 那行点 `unblock-button`
     - 断言:`blocked-users-list` 不再含 bob 行
-    - 断言:client 调 `PUT /_cokret/self/account_data/ck.account.blocklist` 把 entry 移除(或 mark `kind: "unblock"`)
+    - 断言:client 提交 `ck.account_data.set` 把 entry 移除(或 mark `kind: "unblock"`)
 13. **bob** 再发 `M3 = "bob is back ${stamp}"`
 14. **alice** sync `/timeline/${spaceId}`
     - 断言:`timeline-event` 含 `M3`
@@ -101,7 +101,7 @@
 
 - Phase B 步骤 5:alice 在 block 之前能看到 `M1`
 - Phase C 步骤 7:`blocked-users-list` 新增 bob 行
-- Phase D 步骤 8:account_data PUT / GET 返回一致的 entries
+- Phase D 步骤 8:`ck.account_data.set` 与 `ck.account.subscribe` 返回一致的 entries
 - Phase E 步骤 10:alice timeline 不含 `M2`
 - Phase E 步骤 11:alice notifications 不含 `M2` 通知
 - Phase F 步骤 12-14:unblock 后 `M3` 可见
@@ -116,7 +116,7 @@
 ## Implementation notes
 
 - **yougen 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `ck.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
-- **soland 实现**:`PUT/GET /_cokret/self/account_data/ck.account.blocklist` 已用于个人 blocklist;事件 query、account sync timeline、`/_cokret/self/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /_cokret/peer/federation/block-hint` 与 `GET /_cokret/peer/federation/block-hints` 支持 block hint 记录和 unblock retract。
+- **soland 实现**:`ck.account_data.set` + `ck.account.subscribe` 已用于个人 blocklist;事件 query、account sync timeline、`/_soland/self/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /_cokret/peer/federation/block-hint` 与 `GET /_cokret/peer/federation/block-hints` 支持 block hint 记录和 unblock retract。
 - **测试侧**:主流程、E11.1、E11.2、E11.3 均为 live tests;Phase G 的跨服务器成本用本地 block-hint 记录/撤回端点验证,完整双 soland outbox suppression 可在 `federation/cross-server` harness 扩展时继续加深。
 
 ## 风险

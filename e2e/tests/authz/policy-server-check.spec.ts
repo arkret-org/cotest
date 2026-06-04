@@ -205,7 +205,7 @@ test.describe("policy server check", () => {
           },
         );
         expect(obligationScenario.status()).toBe(200);
-        // (re-drive invite, then GET /_cokret/self/audit/events?actor=alice.did
+        // (re-drive invite, then GET /_soland/self/audit/events?actor=alice.did
         //  &action=policy.deny and assert >=1 entry with
         //  target.category="policy_block" + target.upstream_reason="external_policy_blocks_user")
 

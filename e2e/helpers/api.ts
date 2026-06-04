@@ -228,12 +228,13 @@ export async function listReadMarkersViaApi(
   spaceId: string,
   opts: { server?: SolandKey } = {},
 ): Promise<ReadMarker[]> {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(spaceId)}`,
-    { headers: authHeaders(token) },
-  );
-  expect(response.status()).toBe(200);
-  const body = await response.json();
-  expect(Array.isArray(body.markers)).toBe(true);
-  return body.markers as ReadMarker[];
+  const events = await listSpaceEventsViaApi(request, token, spaceId, {
+    server: opts.server,
+    limit: 100,
+  });
+  return events
+    .filter((event) => {
+      return event.kind === "ck.read_cursor.advance" || event.event_kind === "ck.read_cursor.advance";
+    })
+    .map((event) => (event.payload ?? event) as ReadMarker);
 }

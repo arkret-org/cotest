@@ -18,7 +18,7 @@ pub async fn register_account(
     expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/account/register"))
+            .post(server.url("/_soland/self/account/register"))
             .json(&json!({
                 "did": did,
                 "handle": handle,
@@ -36,7 +36,7 @@ pub async fn dev_login(server: &CokretServer, actor: &str, device_id: &str) -> R
     let login = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/auth/dev-login"))
+            .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&json!({
                 "actor": actor,
                 "device_id": device_id,

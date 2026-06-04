@@ -53,7 +53,7 @@ async function expectConsentCell(
   expectedState: "granted" | "revoked" | "expired" | "pending",
 ) {
   const cell = await request.get(
-    `${solandBaseUrl()}/_cokret/self/consent/cells/${encodeURIComponent(holderDid)}` +
+    `${solandBaseUrl()}/_soland/self/consent/cells/${encodeURIComponent(holderDid)}` +
       `?peer=${encodeURIComponent(peerDid)}&scope=${encodeURIComponent(scope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
@@ -71,7 +71,7 @@ async function requestContactApi(
   targetDid: string,
   scope: "invite" | "message" | "call",
 ) {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
+  const response = await request.post(`${solandBaseUrl()}/_soland/self/contacts/request`, {
     headers: authHeaders(token),
     data: { target: targetDid, scope },
   });

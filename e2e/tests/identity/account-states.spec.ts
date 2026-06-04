@@ -26,7 +26,7 @@ test.describe("account states", () => {
     const alice = uniqueUser("s28-baseline");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const meResp = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const meResp = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(meResp.ok()).toBeTruthy();
@@ -44,19 +44,19 @@ test.describe("account states", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const logout = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/logout`, {
+    const logout = await request.post(`${solandBaseUrl()}/_soland/gate/auth/logout`, {
       headers: authHeaders(token),
     });
     expect(logout.status()).toBe(200);
     expect((await logout.json()).revoked).toBe(true);
 
-    const oldMe = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(token),
     });
     expect(oldMe.status()).toBe(401);
 
     const newToken = await issueDevSession(request, alice);
-    const me = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const me = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(newToken),
     });
     expect(me.status()).toBe(200);
@@ -82,13 +82,13 @@ test.describe("account states", () => {
     expect(lockBody.previous_state).toBe("active");
     expect(lockBody.sessions_revoked).toBeGreaterThanOrEqual(1);
 
-    const oldMe = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(aliceToken),
     });
     expect(oldMe.status()).toBe(401);
     expect(wireErrCode(await oldMe.json())).toBe("account_locked");
 
-    const login = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/dev-login`, {
+    const login = await request.post(`${solandBaseUrl()}/_soland/gate/auth/dev-login`, {
       data: {
         actor: alice.did,
         device_id: alice.deviceId,
@@ -123,13 +123,13 @@ test.describe("account states", () => {
     expect(suspend.status()).toBe(200);
     expect((await suspend.json()).state).toBe("suspended");
 
-    const oldMe = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(aliceToken),
     });
     expect(oldMe.status()).toBe(200);
     expect((await oldMe.json()).state).toBe("suspended");
 
-    const login = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/dev-login`, {
+    const login = await request.post(`${solandBaseUrl()}/_soland/gate/auth/dev-login`, {
       data: {
         actor: alice.did,
         device_id: alice.deviceId,
@@ -165,7 +165,7 @@ test.describe("account states", () => {
       actorDid: alice.did,
     });
 
-    const deactivate = await request.post(`${solandBaseUrl()}/_cokret/self/account/deactivate`, {
+    const deactivate = await request.post(`${solandBaseUrl()}/_soland/self/account/deactivate`, {
       headers: authHeaders(aliceToken),
     });
     expect(deactivate.status()).toBe(200);
@@ -173,13 +173,13 @@ test.describe("account states", () => {
     expect(deactivateBody.state).toBe("deactivated");
     expect(deactivateBody.sessions_revoked).toBeGreaterThanOrEqual(1);
 
-    const oldMe = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(aliceToken),
     });
     expect(oldMe.status()).toBe(401);
     expect(wireErrCode(await oldMe.json())).toBe("account_deactivated");
 
-    const login = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/dev-login`, {
+    const login = await request.post(`${solandBaseUrl()}/_soland/gate/auth/dev-login`, {
       data: {
         actor: alice.did,
         device_id: alice.deviceId,
@@ -210,7 +210,7 @@ test.describe("account states", () => {
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
 
-    const erase = await request.post(`${solandBaseUrl()}/_cokret/self/account/erase`, {
+    const erase = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: authHeaders(aliceToken),
     });
     expect(erase.status()).toBe(200);
@@ -222,7 +222,7 @@ test.describe("account states", () => {
     expect(auditActions).toContain("ck.account.state_change");
     expect(JSON.stringify(eraseBody.audit_log)).toContain('"to":"erased"');
 
-    const oldMe = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(aliceToken),
     });
     expect(oldMe.status()).toBe(401);
@@ -252,7 +252,7 @@ test.describe("account states", () => {
     expect(suspend.status()).toBe(200);
 
     const audit = await request.get(
-      `${solandBaseUrl()}/_cokret/self/audit/events?actor=${encodeURIComponent(admin.did)}&limit=20`,
+      `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(admin.did)}&limit=20`,
       { headers: authHeaders(adminToken) },
     );
     expect(audit.status()).toBe(200);

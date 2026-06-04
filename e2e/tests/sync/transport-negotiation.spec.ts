@@ -108,7 +108,7 @@ test.describe("transport negotiation", () => {
       //        - Idempotency-Key
       //   3. soland_b verifies signature against α's DID document key, returns
       //      200 with { accepted: [invite_event_id] }
-      //   4. bob@β sees invite via GET /_cokret/self/notifications within 30s
+      //   4. bob@β sees invite via GET /_soland/self/notifications within 30s
       //
       // Phase B — WebSocket upgrade:
       //   5. soland_a reads β's /_cokret/describe → finds websocket_frame

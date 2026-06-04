@@ -21,7 +21,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     expect_json(
         server
             .http()
-            .post(server.url("/_cokret/self/account/register"))
+            .post(server.url("/_soland/self/account/register"))
             .json(&json!({
                 "did": principal_id,
                 "handle": "@alice-session-grant",
@@ -35,7 +35,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let exchange = expect_json(
         server
             .http()
-            .post(server.url("/_cokret/gate/auth/session-grant/exchange"))
+            .post(server.url("/_cokret/gate/account/session-grants"))
             .json(&json!({
                 "grant_jwt": "coauth.session.jwt",
                 "principal_id": principal_id,
@@ -61,7 +61,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let authenticated = expect_json(
         server
             .http()
-            .get(server.url("/_cokret/self/account/me"))
+            .get(server.url("/_soland/self/account/me"))
             .bearer_auth(exchange["access_token"].as_str().unwrap()),
         StatusCode::OK,
     )

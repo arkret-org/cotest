@@ -113,13 +113,13 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
 
     // ── 3. Drive the live wire: create Realm + Circle + Flows ───────────
     //
-    // The remaining wire steps require soland's CKP-0007 surface:
-    //   - POST /_cokret/self/realms                       (ck.realm.create)
-    //   - POST /_cokret/self/realms/<id>/circles          (ck.circle.create)
-    //   - POST /_cokret/self/circles/<id>/members         (ck.circle.member.state→active)
-    //   - POST /_cokret/self/spaces/<rid>/flows           with scope_circle_id
-    //   - POST /_cokret/self/circles/<id>/tombstone       (ck.circle.tombstone)
-    //   - POST /_cokret/self/realms/<id>/tombstone        (ck.realm.tombstone)
+    // The remaining wire steps require canonical signed event submission:
+    //   - POST /_cokret/self/events with ck.realm.create
+    //   - POST /_cokret/self/events with ck.circle.create
+    //   - POST /_cokret/self/events with ck.circle.member.state -> active
+    //   - POST /_cokret/self/events with flow creation scoped to the circle
+    //   - POST /_cokret/self/events with ck.circle.tombstone
+    //   - POST /_cokret/self/events with ck.realm.tombstone
     //
     // P5 finalises these endpoints; once they're stable replace the bail
     // below with the wire dance and the assertions documented in the doc

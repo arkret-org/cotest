@@ -328,7 +328,7 @@ export async function ensureRegistered(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/_cokret/self/account/register`, {
+  const response = await request.post(`${solandBaseUrl(opts.server)}/_soland/self/account/register`, {
     data: {
       did: user.did,
       handle: user.handle,
@@ -344,13 +344,16 @@ export async function issueDevSession(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/_cokret/gate/auth/dev-login`, {
-    data: {
-      actor: user.did,
-      device_id: user.deviceId,
-      display_name: user.displayName,
+  const response = await request.post(
+    `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`,
+    {
+      data: {
+        actor: user.did,
+        device_id: user.deviceId,
+        display_name: user.displayName,
+      },
     },
-  });
+  );
   expect(response.status()).toBe(200);
   const body = await response.json();
   expect(body.access_token).toBeTruthy();

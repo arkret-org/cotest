@@ -38,7 +38,7 @@
 - soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
 - harness 能 ESM resolve `cokret-spec/spec/v1/artifacts/registry/*.json` (相对 `tests/conformance/<spec>.spec.ts` 向上 4 级到 `cokret-spec/`)
 - `removed-event-kinds.json.entries[*].rejection_level === "hard_reject"` 的子集在 cotest 看来是测试输入(其他 `migration_only` 等暂不构造)
-- alice 通过 `POST /_cokret/self/account/register` + `POST /_cokret/gate/auth/dev-login` 获取了 bearer token (仅 Phase A/B/F)
+- alice 通过 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 获取了 bearer token (仅 Phase A/B/F)
 
 ## Steps
 
@@ -105,7 +105,7 @@
 23. **harness** load `artifacts/registry/forbidden-model-terms.json` → entries 主要是 prose 级别 (`Room`, `Place`, `flow_branch`, `track members`, `Room visibility`, `Realm(kind=list)`)
 24. 收集所有 *string 值* (而非 key) 出现在 `/_cokret/describe` 中的字面量
 25. 断言:no string value contains `\bRoom\b` / `\bPlace\b` (word-boundary,避免误伤 `RoomTitleSection` 这类合成词;同时 `interop_module` / `changelog` 在 describe 中不豁免)
-26. 同样扫描 `/_cokret/self/audit/recent` (若 alice 有权限) 与一个 list operation 的 JSON 序列化结果
+26. 同样扫描 `/_soland/self/audit/recent` (若 alice 有权限) 与一个 list operation 的 JSON 序列化结果
 27. 注意:本 phase 容易误报 (e.g. user-generated content 含 "Room");在 production 实现中应限定到 *server-managed* 字段;在测试中以 fixme 形式钉住,等 soland 明确 surface scope 后再 live 化
 
 ## Observable assertions (合并清单)

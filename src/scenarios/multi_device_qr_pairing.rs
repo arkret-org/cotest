@@ -210,7 +210,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   })).await?["realm_id"].as_str().unwrap().to_owned();
     //
     //   // Welcome device-B into the MLS group on `space_id`:
-    //   alice.post(&format!("/_cokret/self/spaces/{space_id}/mls/welcomes"))
+    //   alice.post(&format!("/_soland/self/spaces/{space_id}/mls/welcomes"))
     //        .json(&json!({"recipient_device_id": device_b, ... }))
     //        .send().await?;
     //
@@ -227,7 +227,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   assert!(revoke["revoked_at"].is_string());
     //
     //   // 6b. device-A still works:
-    //   expect_status(alice.get("/_cokret/self/account/me"), StatusCode::OK).await?;
+    //   expect_status(alice.get("/_soland/self/account/me"), StatusCode::OK).await?;
     //
     //   // 6c. device-B's bearer is now 401:
     //   //   (need a separate bearer issued to device-B — today only
@@ -236,7 +236,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let device_b_token = dev_login(&server, &alice.actor, &device_b).await?;
     //   expect_status(
     //       server.http()
-    //             .get(server.url("/_cokret/self/account/me"))
+    //             .get(server.url("/_soland/self/account/me"))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::UNAUTHORIZED,
     //   ).await?;

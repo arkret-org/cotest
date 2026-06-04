@@ -23,7 +23,7 @@ test.describe("account auth + device flow", () => {
   });
 
   test("expired access token returns 401 on protected endpoint", async ({ request }) => {
-    const meResp = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const meResp = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer expired-or-bogus-token` },
     });
     expect([401, 403]).toContain(meResp.status());

@@ -60,7 +60,7 @@
 //!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
 //!         ownership flow which is not yet wired.
 //! 6. device-B replays MLS history:
-//!       * `GET /_cokret/self/spaces/{S}/timeline?since=...` pulls all `ck.mls.commit` events.
+//!       * `GET /_soland/self/spaces/{S}/timeline?since=...` pulls all `ck.mls.commit` events.
 //!       * with the recovered `mls_history_backup_key`, device-B derives the pre-loss epoch secret
 //!         and decrypts each message's ciphertext.
 //!     Assert: device-B reconstructs all 3 plaintexts that device-A
@@ -283,7 +283,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let timeline = expect_json(
     //       server.http()
     //             .get(server.url(&format!(
-    //                 "/_cokret/self/spaces/{space_id}/timeline")))
+    //                 "/_soland/self/spaces/{space_id}/timeline")))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::OK,
     //   ).await?;

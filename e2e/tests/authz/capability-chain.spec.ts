@@ -79,7 +79,7 @@ test.describe("capability chain @fully-implemented", () => {
       });
 
       // mallory (non-member, no capability) attempts to send a message via API.
-      const send = await request.post(`${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/messages`, {
+      const send = await request.post(`${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/messages`, {
         headers: { authorization: `Bearer ${malloryToken}` },
         data: { content: { text: "mallory attempt" } },
       });
@@ -439,7 +439,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // alice queries her own audit log — must contain authz.grant.create + authz.grant.revoke.
       const aliceAudit = await request.get(
-        `${solandBaseUrl()}/_cokret/self/audit/events?actor=${encodeURIComponent(alice.did)}`,
+        `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(alice.did)}`,
         { headers: { authorization: `Bearer ${aliceToken}` } },
       );
       expect(aliceAudit.status()).toBe(200);
@@ -467,7 +467,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // bob queries his own audit log — must contain authz.grant.delegate.
       const bobAudit = await request.get(
-        `${solandBaseUrl()}/_cokret/self/audit/events?actor=${encodeURIComponent(bob.did)}`,
+        `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(bob.did)}`,
         { headers: { authorization: `Bearer ${bobToken}` } },
       );
       expect(bobAudit.status()).toBe(200);

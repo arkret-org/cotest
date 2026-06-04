@@ -40,6 +40,6 @@
 
 ## Implementation notes
 
-- 不使用旧 `/_cokret/self/spaces` mutation,测试全程走 canonical `POST /_cokret/self/events`。
+- 不使用旧 `/_soland/self/spaces` mutation,测试全程走 canonical `POST /_cokret/self/events`。
 - `ck.member.state` 用 `delivery_status=unroutable` 让 reducer 记录 joined_at,但不要求 DID delivery binding。
 - `@blocking-on: soland#history-visibility-read-path` 已在测试文件保留,作为曾经的服务端缺口标记。

@@ -15,6 +15,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ck:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
+    let _presence_realm = alice.create_realm("Presence Policy Space").await?;
     let bob = server
         .register_client("did:web:bob-authz.example", "@bob-authz", "dev_bob")
         .await?;
@@ -146,7 +147,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_after_revoke["reason_code"], "capability_denied");
 
     let audit = expect_json(
-        alice.get("/_cokret/self/audit/events?limit=20"),
+        alice.get("/_soland/self/audit/events?limit=20"),
         StatusCode::OK,
     )
     .await?;
@@ -180,15 +181,17 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
     assert!(presence_sync["cursor"].is_string());
 
-    let profile = expect_json(
-        server
-            .http()
-            .get(server.url("/_cokret/self/profile/presence?did=did:web:alice.example")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(profile["actor"], "did:web:alice.example");
-    assert_eq!(profile["presence"]["status"], "unavailable");
+    let presence_events = presence_sync["presence"]["events"]
+        .as_array()
+        .expect("account subscribe presence events array");
+    let alice_presence = presence_events
+        .iter()
+        .find(|event| {
+            event["actor_id"] == "did:web:alice.example"
+                || event["user_id"] == "did:web:alice.example"
+        })
+        .expect("alice presence in account subscribe baseline");
+    assert_eq!(alice_presence["status"], "unavailable");
 
     let push_registration = expect_json(
         alice

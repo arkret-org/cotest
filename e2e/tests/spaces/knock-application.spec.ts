@@ -5,7 +5,7 @@
 //   - §3.11 reuse limits / cooldown
 //
 // Soland implementation status (2026-05 audit):
-//   ✓ PUT /_cokret/self/spaces/{id}/policy can set join_rule="knock"
+//   ✓ PUT /_soland/self/spaces/{id}/policy can set join_rule="knock"
 //   ✓ POST /_cokret/self/moves accepts ck.member.state{membership="knock"}
 //   ✗ space.join_policy cell family not registered
 //   ✗ member.application / member.application.review event kinds not present
@@ -53,7 +53,7 @@ test.describe("knock + application + cooldown", () => {
       // SDK code, so we go through soland's higher-level "knock" REST shim
       // if it exists; otherwise the membership endpoint MAY be wired.
       const knockResp = await request.post(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(spaceId)}/members`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/members`,
         {
           headers: { authorization: `Bearer ${bobToken}` },
           data: { member: bob.did, action: "knock" },
@@ -92,7 +92,7 @@ test.describe("knock + application + cooldown", () => {
     async () => {
       // spec: models/space-and-place.md §3.6.2-§3.6.3
       // soland gap: member.application{,.review} event kinds not registered;
-      //             no /_cokret/self/spaces/:id/applications listing endpoint.
+      //             no /_soland/self/spaces/:id/applications listing endpoint.
     },
   );
 

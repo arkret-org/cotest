@@ -126,7 +126,7 @@ test.describe("world_readable history @fully-implemented", () => {
       // outsider attempts to write a message via API — must be denied even with
       // world_readable history (capability is not granted to non-members).
       const write = await request.post(
-        `${solandBaseUrl()}/_cokret/self/spaces/${encodeURIComponent(realmId)}/messages`,
+        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(realmId)}/messages`,
         {
           headers: { authorization: `Bearer ${outsiderToken}` },
           data: { content: { text: "S1.3 outsider tries to write" } },

@@ -45,7 +45,7 @@
 
 6. alice 进 board,点 "Add list" 三次,分别命名 `Todo`、`In Progress`、`Done`
 7. 每次 yougen 提交 `ck.space.create`:`{ kind: "list", parent_space_id: boardId, title }`
-8. 内部:通过 `GET /_cokret/self/spaces/{boardId}/cells/ck.component.child_order.v1` 暴露 list 顺序
+8. 内部:通过 `GET /_soland/self/spaces/{boardId}/cells/ck.component.child_order.v1` 暴露 list 顺序
 9. 断言:board 视图渲染三列(`list-column` testid × 3),按创建顺序排列
 
 ### Phase D — 在 Todo 加两个 Card

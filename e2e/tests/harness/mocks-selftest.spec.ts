@@ -331,39 +331,26 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(jwks.keys?.[0]?.kid).toBe("mock-push-gateway-key-1");
   });
 
-  test("mock-applet-registry: manifest registration, bot DID minting, ghost actor", async ({
+  test("mock-applet-registry: signed applet package", async ({
     request,
   }) => {
     const baseUrl = mockAppletRegistryBaseUrl();
     test.skip(!baseUrl, "mock-applet-registry not started for this run");
 
     const namespace = `selftest-${Date.now()}`;
-    const reg = await request.post(`${baseUrl}/_cokret/edge/applet/register`, {
+    const signed = await request.post(`${baseUrl}/sign-package`, {
       data: {
-        manifest: {
-          name: "selftest-bridge",
-          namespace,
-          capabilities: ["ck.message.send"],
-        },
-        manifest_signature: "selftest-signature",
+        namespace,
+        requested_scopes: ["ck.message.create", "ck.applet.ghost.provision"],
       },
     });
-    expect(reg.status()).toBe(200);
-    const regBody = await reg.json();
-    expect(typeof regBody.applet_id).toBe("string");
-    expect(regBody.bot_actor_did.startsWith("did:web:applet.")).toBe(true);
-    expect(regBody.namespace).toBe(namespace);
-    expect(regBody.status).toBe("registered");
-
-    const ghost = await request.post(
-      `${baseUrl}/_cokret/edge/applet/${regBody.applet_id}/ghost-actor`,
-      { data: { external_id: "u-42", display_name: "External User" } },
-    );
-    expect(ghost.status()).toBe(200);
-    const ghostBody = await ghost.json();
-    expect(ghostBody.ghost_actor_did.startsWith("did:web:ghost.")).toBe(true);
-    // Ghost actor accountability MUST point back to the registry/bot.
-    expect(ghostBody.accountability?.bot_actor_did).toBe(regBody.bot_actor_did);
+    expect(signed.status()).toBe(200);
+    const body = await signed.json();
+    expect(body.package_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(body.applet_package.schema).toBe("ck.schema.applet_package.v1");
+    expect(body.applet_package.bot_actor_id.startsWith(`did:web:bot-${namespace}`)).toBe(true);
+    expect(body.applet_package.requested_scopes).toContain("ck.message.create");
+    expect(body.applet_package.proof.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");

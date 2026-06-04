@@ -29,8 +29,8 @@
 
 ## Pre-conditions
 
-- 两个 DID 都通过 `POST /_cokret/self/account/register` 注册过(与现有 `ensureRegistered` 行为一致)
-- 两个 actor 都持有有效 dev session token(`POST /_cokret/gate/auth/dev-login`)
+- 两个 DID 都通过 `POST /_soland/self/account/register` 注册过(与现有 `ensureRegistered` 行为一致)
+- 两个 actor 都持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
 - 两个 actor 的 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
 - alice 的 consent cell 初始为空 or-set(没有任何 `ck.consent.grant` 历史事件)
 

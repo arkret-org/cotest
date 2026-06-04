@@ -20,10 +20,17 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-type SignedManifest = {
-  manifest: Record<string, unknown>;
-  signature: string;
-  manifest_signature?: string;
+type SignedPackage = {
+  applet_package: Record<string, unknown> & {
+    applet_id: string;
+    bot_actor_id: string;
+    namespaces?: {
+      handles?: Array<{ pattern: string }>;
+    };
+    registration_epoch: string;
+    requested_scopes: string[];
+  };
+  package_digest: string;
   signing_did: string;
 };
 
@@ -33,10 +40,11 @@ type AppletRegistration = {
   portal_realm_id: string;
   namespace: string;
   status: string;
+  registration_epoch: string;
 };
 
 test.describe("applet bridge", () => {
-  test("applet registers, bot joins space, ghost actor relays external messages with accountability chain", async ({
+  test("applet package installs, bot joins space, ghost actor relays external messages with accountability chain", async ({
     browser,
     request,
   }) => {
@@ -48,22 +56,28 @@ test.describe("applet bridge", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const signed = await signManifest(request, registryBase, {
-        manifest_id: `applet:bridge:demo-${stamp}`,
-        namespace: `bridge.demo.${stamp}`,
-        display_name: "Demo Bridge Applet",
-        capabilities: ["realm:portal", "message:write", "actor:provision-ghost"],
-      });
-      const registration = await registerApplet(request, aliceToken, signed, `register-${stamp}`);
-      expect(registration.status).toBe("registered");
-      expect(registration.bot_actor_did).toMatch(/^did:web:bot-bridge-demo-/);
-      expect(registration.portal_realm_id).toMatch(/^ck:realm:portal:bridge-demo-/);
-
       const spaceId = await createSpaceApi(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
         history_visibility: "joined",
       });
+      const signed = await signPackage(request, registryBase, {
+        package_id: `package:bridge:demo-${stamp}`,
+        namespace: `bridge.demo.${stamp}`,
+        display_name: "Demo Bridge Applet",
+        capabilities: ["realm:portal", "message:write", "actor:provision-ghost"],
+      });
+      const registration = await installApplet(
+        request,
+        aliceToken,
+        signed,
+        spaceId,
+        `register-${stamp}`,
+      );
+      expect(registration.status).toBe("installed");
+      expect(registration.bot_actor_did).toMatch(/^did:web:bot-bridge-demo-/);
+      expect(registration.portal_realm_id).toBe(spaceId);
+
       await addSpaceMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
       const accept = await request.post(
         `${registryBase}/bot/${encodeURIComponent(registration.applet_id)}/accept-invite`,
@@ -106,10 +120,16 @@ test.describe("applet bridge", () => {
       );
 
       const revoke = await request.post(
-        `${solandBaseUrl()}/_cokret/edge/applet/${encodeURIComponent(
+        `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
           registration.applet_id,
         )}/revoke`,
-        { headers: authHeaders(aliceToken), data: {} },
+        {
+          headers: authHeaders(aliceToken),
+          data: {
+            effective_scope: { kind: "realm", realm_id: spaceId },
+            registration_epoch: registration.registration_epoch,
+          },
+        },
       );
       expect(revoke.status()).toBe(200);
       expect((await revoke.json()).status).toBe("revoked");
@@ -150,17 +170,29 @@ test.describe("applet bridge", () => {
     const aliceToken = await issueDevSession(request, alice);
     const namespace = `bridge.conflict.${stamp}`;
 
-    const first = await signManifest(request, registryBase, {
-      manifest_id: `applet:bridge:conflict-a-${stamp}`,
-      namespace,
+    const spaceId = await createSpaceApi(request, aliceToken, {
+      title: `applet conflict ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
     });
-    await registerApplet(request, aliceToken, first, `conflict-first-${stamp}`);
 
-    const second = await signManifest(request, registryBase, {
-      manifest_id: `applet:bridge:conflict-b-${stamp}`,
+    const first = await signPackage(request, registryBase, {
+      package_id: `package:bridge:conflict-a-${stamp}`,
       namespace,
     });
-    const denied = await rawRegisterApplet(request, aliceToken, second, `conflict-second-${stamp}`);
+    await installApplet(request, aliceToken, first, spaceId, `conflict-first-${stamp}`);
+
+    const second = await signPackage(request, registryBase, {
+      package_id: `package:bridge:conflict-b-${stamp}`,
+      namespace,
+    });
+    const denied = await rawInstallApplet(
+      request,
+      aliceToken,
+      second,
+      spaceId,
+      `conflict-second-${stamp}`,
+    );
     expect(denied.status()).toBe(409);
     expect(wireErrCode(await denied.json())).toBe("applet_namespace_conflict");
   });
@@ -173,34 +205,39 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-revoke-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const signed = await signManifest(request, registryBase, {
-      manifest_id: `applet:bridge:revoke-${stamp}`,
-      namespace: `bridge.revoke.${stamp}`,
-    });
-    const registration = await registerApplet(request, aliceToken, signed, `revoke-${stamp}`);
     const spaceId = await createSpaceApi(request, aliceToken, {
       title: `applet revoke ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
     });
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:revoke-${stamp}`,
+      namespace: `bridge.revoke.${stamp}`,
+    });
+    const registration = await installApplet(request, aliceToken, signed, spaceId, `revoke-${stamp}`);
     await addSpaceMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
 
     const revoke = await request.post(
-      `${solandBaseUrl()}/_cokret/edge/applet/${encodeURIComponent(
+      `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
         registration.applet_id,
       )}/revoke`,
-      { headers: authHeaders(aliceToken), data: {} },
+      {
+        headers: authHeaders(aliceToken),
+        data: {
+          effective_scope: { kind: "realm", realm_id: spaceId },
+          registration_epoch: registration.registration_epoch,
+        },
+      },
     );
     expect(revoke.status()).toBe(200);
 
     const botWrite = await request.post(
-      `${solandBaseUrl()}/_cokret/edge/applet/${encodeURIComponent(
-        registration.applet_id,
-      )}/bot/messages`,
+      `${solandBaseUrl()}/_cokret/edge/applet/transactions`,
       {
         headers: authHeaders(aliceToken),
         data: {
-          space_id: spaceId,
+          applet_id: registration.applet_id,
+          realm_id: spaceId,
           payload: { kind: "message", text: `bot after revoke ${stamp}` },
         },
       },
@@ -212,7 +249,7 @@ test.describe("applet bridge", () => {
     expect(botDoc.status).toBe("revoked");
   });
 
-  test("E4.3 idempotency: same manifest_id + same Idempotency-Key returns original registration; different key conflicts", async ({
+  test("E4.3 idempotency: same applet package + same Idempotency-Key returns original registration; different key conflicts", async ({
     request,
   }) => {
     const registryBase = requireMockAppletRegistry();
@@ -220,22 +257,45 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-idem-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const signed = await signManifest(request, registryBase, {
-      manifest_id: `applet:bridge:idem-${stamp}`,
+    const spaceId = await createSpaceApi(request, aliceToken, {
+      title: `applet idem ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
+    });
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:idem-${stamp}`,
       namespace: `bridge.idem.${stamp}`,
     });
 
-    const firstResponse = await rawRegisterApplet(request, aliceToken, signed, `idem-${stamp}`);
+    const firstResponse = await rawInstallApplet(
+      request,
+      aliceToken,
+      signed,
+      spaceId,
+      `idem-${stamp}`,
+    );
     expect(firstResponse.status()).toBe(201);
-    const first = (await firstResponse.json()) as AppletRegistration;
+    const first = installRegistrationFromResponse(signed, spaceId, await firstResponse.json());
 
-    const secondResponse = await rawRegisterApplet(request, aliceToken, signed, `idem-${stamp}`);
+    const secondResponse = await rawInstallApplet(
+      request,
+      aliceToken,
+      signed,
+      spaceId,
+      `idem-${stamp}`,
+    );
     expect(secondResponse.status()).toBe(200);
-    const second = (await secondResponse.json()) as AppletRegistration;
+    const second = installRegistrationFromResponse(signed, spaceId, await secondResponse.json());
     expect(second.applet_id).toBe(first.applet_id);
     expect(second.bot_actor_did).toBe(first.bot_actor_did);
 
-    const conflict = await rawRegisterApplet(request, aliceToken, signed, `idem-other-${stamp}`);
+    const conflict = await rawInstallApplet(
+      request,
+      aliceToken,
+      signed,
+      spaceId,
+      `idem-other-${stamp}`,
+    );
     expect(conflict.status()).toBe(409);
     expect(wireErrCode(await conflict.json())).toBe("applet_already_registered");
   });
@@ -250,44 +310,92 @@ function requireMockAppletRegistry(): string {
   return registryBase;
 }
 
-async function signManifest(
+async function signPackage(
   request: APIRequestContext,
   registryBase: string,
   data: Record<string, unknown>,
-): Promise<SignedManifest> {
-  const response = await request.post(`${registryBase}/sign-manifest`, { data });
+): Promise<SignedPackage> {
+  const response = await request.post(`${registryBase}/sign-package`, { data });
   expect(response.status()).toBe(200);
-  return (await response.json()) as SignedManifest;
+  return (await response.json()) as SignedPackage;
 }
 
-async function registerApplet(
+async function installApplet(
   request: APIRequestContext,
   token: string,
-  signed: SignedManifest,
+  signed: SignedPackage,
+  realmId: string,
   idempotencyKey: string,
 ): Promise<AppletRegistration> {
-  const response = await rawRegisterApplet(request, token, signed, idempotencyKey);
+  const response = await rawInstallApplet(request, token, signed, realmId, idempotencyKey);
   expect(response.status()).toBe(201);
-  return (await response.json()) as AppletRegistration;
+  return installRegistrationFromResponse(signed, realmId, await response.json());
 }
 
-async function rawRegisterApplet(
+async function rawInstallApplet(
   request: APIRequestContext,
   token: string,
-  signed: SignedManifest,
+  signed: SignedPackage,
+  realmId: string,
   idempotencyKey: string,
 ) {
-  return await request.post(`${solandBaseUrl()}/_cokret/edge/applet/register`, {
+  const effectiveScope = { kind: "realm", realm_id: realmId };
+  const preview = await request.post(
+    `${solandBaseUrl()}/_cokret/self/applets/install/preview`,
+    {
+      headers: authHeaders(token),
+      data: {
+        applet_package: signed.applet_package,
+        effective_scope: effectiveScope,
+        approval_request: {
+          approve_actions: signed.applet_package.requested_scopes,
+          allow_ghost_actors: true,
+          allow_delegated_native_actors: false,
+          allow_e2ee_join: false,
+          allow_widget: false,
+        },
+      },
+    },
+  );
+  if (!preview.ok()) {
+    return preview;
+  }
+  const plan = await preview.json();
+  return await request.post(`${solandBaseUrl()}/_cokret/self/applets/install`, {
     headers: {
       ...authHeaders(token),
       "Idempotency-Key": idempotencyKey,
     },
     data: {
-      manifest: signed.manifest,
-      signature: signed.signature ?? signed.manifest_signature,
-      trusted_registry_did: signed.signing_did,
+      plan_digest: plan.plan_digest,
+      applet_package: signed.applet_package,
+      effective_scope: effectiveScope,
+      approved_scopes: plan.approved_scopes,
+      actor_policy: {
+        bot_membership: "join",
+        ghost_actor_mode: "policy_declared",
+      },
+      e2ee_policy: { allow_mls_join: false },
+      widget_policy: { allow_widget: false },
     },
   });
+}
+
+function installRegistrationFromResponse(
+  signed: SignedPackage,
+  realmId: string,
+  response: Record<string, unknown>,
+): AppletRegistration {
+  return {
+    applet_id: String(response.applet_id),
+    bot_actor_did: String(response.bot_actor_id),
+    portal_realm_id: realmId,
+    namespace:
+      signed.applet_package.namespaces?.handles?.[0]?.pattern ??
+      signed.applet_package.applet_id,
+    status: String(response.effective_status),
+    registration_epoch: String(response.registration_epoch),
+  };
 }
 
 async function didDocument(
@@ -296,7 +404,7 @@ async function didDocument(
   did: string,
 ): Promise<Record<string, unknown>> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/root/identity/${encodeURIComponent(did)}/did-document`,
+    `${solandBaseUrl()}/_cokret/root/identity/document?did=${encodeURIComponent(did)}`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);

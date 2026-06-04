@@ -141,7 +141,7 @@
 - **yougen owner ban UI**:`/space/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `ck.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
 - **remaining yougen UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 yougen 任务中补。
-- 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_cokret/self/spaces/${spaceId}/cells/ck.component.moderation_state.v1` 或等价 endpoint
+- 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_soland/self/spaces/${spaceId}/cells/ck.component.moderation_state.v1` 或等价 endpoint
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 
 ## 总耗时预估

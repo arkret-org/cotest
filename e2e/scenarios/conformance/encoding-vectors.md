@@ -46,8 +46,8 @@
 
 ## Pre-conditions
 
-- `alice` 和 `guest` 都通过 `POST /_cokret/self/account/register` 注册过 (`ensureRegistered`)
-- `alice` 持有有效 dev session token (`POST /_cokret/gate/auth/dev-login`)
+- `alice` 和 `guest` 都通过 `POST /_soland/self/account/register` 注册过 (`ensureRegistered`)
+- `alice` 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
 - harness 已加载 spec fixture JSON,数据结构形如:
   ```json
   {

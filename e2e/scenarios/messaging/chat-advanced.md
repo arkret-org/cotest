@@ -59,7 +59,7 @@
     - 解析 `@bob` token,生成 `ck.relation.mention` payload
     - 在 plain text space:`ck.message.create.payload.mentions = [bob.did]`
     - 在 E2EE space:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
-16. 断言:bob 收到 push notification(检查 yougen 的 in-app notification panel,或测试侧调 `GET /_cokret/self/notifications` 查 bob 的队列)
+16. 断言:bob 收到 push notification(检查 yougen 的 in-app notification panel,或测试侧调 `GET /_soland/self/notifications` 查 bob 的队列)
 17. 断言:carol **没**收到 mention 通知(她没被点名)
 
 ### Phase E — Poll

@@ -90,7 +90,7 @@ test.describe("discovery", () => {
     const newBio = `Engineer doing E2E work · ${stamp}`;
     const newAvatar = `https://avatars.example/bob-${stamp}.png`;
 
-    const update = await request.post(`${solandBaseUrl()}/_cokret/self/account/profile`, {
+    const update = await request.post(`${solandBaseUrl()}/_soland/self/account/profile`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { display_name: newDisplay, bio: newBio, avatar_url: newAvatar },
     });
@@ -102,12 +102,12 @@ test.describe("discovery", () => {
 
     // Directory search filters actors to the caller's accepted contacts
     // (or self) — establish a contact relationship so alice can see bob.
-    const aliceReq = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
+    const aliceReq = await request.post(`${solandBaseUrl()}/_soland/self/contacts/request`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { target: bob.did },
     });
     expect([200, 201]).toContain(aliceReq.status());
-    const bobAccept = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/respond`, {
+    const bobAccept = await request.post(`${solandBaseUrl()}/_soland/self/contacts/respond`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { requester: alice.did, action: "accept" },
     });
@@ -127,7 +127,7 @@ test.describe("discovery", () => {
     expect((bobRow as { avatar_url?: string }).avatar_url).toBe(newAvatar);
 
     // /account/me reflects new fields.
-    const me = await request.get(`${solandBaseUrl()}/_cokret/self/account/me`, {
+    const me = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer ${bobToken}` },
     });
     expect(me.ok()).toBeTruthy();
@@ -149,7 +149,7 @@ test.describe("discovery", () => {
     request,
   }) => {
     // spec: identity/account-lifecycle.md (contacts) — once a contact request
-    // is rejected, alice's subsequent `POST /_cokret/self/contacts/request` for the
+    // is rejected, alice's subsequent `POST /_soland/self/contacts/request` for the
     // same target MUST NOT open a fresh pending row. The server's cooldown
     // implementation today is "return the existing rejected record" rather
     // than a fresh 4xx — that satisfies the spec invariant (no new pending
@@ -163,7 +163,7 @@ test.describe("discovery", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // alice requests contact with bob.
-    const aliceReq = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
+    const aliceReq = await request.post(`${solandBaseUrl()}/_soland/self/contacts/request`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { target: bob.did },
     });
@@ -172,7 +172,7 @@ test.describe("discovery", () => {
     expect(aliceReqBody.status ?? aliceReqBody.contact?.status).toBe("pending");
 
     // bob rejects the request.
-    const bobResp = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/respond`, {
+    const bobResp = await request.post(`${solandBaseUrl()}/_soland/self/contacts/respond`, {
       headers: { authorization: `Bearer ${bobToken}` },
       data: { requester: alice.did, action: "reject" },
     });
@@ -182,7 +182,7 @@ test.describe("discovery", () => {
 
     // alice retries her contact request — must NOT open a fresh pending row.
     // The server returns the same record with status=rejected (cooldown).
-    const aliceRetry = await request.post(`${solandBaseUrl()}/_cokret/self/contacts/request`, {
+    const aliceRetry = await request.post(`${solandBaseUrl()}/_soland/self/contacts/request`, {
       headers: { authorization: `Bearer ${aliceToken}` },
       data: { target: bob.did },
     });

@@ -111,7 +111,7 @@
 
 ### Phase E — Frontier 一致性
 
-20. 测试 harness 分别查询 α 和 β 的 `/_cokret/self/spaces/${spaceId}/anchor-frontier` (或等价 endpoint),拿到两端的 anchor frontier 集合
+20. 测试 harness 分别查询 α 和 β 的 `/_soland/self/spaces/${spaceId}/anchor-frontier` (或等价 endpoint),拿到两端的 anchor frontier 集合
 21. 断言:两端 frontier 覆盖相同的 event 集合;event_id 相同,顺序可能不同但因果一致
 
 ### Phase F — Pull / Backfill (sub-test E2.1)

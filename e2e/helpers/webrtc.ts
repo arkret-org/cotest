@@ -33,7 +33,7 @@ export async function demoAliceToken(
   request: APIRequestContext,
 ): Promise<string> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/gate/auth/dev-login`,
+    `${solandBaseUrl()}/_soland/gate/auth/dev-login`,
     {
       data: {
         actor: DEMO_ALICE_DID,

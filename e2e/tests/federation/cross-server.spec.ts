@@ -102,7 +102,7 @@ async function waitForMember(
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/_cokret/self/spaces/${encodeURIComponent(spaceId)}`,
+          `${solandBaseUrl(server)}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -195,7 +195,7 @@ test.describe("cross-server federation", () => {
 
       // Each principal context binds to its own server.
       const aliceMeResp = await request.get(
-        `${solandBaseUrl("alpha")}/_cokret/self/account/me`,
+        `${solandBaseUrl("alpha")}/_soland/self/account/me`,
         {
           headers: { authorization: `Bearer ${aliceToken}` },
         },
@@ -205,7 +205,7 @@ test.describe("cross-server federation", () => {
       expect(aliceMe.did).toBe(alice.did);
 
       const bobMeResp = await request.get(
-        `${solandBaseUrl("beta")}/_cokret/self/account/me`,
+        `${solandBaseUrl("beta")}/_soland/self/account/me`,
         {
           headers: { authorization: `Bearer ${bobToken}` },
         },
@@ -348,7 +348,7 @@ test.describe("cross-server federation", () => {
     );
 
     const betaSpace = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/self/spaces/${encodeURIComponent(invite!.space_id)}`,
+      `${solandBaseUrl("beta")}/_soland/self/spaces/${encodeURIComponent(invite!.space_id)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();

@@ -413,15 +413,13 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
 ///
 /// Fixture-decoupled: asserts directly against the canonical registries +
 /// schemas so the new protocol surface can't silently drift:
-/// - `ck.applet.install.preview` / `ck.applet.install` / `ck.applet.revoke`
-///   operations exist;
-/// - `ck.schema.applet_package.v1` is registered and its schema requires
-///   `registration_epoch` / `package_digest` / `proof` and the base
-///   `ck.profile.applet_service.v1` profile;
+/// - `ck.applet.install.preview` / `ck.applet.install` / `ck.applet.revoke` operations exist;
+/// - `ck.schema.applet_package.v1` is registered and its schema requires `registration_epoch` /
+///   `package_digest` / `proof` and the base `ck.profile.applet_service.v1` profile;
 /// - `applet_registration_payload` now requires `registration_epoch`;
 /// - `applet_bridge_error_payload` requires exactly the §7 field set;
-/// - the audit∩applet event kinds (`ck.audit.applet_binding`,
-///   `ck.audit.release`) are present alongside the applet wire events.
+/// - the audit∩applet event kinds (`ck.audit.applet_binding`, `ck.audit.release`) are present
+///   alongside the applet wire events.
 pub fn run_applet_audit_surface_check() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -434,7 +432,11 @@ pub fn run_applet_audit_surface_check() -> Result<()> {
         .iter()
         .filter_map(|o| o.get("operation_id").and_then(Value::as_str))
         .collect();
-    for op in ["ck.applet.install.preview", "ck.applet.install", "ck.applet.revoke"] {
+    for op in [
+        "ck.applet.install.preview",
+        "ck.applet.install",
+        "ck.applet.revoke",
+    ] {
         if !op_ids.contains(op) {
             bail!("operation-registry missing applet install operation {op}");
         }
@@ -447,13 +449,13 @@ pub fn run_applet_audit_surface_check() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("schema-registry missing schemas[]"))?
         .iter()
-        .find(|s| {
-            s.get("schema_id").and_then(Value::as_str) == Some("ck.schema.applet_package.v1")
-        })
+        .find(|s| s.get("schema_id").and_then(Value::as_str) == Some("ck.schema.applet_package.v1"))
         .ok_or_else(|| anyhow!("schema-registry missing ck.schema.applet_package.v1"))?;
     let pkg_file = required_str(pkg_entry, "file")?;
     let pkg_schema = crate::conformance::load_artifact_json(pkg_file)?;
-    if pkg_schema.pointer("/properties/schema/const").and_then(Value::as_str)
+    if pkg_schema
+        .pointer("/properties/schema/const")
+        .and_then(Value::as_str)
         != Some("ck.schema.applet_package.v1")
     {
         bail!("applet-package schema `schema` const drifted");
@@ -487,7 +489,8 @@ pub fn run_applet_audit_surface_check() -> Result<()> {
     }
 
     // (3) + (4) ck.applet.registration / ck.applet.bridge_error payloads.
-    let event_payload = crate::conformance::load_artifact_json("schemas/event-payload.schema.json")?;
+    let event_payload =
+        crate::conformance::load_artifact_json("schemas/event-payload.schema.json")?;
     let reg_required: BTreeSet<&str> = event_payload
         .pointer("/$defs/applet_registration_payload/required")
         .and_then(Value::as_array)
@@ -545,7 +548,8 @@ pub fn run_applet_audit_surface_check() -> Result<()> {
     }
 
     // (6) Applet / audit error codes landed alongside the install model.
-    let error_registry = crate::conformance::load_artifact_json("registry/error-code-registry.json")?;
+    let error_registry =
+        crate::conformance::load_artifact_json("registry/error-code-registry.json")?;
     let error_codes: BTreeSet<&str> = error_registry
         .get("codes")
         .and_then(Value::as_array)

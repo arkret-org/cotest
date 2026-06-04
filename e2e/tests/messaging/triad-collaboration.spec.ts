@@ -324,7 +324,7 @@ test.describe("single-server triad collaboration", () => {
   );
 
   test.describe("E1 sub-cases", () => {
-    // E1.1 — soland's POST /_cokret/self/spaces/{id}/invite is idempotent on
+    // E1.1 — soland's POST /_soland/self/spaces/{id}/invite is idempotent on
     // (space_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
     // space.rs:627-644): the second create returns the existing invite_id
     // unchanged. yougen's invite-member button drives the same endpoint via

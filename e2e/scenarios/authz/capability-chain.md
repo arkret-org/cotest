@@ -67,7 +67,7 @@
 
 ### Phase F — Audit trail
 
-22. alice 查 `/space/${spaceId}/audit` 或调 `GET /_cokret/self/audit/events?space_id=<S>&kind=ck.capability.*`
+22. alice 查 `/space/${spaceId}/audit` 或调 `GET /_soland/self/audit/events?space_id=<S>&kind=ck.capability.*`
 23. 断言:看到一行 grant、一行 delegate、一行 revoke;每行含 grantor / grantee / timestamp / actions / constraints
 
 ## Edge cases

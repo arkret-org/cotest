@@ -147,7 +147,7 @@ test.describe("realm links", () => {
         const defaultSpaceId: string = (await defaultSpaceRes.json()).space_id;
         const violatingText = `this contains ${bannedKeyword} test`;
         const sendRes = await request.post(
-          `${solandBaseUrl()}/_cokret/self/spaces/${defaultSpaceId}/messages`,
+          `${solandBaseUrl()}/_soland/self/spaces/${defaultSpaceId}/messages`,
           { headers: bobAuth, data: { body: violatingText } },
         );
         // moderation_hold or rejected — both are spec-acceptable for an inherited deny.
@@ -193,7 +193,7 @@ test.describe("realm links", () => {
         expect(eff2Body.moderation.banned_keywords ?? []).not.toContain(bannedKeyword);
 
         const resend = await request.post(
-          `${solandBaseUrl()}/_cokret/self/spaces/${defaultSpaceId}/messages`,
+          `${solandBaseUrl()}/_soland/self/spaces/${defaultSpaceId}/messages`,
           { headers: bobAuth, data: { body: violatingText } },
         );
         const resendBody = await resend.json();

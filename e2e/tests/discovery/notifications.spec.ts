@@ -11,6 +11,7 @@ import {
   authHeaders,
   createSpaceApi,
   flowIdFromRealmId,
+  putAccountDataViaEventApi,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -187,8 +188,8 @@ test.describe("notifications", () => {
   }) => {
     // spec: discovery/push-notifications.md — `last_read_at` marker is
     // the canonical "everything before this is read" cursor. Asserted
-    // via the dedicated `POST /_cokret/self/notifications/mark-all-read` +
-    // `GET /_cokret/self/notifications` pair.
+    // via the dedicated `POST /_soland/self/notifications/mark-all-read` +
+    // `GET /_soland/self/notifications` pair.
     const stamp = Date.now();
     const alice = uniqueUser(`s23-mark-${stamp}`);
     await ensureRegistered(request, alice);
@@ -196,7 +197,7 @@ test.describe("notifications", () => {
     const auth = { authorization: `Bearer ${aliceToken}` };
 
     // Pre-mark: last_read_at is null.
-    const before = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
+    const before = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
       headers: auth,
     });
     expect(before.status()).toBe(200);
@@ -205,7 +206,7 @@ test.describe("notifications", () => {
 
     // mark-all-read writes a marker.
     const mark = await request.post(
-      `${solandBaseUrl()}/_cokret/self/notifications/mark-all-read`,
+      `${solandBaseUrl()}/_soland/self/notifications/mark-all-read`,
       { headers: auth, data: {} },
     );
     expect(mark.status()).toBe(200);
@@ -214,7 +215,7 @@ test.describe("notifications", () => {
     expect(markBody.actor).toBe(alice.did);
 
     // Post-mark: last_read_at reflects the marker.
-    const after = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
+    const after = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
       headers: auth,
     });
     expect(after.status()).toBe(200);
@@ -225,7 +226,7 @@ test.describe("notifications", () => {
     // Idempotency / advancement: a second call advances the marker.
     await new Promise((r) => setTimeout(r, 20));
     const mark2 = await request.post(
-      `${solandBaseUrl()}/_cokret/self/notifications/mark-all-read`,
+      `${solandBaseUrl()}/_soland/self/notifications/mark-all-read`,
       { headers: auth, data: {} },
     );
     const mark2Body = await mark2.json();
@@ -254,22 +255,24 @@ test.describe("notifications", () => {
         encryption_profile: "mls_rfc9420",
       });
       await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-      const rules = await request.put(`${solandBaseUrl()}/_cokret/self/account_data/ck.push_rules`, {
-        headers: authHeaders(bobToken),
-        data: {
-          content: {
-            rules: [
-              {
-                rule_id: "keyword.local",
-                evaluation_locus: "client",
-                conditions: [{ kind: "contains_keyword", pattern: "sealed-keyword" }],
-                actions: ["notify"],
-              },
-            ],
-          },
+      await putAccountDataViaEventApi(
+        request,
+        bobToken,
+        bob.did,
+        spaceId,
+        "ck.push_rules",
+        {
+          rules: [
+            {
+              rule_id: "keyword.local",
+              evaluation_locus: "client",
+              conditions: [{ kind: "contains_keyword", pattern: "sealed-keyword" }],
+              actions: ["notify"],
+            },
+          ],
         },
-      });
-      expect([200, 201]).toContain(rules.status());
+        { context: "set ck.push_rules" },
+      );
 
       const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
       const sidecarHash = mentionSidecarHash(spaceId, bob.did);
@@ -293,7 +296,7 @@ test.describe("notifications", () => {
         context: "encrypted message with blind wake sidecar",
       });
 
-      const notifications = await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, {
+      const notifications = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
         headers: authHeaders(bobToken),
       });
       expect(notifications.status()).toBe(200);
