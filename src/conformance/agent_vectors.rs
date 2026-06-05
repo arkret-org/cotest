@@ -128,7 +128,10 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         OP_AGENT_GRANT_DETACH,
         OP_AGENT_SIDECAR_THREAD_ENSURE,
     ] {
-        if !op.starts_with("ck.agent.") && !op.starts_with("ck.account.") {
+        if !op.starts_with("ck.agent.")
+            && !op.starts_with("ck.account.")
+            && !op.starts_with("ck.self.agent.")
+        {
             bail!("agent op id `{op}` lost canonical namespace");
         }
     }

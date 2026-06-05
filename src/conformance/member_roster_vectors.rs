@@ -29,19 +29,19 @@ use cokret_core::model::{
 use cokret_core::{Did, EventId, Hash, RealmId};
 use serde_json::{Value, json};
 
-pub const VECTOR_ID_ROSTER_SHAPE: &str = "ck.vector.sync.member_roster_shape.v1";
-pub const VECTOR_ID_ROSTER_LIMITED: &str = "ck.vector.sync.member_roster_limited.v1";
+pub const VECTOR_ID_ROSTER_SHAPE: &str = "ck.cotest_vector.sync.member_roster_shape.v1";
+pub const VECTOR_ID_ROSTER_LIMITED: &str = "ck.cotest_vector.sync.member_roster_limited.v1";
 pub const VECTOR_ID_ROSTER_WITH_INLINE_IDENTITY_EVENTS: &str =
-    "ck.vector.sync.member_roster_with_inline_identity_events.v1";
+    "ck.cotest_vector.sync.member_roster_with_inline_identity_events.v1";
 /// VECT-COT-4 roster v2 vectors.
 pub const VECTOR_ID_ROSTER_SUBJECT_UNDISCLOSED_OMITS_GATED: &str =
-    "ck.vector.sync.member_roster_subject_undisclosed_omits_gated_fields.v1";
+    "ck.cotest_vector.sync.member_roster_subject_undisclosed_omits_gated_fields.v1";
 pub const VECTOR_ID_ROSTER_HANDLE_CLAIMS_SUBJECT_ALIGNMENT: &str =
-    "ck.vector.sync.member_roster_handle_claims_subject_alignment.v1";
+    "ck.cotest_vector.sync.member_roster_handle_claims_subject_alignment.v1";
 pub const VECTOR_ID_ROSTER_DISPLAY_DIGEST_STABLE_UNDER_FRESHNESS: &str =
-    "ck.vector.sync.member_roster_display_state_digest_stable_under_freshness_hints.v1";
+    "ck.cotest_vector.sync.member_roster_display_state_digest_stable_under_freshness_hints.v1";
 pub const VECTOR_ID_ROSTER_HANDLE_CLAIMS_LIMITED_SEMANTICS: &str =
-    "ck.vector.sync.member_roster_handle_claims_limited_semantics.v1";
+    "ck.cotest_vector.sync.member_roster_handle_claims_limited_semantics.v1";
 
 pub const ALL_MEMBER_ROSTER_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_ROSTER_SHAPE,

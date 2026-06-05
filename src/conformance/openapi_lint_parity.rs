@@ -160,13 +160,12 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
 }
 
 /// Mirror of `lint_artifacts.py::check_vector_reference_closure` — verifies
-/// that every `ck.vector.*` id referenced from any fixture JSON resolves to a
-/// declared vector in the canonical conformance prose
-/// (`spec/v1/zh/conformance/conformance-vectors.md`) or the fixture file
-/// itself defines it.
+/// that every `ck.vector.*` id referenced from fixtures, conformance prose, or
+/// cotest Rust sources resolves to the canonical `vector-registry.json`.
 pub fn run_vector_reference_closure_check() -> Result<()> {
     use std::collections::BTreeSet;
     use std::fs;
+    use std::path::Path;
     let root = super::spec_artifacts_root();
     let fixtures_dir = root.join("fixtures");
     if !fixtures_dir.is_dir() {
@@ -175,7 +174,14 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
             fixtures_dir.display()
         );
     }
-    let mut declared: BTreeSet<String> = BTreeSet::new();
+    let registry_path = root.join("registry").join("vector-registry.json");
+    let registry = load_registry_vector_ids(&registry_path)?;
+    if registry.is_empty() {
+        bail!(
+            "vector registry {} contains no ck.vector.* ids",
+            registry_path.display()
+        );
+    }
     let mut referenced: BTreeSet<String> = BTreeSet::new();
     if let Some(prose_path) = root.parent().map(|spec_v1| {
         spec_v1
@@ -185,7 +191,7 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
     }) {
         if prose_path.is_file() {
             let prose = fs::read_to_string(&prose_path)?;
-            declared.extend(extract_vector_tokens(&prose));
+            referenced.extend(extract_vector_tokens(&prose));
         }
     }
     for entry in fs::read_dir(&fixtures_dir)? {
@@ -194,25 +200,61 @@ pub fn run_vector_reference_closure_check() -> Result<()> {
             continue;
         }
         let raw = fs::read_to_string(&path)?;
-        let fixture_vectors = extract_vector_tokens(&raw);
-        // Mirror cokret-spec's Python lint: any ck.vector.* token appearing
-        // in a fixture JSON is part of the known-vector definition set. Some
-        // fixture suites declare vectors in top-level arrays such as
-        // `conformance_vectors`, not only in object-level `vector_id` fields.
-        declared.extend(fixture_vectors.iter().cloned());
-        for vector_id in fixture_vectors {
-            referenced.insert(vector_id.clone());
-        }
+        referenced.extend(extract_vector_tokens(&raw));
     }
-    if declared.is_empty() {
-        bail!("no ck.vector.* declarations found in fixtures or conformance prose");
+    collect_rust_source_vector_refs(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut referenced,
+    )?;
+    collect_rust_source_vector_refs(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests"),
+        &mut referenced,
+    )?;
+    let missing = referenced
+        .difference(&registry)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        bail!(
+            "vector_reference_closure: ck.vector.* ids referenced outside canonical vector-registry.json: {}",
+            missing.join(", ")
+        );
     }
-    for vector_id in &referenced {
-        if !declared.contains(vector_id) {
-            bail!(
-                "vector_reference_closure: `{vector_id}` referenced by fixtures but not declared in any fixture or conformance prose"
-            );
+    Ok(())
+}
+
+fn load_registry_vector_ids(path: &std::path::Path) -> Result<BTreeSet<String>> {
+    let raw = std::fs::read_to_string(path)?;
+    let registry: serde_json::Value = serde_json::from_str(&raw)
+        .map_err(|error| anyhow!("failed to parse {}: {error}", path.display()))?;
+    let vectors = registry
+        .get("vectors")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow!("{} missing vectors[]", path.display()))?;
+    Ok(vectors
+        .iter()
+        .filter_map(|item| item.get("vector_id").and_then(serde_json::Value::as_str))
+        .filter(|id| id.starts_with("ck.vector."))
+        .map(ToOwned::to_owned)
+        .collect())
+}
+
+fn collect_rust_source_vector_refs(
+    path: &std::path::Path,
+    out: &mut BTreeSet<String>,
+) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_file() {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+            let raw = std::fs::read_to_string(path)?;
+            out.extend(extract_vector_tokens(&raw));
         }
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(path)? {
+        collect_rust_source_vector_refs(&entry?.path(), out)?;
     }
     Ok(())
 }
@@ -236,12 +278,21 @@ fn extract_vector_tokens(input: &str) -> Vec<String> {
                 break;
             }
         }
-        if let Ok(token) = std::str::from_utf8(&bytes[i..j]) {
+        if j > i + needle.len()
+            && let Ok(token) = std::str::from_utf8(&bytes[i..j])
+            && is_vector_id_token(token)
+        {
             out.push(token.to_string());
         }
         i = j;
     }
     out
+}
+
+fn is_vector_id_token(token: &str) -> bool {
+    token.rsplit('.').next().is_some_and(|tail| {
+        tail.len() > 1 && tail.starts_with('v') && tail[1..].chars().all(|ch| ch.is_ascii_digit())
+    })
 }
 
 fn yaml_string_array(value: &YamlValue, field: &str) -> Result<BTreeSet<String>> {

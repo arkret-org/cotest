@@ -117,10 +117,8 @@ conformance_test!(
 
 conformance_test!(
     /// Round 4 / A2 — lint parity: every `ck.vector.*` token referenced
-    /// from any fixture JSON resolves against the union of declared
-    /// vectors across the fixture set. Best-effort cotest mirror of
-    /// `check_vector_reference_closure` (the full Python pass also
-    /// parses prose markdown).
+    /// from fixture JSON, conformance prose, or cotest Rust sources
+    /// resolves against the canonical vector-registry.json.
     vector_reference_closure_check_matches_python_lint,
     "vector_reference_closure",
     cotest::conformance::run_vector_reference_closure_check,
@@ -456,9 +454,9 @@ conformance_test!(
 conformance_test!(
     /// Round-24 D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
     /// join/leave, covered_frontier accumulation, AAD digest pinning).
-    mlR_e2ee_basic_fixture_suite_matches_reference_semantics,
+    mls_e2ee_basic_fixture_suite_matches_reference_semantics,
     "mlR_e2ee_basic_fixture",
-    cotest::conformance::run_mlR_e2ee_basic_fixture_suite,
+    cotest::conformance::run_mls_e2ee_basic_fixture_suite,
 );
 
 conformance_test!(

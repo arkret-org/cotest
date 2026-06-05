@@ -37,27 +37,27 @@ use serde_json::json;
 // ── Vector ids ───────────────────────────────────────────────────────────────
 
 pub const VECTOR_ID_OA_GRAMMAR_SCHEME_EQUIVALENCE: &str =
-    "ck.vector.object_addressing.grammar.scheme_fragment_equivalence.v1";
+    "ck.cotest_vector.object_addressing.grammar.scheme_fragment_equivalence.v1";
 pub const VECTOR_ID_OA_GRAMMAR_HIERARCHY_FORMS: &str =
-    "ck.vector.object_addressing.grammar.realm_flow_message_forms.v1";
+    "ck.cotest_vector.object_addressing.grammar.realm_flow_message_forms.v1";
 pub const VECTOR_ID_OA_GRAMMAR_FAIL_CLOSED: &str =
-    "ck.vector.object_addressing.grammar.fail_closed.v1";
+    "ck.cotest_vector.object_addressing.grammar.fail_closed.v1";
 pub const VECTOR_ID_OA_GRAMMAR_REALM_DISAMBIGUATION: &str =
-    "ck.vector.object_addressing.grammar.realm_id_vs_alias.v1";
+    "ck.cotest_vector.object_addressing.grammar.realm_id_vs_alias.v1";
 pub const VECTOR_ID_OA_DIGEST_IGNORES_HINTS: &str =
-    "ck.vector.object_addressing.target_digest.ignores_hints.v1";
+    "ck.cotest_vector.object_addressing.target_digest.ignores_hints.v1";
 pub const VECTOR_ID_OA_DIGEST_TRACKS_OBJECT: &str =
-    "ck.vector.object_addressing.target_digest.tracks_object_identity.v1";
+    "ck.cotest_vector.object_addressing.target_digest.tracks_object_identity.v1";
 pub const VECTOR_ID_OA_DIGEST_OMITS_ABSENT: &str =
-    "ck.vector.object_addressing.target_digest.omits_absent_levels.v1";
+    "ck.cotest_vector.object_addressing.target_digest.omits_absent_levels.v1";
 pub const VECTOR_ID_OA_SCOPE_CONFUSION_REPLAY: &str =
-    "ck.vector.object_addressing.scope_confusion.cross_object_replay_rejected.v1";
+    "ck.cotest_vector.object_addressing.scope_confusion.cross_object_replay_rejected.v1";
 pub const VECTOR_ID_OA_SCOPE_TOKEN_LINK_TYPE_WINS: &str =
-    "ck.vector.object_addressing.scope_confusion.token_link_type_wins.v1";
+    "ck.cotest_vector.object_addressing.scope_confusion.token_link_type_wins.v1";
 pub const VECTOR_ID_OA_RESOLVE_TARGET_COMMON_FIELDS: &str =
-    "ck.vector.object_addressing.resolve_target.common_fields_shape.v1";
+    "ck.cotest_vector.object_addressing.resolve_target.common_fields_shape.v1";
 pub const VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW: &str =
-    "ck.vector.object_addressing.resolve_target.realm_target_carries_preview.v1";
+    "ck.cotest_vector.object_addressing.resolve_target.realm_target_carries_preview.v1";
 
 pub const ALL_OBJECT_ADDRESSING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_OA_GRAMMAR_SCHEME_EQUIVALENCE,

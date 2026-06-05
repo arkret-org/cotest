@@ -155,8 +155,8 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
         );
         for id in ids {
             assert!(
-                id.starts_with("ck.vector."),
-                "{label} id must live in ck.vector registry namespace: {id}"
+                id.starts_with("ck.cotest_vector."),
+                "{label} id must use cotest-local vector namespace unless it is registered in vector-registry.json: {id}"
             );
             assert!(seen.insert(*id), "duplicate conformance vector id: {id}");
         }
@@ -165,7 +165,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
         ALL_MEMBER_IDENTITY_VECTOR_IDS
             .iter()
             .any(|id| id.contains("handle_field_forbidden")),
-        "VECT-COT-8 handle_field_forbidden id must remain registered"
+        "VECT-COT-8 handle_field_forbidden id must remain present"
     );
 }
 
