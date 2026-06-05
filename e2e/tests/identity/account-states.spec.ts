@@ -6,8 +6,8 @@ import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
-  createSharedSpaceViaApi,
-  listSpaceEventsViaApi,
+  createSharedRealmViaApi,
+  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { wireErrCode } from "../../helpers/soland-api";
@@ -156,7 +156,7 @@ test.describe("account states", () => {
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+    const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
       title: "deactivation visibility",
       ownerDid: alice.did,
     });
@@ -197,7 +197,7 @@ test.describe("account states", () => {
     const searchBody = await search.json();
     expect((searchBody.results as Array<{ did: string }>).some((row) => row.did === alice.did)).toBe(false);
 
-    const events = await listSpaceEventsViaApi(request, bobToken, spaceId);
+    const events = await listRealmEventsViaApi(request, bobToken, spaceId);
     expect(JSON.stringify(events)).toContain(message);
   });
 

@@ -6,9 +6,9 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import {
-  createSpaceViaApi,
-  createSharedSpaceViaApi,
-  listSpaceEventsViaApi,
+  createRealmViaApi,
+  createSharedRealmViaApi,
+  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { stepShot } from "../../helpers/screenshots";
@@ -55,7 +55,7 @@ test.describe("single-server triad collaboration", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+    const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
       title: `triad audit ${stamp}`,
       historyVisibility: "shared",
     });
@@ -85,7 +85,7 @@ test.describe("single-server triad collaboration", () => {
       { context: "revise message" },
     );
 
-    const beforeRedact = await listSpaceEventsViaApi(request, bobToken, spaceId);
+    const beforeRedact = await listRealmEventsViaApi(request, bobToken, spaceId);
     expect(beforeRedact.map((event) => event.event_kind)).toEqual(
       expect.arrayContaining(["ck.message.create", "ck.message.revise"]),
     );
@@ -108,7 +108,7 @@ test.describe("single-server triad collaboration", () => {
       { context: "redact message" },
     );
 
-    const events = await listSpaceEventsViaApi(request, bobToken, spaceId);
+    const events = await listRealmEventsViaApi(request, bobToken, spaceId);
     expect(events.map((event) => event.event_kind)).toContain("ck.message.revise");
     expect(events.map((event) => event.event_kind)).not.toContain("ck.message.create");
     expect(events.map((event) => event.event_kind)).not.toContain("ck.message.redact");
@@ -133,7 +133,7 @@ test.describe("single-server triad collaboration", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+    const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
       title: `triad joined ${stamp}`,
       historyVisibility: "joined",
     });
@@ -186,7 +186,7 @@ test.describe("single-server triad collaboration", () => {
       context: "post-join triad message",
     });
 
-    const carolEvents = await listSpaceEventsViaApi(request, carolToken, spaceId);
+    const carolEvents = await listRealmEventsViaApi(request, carolToken, spaceId);
     const ids = carolEvents.map((event) => event.event_id);
     expect(ids).not.toContain(pre.event_id);
     expect(ids).toContain(post.event_id);
@@ -392,7 +392,7 @@ test.describe("single-server triad collaboration", () => {
       const carolToken = await issueDevSession(request, carol);
 
       const preMessage = `pre-join shared message ${stamp}`;
-      const spaceId = await createSpaceViaApi(request, aliceToken, {
+      const spaceId = await createRealmViaApi(request, aliceToken, {
         title: `S1.2 Shared History ${stamp}`,
         historyVisibility: "shared",
         ownerDid: alice.did,
@@ -421,7 +421,7 @@ test.describe("single-server triad collaboration", () => {
         { context: "join carol shared history" },
       );
 
-      const carolEvents = await listSpaceEventsViaApi(request, carolToken, spaceId);
+      const carolEvents = await listRealmEventsViaApi(request, carolToken, spaceId);
       expect(carolEvents.map((event) => event.event_id)).toContain(pre.event_id);
       expect(JSON.stringify(carolEvents)).toContain(preMessage);
     });

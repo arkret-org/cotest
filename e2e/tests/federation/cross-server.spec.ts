@@ -61,13 +61,13 @@ async function waitForInvite(
   request: APIRequestContext,
   token: string,
   inviteeDid: string,
-  spaceId: string,
+  realmId: string,
   server: "alpha" | "beta",
 ) {
   let found:
     | {
         invite_id: string;
-        space_id: string;
+        realm_id: string;
         invitee?: string;
         state?: string;
         status?: string;
@@ -80,8 +80,7 @@ async function waitForInvite(
         found = invites.find(
           (invite) =>
             invite.invitee === inviteeDid &&
-            invite.space_id.replace(/^ck:space:/, "ck:realm:") ===
-              spaceId.replace(/^ck:space:/, "ck:realm:"),
+            invite.realm_id === realmId,
         );
         return Boolean(found);
       },
@@ -95,14 +94,14 @@ async function waitForMember(
   request: APIRequestContext,
   token: string,
   memberDid: string,
-  spaceId: string,
+  realmId: string,
   server: "alpha" | "beta",
 ) {
   await expect
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
+          `${solandBaseUrl(server)}/_soland/self/spaces/${encodeURIComponent(realmId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -119,14 +118,14 @@ async function waitForMember(
 async function waitForEventBody(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   bodyText: string,
   server: "alpha" | "beta",
 ) {
   await expect
     .poll(
       async () => {
-        const body = await queryRealmEventsApi(request, token, spaceId, {
+        const body = await queryRealmEventsApi(request, token, realmId, {
           server,
           limit: 100,
         });
@@ -158,7 +157,7 @@ test.describe("cross-server federation", () => {
     expect(pushProbe.status()).not.toBe(404);
 
     const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?space_id=ck:space:probe`,
+      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?realm_id=ck:realm:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
   });
@@ -237,13 +236,13 @@ test.describe("cross-server federation", () => {
     });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const realmId = await alicePage.createSpace({
         title: `S2 Cross-server ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "joined",
       });
-      await alicePage.inviteFromAdmin(spaceId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.did);
       await stepShot(alicePage.page, testInfo, "alpha-invite-issued");
 
       // The invite MUST be visible in α's space-invites list right after issuing.
@@ -279,15 +278,15 @@ test.describe("cross-server federation", () => {
       "federation.outbound_push.signed_intent",
     );
 
-    const spaceId = typedId("space");
+    const realmId = typedId("realm");
     const inviteOperation = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.member.state",
       payload: {
         actor_id: bob.did,
         member: bob.did,
         membership: "invite",
-        space_title: `S2 pushed invite ${stamp}`,
+        realm_title: `S2 pushed invite ${stamp}`,
         discoverability: "public",
         history_visibility: "shared",
       },
@@ -297,7 +296,7 @@ test.describe("cross-server federation", () => {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       server: "beta",
-      spaceId,
+      realmId,
       serviceBindingRef: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
     });
     expect(push.accepted).toContain(inviteOperation.operation_id);
@@ -307,14 +306,14 @@ test.describe("cross-server federation", () => {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       server: "beta",
-      spaceId,
+      realmId,
       serviceBindingRef: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
     });
     expect(replay.accepted).toContain(inviteOperation.operation_id);
     expect(replay.rejected ?? []).toEqual([]);
 
     const pull = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?space_id=${encodeURIComponent(spaceId)}&limit=10`,
+      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?realm_id=${encodeURIComponent(realmId)}&limit=10`,
     );
     expect(pull.ok()).toBeTruthy();
     const pullBody = await pull.json();
@@ -330,11 +329,11 @@ test.describe("cross-server federation", () => {
       ),
     ).toHaveLength(1);
 
-    const projectedRealmId = spaceId.replace(/^ck:space:/, "ck:realm:");
+    const projectedRealmId = realmId.replace(/^ck:space:/, "ck:realm:");
     const invites = await listInvitesApi(request, bobToken, { server: "beta" });
     const invite = invites.find(
       (item) =>
-        [spaceId, projectedRealmId].includes(item.space_id) &&
+        [realmId, projectedRealmId].includes(item.realm_id) &&
         item.invitee === bob.did,
     );
     expect(invite).toBeTruthy();
@@ -342,13 +341,13 @@ test.describe("cross-server federation", () => {
       request,
       bobToken,
       bob.did,
-      invite!.space_id,
+      invite!.realm_id,
       invite!.invite_id,
       { server: "beta" },
     );
 
     const betaSpace = await request.get(
-      `${solandBaseUrl("beta")}/_soland/self/spaces/${encodeURIComponent(invite!.space_id)}`,
+      `${solandBaseUrl("beta")}/_soland/self/spaces/${encodeURIComponent(invite!.realm_id)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();
@@ -375,31 +374,31 @@ test.describe("cross-server federation", () => {
     });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const realmId = await alicePage.createSpace({
         title: `S2 auto federation ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "joined",
       });
-      await alicePage.inviteFromAdmin(spaceId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.did);
       await stepShot(alicePage.page, testInfo, "alpha-auto-invite-issued");
 
       const betaInvite = await waitForInvite(
         request,
         bobToken,
         bob.did,
-        spaceId,
+        realmId,
         "beta",
       );
       await acceptInviteApi(
         request,
         bobToken,
         bob.did,
-        betaInvite.space_id,
+        betaInvite.realm_id,
         betaInvite.invite_id,
         { server: "beta" },
       );
-      await waitForMember(request, aliceToken, bob.did, spaceId, "alpha");
+      await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
     } finally {
       await alicePage.close();
     }
@@ -418,7 +417,7 @@ test.describe("cross-server federation", () => {
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
-    const spaceId = await createRealmApi(
+    const realmId = await createRealmApi(
       request,
       aliceToken,
       {
@@ -439,32 +438,32 @@ test.describe("cross-server federation", () => {
       request,
       bobToken,
       bob.did,
-      spaceId,
+      realmId,
       "beta",
     );
     await acceptInviteApi(
       request,
       bobToken,
       bob.did,
-      betaInvite.space_id,
+      betaInvite.realm_id,
       betaInvite.invite_id,
       {
         server: "beta",
       },
     );
-    await waitForMember(request, aliceToken, bob.did, spaceId, "alpha");
+    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
 
     const aliceBody = `alice from alpha ${stamp}`;
-    await sendMessageApi(request, aliceToken, spaceId, aliceBody, {
+    await sendMessageApi(request, aliceToken, realmId, aliceBody, {
       server: "alpha",
     });
-    await waitForEventBody(request, bobToken, spaceId, aliceBody, "beta");
+    await waitForEventBody(request, bobToken, realmId, aliceBody, "beta");
 
     const bobBody = `bob from beta ${stamp}`;
-    await sendMessageApi(request, bobToken, spaceId, bobBody, {
+    await sendMessageApi(request, bobToken, realmId, bobBody, {
       server: "beta",
     });
-    await waitForEventBody(request, aliceToken, spaceId, bobBody, "alpha");
+    await waitForEventBody(request, aliceToken, realmId, bobBody, "alpha");
   });
 
   test("Pull / backfill: after a network partition, β fetches missing α events via GET /_cokret/peer/federation/pull-operations", async ({
@@ -480,7 +479,7 @@ test.describe("cross-server federation", () => {
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
-    const spaceId = await createRealmApi(
+    const realmId = await createRealmApi(
       request,
       aliceToken,
       {
@@ -501,24 +500,24 @@ test.describe("cross-server federation", () => {
       request,
       bobToken,
       bob.did,
-      spaceId,
+      realmId,
       "beta",
     );
     await acceptInviteApi(
       request,
       bobToken,
       bob.did,
-      betaInvite.space_id,
+      betaInvite.realm_id,
       betaInvite.invite_id,
       {
         server: "beta",
       },
     );
-    await waitForMember(request, aliceToken, bob.did, spaceId, "alpha");
+    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
 
     const missingBody = `pulled after partition ${stamp}`;
     const missingOperation = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.message.create",
       payload: {
         event_id: typedId("event"),
@@ -536,25 +535,25 @@ test.describe("cross-server federation", () => {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("alpha"),
       server: "alpha",
-      spaceId,
+      realmId,
       serviceBindingRef: `${solandServiceDid("alpha")}#cotest-partition-source`,
     });
-    await waitForEventBody(request, aliceToken, spaceId, missingBody, "alpha");
+    await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
     const betaBeforeEvents = await queryRealmEventsApi(
       request,
       bobToken,
-      spaceId,
+      realmId,
       {
         server: "beta",
         limit: 100,
       },
     );
     expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
-    const alphaFrontier = await operationFrontierApi(request, spaceId, {
+    const alphaFrontier = await operationFrontierApi(request, realmId, {
       server: "alpha",
     });
-    const betaFrontierBefore = await operationFrontierApi(request, spaceId, {
+    const betaFrontierBefore = await operationFrontierApi(request, realmId, {
       server: "beta",
     });
     expect(betaFrontierBefore.frontier_digest).not.toBe(
@@ -565,16 +564,16 @@ test.describe("cross-server federation", () => {
       server: "beta",
       peerUrl: solandBaseUrl("alpha"),
       peerDid: solandServiceDid("alpha"),
-      spaceId,
+      realmId,
       limit: 100,
     });
     expect(backfill.rejected ?? []).toEqual([]);
     expect(backfill.accepted ?? []).toContain(
       String(missingOperation.operation_id),
     );
-    await waitForEventBody(request, bobToken, spaceId, missingBody, "beta");
+    await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
 
-    const betaFrontierAfter = await operationFrontierApi(request, spaceId, {
+    const betaFrontierAfter = await operationFrontierApi(request, realmId, {
       server: "beta",
     });
     for (const operationId of alphaFrontier.operation_ids) {
@@ -602,9 +601,9 @@ test.describe("cross-server federation", () => {
   test("RFC 9421 signature failure: tampered Signature header makes β reject the entire batch with 4xx", async ({
     request,
   }) => {
-    const spaceId = typedId("space");
+    const realmId = typedId("realm");
     const operation = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.message.create",
       payload: {
         event_id: typedId("event"),
@@ -621,7 +620,7 @@ test.describe("cross-server federation", () => {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       server: "beta",
-      spaceId,
+      realmId,
       serviceBindingRef: `${solandServiceDid("alpha")}#cotest-rfc9421-negative`,
       tamperSignature: true,
     });

@@ -10,7 +10,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
-import { sameRealmOrSpaceId, signedEventEnvelope } from "./soland-api";
+import { signedEventEnvelope } from "./soland-api";
 
 export type JointUser = {
   name: string;
@@ -198,7 +198,7 @@ export class JointUserPage {
   // is session-local, so a fresh-context invitee can't see seed-member invites
   // via the UI. The old REST mutation endpoint was removed; acceptance now
   // flows through the canonical event path as an invite -> join member state.
-  async acceptInvite(spaceId: string) {
+  async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
     const token = this.session.sessionToken;
     if (!token) {
@@ -213,21 +213,21 @@ export class JointUserPage {
       );
     }
     const body = (await listResp.json()) as {
-      invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
+      invites?: Array<{ invite_id: string; realm_id: string; invitee?: string }>;
     };
     const invite = (body.invites ?? []).find(
-      (i) => sameRealmOrSpaceId(i.space_id, spaceId) && i.invitee === this.user.did,
+      (i) => i.realm_id === realmId && i.invitee === this.user.did,
     );
     if (!invite) {
       throw new Error(
-        `acceptInvite: no pending invite for ${this.user.did} in space ${spaceId} ` +
+        `acceptInvite: no pending invite for ${this.user.did} in realm ${realmId} ` +
           `(visible invites: ${JSON.stringify(body.invites ?? [])})`,
       );
     }
-    await this.acceptInviteById(spaceId, invite.invite_id);
+    await this.acceptInviteById(realmId, invite.invite_id);
   }
 
-  async acceptInviteById(spaceId: string, inviteId: string) {
+  async acceptInviteById(realmId: string, inviteId: string) {
     const serverUrl = this.session.serverUrl;
     const token = this.session.sessionToken;
     if (!token) {
@@ -235,7 +235,7 @@ export class JointUserPage {
     }
     const envelope = signedEventEnvelope({
       actorDid: this.user.did,
-      realmId: spaceId,
+      realmId,
       kind: "ck.member.state",
       payload: {
         actor_id: this.user.did,

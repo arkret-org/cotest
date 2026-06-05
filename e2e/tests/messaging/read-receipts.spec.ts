@@ -8,7 +8,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   allowPlaintextMessagesViaApi,
   authHeaders,
-  createSharedSpaceViaApi,
+  createSharedRealmViaApi,
   listReadMarkersViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
@@ -37,7 +37,7 @@ test.describe("read receipts + privacy", () => {
       issueDevSession(request, bob),
     ]);
 
-    const spaceId = await createSharedSpaceViaApi(
+    const spaceId = await createSharedRealmViaApi(
       request,
       bob,
       bobToken,
@@ -263,7 +263,7 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedSpaceViaApi(request, bob, bobToken, alice, aliceToken, {
+  const spaceId = await createSharedRealmViaApi(request, bob, bobToken, alice, aliceToken, {
     title: `${label} receipt ${stamp}`,
     discoverability: "listed",
     historyVisibility: "shared",

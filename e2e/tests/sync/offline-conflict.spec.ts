@@ -5,8 +5,8 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   allowPlaintextMessagesViaApi,
-  createSharedSpaceViaApi,
-  listSpaceEventsViaApi,
+  createSharedRealmViaApi,
+  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import {
@@ -44,7 +44,7 @@ test.describe("offline sync + conflict repair", () => {
     const m1 = `G2.T3 reconnect m1 ${stamp}`;
     const m2 = `G2.T3 reconnect m2 ${stamp}`;
 
-    const spaceId = await createSharedSpaceViaApi(
+    const spaceId = await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
@@ -58,7 +58,7 @@ test.describe("offline sync + conflict repair", () => {
     );
     await allowPlaintextMessagesViaApi(request, aliceToken, spaceId);
 
-    const before = JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId));
+    const before = JSON.stringify(await listRealmEventsViaApi(request, bobToken, spaceId));
     expect(before).not.toContain(m1);
     expect(before).not.toContain(m2);
 
@@ -66,11 +66,11 @@ test.describe("offline sync + conflict repair", () => {
     await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m2, { actorDid: alice.did });
 
     await expect
-      .poll(async () => JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId)), {
+      .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, bobToken, spaceId)), {
         timeout: 30_000,
       })
       .toContain(m1);
-    const after = JSON.stringify(await listSpaceEventsViaApi(request, bobToken, spaceId));
+    const after = JSON.stringify(await listRealmEventsViaApi(request, bobToken, spaceId));
     expect(after).toContain(m2);
   });
 
@@ -188,7 +188,7 @@ async function createBottomConflictFixture(
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedSpaceViaApi(
+  const spaceId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,

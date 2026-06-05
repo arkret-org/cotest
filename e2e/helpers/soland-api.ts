@@ -248,7 +248,7 @@ export async function listInvitesApi(
 ): Promise<
   Array<{
     invite_id: string;
-    space_id: string;
+    realm_id: string;
     invitee?: string;
     state?: string;
     status?: string;
@@ -261,7 +261,7 @@ export async function listInvitesApi(
     },
   );
   const body = await expectJsonOk<{
-    invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
+    invites?: Array<{ invite_id: string; realm_id: string; invitee?: string }>;
   }>(response, "list invites");
   return body.invites ?? [];
 }
@@ -481,10 +481,6 @@ export function flowIdFromRealmId(realmId: string): string {
   return `ck:flow:${suffix}`;
 }
 
-export function sameRealmOrSpaceId(left: string, right: string): boolean {
-  return left === right;
-}
-
 export function canonicalTimestamp(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
@@ -570,8 +566,7 @@ export async function rawPushFederationOperations(
 function federationOperationWireBody(
   operation: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { space_id: _spaceId, ...wireOperation } = operation;
-  return stripUndefined(wireOperation) as Record<string, unknown>;
+  return stripUndefined(operation) as Record<string, unknown>;
 }
 
 export async function backfillFederationOperations(

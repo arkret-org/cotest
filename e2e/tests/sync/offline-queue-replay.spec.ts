@@ -4,8 +4,8 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import {
-  createSharedSpaceViaApi,
-  listSpaceEventsViaApi,
+  createSharedRealmViaApi,
+  listRealmEventsViaApi,
 } from "../../helpers/api";
 import { signedEventEnvelope, submitSignedEventApi } from "../../helpers/soland-api";
 import {
@@ -115,7 +115,7 @@ test.describe("offline queue replay", () => {
         { timeout: 30_000 },
       );
       const serialized = JSON.stringify(
-        await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId),
+        await listRealmEventsViaApi(request, fixture.aliceToken, fixture.spaceId),
       );
       expect(serialized).not.toContain(body);
     } finally {
@@ -148,7 +148,7 @@ async function createOfflineFixture(
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedSpaceViaApi(
+  const spaceId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,
@@ -180,11 +180,11 @@ async function expectServerEventsContain(
   bodies: string[],
 ) {
   await expect
-    .poll(async () => JSON.stringify(await listSpaceEventsViaApi(request, token, spaceId)), {
+    .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, token, spaceId)), {
       timeout: 30_000,
     })
     .toContain(bodies[bodies.length - 1]);
-  const serialized = JSON.stringify(await listSpaceEventsViaApi(request, token, spaceId));
+  const serialized = JSON.stringify(await listRealmEventsViaApi(request, token, spaceId));
   for (const body of bodies) {
     expect(serialized).toContain(body);
   }

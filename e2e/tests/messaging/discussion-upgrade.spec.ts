@@ -11,9 +11,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   authHeaders,
-  createSharedSpaceViaApi,
+  createSharedRealmViaApi,
   listReadMarkersViaApi,
-  listSpaceEventsViaApi,
+  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
@@ -56,7 +56,7 @@ test.describe("discussion upgrade to child space", () => {
       { context: "inline discussion message" },
     );
 
-    const events = await listSpaceEventsViaApi(
+    const events = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
       fixture.parentId,
@@ -75,7 +75,7 @@ test.describe("discussion upgrade to child space", () => {
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "route-separate");
-    const childId = await createSharedSpaceViaApi(
+    const childId = await createSharedRealmViaApi(
       request,
       fixture.alice,
       fixture.aliceToken,
@@ -98,12 +98,12 @@ test.describe("discussion upgrade to child space", () => {
       { actorDid: fixture.alice.did },
     );
 
-    const parentEvents = await listSpaceEventsViaApi(
+    const parentEvents = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
       fixture.parentId,
     );
-    const childEvents = await listSpaceEventsViaApi(
+    const childEvents = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
       childId,
@@ -136,7 +136,7 @@ test.describe("discussion upgrade to child space", () => {
       issueDevSession(request, alice),
       issueDevSession(request, carol),
     ]);
-    const parentId = await createSharedSpaceViaApi(
+    const parentId = await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
@@ -151,7 +151,7 @@ test.describe("discussion upgrade to child space", () => {
       `parent hidden ${stamp}`,
       { actorDid: alice.did },
     );
-    await createSharedSpaceViaApi(
+    await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
@@ -184,7 +184,7 @@ test.describe("discussion upgrade to child space", () => {
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "child-receipt");
-    const childId = await createSharedSpaceViaApi(
+    const childId = await createSharedRealmViaApi(
       request,
       fixture.alice,
       fixture.aliceToken,
@@ -254,7 +254,7 @@ test.describe("discussion upgrade to child space", () => {
       "F1 bob inline",
     );
 
-    const events = await listSpaceEventsViaApi(
+    const events = await listRealmEventsViaApi(
       request,
       fixture.aliceToken,
       fixture.parentId,
@@ -291,7 +291,7 @@ test.describe("discussion upgrade to child space", () => {
       circleId,
     );
 
-    const parentEvents = await listSpaceEventsViaApi(
+    const parentEvents = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
       fixture.parentId,
@@ -317,7 +317,7 @@ test.describe("discussion upgrade to child space", () => {
       request,
       "fixme-route-after-promote",
     );
-    const childId = await createSharedSpaceViaApi(
+    const childId = await createSharedRealmViaApi(
       request,
       fixture.alice,
       fixture.aliceToken,
@@ -361,10 +361,10 @@ test.describe("discussion upgrade to child space", () => {
     );
 
     const parentIds = (
-      await listSpaceEventsViaApi(request, fixture.bobToken, fixture.parentId)
+      await listRealmEventsViaApi(request, fixture.bobToken, fixture.parentId)
     ).map((event) => event.event_id);
     const childIds = (
-      await listSpaceEventsViaApi(request, fixture.bobToken, childId)
+      await listRealmEventsViaApi(request, fixture.bobToken, childId)
     ).map((event) => event.event_id);
     expect(parentIds).toContain(pre.event_id);
     expect(parentIds).not.toContain(post.event_id);
@@ -389,7 +389,7 @@ test.describe("discussion upgrade to child space", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const parentId = await createSharedSpaceViaApi(
+    const parentId = await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
@@ -400,7 +400,7 @@ test.describe("discussion upgrade to child space", () => {
         historyVisibility: "joined",
       },
     );
-    const childId = await createSharedSpaceViaApi(
+    const childId = await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
@@ -450,7 +450,7 @@ test.describe("discussion upgrade to child space", () => {
       expect(parentResponse.status()).toBe(404);
     }
     const childIds = (
-      await listSpaceEventsViaApi(request, carolToken, childId)
+      await listRealmEventsViaApi(request, carolToken, childId)
     ).map((event) => event.event_id);
     expect(childIds).toContain(post.event_id);
   });
@@ -459,7 +459,7 @@ test.describe("discussion upgrade to child space", () => {
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "fixme-child-e2ee");
-    const childId = await createSharedSpaceViaApi(
+    const childId = await createSharedRealmViaApi(
       request,
       fixture.alice,
       fixture.aliceToken,
@@ -473,10 +473,10 @@ test.describe("discussion upgrade to child space", () => {
     );
 
     const parentRealm = (
-      await listSpaceEventsViaApi(request, fixture.bobToken, fixture.parentId)
+      await listRealmEventsViaApi(request, fixture.bobToken, fixture.parentId)
     ).find((event) => event.event_kind === "ck.realm.create");
     const childRealm = (
-      await listSpaceEventsViaApi(request, fixture.bobToken, childId)
+      await listRealmEventsViaApi(request, fixture.bobToken, childId)
     ).find((event) => event.event_kind === "ck.realm.create");
     expect(parentRealm?.payload).toMatchObject({
       object: { encryption_profile: "none" },
@@ -515,7 +515,7 @@ test.describe("discussion upgrade to child space", () => {
       }),
     });
     expect(response.status()).toBe(200);
-    const events = await listSpaceEventsViaApi(
+    const events = await listRealmEventsViaApi(
       request,
       fixture.aliceToken,
       fixture.parentId,
@@ -539,7 +539,7 @@ test.describe("discussion upgrade to child space", () => {
       request,
       "fixme-receipt-override",
     );
-    const childId = await createSharedSpaceViaApi(
+    const childId = await createSharedRealmViaApi(
       request,
       fixture.alice,
       fixture.aliceToken,
@@ -594,7 +594,7 @@ async function createDiscussionFixture(
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const parentId = await createSharedSpaceViaApi(
+  const parentId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,

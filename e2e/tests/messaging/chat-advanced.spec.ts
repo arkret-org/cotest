@@ -10,8 +10,8 @@ import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   authHeaders,
-  createSharedSpaceViaApi,
-  listSpaceEventsViaApi,
+  createSharedRealmViaApi,
+  listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
@@ -111,7 +111,7 @@ test.describe("chat advanced", () => {
       { context: "remove reaction" },
     );
 
-    const events = await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
+    const events = await listRealmEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
     expect(events.map((event) => event.event_kind)).toEqual(
       expect.arrayContaining(["ck.reaction.add", "ck.reaction.remove"]),
     );
@@ -148,7 +148,7 @@ test.describe("chat advanced", () => {
     });
     await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
 
-    const events = await listSpaceEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
+    const events = await listRealmEventsViaApi(request, fixture.aliceToken, fixture.spaceId);
     const messageEvents = events.filter((event) => event.event_kind === "ck.message.create");
     expect(messageEvents.map((event) => event.event_id)).toEqual([
       root.event_id,
@@ -187,7 +187,7 @@ test.describe("chat advanced", () => {
       { context: "mention message" },
     );
 
-    const events = await listSpaceEventsViaApi(request, fixture.bobToken, fixture.spaceId);
+    const events = await listRealmEventsViaApi(request, fixture.bobToken, fixture.spaceId);
     const mention = events.find(
       (event) =>
         event.event_kind === "ck.message.create" &&
@@ -671,7 +671,7 @@ test.describe("chat advanced", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createSharedSpaceViaApi(
+      const spaceId = await createSharedRealmViaApi(
         request,
         alice,
         aliceToken,
@@ -701,7 +701,7 @@ test.describe("chat advanced", () => {
         context: "submit E2EE mention sidecar message",
       });
 
-      const events = await listSpaceEventsViaApi(request, aliceToken, spaceId, { limit: 100 });
+      const events = await listRealmEventsViaApi(request, aliceToken, spaceId, { limit: 100 });
       const messageEvent = events.find(
         (event) => String(event.event_id) === String(envelope.event_id),
       );
@@ -755,7 +755,7 @@ async function createChatApiFixture(request: APIRequestContext, label: string) {
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedSpaceViaApi(request, alice, aliceToken, bob, bobToken, {
+  const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
     title: `${label} ${stamp}`,
     historyVisibility: "shared",
   });

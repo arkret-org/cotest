@@ -7,7 +7,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   authHeaders,
-  createSharedSpaceViaApi,
+  createSharedRealmViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
@@ -57,7 +57,7 @@ test.describe("moderation appeal", () => {
       issueDevSession(request, appellant),
       issueDevSession(request, reviewer),
     ]);
-    const realmId = await createSharedSpaceViaApi(
+    const realmId = await createSharedRealmViaApi(
       request,
       reviewer,
       reviewerToken,
@@ -273,7 +273,7 @@ async function createAppealFixture(
     issueDevSession(request, moderator),
     issueDevSession(request, reviewer),
   ]);
-  const realmId = await createSharedSpaceViaApi(
+  const realmId = await createSharedRealmViaApi(
     request,
     appellant,
     appellantToken,

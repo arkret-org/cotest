@@ -3,7 +3,6 @@ import { solandBaseUrl, type SolandKey } from "./env";
 import {
   createRealmApi,
   flowIdFromRealmId,
-  sameRealmOrSpaceId,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
@@ -13,7 +12,7 @@ export function authHeaders(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-export type ApiSpaceOpts = {
+export type ApiRealmOpts = {
   title: string;
   summary?: string;
   discoverability?: string;
@@ -28,7 +27,7 @@ export type ApiSpaceOpts = {
 export type ApiMessage = {
   event_id: string;
   operation_id?: string;
-  space_id: string;
+  realm_id: string;
   sender?: string;
   sync_token?: string;
 };
@@ -50,18 +49,14 @@ export type ReadMarker = {
   updated_at: string;
 };
 
-// Thin wrapper over `createRealmApi` (soland-api.ts) so there is a single
-// realm-creation flow. The only behavioural carry-over from the old standalone
-// implementation is the `default_discoverability: "public"` default (the
-// soland-api version defaults to "listed"); we preserve it by mapping
-// `discoverability` to "public" when the caller does not specify one. The
-// `ownerDid` assertion is also preserved — existing callers always pass it.
-export async function createSpaceViaApi(
+// Thin wrapper over `createRealmApi` so tests share one canonical
+// realm-creation flow while preserving the public discoverability default.
+export async function createRealmViaApi(
   request: APIRequestContext,
   token: string,
-  opts: ApiSpaceOpts,
+  opts: ApiRealmOpts,
 ): Promise<string> {
-  expect(opts.ownerDid, "createSpaceViaApi requires opts.ownerDid for canonical events").toBeTruthy();
+  expect(opts.ownerDid, "createRealmViaApi requires opts.ownerDid for canonical events").toBeTruthy();
   return await createRealmApi(
     request,
     token,
@@ -83,7 +78,7 @@ export async function acceptInviteViaApi(
   request: APIRequestContext,
   token: string,
   actorDid: string,
-  spaceId: string,
+  realmId: string,
   opts: { server?: SolandKey } = {},
 ) {
   const base = solandBaseUrl(opts.server);
@@ -92,19 +87,19 @@ export async function acceptInviteViaApi(
   });
   expect(list.status()).toBe(200);
   const body = (await list.json()) as {
-    invites?: Array<{ invite_id: string; space_id: string; invitee?: string }>;
+    invites?: Array<{ invite_id: string; realm_id: string; invitee?: string }>;
   };
   const invite = (body.invites ?? []).find(
-    (candidate) => sameRealmOrSpaceId(candidate.space_id, spaceId) && candidate.invitee === actorDid,
+    (candidate) => candidate.realm_id === realmId && candidate.invitee === actorDid,
   );
-  expect(invite, `pending invite for ${actorDid} in ${spaceId}`).toBeTruthy();
+  expect(invite, `pending invite for ${actorDid} in ${realmId}`).toBeTruthy();
 
   await submitSignedEventApi(
     request,
     token,
     signedEventEnvelope({
       actorDid,
-      realmId: spaceId,
+      realmId,
       kind: "ck.member.state",
       payload: {
         actor_id: actorDid,
@@ -118,15 +113,15 @@ export async function acceptInviteViaApi(
   );
 }
 
-export async function createSharedSpaceViaApi(
+export async function createSharedRealmViaApi(
   request: APIRequestContext,
   owner: JointUser,
   ownerToken: string,
   member: JointUser,
   memberToken: string,
-  opts: Omit<ApiSpaceOpts, "invitees">,
+  opts: Omit<ApiRealmOpts, "invitees">,
 ): Promise<string> {
-  const spaceId = await createSpaceViaApi(request, ownerToken, {
+  const realmId = await createRealmViaApi(request, ownerToken, {
     ...opts,
     ownerDid: owner.did,
   });
@@ -135,7 +130,7 @@ export async function createSharedSpaceViaApi(
     ownerToken,
     signedEventEnvelope({
       actorDid: owner.did,
-      realmId: spaceId,
+      realmId,
       kind: "ck.member.state",
       payload: {
         actor_id: member.did,
@@ -147,18 +142,18 @@ export async function createSharedSpaceViaApi(
     { server: opts.server, context: `join ${member.did}` },
   );
   void memberToken;
-  return spaceId;
+  return realmId;
 }
 
 export async function allowPlaintextMessagesViaApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   opts: { server?: SolandKey } = {},
 ) {
   void request;
   void token;
-  void spaceId;
+  void realmId;
   void opts;
 }
 
@@ -174,17 +169,17 @@ export async function allowPlaintextMessagesViaApi(
 export async function sendPlaintextMessageViaApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   body: string,
   opts: { actorDid?: string; server?: SolandKey } = {},
 ): Promise<ApiMessage> {
   expect(opts.actorDid, "sendPlaintextMessageViaApi requires opts.actorDid for canonical events").toBeTruthy();
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
-    realmId: spaceId,
+    realmId,
     kind: "ck.message.create",
     payload: {
-      flow_id: flowIdFromRealmId(spaceId),
+      flow_id: flowIdFromRealmId(realmId),
       track_name: "discussion",
       content: {
         kind: "ck.content.text",
@@ -199,19 +194,19 @@ export async function sendPlaintextMessageViaApi(
   });
   return {
     event_id: String(envelope.event_id),
-    space_id: spaceId,
+    realm_id: realmId,
     sender: opts.actorDid,
   };
 }
 
-export async function listSpaceEventsViaApi(
+export async function listRealmEventsViaApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   opts: { limit?: number; server?: SolandKey } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events?realms=${encodeURIComponent(spaceId)}&limit=${
+    `${solandBaseUrl(opts.server)}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=${
       opts.limit ?? 50
     }`,
     { headers: authHeaders(token) },
@@ -225,10 +220,10 @@ export async function listSpaceEventsViaApi(
 export async function listReadMarkersViaApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   opts: { server?: SolandKey } = {},
 ): Promise<ReadMarker[]> {
-  const events = await listSpaceEventsViaApi(request, token, spaceId, {
+  const events = await listRealmEventsViaApi(request, token, realmId, {
     server: opts.server,
     limit: 100,
   });
