@@ -14,7 +14,7 @@ import {
 } from "../../helpers/env";
 import {
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   expectJsonOk,
 } from "../../helpers/soland-api";
 import { stepShot } from "../../helpers/screenshots";
@@ -54,7 +54,7 @@ test.describe("policy server check", () => {
       ensureRegistered(request, bob),
     ]);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S30 policy config ${stamp}`,
       discoverability: "listed",
       history_visibility: "shared",

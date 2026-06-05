@@ -31,13 +31,13 @@ import {
   acceptInviteApi,
   authHeaders,
   backfillFederationOperations,
-  createSpaceApi,
+  createRealmApi,
   listInvitesApi,
   makeOperation,
   operationFrontierApi,
   pushFederationOperations,
   rawPushFederationOperations,
-  querySpaceEventsApi,
+  queryRealmEventsApi,
   sendMessageApi,
   typedId,
 } from "../../helpers/soland-api";
@@ -126,7 +126,7 @@ async function waitForEventBody(
   await expect
     .poll(
       async () => {
-        const body = await querySpaceEventsApi(request, token, spaceId, {
+        const body = await queryRealmEventsApi(request, token, spaceId, {
           server,
           limit: 100,
         });
@@ -418,7 +418,7 @@ test.describe("cross-server federation", () => {
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
-    const spaceId = await createSpaceApi(
+    const spaceId = await createRealmApi(
       request,
       aliceToken,
       {
@@ -480,7 +480,7 @@ test.describe("cross-server federation", () => {
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
-    const spaceId = await createSpaceApi(
+    const spaceId = await createRealmApi(
       request,
       aliceToken,
       {
@@ -541,7 +541,7 @@ test.describe("cross-server federation", () => {
     });
     await waitForEventBody(request, aliceToken, spaceId, missingBody, "alpha");
 
-    const betaBeforeEvents = await querySpaceEventsApi(
+    const betaBeforeEvents = await queryRealmEventsApi(
       request,
       bobToken,
       spaceId,

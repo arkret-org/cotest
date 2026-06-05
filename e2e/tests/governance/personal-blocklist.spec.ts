@@ -6,14 +6,14 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   accountSubscribeDeltaApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   makeOperation,
   putAccountDataViaEventApi,
   pushFederationOperations,
-  querySpaceEventsApi,
+  queryRealmEventsApi,
   sendMessageApi,
 } from "../../helpers/soland-api";
 import {
@@ -187,13 +187,13 @@ test.describe("personal blocklist", () => {
         issueDevSession(request, bob),
         issueDevSession(request, carol),
       ]);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S31 E11.1 ${stamp}`,
         public: true,
         history_visibility: "shared",
       });
-      await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-      await addSpaceMemberApi(request, aliceToken, spaceId, carol.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, carol.did);
       await putBlocklist(request, aliceToken, alice.did, spaceId, [
         canonicalActorBlockEntry(bob.did),
       ]);
@@ -201,8 +201,8 @@ test.describe("personal blocklist", () => {
       const body = `S31 E11.1 bob ${stamp}`;
       const sent = await sendMessageApi(request, bobToken, spaceId, body);
 
-      expect(eventsText(await querySpaceEventsApi(request, aliceToken, spaceId))).not.toContain(body);
-      expect(eventsText(await querySpaceEventsApi(request, carolToken, spaceId))).toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, carolToken, spaceId))).toContain(body);
 
       const redactOperation = makeOperation({
         spaceId,
@@ -220,7 +220,7 @@ test.describe("personal blocklist", () => {
       });
       expect(redactPush.accepted).toContain(redactOperation.operation_id);
 
-      expect(eventsText(await querySpaceEventsApi(request, carolToken, spaceId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, carolToken, spaceId))).not.toContain(body);
     },
   );
 
@@ -235,16 +235,16 @@ test.describe("personal blocklist", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S31 E11.2 ${stamp}`,
         public: true,
         history_visibility: "shared",
       });
-      await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
 
       const mutedVisible = `S31 E11.2 muted-visible ${stamp}`;
       await sendMessageApi(request, bobToken, spaceId, mutedVisible);
-      expect(eventsText(await querySpaceEventsApi(request, aliceToken, spaceId))).toContain(
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).toContain(
         mutedVisible,
       );
 
@@ -289,7 +289,7 @@ test.describe("personal blocklist", () => {
       ]);
       const blockedHidden = `S31 E11.2 blocked-hidden ${stamp}`;
       await sendMessageApi(request, bobToken, spaceId, blockedHidden);
-      expect(eventsText(await querySpaceEventsApi(request, aliceToken, spaceId))).not.toContain(
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(
         blockedHidden,
       );
     },
@@ -306,12 +306,12 @@ test.describe("personal blocklist", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S31 E11.3 ${stamp}`,
         public: true,
         history_visibility: "shared",
       });
-      await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
       await putBlocklist(request, aliceToken, alice.did, spaceId, [
         canonicalActorBlockEntry(bob.did),
       ]);
@@ -319,8 +319,8 @@ test.describe("personal blocklist", () => {
       const body = `S31 E11.3 bob own message ${stamp}`;
       await sendMessageApi(request, bobToken, spaceId, body);
 
-      expect(eventsText(await querySpaceEventsApi(request, aliceToken, spaceId))).not.toContain(body);
-      expect(eventsText(await querySpaceEventsApi(request, bobToken, spaceId))).toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, bobToken, spaceId))).toContain(body);
 
       expect(await blocklistContains(request, bobToken, alice.did)).toBe(false);
       expect(await readNotificationsText(request, bobToken)).not.toMatch(/blocked by|blocklist/i);

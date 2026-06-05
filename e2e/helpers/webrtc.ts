@@ -4,7 +4,7 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { solandBaseUrl } from "./env";
-import { createSpaceApi } from "./soland-api";
+import { createRealmApi } from "./soland-api";
 
 export let DEMO_REALM_ID = "ck:realm:0196419b-0000-7000-8000-000000000000";
 export const DEMO_ALICE_DID = "did:web:alice.example";
@@ -52,7 +52,7 @@ export async function createCallSession(
   request: APIRequestContext,
   token: string,
 ): Promise<string> {
-  DEMO_REALM_ID = await createSpaceApi(request, token, {
+  DEMO_REALM_ID = await createRealmApi(request, token, {
     title: `cotest webrtc ${Date.now()}`,
     history_visibility: "joined",
     ownerDid: DEMO_ALICE_DID,

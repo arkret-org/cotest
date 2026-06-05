@@ -17,7 +17,7 @@ import {
 } from "../../helpers/env";
 import {
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   makeOperation,
   operationFrontierApi,
   rawPushFederationOperations,
@@ -76,7 +76,7 @@ test.describe("federation security hardening", () => {
     const alice = uniqueUser("fed-deny-alice");
     await ensureRegistered(request, alice, { server: "alpha" });
     const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
-    const spaceId = await createSpaceApi(
+    const spaceId = await createRealmApi(
       request,
       aliceToken,
       {
@@ -112,7 +112,7 @@ test.describe("federation security hardening", () => {
     const alice = uniqueUser("fed-egress-alice");
     await ensureRegistered(request, alice, { server: "alpha" });
     const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
-    const spaceId = await createSpaceApi(
+    const spaceId = await createRealmApi(
       request,
       aliceToken,
       { title: "private egress rejection", public: false },

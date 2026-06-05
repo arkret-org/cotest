@@ -16,9 +16,9 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 
@@ -55,11 +55,11 @@ test.describe("calls", () => {
       await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
       const aliceToken = await issueDevSession(request, alice);
       const bobToken = await issueDevSession(request, bob);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S18 WebRTC ${stamp}`,
         public: true,
       });
-      await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
 
       const session = await request.post(`${solandBaseUrl()}/_cokret/self/webrtc/sessions`, {
         headers: authHeaders(aliceToken),
@@ -476,12 +476,12 @@ async function setupCallSpace(request: APIRequestContext, label: string) {
   const aliceToken = await issueDevSession(request, alice);
   const bobToken = await issueDevSession(request, bob);
   const carolToken = await issueDevSession(request, carol);
-  const spaceId = await createSpaceApi(request, aliceToken, {
+  const spaceId = await createRealmApi(request, aliceToken, {
     title: `S18 ${label} ${stamp}`,
     public: true,
   });
-  await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-  await addSpaceMemberApi(request, aliceToken, spaceId, carol.did);
+  await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+  await addRealmMemberApi(request, aliceToken, spaceId, carol.did);
   return { alice, bob, carol, aliceToken, bobToken, carolToken, spaceId };
 }
 

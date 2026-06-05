@@ -12,7 +12,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   flowIdFromRealmId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -35,7 +35,7 @@ test.describe("Document Morph collaboration", () => {
     const alice = uniqueUser("doc-projection-alice");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const realmId = await createSpaceApi(request, token, {
+    const realmId = await createRealmApi(request, token, {
       title: `Document projection ${Date.now()}`,
       history_visibility: "shared",
     });

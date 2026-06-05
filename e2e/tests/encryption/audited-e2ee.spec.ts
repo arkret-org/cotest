@@ -7,9 +7,9 @@ import { createHash } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mockAuditAgentBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   flowIdFromRealmId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -171,7 +171,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     issueDevSession(request, reporter),
   ]);
 
-  const spaceId = await createSpaceApi(request, aliceToken, {
+  const spaceId = await createRealmApi(request, aliceToken, {
     title: `S25 audited E2EE ${label} ${Date.now()}`,
     discoverability: "listed",
     history_visibility: "joined",
@@ -186,8 +186,8 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
       assurance: "mock_attested",
     },
   });
-  await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-  await addSpaceMemberApi(request, aliceToken, spaceId, reporter.did);
+  await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+  await addRealmMemberApi(request, aliceToken, spaceId, reporter.did);
 
   const plaintext = `audited plaintext must not leak ${Date.now()}`;
   const ciphertext = `opaque-ciphertext-${label}-${Date.now()}`;

@@ -5,9 +5,9 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   signedEventEnvelope,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -37,7 +37,7 @@ test.describe("organization policy inheritance", () => {
     "acme-org publishes ck.organization.moderation_policy with deny_join targets; spaces under acme inherit the policy automatically",
     async ({ request }) => {
       const { alice, mallory, aliceToken, orgDid } = await setupAcmeOrg(request, "s30-inherit");
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S30 inherited policy ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
@@ -68,7 +68,7 @@ test.describe("organization policy inheritance", () => {
     "mallory's join attempt on an Acme space is rejected with organization_policy_denied; space-level override requires organization approval",
     async ({ request }) => {
       const { alice, mallory, aliceToken, orgDid } = await setupAcmeOrg(request, "s30-deny");
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S30 deny join ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
@@ -119,7 +119,7 @@ test.describe("organization policy inheritance", () => {
       );
       expect(withApproval.ok()).toBeTruthy();
 
-      await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
       const space = await request.get(
         `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
         { headers: authHeaders(aliceToken) },
@@ -133,12 +133,12 @@ test.describe("organization policy inheritance", () => {
     "policy update at organization level fans out to all member spaces without per-space rewrites",
     async ({ request }) => {
       const { aliceToken, orgDid } = await setupAcmeOrg(request, "s30-fanout");
-      const first = await createSpaceApi(request, aliceToken, {
+      const first = await createRealmApi(request, aliceToken, {
         title: `S30 fanout one ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
       });
-      const second = await createSpaceApi(request, aliceToken, {
+      const second = await createRealmApi(request, aliceToken, {
         title: `S30 fanout two ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
@@ -185,7 +185,7 @@ test.describe("organization policy inheritance", () => {
       // spec: discovery-directory.md §2
       const label = `s30-dir-${Date.now()}`;
       const { alice, aliceToken, orgDid } = await setupAcmeOrg(request, label);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S30 org directory ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],

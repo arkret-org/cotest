@@ -11,7 +11,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
-  createSpaceApi,
+  createRealmApi,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -85,7 +85,7 @@ test.describe("project simulation", () => {
       const alice = uniqueUser("s16-fsm-alice");
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S16 FSM ${Date.now()}`,
         ownerDid: alice.did,
       });

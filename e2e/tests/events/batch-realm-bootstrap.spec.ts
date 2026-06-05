@@ -7,7 +7,7 @@ import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
-  querySpaceEventsApi,
+  queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
   singleDidAnchorer,
@@ -90,7 +90,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       realmId,
       "owner write after batch bootstrap",
     );
-    const timeline = await querySpaceEventsApi(request, aliceToken, realmId);
+    const timeline = await queryRealmEventsApi(request, aliceToken, realmId);
     const events = (timeline.events ?? []) as Array<Record<string, unknown>>;
     expect(events.map((event) => event.event_id)).toContain(message.event_id);
   });

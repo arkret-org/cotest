@@ -90,7 +90,7 @@ export async function expectJsonOk<T = Record<string, unknown>>(
   return JSON.parse(text) as T;
 }
 
-export async function createSpaceApi(
+export async function createRealmApi(
   request: APIRequestContext,
   token: string,
   data: {
@@ -188,10 +188,10 @@ export async function createSpaceApi(
   return realmId;
 }
 
-export async function addSpaceMemberApi(
+export async function addRealmMemberApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   memberDid: string,
   opts: { server?: SolandKey } = {},
 ) {
@@ -201,7 +201,7 @@ export async function addSpaceMemberApi(
     token,
     signedEventEnvelope({
       actorDid,
-      realmId: spaceId,
+      realmId,
       kind: "ck.member.state",
       payload: {
         actor_id: memberDid,
@@ -218,7 +218,7 @@ export async function acceptInviteApi(
   request: APIRequestContext,
   token: string,
   actorDid: string,
-  spaceId: string,
+  realmId: string,
   inviteId: string,
   opts: { server?: SolandKey } = {},
 ) {
@@ -227,7 +227,7 @@ export async function acceptInviteApi(
     token,
     signedEventEnvelope({
       actorDid,
-      realmId: spaceId,
+      realmId,
       kind: "ck.member.state",
       payload: {
         actor_id: actorDid,
@@ -269,18 +269,18 @@ export async function listInvitesApi(
 export async function sendMessageApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   body: string,
   opts: { server?: SolandKey; encrypted?: boolean; createdAt?: string } = {},
 ) {
   const actorDid = await currentActorDidApi(request, token, opts);
   const envelope = signedEventEnvelope({
     actorDid,
-    realmId: spaceId,
+    realmId,
     kind: "ck.message.create",
     createdAt: opts.createdAt,
     payload: {
-      flow_id: flowIdFromRealmId(spaceId),
+      flow_id: flowIdFromRealmId(realmId),
       track_name: "discussion",
       content: {
         kind: "ck.content.text",
@@ -291,29 +291,28 @@ export async function sendMessageApi(
   });
   await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
-    context: `send message to ${spaceId}`,
+    context: `send message to ${realmId}`,
   });
   return {
     event_id: String(envelope.event_id),
-    space_id: spaceId,
+    realm_id: realmId,
     sender: actorDid,
   };
 }
 
-export async function querySpaceEventsApi(
+export async function queryRealmEventsApi(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   opts: { server?: SolandKey; limit?: number } = {},
 ) {
-  const queryParam = spaceId.startsWith("ck:realm:") ? "realms" : "space_id";
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/events?${queryParam}=${encodeURIComponent(spaceId)}&limit=${opts.limit ?? 100}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=${opts.limit ?? 100}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<Record<string, unknown>>(
     response,
-    `query events for ${spaceId}`,
+    `query events for ${realmId}`,
   );
 }
 
@@ -478,12 +477,12 @@ export async function submitSignedEventApi(
 }
 
 export function flowIdFromRealmId(realmId: string): string {
-  const suffix = realmId.replace(/^ck:(realm|space):/, "");
+  const suffix = realmId.replace(/^ck:realm:/, "");
   return `ck:flow:${suffix}`;
 }
 
 export function sameRealmOrSpaceId(left: string, right: string): boolean {
-  return left.replace(/^ck:space:/, "ck:realm:") === right.replace(/^ck:space:/, "ck:realm:");
+  return left === right;
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {
@@ -492,7 +491,7 @@ export function canonicalTimestamp(date: Date = new Date()): string {
 
 export function makeOperation(args: {
   operationId?: string;
-  spaceId: string;
+  realmId: string;
   objectType: string;
   operationType?: string;
   payload: Record<string, unknown>;
@@ -502,17 +501,12 @@ export function makeOperation(args: {
     operation_id: args.operationId ?? typedId("operation"),
     type: "operation",
     operation_type: args.operationType ?? "create",
-    realm_id: realmIdForOperation(args.spaceId),
-    space_id: args.spaceId,
+    realm_id: args.realmId,
     object_id: undefined,
     object_type: args.objectType,
     payload: args.payload,
     created_at: new Date().toISOString(),
   };
-}
-
-function realmIdForOperation(spaceId: string): string {
-  return spaceId.replace(/^ck:space:/, "ck:realm:");
 }
 
 export async function pushFederationOperations(
@@ -521,7 +515,7 @@ export async function pushFederationOperations(
   opts: {
     origin: string;
     destination?: string;
-    spaceId: string;
+    realmId: string;
     server?: SolandKey;
     serviceBindingRef?: string;
   },
@@ -540,7 +534,7 @@ export async function rawPushFederationOperations(
   opts: {
     origin: string;
     destination?: string;
-    spaceId: string;
+    realmId: string;
     server?: SolandKey;
     serviceBindingRef?: string;
     tamperSignature?: boolean;
@@ -552,7 +546,7 @@ export async function rawPushFederationOperations(
   const body = stripUndefined({
     origin: opts.origin,
     destination,
-    space_id: opts.spaceId,
+    realm_id: opts.realmId,
     service_binding_ref:
       opts.serviceBindingRef ?? `${opts.origin}#cotest-federation-smoke`,
     operations: operations.map(federationOperationWireBody),
@@ -586,7 +580,7 @@ export async function backfillFederationOperations(
     server?: SolandKey;
     peerUrl?: string;
     peerDid?: string;
-    spaceId: string;
+    realmId: string;
     afterCursor?: string;
     limit?: number;
     maxPages?: number;
@@ -598,7 +592,7 @@ export async function backfillFederationOperations(
       data: {
         peer_url: opts.peerUrl,
         peer_did: opts.peerDid,
-        space_id: opts.spaceId,
+        realm_id: opts.realmId,
         after_cursor: opts.afterCursor,
         limit: opts.limit,
         max_pages: opts.maxPages,
@@ -618,14 +612,14 @@ export async function backfillFederationOperations(
 
 export async function operationFrontierApi(
   request: APIRequestContext,
-  spaceId: string,
+  realmId: string,
   opts: { server?: SolandKey } = {},
 ) {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/peer/federation/operation-frontier?space_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/peer/federation/operation-frontier?realm_id=${encodeURIComponent(realmId)}`,
   );
   return await expectJsonOk<{
-    space_id: string;
+    realm_id: string;
     operation_count: number;
     operation_ids: string[];
     latest_operation_id?: string;

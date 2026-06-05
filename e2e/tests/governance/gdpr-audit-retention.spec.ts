@@ -12,9 +12,9 @@ import {
   acceptInviteApi,
   authHeaders,
   canonicalTimestamp,
-  createSpaceApi,
+  createRealmApi,
   listInvitesApi,
-  querySpaceEventsApi,
+  queryRealmEventsApi,
   sendMessageApi,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -204,7 +204,7 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S27 retention ${stamp}`,
       discoverability: "listed",
       history_visibility: "shared",
@@ -223,7 +223,7 @@ test.describe("GDPR / audit / retention", () => {
       { createdAt: oldCreatedAt },
     );
 
-    const before = await querySpaceEventsApi(request, aliceToken, spaceId);
+    const before = await queryRealmEventsApi(request, aliceToken, spaceId);
     expect(JSON.stringify(before)).toContain(oldBody);
 
     const sweep = await request.post(
@@ -247,7 +247,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(tombstone?.anchored).toBe(true);
     expect(tombstone?.physical_delete).toBe(false);
 
-    const after = await querySpaceEventsApi(request, aliceToken, spaceId);
+    const after = await queryRealmEventsApi(request, aliceToken, spaceId);
     const events = after.events as Array<{
       event_id?: string;
       payload?: Record<string, unknown>;
@@ -286,7 +286,7 @@ test.describe("GDPR / audit / retention", () => {
         issueDevSession(request, bob, { server: "beta" }),
       ]);
 
-      const spaceId = await createSpaceApi(
+      const spaceId = await createRealmApi(
         request,
         aliceToken,
         {
@@ -339,7 +339,7 @@ test.describe("GDPR / audit / retention", () => {
       await expect
         .poll(
           async () => {
-            const body = await querySpaceEventsApi(request, bobToken, spaceId, {
+            const body = await queryRealmEventsApi(request, bobToken, spaceId, {
               server: "beta",
               limit: 100,
             });
@@ -380,7 +380,7 @@ test.describe("GDPR / audit / retention", () => {
         )
         .toContain("[user erased]");
 
-      const betaTimelineAfter = await querySpaceEventsApi(
+      const betaTimelineAfter = await queryRealmEventsApi(
         request,
         bobToken,
         spaceId,

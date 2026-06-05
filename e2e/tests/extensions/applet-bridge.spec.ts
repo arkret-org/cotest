@@ -5,10 +5,10 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { mockAppletRegistryBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
-  querySpaceEventsApi,
+  createRealmApi,
+  queryRealmEventsApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -56,7 +56,7 @@ test.describe("applet bridge", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
         history_visibility: "joined",
@@ -78,7 +78,7 @@ test.describe("applet bridge", () => {
       expect(registration.bot_actor_did).toMatch(/^did:web:bot-bridge-demo-/);
       expect(registration.portal_realm_id).toBe(spaceId);
 
-      await addSpaceMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
+      await addRealmMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
       const accept = await request.post(
         `${registryBase}/bot/${encodeURIComponent(registration.applet_id)}/accept-invite`,
         { data: { space_id: spaceId } },
@@ -103,7 +103,7 @@ test.describe("applet bridge", () => {
       expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
       expect(String(externalBody.message_id)).toMatch(/^ck:message:/);
 
-      const events = await querySpaceEventsApi(request, aliceToken, spaceId);
+      const events = await queryRealmEventsApi(request, aliceToken, spaceId);
       expect(JSON.stringify(events)).toContain(text);
       await alicePage.gotoTimelineSpace(spaceId);
       await expect(alicePage.page.getByTestId("timeline")).toContainText(text, {
@@ -147,7 +147,7 @@ test.describe("applet bridge", () => {
       });
       expect([403, 409]).toContain(afterRevoke.status());
       expect(wireErrCode(await afterRevoke.json())).toBe("applet_revoked");
-      expect(JSON.stringify(await querySpaceEventsApi(request, aliceToken, spaceId))).not.toContain(
+      expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(
         afterRevokeText,
       );
 
@@ -170,7 +170,7 @@ test.describe("applet bridge", () => {
     const aliceToken = await issueDevSession(request, alice);
     const namespace = `bridge.conflict.${stamp}`;
 
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `applet conflict ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -205,7 +205,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-revoke-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `applet revoke ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -215,7 +215,7 @@ test.describe("applet bridge", () => {
       namespace: `bridge.revoke.${stamp}`,
     });
     const registration = await installApplet(request, aliceToken, signed, spaceId, `revoke-${stamp}`);
-    await addSpaceMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
+    await addRealmMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
 
     const revoke = await request.post(
       `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
@@ -257,7 +257,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-idem-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `applet idem ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",

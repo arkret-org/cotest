@@ -14,9 +14,9 @@ import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -75,7 +75,7 @@ test.describe("encrypted attachments", () => {
       issueDevSession(request, mallory),
     ]);
 
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S12 encrypted attachments ${Date.now()}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -83,7 +83,7 @@ test.describe("encrypted attachments", () => {
       plaintext_visible_services: [],
       ownerDid: alice.did,
     });
-    await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
 
     const ciphertext = Buffer.from(`ciphertext-only-${Date.now()}`, "utf8");
     const ciphertextDigest = sha256Digest(ciphertext);

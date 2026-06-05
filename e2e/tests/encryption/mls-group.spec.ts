@@ -13,8 +13,8 @@ import {
   authHeaders,
   b64url,
   canonicalTimestamp,
-  addSpaceMemberApi,
-  createSpaceApi,
+  addRealmMemberApi,
+  createRealmApi,
   singleDidAnchorer,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -31,7 +31,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 // Build an encrypted Realm via a direct ck.realm.create envelope. The shared
-// createSpaceApi helper puts `plaintext_visible_services` at the payload root,
+// createRealmApi helper puts `plaintext_visible_services` at the payload root,
 // which the current soland realm_create schema rejects (additionalProperties);
 // this inline shape mirrors the accepted envelope used elsewhere in this file.
 async function createEncryptedRealm(
@@ -130,7 +130,7 @@ test.describe("MLS group encryption", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S11 MLS create-time ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -267,7 +267,7 @@ test.describe("MLS group encryption", () => {
       "mls_keypackage_already_claimed",
     );
 
-    const realmId = await createSpaceApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `MLS lifecycle ${stamp}`,
       ownerDid: alice.did,
       history_visibility: "joined",
@@ -468,13 +468,13 @@ test.describe("MLS group encryption", () => {
       ensureRegistered(request, bob),
     ]);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S11 MLS ban ${stamp}`,
       ownerDid: alice.did,
       history_visibility: "joined",
       encryption_profile: "mls_rfc9420",
     });
-    await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
 
     const alicePage = await openUserPage(browser, alice, {
       sessionToken: aliceToken,

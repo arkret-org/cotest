@@ -7,7 +7,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   expectJsonOk,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -188,7 +188,7 @@ test.describe("consent grant", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const realmId = await createSpaceApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `P1-020 consent reducer ${Date.now()}`,
       ownerDid: alice.did,
     });

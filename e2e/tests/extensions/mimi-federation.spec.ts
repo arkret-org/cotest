@@ -12,8 +12,8 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  createSpaceApi,
-  querySpaceEventsApi,
+  createRealmApi,
+  queryRealmEventsApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -148,7 +148,7 @@ test.describe("mimi federation", () => {
       "transcript_bound",
     );
 
-    const events = await querySpaceEventsApi(request, token, spaceId);
+    const events = await queryRealmEventsApi(request, token, spaceId);
     const downgradeEvent = eventById(events, String(downgradeBody.cokret_event_id));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
     expect(nested(downgradeEvent, "payload", "content", "ck.morph.e2ee_downgrade")).toBe(
@@ -197,7 +197,7 @@ test.describe("mimi federation", () => {
       "m.location.share.live",
     );
 
-    const events = await querySpaceEventsApi(request, token, spaceId);
+    const events = await queryRealmEventsApi(request, token, spaceId);
     const event = eventById(events, String(body.cokret_event_id));
     expect(nested(event, "payload", "content", "kind")).toBe("ck.content.unsupported");
     expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
@@ -216,7 +216,7 @@ async function createBoundMimiRoom(
   const alice = uniqueUser(`mimi-${suffix}-${stamp}`);
   await ensureRegistered(request, alice);
   const token = await issueDevSession(request, alice);
-  const spaceId = await createSpaceApi(request, token, {
+  const spaceId = await createRealmApi(request, token, {
     title: `mimi ${suffix} ${stamp}`,
     discoverability: "listed",
     history_visibility: "joined",

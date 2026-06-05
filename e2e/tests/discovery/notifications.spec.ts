@@ -7,9 +7,9 @@ import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   flowIdFromRealmId,
   putAccountDataViaEventApi,
   signedEventEnvelope,
@@ -248,13 +248,13 @@ test.describe("notifications", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createSpaceApi(request, aliceToken, {
+      const spaceId = await createRealmApi(request, aliceToken, {
         title: `S23 E2EE Blind Wake ${stamp}`,
         discoverability: "listed",
         history_visibility: "shared",
         encryption_profile: "mls_rfc9420",
       });
-      await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
       await putAccountDataViaEventApi(
         request,
         bobToken,

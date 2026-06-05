@@ -7,7 +7,7 @@
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
-import { authHeaders, createSpaceApi, wireErrCode } from "../../helpers/soland-api";
+import { authHeaders, createRealmApi, wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -214,7 +214,7 @@ test.describe("realm links", () => {
       const auth = authHeaders(aliceToken);
 
       const mk = async (label: string) => {
-        return await createSpaceApi(request, aliceToken, {
+        return await createRealmApi(request, aliceToken, {
           title: `realm-link-cycle-${label}-${stamp}`,
           public: true,
           discoverability: "public",

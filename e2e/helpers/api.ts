@@ -1,7 +1,7 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import {
-  createSpaceApi,
+  createRealmApi,
   flowIdFromRealmId,
   sameRealmOrSpaceId,
   signedEventEnvelope,
@@ -50,7 +50,7 @@ export type ReadMarker = {
   updated_at: string;
 };
 
-// Thin wrapper over `createSpaceApi` (soland-api.ts) so there is a single
+// Thin wrapper over `createRealmApi` (soland-api.ts) so there is a single
 // realm-creation flow. The only behavioural carry-over from the old standalone
 // implementation is the `default_discoverability: "public"` default (the
 // soland-api version defaults to "listed"); we preserve it by mapping
@@ -62,7 +62,7 @@ export async function createSpaceViaApi(
   opts: ApiSpaceOpts,
 ): Promise<string> {
   expect(opts.ownerDid, "createSpaceViaApi requires opts.ownerDid for canonical events").toBeTruthy();
-  return await createSpaceApi(
+  return await createRealmApi(
     request,
     token,
     {

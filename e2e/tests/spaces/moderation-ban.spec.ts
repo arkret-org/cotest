@@ -10,12 +10,12 @@
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
-  addSpaceMemberApi,
+  addRealmMemberApi,
   authHeaders,
-  createSpaceApi,
+  createRealmApi,
   makeOperation,
   pushFederationOperations,
-  querySpaceEventsApi,
+  queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
 } from "../../helpers/soland-api";
@@ -52,16 +52,16 @@ test.describe("moderation and ban", () => {
       issueDevSession(request, carol),
     ]);
 
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S5 Moderation API ${stamp}`,
       summary: "moderation + ban API-first coverage",
       public: true,
       discoverability: "public",
       history_visibility: "shared",
     });
-    await addSpaceMemberApi(request, aliceToken, spaceId, bob.did);
-    await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
-    await addSpaceMemberApi(request, aliceToken, spaceId, carol.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, carol.did);
 
     const abusive = `S5 abusive content ${stamp}`;
     const postBan = `S5 after ban ${stamp}`;
@@ -69,7 +69,7 @@ test.describe("moderation and ban", () => {
     const sent = await sendMessageApi(request, malloryToken, spaceId, abusive);
     expect(sent.event_id).toMatch(/^ck:event:/);
 
-    const beforeRedaction = await querySpaceEventsApi(request, aliceToken, spaceId);
+    const beforeRedaction = await queryRealmEventsApi(request, aliceToken, spaceId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
     const reportResp = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
@@ -192,9 +192,9 @@ test.describe("moderation and ban", () => {
     });
     expect(redactPush.accepted).toContain(redactOperation.operation_id);
 
-    const afterRedactionAlice = await querySpaceEventsApi(request, aliceToken, spaceId);
-    const afterRedactionBob = await querySpaceEventsApi(request, bobToken, spaceId);
-    const afterRedactionCarol = await querySpaceEventsApi(request, carolToken, spaceId);
+    const afterRedactionAlice = await queryRealmEventsApi(request, aliceToken, spaceId);
+    const afterRedactionBob = await queryRealmEventsApi(request, bobToken, spaceId);
+    const afterRedactionCarol = await queryRealmEventsApi(request, carolToken, spaceId);
     expect(JSON.stringify(afterRedactionAlice)).not.toContain(abusive);
     expect(JSON.stringify(afterRedactionBob)).not.toContain(abusive);
     expect(JSON.stringify(afterRedactionCarol)).not.toContain(abusive);
@@ -223,13 +223,13 @@ test.describe("moderation and ban", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
 
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S5.3 Idempotent Ban API ${stamp}`,
       public: true,
       discoverability: "public",
       history_visibility: "shared",
     });
-    await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
 
     const firstBan = makeOperation({
       spaceId,
@@ -272,13 +272,13 @@ test.describe("moderation and ban", () => {
 
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, mallory)]);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createSpaceApi(request, aliceToken, {
+    const spaceId = await createRealmApi(request, aliceToken, {
       title: `S5 UI Ban ${stamp}`,
       public: true,
       discoverability: "public",
       history_visibility: "shared",
     });
-    await addSpaceMemberApi(request, aliceToken, spaceId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
 
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
     try {
