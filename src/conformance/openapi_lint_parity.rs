@@ -40,12 +40,12 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
     for required_field in ["service_did", "trust_domain"] {
         if !schema_required.contains(required_field) {
             bail!(
-                "service-describe.schema.json `required` missing `{required_field}` (round-4 lint parity)"
+                "service-describe.schema.json `required` missing `{required_field}` (lint parity)"
             );
         }
         if !openapi_required.contains(required_field) {
             bail!(
-                "openapi components.schemas.ServiceDescribe.required missing `{required_field}` (round-4 lint parity)"
+                "openapi components.schemas.ServiceDescribe.required missing `{required_field}` (lint parity)"
             );
         }
     }
@@ -90,7 +90,7 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
             .and_then(YamlValue::as_str);
         if ref_target != Some("#/components/schemas/ServiceDescribe") {
             bail!(
-                "{describe_path} 200 response does not reference ServiceDescribe (got {ref_target:?}) (round-4 lint parity)"
+                "{describe_path} 200 response does not reference ServiceDescribe (got {ref_target:?}) (lint parity)"
             );
         }
     }
@@ -129,12 +129,12 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .and_then(YamlValue::as_str);
     if req_ref != Some("#/components/schemas/PolicyCheckRequest") {
         bail!(
-            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequest, got {req_ref:?} (round-4 lint parity)"
+            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequest, got {req_ref:?} (lint parity)"
         );
     }
     if resp_ref != Some("#/components/schemas/PolicyCheckResponse") {
         bail!(
-            "/_cokret/self/policy/check 200 response must reference PolicyCheckResponse, got {resp_ref:?} (round-4 lint parity)"
+            "/_cokret/self/policy/check 200 response must reference PolicyCheckResponse, got {resp_ref:?} (lint parity)"
         );
     }
 
@@ -150,11 +150,11 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .ok_or_else(|| anyhow!("components.schemas.PolicyCheckResponse missing"))?;
     let req_required = yaml_string_array(req_component, "required")?;
     if !req_required.contains("realm_id") {
-        bail!("PolicyCheckRequest.required must include realm_id (round-4 lint parity)");
+        bail!("PolicyCheckRequest.required must include realm_id (lint parity)");
     }
     let resp_required = yaml_string_array(resp_component, "required")?;
     if !resp_required.contains("bound_to") {
-        bail!("PolicyCheckResponse.required must include bound_to (round-4 lint parity)");
+        bail!("PolicyCheckResponse.required must include bound_to (lint parity)");
     }
     Ok(())
 }

@@ -1,5 +1,4 @@
-//! R3 spec-sync (cokret-spec @ b47ff6ec) — sidecar conformance vectors
-//! (§0.11 of `_before_todos.md`).
+//! Sidecar conformance vectors (§0.11 of `_before_todos.md`).
 //!
 //! 4 vectors:
 //!   - `ck.vector.sidecar.ensure_idempotent.v1`

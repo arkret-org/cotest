@@ -1,5 +1,4 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — §3.2.1 primary handle
-//! selection conformance vectors (VECT-COT-1).
+//! §3.2.1 primary handle selection conformance vectors (VECT-COT-1).
 //!
 //! Spec source: `identity/identity-handles.md §3.2.1` +
 //! `handle-claim.schema.json`.

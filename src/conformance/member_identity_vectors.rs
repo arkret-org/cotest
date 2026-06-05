@@ -1,5 +1,5 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — `ck.member.identity.update`
-//! conformance vectors (VECT-MID-1..7) + VECT-COT-8.
+//! `ck.member.identity.update` conformance vectors
+//! (VECT-MID-1..7) + VECT-COT-8.
 //!
 //! Source artefacts:
 //!   * `artifacts/schemas/member-identity.schema.json`

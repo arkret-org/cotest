@@ -1,5 +1,4 @@
-//! R3 spec-sync (cokret-spec @ b47ff6ec) — cursor opaque vectors
-//! (§0.11 of `_before_todos.md`).
+//! Cursor opaque vectors (§0.11 of `_before_todos.md`).
 //!
 //! 2 vectors:
 //!   - `ck.vector.encoding.cursor_opaque.core.v1` — default stateful body `{v, purpose, t, x, h}`.

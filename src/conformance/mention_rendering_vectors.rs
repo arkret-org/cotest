@@ -1,5 +1,4 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — §3.8 mention rendering
-//! conformance vectors (VECT-COT-2).
+//! §3.8 mention rendering conformance vectors (VECT-COT-2).
 //!
 //! Spec source: `models/flow-and-message.md §9.4` +
 //! `identity/identity-handles.md §3.8.1 / §3.8.2`.

@@ -1,7 +1,8 @@
-//! R3 spec-sync (cokret-spec @ b47ff6ec) — integration entrypoints for
-//! the new conformance vectors and scenario scaffolds. SDK-pure vector
-//! suites run unconditionally; integration-target scenarios are
-//! `#[ignore]`-gated on R3.1 reducer / signing wiring.
+//! Integration entrypoints for the conformance vectors and scenario
+//! scaffolds. SDK-pure vector suites run unconditionally; integration-target
+//! scenarios are `#[ignore]`-gated on reducer / signing wiring.
+//!
+//! Spec-sync revision is tracked in `CHANGELOG.md`, not pinned in source.
 
 use std::collections::BTreeSet;
 

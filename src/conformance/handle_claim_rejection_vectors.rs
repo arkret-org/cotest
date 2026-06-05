@@ -1,5 +1,4 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — handle-claim rejection
-//! conformance vectors (VECT-COT-6 / VECT-COT-7).
+//! Handle-claim rejection conformance vectors (VECT-COT-6 / VECT-COT-7).
 //!
 //! Spec source: `artifacts/schemas/handle-claim.schema.json` +
 //! `identity/identity-handles.md §3.2 / §17`.

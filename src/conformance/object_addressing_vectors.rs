@@ -1,6 +1,5 @@
-//! R3.3 spec-sync (cokret-spec @ cced4b8) — CKP-0011 shareable
-//! object-addressing + `ck.directory.resolve_target` conformance vectors
-//! (OA-COT-1..4).
+//! CKP-0011 shareable object-addressing + `ck.directory.resolve_target`
+//! conformance vectors (OA-COT-1..4).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.1` (resolve_target +
 //! common directory response fields) + the CKP-0011 object-addressing grammar.

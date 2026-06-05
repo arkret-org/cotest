@@ -1,5 +1,4 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — `ck.directory.list_handles_for_subject`
-//! conformance vectors (VECT-COT-3).
+//! `ck.directory.list_handles_for_subject` conformance vectors (VECT-COT-3).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.0` +
 //! `artifacts/schemas/list-handles-for-subject-response.schema.json`

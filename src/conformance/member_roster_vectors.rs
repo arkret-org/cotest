@@ -1,5 +1,5 @@
-//! R3.2 spec-sync (cokret-spec @ b56cab1) — sync `member_roster_entry`
-//! conformance vectors (VECT-ROST-1..3 + VECT-COT-4 roster v2).
+//! Sync `member_roster_entry` conformance vectors
+//! (VECT-ROST-1..3 + VECT-COT-4 roster v2).
 //!
 //! Source artefact:
 //!   * `artifacts/schemas/account-subscribe-frame.schema.json` (`$defs/member_roster_entry`).
