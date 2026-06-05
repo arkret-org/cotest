@@ -4,7 +4,7 @@
 //! `cokret-spec/spec/v1/artifacts/registry/*.json` (path overridable via
 //! `COKRET_SPEC_DIR`) and walks a downstream tree looking for occurrences of:
 //!
-//! * `cx.*` event-kind or operation-id literals listed as removed
+//! * `ck.*` event-kind or operation-id literals listed as removed
 //! * profile ids listed as deprecated
 //! * wire field names listed as forbidden (in JSON or Rust string literals)
 //! * model terms listed as forbidden (in Rust identifiers / Markdown prose)
@@ -289,7 +289,7 @@ pub fn scan_tree_protocol_drift(
 
 /// Walk `root` and scan for circle-rollout (CKP-0007) structural drift
 /// rules (see [`crate::circle_rules`]). Detects the hard-removed
-/// `discussion_realm_ref` field and any unknown `cx.circle.*` literal that
+/// `discussion_realm_ref` field and any unknown `ck.circle.*` literal that
 /// is not on the 7-event-kind / 6-capability-action allowlist.
 pub fn scan_tree_circle(root: &Path) -> Result<Vec<crate::circle_rules::CircleFinding>> {
     let mut out = Vec::new();
@@ -441,7 +441,7 @@ fn rule_applies_to(rule: &ArtifactRule, kind: FileKind) -> bool {
         ArtifactSource::RemovedEventKinds
         | ArtifactSource::DeprecatedProfileIds
         | ArtifactSource::RemovedOperationIds => {
-            // `cx.*` literals can appear in code, JSON, and docs.
+            // `ck.*` literals can appear in code, JSON, and docs.
             matches!(
                 kind,
                 FileKind::Rust | FileKind::Typescript | FileKind::Json | FileKind::Markdown
@@ -555,7 +555,7 @@ fn decide_allowlist(
 ///
 /// Token matching rules:
 ///
-/// * For tokens beginning with `cx.` we require either start-of-line, or that the preceding
+/// * For tokens beginning with `ck.` we require either start-of-line, or that the preceding
 ///   character is not an ASCII identifier character (so `mycx.flow.track.member` does not match).
 /// * For multi-word tokens that contain a space (e.g. `track members`) we do case-insensitive
 ///   substring search.
@@ -586,7 +586,7 @@ fn find_cx_literal(line: &str, token: &str) -> Option<usize> {
             // Require the preceding byte to not be an identifier char.
             let prev_ok = i == 0 || !is_ident_byte(bytes[i - 1]);
             // And the following byte must not extend the identifier further
-            // (we want `cx.flow.track.member` but not `cx.flow.track.member.x`
+            // (we want `ck.flow.track.member` but not `ck.flow.track.member.x`
             // — except when token already ends in something matched literally
             // by the registry id). We use: trailing char must not be ident,
             // dot is allowed only if the token already ends with `.`.

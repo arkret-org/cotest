@@ -381,7 +381,7 @@ test.describe("kanban end-to-end", () => {
 
   // Regression: creator-device "add description on a fresh encrypted Realm".
   //
-  // The happy-path kanban tests above build PLAINTEXT spaces — createSpace
+  // The happy-path kanban tests above build PLAINTEXT Realms — createRealm
   // leaves encryption_profile unset, which defaults to "none" (see
   // helpers/users.ts + soland-api.ts), so soland's content-encryption floor
   // (operations.rs validate_content_encryption_floor) is never armed and the

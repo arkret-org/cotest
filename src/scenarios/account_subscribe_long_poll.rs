@@ -25,16 +25,16 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let space_id = alice.create_realm("Long-Poll Recovery Space").await?;
+    let realm_id = alice.create_realm("Long-Poll Recovery Realm").await?;
     alice
-        .send_message(&space_id, "ck:thread:long-poll", "baseline message")
+        .send_message(&realm_id, "ck:thread:long-poll", "baseline message")
         .await?;
 
     // Full sync establishes the baseline + a cursor the rest of the
     // scenario re-uses. After this point the realm is "quiet" — every
     // subsequent assertion drives the delta-empty path.
     let baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
-    let baseline_realm = baseline["realms"][&space_id].clone();
+    let baseline_realm = baseline["realms"][&realm_id].clone();
     assert!(
         baseline_realm.is_object(),
         "full sync MUST include the realm baseline: {baseline}"
@@ -53,7 +53,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     )
     .await?;
     assert!(
-        quiet["realms"][&space_id].is_null(),
+        quiet["realms"][&realm_id].is_null(),
         "quiet incremental sync MUST drop the realm baseline: {quiet}"
     );
     assert!(
@@ -97,11 +97,11 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     //     concurrent send and verify the incremental subscribe returns
     //     well inside the deadline with the new realm baseline + event.
     let alice_for_wake = alice.clone();
-    let space_id_for_wake = space_id.clone();
+    let realm_id_for_wake = realm_id.clone();
     let waker = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
         alice_for_wake
-            .send_message(&space_id_for_wake, "ck:thread:long-poll", "wake the poll")
+            .send_message(&realm_id_for_wake, "ck:thread:long-poll", "wake the poll")
             .await
     });
 
@@ -121,7 +121,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
         wake_elapsed < Duration::from_secs(3),
         "broadcast should wake long-poll well before its deadline (got {wake_elapsed:?})"
     );
-    let timeline_events = woken["realms"][&space_id]["timeline"]["events"]
+    let timeline_events = woken["realms"][&realm_id]["timeline"]["events"]
         .as_array()
         .ok_or_else(|| anyhow!("woken delta missing realm timeline: {woken}"))?;
     assert!(

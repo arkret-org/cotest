@@ -199,7 +199,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
-    const realmId = `ck:space:selftest:${Date.now()}`;
+    const realmId = `ck:realm:selftest:${Date.now()}`;
     const invite = await request.post(`${baseUrl}/_soland/admin/audit-agent/invite`, {
       data: { realm_id: realmId, invite: { event_id: "evt-selftest" } },
     });

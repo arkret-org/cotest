@@ -14,7 +14,7 @@ use sha2::Sha256;
 /// "controller_agent_circle_key" derivation under spec head 37ce729.
 fn derive_sidecar_id(controller_did: &str, agent_principal_id: &str) -> Result<String> {
     let info = format!("cotest-sidecar|{controller_did}|{agent_principal_id}");
-    let hk = Hkdf::<Sha256>::new(Some(b"cx-cotest-sidecar-derive-v1"), info.as_bytes());
+    let hk = Hkdf::<Sha256>::new(Some(b"ck-cotest-sidecar-derive-v1"), info.as_bytes());
     let mut okm = [0u8; 16];
     hk.expand(b"sidecar_circle_id", &mut okm)
         .map_err(|e| anyhow!("hkdf expand: {e}"))?;

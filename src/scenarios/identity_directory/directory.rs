@@ -25,54 +25,54 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .register_client("did:web:bob-privacy.example", "@bob-privacy", "dev_bob")
         .await?;
 
-    let public_space = alice
+    let public_realm = alice
         .create_realm_with(json!({
             "title": "Visibility Matrix Public",
             "discoverability": "public"
         }))
         .await?;
-    let listed_space = alice
+    let listed_realm = alice
         .create_realm_with(json!({
             "title": "Visibility Matrix Listed",
             "discoverability": "listed"
         }))
         .await?;
-    let restricted_space = alice
+    let restricted_realm = alice
         .create_realm_with(json!({
             "title": "Visibility Matrix Restricted",
             "discoverability": "restricted"
         }))
         .await?;
-    let unlisted_space = alice
+    let unlisted_realm = alice
         .create_realm_with(json!({
             "title": "Visibility Matrix Unlisted",
             "discoverability": "unlisted"
         }))
         .await?;
-    let invite_only_space = alice
+    let invite_only_realm = alice
         .create_realm_with(json!({
             "title": "Visibility Matrix Invite Only",
             "discoverability": "invite_only",
             "invitees": [bob.actor.clone()]
         }))
         .await?;
-    let secret_space = alice
+    let secret_realm = alice
         .create_realm_with(json!({
             "title": "Visibility Matrix Secret",
             "discoverability": "secret"
         }))
         .await?;
 
-    let public_space_id = realm_id_from(&public_space, "public")?;
-    let listed_space_id = realm_id_from(&listed_space, "listed")?;
-    let restricted_space_id = realm_id_from(&restricted_space, "restricted")?;
-    let unlisted_space_id = realm_id_from(&unlisted_space, "unlisted")?;
-    let invite_only_space_id = realm_id_from(&invite_only_space, "invite_only")?;
-    let secret_space_id = realm_id_from(&secret_space, "secret")?;
+    let public_realm_id = realm_id_from(&public_realm, "public")?;
+    let listed_realm_id = realm_id_from(&listed_realm, "listed")?;
+    let restricted_realm_id = realm_id_from(&restricted_realm, "restricted")?;
+    let unlisted_realm_id = realm_id_from(&unlisted_realm, "unlisted")?;
+    let invite_only_realm_id = realm_id_from(&invite_only_realm, "invite_only")?;
+    let secret_realm_id = realm_id_from(&secret_realm, "secret")?;
 
     let invite_event = alice
         .submit_event(
-            &invite_only_space_id,
+            &invite_only_realm_id,
             "ck.invite.create",
             json!({
                 "invitee": bob.actor,
@@ -104,29 +104,29 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     assert_eq!(
         anonymous_search_ids,
         BTreeSet::from([
-            public_space_id.clone(),
-            listed_space_id.clone(),
-            restricted_space_id.clone(),
+            public_realm_id.clone(),
+            listed_realm_id.clone(),
+            restricted_realm_id.clone(),
         ])
     );
 
-    for resolvable_space_id in [
-        &public_space_id,
-        &listed_space_id,
-        &restricted_space_id,
-        &unlisted_space_id,
+    for resolvable_realm_id in [
+        &public_realm_id,
+        &listed_realm_id,
+        &restricted_realm_id,
+        &unlisted_realm_id,
     ] {
         let resolved = expect_json(
             server
                 .http()
                 .post(server.url("/_cokret/find/directory/resolve-realm"))
-                .json(&json!({"realm_id": resolvable_space_id.as_str()})),
+                .json(&json!({"realm_id": resolvable_realm_id.as_str()})),
             StatusCode::OK,
         )
         .await?;
         assert_eq!(
-            resolved["space_preview"]["realm_id"],
-            resolvable_space_id.as_str()
+            resolved["realm_preview"]["realm_id"],
+            resolvable_realm_id.as_str()
         );
     }
 
@@ -134,7 +134,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
-            .json(&json!({"realm_id": invite_only_space_id.clone()})),
+            .json(&json!({"realm_id": invite_only_realm_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -143,7 +143,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
-            .json(&json!({"realm_id": secret_space_id.clone()})),
+            .json(&json!({"realm_id": secret_realm_id.clone()})),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -154,23 +154,23 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .as_array()
         .unwrap()
         .iter()
-        .find(|invite| invite["space_id"].as_str() == Some(invite_only_space_id.as_str()))
+        .find(|invite| invite["realm_id"].as_str() == Some(invite_only_realm_id.as_str()))
         .and_then(|invite| invite["invite_token"].as_str())
-        .ok_or_else(|| anyhow!("missing invite token for invite-only space: {invites}"))?;
+        .ok_or_else(|| anyhow!("missing invite token for invite-only Realm: {invites}"))?;
     let invite_only_resolved = expect_json(
         server
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
             .json(&json!({
-                "realm_id": invite_only_space_id.clone(),
+                "realm_id": invite_only_realm_id.clone(),
                 "invite_token": invite_token
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        invite_only_resolved["space_preview"]["realm_id"],
-        invite_only_space_id
+        invite_only_resolved["realm_preview"]["realm_id"],
+        invite_only_realm_id
     );
 
     let secret_resolved = expect_json(
@@ -178,15 +178,15 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
             .json(&json!({
-                "realm_id": secret_space_id.clone(),
+                "realm_id": secret_realm_id.clone(),
                 "signed_link": "cotest-signed-link"
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        secret_resolved["space_preview"]["realm_id"],
-        secret_space_id
+        secret_resolved["realm_preview"]["realm_id"],
+        secret_realm_id
     );
 
     let anonymous_bob_actors = expect_json(

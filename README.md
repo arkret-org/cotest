@@ -41,7 +41,7 @@ back-compat aliases stay covered.
 
 Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds:
 
-- **12 new security-closure vectors** (`cx.vector.*` from
+- **12 new security-closure vectors** (`ck.vector.*` from
   `security-closure-vectors.json`) driven through a runner contract
   `{given_state, operation}` → assertions on
   `{transcript, expected_state_transition, expected_external_response,
@@ -49,11 +49,11 @@ Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds:
 - **schema-validation-fixture runner** — positive and negative cases
   exercised against `schema_ref`.
 - **Round R4 literal-scanner rules** — bad DID method segments,
-  string-payload `cx.events.subscribe` usage, `cx.cross_signing.publish`
+  string-payload `ck.events.subscribe` usage, `ck.cross_signing.publish`
   without `expected_previous_generation`, and
   `compute_audit_policy_version_digest` calls with fewer than 4 arguments.
 - **Drift-validator allowlists extended** for the new capability action
-  `cx.morph.create`, the three new error codes
+  `ck.morph.create`, the three new error codes
   (`delivery_binding_stale` / `_handed_over` / `historical_only`), the
   `ck:space:` id-kind in `object_ref`, and the new schema `$defs`
   (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
@@ -315,7 +315,7 @@ drift-detection artifacts shipped under
 - `renames.json`
 
 and walks a downstream Rust / TypeScript / JSON / Markdown tree looking for
-literal occurrences of `cx.*` event-kind / operation-id strings, deprecated
+literal occurrences of `ck.*` event-kind / operation-id strings, deprecated
 profile ids, forbidden wire field names, and forbidden model terms. Each
 finding carries the originating artifact, rejection level, suggested
 replacement, and whether the file context is allowlisted.

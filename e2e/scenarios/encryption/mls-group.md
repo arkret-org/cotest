@@ -57,7 +57,7 @@
    - 计算 `ck.mls.commit`:Add 提案(bob.leaf)
    - 派生新 epoch secrets
    - 为 bob 生成 `ck.mls.welcome`(用 bob KeyPackage 的 InitKey 加密)
-   - `governance_binding` 嵌入 `space_policy_hash` + `membership_frontier` + `reducer_profile_digest`
+   - `governance_binding` 嵌入 `realm_policy_digest` + `membership_frontier` + `reducer_profile_digest`
 7. alice 提交 commit + welcome 到 soland;welcome 通过 durable Event 路由给 bob(spec §2.2.1)
 8. bob yougen 拉 sync → 解 welcome → 派生 epoch 1 secrets
 9. 断言:bob `/timeline/${spaceId}` 可访问,timeline 渲染说"Welcome to encrypted space"
@@ -111,7 +111,7 @@
 ## Edge cases / sub-tests
 
 - **E11.1 并发 commits**:alice 和 bob 同时提交 commit(竞态)→ `covered_frontier_cell` 返回 ⊥,clients 进入 `decryption_pending`,后续 commit 解决(spec §2.5.2)
-- **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.space_policy_hash` → soland 拒绝整批,reducer reason `governance_binding_mismatch`
+- **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.realm_policy_digest` → soland 拒绝整批,reducer reason `governance_binding_mismatch`
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
 - **E11.4 加入前已发消息 + history_visibility=shared**:把 Phase D 改用 `history_visibility=shared` — carol 加入后应当能解(spec §3.4 shared rule + §6 offline epoch retention)
 - **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 space 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端

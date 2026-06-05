@@ -32,8 +32,8 @@
 //!    Replacement: `scope_circle_id`.
 //! 2. **`UnknownCircleEventKind`** — any string literal beginning with `ck.circle.` whose tail is
 //!    **not** on the canonical allowlist (7 event kinds + 6 capability actions registered by
-//!    CKP-0007). The legacy `cx.circle.*` brand prefix is rejected separately by
-//!    `literal_scanner`'s cx-brand rule, so this rule scans the canonical `ck.circle.` prefix in
+//!    CKP-0007). The legacy `ck.circle.*` brand prefix is rejected separately by
+//!    `literal_scanner`'s ck-brand rule, so this rule scans the canonical `ck.circle.` prefix in
 //!    order to catch genuinely mis-spelled tails such as `ck.circle.bogus`.
 //! 3. **`UnknownCircleErrorCode`** — any string literal whose value is one of the CKP-0007 reason
 //!    code names (we still want the canonical spelling to be the only spelling). Unknown variants
@@ -246,8 +246,8 @@ fn scan_circle_dotted_string(
 ) {
     // Find every occurrence of the canonical `ck.circle.` prefix and extract
     // the following dotted-identifier tail until a non-identifier-non-dot char
-    // or quote. The legacy `cx.circle.` brand prefix is handled by
-    // `literal_scanner`'s cx-brand rule, so scanning `ck.circle.` here lets us
+    // or quote. The legacy `ck.circle.` brand prefix is handled by
+    // `literal_scanner`'s ck-brand rule, so scanning `ck.circle.` here lets us
     // catch genuinely mis-spelled tails like `ck.circle.bogus`.
     let needle = "ck.circle.";
     let bytes = line.as_bytes();

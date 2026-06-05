@@ -15,17 +15,17 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ck:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
-    let _presence_realm = alice.create_realm("Presence Policy Space").await?;
+    let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
     let bob = server
         .register_client("did:web:bob-authz.example", "@bob-authz", "dev_bob")
         .await?;
-    let space_id = alice.create_realm("Grant Lifecycle Space").await?;
+    let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
     let denied_before_grant = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor": bob.actor,
             "action": "manage_space",
-            "resource": {"kind": "space", "realm_id": space_id}
+            "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
@@ -35,7 +35,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let manage_grant = expect_json(
         alice.post("/_cokret/self/authz/grants").json(&json!({
-            "space_id": space_id,
+            "realm_id": realm_id,
             "subject": bob.actor,
             "resource": "*",
             "actions": ["manage_space"],
@@ -49,7 +49,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let effective_grants = expect_json(
         alice.get("/_cokret/self/authz/effective-grants").query(&[
             ("subject", bob.actor.as_str()),
-            ("space_id", space_id.as_str()),
+            ("realm_id", realm_id.as_str()),
         ]),
         StatusCode::OK,
     )
@@ -61,7 +61,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor": bob.actor,
             "action": "manage_space",
-            "resource": {"kind": "space", "realm_id": space_id}
+            "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
@@ -72,12 +72,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         manage_grant_id
     );
 
-    alice.add_member(&space_id, &bob).await?;
+    alice.add_member(&realm_id, &bob).await?;
     let member_send = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor": bob.actor,
             "action": "send",
-            "resource": {"kind": "space", "realm_id": space_id}
+            "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
@@ -86,7 +86,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let deny_send_grant = expect_json(
         alice.post("/_cokret/self/authz/grants").json(&json!({
-            "space_id": space_id,
+            "realm_id": realm_id,
             "subject": bob.actor,
             "resource": "*",
             "actions": ["send"],
@@ -101,7 +101,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor": bob.actor,
             "action": "send",
-            "resource": {"kind": "space", "realm_id": space_id}
+            "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
@@ -120,7 +120,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor": bob.actor,
             "action": "send",
-            "resource": {"kind": "space", "realm_id": space_id}
+            "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
@@ -138,7 +138,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor": bob.actor,
             "action": "manage_space",
-            "resource": {"kind": "space", "realm_id": space_id}
+            "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
@@ -245,7 +245,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_id": "req-review",
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "space.delete",
+                "action": "ck.realm.destroy",
                 "actor": "did:web:alice.example",
                 "source": {"service": "soland"}
             })),

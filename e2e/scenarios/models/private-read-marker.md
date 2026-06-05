@@ -37,7 +37,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 |---|---|---|---|
 | alice | alice-device-1 (laptop) | `did:web:alice-s11-<uuid>.example` / `ck:device:...-d1` | reader,首次记录 read marker |
 | alice | alice-device-2 (phone)  | 同上 actor,不同 device_id `ck:device:...-d2` | 第二台 device,接收 to-device 同步;最后触发 mark-all-read |
-| bob   | bob 默认设备            | `did:web:bob-s11-<uuid>.example`              | sender,在共享 space 里发 M1/M2/M3/M4 |
+| bob   | bob 默认设备            | `did:web:bob-s11-<uuid>.example`              | sender,在共享 Realm 里发 M1/M2/M3/M4 |
 
 ## Pre-conditions
 
@@ -50,27 +50,27 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Steps
 
-### Phase A — Baseline:注册 + 多设备 + 共享 space
+### Phase A — Baseline:注册 + 多设备 + 共享 Realm
 
 1. 注册 alice / bob;为 alice 通过 `issueDevSession` 取两个 token —— 对应 alice-device-1 与
    alice-device-2(参考 `identity/multi-device` Phase A,真实 QR 配对 + cross-signing 还未上线,
    这里复用 dev-login 双 token 作为代理)
-2. alice (device-1) 通过 `/setup` 多步向导建空间 `S`:
+2. alice (device-1) 通过 `/setup` 多步向导建 Realm `R`:
    - title = `"models/private-read-cursor S ${stamp}"`
    - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
    - seed_members = `[bob.did]`
-3. 断言:`realm-lifecycle-flow` 含 `created ck:space:...`,记录 `spaceId`
-4. bob 通过 `acceptInvite(spaceId)` 加入空间
+3. 断言:`realm-lifecycle-flow` 含 `created ck:realm:...`,记录 `realmId`
+4. bob 通过 `acceptInvite(realmId)` 加入 Realm
 
 ### Phase B — bob 发 M1, M2, M3
 
-5. bob 进 `/timeline/${spaceId}`,顺序发 `M1 = "bob M1 ${stamp}"`、`M2 = "bob M2 ${stamp}"`、
+5. bob 进 `/timeline/${realmId}`,顺序发 `M1 = "bob M1 ${stamp}"`、`M2 = "bob M2 ${stamp}"`、
    `M3 = "bob M3 ${stamp}"`
 6. 断言:三条都 `write-status` 含 `persisted`
 
 ### Phase C — alice device-1 读取并记录 read marker(到 M2)
 
-7. alice (device-1) 进 `/timeline/${spaceId}`,等到 `timeline-event` 至少含 M1/M2/M3
+7. alice (device-1) 进 `/timeline/${realmId}`,等到 `timeline-event` 至少含 M1/M2/M3
 8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 yougen 触发 read-position 上报
 9. 客户端通过 `POST /_cokret/self/account/data/m.read_cursor`(account data API,private object 写路径)
    推 marker,payload 含 `last_read_at = <ts(M2)>` + `last_read_anchor = M2.event_id`
@@ -109,7 +109,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Observable assertions(合并清单)
 
-- Phase A 步骤 3:`spaceId` 形如 `ck:space:...`
+- Phase A 步骤 3:`realmId` 形如 `ck:realm:...`
 - Phase B 步骤 6:M1/M2/M3 三条都 persisted
 - Phase C 步骤 10:`last_read_at` 写入成功,`unread_count` 反映 M3 未读
 - Phase D 步骤 12:device-1 settings 上 marker 文本可见
@@ -122,13 +122,13 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 - **E10.1 multi-device read marker eventual consistency**:device-1 写 marker → device-2 收到
   marker 之间允许有一个有界窗口(spec §3:30s);窗口内 device-2 的 `last_read_at` MAY 落后,但
   最终一定收敛到 device-1 写入的最新值
-- **E10.2 E2EE space 中 notification 脱敏**:把 `spaceId` 切到一个 `encryption_locus =
-  per_space_mls` 的 space;bob 发的 M4 在 server 侧 payload 是密文,但 server 仍能投递 to-device
+- **E10.2 E2EE Realm 中 notification 脱敏**:把 `realmId` 切到一个 `encryption_locus =
+  per_realm_mls` 的 Realm;bob 发的 M4 在 server 侧 payload 是密文,但 server 仍能投递 to-device
   wake;notification 投影由 client 在解密后产生 — 测试断言 server `GET /_soland/self/notifications` 不
   暴露明文 body,只暴露 envelope 元数据(event_id、sender_did、ts、`encrypted: true`)
-- **E10.3 discussion realm 的 read marker 独立于 parent space**:在 space `S` 下开 discussion realm
-  `D`(`POST /_soland/self/spaces/${spaceId}/discussions`,realm linkage 见 `models/realm-links.md`);
-  alice 在 `D` 里把 marker 推到一条 `D.M1`,但 `S` 的 marker 保持在 M2;断言两个 marker 在
+- **E10.3 discussion Realm 的 read marker 独立于 parent Realm**:在 Realm `R` 下开 discussion Realm
+  `D`(realm linkage 见 `models/realm-links.md`);
+  alice 在 `D` 里把 marker 推到一条 `D.M1`,但 `R` 的 marker 保持在 M2;断言两个 marker 在
   account data 里以**不同 key**存储(`m.read_cursor:${realm_id}`),互不污染
 
 ## Implementation notes
@@ -144,8 +144,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   testid 上线后才能跑(或者改成纯 API 断言绕过)
 - **multi-device dev-login proxy**:沿用 `identity/multi-device` Phase A 的做法 — 对同一 actor 调
   `dev-login` 两次得到两个 session token(可能相同也可能不同),分别注入两个 browser context
-- **E2EE 子测试(E10.2)**:cotest 当前没有可靠的 "create encrypted space" 入口;先标 fixme,等
-  encryption realm scenario 提供 helper 再补
+- **E2EE 子测试(E10.2)**:cotest 当前没有可靠的 "create encrypted Realm" 入口;先标 fixme,等
+  encryption Realm scenario 提供 helper 再补
 - **discussion realm 子测试(E10.3)**:依赖 discussion realm 的 e2e helper / API(spec `models/realm-
   links.md`),目前未实装,标 fixme
 

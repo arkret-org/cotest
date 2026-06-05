@@ -366,8 +366,8 @@ test.describe("calls", () => {
       });
       const aliceUsername = aliceIce.turn_servers[0].username as string;
       const bobUsername = bobIce.turn_servers[0].username as string;
-      expect(aliceUsername).toMatch(/^cx-turn-/);
-      expect(bobUsername).toMatch(/^cx-turn-/);
+      expect(aliceUsername).toMatch(/^ck-turn-/);
+      expect(bobUsername).toMatch(/^ck-turn-/);
       expect(aliceUsername).not.toContain(alice.did);
       expect(aliceUsername).not.toContain("did:web");
       expect(aliceUsername).not.toContain(alice.name);

@@ -89,9 +89,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .any(|result| result["subject"].as_str() == Some(BOB_DID))
     );
 
-    let space_id = create_collaboration_realm(&alice).await?;
+    let realm_id = create_collaboration_realm(&alice).await?;
     let created_space = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{space_id}")),
+        alice.get(&format!("/_soland/self/spaces/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -101,14 +101,14 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         server
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
-            .json(&json!({"realm_id": space_id})),
+            .json(&json!({"realm_id": realm_id})),
         StatusCode::NOT_FOUND,
     )
     .await?;
 
     let member_join = alice
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.member.state",
             json!({
                 "actor_id": BOB_DID,
@@ -119,7 +119,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_join["status"], "accepted");
     let with_bob = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{space_id}")),
+        alice.get(&format!("/_soland/self/spaces/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -133,7 +133,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let sent = alice
         .send_message(
-            &space_id,
+            &realm_id,
             "ck:thread:collaboration",
             "hello from collaboration workflow",
         )
@@ -142,7 +142,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert!(sent["event_id"].as_str().unwrap().starts_with("ck:event:"));
 
     let bob_sync = bob.sync().await?;
-    let bob_events = timeline_events(&bob_sync, &space_id)?;
+    let bob_events = timeline_events(&bob_sync, &realm_id)?;
     assert!(
         bob_events
             .iter()
@@ -152,7 +152,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let bob_reply = bob
         .send_message(
-            &space_id,
+            &realm_id,
             "ck:thread:collaboration",
             "hello alice from collaboration workflow",
         )
@@ -166,7 +166,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     );
 
     let alice_sync = alice.sync().await?;
-    let alice_timeline = timeline_events(&alice_sync, &space_id)?;
+    let alice_timeline = timeline_events(&alice_sync, &realm_id)?;
     assert!(
         alice_timeline
             .iter()
@@ -183,7 +183,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let snapshot = expect_json(
         server
             .http()
-            .get(server.url(&format!("/_cokret/self/snapshot/head?realm_id={space_id}"))),
+            .get(server.url(&format!("/_cokret/self/snapshot/head?realm_id={realm_id}"))),
         StatusCode::OK,
     )
     .await?;
@@ -201,7 +201,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let member_ban = alice
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.member.state",
             json!({
                 "actor_id": BOB_DID,
@@ -212,7 +212,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_ban["status"], "accepted");
     let removed = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{space_id}")),
+        alice.get(&format!("/_soland/self/spaces/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -227,7 +227,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let lifecycle = expect_json(
         alice
             .get("/_cokret/self/events")
-            .query(&[("realms", space_id.as_str()), ("limit", "100")]),
+            .query(&[("realms", realm_id.as_str()), ("limit", "100")]),
         StatusCode::OK,
     )
     .await?;

@@ -22,18 +22,18 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         .await?;
     let bob_client = bob.client();
 
-    let space_id = alice.create_realm("Backfill Recovery Space").await?;
-    alice.add_member(&space_id, bob_client).await?;
+    let realm_id = alice.create_realm("Backfill Recovery Realm").await?;
+    alice.add_member(&realm_id, bob_client).await?;
 
     let sent = [
         alice
-            .send_message(&space_id, "ck:thread:backfill", "first event before gap")
+            .send_message(&realm_id, "ck:thread:backfill", "first event before gap")
             .await?,
         alice
-            .send_message(&space_id, "ck:thread:backfill", "second event inside gap")
+            .send_message(&realm_id, "ck:thread:backfill", "second event inside gap")
             .await?,
         alice
-            .send_message(&space_id, "ck:thread:backfill", "third event after gap")
+            .send_message(&realm_id, "ck:thread:backfill", "third event after gap")
             .await?,
     ];
     let expected_message_ids = sent
@@ -51,9 +51,9 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     for _ in 0..12 {
         let path = match cursor.as_deref() {
             Some(cursor) => {
-                format!("/_cokret/self/events?realms={space_id}&limit=1&after={cursor}")
+                format!("/_cokret/self/events?realms={realm_id}&limit=1&after={cursor}")
             }
-            None => format!("/_cokret/self/events?realms={space_id}&limit=1"),
+            None => format!("/_cokret/self/events?realms={realm_id}&limit=1"),
         };
         let page = expect_json(alice.get(&path), StatusCode::OK).await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());
@@ -74,7 +74,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     );
 
     let bob_sync = bob_client.sync().await?;
-    let synced_message_ids = json_array(&bob_sync["realms"][&space_id]["timeline"], "events")?
+    let synced_message_ids = json_array(&bob_sync["realms"][&realm_id]["timeline"], "events")?
         .iter()
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();

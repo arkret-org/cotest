@@ -530,7 +530,7 @@ test.describe("MLS group encryption", () => {
   test.fixme(// @blocking-on: soland#encryption-mls-group-gap
   // @user-promise: e2e/scenarios/encryption/mls-group.md
   // @expected-live-by: 2026Q3
-  "E11.2 governance_binding.space_policy_hash mismatch causes federation push to reject with governance_binding_mismatch", async () => {
+  "E11.2 governance_binding.realm_policy_digest mismatch causes federation push to reject with governance_binding_mismatch", async () => {
     // spec: encryption-and-audit.md §2.5.1
   });
 

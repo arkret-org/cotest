@@ -10,7 +10,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")
         .await?;
-    let space_id = create_test_realm(
+    let realm_id = create_test_realm(
         &alice,
         "ck:realm:01999999-0000-7000-8000-00000000e101",
         "Event Idempotency Replay",
@@ -18,7 +18,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     .await?;
     let event = event_envelope(
         &alice.actor,
-        &space_id,
+        &realm_id,
         "ck.message.create",
         json!({
             "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
@@ -54,7 +54,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let listed = expect_json(
         alice
             .get("/_cokret/self/events")
-            .query(&[("realms", space_id.as_str()), ("limit", "100")]),
+            .query(&[("realms", realm_id.as_str()), ("limit", "100")]),
         StatusCode::OK,
     )
     .await?;
@@ -78,7 +78,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let alice = server
         .demo_client("did:web:alice-edit-redact.example", "dev_alice")
         .await?;
-    let space_id = create_test_realm(
+    let realm_id = create_test_realm(
         &alice,
         "ck:realm:01999999-0000-7000-8000-00000000e102",
         "Event Idempotency Edit Redact",
@@ -86,7 +86,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     .await?;
     let create_event = event_envelope(
         &alice.actor,
-        &space_id,
+        &realm_id,
         "ck.message.create",
         json!({
             "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
@@ -103,11 +103,11 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let create_event_id = json_string(&created, "event_id")?;
     let message_ref = create_event_id.replacen("ck:event:", "ck:message:", 1);
 
-    assert_projected_kind_count(&alice, &space_id, "ck.message.create", 1).await?;
+    assert_projected_kind_count(&alice, &realm_id, "ck.message.create", 1).await?;
 
     let revise_event = event_envelope(
         &alice.actor,
-        &space_id,
+        &realm_id,
         "ck.message.revise",
         json!({
             "target_event_id": create_event_id,
@@ -121,12 +121,12 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     );
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
     let revise_event_id = json_string(&revised, "event_id")?;
-    assert_projected_event_count(&alice, &space_id, revise_event_id, 1).await?;
-    assert_projected_kind_count(&alice, &space_id, "ck.message.revise", 1).await?;
+    assert_projected_event_count(&alice, &realm_id, revise_event_id, 1).await?;
+    assert_projected_kind_count(&alice, &realm_id, "ck.message.revise", 1).await?;
 
     let redact_event = event_envelope(
         &alice.actor,
-        &space_id,
+        &realm_id,
         "ck.message.redact",
         json!({
             "target_event_id": create_event_id,
@@ -136,7 +136,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     );
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
     let redact_event_id = json_string(&redacted, "event_id")?;
-    let visible_after_redaction = list_space_events(&alice, &space_id).await?;
+    let visible_after_redaction = list_realm_events(&alice, &realm_id).await?;
     assert_eq!(
         event_count(&visible_after_redaction, create_event_id)?,
         0,
@@ -226,11 +226,11 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<
     Ok(first)
 }
 
-async fn list_space_events(alice: &TestActorClient, space_id: &str) -> Result<Value> {
+async fn list_realm_events(alice: &TestActorClient, realm_id: &str) -> Result<Value> {
     expect_json(
         alice
             .get("/_cokret/self/events")
-            .query(&[("realms", space_id), ("limit", "100")]),
+            .query(&[("realms", realm_id), ("limit", "100")]),
         StatusCode::OK,
     )
     .await
@@ -238,11 +238,11 @@ async fn list_space_events(alice: &TestActorClient, space_id: &str) -> Result<Va
 
 async fn assert_projected_event_count(
     alice: &TestActorClient,
-    space_id: &str,
+    realm_id: &str,
     event_id: &str,
     expected: usize,
 ) -> Result<()> {
-    let listed = list_space_events(alice, space_id).await?;
+    let listed = list_realm_events(alice, realm_id).await?;
     let actual = event_count(&listed, event_id)?;
     assert_eq!(
         actual, expected,
@@ -253,11 +253,11 @@ async fn assert_projected_event_count(
 
 async fn assert_projected_kind_count(
     alice: &TestActorClient,
-    space_id: &str,
+    realm_id: &str,
     kind: &str,
     expected: usize,
 ) -> Result<()> {
-    let listed = list_space_events(alice, space_id).await?;
+    let listed = list_realm_events(alice, realm_id).await?;
     let actual = event_kind_count(&listed, kind)?;
     assert_eq!(
         actual, expected,

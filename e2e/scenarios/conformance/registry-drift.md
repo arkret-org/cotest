@@ -9,7 +9,7 @@
 ## Spec 锚点
 
 - `cokret-spec/spec/v1/zh/conformance/schema-registry.md` §1 (真源声明)、§3 (event type 设计约束 — `ck.` 前缀 + critical extension fail-closed)、§5 (extension 命名)、§6 (演进约束 — schema_violation / 未知 critical fail-closed)
-- `cokret-spec/spec/v1/artifacts/registry/removed-event-kinds.json` — 32 个被移除的 `cx.*` event.kind,`hard_reject` rejection level
+- `cokret-spec/spec/v1/artifacts/registry/removed-event-kinds.json` — 32 个被移除的 `ck.*` event.kind,`hard_reject` rejection level
 - `cokret-spec/spec/v1/artifacts/registry/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
 - `cokret-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json` — 被废弃的 profile id
 - `cokret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json` — 5 个上下文绑定的禁用 wire 字段名 (`branch` / `room_kind` / `discussion_space_ref` / `space_frontier` / 含 `kind=room` 的 flow payload)
@@ -45,7 +45,7 @@
 ### Phase A — Removed event kinds hard-reject
 
 1. **harness** load `artifacts/registry/removed-event-kinds.json`,filter `entries[*].rejection_level === "hard_reject"`
-2. 对每个 `entry.id` (e.g. `cx.field.position.move`, `ck.realm.lifecycle.set`, `cx.space.policy`),构造一个最小合法 EventEnvelope:
+2. 对每个 `entry.id` (e.g. `ck.field.position.move`, `ck.realm.lifecycle.set`, `ck.space.policy`),构造一个最小合法 EventEnvelope:
    ```json
    { "kind": "<removed_id>", "actor_did": "<alice>", "realm_id": "<test_realm>", "payload": {} }
    ```
@@ -59,7 +59,7 @@
 
 ### Phase B — Removed operation IDs hard-reject
 
-6. **harness** load `artifacts/registry/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `cx.flow.track.member.add`, `cx.realm.lifecycle.set.apply`)
+6. **harness** load `artifacts/registry/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `ck.flow.track.member.add`, `ck.realm.lifecycle.set.apply`)
 7. 对每个 `entry.id`,尝试通过 soland 的 generic operation endpoint 调用:
    - 若 soland 暴露 `POST /_cokret/self/operations/{operation_id}` → POST with `{}` body + bearer
    - 否则 fallback 到 `POST /_cokret/self/server/operation/invoke` with `{ operation_id, input: {} }` body
@@ -120,7 +120,7 @@
 ## Edge cases / sub-tests
 
 - **R4.1 partial-name 误报**:Phase D 的 deep-walk 必须只断言**精确 key 等于** forbidden id (不是 substring) — 否则 `realm_frontier` 会误伤 `space_frontier`。Phase F 用 word-boundary regex,但仍可能误报 prose;接受。
-- **R4.2 case-sensitivity**:registry 中的 id 都是 lowercase + `cx.` 前缀;Phase A/B/C 的 set 比对必须 case-sensitive,**不要** lowercase normalize (避免假阴性 — 服务器若返回 `Cx.Realm.Lifecycle.Set` 也是 drift)。
+- **R4.2 case-sensitivity**:registry 中的 id 都是 lowercase + `ck.` 前缀;Phase A/B/C 的 set 比对必须 case-sensitive,**不要** lowercase normalize (避免假阴性 — 服务器若返回 `Cx.Realm.Lifecycle.Set` 也是 drift)。
 - **R4.3 nested profile arrays**:Phase C 的 deep-walk profile id 收集要考虑 nested structures,e.g. `describe.implemented_features.requirements_role_map[*].profile_id`。harness 实现:遇到任何 key 名匹配 `/profile_id?$/` 的 string value,即纳入 claimed set。
 - **R4.4 describe 缺字段时的 fallback**:若 soland describe 未实现 `implemented_features.operations` 字段,Phase E 应 `test.skip("describe.implemented_features.operations 字段不存在 — 无法验证 operation coverage")`,不应让测试静默 pass。
 - **R4.5 batch artifact reload**:每个 LIVE phase 在 `beforeAll` 中一次性 readFileSync + JSON.parse,不在 per-test 重复 IO。

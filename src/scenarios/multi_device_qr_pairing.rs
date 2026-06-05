@@ -152,7 +152,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //       .send().await?.json().await?;
     //
     //   let canonical = format!(
-    //       "cx-device-trust-bind-v1\n{}",
+    //       "ck-device-trust-bind-v1\n{}",
     //       canonical_json(json!({
     //           "principal_id": alice.actor,
     //           "device_id": device_b,

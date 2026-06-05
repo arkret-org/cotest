@@ -17,13 +17,13 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
         .register_client("did:web:carol-typing.example", "@carol-typing", "dev_carol")
         .await?;
 
-    let space_id = alice.create_realm("Typing And Push Space").await?;
-    alice.add_member(&space_id, &bob).await?;
+    let realm_id = alice.create_realm("Typing And Push Realm").await?;
+    alice.add_member(&realm_id, &bob).await?;
 
     expect_api_error(
         carol
             .post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&carol.actor, &space_id, true)),
+            .json(&typing_envelope(&carol.actor, &realm_id, true)),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -31,7 +31,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let typing = expect_json(
         bob.post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&bob.actor, &space_id, true)),
+            .json(&typing_envelope(&bob.actor, &realm_id, true)),
         StatusCode::OK,
     )
     .await?;
@@ -39,7 +39,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
     assert_eq!(typing["kind"], "ck.typing");
 
     let sync_with_typing = alice.sync().await?;
-    let ephemeral = sync_with_typing["realms"][&space_id]["ephemeral"]
+    let ephemeral = sync_with_typing["realms"][&realm_id]["ephemeral"]
         .as_array()
         .unwrap();
     assert_eq!(ephemeral.len(), 1);
@@ -55,7 +55,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let stopped = expect_json(
         bob.post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&bob.actor, &space_id, false)),
+            .json(&typing_envelope(&bob.actor, &realm_id, false)),
         StatusCode::OK,
     )
     .await?;
@@ -63,7 +63,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let sync_without_typing = alice.sync().await?;
     assert!(
-        sync_without_typing["realms"][&space_id]["ephemeral"]
+        sync_without_typing["realms"][&realm_id]["ephemeral"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -77,7 +77,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let rules_written = bob
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.account_data.set",
             json!({
                 "key": "ck.push_rules",
@@ -108,7 +108,7 @@ pub async fn typing_and_push_rules_flow_work() -> Result<()> {
 
     let deleted_rules = bob
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.account_data.set",
             json!({
                 "key": "ck.push_rules",

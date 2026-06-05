@@ -79,7 +79,7 @@
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `realm_id = realmId`
-   - `service_binding_ref` 含 `space_policy_hash` / `membership_frontier` / `reducer_profile_digest`
+   - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier` / `reducer_profile_digest`
    - `events: [<完整签名的 ck.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
 7. β 校验:

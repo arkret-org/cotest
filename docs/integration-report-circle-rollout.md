@@ -139,7 +139,7 @@ independent of CKP-0007 work:
   — `ck.circle.member.state` cell_subject must declare `field` or
   `components[]`
 - `event_kind_payload_coverage_fixture_suite_matches_reference_semantics`
-  — `cx.component.device.authorized.v1` (group=or_set_families) absent in
+  — `ck.component.device.authorized.v1` (group=or_set_families) absent in
   live registry (renamed → `ck.component.device.authorization.v1`)
 - `artifact_registry_suite_matches_reference_semantics` — same family
   rename

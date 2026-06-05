@@ -35,17 +35,17 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let contacts = expect_json(bob.get("/_soland/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
-    let invite_space = alice
+    let invite_realm = alice
         .create_realm_with(json!({
-            "title": "Invite Token Space",
+            "title": "Invite Token Realm",
             "discoverability": "invite_only",
             "invitees": [bob.actor.clone()]
         }))
         .await?;
-    let invite_space_id = invite_space["realm_id"].as_str().unwrap().to_owned();
+    let invite_realm_id = invite_realm["realm_id"].as_str().unwrap().to_owned();
     let invite_event = alice
         .submit_event(
-            &invite_space_id,
+            &invite_realm_id,
             "ck.invite.create",
             json!({
                 "invitee": bob.actor,
@@ -67,7 +67,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "expected one invite for bob: {}",
         serde_json::to_string_pretty(&invites)?
     );
-    assert_eq!(invites["invites"][0]["space_id"], invite_space_id);
+    assert_eq!(invites["invites"][0]["realm_id"], invite_realm_id);
     let invite_token = invites["invites"][0]["invite_token"].as_str().unwrap();
 
     expect_status(
@@ -87,37 +87,37 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(invite_resolve["space_preview"]["realm_id"], invite_space_id);
+    assert_eq!(invite_resolve["realm_preview"]["realm_id"], invite_realm_id);
 
-    let listed_space = alice
+    let listed_realm = alice
         .create_realm_with(json!({
-            "title": "Listed Directory Space",
+            "title": "Listed Directory Realm",
             "discoverability": "listed"
         }))
         .await?;
-    let listed_space_id = listed_space["realm_id"].as_str().unwrap().to_owned();
+    let listed_realm_id = listed_realm["realm_id"].as_str().unwrap().to_owned();
     let listed_search = expect_json(
         server
             .http()
             .post(server.url("/_cokret/find/directory/search-realms"))
-            .json(&json!({"query": "Listed Directory Space"})),
+            .json(&json!({"query": "Listed Directory Realm"})),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(listed_search["results"][0]["realm_id"], listed_space_id);
+    assert_eq!(listed_search["results"][0]["realm_id"], listed_realm_id);
 
-    let unlisted_space = alice
+    let unlisted_realm = alice
         .create_realm_with(json!({
-            "title": "Unlisted Directory Space",
+            "title": "Unlisted Directory Realm",
             "discoverability": "unlisted"
         }))
         .await?;
-    let unlisted_space_id = unlisted_space["realm_id"].as_str().unwrap().to_owned();
+    let unlisted_realm_id = unlisted_realm["realm_id"].as_str().unwrap().to_owned();
     let unlisted_search = expect_json(
         server
             .http()
             .post(server.url("/_cokret/find/directory/search-realms"))
-            .json(&json!({"query": "Unlisted Directory Space"})),
+            .json(&json!({"query": "Unlisted Directory Realm"})),
         StatusCode::OK,
     )
     .await?;
@@ -127,31 +127,31 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_cokret/find/directory/resolve-realm"))
-            .json(&json!({"realm_id": unlisted_space_id})),
+            .json(&json!({"realm_id": unlisted_realm_id})),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        unlisted_resolve["space_preview"]["realm_id"],
-        unlisted_space["realm_id"]
+        unlisted_resolve["realm_preview"]["realm_id"],
+        unlisted_realm["realm_id"]
     );
 
-    let shared_space_id = alice.create_realm("Workflow Export Space").await?;
-    alice.add_member(&shared_space_id, &bob).await?;
+    let shared_realm_id = alice.create_realm("Workflow Export Realm").await?;
+    alice.add_member(&shared_realm_id, &bob).await?;
     let sent = alice
         .send_message(
-            &shared_space_id,
+            &shared_realm_id,
             "ck:thread:directory-workflow",
             "hello directory workflow",
         )
         .await?;
 
     let exported = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{shared_space_id}/export")),
+        alice.get(&format!("/_soland/self/realms/{shared_realm_id}/export")),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(exported["schema"], "ck.export.space.v1");
+    assert_eq!(exported["schema"], "ck.export.realm.v1");
     let sent_operation_id =
         sent["event_id"]
             .as_str()
@@ -181,7 +181,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         Some("true")
     );
     let waited_sync = account_subscribe_delta_from_text(&waited_sync.text())?;
-    let waited_events = waited_sync["realms"][&shared_space_id]["timeline"]["events"]
+    let waited_events = waited_sync["realms"][&shared_realm_id]["timeline"]["events"]
         .as_array()
         .unwrap();
     assert!(

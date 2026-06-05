@@ -693,7 +693,7 @@ function detachedJwsFixture(args: {
   const protectedHeader = base64urlJson({
     alg: "EdDSA",
     kid: args.verificationMethod,
-    typ: "cx-event-proof+jws",
+    typ: "ck-event-proof+jws",
   });
   const payload = base64urlJson({
     proof_kind: "event_payload",

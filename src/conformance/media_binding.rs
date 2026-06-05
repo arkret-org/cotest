@@ -327,11 +327,11 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
             "ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED spelling drifted: {ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED}"
         );
     }
-    // Only MLS-Exporter (label `cx-rtc-frame-key/v1`, length=19) is
+    // Only MLS-Exporter (label `ck-rtc-frame-key/v1`, length=19) is
     // accepted as the SFrame frame key source. Backend-cloud key
     // escrow (any wire form that funnels keys through the focus
     // service) is rejected.
-    const MLS_EXPORTER_LABEL: &str = "cx-rtc-frame-key/v1";
+    const MLS_EXPORTER_LABEL: &str = "ck-rtc-frame-key/v1";
     const MLS_EXPORTER_LENGTH: usize = 19;
     if MLS_EXPORTER_LABEL.len() != MLS_EXPORTER_LENGTH {
         bail!(

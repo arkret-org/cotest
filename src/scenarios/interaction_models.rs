@@ -35,18 +35,18 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let carol = carol_actor.client();
     let dave = dave_actor.client();
 
-    let space_id = alice.create_realm("Interaction Model Space").await?;
+    let realm_id = alice.create_realm("Interaction Model Realm").await?;
     for member in [bob, carol, dave] {
-        alice.add_member(&space_id, member).await?;
+        alice.add_member(&realm_id, member).await?;
     }
 
     let sent = alice
-        .send_message(&space_id, "ck:thread:interaction", "hello interaction")
+        .send_message(&realm_id, "ck:thread:interaction", "hello interaction")
         .await?;
 
     expect_status(
         server.http().get(server.url(&format!(
-            "/_cokret/self/events/subscribe?spaces={space_id}&limit=1"
+            "/_cokret/self/events/subscribe?realms={realm_id}&limit=1"
         ))),
         StatusCode::NOT_FOUND,
     )
@@ -54,7 +54,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let subscribe_response = expect_response(
         alice.get(&format!(
-            "/_cokret/self/events/subscribe?spaces={space_id}&limit=10"
+            "/_cokret/self/events/subscribe?realms={realm_id}&limit=10"
         )),
         StatusCode::OK,
     )
@@ -68,7 +68,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let reaction = bob
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.reaction.add",
             json!({
                 "target_ref": sent["event_id"],
@@ -80,7 +80,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let removed_reaction = carol
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.reaction.remove",
             json!({
                 "target_ref": sent["event_id"],
@@ -99,7 +99,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
     let marker = dave
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.read_cursor.advance",
             json!({
                 "id": sent["event_id"]
@@ -109,7 +109,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                 "schema": "ck.schema.read_cursor.v1",
                 "actor_id": dave.actor,
                 "device_id": dave.device_id,
-                "realm_id": space_id,
+                "realm_id": realm_id,
                 "read_scope": {
                     "kind": "thread",
                     "ref": thread_root_ref
@@ -134,7 +134,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     );
 
     let markers = expect_json(
-        dave.get(&format!("/_cokret/self/events?realms={space_id}&limit=50")),
+        dave.get(&format!("/_cokret/self/events?realms={realm_id}&limit=50")),
         StatusCode::OK,
     )
     .await?;
@@ -157,7 +157,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let revised = alice
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.message.revise",
             json!({
                 "body": "edited interaction",
@@ -171,7 +171,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let redacted = alice
         .submit_event(
-            &space_id,
+            &realm_id,
             "ck.message.redact",
             json!({
                 "target_event_id": sent["event_id"],

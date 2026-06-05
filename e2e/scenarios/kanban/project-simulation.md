@@ -32,7 +32,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ### Phase A — alice 建 sprint board
 
 1. alice createRealm `"Sprint 24"`,`joinRule = invite`
-2. alice 建 board `"Sprint 24 board"`(`cx.place.create kind=board`)
+2. alice 建 board `"Sprint 24 board"`(`ck.place.create kind=board`)
 3. 建三个 list:`Todo`、`In Progress`、`Done`
 4. 建三张 Card:
    - `Card 1: "Implement login"` (fields: status=todo, due_date=2026-05-20)
@@ -89,7 +89,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ### Phase H — Board archive
 
 30. sprint 结束,alice 在 board 视图点 "Archive board"
-31. yougen 提交 `cx.place.update`:`fields.state = "archived"`(或 cascade Move)
+31. yougen 提交 `ck.place.update`:`fields.state = "archived"`(或 cascade Move)
 32. 断言:board 主视图不再列出 Sprint 24 board;archive view 中能找到
 33. 断言:archived board 内的 cards / lists 仍然存在但 read-only(spec §4.4 cascade rules)
 
@@ -114,7 +114,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.relation.create assigned_to`、`cx.place.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `ck.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
+- **soland 缺口**:`ck.relation.create assigned_to`、`ck.place.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `ck.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **yougen 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 

@@ -15,20 +15,20 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         .register_client("did:web:bob-policy.example", "@bob-policy", "dev_bob")
         .await?;
 
-    let space_id = alice.create_realm("Policy Document Space").await?;
-    alice.add_member(&space_id, &bob).await?;
+    let realm_id = alice.create_realm("Policy Document Realm").await?;
+    alice.add_member(&realm_id, &bob).await?;
 
     let initial = expect_json(alice.get("/_soland/self/policies"), StatusCode::OK).await?;
     assert!(initial["policies"].as_array().unwrap().is_empty());
 
     let policy = expect_json(
         alice.post("/_soland/self/policies").json(&json!({
-            "scope": space_id,
+            "scope": realm_id,
             "subject_ref": bob.actor,
             "policy_type": "ck.message.create",
             "effect": "deny",
             "actions": ["ck.message.create"],
-            "resource": {"kind": "space", "realm_id": space_id},
+            "resource": {"kind": "realm", "realm_id": realm_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}]
         })),
         StatusCode::OK,
@@ -39,7 +39,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(policy["owner"], alice.actor);
 
     let listed = expect_json(
-        alice.get(&format!("/_soland/self/policies?scope={space_id}")),
+        alice.get(&format!("/_soland/self/policies?scope={realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -69,8 +69,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ck.message.create",
                 "actor": bob.actor,
-                "realm_id": space_id,
-                "source": {"kind": "space", "realm_id": space_id}
+                "realm_id": realm_id,
+                "source": {"kind": "realm", "realm_id": realm_id}
             })),
         StatusCode::OK,
     )
@@ -82,12 +82,12 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let inactive = expect_json(
         alice.post("/_soland/self/policies").json(&json!({
             "policy_id": policy_id,
-            "scope": space_id,
+            "scope": realm_id,
             "subject_ref": bob.actor,
             "policy_type": "ck.message.create",
             "effect": "deny",
             "actions": ["ck.message.create"],
-            "resource": {"kind": "space", "realm_id": space_id},
+            "resource": {"kind": "realm", "realm_id": realm_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}],
             "active": false
         })),
@@ -105,8 +105,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ck.message.create",
                 "actor": bob.actor,
-                "realm_id": space_id,
-                "source": {"kind": "space", "realm_id": space_id}
+                "realm_id": realm_id,
+                "source": {"kind": "realm", "realm_id": realm_id}
             })),
         StatusCode::OK,
     )

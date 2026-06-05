@@ -224,7 +224,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let carol = server
         .register_client("did:web:carol-blob.example", "@carol-blob", "dev_carol")
         .await?;
-    let space_id = create_blob_access_realm(&alice, &bob).await?;
+    let realm_id = create_blob_access_realm(&alice, &bob).await?;
 
     expect_api_error(
         server
@@ -255,7 +255,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .http()
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice.token)
-            .header("x-cokret-realm-id", &space_id)
+            .header("x-cokret-realm-id", &realm_id)
             .header("content-type", "text/plain")
             .body("encrypted-bytes"),
         StatusCode::OK,

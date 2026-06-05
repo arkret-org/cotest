@@ -80,7 +80,7 @@
 > status<400 + 评论解密渲染)。**以下为原始诊断记录:**
 
 尝试修复时发现是**两层**问题(2026-06-01 实跑确认):
-1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `ck.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `cx.flow.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
+1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `ck.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `ck.flow.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
 2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。yougen 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban flow 内容"能加密"只因 flow patch 值不走该 envelope schema 校验;消息走,故被拒。**yougen 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `cokret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
 - **修**(sizable):把 yougen chat 消息加密改用 SDK 的 `MessageCrypto::encrypt_with_aad` 合规路径(构造 aad、aad_digest、version、整合 commit),跨 SDK+yougen、需多轮重建。`@blocking-on: yougen#chat-encrypted-message-envelope-nonconforming`。
 - 本轮已尝试"去 wasm 门 + 默认 Send 走加密"并实跑:明文泄漏被堵(不再泄漏),但暴露第 2 层后**已 `git checkout` 回退 chat.rs**,避免留下"加密频道发不出消息"的回归。
@@ -96,7 +96,7 @@
 ## 6. 仍开放的缺口
 
 - **潜在隐患(未触发但应修)**:客户端 `unwrap_or(false)`(kanban.rs:2686)+ 服务端 sync `unwrap_or("none")`(sync.rs:531)两处"未知即明文"默认 + sync 全量覆盖乐观投影(sync_engine.rs:374 / app.rs:10477)。当前 happy-path 未触发,但投影滞后/竞态下仍可能误判明文。建议 fail-safe(未知不得默认明文;sync 不得用 none 覆盖已知加密 profile,该字段 create-locked 永不可变)。
-- **createSpaceApi 与 soland schema 漂移**:`cotest/e2e/helpers/soland-api.ts:132` 在 realm_create payload 根部放 `plaintext_visible_services`,被现行 schema 拒(波及所有用该 helper 的 e2e)。本审计 create-lock 用例已改用内联 realm 创建绕开,但 helper 本身应修。
+- **createRealmApi 与 soland schema 漂移**:`cotest/e2e/helpers/soland-api.ts:132` 在 realm_create payload 根部放 `plaintext_visible_services`,被现行 schema 拒(波及所有用该 helper 的 e2e)。本审计 create-lock 用例已改用内联 realm 创建绕开,但 helper 本身应修。
 - **metadata_encryption_floor 服务端是否真强制**(`reducer.rs` ~7102):子审计称"字段存了未强制",待核实。
 - **welcome 部分失败的 UI 上报**:当前 `WelcomeApplyOutcome.first_error` 只打日志,用户可能误以为已就绪。
 - **多设备**:QR 配对 / MLS Remove 级联 / 设备撤销后 account-secret 轮换持久化,多数仍 fixme/ignore,等 soland MLS 状态机。

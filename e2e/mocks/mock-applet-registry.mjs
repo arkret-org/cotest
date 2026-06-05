@@ -312,7 +312,7 @@ const server = createServer(async (req, res) => {
         },
         body: JSON.stringify({
           applet_id: body.applet_id,
-          realm_id: body.realm_id ?? body.space_id,
+          realm_id: body.realm_id,
           external_user: body.external_user,
           payload: body.payload,
         }),
