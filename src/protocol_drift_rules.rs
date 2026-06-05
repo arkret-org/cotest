@@ -16,7 +16,7 @@
 //!   next `:`) contains any of `.`, `-`, `_`. Spec tightened the regex to `^did:[a-z0-9]+:[^\s]+$`.
 //!
 //! ## events.subscribe payload typing
-//! * **`EventsSubscribeStringPayload`** — the payload of `ck.events.subscribe` is now the typed
+//! * **`EventsSubscribeStringPayload`** — the payload of `ck.self.events.subscribe` is now the typed
 //!   `EventsSubscribeFrame` object; any literal where the payload is declared as / typed as
 //!   `string` (or `String` / `&str`) is a violation.
 //!
@@ -55,7 +55,7 @@ use serde::Serialize;
 pub const DID_METHOD_SEGMENT_REGEX: &str = r"^did:[a-z0-9]+:[^\s]+$";
 
 /// Twelve event kinds that are *ephemeral only* — they MUST NOT be
-/// submitted via `ck.events.submit` as durable events.
+/// submitted via `ck.self.events.submit` as durable events.
 pub const EPHEMERAL_ONLY_KINDS: &[&str] = &[
     "ck.call.signal",
     "ck.presence",
@@ -292,7 +292,7 @@ fn scan_events_subscribe_string_payload(
     out: &mut Vec<ProtocolDriftFinding>,
 ) {
     // DRIFT-ALLOW: this is the rule's own search token, not a payload declaration.
-    let token = "ck.events.subscribe";
+    let token = "ck.self.events.subscribe";
     let Some(col) = line.find(token) else { return };
     let lower = line.to_ascii_lowercase();
     let migration_phrase = lower.contains("no longer a string")
@@ -528,7 +528,7 @@ fn scan_ephemeral_kind(
         if let Some(col) = find_literal_token(line, kind) {
             let lower = line.to_ascii_lowercase();
             let looks_durable_submit = lower.contains("events.submit")
-                || lower.contains("ck.events.submit")
+                || lower.contains("ck.self.events.submit")
                 || lower.contains("event.kind")
                 || (lower.contains("\"kind\":") && !lower.contains("ephemeral"));
             if looks_durable_submit {
@@ -540,7 +540,7 @@ fn scan_ephemeral_kind(
                     matched_literal: (*kind).to_string(),
                     message: format!(
                         "`{kind}` is `wire_scope=ephemeral_event`; MUST NOT be submitted \
-                         via `ck.events.submit` as a durable Event. Use \
+                         via `ck.self.events.submit` as a durable Event. Use \
                          `ck.schema.ephemeral_envelope.v1` (broadcast) or \
                          `ck.schema.device_message.v1` (point-to-point)."
                     ),
@@ -740,7 +740,7 @@ mod tests {
     fn flags_events_subscribe_with_string_type() {
         // DRIFT-ALLOW: scanner self-test asserts the rule fires on a pre-tightening stringly
         // subscribe.
-        let f = scan("fn handle_cx_events_subscribe(payload: String) {} // ck.events.subscribe");
+        let f = scan("fn handle_cx_events_subscribe(payload: String) {} // ck.self.events.subscribe");
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::EventsSubscribeStringPayload)

@@ -101,7 +101,7 @@
 
 - Phase B 步骤 5:alice 在 block 之前能看到 `M1`
 - Phase C 步骤 7:`blocked-users-list` 新增 bob 行
-- Phase D 步骤 8:`ck.account_data.set` 与 `ck.account.subscribe` 返回一致的 entries
+- Phase D 步骤 8:`ck.account_data.set` 与 `ck.self.account.subscribe` 返回一致的 entries
 - Phase E 步骤 10:alice timeline 不含 `M2`
 - Phase E 步骤 11:alice notifications 不含 `M2` 通知
 - Phase F 步骤 12-14:unblock 后 `M3` 可见
@@ -116,7 +116,7 @@
 ## Implementation notes
 
 - **yougen 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `ck.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
-- **soland 实现**:`ck.account_data.set` + `ck.account.subscribe` 已用于个人 blocklist;事件 query、account sync timeline、`/_soland/self/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /_cokret/peer/federation/block-hint` 与 `GET /_cokret/peer/federation/block-hints` 支持 block hint 记录和 unblock retract。
+- **soland 实现**:`ck.account_data.set` + `ck.self.account.subscribe` 已用于个人 blocklist;事件 query、account sync timeline、`/_soland/self/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST /_cokret/peer/federation/block-hint` 与 `GET /_cokret/peer/federation/block-hints` 支持 block hint 记录和 unblock retract。
 - **测试侧**:主流程、E11.1、E11.2、E11.3 均为 live tests;Phase G 的跨服务器成本用本地 block-hint 记录/撤回端点验证,完整双 soland outbox suppression 可在 `federation/cross-server` harness 扩展时继续加深。
 
 ## 风险

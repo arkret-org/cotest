@@ -40,7 +40,7 @@
       },
       "describe": {
         "service": "floria",
-        "operation_id": "ck.push.notify",
+        "operation_id": "ck.edge.push.notify",
         "supported_profiles": [
           "ck.profile.push_gateway.v1"
         ],

@@ -8,7 +8,7 @@
 
 - `models/space-and-place.md` §3.4 — `history_visibility=joined`
 - `models/realm-and-space.md` §2.6 — Realm 创建者是 bootstrap owner
-- `models/events.md` — `ck.events.query` / `ck.events.subscribe`
+- `models/events.md` — `ck.self.events.query` / `ck.self.events.subscribe`
 
 ## 拓扑
 

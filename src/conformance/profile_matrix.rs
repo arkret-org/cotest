@@ -382,7 +382,7 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
     validate_server_claims_against_matrix(&good, matrix)?;
 
     let mut missing_operation = core.required_operations.clone();
-    missing_operation.remove("ck.events.submit");
+    missing_operation.remove("ck.self.events.submit");
     let bad = json!({
         "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": sorted_values(&missing_operation),
@@ -390,7 +390,7 @@ fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
         "supported_event_schemas": sorted_values(&core.required_schemas),
     });
     if validate_server_claims_against_matrix(&bad, matrix).is_ok() {
-        bail!("profile matrix accepted a server claim missing ck.events.submit");
+        bail!("profile matrix accepted a server claim missing ck.self.events.submit");
     }
 
     let unknown = json!({

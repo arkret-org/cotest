@@ -42,10 +42,10 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
 // ─── VECT-AG-1 — provision ─────────────────────────────────────────────────
 
 pub fn run_agent_provision_vector() -> Result<()> {
-    if OP_AGENT_PROVISION != "ck.agent.provision" {
+    if OP_AGENT_PROVISION != "ck.self.agent.provision" {
         bail!("OP_AGENT_PROVISION spelling drifted: {OP_AGENT_PROVISION}");
     }
-    if CAP_ACTION_AGENT_PROVISION != "ck.agent.provision" {
+    if CAP_ACTION_AGENT_PROVISION != "ck.self.agent.provision" {
         bail!("CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}");
     }
     // The provisioning error matrix MUST include `failed_precondition`
@@ -68,7 +68,7 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
             "ERROR_CODE_PAIRING_REQUEST_EXPIRED spelling drifted: {ERROR_CODE_PAIRING_REQUEST_EXPIRED}"
         );
     }
-    if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.account.agent_key_pair" {
+    if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.agent_key_pair" {
         bail!("OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}");
     }
     // The error-response matrix for the key-pair endpoint MUST
@@ -132,7 +132,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
             bail!("agent op id `{op}` lost canonical namespace");
         }
     }
-    if OP_AGENT_DEACTIVATE != "ck.agent.deactivate" {
+    if OP_AGENT_DEACTIVATE != "ck.self.agent.deactivate" {
         bail!("OP_AGENT_DEACTIVATE spelling drifted: {OP_AGENT_DEACTIVATE}");
     }
 
@@ -194,7 +194,7 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
 // ─── VECT-AG-5 — session_grant.replay ──────────────────────────────────────
 
 pub fn run_agent_session_grant_replay_vector() -> Result<()> {
-    if OP_ACCOUNT_ISSUE_SESSION_GRANT != "ck.account.issue_session_grant" {
+    if OP_ACCOUNT_ISSUE_SESSION_GRANT != "ck.gate.account.issue_session_grant" {
         bail!("OP_ACCOUNT_ISSUE_SESSION_GRANT spelling drifted: {OP_ACCOUNT_ISSUE_SESSION_GRANT}");
     }
     // Agent branch reject codes per §0.8:

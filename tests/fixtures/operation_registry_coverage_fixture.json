@@ -10,16 +10,16 @@
   },
   "operation_to_event_kinds": [
     {
-      "operation_id": "ck.events.submit",
+      "operation_id": "ck.self.events.submit",
       "tier": "core",
       "target_event_kinds_hint": "any",
       "capability_action_hint": "varies_per_event_kind"
     },
     {
-      "operation_id": "ck.moderation.report",
+      "operation_id": "ck.self.moderation.report",
       "tier": "extension",
-      "target_event_kinds": ["ck.moderation.report"],
-      "capability_actions": ["ck.moderation.report"]
+      "target_event_kinds": ["ck.self.moderation.report"],
+      "capability_actions": ["ck.self.moderation.report"]
     }
   ],
   "vectors": [
@@ -41,37 +41,37 @@
     {
       "name": "events_submit_is_core",
       "scope": "live_registry",
-      "operation_id": "ck.events.submit",
+      "operation_id": "ck.self.events.submit",
       "expected": { "outcome": "tier_match", "tier": "core" }
     },
     {
       "name": "moderation_report_is_extension",
       "scope": "live_registry",
-      "operation_id": "ck.moderation.report",
+      "operation_id": "ck.self.moderation.report",
       "expected": { "outcome": "tier_match", "tier": "extension" }
     },
     {
       "name": "applet_ping_is_interop_bridge",
       "scope": "live_registry",
-      "operation_id": "ck.applet.ping",
+      "operation_id": "ck.edge.applet.ping",
       "expected": { "outcome": "tier_match", "tier": "interop_bridge" }
     },
     {
       "name": "applet_install_preview_is_extension",
       "scope": "live_registry",
-      "operation_id": "ck.applet.install.preview",
+      "operation_id": "ck.self.applet.install.preview",
       "expected": { "outcome": "tier_match", "tier": "extension" }
     },
     {
       "name": "applet_install_is_extension",
       "scope": "live_registry",
-      "operation_id": "ck.applet.install",
+      "operation_id": "ck.self.applet.install",
       "expected": { "outcome": "tier_match", "tier": "extension" }
     },
     {
       "name": "applet_revoke_is_extension",
       "scope": "live_registry",
-      "operation_id": "ck.applet.revoke",
+      "operation_id": "ck.self.applet.revoke",
       "expected": { "outcome": "tier_match", "tier": "extension" }
     },
     {
@@ -95,7 +95,7 @@
     },
     {
       "name": "tier_mismatch_for_known_op",
-      "operation_id": "ck.events.submit",
+      "operation_id": "ck.self.events.submit",
       "claimed_tier": "deployment_local",
       "drift": { "kind": "tier_mismatch" },
       "expected": { "outcome": "reject", "reason_code": "tier_drift" }

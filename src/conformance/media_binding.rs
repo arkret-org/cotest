@@ -196,7 +196,7 @@ fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
 }
 
 pub fn run_token_exchange_minimal_vector() -> Result<()> {
-    if OP_CALL_MEDIA_TOKEN_EXCHANGE != "ck.call.media.token_exchange" {
+    if OP_CALL_MEDIA_TOKEN_EXCHANGE != "ck.self.call.media.token_exchange" {
         bail!("OP_CALL_MEDIA_TOKEN_EXCHANGE spelling drifted: {OP_CALL_MEDIA_TOKEN_EXCHANGE}");
     }
     if PARTICIPANT_BINDING_SCHEMA != "ck.media.participant_binding.v1" {

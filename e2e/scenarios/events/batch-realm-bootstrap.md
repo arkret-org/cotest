@@ -2,7 +2,7 @@
 
 ## Intent
 
-Prove `ck.events.submit` batch mode is a real protocol response path and that `ck.realm.create` materializes the creator's initial Realm membership before subsequent owner writes.
+Prove `ck.self.events.submit` batch mode is a real protocol response path and that `ck.realm.create` materializes the creator's initial Realm membership before subsequent owner writes.
 
 ## Flow
 
@@ -14,6 +14,6 @@ Prove `ck.events.submit` batch mode is a real protocol response path and that `c
 
 ## Acceptance
 
-- Batch `ck.events.submit` never returns an empty 2xx response.
+- Batch `ck.self.events.submit` never returns an empty 2xx response.
 - Realm bootstrap writes the owner membership index before the owner sends the next event.
 - The scenario is tagged `@fully-implemented` so `joint-smoke` covers it.

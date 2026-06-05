@@ -18,7 +18,7 @@
 //     Registry public key (for verifying registry-signed envelopes).
 //   POST /sign-package
 //     Returns a sealed controller-signed ck.schema.applet_package.v1 for
-//     soland's canonical ck.applet.install.preview / ck.applet.install flow.
+//     soland's canonical ck.self.applet.install.preview / ck.self.applet.install flow.
 //   POST /external-event
 //     Forwards an external payload to soland's `/_cokret/edge/applet/transactions`.
 //   GET  /inspect → full mock state.

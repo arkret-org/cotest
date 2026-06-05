@@ -400,7 +400,7 @@ conformance_test!(
 
 conformance_test!(
     /// S-13 (cokret-spec 653ffb2) — Applet install/package surface + audit
-    /// intersection. Pins the new ck.applet.install/preview/revoke operations,
+    /// intersection. Pins the new ck.self.applet.install/preview/revoke operations,
     /// the ck.schema.applet_package.v1 schema, the now-required
     /// registration_epoch field, the reshaped ck.applet.bridge_error payload,
     /// and the ck.audit.applet_binding / ck.audit.release event kinds against

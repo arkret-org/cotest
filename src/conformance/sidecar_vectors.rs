@@ -35,10 +35,10 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
-    if OP_AGENT_SIDECAR_THREAD_ENSURE != "ck.agent.sidecar_thread.ensure" {
+    if OP_AGENT_SIDECAR_THREAD_ENSURE != "ck.self.agent.sidecar_thread.ensure" {
         bail!("OP_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {OP_AGENT_SIDECAR_THREAD_ENSURE}");
     }
-    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ck.agent.sidecar_thread.ensure" {
+    if CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE != "ck.self.agent.sidecar_thread.ensure" {
         bail!(
             "CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE spelling drifted: {CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE}"
         );
@@ -78,7 +78,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
 // ─── VECT-SC-3 — existence_privacy ─────────────────────────────────────────
 
 pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
-    // A caller without the `ck.agent.sidecar_thread.ensure` capability
+    // A caller without the `ck.self.agent.sidecar_thread.ensure` capability
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
     if ERROR_CODE_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {

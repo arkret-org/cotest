@@ -12,12 +12,12 @@ const PRINCIPAL_SERVER_PROFILE: &str = "ck.profile.principal_server.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
     "ck.server.describe",
-    "ck.account.describe",
-    "ck.account.subscribe",
-    "ck.events.subscribe",
-    "ck.events.query",
-    "ck.snapshot.head",
-    "ck.authz.check",
+    "ck.self.account.describe",
+    "ck.self.account.subscribe",
+    "ck.self.events.subscribe",
+    "ck.self.events.query",
+    "ck.self.snapshot.head",
+    "ck.self.authz.check",
 ];
 
 const REQUIRED_EVENT_KINDS: &[&str] = &[

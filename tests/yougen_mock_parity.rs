@@ -538,7 +538,7 @@ fn normalize_server_describe(body: Value) -> Value {
             operations
                 .iter()
                 .filter_map(Value::as_str)
-                .any(|operation| operation == "ck.events.submit")
+                .any(|operation| operation == "ck.self.events.submit")
         })
         .unwrap_or(false);
     json!({

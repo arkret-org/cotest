@@ -440,9 +440,9 @@ fn validate_operation_registry(
         }
     }
     for required in [
-        "ck.events.describe",
-        "ck.events.submit",
-        "ck.account.subscribe",
+        "ck.self.events.describe",
+        "ck.self.events.submit",
+        "ck.self.account.subscribe",
     ] {
         if !ids.contains(required) {
             bail!("operation registry missing required {required}");

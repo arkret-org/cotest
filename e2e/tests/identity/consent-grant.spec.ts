@@ -157,7 +157,7 @@ test.describe("consent grant", () => {
     expect(openBody.ok).toBe(true);
     expect(openBody.state).toBe("requested");
     expect(openBody.consent_id).toMatch(/^ck:mimi_consent:/);
-    expect(openBody.receipt?.operation_id).toBe("ck.mimi.request_consent");
+    expect(openBody.receipt?.operation_id).toBe("ck.open.mimi.request_consent");
     expect(openBody.receipt?.extra?.privacy_state).toBe("holder_private");
     expect(openBody.receipt?.extra?.consent_grants_space_capability).toBe(false);
 
@@ -174,7 +174,7 @@ test.describe("consent grant", () => {
     expect(updateBody.ok).toBe(true);
     expect(updateBody.consent_id).toBe(openBody.consent_id);
     expect(updateBody.state).toBe("accepted");
-    expect(updateBody.receipt?.operation_id).toBe("ck.mimi.update_consent");
+    expect(updateBody.receipt?.operation_id).toBe("ck.open.mimi.update_consent");
     expect(updateBody.receipt?.extra?.membership_still_required).toBe(true);
   });
 

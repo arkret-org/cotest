@@ -34,13 +34,13 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     crate::conformance::validate_server_profile_claims(&server_describe)?;
 
     for required in [
-        "ck.account.subscribe",
-        "ck.directory.search_realms",
-        "ck.authz.check",
-        "ck.ephemeral.send",
-        "ck.push.register_device",
-        "ck.policy.check",
-        "ck.moderation.report",
+        "ck.self.account.subscribe",
+        "ck.find.directory.search_realms",
+        "ck.self.authz.check",
+        "ck.self.ephemeral.send",
+        "ck.edge.push.register_device",
+        "ck.self.policy.check",
+        "ck.self.moderation.report",
     ] {
         assert!(
             description

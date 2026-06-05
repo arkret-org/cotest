@@ -1,5 +1,5 @@
 // Contract: e2e/scenarios/events/batch-realm-bootstrap.md
-// Regression guard for ck.events.submit batch responses and Realm creator
+// Regression guard for ck.self.events.submit batch responses and Realm creator
 // membership materialization.
 
 import { expect, test } from "@playwright/test";

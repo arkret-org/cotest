@@ -55,12 +55,12 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": [
             "ck.server.describe",
-            "ck.events.describe",
-            "ck.events.submit",
-            "ck.events.get",
-            "ck.events.resolve",
-            "ck.events.query",
-            "ck.events.frontier"
+            "ck.self.events.describe",
+            "ck.self.events.submit",
+            "ck.self.events.get",
+            "ck.self.events.resolve",
+            "ck.self.events.query",
+            "ck.self.events.frontier"
         ],
         "supported_event_kinds": [
             "ck.space.create",

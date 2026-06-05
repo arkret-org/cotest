@@ -7,7 +7,7 @@
   "cases": [
     {
       "name": "agent_pause_payload_minimal",
-      "event_kind": "ck.agent.pause",
+      "event_kind": "ck.self.agent.pause",
       "payload_def_ref": "agent_pause_payload",
       "payload": {
         "agent_principal_id": "did:web:agent.example",
@@ -24,7 +24,7 @@
     },
     {
       "name": "agent_resume_payload_minimal",
-      "event_kind": "ck.agent.resume",
+      "event_kind": "ck.self.agent.resume",
       "payload_def_ref": "agent_resume_payload",
       "payload": {
         "agent_principal_id": "did:web:agent.example",
@@ -40,7 +40,7 @@
     },
     {
       "name": "agent_deactivate_payload_terminal",
-      "event_kind": "ck.agent.deactivate",
+      "event_kind": "ck.self.agent.deactivate",
       "payload_def_ref": "agent_deactivate_payload",
       "payload": {
         "agent_principal_id": "did:web:agent.example",
@@ -134,7 +134,7 @@
     },
     {
       "name": "actor_kind_field_must_fail",
-      "event_kind": "ck.agent.pause",
+      "event_kind": "ck.self.agent.pause",
       "payload_def_ref": "agent_pause_payload",
       "reason": "actor_kind_reducer_managed",
       "payload": {

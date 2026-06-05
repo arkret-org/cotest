@@ -48,12 +48,12 @@
         },
         "supported_operations": [
           "ck.server.describe",
-          "ck.account.describe",
-          "ck.account.subscribe",
-          "ck.events.subscribe",
-          "ck.events.query",
-          "ck.snapshot.head",
-          "ck.authz.check"
+          "ck.self.account.describe",
+          "ck.self.account.subscribe",
+          "ck.self.events.subscribe",
+          "ck.self.events.query",
+          "ck.self.snapshot.head",
+          "ck.self.authz.check"
         ],
         "supported_event_kinds": [
           "ck.space.create",
@@ -100,15 +100,15 @@
         },
         "supported_operations": [
           "ck.server.describe",
-          "ck.account.describe",
-          "ck.account.subscribe",
-          "ck.events.subscribe",
-          "ck.events.query",
-          "ck.snapshot.head",
-          "ck.authz.check",
+          "ck.self.account.describe",
+          "ck.self.account.subscribe",
+          "ck.self.events.subscribe",
+          "ck.self.events.query",
+          "ck.self.snapshot.head",
+          "ck.self.authz.check",
           "ck.admin.device.revoke",
           "ck.agent.task.submit",
-          "ck.applet.install",
+          "ck.self.applet.install",
           "ck.media.session.offer"
         ],
         "supported_event_kinds": [

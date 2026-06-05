@@ -66,7 +66,7 @@
    - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` 全部存在且是数组
    - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `cotest_verified`)
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
-   - `supported_operations` 至少含 `ck.server.describe` 与 `ck.events.submit`(spec §4.2 + service-api-schema §2.1 `/events POST`)
+   - `supported_operations` 至少含 `ck.server.describe` 与 `ck.self.events.submit`(spec §4.2 + service-api-schema §2.1 `/events POST`)
 3. `GET ${coauthBaseUrl()}/_cokret/describe`(仅当 `coauthBaseUrl()` 已配置)
 4. 断言:
    - HTTP 200,JSON

@@ -413,7 +413,7 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
 ///
 /// Fixture-decoupled: asserts directly against the canonical registries +
 /// schemas so the new protocol surface can't silently drift:
-/// - `ck.applet.install.preview` / `ck.applet.install` / `ck.applet.revoke` operations exist;
+/// - `ck.self.applet.install.preview` / `ck.self.applet.install` / `ck.self.applet.revoke` operations exist;
 /// - `ck.schema.applet_package.v1` is registered and its schema requires `registration_epoch` /
 ///   `package_digest` / `proof` and the base `ck.profile.applet_service.v1` profile;
 /// - `applet_registration_payload` now requires `registration_epoch`;
@@ -433,9 +433,9 @@ pub fn run_applet_audit_surface_check() -> Result<()> {
         .filter_map(|o| o.get("operation_id").and_then(Value::as_str))
         .collect();
     for op in [
-        "ck.applet.install.preview",
-        "ck.applet.install",
-        "ck.applet.revoke",
+        "ck.self.applet.install.preview",
+        "ck.self.applet.install",
+        "ck.self.applet.revoke",
     ] {
         if !op_ids.contains(op) {
             bail!("operation-registry missing applet install operation {op}");
@@ -573,7 +573,7 @@ pub fn run_applet_audit_surface_check() -> Result<()> {
         "applet_audit_surface.summary",
         &json!({ "name": "applet_audit_surface" }),
         json!({
-            "install_ops": ["ck.applet.install.preview", "ck.applet.install", "ck.applet.revoke"],
+            "install_ops": ["ck.self.applet.install.preview", "ck.self.applet.install", "ck.self.applet.revoke"],
             "package_schema": "ck.schema.applet_package.v1",
             "registration_epoch_required": true,
             "bridge_error_required": expected_bridge.iter().collect::<Vec<_>>(),
