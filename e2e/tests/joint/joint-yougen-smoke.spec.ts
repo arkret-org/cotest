@@ -77,7 +77,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
         .poll(async () => {
           const invites = await listInvitesApi(request, bobToken);
           return invites.some(
-            (invite) => invite.space_id === spaceId && invite.invitee === bob.did,
+            (invite) => invite.realm_id === spaceId && invite.invitee === bob.did,
           );
         }, { timeout: 30_000 })
         .toBe(true);

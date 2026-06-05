@@ -74,18 +74,18 @@ test.describe("personal blocklist", () => {
       const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const realmId = await alicePage.createSpace({
           title: `S31 Blocklist ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
           historyVisibility: "joined",
           seedMembers: [bob.did],
         });
-        await bobPage.acceptInvite(spaceId);
+        await bobPage.acceptInvite(realmId);
 
         const m1 = `S31 m1 ${stamp}`;
-        await bobPage.sendTimelineMessage(spaceId, m1);
-        await alicePage.gotoTimelineSpace(spaceId);
+        await bobPage.sendTimelineMessage(realmId, m1);
+        await alicePage.gotoTimelineSpace(realmId);
         await expect(alicePage.page.getByTestId("timeline")).toContainText(m1, {
           timeout: 30_000,
         });
@@ -122,9 +122,9 @@ test.describe("personal blocklist", () => {
           .toBe(true);
 
         const m2 = `S31 m2 ${stamp}`;
-        await bobPage.sendTimelineMessage(spaceId, m2);
-        await alicePage.gotoTimelineSpace(spaceId);
-        const aliceTexts = await alicePage.readTimelineTexts(spaceId);
+        await bobPage.sendTimelineMessage(realmId, m2);
+        await alicePage.gotoTimelineSpace(realmId);
+        const aliceTexts = await alicePage.readTimelineTexts(realmId);
         expect(aliceTexts.some((t) => t.includes(m2))).toBe(false);
         await expect(bobPage.page.getByTestId("timeline")).toContainText(m2, {
           timeout: 30_000,
@@ -159,8 +159,8 @@ test.describe("personal blocklist", () => {
           .toBe(false);
 
         const m3 = `S31 m3 ${stamp}`;
-        await bobPage.sendTimelineMessage(spaceId, m3);
-        await alicePage.gotoTimelineSpace(spaceId);
+        await bobPage.sendTimelineMessage(realmId, m3);
+        await alicePage.gotoTimelineSpace(realmId);
         await expect(alicePage.page.getByTestId("timeline")).toContainText(m3, {
           timeout: 30_000,
         });
@@ -187,25 +187,25 @@ test.describe("personal blocklist", () => {
         issueDevSession(request, bob),
         issueDevSession(request, carol),
       ]);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S31 E11.1 ${stamp}`,
         public: true,
         history_visibility: "shared",
       });
-      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
-      await addRealmMemberApi(request, aliceToken, spaceId, carol.did);
-      await putBlocklist(request, aliceToken, alice.did, spaceId, [
+      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+      await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+      await putBlocklist(request, aliceToken, alice.did, realmId, [
         canonicalActorBlockEntry(bob.did),
       ]);
 
       const body = `S31 E11.1 bob ${stamp}`;
-      const sent = await sendMessageApi(request, bobToken, spaceId, body);
+      const sent = await sendMessageApi(request, bobToken, realmId, body);
 
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(body);
-      expect(eventsText(await queryRealmEventsApi(request, carolToken, spaceId))).toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, carolToken, realmId))).toContain(body);
 
       const redactOperation = makeOperation({
-        spaceId,
+        realmId,
         objectType: "ck.message.redact",
         payload: {
           target_event_id: sent.event_id,
@@ -216,11 +216,11 @@ test.describe("personal blocklist", () => {
       });
       const redactPush = await pushFederationOperations(request, [redactOperation], {
         origin: solandServiceDid(),
-        spaceId,
+        realmId,
       });
       expect(redactPush.accepted).toContain(redactOperation.operation_id);
 
-      expect(eventsText(await queryRealmEventsApi(request, carolToken, spaceId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, carolToken, realmId))).not.toContain(body);
     },
   );
 
@@ -235,16 +235,16 @@ test.describe("personal blocklist", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S31 E11.2 ${stamp}`,
         public: true,
         history_visibility: "shared",
       });
-      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
       const mutedVisible = `S31 E11.2 muted-visible ${stamp}`;
-      await sendMessageApi(request, bobToken, spaceId, mutedVisible);
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).toContain(
+      await sendMessageApi(request, bobToken, realmId, mutedVisible);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).toContain(
         mutedVisible,
       );
 
@@ -260,7 +260,7 @@ test.describe("personal blocklist", () => {
       });
       expect(registerDevice.status()).toBe(200);
 
-      await putAccountDataViaEventApi(request, aliceToken, alice.did, spaceId, "ck.push_rules", {
+      await putAccountDataViaEventApi(request, aliceToken, alice.did, realmId, "ck.push_rules", {
         rules: [
           {
             rule_id: `mute-${stamp}`,
@@ -284,12 +284,12 @@ test.describe("personal blocklist", () => {
       const notifyBody = await notify.json();
       expect(JSON.stringify(notifyBody)).toContain("push_rule");
 
-      await putBlocklist(request, aliceToken, alice.did, spaceId, [
+      await putBlocklist(request, aliceToken, alice.did, realmId, [
         canonicalActorBlockEntry(bob.did),
       ]);
       const blockedHidden = `S31 E11.2 blocked-hidden ${stamp}`;
-      await sendMessageApi(request, bobToken, spaceId, blockedHidden);
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(
+      await sendMessageApi(request, bobToken, realmId, blockedHidden);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(
         blockedHidden,
       );
     },
@@ -306,21 +306,21 @@ test.describe("personal blocklist", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S31 E11.3 ${stamp}`,
         public: true,
         history_visibility: "shared",
       });
-      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
-      await putBlocklist(request, aliceToken, alice.did, spaceId, [
+      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+      await putBlocklist(request, aliceToken, alice.did, realmId, [
         canonicalActorBlockEntry(bob.did),
       ]);
 
       const body = `S31 E11.3 bob own message ${stamp}`;
-      await sendMessageApi(request, bobToken, spaceId, body);
+      await sendMessageApi(request, bobToken, realmId, body);
 
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(body);
-      expect(eventsText(await queryRealmEventsApi(request, bobToken, spaceId))).toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, bobToken, realmId))).toContain(body);
 
       expect(await blocklistContains(request, bobToken, alice.did)).toBe(false);
       expect(await readNotificationsText(request, bobToken)).not.toMatch(/blocked by|blocklist/i);

@@ -43,9 +43,9 @@ test.describe("federation security hardening", () => {
       "requires beta SOLAND_FEDERATION_DENYLIST to include alpha service DID/domain",
     );
 
-    const spaceId = typedId("space");
+    const realmId = typedId("realm");
     const op = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.message.create",
       payload: {
         event_id: typedId("event"),
@@ -57,7 +57,7 @@ test.describe("federation security hardening", () => {
     const response = await rawPushFederationOperations(request, [op], {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
-      spaceId,
+      realmId,
       server: "beta",
     });
 
@@ -76,7 +76,7 @@ test.describe("federation security hardening", () => {
     const alice = uniqueUser("fed-deny-alice");
     await ensureRegistered(request, alice, { server: "alpha" });
     const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
-    const spaceId = await createRealmApi(
+    const realmId = await createRealmApi(
       request,
       aliceToken,
       {
@@ -86,14 +86,14 @@ test.describe("federation security hardening", () => {
       },
       { server: "alpha" },
     );
-    await sendMessageApi(request, aliceToken, spaceId, "must not fan out", {
+    await sendMessageApi(request, aliceToken, realmId, "must not fan out", {
       server: "alpha",
     });
 
     await expect
       .poll(
         async () => {
-          const frontier = await operationFrontierApi(request, spaceId, { server: "beta" });
+          const frontier = await operationFrontierApi(request, realmId, { server: "beta" });
           return frontier.operation_count;
         },
         { timeout: 10_000, intervals: [1_000, 2_000] },
@@ -112,7 +112,7 @@ test.describe("federation security hardening", () => {
     const alice = uniqueUser("fed-egress-alice");
     await ensureRegistered(request, alice, { server: "alpha" });
     const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
-    const spaceId = await createRealmApi(
+    const realmId = await createRealmApi(
       request,
       aliceToken,
       { title: "private egress rejection", public: false },
@@ -126,7 +126,7 @@ test.describe("federation security hardening", () => {
         data: {
           peer_url: solandBaseUrl("beta"),
           peer_did: solandServiceDid("beta"),
-          space_id: spaceId,
+          realm_id: realmId,
           limit: 1,
           max_pages: 1,
         },

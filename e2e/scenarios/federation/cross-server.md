@@ -78,7 +78,7 @@
 6. α `POST http://<port_β>/_cokret/peer/federation/push-operations`,body 含:
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
-   - `space_id = spaceId`
+   - `realm_id = realmId`
    - `service_binding_ref` 含 `space_policy_hash` / `membership_frontier` / `reducer_profile_digest`
    - `events: [<完整签名的 ck.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
@@ -118,7 +118,7 @@
 
 22. 把 β 临时离线(harness 用 `route.block` 拦掉 α→β 的 push,模拟网络分区)
 23. **alice** 发 `M_offline = "during partition ${stamp}"`,α 多次重试 push 失败
-24. 恢复 β,**bob** 进 timeline → β 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /_cokret/peer/federation/pull-operations?space_id=...&after_cursor=...`
+24. 恢复 β,**bob** 进 timeline → β 检测因果缺口(本地缺 `M_offline` 的 `prev_refs`),发起 `GET /_cokret/peer/federation/pull-operations?realm_id=...&after_cursor=...`
 25. α 返回缺口 event 数组,β 落库,bob 现在能看到 `M_offline`
 
 ### Phase G — Capability revoke fanout (sub-test E2.2)

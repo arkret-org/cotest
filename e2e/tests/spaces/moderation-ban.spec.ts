@@ -52,30 +52,30 @@ test.describe("moderation and ban", () => {
       issueDevSession(request, carol),
     ]);
 
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S5 Moderation API ${stamp}`,
       summary: "moderation + ban API-first coverage",
       public: true,
       discoverability: "public",
       history_visibility: "shared",
     });
-    await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
-    await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
-    await addRealmMemberApi(request, aliceToken, spaceId, carol.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
 
     const abusive = `S5 abusive content ${stamp}`;
     const postBan = `S5 after ban ${stamp}`;
 
-    const sent = await sendMessageApi(request, malloryToken, spaceId, abusive);
+    const sent = await sendMessageApi(request, malloryToken, realmId, abusive);
     expect(sent.event_id).toMatch(/^ck:event:/);
 
-    const beforeRedaction = await queryRealmEventsApi(request, aliceToken, spaceId);
+    const beforeRedaction = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
     const reportResp = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
       headers: authHeaders(bobToken),
       data: {
-        space_id: spaceId,
+        realm_id: realmId,
         target_ref: sent.event_id,
         reason: "harassment",
         description: "S5 abusive content posted by mallory",
@@ -89,21 +89,21 @@ test.describe("moderation and ban", () => {
     expect(reportBody.status).toBe("queued");
 
     const reporterReports = await request.get(
-      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(reporterReports.ok()).toBeTruthy();
     expect(JSON.stringify(await reporterReports.json())).toContain(reportBody.report_id);
 
     const targetReports = await request.get(
-      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(malloryToken) },
     );
     expect(targetReports.ok()).toBeTruthy();
     expect(JSON.stringify(await targetReports.json())).not.toContain(reportBody.report_id);
 
     const bystanderReports = await request.get(
-      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(carolToken) },
     );
     expect(bystanderReports.ok()).toBeTruthy();
@@ -116,7 +116,7 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(await targetAdminReports.json())).not.toContain(reportBody.report_id);
 
     const ownerReports = await request.get(
-      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(spaceId)}`,
+      `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(ownerReports.ok()).toBeTruthy();
@@ -126,7 +126,7 @@ test.describe("moderation and ban", () => {
       headers: authHeaders(bobToken),
       data: signedEventEnvelope({
         actorDid: bob.did,
-        realmId: spaceId,
+        realmId: realmId,
         kind: "ck.member.state",
         payload: {
           actor_id: mallory.did,
@@ -146,7 +146,7 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(await reports.json())).toContain(reportBody.report_id);
 
     const banOperation = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.member.state",
       payload: {
         actor_id: mallory.did,
@@ -158,26 +158,26 @@ test.describe("moderation and ban", () => {
     });
     const banPush = await pushFederationOperations(request, [banOperation], {
       origin: solandServiceDid(),
-      spaceId,
+      realmId,
     });
     expect(banPush.accepted).toContain(banOperation.operation_id);
 
-    const spaceAfterBan = await request.get(
-      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
+    const realmAfterBan = await request.get(
+      `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
       { headers: authHeaders(aliceToken) },
     );
-    expect(spaceAfterBan.ok()).toBeTruthy();
-    const spaceAfterBanBody = await spaceAfterBan.json();
-    expect(spaceAfterBanBody.members ?? []).not.toContain(mallory.did);
+    expect(realmAfterBan.ok()).toBeTruthy();
+    const realmAfterBanBody = await realmAfterBan.json();
+    expect(realmAfterBanBody.members ?? []).not.toContain(mallory.did);
 
     const bannedWrite = await request.post(`${solandBaseUrl()}/_cokret/self/messages/send`, {
       headers: authHeaders(malloryToken),
-      data: { space_id: spaceId, content: { body: postBan } },
+      data: { realm_id: realmId, content: { body: postBan } },
     });
     expect([401, 403, 404]).toContain(bannedWrite.status());
 
     const redactOperation = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.message.redact",
       payload: {
         target_event_id: sent.event_id,
@@ -188,19 +188,19 @@ test.describe("moderation and ban", () => {
     });
     const redactPush = await pushFederationOperations(request, [redactOperation], {
       origin: solandServiceDid(),
-      spaceId,
+      realmId,
     });
     expect(redactPush.accepted).toContain(redactOperation.operation_id);
 
-    const afterRedactionAlice = await queryRealmEventsApi(request, aliceToken, spaceId);
-    const afterRedactionBob = await queryRealmEventsApi(request, bobToken, spaceId);
-    const afterRedactionCarol = await queryRealmEventsApi(request, carolToken, spaceId);
+    const afterRedactionAlice = await queryRealmEventsApi(request, aliceToken, realmId);
+    const afterRedactionBob = await queryRealmEventsApi(request, bobToken, realmId);
+    const afterRedactionCarol = await queryRealmEventsApi(request, carolToken, realmId);
     expect(JSON.stringify(afterRedactionAlice)).not.toContain(abusive);
     expect(JSON.stringify(afterRedactionBob)).not.toContain(abusive);
     expect(JSON.stringify(afterRedactionCarol)).not.toContain(abusive);
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/export`,
+      `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
@@ -223,42 +223,42 @@ test.describe("moderation and ban", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
 
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S5.3 Idempotent Ban API ${stamp}`,
       public: true,
       discoverability: "public",
       history_visibility: "shared",
     });
-    await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 
     const firstBan = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.member.state",
       payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
     });
     const secondBan = makeOperation({
-      spaceId,
+      realmId,
       objectType: "ck.member.state",
       payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
     });
 
     const first = await pushFederationOperations(request, [firstBan], {
       origin: solandServiceDid(),
-      spaceId,
+      realmId,
     });
     expect(first.accepted).toContain(firstBan.operation_id);
 
     const second = await pushFederationOperations(request, [secondBan], {
       origin: solandServiceDid(),
-      spaceId,
+      realmId,
     });
     expect(second.accepted).toContain(secondBan.operation_id);
 
-    const space = await request.get(`${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`, {
+    const realm = await request.get(`${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`, {
       headers: authHeaders(aliceToken),
     });
-    expect(space.ok()).toBeTruthy();
-    const body = await space.json();
+    expect(realm.ok()).toBeTruthy();
+    const body = await realm.json();
     expect(body.members ?? []).not.toContain(mallory.did);
   });
 
@@ -272,17 +272,17 @@ test.describe("moderation and ban", () => {
 
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, mallory)]);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S5 UI Ban ${stamp}`,
       public: true,
       discoverability: "public",
       history_visibility: "shared",
     });
-    await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
     try {
-      await alicePage.gotoSpaceAdminSection(spaceId, "members");
+      await alicePage.gotoSpaceAdminSection(realmId, "members");
       const malloryRow = alicePage.page.locator(
         `[data-testid="member-row"][data-member-did="${mallory.did}"]`,
       );
@@ -292,12 +292,12 @@ test.describe("moderation and ban", () => {
         timeout: 30_000,
       });
 
-      const space = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
+      const realm = await request.get(
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(aliceToken) },
       );
-      expect(space.ok()).toBeTruthy();
-      const body = await space.json();
+      expect(realm.ok()).toBeTruthy();
+      const body = await realm.json();
       expect(body.members ?? []).not.toContain(mallory.did);
     } finally {
       await alicePage.close();

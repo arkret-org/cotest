@@ -58,8 +58,8 @@ test.describe("core object invariants", () => {
         // ── Step 3: read back the Space via the soland API and verify the
         // spec §3 common-field equivalents on the SpaceLifecycleResponse
         // serializer. Current wire shape (soland/src/wire.rs
-        // SpaceLifecycleResponse): { ok, space_id, owner, members, deleted }.
-        //   - space_id  ↔ spec `id`              (typed ck:realm: prefix)
+        // SpaceLifecycleResponse): { ok, realm_id, owner, members, deleted }.
+        //   - realm_id  ↔ spec `id`              (typed ck:realm: prefix)
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
@@ -70,14 +70,14 @@ test.describe("core object invariants", () => {
         expect(spaceRes.status()).toBe(200);
         const spaceBody = (await spaceRes.json()) as {
           ok?: boolean;
-          space_id?: string;
+          realm_id?: string;
           owner?: string;
           members?: string[];
           deleted?: boolean;
         };
         // Common-field 1: `id` (typed ck:realm: prefix).
-        expect(spaceBody.space_id).toBe(spaceId);
-        expect(spaceBody.space_id).toMatch(/^ck:realm:/);
+        expect(spaceBody.realm_id).toBe(spaceId);
+        expect(spaceBody.realm_id).toMatch(/^ck:realm:/);
         // Common-field 2: actor reference (`created_by` equivalent → `owner`).
         expect(spaceBody.owner).toBe(alice.did);
         // Membership invariant: owner must always appear in members.

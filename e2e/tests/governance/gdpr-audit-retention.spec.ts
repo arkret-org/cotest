@@ -204,7 +204,7 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S27 retention ${stamp}`,
       discoverability: "listed",
       history_visibility: "shared",
@@ -218,19 +218,19 @@ test.describe("GDPR / audit / retention", () => {
     const sent = await sendMessageApi(
       request,
       aliceToken,
-      spaceId,
+      realmId,
       oldBody,
       { createdAt: oldCreatedAt },
     );
 
-    const before = await queryRealmEventsApi(request, aliceToken, spaceId);
+    const before = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(before)).toContain(oldBody);
 
     const sweep = await request.post(
       `${solandBaseUrl()}/_soland/admin/retention/sweep`,
       {
         headers: authHeaders(aliceToken),
-        data: { space_id: spaceId },
+        data: { realm_id: realmId },
       },
     );
     expect(sweep.status()).toBe(200);
@@ -247,7 +247,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(tombstone?.anchored).toBe(true);
     expect(tombstone?.physical_delete).toBe(false);
 
-    const after = await queryRealmEventsApi(request, aliceToken, spaceId);
+    const after = await queryRealmEventsApi(request, aliceToken, realmId);
     const events = after.events as Array<{
       event_id?: string;
       payload?: Record<string, unknown>;
@@ -286,7 +286,7 @@ test.describe("GDPR / audit / retention", () => {
         issueDevSession(request, bob, { server: "beta" }),
       ]);
 
-      const spaceId = await createRealmApi(
+      const realmId = await createRealmApi(
         request,
         aliceToken,
         {
@@ -304,7 +304,7 @@ test.describe("GDPR / audit / retention", () => {
       );
 
       let betaInvite:
-        | { invite_id: string; space_id: string; invitee?: string }
+        | { invite_id: string; realm_id: string; invitee?: string }
         | undefined;
       await expect
         .poll(
@@ -315,8 +315,7 @@ test.describe("GDPR / audit / retention", () => {
             betaInvite = invites.find(
               (invite) =>
                 invite.invitee === bob.did &&
-                invite.space_id.replace(/^ck:space:/, "ck:realm:") ===
-                  spaceId.replace(/^ck:space:/, "ck:realm:"),
+                invite.realm_id === realmId,
             );
             return Boolean(betaInvite);
           },
@@ -327,19 +326,19 @@ test.describe("GDPR / audit / retention", () => {
         request,
         bobToken,
         bob.did,
-        betaInvite!.space_id,
+        betaInvite!.realm_id,
         betaInvite!.invite_id,
         { server: "beta" },
       );
 
       const aliceBody = `alice erasable cross-server body ${stamp}`;
-      await sendMessageApi(request, aliceToken, spaceId, aliceBody, {
+      await sendMessageApi(request, aliceToken, realmId, aliceBody, {
         server: "alpha",
       });
       await expect
         .poll(
           async () => {
-            const body = await queryRealmEventsApi(request, bobToken, spaceId, {
+            const body = await queryRealmEventsApi(request, bobToken, realmId, {
               server: "beta",
               limit: 100,
             });
@@ -383,7 +382,7 @@ test.describe("GDPR / audit / retention", () => {
       const betaTimelineAfter = await queryRealmEventsApi(
         request,
         bobToken,
-        spaceId,
+        realmId,
         {
           server: "beta",
           limit: 100,

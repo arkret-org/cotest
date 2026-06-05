@@ -16,11 +16,11 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
         .register_client("did:web:dave-webrtc.example", "@dave-webrtc", "dev_dave")
         .await?;
 
-    let space_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
+    let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
 
     expect_api_error(
         dave.post("/_cokret/self/webrtc/sessions").json(&json!({
-            "space_id": space_id,
+            "realm_id": realm_id,
             "participants": []
         })),
         StatusCode::FORBIDDEN,
@@ -30,7 +30,7 @@ pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
 
     let session = expect_json(
         alice.post("/_cokret/self/webrtc/sessions").json(&json!({
-            "space_id": space_id,
+            "realm_id": realm_id,
             "participants": [],
             "ttl_ms": 90_000
         })),

@@ -101,7 +101,7 @@ async function waitForMember(
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/_soland/self/spaces/${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl(server)}/_soland/self/realms/${encodeURIComponent(realmId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -329,12 +329,9 @@ test.describe("cross-server federation", () => {
       ),
     ).toHaveLength(1);
 
-    const projectedRealmId = realmId.replace(/^ck:space:/, "ck:realm:");
     const invites = await listInvitesApi(request, bobToken, { server: "beta" });
     const invite = invites.find(
-      (item) =>
-        [realmId, projectedRealmId].includes(item.realm_id) &&
-        item.invitee === bob.did,
+      (item) => item.realm_id === realmId && item.invitee === bob.did,
     );
     expect(invite).toBeTruthy();
     await acceptInviteApi(
@@ -347,7 +344,7 @@ test.describe("cross-server federation", () => {
     );
 
     const betaSpace = await request.get(
-      `${solandBaseUrl("beta")}/_soland/self/spaces/${encodeURIComponent(invite!.realm_id)}`,
+      `${solandBaseUrl("beta")}/_soland/self/realms/${encodeURIComponent(invite!.realm_id)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();

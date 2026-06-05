@@ -133,7 +133,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
 
     let pulled_on_b = expect_json(
         server_b.http().get(server_b.url(&format!(
-            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?realm_id={realm_id}"
         ))),
         StatusCode::OK,
     )

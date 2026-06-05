@@ -189,7 +189,6 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
         "ck.message.create" => {
             let flow_id = realm_id
                 .strip_prefix("ck:realm:")
-                .or_else(|| realm_id.strip_prefix("ck:space:"))
                 .map(|suffix| format!("ck:flow:{suffix}"))
                 .unwrap_or_else(|| "ck:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
             object

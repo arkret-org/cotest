@@ -54,16 +54,15 @@ async function sendChat(page: JointUserPage, spaceId: string, body: string) {
 async function accountSubscribeTimelineEvents(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
   const subscribe = await request.get(`${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`, {
     headers: authHeaders(token),
   });
   expect(subscribe.status()).toBe(200);
   const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
-  const realmId = spaceId.replace(/^ck:space:/, "ck:realm:");
-  const realmFrame = frame.realms[realmId] ?? frame.realms[spaceId];
-  expect(realmFrame, `sync realm frame for ${spaceId}`).toBeTruthy();
+  const realmFrame = frame.realms[realmId];
+  expect(realmFrame, `sync realm frame for ${realmId}`).toBeTruthy();
   expect(Array.isArray(realmFrame.timeline?.events)).toBe(true);
   return realmFrame.timeline.events as Array<Record<string, unknown>>;
 }
@@ -329,8 +328,7 @@ test.describe("chat advanced", () => {
     });
     expect(subscribe.status()).toBe(200);
     const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
-    const realmId = fixture.spaceId.replace(/^ck:space:/, "ck:realm:");
-    const realmFrame = frame.realms[realmId] ?? frame.realms[fixture.spaceId];
+    const realmFrame = frame.realms[fixture.spaceId];
     const ephemeral = realmFrame.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
     expect(JSON.stringify(ephemeral)).toContain("discussion");

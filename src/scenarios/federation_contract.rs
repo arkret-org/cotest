@@ -161,7 +161,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/_cokret/peer/federation/pull-operations?space_id=bad")),
+            .get(server.url("/_cokret/peer/federation/pull-operations?realm_id=bad")),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
@@ -234,7 +234,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let first_push_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
-        "space_id": realm_id,
+        "realm_id": realm_id,
         "service_binding_ref": "did:web:remote.example#soland",
         "operations": [operation.clone()]
     });
@@ -255,7 +255,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let pulled = expect_json(
         server.http().get(server.url(&format!(
-            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?realm_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -264,13 +264,13 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let bootstrap = expect_json(
         server.http().get(server.url(&format!(
-            "/_cokret/peer/federation/pull-operations?space_id={realm_id}&snapshot_bootstrap=true"
+            "/_cokret/peer/federation/pull-operations?realm_id={realm_id}&snapshot_bootstrap=true"
         ))),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        bootstrap["snapshot_bootstrap"]["manifest"]["space_id"],
+        bootstrap["snapshot_bootstrap"]["manifest"]["realm_id"],
         realm_id
     );
     assert!(
@@ -284,7 +284,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let replay_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
-        "space_id": realm_id,
+        "realm_id": realm_id,
         "service_binding_ref": "did:web:remote.example#soland",
         "operations": [operation]
     });
@@ -305,7 +305,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let after_replay_pull = expect_json(
         server.http().get(server.url(&format!(
-            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?realm_id={realm_id}"
         ))),
         StatusCode::OK,
     )
@@ -337,7 +337,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let invalid_push_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
-        "space_id": realm_id,
+        "realm_id": realm_id,
         "service_binding_ref": "did:web:remote.example#soland",
         "operations": [invalid_operation]
     });
@@ -372,7 +372,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let redaction_push_body = json!({
         "origin": "did:web:remote.example",
         "destination": server.service_did(),
-        "space_id": realm_id,
+        "realm_id": realm_id,
         "service_binding_ref": "did:web:remote.example#soland",
         "operations": [redaction]
     });
@@ -395,7 +395,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
     let redacted_pull = expect_json(
         server.http().get(server.url(&format!(
-            "/_cokret/peer/federation/pull-operations?space_id={realm_id}"
+            "/_cokret/peer/federation/pull-operations?realm_id={realm_id}"
         ))),
         StatusCode::OK,
     )
