@@ -22,7 +22,7 @@
 //!       3. client decrypts backup envelope.
 //!       4. client verifies key commitment.
 //!       5. client publishes `recover` or `ck.device.authorize`.
-//!       6. for E2EE spaces: pull MLS state, replay historical `ck.mls.commit` events with the
+//!       6. for E2EE Realms: pull MLS state, replay historical `ck.mls.commit` events with the
 //!          recovered `mls_history_backup_key` to decrypt pre-loss epoch content.
 //!   - §7.4 "所有权证明与解密证明" — SSK proof binding fields: `challenge / audience / origin /
 //!     service_did / principal_id / key_id / expires_at / nonce`.
@@ -31,7 +31,7 @@
 //! ## Scenario walk-through
 //!
 //! 1. Boot soland; register alice with device-A.
-//! 2. Create an E2EE space `S` containing alice (+ optionally bob, to give Commit events
+//! 2. Create an E2EE Realm `R` containing alice (+ optionally bob, to give Commit events
 //!    non-trivial proposals); send N=3 messages. Each message triggers a `ck.mls.commit` envelope
 //!    on the timeline; encrypted body is opaque to the server.
 //! 3. Mint a key backup envelope client-side:
@@ -60,7 +60,7 @@
 //!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
 //!         ownership flow which is not yet wired.
 //! 6. device-B replays MLS history:
-//!       * `GET /_soland/self/spaces/{S}/timeline?since=...` pulls all `ck.mls.commit` events.
+//!       * `GET /_cokret/self/realms/{R}/timeline?since=...` pulls all `ck.mls.commit` events.
 //!       * with the recovered `mls_history_backup_key`, device-B derives the pre-loss epoch secret
 //!         and decrypts each message's ciphertext.
 //!     Assert: device-B reconstructs all 3 plaintexts that device-A
@@ -112,9 +112,9 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       &device_a,
     //   ).await?;
 
-    // ── Step 2: alice creates E2EE space + sends 3 messages ─────────────
+    // ── Step 2: alice creates E2EE Realm + sends 3 messages ─────────────
     //
-    //   let space_id = alice.create_realm_with(json!({
+    //   let realm_id = alice.create_realm_with(json!({
     //       "title": "ct11-e2ee-history",
     //       "encryption_profile": "mls_rfc9420",
     //       "plaintext_visible_services": [],
@@ -130,7 +130,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //       let ciphertext = xchacha20_seal(&epoch_key, body.as_bytes(),
     //                                       /*aad=*/ b"ct11-e2ee-history");
     //       alice.post("/_cokret/self/events").json(&event_envelope(
-    //           &alice.actor, &space_id, "ck.mls.commit",
+    //           &alice.actor, &realm_id, "ck.mls.commit",
     //           json!({
     //               "epoch": i,
     //               "ciphertext": base64url(ciphertext),
@@ -283,7 +283,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let timeline = expect_json(
     //       server.http()
     //             .get(server.url(&format!(
-    //                 "/_soland/self/spaces/{space_id}/timeline")))
+    //                 "/_cokret/self/realms/{realm_id}/timeline")))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::OK,
     //   ).await?;

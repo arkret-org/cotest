@@ -7,12 +7,12 @@
 //!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, cokret-spec @ 7157ee8) and
 //!      whose `member_delivery_binding` points at a recipient principal server.
 //!   2. teabay (T3.4) hosts `ck.find.directory.resolve_handle(intent="member_add")` and filters
-//!      candidates against the target Space's `allowed_recipient_services`.
+//!      candidates against the target Realm's `allowed_recipient_services`.
 //!   3. soland (T3.3) projects `ck.realm.delivery_binding_policy` and the `ck.member.state{join}`
 //!      reducer rejects bindings whose `recipient_service_did` is not in the policy allow-list.
 //!   4. The SDK (T3.1) ships `MemberDeliveryBindingCandidate` and
-//!      `Space::member_add_with_candidate` as the *only* sanctioned builder-side entry point: the
-//!      candidate is re-validated against `audience = target_space_id` + `now` before any operation
+//!      `Realm::member_add_with_candidate` as the sanctioned builder-side entry point: the
+//!      candidate is re-validated against `audience = target_realm_id` + `now` before any operation
 //!      is built.
 //!
 //! ## Scope of this scenario
@@ -28,7 +28,7 @@
 //!    candidate builder, exercising the same `audience` / `expires_at` / `subject_id` /
 //!    `binding_source` invariants that the live teabay row in T3.4 enforces.
 //!  - **Negative cases** — always run; each builds a malformed candidate and asserts the matching
-//!    `CandidateError` (or `Space:: member_add_with_candidate` rejection) fires. These guard the
+//!    `CandidateError` (or `Realm::member_add_with_candidate` rejection) fires. These guard the
 //!    SDK contract surface that downstream callers (yougen, sodmin, future web UI) rely on
 //!    regardless of which directory implementation is in front of them.
 
@@ -50,8 +50,8 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 // ── Test fixture knobs ─────────────────────────────────────────────────────
 
-/// Stable Space DID used as the candidate audience for the happy path. Picked
-/// so the assertions read as a Space identifier and not as a free-form string.
+/// Stable Realm DID used as the candidate audience for the happy path. Picked
+/// so the assertions read as a Realm identifier and not as a free-form string.
 const TARGET_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-handle2joinaa";
 
 /// Stable principal-server DID that appears as both the issuer and the
@@ -59,7 +59,7 @@ const TARGET_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-handle2joinaa";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 
 /// Alternate principal-server DID — used by the `service_not_allowed`
-/// negative to model a Space whose policy only lists `PRINCIPAL_DID`.
+/// negative to model a Realm whose policy only lists `PRINCIPAL_DID`.
 const OTHER_PRINCIPAL_DID: &str = "did:web:rogue.example";
 
 /// Subject DID for the happy path actor.
@@ -89,9 +89,9 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_verified_false().context("T3.5 negative — verified=false on handle row")?;
     negative_case_subject_mismatch().context("T3.5 negative — claim subject != caller did")?;
     negative_case_expired().context("T3.5 negative — candidate expired")?;
-    negative_case_audience_mismatch().context("T3.5 negative — audience != target space")?;
+    negative_case_audience_mismatch().context("T3.5 negative — audience != target Realm")?;
     negative_case_service_not_allowed()
-        .context("T3.5 negative — recipient_service_did not in Space allow-list")?;
+        .context("T3.5 negative — recipient_service_did not in Realm allow-list")?;
     negative_case_acct_canonical_rejected().context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
@@ -122,7 +122,7 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
     candidate.validate(&ctx).map_err(|e| {
         anyhow!(
             "T3.5 happy path: a freshly minted handle_claim-shaped candidate \
-             MUST validate against the target Space audience + subject, but \
+             MUST validate against the target Realm audience + subject, but \
              validate() returned {e:?}"
         )
     })?;
@@ -263,7 +263,7 @@ fn negative_case_expired() -> Result<()> {
     }
 }
 
-/// `audience_mismatch` — the candidate was issued for a *different* Space
+/// `audience_mismatch` — the candidate was issued for a *different* Realm
 /// than the one the caller is joining. Required by spec §9 + T3.4.
 fn negative_case_audience_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
@@ -274,20 +274,20 @@ fn negative_case_audience_mismatch() -> Result<()> {
         Err(CandidateError::AudienceMismatch { .. }) => Ok(()),
         Err(other) => bail!("T3.5 audience_mismatch: expected `AudienceMismatch`, got {other:?}"),
         Ok(()) => bail!(
-            "T3.5 audience_mismatch: a candidate bound to a different Space \
+            "T3.5 audience_mismatch: a candidate bound to a different Realm \
              audience was accepted — directory caches MUST NOT replay \
-             cross-Space"
+             cross-Realm"
         ),
     }
 }
 
 /// `service_not_allowed` — the candidate's `recipient_service_did` is not in
-/// the target Space's `allowed_recipient_services`. This is the soland
+/// the target Realm's `allowed_recipient_services`. This is the soland
 /// (T3.3) reducer gate (`recipient_service_not_allowed`). The SDK candidate
-/// validator itself does not own the Space's policy cell; the candidate now
+/// validator itself does not own the Realm's policy cell; the candidate now
 /// single-sources the recipient under `member_delivery_binding`.
 ///
-/// The full Space-policy check is exercised in the live-stack probe below;
+/// The full Realm-policy check is exercised in the live-stack probe below;
 /// here we pin the local allow-list predicate that downstream reducers can
 /// rely on.
 fn negative_case_service_not_allowed() -> Result<()> {
@@ -348,7 +348,7 @@ fn negative_case_acct_canonical_rejected() -> Result<()> {
 
 /// `did_document_fallback_rejected` — `member_delivery_binding.binding_source`
 /// MUST be one of `{Explicit, Invite, JoinPolicy, OrganizationPolicy,
-/// SpacePolicy}`. The forbidden `did_document_default` value is excluded
+/// RealmPolicy}`. The forbidden `did_document_default` value is excluded
 /// from the typed enum at the schema/SDK boundary, so we exercise the
 /// rejection by attempting deserialisation of a payload carrying that
 /// string.
@@ -458,7 +458,7 @@ async fn live_stack_probe() -> Result<()> {
     } else {
         // 404 path — verify the errcode is the blinded `not_found` we
         // expect, not a body-shape rejection that would suggest the
-        // teabay T3.4 wiring is mis-parsing `intent`/`space_id`.
+        // teabay T3.4 wiring is mis-parsing `intent`/`realm_id`.
         let body: Value = serde_json::from_str(&text)
             .with_context(|| format!("T3.5 live probe: 404 body not JSON: {text}"))?;
         let errcode = body
@@ -483,7 +483,7 @@ async fn live_stack_probe() -> Result<()> {
 /// Build a happy-path `MemberDeliveryBindingCandidate` that mirrors the
 /// shape coauth's `issue_handle_claim` packs into the directory's
 /// `resolve_handle` response. `audience = TARGET_REALM_ID` so the candidate
-/// validates against the same Space the SDK builder is asked to join.
+/// validates against the same Realm the SDK builder is asked to join.
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = Did::new(ALICE_DID.to_owned())?;
     let principal = Did::new(PRINCIPAL_DID.to_owned())?;

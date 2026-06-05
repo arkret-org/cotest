@@ -61,7 +61,7 @@ pub mod soland_teabay_directory_sync;
 pub mod space_permissions;
 pub mod spec_section_11;
 pub mod starid_replay;
-pub mod teabay_resolve_space;
+pub mod teabay_resolve_realm;
 pub mod teabay_signed_ingest_negative;
 pub mod teabay_unsigned_ingest;
 pub mod to_device_offline_ordering;

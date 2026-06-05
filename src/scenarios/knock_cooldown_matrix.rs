@@ -1,6 +1,6 @@
 //! CT-4 — Knock + member.application + cooldown matrix.
 //!
-//! Spec: `cokret-spec/spec/v1/zh/models/space-and-place.md`
+//! Spec: `cokret-spec/spec/v1/zh/models/realm-and-space.md`
 //!   - §3.3 — `default_join_rule` enum + gate composition
 //!   - §3.6.2 — `member.application` schema
 //!   - §3.6.3 — `member.application.review` (accept / reject / request_changes)
@@ -11,7 +11,7 @@
 //!     max_open_applications_per_actor=1)
 //!
 //! Scenario walk-through (when fully wired):
-//!   1. Alice creates a Space with `join_rule="knock"` and `manual_review` gate
+//!   1. Alice creates a Realm with `join_rule="knock"` and `manual_review` gate
 //!      (`auto_resolve=false`); short test-only `application_ttl=10s` and
 //!      `cooldown_after_reject=2s` so the matrix exercises in seconds.
 //!   2. Bob (non-member) submits `ck.member.state{membership=knock}` → reducer accepts, projects
@@ -36,7 +36,7 @@
 //! dev-mode reducer, despite the bare `knock` membership state being
 //! supported per `soland/src/reducer.rs::knock_state_visible_in_members_in_state_query`):
 //!
-//!   * `ck.realm.join_rule` event kind not yet enforced by reducer (Space create only stores
+//!   * `ck.realm.join_rule` event kind not yet enforced by reducer (Realm create only stores
 //!     `public: bool`, no enum); no path to set `join_rule="knock"`.
 //!   * `member.application` / `.review` / `.cancel` event kinds not in the soland event kind
 //!     registry (`soland/src/routing/events/operations.rs` dispatcher table).
@@ -59,7 +59,7 @@ use anyhow::Result;
 /// `#[ignore]`'d test surfaces in `cargo test --list` output without
 /// false-positive passes.
 pub async fn knock_cooldown_matrix_run() -> Result<()> {
-    // When ready: spawn soland, create space with knock policy, run the
+    // When ready: spawn soland, create Realm with knock policy, run the
     // 8-step matrix above. Skeleton sketch retained for the implementor:
     //
     //   let server = CokretServer::spawn("knock-cooldown-matrix").await?;
@@ -68,23 +68,23 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     //   let bob   = register_account(&server, "did:web:bob.example",
     //                                "@bob",   "dev_bob").await?;
     //
-    //   let space_id = create_knock_space(&server, &alice,
-    //       "Knock Test", /*application_ttl=*/"10s",
+    //   let realm_id = create_knock_realm(&server, &alice,
+    //       "Knock Test Realm", /*application_ttl=*/"10s",
     //       /*cooldown_after_reject=*/"2s", /*max_open=*/1).await?;
     //
     //   // 2. Knock
-    //   submit_event(&server, &bob, "did:web:bob.example", &space_id,
+    //   submit_event(&server, &bob, "did:web:bob.example", &realm_id,
     //                "ck.member.state",
     //                json!({"membership":"knock"}), StatusCode::OK).await?;
     //   // 3. Application
-    //   let app = submit_event(&server, &bob, "did:web:bob.example", &space_id,
+    //   let app = submit_event(&server, &bob, "did:web:bob.example", &realm_id,
     //                "member.application.v1",
     //                json!({"applicant_did":"did:web:bob.example",
     //                       "knock_ref":"<event id>",
     //                       "policy_version":"<sha256>",
     //                       "answers": []}), StatusCode::OK).await?;
     //   // 4. Reject
-    //   submit_event(&server, &alice, "did:web:alice.example", &space_id,
+    //   submit_event(&server, &alice, "did:web:alice.example", &realm_id,
     //                "member.application.review.v1",
     //                json!({"application_ref": app["event_id"],
     //                       "decision":"reject",

@@ -76,7 +76,7 @@ const SERVICE_SPECS: &[ServiceSpec] = &[
 pub async fn live_stack_certification_report_from_env() -> Result<StackCertificationReport> {
     // Bound every probe so a describe endpoint that accepts the connection but
     // never responds can't hang the report (and the CI job) indefinitely —
-    // matches the 5s convention used by teabay_resolve_space / starid_replay.
+    // matches the 5s convention used by teabay_resolve_realm / starid_replay.
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(5))

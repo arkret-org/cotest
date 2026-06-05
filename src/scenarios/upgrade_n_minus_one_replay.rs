@@ -34,7 +34,7 @@
 //!        - Cache by tag hash so repeated CT-17 runs don't rebuild.
 //!   3. Write fixture data with the N-1 binary against a fresh data dir.
 //!        - Spawn N-1 soland, point at a tempdir DB / Pg schema.
-//!        - alice creates a space, sends N messages, knocks/joins, uploads a blob — exercise enough
+//!        - alice creates a Realm, sends N messages, knocks/joins, uploads a blob — exercise enough
 //!          event kinds that the replay matrix is non-trivial.
 //!        - Capture the projection state via the public API: list of messages, member roster, blob
 //!          refs.
@@ -139,13 +139,13 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   ).await?;
     //   let alice = register_account(&server_old, "did:web:alice.example",
     //                                "@alice", "dev_alice").await?;
-    //   let space_id = create_realm(&server_old, &alice, "Upgrade Space").await?;
+    //   let realm_id = create_realm(&server_old, &alice, "Upgrade Realm").await?;
     //   let mut sent = Vec::new();
     //   for i in 0..16 {
-    //       sent.push(send_message(&server_old, &alice, &space_id,
+    //       sent.push(send_message(&server_old, &alice, &realm_id,
     //                              &format!("hello {i}")).await?);
     //   }
-    //   let baseline = capture_projection(&server_old, &alice, &space_id).await?;
+    //   let baseline = capture_projection(&server_old, &alice, &realm_id).await?;
     //
     //   // Step 4: graceful shutdown
     //   server_old.graceful_stop().await?;
@@ -159,19 +159,19 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //   assert!(server_new.health().await?["replay_error"].is_null());
     //
     //   // Step 6: equivalence
-    //   let upgraded = capture_projection(&server_new, &alice, &space_id).await?;
+    //   let upgraded = capture_projection(&server_new, &alice, &realm_id).await?;
     //   let migrations = load_migration_manifest()?;
     //   assert_projections_equivalent(&baseline, &upgraded, &migrations)?;
     //
     //   // Step 7: write a new event under N, restart, prove it replays
-    //   let new_msg = send_message(&server_new, &alice, &space_id,
+    //   let new_msg = send_message(&server_new, &alice, &realm_id,
     //                              "post-upgrade ping").await?;
     //   server_new.graceful_stop().await?;
     //   let server_new2 = CokretServer::spawn_with_postgres_existing(
     //       "ct17-upgraded-restart", data_dir.path(),
     //       &pg_url_for(&pg_schema),
     //   ).await?;
-    //   let messages = list_messages(&server_new2, &alice, &space_id).await?;
+    //   let messages = list_messages(&server_new2, &alice, &realm_id).await?;
     //   assert!(messages.iter().any(|m| m["event_id"] == new_msg["event_id"]));
 
     let _ = step_1_resolve_previous_tag;
@@ -210,7 +210,7 @@ fn step_2_build_n_minus_one() -> ! {
 fn step_3_write_fixture_with_old_binary() -> ! {
     unimplemented!(
         "step 3: spawn the N-1 binary against a fresh per-test Pg schema, \
-         register an actor + space, send a representative slice of event \
+         register an actor + Realm, send a representative slice of event \
          kinds (messages / membership / blob refs), capture the projection \
          state via the public read API"
     )

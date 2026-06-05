@@ -2,15 +2,15 @@
 //!
 //! Per spec §9, `resolve_realm` accepts any of `realm_id`, `alias`,
 //! `invite_token`, or `signed_link` as the lookup key. **Per the current
-//! teabay implementation** (`crates/server/src/query/space.rs::resolve_space`,
-//! `load_space_row`), all four lookup parameters converge to a single
+//! teabay implementation** (`crates/server/src/query/realm.rs::resolve_realm`,
+//! `directory_resources` row lookup), all four lookup parameters converge to a single
 //! `directory_resources.resource_id = $key` lookup. There is no separate
 //! alias / invite-token table walk yet.
 //!
 //! This fixture pins the **current** behaviour rather than the spec'd
 //! behaviour:
 //!
-//!   * `space_id` lookup — happy path; a seeded resource_id is found.
+//!   * `realm_id` lookup — happy path; a seeded resource_id is found.
 //!   * `alias` lookup — same code path; the alias string is matched against `resource_id`. So an
 //!     alias that doesn't equal the resource_id returns `not_found` (blinded). This is the
 //!     documented gap.
@@ -31,30 +31,30 @@ use serde_json::{Value, json};
 
 use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, spawn_required};
 
-/// Issue three resolve-space probes against a live teabay and assert the
+/// Issue three resolve-realm probes against a live teabay and assert the
 /// current single-lookup behaviour. The probe values are deliberately chosen
 /// so all three return blinded `not_found` against an empty / freshly-spun
 /// directory — what we're pinning is that the surface **accepts** each of
 /// the three parameter shapes (request validates, returns a structured
 /// response) rather than 4xx-ing on the input shape.
-pub async fn teabay_resolve_space_three_lookups_run() -> Result<()> {
+pub async fn teabay_resolve_realm_three_lookups_run() -> Result<()> {
     let proc = spawn_required(&TEABAY_SPEC)
         .await
-        .context("spawn teabay binary for resolve-space lookup-shape test")?;
+        .context("spawn teabay binary for resolve-realm lookup-shape test")?;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
     let url = proc.url("/_cokret/find/directory/resolve-realm");
 
     // --- by realm_id ------------------------------------------------------
-    let probe = json!({ "realm_id": "cotest-tb2-space-id" });
-    let by_space_id = client.post(&url).json(&probe).send().await?;
-    assert_resolved_or_blinded_not_found(by_space_id, "realm_id").await?;
+    let probe = json!({ "realm_id": "cotest-tb2-realm-id" });
+    let by_realm_id = client.post(&url).json(&probe).send().await?;
+    assert_resolved_or_blinded_not_found(by_realm_id, "realm_id").await?;
 
     // --- by alias ---------------------------------------------------------
     //
     // Per current impl, alias is matched against `resource_id` directly.
-    // The probe value here is distinct from any seeded space → blinded
+    // The probe value here is distinct from any seeded Realm -> blinded
     // not_found. The test passes when teabay returns a structured response
     // (any of: 200 envelope, 404 with not_found errcode). It fails if the
     // surface 4xx's the input shape itself.

@@ -2,7 +2,7 @@
 //!
 //! Verifies the resolve-realm surface accepts `realm_id` / `alias` /
 //! `invite_token` parameter shapes. See
-//! `cotest::scenarios::teabay_resolve_space` for the actual probe logic and
+//! `cotest::scenarios::teabay_resolve_realm` for the actual probe logic and
 //! the codex-confirmed observation that all three currently converge to a
 //! single resource_id lookup.
 //!
@@ -10,7 +10,7 @@
 //! DSN (`DATABASE_URL`, `TEABAY_BIN`); CI runners without one cleanly skip.
 //! Locally:
 //!
-//!   cargo test --test teabay_resolve_space -- --ignored
+//!   cargo test --test teabay_resolve_realm -- --ignored
 
 use anyhow::Result;
 use serial_test::serial;
@@ -21,6 +21,6 @@ use serial_test::serial;
 #[tokio::test]
 #[ignore = "needs teabay binary + DATABASE_URL"]
 #[serial]
-async fn teabay_resolve_space_three_lookups() -> Result<()> {
-    cotest::scenarios::teabay_resolve_space::teabay_resolve_space_three_lookups_run().await
+async fn teabay_resolve_realm_three_lookups() -> Result<()> {
+    cotest::scenarios::teabay_resolve_realm::teabay_resolve_realm_three_lookups_run().await
 }

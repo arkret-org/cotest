@@ -49,8 +49,8 @@
 //!    existing inventory is only readable via the per-device admin surfaces. This is one of the
 //!    prerequisite gaps.
 //!
-//! 5. Wrap alice + a second principal (`bob`) into an E2EE space `S` so that "MLS Remove fanout"
-//!    has a non-trivial member set. device-B joins `S` via a Welcome → Commit roundtrip (today this
+//! 5. Wrap alice + a second principal (`bob`) into an E2EE Realm `R` so that "MLS Remove fanout"
+//!    has a non-trivial member set. device-B joins `R` via a Welcome → Commit roundtrip (today this
 //!    is also stubbed out in soland; MLS group state is not durable server-side per the `mls` grep
 //!    showing no `ck.mls.*` handlers).
 //!
@@ -58,8 +58,8 @@
 //!    response 200 with `revoked_device_id == device-B` and a `revoked_at` timestamp. b. device-A
 //!    still works (its session is unaffected). c. device-B's bearer token returns 401 on `GET
 //!    /_cokret/self/ account/me` (the post-round-23 `cannot_self_revoke` + revoke surface; verified
-//!    via the existing `device::device_revoke` handler). d. For the E2EE space `S` that alice +
-//!    device-B were in: a `ck.mls.commit` event with a `Remove` proposal MUST appear in the space
+//!    via the existing `device::device_revoke` handler). d. For the E2EE Realm `R` that alice +
+//!    device-B were in: a `ck.mls.commit` event with a `Remove` proposal MUST appear in the Realm
 //!    timeline within a bounded delay (per §9 + §6 device list sync). Alice's sync should observe
 //!    both:
 //!             * `ck.device.list_update` with device-B in `left[]`,
@@ -126,7 +126,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   //     envelope:
     //   alice.post("/_cokret/self/events").json(&event_envelope(
     //       &alice.actor,
-    //       <principal_control_space_id>,
+    //       <principal_control_realm_id>,
     //       "ck.cross_signing.publish",
     //       json!({
     //           "principal_signing_key": { "kid": <PSK kid>, "alg": "EdDSA",
@@ -197,20 +197,20 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //
     // NB: today this endpoint does not exist — see "blockers" above.
 
-    // ── Step 5: create E2EE space + add both devices to MLS group ───────
+    // ── Step 5: create E2EE Realm + add both devices to MLS group ───────
     //
     //   let bob = server.register_client(
     //       "did:web:bob.ct9.cotest.local", "@bob-ct9",
     //       &new_prefixed_uuid7("ck:device:")).await?;
-    //   let space_id = alice.create_realm_with(json!({
+    //   let realm_id = alice.create_realm_with(json!({
     //       "title": "ct9-e2ee",
     //       "encryption_profile": "mls_rfc9420",
     //       "invitees": [bob.actor],
     //       "plaintext_visible_services": [],
     //   })).await?["realm_id"].as_str().unwrap().to_owned();
     //
-    //   // Welcome device-B into the MLS group on `space_id`:
-    //   alice.post(&format!("/_soland/self/spaces/{space_id}/mls/welcomes"))
+    //   // Welcome device-B into the MLS group on `realm_id`:
+    //   alice.post(&format!("/_cokret/self/realms/{realm_id}/mls/welcomes"))
     //        .json(&json!({"recipient_device_id": device_b, ... }))
     //        .send().await?;
     //
@@ -241,12 +241,12 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //       StatusCode::UNAUTHORIZED,
     //   ).await?;
     //
-    //   // 6d. MLS Remove fanout: alice's sync on `space_id` MUST emit
+    //   // 6d. MLS Remove fanout: alice's sync on `realm_id` MUST emit
     //   //     `ck.mls.commit` with proposals[].type == "remove" within
     //   //     a bounded delay.
     //   eventually(|| async {
     //       let sync = alice.sync().await?;
-    //       let commits = sync["spaces"][&space_id]["timeline"]["events"]
+    //       let commits = sync["realms"][&realm_id]["timeline"]["events"]
     //           .as_array()
     //           .unwrap_or(&vec![])
     //           .iter()
@@ -258,8 +258,8 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //                  .unwrap_or(false)),
     //               "expected at least one Remove proposal in ck.mls.commit");
     //       // device_b appears in ck.device.list_update.left[]:
-    //       let list_updates = sync["spaces"]
-    //           [<principal_control_space_id>]
+    //       let list_updates = sync["realms"]
+    //           [<principal_control_realm_id>]
     //           ["timeline"]["events"]
     //           .as_array()
     //           .unwrap_or(&vec![])

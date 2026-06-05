@@ -10,8 +10,8 @@
 //! Spec: there is no dedicated soak-test spec; the relevant invariants
 //! are operational, not protocol:
 //!   - heap growth MUST be sub-linear in event count once the steady state is reached (a small
-//!     per-actor and per-space working set is expected, but a linear-in-N leak is a bug);
-//!   - p50 / p95 read latency for `GET /_cokret/self/messages?space_id=...` MUST stay within a
+//!     per-actor and per-Realm working set is expected, but a linear-in-N leak is a bug);
+//!   - p50 / p95 read latency for `GET /_cokret/self/events?realms=...` MUST stay within a
 //!     constant factor of the empty-store latency as the log grows (index-backed read, not full
 //!     scan);
 //!   - anchor-store row growth MUST be linear in event count (no pathological write amplification),
@@ -25,7 +25,7 @@
 //!      `/proc/.../status` or `wmic process get` polling.
 //!   2. Setup phase (not counted toward soak timing):
 //!        - Register 100 actors (`@soak0` … `@soak99`).
-//!        - alice creates a "soak" space, invites all 100.
+//!        - alice creates a "soak" Realm, invites all 100.
 //!        - All 100 accept; membership steady state reached.
 //!   3. Soak phase:
 //!        - 100 concurrent worker tasks (tokio task per actor).
@@ -35,7 +35,7 @@
 //!   4. Sampling (concurrent with step 3, runs at 1 Hz):
 //!        - Heap: read `RSS` from `/proc/<pid>/status` on Linux, `wmic process where
 //!          ProcessId=<pid> get WorkingSetSize` on Windows, `task_info` via libproc on macOS.
-//!        - Latency: every 5 s, fire 10 `GET /_cokret/self/messages?space_id= <space>&limit=50`
+//!        - Latency: every 5 s, fire 10 `GET /_cokret/self/events?realms=<realm>&limit=50`
 //!          requests, record p50 / p95.
 //!        - Anchor store: every 30 s, query `SELECT count(*) FROM anchor_store` (or equivalent).
 //!   5. Steady-state window: drop the first 10% of samples (warm-up) and the last 10% (drain). On
@@ -115,16 +115,16 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //   // Step 1: persistent soland
     //   let server = CokretServer::spawn_with_postgres("soak").await?;
     //
-    //   // Step 2: setup actors + shared space
+    //   // Step 2: setup actors + shared Realm
     //   let alice = register_account(&server, "did:web:alice.example",
     //                                "@alice", "dev_alice").await?;
-    //   let space_id = create_realm(&server, &alice, "Soak Space").await?;
+    //   let realm_id = create_realm(&server, &alice, "Soak Realm").await?;
     //   let mut actors = Vec::with_capacity(N_ACTORS);
     //   for i in 0..N_ACTORS {
     //       let did = format!("did:web:soak{i}.example");
     //       let a = register_account(&server, &did, &format!("@soak{i}"),
     //                                &format!("dev_soak{i}")).await?;
-    //       invite_and_join(&server, &alice, &a, &space_id).await?;
+    //       invite_and_join(&server, &alice, &a, &realm_id).await?;
     //       actors.push(a);
     //   }
     //
@@ -138,7 +138,7 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //                                      SAMPLE_INTERVAL,
     //                                      stop.clone(),
     //                                      heap_samples.clone());
-    //   let latency_task = spawn_latency_probe(&server, &alice, &space_id,
+    //   let latency_task = spawn_latency_probe(&server, &alice, &realm_id,
     //                                          LATENCY_PROBE_INTERVAL,
     //                                          stop.clone(),
     //                                          latency_samples.clone());
@@ -152,10 +152,10 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //   for actor in &actors {
     //       let actor = actor.clone();
     //       let server = server.clone();
-    //       let space_id = space_id.clone();
+    //       let realm_id = realm_id.clone();
     //       senders.spawn(async move {
     //           for j in 0..N_MESSAGES_PER_ACTOR {
-    //               send_message(&server, &actor, &space_id,
+    //               send_message(&server, &actor, &realm_id,
     //                            &format!("soak {j}")).await?;
     //               tokio::time::sleep(Duration::from_millis(10)).await;
     //           }
@@ -173,7 +173,7 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //   anchor_task.await??;
     //
     //   for actor in &actors {
-    //       list_messages(&server, actor, &space_id).await?;
+    //       list_messages(&server, actor, &realm_id).await?;
     //   }
     //
     //   // Step 5: steady-state assertions on middle 80%
@@ -198,7 +198,7 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //            outside ±5% of expected 1.0");
 
     let _ = step_1_spawn_persistent_soland;
-    let _ = step_2_setup_actors_and_space;
+    let _ = step_2_setup_actors_and_realm;
     let _ = step_3_run_concurrent_senders;
     let _ = step_4_run_samplers;
     let _ = step_5_assert_steady_state;
@@ -220,9 +220,9 @@ fn step_1_spawn_persistent_soland() -> ! {
     )
 }
 
-fn step_2_setup_actors_and_space() -> ! {
+fn step_2_setup_actors_and_realm() -> ! {
     unimplemented!(
-        "step 2: register 100 actors, create one shared space, invite + \
+        "step 2: register 100 actors, create one shared Realm, invite + \
          join all 100. This setup phase is NOT counted toward soak metrics"
     )
 }
