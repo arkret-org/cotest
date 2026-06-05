@@ -100,7 +100,7 @@ test.describe("encrypted attachments", () => {
         ...authHeaders(aliceToken),
         "content-type": "image/png",
         "x-cokret-filename": "cat.png",
-        "x-cokret-space-id": spaceId,
+        "x-cokret-realm-id": spaceId,
         "x-cokret-blob-encrypted": "true",
         "x-cokret-attachment-envelope": JSON.stringify(envelope),
         "x-cokret-content-digest": ciphertextDigest,

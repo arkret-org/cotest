@@ -3,7 +3,7 @@
 // Spec refs:
 //   - identity/account-lifecycle.md §2.1
 //   - identity/identity-did.md §2-§3.4
-//   - identity/key-management.md §5.0-§5.1 (control space genesis, cross-signing)
+//   - identity/key-management.md §5.0-§5.1 (control Realm genesis, cross-signing)
 //   - crypto-media/device-lifecycle.md §3 (registration paths)
 
 import { expect, test } from "@playwright/test";
@@ -156,10 +156,10 @@ test.describe("account onboarding", () => {
     // @blocking-on: soland#identity-onboarding-gap
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
-    "principal control space is created (purpose=principal_control); first device registered via ck.device.authorize; cross-signing PSK/SSK/USK published",
+    "principal control Realm is created (purpose=principal_control); first device registered via ck.device.authorize; cross-signing PSK/SSK/USK published",
     async () => {
       // spec: key-management.md §5.0.1 (4-step bootstrap)
-      // soland gap: ck.profile.principal_control_space.v1 profile; ck.cross_signing.publish.v1.
+      // soland gap: ck.profile.principal_control_realm.v1 profile; ck.cross_signing.publish.
     },
   );
 

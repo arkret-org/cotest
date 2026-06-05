@@ -38,9 +38,9 @@
 3. device-2 选"Add to existing account",生成本地 device key,展示 QR(含 device-2 pubkey + 一次性 challenge)
 4. device-1 进 `/settings/devices` 选 "Add device" → scan QR(测试 harness 用 `page.evaluate` 模拟相机读取,直接把 QR payload 注入 device-1)
 5. device-1 验证 challenge → 用 SSK 签 `ck.device.authorize`,payload 含 device-2 pubkey + cross_signing_binding(spec §5.2)
-6. device-1 把该事件 POST 到 soland 的 events API,落到 alice 的 principal control space
-7. device-2 拉 control space,看到 `ck.device.authorize` 含自己的 pubkey,接受
-8. device-2 拉 MLS welcome(若 alice 在 E2EE space)→ 加入现有 MLS group
+6. device-1 把该事件 POST 到 soland 的 events API,落到 alice 的 principal control Realm
+7. device-2 拉 control Realm,看到 `ck.device.authorize` 含自己的 pubkey,接受
+8. device-2 拉 MLS welcome(若 alice 在 E2EE Realm)→ 加入现有 MLS group
 9. 断言:device-1 和 device-2 都进 `/settings/devices`,都看到对方在列表(`ck.device.list_update` 已同步)
 
 ### Phase B — 两台设备并发收发

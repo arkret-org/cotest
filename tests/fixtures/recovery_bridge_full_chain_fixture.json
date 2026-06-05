@@ -3,12 +3,12 @@
   "version": "2026-05-17",
   "vectors": [
     {
-      "name": "principal_cache_lookup_resolves_principal_space",
+      "name": "principal_cache_lookup_resolves_principal_realm",
       "step": "principal_cache_lookup",
       "account_did": "did:web:alice.example",
       "expected": {
         "outcome": "accept",
-        "principal_space_id": "ck:realm:01964200-0000-7000-8000-000000000001"
+        "principal_realm_id": "ck:realm:01964200-0000-7000-8000-000000000001"
       }
     },
     {

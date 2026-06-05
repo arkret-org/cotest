@@ -298,9 +298,9 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
             "principal_cache_lookup" => {
                 let _ = required_str(v, "account_did")?;
                 let _ = v
-                    .pointer("/expected/principal_space_id")
+                    .pointer("/expected/principal_realm_id")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing principal_space_id"))?;
+                    .ok_or_else(|| anyhow!("vector {name} missing principal_realm_id"))?;
             }
             "recovery_action_proof" => {
                 let kind = required_str(v, "action_kind")?;

@@ -157,8 +157,8 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     let mut covered_visibility_private = false;
     let mut covered_branch_tighten = false;
     let mut covered_branch_loosen_blocked = false;
-    let mut covered_flow_overrides_space = false;
-    let mut covered_space_overrides_default = false;
+    let mut covered_flow_overrides_realm = false;
+    let mut covered_realm_overrides_default = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -175,28 +175,28 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
 
         // Compose effective policy.
         let (eff_disclosure, eff_visibility) = match scope {
-            "space" => {
+            "realm" => {
                 let disclosure = required_str(policy, "disclosure")?;
                 let visibility = required_str(policy, "visibility")?;
                 (disclosure.to_owned(), visibility.to_owned())
             }
-            "child_space" => {
+            "flow" => {
                 // Per spec 2026-05-08 (removed-event-kinds.json:
                 // cx.flow.track.read_receipt_policy), track-level read-receipt
                 // overrides are not in v1. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
-                // independent child scope (Flow.scope_circle_id, CKP-0007)
+                // independent Flow/Circle scope (Flow.scope_circle_id, CKP-0007)
                 // whose own ck.realm.read_receipt_policy composes against the
-                // parent Space policy via the same tighten-only rules.
+                // parent Realm policy via the same tighten-only rules.
                 let parent = policy
                     .get("parent")
-                    .ok_or_else(|| anyhow!("vector {name} child_space missing parent"))?;
+                    .ok_or_else(|| anyhow!("vector {name} flow missing parent"))?;
                 // `child_scope` (not `branch`, which is a forbidden Flow-track
-                // wire term) is the child Space's own read-receipt policy that
+                // wire term) is the Flow/Circle scope read-receipt policy that
                 // composes against the parent via tighten-only rules.
                 let child_scope = policy
                     .get("child_scope")
-                    .ok_or_else(|| anyhow!("vector {name} child_space missing child_scope"))?;
+                    .ok_or_else(|| anyhow!("vector {name} flow missing child_scope"))?;
                 let parent_disclosure = required_str(parent, "disclosure")?;
                 let branch_disclosure = required_str(child_scope, "disclosure")?;
                 let parent_visibility = required_str(parent, "visibility")?;
@@ -292,8 +292,8 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             "branch_overrides_loosen_rejected_when_not_allowed" => {
                 covered_branch_loosen_blocked = true
             }
-            "prefs_resolution_flow_overrides_space" => covered_flow_overrides_space = true,
-            "prefs_resolution_space_overrides_default" => covered_space_overrides_default = true,
+            "prefs_resolution_flow_overrides_realm" => covered_flow_overrides_realm = true,
+            "prefs_resolution_realm_overrides_default" => covered_realm_overrides_default = true,
             _ => {}
         }
         emit_vector(
@@ -315,11 +315,11 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
         && covered_visibility_private
         && covered_branch_tighten
         && covered_branch_loosen_blocked
-        && covered_flow_overrides_space
-        && covered_space_overrides_default)
+        && covered_flow_overrides_realm
+        && covered_realm_overrides_default)
     {
         bail!(
-            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / branch-tighten / branch-loosen-blocked / flow-overrides-space / space-overrides-default"
+            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / branch-tighten / branch-loosen-blocked / flow-overrides-realm / realm-overrides-default"
         );
     }
 
@@ -361,22 +361,21 @@ fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Re
     })
 }
 fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
-    // Resolution order per spec discovery/read-receipts.md §3.6 (post 2026-05-08
-    // wire-break): child_space → space → default. Track-level overrides removed
-    // from v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy).
+    // Resolution order per spec discovery/client-preferences.md §3.8:
+    // flow -> realm -> default. Track-level overrides are not in v1.
     let lookup = vector.get("scope_lookup");
     if let Some(lookup) = lookup
-        && let Some(child_space_id) = lookup.get("child_space_id").and_then(Value::as_str)
-        && let Some(child_spaces) = prefs.get("child_spaces").and_then(Value::as_object)
-        && let Some(entry) = child_spaces.get(child_space_id)
+        && let Some(flow_id) = lookup.get("flow_id").and_then(Value::as_str)
+        && let Some(flows) = prefs.get("flows").and_then(Value::as_object)
+        && let Some(entry) = flows.get(flow_id)
         && let Some(send) = entry.get("send").and_then(Value::as_bool)
     {
         return Ok(send);
     }
     if let Some(lookup) = lookup
-        && let Some(space_id) = lookup.get("realm_id").and_then(Value::as_str)
-        && let Some(spaces) = prefs.get("spaces").and_then(Value::as_object)
-        && let Some(entry) = spaces.get(space_id)
+        && let Some(realm_id) = lookup.get("realm_id").and_then(Value::as_str)
+        && let Some(realms) = prefs.get("realms").and_then(Value::as_object)
+        && let Some(entry) = realms.get(realm_id)
         && let Some(send) = entry.get("send").and_then(Value::as_bool)
     {
         return Ok(send);

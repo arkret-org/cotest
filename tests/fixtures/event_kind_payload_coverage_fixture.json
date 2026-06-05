@@ -74,12 +74,16 @@
       "payload_shape": { "organization_ref": "did:web:org.example" }
     },
     {
-      "name": "space_inheritance_policy_cas_register",
+      "name": "realm_inheritance_policy_cas_register",
       "event_kind": "ck.realm.inheritance_policy",
       "cell_family": "ck.component.realm.inheritance_policy.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "payload_shape": { "parent_space_id": "ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "inherit_policy": false }
+      "payload_shape": {
+        "source_realm_id": "ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+        "inherits": { "policy_rules": ["moderation.v1"] },
+        "mode": "narrow_only"
+      }
     },
     {
       "name": "consent_grant_or_set",

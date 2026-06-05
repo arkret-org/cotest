@@ -1,13 +1,13 @@
 {
   "profile": "ck.profile.read_receipt_policy_vectors.v1",
   "version": "2026-05-19",
-  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ck.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Space it MUST be upgraded to an independent child Space (Flow.scope_circle_id pointing at a Circle, per CKP-0007) whose own ck.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ck.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (child_space → space → default).",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ck.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Realm it MUST be upgraded to an independent Flow/Circle scope (Flow.scope_circle_id pointing at a Circle, per CKP-0007) whose own ck.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ck.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (flow → realm → default).",
   "vectors": [
     {
       "name": "disclosure_required_locks_client_send",
-      "comment": "When a Space declares disclosure=required, even a user preference of send=false MUST be overridden — compliant clients send the receipt and lock the UI toggle.",
+      "comment": "When a Realm declares disclosure=required, even a user preference of send=false MUST be overridden — compliant clients send the receipt and lock the UI toggle.",
       "policy": {
-        "scope": "space",
+        "scope": "realm",
         "disclosure": "required",
         "visibility": "members",
         "scope_overrides_allowed": true
@@ -23,9 +23,9 @@
     },
     {
       "name": "disclosure_disabled_drops_receipt_at_sync_service",
-      "comment": "When a Space declares disclosure=disabled, even a user preference of send=true MUST be overridden — compliant clients MUST NOT generate the receipt and Sync Service MUST drop any inbound ck.receipt.read for this scope.",
+      "comment": "When a Realm declares disclosure=disabled, even a user preference of send=true MUST be overridden — compliant clients MUST NOT generate the receipt and Sync Service MUST drop any inbound ck.receipt.read for this scope.",
       "policy": {
-        "scope": "space",
+        "scope": "realm",
         "disclosure": "disabled",
         "visibility": "members",
         "scope_overrides_allowed": true
@@ -42,9 +42,9 @@
     },
     {
       "name": "visibility_private_fanout_only_to_sender",
-      "comment": "When visibility=private, Sync Service MUST only fanout the receipt to the original sender of the referenced event_id. Other Space members MUST NOT observe it.",
+      "comment": "When visibility=private, Sync Service MUST only fanout the receipt to the original sender of the referenced event_id. Other Realm members MUST NOT observe it.",
       "policy": {
-        "scope": "space",
+        "scope": "realm",
         "disclosure": "optional",
         "visibility": "private",
         "scope_overrides_allowed": true
@@ -61,9 +61,9 @@
     },
     {
       "name": "branch_overrides_tighten_only",
-      "comment": "A child Space (upgraded discussion timeline, Flow.scope_circle_id binding) MAY tighten the parent Space's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the child Space is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy) — the child-Space surface is the only legitimate scope for a per-discussion override.",
+      "comment": "A Flow/Circle scope (upgraded discussion timeline, Flow.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the Flow/Circle scope is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy) — the Flow/Circle-scope surface is the only legitimate scope for a per-discussion override.",
       "policy": {
-        "scope": "child_space",
+        "scope": "flow",
         "parent": {
           "disclosure": "optional",
           "visibility": "members",
@@ -89,9 +89,9 @@
     },
     {
       "name": "branch_overrides_loosen_rejected_when_not_allowed",
-      "comment": "When the parent Space declares scope_overrides_allowed=false, a child Space MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the child-Space ck.realm.read_receipt_policy is the only surface.",
+      "comment": "When the parent Realm declares scope_overrides_allowed=false, a Flow/Circle scope MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the Flow/Circle-scope ck.realm.read_receipt_policy is the only surface.",
       "policy": {
-        "scope": "child_space",
+        "scope": "flow",
         "parent": {
           "disclosure": "required",
           "visibility": "private",
@@ -113,30 +113,30 @@
         "is_send": true,
         "is_locked": true,
         "sync_service_fanout": "sender_only",
-        "reducer_action": "reject_loosening_child_space_move"
+        "reducer_action": "reject_loosening_flow_scope_move"
       }
     },
     {
-      "name": "prefs_resolution_flow_overrides_space",
-      "comment": "When policy is optional and the user has both parent-Space-level and child-Space-level (Flow.scope_circle_id, CKP-0007) overrides, the child-Space override wins. Resolution order is child_space → space → default (track-level overrides are not in v1; see removed-event-kinds.json).",
+      "name": "prefs_resolution_flow_overrides_realm",
+      "comment": "When policy is optional and the user has both parent-Realm-level and Flow/Circle-scope-level (Flow.scope_circle_id, CKP-0007) overrides, the Flow/Circle-scope override wins. Resolution order is flow → realm → default (track-level overrides are not in v1; see removed-event-kinds.json).",
       "policy": {
-        "scope": "space",
+        "scope": "realm",
         "disclosure": "optional",
         "visibility": "members",
         "scope_overrides_allowed": true
       },
       "preferences": {
         "default": { "send": true },
-        "spaces": {
+        "realms": {
           "ck:realm:01JS0SP00000000000000RR000": { "send": false }
         },
-        "child_spaces": {
-          "ck:realm:01JS1CS00000000000000RR000": { "send": true }
+        "flows": {
+          "ck:flow:01JS1FL00000000000000RR000": { "send": true }
         }
       },
       "scope_lookup": {
         "realm_id": "ck:realm:01JS0SP00000000000000RR000",
-        "child_space_id": "ck:realm:01JS1CS00000000000000RR000"
+        "flow_id": "ck:flow:01JS1FL00000000000000RR000"
       },
       "expected": {
         "decision": "send",
@@ -145,17 +145,17 @@
       }
     },
     {
-      "name": "prefs_resolution_space_overrides_default",
-      "comment": "Without a child-Space-level override, the parent-Space-level override wins over the default.",
+      "name": "prefs_resolution_realm_overrides_default",
+      "comment": "Without a Flow/Circle-scope-level override, the parent-Realm-level override wins over the default.",
       "policy": {
-        "scope": "space",
+        "scope": "realm",
         "disclosure": "optional",
         "visibility": "members",
         "scope_overrides_allowed": true
       },
       "preferences": {
         "default": { "send": true },
-        "spaces": {
+        "realms": {
           "ck:realm:01JS0SP00000000000000RR000": { "send": false }
         }
       },

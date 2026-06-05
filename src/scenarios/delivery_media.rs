@@ -255,7 +255,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .http()
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice.token)
-            .header("x-cokret-space-id", &space_id)
+            .header("x-cokret-realm-id", &space_id)
             .header("content-type", "text/plain")
             .body("encrypted-bytes"),
         StatusCode::OK,

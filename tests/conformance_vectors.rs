@@ -613,7 +613,7 @@ fn test_7_cx_member_identity_update_live() {
     //   3. Client `account.subscribe` frame surfaces a roster with only the second event in
     //      `identity_event_ids[]`.
     //   4. `ck.profile.update` field-level delta MUST drive the v2 display_name onto the projected
-    //      profile; the `ck.profile.space_override` profile MUST take precedence when set
+    //      profile; the `ck.profile.realm_override` profile MUST take precedence when set
     //      per-Space.
     unreachable!("integration target gated on soland MID reducer (R3.1)");
 }
