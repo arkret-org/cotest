@@ -52,7 +52,7 @@
    - history_visibility = `shared`
    - seed_members = `[bob.did, mallory.did, carol.did]`
 2. 记录 `spaceId`
-3. 断言:alice 的 `/space/${spaceId}/admin` 显示 4 个成员 (alice + 3 个 seed)
+3. 断言:alice 的 `/realms/${spaceId}/admin` 显示 4 个成员 (alice + 3 个 seed)
 
 ### Phase B — mallory 发违规消息
 
@@ -138,7 +138,7 @@
 
 - **soland report privacy**:`GET /_cokret/self/moderation/reports` 只向 reporter、realm owner、配置的 admin principal 返回 report;dev-mode `GET /_soland/admin/reports` 复用同一过滤,避免被举报人或普通成员通过 admin collection 读到 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `ck.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
-- **yougen owner ban UI**:`/space/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
+- **yougen owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `ck.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
 - **remaining yougen UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 yougen 任务中补。
 - 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_soland/self/spaces/${spaceId}/cells/ck.component.moderation_state.v1` 或等价 endpoint

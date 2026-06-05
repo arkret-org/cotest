@@ -14,7 +14,7 @@
 //     Forward `ck.moderation.franking_proof` / `ck.audit.report` events to the
 //     mock. Auto-acknowledges by recording a generated `ck.audit.accessed`
 //     envelope, fetchable via /inspect.
-//   POST /_soland/admin/audit-agent/invite { space_id, invite, mls_key_package? }
+//   POST /_soland/admin/audit-agent/invite { realm_id, invite, mls_key_package? }
 //     Acknowledge an invite. Returns a synthetic `ck.audit.accessed`
 //     envelope signed by the agent.
 //   GET  /_soland/admin/audit-agent/inbox   → events received
@@ -63,14 +63,14 @@ const inboxLog = new InspectLog("inbox");
 const inviteLog = new InspectLog("invites");
 const accessedLog = new InspectLog("accessed");
 
-function signAuditBinding({ space_id, event_id, audience }) {
+function signAuditBinding({ realm_id, event_id, audience }) {
   // Synthetic JWT-shaped binding so consumers can verify it with the
   // /jwks key. Ed25519 signs the raw concatenated header.payload buffer.
   const header = { alg: "EdDSA", typ: "JWT", kid: "mock-audit-agent-key-1" };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: agentDid,
-    sub: space_id,
+    sub: realm_id,
     aud: audience ?? audienceDefault,
     iat: now,
     exp: now + 600,
@@ -85,10 +85,10 @@ function signAuditBinding({ space_id, event_id, audience }) {
   return `${enc}.${b64url(sig)}`;
 }
 
-function makeAccessedEnvelope({ space_id, source_event_id, reason }) {
+function makeAccessedEnvelope({ realm_id, source_event_id, reason }) {
   const event = {
     event_id: `ck:event:audit-accessed:${randomUUID()}`,
-    space_id,
+    realm_id,
     type: "ck.audit.accessed",
     actor_did: agentDid,
     occurred_at: new Date().toISOString(),
@@ -98,7 +98,7 @@ function makeAccessedEnvelope({ space_id, source_event_id, reason }) {
       reason: reason ?? "audit_disclosure_policy.trigger",
     },
     binding_proof: signAuditBinding({
-      space_id,
+      realm_id,
       event_id: source_event_id ?? null,
     }),
   };
@@ -156,7 +156,7 @@ const server = createServer(async (req, res) => {
     inboxLog.record({ kind: body.kind, event: body.event });
     if (body.kind === "ck.audit.report") {
       const accessed = makeAccessedEnvelope({
-        space_id: body.event?.space_id,
+        realm_id: body.event?.realm_id,
         source_event_id: body.event?.event_id,
         reason: "audit_disclosure_policy.trigger",
       });
@@ -169,14 +169,14 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/_soland/admin/audit-agent/invite" && req.method === "POST") {
     const body = await readJson(req);
-    if (!body || !body.space_id) {
+    if (!body || !body.realm_id) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_space_id" }));
+      res.end(JSON.stringify({ error: "missing_realm_id" }));
       return;
     }
-    inviteLog.record({ space_id: body.space_id, invite: body.invite ?? null });
+    inviteLog.record({ realm_id: body.realm_id, invite: body.invite ?? null });
     const accessed = makeAccessedEnvelope({
-      space_id: body.space_id,
+      realm_id: body.realm_id,
       source_event_id: body.invite?.event_id,
       reason: "invite_accepted",
     });

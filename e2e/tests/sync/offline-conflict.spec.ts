@@ -104,7 +104,7 @@ test.describe("offline sync + conflict repair", () => {
   }) => {
     const fixture = await createBottomConflictFixture(browser, request, "banner");
     try {
-      await fixture.bobPage.gotoSpaceAdminSection(fixture.spaceId, "repair");
+      await fixture.bobPage.gotoRealmAdminSection(fixture.spaceId, "repair");
       await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toBeVisible({
         timeout: 30_000,
       });
@@ -124,7 +124,7 @@ test.describe("offline sync + conflict repair", () => {
   }) => {
     const fixture = await createBottomConflictFixture(browser, request, "repair");
     try {
-      await fixture.bobPage.gotoSpaceAdminSection(fixture.spaceId, "repair");
+      await fixture.bobPage.gotoRealmAdminSection(fixture.spaceId, "repair");
       await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toBeVisible({
         timeout: 30_000,
       });
@@ -136,7 +136,7 @@ test.describe("offline sync + conflict repair", () => {
         new RegExp(fixture.aliceTitle),
       );
       await fixture.bobPage.page.getByTestId("repair-submit-button").click();
-      await expect(fixture.bobPage.page.getByTestId("space-admin-panel")).toContainText(
+      await expect(fixture.bobPage.page.getByTestId("realm-admin-panel")).toContainText(
         /repair event .*state=accepted/,
         { timeout: 30_000 },
       );
@@ -147,7 +147,7 @@ test.describe("offline sync + conflict repair", () => {
         })
         .toEqual([]);
 
-      await fixture.bobPage.gotoSpaceAdminSection(fixture.spaceId, "repair");
+      await fixture.bobPage.gotoRealmAdminSection(fixture.spaceId, "repair");
       await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toHaveCount(0);
     } finally {
       await closeBottomFixture(fixture);

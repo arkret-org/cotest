@@ -74,7 +74,7 @@ test.describe("personal blocklist", () => {
       const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
       try {
-        const realmId = await alicePage.createSpace({
+        const realmId = await alicePage.createRealm({
           title: `S31 Blocklist ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -85,7 +85,7 @@ test.describe("personal blocklist", () => {
 
         const m1 = `S31 m1 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m1);
-        await alicePage.gotoTimelineSpace(realmId);
+        await alicePage.gotoTimelineRealm(realmId);
         await expect(alicePage.page.getByTestId("timeline")).toContainText(m1, {
           timeout: 30_000,
         });
@@ -123,7 +123,7 @@ test.describe("personal blocklist", () => {
 
         const m2 = `S31 m2 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m2);
-        await alicePage.gotoTimelineSpace(realmId);
+        await alicePage.gotoTimelineRealm(realmId);
         const aliceTexts = await alicePage.readTimelineTexts(realmId);
         expect(aliceTexts.some((t) => t.includes(m2))).toBe(false);
         await expect(bobPage.page.getByTestId("timeline")).toContainText(m2, {
@@ -160,7 +160,7 @@ test.describe("personal blocklist", () => {
 
         const m3 = `S31 m3 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m3);
-        await alicePage.gotoTimelineSpace(realmId);
+        await alicePage.gotoTimelineRealm(realmId);
         await expect(alicePage.page.getByTestId("timeline")).toContainText(m3, {
           timeout: 30_000,
         });

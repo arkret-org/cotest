@@ -33,7 +33,7 @@
 
 ### Phase B — alice 在 Acme 下建 space
 
-4. alice 持 Acme membership;alice createSpace `S_acme`,关联到 `acme-org.did`
+4. alice 持 Acme membership;alice createRealm `S_acme`,关联到 `acme-org.did`
 5. soland reducer:`S_acme.organization_ref = acme-org.did`
 6. 断言:space `S_acme` 上的 policy chain 含 organization 层(可通过 `GET /_soland/self/spaces/<S>/effective-policy` 查)
 

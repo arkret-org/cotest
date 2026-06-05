@@ -49,7 +49,7 @@ async function createJointTwoUserRealm(
     openUserPage(browser, bob, { sessionToken: bobToken }),
   ]);
 
-  const spaceId = await alicePage.createSpace({
+  const spaceId = await alicePage.createRealm({
     title: `joint smoke ${stamp}`,
     summary: "cotest joint harness smoke",
     discoverability: "public",

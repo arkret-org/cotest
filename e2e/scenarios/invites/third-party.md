@@ -28,7 +28,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 
 ### Phase A — alice 发起第三方邀请
 
-1. alice createSpace `S`,`joinRule=invite`
+1. alice createRealm `S`,`joinRule=invite`
 2. alice yougen 点 "Invite by email",输入 `bob@example.com`
 3. 客户端:
    - 生成 random `salt` + `token`
@@ -36,7 +36,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
    - 生成临时 `verification_public_key`
    - 提交 `ck.invite.third_party { space_id, token_commitment, verification_public_key, expires_at: +7d }`
 4. yougen 调 mock email service `POST /_cokret/self/verification/send` 把 `token` 通过邮件投递给 bob(out-of-band)
-5. 断言:`/space/${spaceId}/admin` 显示 `pending third-party invite to bob@example.com` (`pending-3pid-invite-row` testid)
+5. 断言:`/realms/${spaceId}/admin` 显示 `pending third-party invite to bob@example.com` (`pending-3pid-invite-row` testid)
 6. 断言:`token_commitment` 在事件链里,**plaintext email 不在事件链**(隐私 invariant)
 
 ### Phase B — bob 注册 DID
@@ -56,7 +56,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
     - 校验 `subject_proof` 是 bob 的 DID key 签的
     - 把 pending invite 转 `ck.invite.create` for bob
 14. bob 客户端再提交 `ck.invite.accept` → 加入成员
-15. 断言:`/space/${spaceId}/admin` 显示 bob 是 member;old pending row 消失
+15. 断言:`/realms/${spaceId}/admin` 显示 bob 是 member;old pending row 消失
 16. 断言:bob 进 `/timeline/${spaceId}` 看得到 alice 的消息(history_visibility 之内)
 
 ### Phase D — E2EE space 的 MLS welcome

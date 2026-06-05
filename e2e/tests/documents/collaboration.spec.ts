@@ -183,7 +183,7 @@ test.describe("Document Morph collaboration", () => {
     const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
     try {
-      const realmId = await alicePage.createSpace({
+      const realmId = await alicePage.createRealm({
         title: `Document UI ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",

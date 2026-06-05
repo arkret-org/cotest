@@ -26,7 +26,7 @@
 
 ### Phase A — Alex 开 ticket space
 
-1. Alex `createSpace` `"Support escalation #1042"`,seed Sam
+1. Alex `createRealm` `"Support escalation #1042"`,seed Sam
 2. Sam `acceptInvite`
 3. Alex 在 timeline 发 ticket summary:`"Ticket #1042 — customer X's checkout fails with 500 on /api/charge."`
 4. Sam reply:`"Got logs? When did it start?"`(对 Alex 的 summary)

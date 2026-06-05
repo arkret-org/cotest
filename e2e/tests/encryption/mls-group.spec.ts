@@ -95,7 +95,7 @@ test.describe("MLS group encryption", () => {
     });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S11 E2EE ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -103,7 +103,7 @@ test.describe("MLS group encryption", () => {
         encryptionProfile: "mls_rfc9420",
       });
 
-      await alicePage.gotoSpaceAdminSection(spaceId, "security");
+      await alicePage.gotoRealmAdminSection(spaceId, "security");
       await expect(alicePage.page.getByTestId("mls-rotation")).toBeVisible({
         timeout: 30_000,
       });
@@ -481,7 +481,7 @@ test.describe("MLS group encryption", () => {
     });
 
     try {
-      await alicePage.gotoSpaceAdminSection(spaceId, "members");
+      await alicePage.gotoRealmAdminSection(spaceId, "members");
       const refresh = alicePage.page.getByTestId("refresh-members-button");
       await expect(refresh).toBeVisible({ timeout: 120_000 });
       const bobRow = alicePage.page.getByTestId("member-row").filter({
@@ -502,12 +502,12 @@ test.describe("MLS group encryption", () => {
         .toBeGreaterThan(0);
 
       await bobRow.first().getByTestId("ban-member-button").click();
-      await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(
+      await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(
         "epoch_update_required",
         { timeout: 30_000 },
       );
 
-      await alicePage.gotoTimelineSpace(spaceId);
+      await alicePage.gotoTimelineRealm(spaceId);
       const epochBanner = alicePage.page.getByTestId(
         "epoch-update-required-banner",
       );
@@ -670,7 +670,7 @@ test.describe("MLS group encryption", () => {
     // @expected-live-by: 2026Q3
     "fresh device without MLS welcome/restore refuses encrypted private writes instead of silently downgrading to plaintext",
     async () => {
-      // 1) deviceA: createSpace(encryption_profile=mls_rfc9420) + board + list + card.
+      // 1) deviceA: createRealm(encryption_profile=mls_rfc9420) + board + list + card.
       // 2) deviceB = sameActorFreshDevice(alice): fresh session, NO passphrase
       //    vault set up, NO welcome applied.
       // 3) deviceB opens the board, opens the card (title is plaintext metadata),

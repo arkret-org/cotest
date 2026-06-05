@@ -25,7 +25,7 @@
 
 ### Phase A — 起 board
 
-1. Pat createSpace `"Week 21 ops"`
+1. Pat createRealm `"Week 21 ops"`
 2. 进 `/kanban`,建三列 `Today` / `Doing` / `Done`
 
 ### Phase B — 计划当日任务

@@ -55,7 +55,7 @@ test.describe("workflow: incident response", () => {
       const finalSummary = `${alert} Root cause: payment worker rollback fixed DB pool saturation.`;
 
       try {
-        const spaceId = await oncallPage.createSpace({
+        const spaceId = await oncallPage.createRealm({
           title: `SEV-2 checkout ${stamp}`,
           summary: "Incident response war room",
           discoverability: "listed",
@@ -74,7 +74,7 @@ test.describe("workflow: incident response", () => {
         });
         await stepShot(oncallPage.page, testInfo, "A-alert-ack");
 
-        await backendPage.gotoTimelineSpace(spaceId);
+        await backendPage.gotoTimelineRealm(spaceId);
         await expect(backendPage.timelineEvent(alert)).toBeVisible({ timeout: 30_000 });
         await backendPage.timelineEvent(alert).getByTestId("reply-button").click();
         await backendPage.sendTimelineMessage(spaceId, diagnostic);
@@ -83,7 +83,7 @@ test.describe("workflow: incident response", () => {
         });
         await stepShot(backendPage.page, testInfo, "B-diagnostic");
 
-        await commsPage.gotoTimelineSpace(spaceId);
+        await commsPage.gotoTimelineRealm(spaceId);
         await commsPage.timelineEvent(alert).getByTestId("reply-button").click();
         await commsPage.sendTimelineMessage(spaceId, publicUpdate);
         await expect(commsPage.timelineEvent(publicUpdate).getByTestId("reply-indicator")).toBeVisible({
@@ -92,10 +92,10 @@ test.describe("workflow: incident response", () => {
         await expect(commsPage.page.getByTestId("timeline")).not.toContainText("DB pool saturation");
         await stepShot(commsPage.page, testInfo, "C-public-update");
 
-        await backendPage.gotoTimelineSpace(spaceId);
+        await backendPage.gotoTimelineRealm(spaceId);
         await backendPage.timelineEvent(diagnostic).getByTestId("reply-button").click();
         await backendPage.sendTimelineMessage(spaceId, mitigation);
-        await oncallPage.gotoTimelineSpace(spaceId);
+        await oncallPage.gotoTimelineRealm(spaceId);
         await expect(oncallPage.timelineEvent(mitigation)).toBeVisible({ timeout: 30_000 });
 
         await oncallPage.timelineEvent(alert).getByTestId("edit-button").click();
@@ -121,7 +121,7 @@ test.describe("workflow: incident response", () => {
       const page = await openUserPage(browser, oncall, { sessionToken: token });
 
       try {
-        const spaceId = await page.createSpace({
+        const spaceId = await page.createRealm({
           title: `SEV FSM ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -199,7 +199,7 @@ test.describe("workflow: incident response", () => {
       const commanderPage = await openUserPage(browser, commander, { sessionToken: commanderToken });
 
       try {
-        const spaceId = await commanderPage.createSpace({
+        const spaceId = await commanderPage.createRealm({
           title: `SEV-1 priority ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -237,7 +237,7 @@ test.describe("workflow: incident response", () => {
       const page = await openUserPage(browser, oncall, { sessionToken: token });
 
       try {
-        const spaceId = await page.createSpace({
+        const spaceId = await page.createRealm({
           title: `SEV Postmortem ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",

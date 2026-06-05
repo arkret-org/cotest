@@ -23,7 +23,7 @@
 
 ### Phase A — 准备 standup space
 
-1. Lin createSpace `"Team Daily"`,seed Pat + Quincy(每天都是同一个 space,但我们 stamp 让每次 e2e 跑用一个新的)
+1. Lin createRealm `"Team Daily"`,seed Pat + Quincy(每天都是同一个 space,但我们 stamp 让每次 e2e 跑用一个新的)
 2. Pat、Quincy acceptInvite
 
 ### Phase B — 三个人陆续 post

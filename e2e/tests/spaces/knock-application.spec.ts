@@ -40,7 +40,7 @@ test.describe("knock + application + cooldown", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S6 Knock ${stamp}`,
         summary: "knock + application coverage",
         discoverability: "listed",
@@ -65,12 +65,12 @@ test.describe("knock + application + cooldown", () => {
       // for the probe — the real contract is in the fixme tests below.
       expect([200, 201, 202, 400, 403, 404]).toContain(knockResp.status());
 
-      // Whichever route was used, alice's space-admin view MUST list bob in
+      // Whichever route was used, alice's realm-admin view MUST list bob in
       // an "applicants / knockers" pane. Yougen renders the FSM members
-      // table; we just look for bob's DID anywhere in space-admin-panel.
-      await alicePage.gotoSpaceAdmin(spaceId);
+      // table; we just look for bob's DID anywhere in realm-admin-panel.
+      await alicePage.gotoRealmAdmin(spaceId);
       if (knockResp.ok()) {
-        await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(bob.did, {
+        await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(bob.did, {
           timeout: 30_000,
         });
       }

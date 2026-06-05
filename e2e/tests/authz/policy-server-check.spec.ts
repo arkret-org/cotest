@@ -151,7 +151,7 @@ test.describe("policy server check", () => {
         });
         expect(realmResp.status()).toBe(200);
 
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S30 policy ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -164,9 +164,9 @@ test.describe("policy server check", () => {
           { data: { default: { decision: "allow" } } },
         );
         expect(allowScenario.status()).toBe(200);
-        await alicePage.gotoSpaceAdmin(spaceId);
+        await alicePage.gotoRealmAdmin(spaceId);
         // (drive invite-member → send-invite-button against alicePage; assert
-        // space-admin-panel status contains "invited" + bob.did)
+        // realm-admin-panel status contains "invited" + bob.did)
         await stepShot(alicePage.page, testInfo, "policy-allow-invite");
 
         // Phase C — flip mock to deny → invite rejected with reason.
@@ -257,7 +257,7 @@ test.describe("policy server check", () => {
           data: { default: { decision: "allow", delay_ms: 9000 } },
         });
 
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S30 timeout ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",

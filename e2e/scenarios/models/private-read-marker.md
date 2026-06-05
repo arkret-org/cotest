@@ -59,7 +59,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
    - title = `"models/private-read-cursor S ${stamp}"`
    - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
    - seed_members = `[bob.did]`
-3. 断言:`space-lifecycle-flow` 含 `created ck:space:...`,记录 `spaceId`
+3. 断言:`realm-lifecycle-flow` 含 `created ck:space:...`,记录 `spaceId`
 4. bob 通过 `acceptInvite(spaceId)` 加入空间
 
 ### Phase B — bob 发 M1, M2, M3

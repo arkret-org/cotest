@@ -77,7 +77,7 @@ test.describe("moderation appeal", () => {
 
     const appellantPage = await openUserPage(browser, appellant, { sessionToken: appellantToken });
     try {
-      await appellantPage.gotoTimelineSpace(realmId);
+      await appellantPage.gotoTimelineRealm(realmId);
       await expect(appellantPage.page.getByTestId("timeline")).toContainText(
         "Moderation decision",
         { timeout: 120_000 },

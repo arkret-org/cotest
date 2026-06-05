@@ -23,9 +23,9 @@ use cokret_core::{
     anchor_canonical_bytes, compute_anchor_id,
 };
 
-fn space() -> Result<RealmId> {
-    RealmId::new("ck:space:0196419b-0000-7000-8000-00000000014a".to_owned())
-        .map_err(|e| anyhow!("space id: {e}"))
+fn realm() -> Result<RealmId> {
+    RealmId::new("ck:realm:0196419b-0000-7000-8000-00000000014a".to_owned())
+        .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn move_id(hex_byte: u8) -> Result<MoveId> {
@@ -59,7 +59,7 @@ fn build_anchor() -> Result<Anchor> {
         .map_err(|e| anyhow!("anchorer did: {e}"))?;
     let mut a = Anchor {
         id: anchor_id(0x00)?,
-        realm_id: space()?,
+        realm_id: realm()?,
         predecessor_refs: vec![anchor_id(0xaa)?],
         frontier: vec![move_id(0x11)?, move_id(0x22)?],
         state_root: hash(0x77)?,

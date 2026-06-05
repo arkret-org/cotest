@@ -27,7 +27,7 @@
 
 ### Phase A — Sprint kickoff space
 
-1. Mei `createSpace` `"Sprint 24"`,seed Bob 和 Carol
+1. Mei `createRealm` `"Sprint 24"`,seed Bob 和 Carol
 2. Bob、Carol `acceptInvite`
 3. Mei 发 timeline 消息 `"Sprint 24 starts now — pick a Backlog card and reply with your choice."`
 4. 两个工程师都收到这条消息(timeline contains)

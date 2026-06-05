@@ -27,7 +27,7 @@
 
 ### Phase A — Mei 准备入职 space
 
-1. Mei `createSpace` `"Welcome to the team"`,`joinRule = invite`,`seedMembers = [yuki.did]`
+1. Mei `createRealm` `"Welcome to the team"`,`joinRule = invite`,`seedMembers = [yuki.did]`
 2. Yuki `acceptInvite`
 3. Mei 进 timeline,发 `"Hi Yuki, welcome aboard! Ping me if anything blocks you."`
 4. Yuki 回复 Mei 的欢迎消息:`"Thanks Mei — happy to be here."`

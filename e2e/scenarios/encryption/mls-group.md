@@ -47,7 +47,7 @@
    - 生成 MLS group context、cipher suite(默认 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`)
    - 写 `ck.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
    - 写 `ck.space.create` Move,关联 genesis
-3. 断言:`/space/${spaceId}/admin/security` 显示 MLS 管理控件
+3. 断言:`/realms/${spaceId}/admin/security` 显示 MLS 管理控件
 4. 断言:`GET /_soland/self/spaces/${spaceId}` 返回 `encryption_profile = "mls_rfc9420"`
 
 ### Phase B — bob 加入(Welcome)

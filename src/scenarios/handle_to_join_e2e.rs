@@ -52,7 +52,7 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 /// Stable Space DID used as the candidate audience for the happy path. Picked
 /// so the assertions read as a Space identifier and not as a free-form string.
-const TARGET_SPACE_ID: &str = "ck:realm:0196419b-0000-7000-8000-handle2joinaa";
+const TARGET_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-handle2joinaa";
 
 /// Stable principal-server DID that appears as both the issuer and the
 /// recipient on the candidate. T3.4's allow-list test uses the same shape.
@@ -116,7 +116,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
 
 fn happy_path_via_sdk_candidate() -> Result<()> {
     let candidate = sample_candidate()?;
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned())
+    let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
         .with_expected_subject(Did::new(ALICE_DID.to_owned())?);
 
     candidate.validate(&ctx).map_err(|e| {
@@ -208,7 +208,7 @@ fn negative_case_verified_false() -> Result<()> {
     // Clearing proofs[] is the SDK-side analog of `verified=false` — there
     // is no audit/issuer proof to anchor the candidate to.
     candidate.proofs.clear();
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned());
+    let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned());
 
     match candidate.validate(&ctx) {
         Err(CandidateError::MissingProof) => Ok(()),
@@ -231,7 +231,7 @@ fn negative_case_subject_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
     let mallory = Did::new("did:web:mallory.example".to_owned())?;
     let ctx =
-        CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()).with_expected_subject(mallory);
+        CandidateValidationContext::new(TARGET_REALM_ID.to_owned()).with_expected_subject(mallory);
 
     match candidate.validate(&ctx) {
         Err(CandidateError::SubjectMismatch { .. }) => Ok(()),
@@ -250,7 +250,7 @@ fn negative_case_subject_mismatch() -> Result<()> {
 fn negative_case_expired() -> Result<()> {
     let mut candidate = sample_candidate()?;
     candidate.expires_at = Utc::now() - ChronoDuration::seconds(1);
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned());
+    let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned());
 
     match candidate.validate(&ctx) {
         Err(CandidateError::Expired { .. }) => Ok(()),
@@ -294,7 +294,7 @@ fn negative_case_service_not_allowed() -> Result<()> {
     let mut candidate = sample_candidate()?;
     candidate.member_delivery_binding.recipient_service_did =
         Did::new(OTHER_PRINCIPAL_DID.to_owned())?;
-    candidate.validate(&CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()))?;
+    candidate.validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))?;
 
     let allowed = [PRINCIPAL_DID];
     if allowed.contains(
@@ -428,8 +428,8 @@ async fn live_stack_probe() -> Result<()> {
             "handle": ALICE_HANDLE,
             "intent": "member_add",
             "requester": PRINCIPAL_DID,
-            "audience": TARGET_SPACE_ID,
-            "realm_id": TARGET_SPACE_ID,
+            "audience": TARGET_REALM_ID,
+            "realm_id": TARGET_REALM_ID,
         }))
         .send()
         .await
@@ -482,7 +482,7 @@ async fn live_stack_probe() -> Result<()> {
 
 /// Build a happy-path `MemberDeliveryBindingCandidate` that mirrors the
 /// shape coauth's `issue_handle_claim` packs into the directory's
-/// `resolve_handle` response. `audience = TARGET_SPACE_ID` so the candidate
+/// `resolve_handle` response. `audience = TARGET_REALM_ID` so the candidate
 /// validates against the same Space the SDK builder is asked to join.
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = Did::new(ALICE_DID.to_owned())?;
@@ -507,7 +507,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             policy_event_ref: Some("ck:event:01890000-0000-7000-8000-policyref001".to_owned()),
         },
         issuer_service_did: principal,
-        audience: TARGET_SPACE_ID.to_owned(),
+        audience: TARGET_REALM_ID.to_owned(),
         expires_at: future_expiry(ChronoDuration::minutes(5)),
         issued_at: Some(Utc::now()),
         source_refs: vec![SOURCE_REF_EVENT_ID.to_owned()],
@@ -518,7 +518,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             "payload_digest":
                 "sha256:00000000000000000000000000000000000000000000000000000000000000aa",
             "created_at": "2026-05-19T00:00:00Z",
-            "audience": TARGET_SPACE_ID,
+            "audience": TARGET_REALM_ID,
             "jws": "aaa.bbb.ccc"
         })],
         claim_digest: None,

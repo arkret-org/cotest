@@ -24,7 +24,7 @@ messaging/triad-collaboration 主流程的小变种:验证 `world_readable` 这�
 
 ## Steps
 
-1. alice createSpace `S_open`,`discoverability=public`,`join_rule=public`,`history_visibility=world_readable`
+1. alice createRealm `S_open`,`discoverability=public`,`join_rule=public`,`history_visibility=world_readable`
 2. alice 邀请 bob 后 bob acceptInvite;两人交换若干消息 `M1..M5`
 3. **outsider**(已登录,非成员)访问 `/timeline/<S_open>` 或 API `GET /_soland/self/spaces/<S_open>/events`
 4. 断言:outsider 看得到 `M1..M5`(world_readable 允许)

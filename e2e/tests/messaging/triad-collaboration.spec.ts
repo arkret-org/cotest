@@ -28,11 +28,11 @@ import {
 test.describe.configure({ mode: "serial" });
 
 // Helper kept inline (per G2.T1 scope: do not extend helpers/users.ts).
-// Waits for yougen's SpaceAdmin Members section to mount the invite card.
-// gotoSpaceAdminSection already clicks the Members tab if hydration falls
+// Waits for yougen's RealmAdmin Members section to mount the invite card.
+// gotoRealmAdminSection already clicks the Members tab if hydration falls
 // back to Overview; this extra poll defeats the rare case where the tab
 // click lands before active_section signal settles. Bounded at 30s — the
-// SpaceAdminPanel mounts well under that on a healthy dev server; if it
+// RealmAdminPanel mounts well under that on a healthy dev server; if it
 // hasn't rendered in 30s the panel itself is broken, not racing.
 async function waitForInviteCardReady(page: Page) {
   await page.waitForFunction(
@@ -230,7 +230,7 @@ test.describe("single-server triad collaboration", () => {
 
     try {
       // Phase A — alice creates space, seed-invites bob; bob accepts.
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S1 Triad ${stamp}`,
         summary: "triad collaboration coverage",
         discoverability: "listed",
@@ -247,7 +247,7 @@ test.describe("single-server triad collaboration", () => {
       await alicePage.sendTimelineMessage(spaceId, m1);
       await stepShot(alicePage.page, testInfo, "B-m1-sent");
 
-      await bobPage.gotoTimelineSpace(spaceId);
+      await bobPage.gotoTimelineRealm(spaceId);
       await expect(bobPage.page.getByTestId("timeline")).toContainText(m1, {
         timeout: 30_000,
       });
@@ -272,7 +272,7 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(bobPage.page, testInfo, "B-bob-edited-m2");
 
       // Alice sees the edited reply.
-      await alicePage.gotoTimelineSpace(spaceId);
+      await alicePage.gotoTimelineRealm(spaceId);
       await expect(alicePage.timelineEvent(m2Edited)).toBeVisible({ timeout: 30_000 });
 
       // Phase C — alice invites carol, carol accepts, carol has restricted history.
@@ -282,7 +282,7 @@ test.describe("single-server triad collaboration", () => {
       await carolPage.acceptInvite(spaceId);
       await stepShot(carolPage.page, testInfo, "C-carol-accepted-invite");
 
-      await carolPage.gotoTimelineSpace(spaceId);
+      await carolPage.gotoTimelineRealm(spaceId);
       // Spec models/space-and-place.md §3.4: history_visibility=joined →
       // carol sees nothing posted before she became a member.
       await expect(carolPage.timelineEvent(m1)).toHaveCount(0);
@@ -297,7 +297,7 @@ test.describe("single-server triad collaboration", () => {
 
       // Phase E — bob redacts his own M2; alice sees tombstone; carol unaffected
       // (she never saw M2 anyway because of history_visibility).
-      await bobPage.gotoTimelineSpace(spaceId);
+      await bobPage.gotoTimelineRealm(spaceId);
       const m2Tombstone = bobPage.timelineEvent(m2Edited);
       await m2Tombstone.getByTestId("redact-button").click();
       await bobPage.page.getByTestId("confirm-redact-button").click();
@@ -305,13 +305,13 @@ test.describe("single-server triad collaboration", () => {
       await expect(bobPage.page.getByTestId("write-status")).toContainText(/tombstoned/);
       await stepShot(bobPage.page, testInfo, "E-bob-redacted");
 
-      await alicePage.gotoTimelineSpace(spaceId);
+      await alicePage.gotoTimelineRealm(spaceId);
       await expect(alicePage.page.getByTestId("redacted-tombstone")).toBeVisible({ timeout: 30_000 });
       // The redacted body should not be visible in plain form anymore.
       await expect(alicePage.page.getByTestId("timeline")).not.toContainText(m2Edited);
       await stepShot(alicePage.page, testInfo, "E-alice-sees-tombstone");
 
-      await carolPage.gotoTimelineSpace(spaceId);
+      await carolPage.gotoTimelineRealm(spaceId);
       // Carol only sees M3 (and possibly the tombstone marker for M2, but never
       // its original text).
       await expect(carolPage.timelineEvent(m3)).toBeVisible();
@@ -329,7 +329,7 @@ test.describe("single-server triad collaboration", () => {
     // space.rs:627-644): the second create returns the existing invite_id
     // unchanged. yougen's invite-member button drives the same endpoint via
     // submit_event_envelope, so re-issuing the same invite produces only one
-    // invite-row in space-admin.
+    // invite-row in realm-admin.
     test("E1.1 idempotent invite — re-issuing the same invite does not duplicate", async ({
       browser,
       request,
@@ -343,18 +343,18 @@ test.describe("single-server triad collaboration", () => {
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S1 Idempotent Invite ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
 
-        // First invite. inviteFromAdmin internally calls gotoSpaceAdminSection
+        // First invite. inviteFromAdmin internally calls gotoRealmAdminSection
         // (Members) and asserts the invite-member card before clicking — that
-        // already defeats the SpaceAdminPanel hydration race that historically
+        // already defeats the RealmAdminPanel hydration race that historically
         // caused fresh-nav fails (see scenarios/spaces/admin-section-route.md).
         // We add an explicit waitForInviteCardReady belt-and-suspenders only
-        // on the second issue, where the helper's gotoSpaceAdmin re-mounts.
+        // on the second issue, where the helper's gotoRealmAdmin re-mounts.
         await alicePage.inviteFromAdmin(spaceId, bob.did);
 
         // Re-issue same invite — soland MUST treat as idempotent (same

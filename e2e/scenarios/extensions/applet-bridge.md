@@ -62,13 +62,13 @@
    - join_rule = `invite`
    - history_visibility = `joined`
    - seed_members = `[]`(bot 走 admin invite 通道,不走 seed)
-6. 断言:`space-lifecycle-flow` 显示 `created ck:space:...`,记录 `spaceId`
-7. **alice** 在 `/space/${spaceId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_did`
-   - 断言:`space-admin-panel` 状态文本含 `invited ${bot_actor_did}`
+6. 断言:`realm-lifecycle-flow` 显示 `created ck:space:...`,记录 `spaceId`
+7. **alice** 在 `/realms/${spaceId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_did`
+   - 断言:`realm-admin-panel` 状态文本含 `invited ${bot_actor_did}`
 8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ space_id: spaceId }`
    - mock 内部会用 bot 的 session token 调 soland `POST /_soland/self/spaces/${spaceId}/invite/accept`
    - 断言:返回 `{ status: "joined" }`
-9. **alice** 同步 `/space/${spaceId}/admin/members`,断言 members 列表包含 `bot_actor_did`
+9. **alice** 同步 `/realms/${spaceId}/admin/members`,断言 members 列表包含 `bot_actor_did`
 
 ### Phase C — 外部事件 → ghost actor 转译
 
@@ -102,7 +102,7 @@
 
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
-17. **alice** 在 `/space/${spaceId}/admin/access` 或 `/settings/applets`(以 yougen 实际路由为准)对 `applet_id` 执行 revoke:
+17. **alice** 在 `/realms/${spaceId}/admin/access` 或 `/settings/applets`(以 yougen 实际路由为准)对 `applet_id` 执行 revoke:
     - 调 soland `POST /_cokret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope` 和 `registration_epoch`
     - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)

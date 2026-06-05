@@ -69,7 +69,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/_soland/self/space/${encodeURIComponent(fixture.internalSpaceId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
+      `${solandBaseUrl("alpha")}/_soland/self/realms/${encodeURIComponent(fixture.internalRealmId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(direct.status()).toBe(403);
     await expectErrorCode(direct, "external_user_no_main_access");
@@ -86,7 +86,7 @@ test.describe("sovereign deployment", () => {
       data: {
         actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
-        path: `/_soland/self/space/${fixture.internalSpaceId}`,
+        path: `/_soland/self/realms/${fixture.internalRealmId}`,
       },
     });
     expect(proxy.status()).toBe(403);
@@ -187,7 +187,7 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const aliceDid = `did:web:alice-int-${label}-${stamp}.example`;
   const bobDid = `did:web:bob-ext-${label}-${stamp}.example.org`;
   const enclaveRealmId = `ck:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
-  const internalSpaceId = `ck:space:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
+  const internalRealmId = `ck:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
 
   await postJson(request, "alpha", "/_soland/admin/deployment/configure", {
     profile: "sovereign_main",
@@ -230,7 +230,7 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
     target_host: invite.target_host,
   });
 
-  return { stamp, short, aliceDid, bobDid, enclaveRealmId, internalSpaceId, acceptBody };
+  return { stamp, short, aliceDid, bobDid, enclaveRealmId, internalRealmId, acceptBody };
 }
 
 async function postJson(

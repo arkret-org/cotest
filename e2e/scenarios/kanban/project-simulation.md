@@ -31,7 +31,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ### Phase A — alice 建 sprint board
 
-1. alice createSpace `"Sprint 24"`,`joinRule = invite`
+1. alice createRealm `"Sprint 24"`,`joinRule = invite`
 2. alice 建 board `"Sprint 24 board"`(`cx.place.create kind=board`)
 3. 建三个 list:`Todo`、`In Progress`、`Done`
 4. 建三张 Card:

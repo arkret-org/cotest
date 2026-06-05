@@ -91,7 +91,7 @@
 
 21. mock(作为 bob_extern)通过 Phase B 的同一 relationship 反向 POST 一个 TSP envelope,内层为 `ck.member.state` operation:`actor = bob_extern.did`、`space_id = S_tsp`、`state = "join"`
 22. alice 客户端的 TSP listener(由 alice 自己的 `ck.service.tsp` endpoint 承载,= 同一个 mock 实例的另一侧)收到 envelope → 验证外层 → 解出内层 → 验证 Cokret event signature(bob_extern 的 `did:web` key)
-23. 断言:alice 侧 `/space/${S_tsp}/admin` 显示 bob_extern 状态为 `joined`(或在 `space-admin-panel` 中匹配 `joined ${bobExternDid}`)
+23. 断言:alice 侧 `/realms/${S_tsp}/admin` 显示 bob_extern 状态为 `joined`(或在 `realm-admin-panel` 中匹配 `joined ${bobExternDid}`)
 24. 断言:alice 侧 audit log 含一条 `tsp.message.receive` 记录,`payload_type: "ck.member.state"`,且 `verification_result: "ok"`
 
 ## Observable assertions(合并清单)

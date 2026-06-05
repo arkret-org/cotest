@@ -37,7 +37,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const realmId = await alicePage.createSpace({
+      const realmId = await alicePage.createRealm({
         title: `worldread ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -76,7 +76,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const realmId = await alicePage.createSpace({
+      const realmId = await alicePage.createRealm({
         title: `worldread anon ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -115,7 +115,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const realmId = await alicePage.createSpace({
+      const realmId = await alicePage.createRealm({
         title: `S1.3 World ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",

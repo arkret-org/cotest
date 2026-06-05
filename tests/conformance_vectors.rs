@@ -710,9 +710,9 @@ fn test_8_handle_rename_round_trip_live() {
     //   1. Client builds invite for canonical handle `alice:acme.example`.
     //   2. soland reducer accepts member-add with `payload.handle = "alice:acme.example"` (NO
     //      `handle_uri` field).
-    //   3. teabay's `ck.find.directory.resolve_handle(handle=...)` accepts the canonical handle string
-    //      in the request body and returns a candidate whose `handle` field is the same canonical
-    //      wire form.
+    //   3. teabay's `ck.find.directory.resolve_handle(handle=...)` accepts the canonical handle
+    //      string in the request body and returns a candidate whose `handle` field is the same
+    //      canonical wire form.
     //   4. coauth's handle-claim issuance + sync surface MUST NOT emit `handle_uri` anywhere on a
     //      fresh R3.1 wire shape.
     unreachable!("integration target gated on coauth+soland+teabay R3.1 rename");

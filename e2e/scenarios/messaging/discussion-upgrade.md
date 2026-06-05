@@ -29,7 +29,7 @@
 
 ### Phase A — 创建 Flow + 初期 discussion
 
-1. alice createSpace `S_parent`,seedMembers=[bob]
+1. alice createRealm `S_parent`,seedMembers=[bob]
 2. alice 在 `S_parent` 中创建 Flow `F1` (Card),`discussion` track 默认启用
 3. alice、bob 在 `F1` discussion 中互发 10 条消息 `M1..M10`
 4. 断言:两人都看到 `M1..M10` 在 `F1` 详情的 Comments 区

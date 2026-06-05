@@ -1,5 +1,5 @@
-// Probe: does yougen's SpaceAdminPanel see active_section correctly when
-// the URL is /space/<id>/admin/<section> on a fresh navigation? Helps
+// Probe: does yougen's RealmAdminPanel see active_section correctly when
+// the URL is /realms/<id>/admin/<section> on a fresh navigation? Helps
 // diagnose why invite-member and refresh-members-button never render.
 
 import { expect, test } from "@playwright/test";
@@ -11,7 +11,7 @@ import {
 } from "../../helpers/users";
 
 test.describe("admin section route @fully-implemented", () => {
-  test("space-admin-active-section reflects route on fresh nav", async ({
+  test("realm-admin-active-section reflects route on fresh nav", async ({
     browser,
     request,
   }) => {
@@ -24,23 +24,23 @@ test.describe("admin section route @fully-implemented", () => {
     });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Admin section probe ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
 
       // Land directly on /admin/members via hard navigation (no tab click).
-      await alicePage.page.goto(`/space/${spaceId}/admin/members`, {
+      await alicePage.page.goto(`/realms/${spaceId}/admin/members`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(alicePage.page.getByTestId("space-admin-panel")).toBeVisible(
+      await expect(alicePage.page.getByTestId("realm-admin-panel")).toBeVisible(
         {
           timeout: 120_000,
         },
       );
       const sectionLabel = alicePage.page.getByTestId(
-        "space-admin-active-section",
+        "realm-admin-active-section",
       );
       await expect(sectionLabel).toBeVisible({ timeout: 30_000 });
       const text = (await sectionLabel.textContent())?.trim();

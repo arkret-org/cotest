@@ -236,7 +236,7 @@ test.describe("cross-server federation", () => {
     });
 
     try {
-      const realmId = await alicePage.createSpace({
+      const realmId = await alicePage.createRealm({
         title: `S2 Cross-server ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -371,7 +371,7 @@ test.describe("cross-server federation", () => {
     });
 
     try {
-      const realmId = await alicePage.createSpace({
+      const realmId = await alicePage.createRealm({
         title: `S2 auto federation ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",

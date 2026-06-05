@@ -386,7 +386,7 @@ test.describe("chat advanced", () => {
     const m2 = `S14 yes ship ${stamp}`;
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S14 Chat ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -459,7 +459,7 @@ test.describe("chat advanced", () => {
     const mention = `@${bob.handle.replace(/^@/, "")} can you review the incident note? ${stamp}`;
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S14D Mention ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -525,7 +525,7 @@ test.describe("chat advanced", () => {
     const optionB = `After backup ${stamp}`;
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S14E Poll ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -590,7 +590,7 @@ test.describe("chat advanced", () => {
       const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S14F Typing ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -632,7 +632,7 @@ test.describe("chat advanced", () => {
       const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S14G Presence ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",

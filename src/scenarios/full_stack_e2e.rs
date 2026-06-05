@@ -67,7 +67,7 @@ const BOB_DID: &str = "did:web:bob.acme.example";
 const ALICE_HANDLE: &str = "alice:acme.example";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
-const TARGET_SPACE_ID: &str = "ck:realm:0196419b-0000-7000-8000-fullstacke2e1";
+const TARGET_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-fullstacke2e1";
 const STABLE_FLOW_ID: &str = "ck:flow:0196419b-0000-7000-8000-fullstackflow";
 const STABLE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-fullstackevt0";
 const SOURCE_REF_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-srcref0000001";
@@ -204,11 +204,11 @@ fn step_3_teabay_resolve_handle(candidate: &MemberDeliveryBindingCandidate) -> R
              a candidate tagged with CandidateIntent::MemberAdd"
         );
     }
-    if candidate.audience != TARGET_SPACE_ID {
+    if candidate.audience != TARGET_REALM_ID {
         bail!(
             "T8.1 step 3: candidate.audience = `{}`, expected target Space `{}`",
             candidate.audience,
-            TARGET_SPACE_ID
+            TARGET_REALM_ID
         );
     }
     if candidate.source_refs.is_empty() {
@@ -225,7 +225,7 @@ fn step_3_teabay_resolve_handle(candidate: &MemberDeliveryBindingCandidate) -> R
 /// soland's `ck.member.state{join}` reducer (T3.3) re-runs the SDK validator
 /// before persisting the new binding. We exercise the happy path here.
 fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned())
+    let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
         .with_expected_subject(Did::new(ALICE_DID.to_owned())?);
     candidate.validate(&ctx).map_err(|e| {
         anyhow!(
@@ -249,7 +249,7 @@ fn step_5_yougen_mock_send_message() -> Result<Value> {
         "kind": "ck.message.create",
         "actor_id": BOB_DID,
         "actor_seq": 1,
-        "realm_id": TARGET_SPACE_ID,
+        "realm_id": TARGET_REALM_ID,
         "flow_id": STABLE_FLOW_ID,
         "created_at": Utc::now().to_rfc3339(),
         "hlc": "1747613100000-0-cotest-yougen",
@@ -382,7 +382,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
     let mut handover = original.clone();
     handover.member_delivery_binding.recipient_service_did =
         Did::new(REBOUND_PRINCIPAL_DID.to_owned())?;
-    handover.validate(&CandidateValidationContext::new(TARGET_SPACE_ID.to_owned()))?;
+    handover.validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))?;
 
     let allowed = [PRINCIPAL_DID];
     if allowed.contains(
@@ -405,7 +405,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
 fn step_9_revocation(original: &MemberDeliveryBindingCandidate) -> Result<()> {
     let mut revoked = original.clone();
     revoked.expires_at = Utc::now() - ChronoDuration::seconds(1);
-    let ctx = CandidateValidationContext::new(TARGET_SPACE_ID.to_owned());
+    let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned());
     match revoked.validate(&ctx) {
         Err(CandidateError::Expired { .. }) => Ok(()),
         Err(other) => bail!(
@@ -447,8 +447,8 @@ fn negative_did_document_fallback_rejected() -> Result<()> {
 /// sanitizer.
 fn negative_stable_push_id_leak_rejected() -> Result<()> {
     let leaks: &[(&str, Value)] = &[
-        ("realm_id", json!(TARGET_SPACE_ID)),
-        ("realm_id", json!(TARGET_SPACE_ID)),
+        ("realm_id", json!(TARGET_REALM_ID)),
+        ("realm_id", json!(TARGET_REALM_ID)),
         ("flow_id", json!(STABLE_FLOW_ID)),
         ("event_id", json!(STABLE_EVENT_ID)),
     ];
@@ -562,8 +562,8 @@ async fn live_stack_probe() -> Result<()> {
             "handle": ALICE_HANDLE,
             "intent": "member_add",
             "requester": PRINCIPAL_DID,
-            "audience": TARGET_SPACE_ID,
-            "realm_id": TARGET_SPACE_ID,
+            "audience": TARGET_REALM_ID,
+            "realm_id": TARGET_REALM_ID,
         }))
         .send()
         .await
@@ -590,7 +590,7 @@ async fn live_stack_probe() -> Result<()> {
             "kind": "ck.message.create",
             "actor_id": ALICE_DID,
             "actor_seq": 1,
-            "realm_id": TARGET_SPACE_ID,
+            "realm_id": TARGET_REALM_ID,
             "created_at": Utc::now().to_rfc3339(),
             "hlc": "1747613100000-0-cotest",
             "prev_refs": [],
@@ -658,7 +658,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             policy_event_ref: Some("ck:event:0196419b-0000-7000-8000-policyref001".to_owned()),
         },
         issuer_service_did: principal,
-        audience: TARGET_SPACE_ID.to_owned(),
+        audience: TARGET_REALM_ID.to_owned(),
         expires_at: future_expiry(ChronoDuration::minutes(5)),
         issued_at: Some(Utc::now()),
         source_refs: vec![SOURCE_REF_EVENT_ID.to_owned()],
@@ -669,7 +669,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             "payload_digest":
                 "sha256:00000000000000000000000000000000000000000000000000000000000000bb",
             "created_at": "2026-05-19T00:00:00Z",
-            "audience": TARGET_SPACE_ID,
+            "audience": TARGET_REALM_ID,
             "jws": "real.shaped.jws"
         })],
         claim_digest: None,

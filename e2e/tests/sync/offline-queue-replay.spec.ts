@@ -163,7 +163,7 @@ async function createOfflineFixture(
     openUserPage(browser, alice, { sessionToken: aliceToken }),
     openUserPage(browser, bob, { sessionToken: bobToken }),
   ]);
-  await Promise.all([alicePage.gotoTimelineSpace(spaceId), bobPage.gotoTimelineSpace(spaceId)]);
+  await Promise.all([alicePage.gotoTimelineRealm(spaceId), bobPage.gotoTimelineRealm(spaceId)]);
   return { alice, bob, aliceToken, bobToken, alicePage, bobPage, spaceId };
 }
 

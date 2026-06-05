@@ -160,7 +160,7 @@ test.describe("transport negotiation", () => {
         expect(solandServiceDid("alpha")).toMatch(/^did:/);
         expect(solandServiceDid("beta")).toMatch(/^did:/);
 
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S8 Transport ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",

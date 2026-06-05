@@ -47,9 +47,9 @@
    - join_rule = `invite`
    - history_visibility = `joined` ← 关键:carol 加入前的消息对她不可见
    - seed_members = `[bob.did]` ← 在 Seed 步骤填,触发 alice 对 bob 的 invite 事件
-2. 断言:`space-lifecycle-flow` 显示 `created ck:space:...`,记录 `spaceId`
+2. 断言:`realm-lifecycle-flow` 显示 `created ck:space:...`,记录 `spaceId`
 3. **bob** 加载 yougen,进入空间;隐式接受 invite (现有 helper 的行为是 seed members 已经被 alice 直接加成员,等于 invite + accept 一起);如果未来 yougen 把 invite/accept 拆开,这里要补一个 `bob 接受邀请` 的子步
-4. 断言:bob 的 `/space/${spaceId}/admin` 可访问、`space-admin-panel` 渲染
+4. 断言:bob 的 `/realms/${spaceId}/admin` 可访问、`realm-admin-panel` 渲染
 
 ### Phase B — 双向消息 + reactions + reply + edit
 
@@ -66,8 +66,8 @@
 
 ### Phase C — 晚到成员 + history_visibility 验证
 
-11. **alice** 通过 `/space/${spaceId}/admin` 的 `invite-member` 流程邀请 `carol.did`
-    - 断言:`space-admin-panel` 状态文本含 `invited carol.did`
+11. **alice** 通过 `/realms/${spaceId}/admin` 的 `invite-member` 流程邀请 `carol.did`
+    - 断言:`realm-admin-panel` 状态文本含 `invited carol.did`
 12. **carol** 加载 yougen,进入空间
 13. **carol** 看 `/timeline/${spaceId}`
     - 断言 (history_visibility = joined 的语义):**carol 看不到** `M1` / `M2`(她加入之前的消息);timeline 是空的,或者只显示一个"history starts here"占位
@@ -108,10 +108,10 @@
 
 ## Implementation notes
 
-- Yougen 当前的 `seedMembers` 通过 `/setup` 注入,语义可能等价于 "alice 直接添加" 而非 "alice invite + bob accept"。如果 spec 严格要求 invite-then-accept 顺序,这一条要么补 yougen 的 accept UI,要么换成 `/space/:id/admin` 的 `invite-member` 流程驱动
-- `/space/:id/admin` 的 invite UI (`invite-member`、`invite-target-input`、`send-invite-button`) 已经存在,Phase C 直接用
+- Yougen 当前的 `seedMembers` 通过 `/setup` 注入,语义可能等价于 "alice 直接添加" 而非 "alice invite + bob accept"。如果 spec 严格要求 invite-then-accept 顺序,这一条要么补 yougen 的 accept UI,要么换成 `/realms/:id/admin` 的 `invite-member` 流程驱动
+- `/realms/:id/admin` 的 invite UI (`invite-member`、`invite-target-input`、`send-invite-button`) 已经存在,Phase C 直接用
 - Timeline 现有的 testid:`composer-input`、`send-button`、`timeline`、`timeline-event`、`write-status`、`edit-button`、`save-edit-button`、`redact-button`、`confirm-redact-button`、`redacted-tombstone`、`chat-react-button`、`chat-reactions`、`chat-reply-button`、`chat-reply-indicator`
-- 不需要新 helper,基本能用现有 `JointUserPage.createSpace` + `JointUserPage.gotoSpaceAdmin` + 直接 `page.goto("/timeline/${spaceId}")` 覆盖
+- 不需要新 helper,基本能用现有 `JointUserPage.createRealm` + `JointUserPage.gotoRealmAdmin` + 直接 `page.goto("/timeline/${spaceId}")` 覆盖
 - 步骤 13 的 "carol 看不到旧消息" 是新增断言点,要确认 yougen 实现了 history_visibility 的 client-side 过滤(否则 fail 不代表 spec 不对,而是 yougen 漏实现)— 跑测前**先确认或挂 TODO**
 
 ## 总耗时预估

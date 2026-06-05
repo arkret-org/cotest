@@ -22,7 +22,7 @@ test.describe.configure({ mode: "serial" });
 // (description / synthesis / discussion comment). Each guards that a private
 // Flow content path round-trips as an ENCRYPTED write on the SAME device that
 // just created the Realm. The plaintext happy-paths above never arm the
-// content-encryption floor (createSpace defaults encryption_profile to
+// content-encryption floor (createRealm defaults encryption_profile to
 // "none"), and encryption/key-backup.spec.ts A2 only reaches the encrypted
 // kanban write on a RESTORED second device — never on the original creator
 // device, which is the path this trio covers.
@@ -110,7 +110,7 @@ test.describe("kanban end-to-end", () => {
 
     try {
       // Create a space so the kanban view has a selected_space context.
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Kanban Space ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -244,7 +244,7 @@ test.describe("kanban end-to-end", () => {
     const third = `Third-${stamp}`;
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Kanban Column Drag ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -306,7 +306,7 @@ test.describe("kanban end-to-end", () => {
     const third = `Third-${stamp}`;
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Kanban Order ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -435,7 +435,7 @@ test.describe("kanban end-to-end", () => {
       // Encrypted Realm — mirrors the yougen setup-wizard default. This is the
       // single line that distinguishes this case from the plaintext happy
       // paths above and arms the content-encryption floor.
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Encrypted Kanban ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -556,7 +556,7 @@ test.describe("kanban end-to-end", () => {
     const floorViolations = recordFloorViolations(alicePage.page);
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Encrypted Kanban Synthesis ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -644,7 +644,7 @@ test.describe("kanban end-to-end", () => {
     const floorViolations = recordFloorViolations(alicePage.page);
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `Encrypted Kanban Discussion ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",

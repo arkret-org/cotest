@@ -48,7 +48,7 @@ test.describe("project simulation", () => {
     const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S16 Sprint ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -61,7 +61,7 @@ test.describe("project simulation", () => {
       await carolPage.acceptInvite(spaceId);
 
       // Sanity: alice's admin landing renders.
-      await alicePage.gotoSpaceAdmin(spaceId);
+      await alicePage.gotoRealmAdmin(spaceId);
       await stepShot(alicePage.page, testInfo, "A-team-joined");
     } finally {
       await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);

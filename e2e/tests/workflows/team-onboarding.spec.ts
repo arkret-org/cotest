@@ -44,7 +44,7 @@ test.describe("workflow: team onboarding", () => {
 
     try {
       // Phase A — welcome space + seed invite.
-      const spaceId = await meiPage.createSpace({
+      const spaceId = await meiPage.createRealm({
         title: `Welcome to the team ${stamp}`,
         summary: "Day-1 onboarding hub",
         discoverability: "listed",
@@ -56,7 +56,7 @@ test.describe("workflow: team onboarding", () => {
       await stepShot(meiPage.page, testInfo, "A-welcome");
 
       // Phase B — Yuki picks up the welcome and replies.
-      await yukiPage.gotoTimelineSpace(spaceId);
+      await yukiPage.gotoTimelineRealm(spaceId);
       await expect(yukiPage.page.getByTestId("timeline")).toContainText(welcome, {
         timeout: 30_000,
       });
@@ -71,23 +71,23 @@ test.describe("workflow: team onboarding", () => {
       await stepShot(yukiPage.page, testInfo, "B-yuki-replied");
 
       // Phase C — Mei edits the welcome in place; Yuki sees the patched copy.
-      await meiPage.gotoTimelineSpace(spaceId);
+      await meiPage.gotoTimelineRealm(spaceId);
       await expect(meiPage.timelineEvent(welcome)).toBeVisible({ timeout: 30_000 });
       await meiPage.timelineEvent(welcome).getByTestId("edit-button").click();
       await meiPage.page.getByTestId("edit-composer").locator("textarea").fill(welcomeEdited);
       await meiPage.page.getByTestId("save-edit-button").click();
       await expect(meiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
       await expect(meiPage.page.getByTestId("write-status")).toContainText(/revised/);
-      await yukiPage.gotoTimelineSpace(spaceId);
+      await yukiPage.gotoTimelineRealm(spaceId);
       await expect(yukiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
       await stepShot(meiPage.page, testInfo, "C-welcome-edited");
 
       // Phase D — close the day with a small back-and-forth.
       await meiPage.sendTimelineMessage(spaceId, wrap);
-      await yukiPage.gotoTimelineSpace(spaceId);
+      await yukiPage.gotoTimelineRealm(spaceId);
       await expect(yukiPage.timelineEvent(wrap)).toBeVisible({ timeout: 30_000 });
       await yukiPage.sendTimelineMessage(spaceId, yukiWrap);
-      await meiPage.gotoTimelineSpace(spaceId);
+      await meiPage.gotoTimelineRealm(spaceId);
       await expect(meiPage.timelineEvent(yukiWrap)).toBeVisible({ timeout: 30_000 });
       await stepShot(meiPage.page, testInfo, "D-wrap-up");
     } finally {

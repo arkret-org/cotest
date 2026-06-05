@@ -39,7 +39,7 @@ test.describe("notifications", () => {
     const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S23 Notif ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -83,7 +83,7 @@ test.describe("notifications", () => {
       const mentionMsg = `@${bob.handle.replace(/^@/, "")} muted mention override ${stamp}`;
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S23 Muted ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -142,7 +142,7 @@ test.describe("notifications", () => {
       const resumedMsg = `DND resumed ${stamp}`;
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S23 DND ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -341,7 +341,7 @@ test.describe("notifications", () => {
       const bobDevice2Page = await openUserPage(browser, bobDevice2, { sessionToken: bobToken2 });
 
       try {
-        const spaceId = await alicePage.createSpace({
+        const spaceId = await alicePage.createRealm({
           title: `S23 Cross Device ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",

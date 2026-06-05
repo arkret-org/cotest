@@ -23,7 +23,7 @@
     },
     "admin": {
       "did": "did:web:admin.example",
-      "role": "space_admin",
+      "role": "realm_admin",
       "default_handle": "@admin",
       "default_device_id": "dev_admin"
     },

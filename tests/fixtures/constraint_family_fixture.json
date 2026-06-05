@@ -44,19 +44,19 @@
         "constraint_type": "field_access",
         "effect": "allow",
         "evaluation_class": "grant_local",
-        "fields_write_allow": ["title", "description"],
+        "allowed_write_fields": ["title", "description"],
         "condition": { "kind": "object_is_owned_by_actor" }
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
     },
     {
-      "name": "type_restriction_object_type_allow",
+      "name": "type_restriction_allowed_object_types",
       "constraint_type": "type_restriction",
       "constraint": {
         "constraint_type": "type_restriction",
         "effect": "allow",
         "evaluation_class": "grant_local",
-        "object_type_allow": ["card", "note"]
+        "allowed_object_types": ["card", "note"]
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
     },
@@ -170,7 +170,7 @@
         "subtype": "visibility",
         "effect": "deny",
         "evaluation_class": "grant_local",
-        "visibility_allow": ["joined", "invited"]
+        "allowed_history_visibility_values": ["joined", "invited"]
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
     }
@@ -228,8 +228,8 @@
         "constraint_type": "field_access",
         "effect": "allow",
         "evaluation_class": "stateless",
-        "fields_write_allow": ["title", "body"],
-        "object_type_allow": ["card", "note"]
+        "allowed_write_fields": ["title", "body"],
+        "allowed_object_types": ["card", "note"]
       },
       "expected": {
         "outcome": "shape_ok",

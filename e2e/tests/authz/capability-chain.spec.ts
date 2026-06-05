@@ -72,7 +72,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `S20 baseline ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -103,7 +103,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `cap grant ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -158,7 +158,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `cap delegate ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -219,7 +219,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `cap revoke ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -301,7 +301,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `cap overgrant ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -354,7 +354,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `cap overexpire ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -407,7 +407,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `cap audit ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",

@@ -40,7 +40,7 @@ test.describe("tsp bootstrap", () => {
       //   E — reverse channel: mock sends bob_extern's
       //       `ck.member.state{join}` via the same relationship; alice's
       //       TSP listener decrypts, verifies bob_extern's did:web
-      //       signature, and the space-admin-panel reflects the join.
+      //       signature, and the realm-admin-panel reflects the join.
       //
       // soland gap: ck.service.tsp endpoint declaration + TSP envelope verification 未实现 (TSP 是 extension profile,v1 core 不必需)
       // yougen gap: establish-tsp-button on /directory, /settings/connections

@@ -45,7 +45,7 @@ test.describe("workflow: kanban week-in-review", () => {
       // explicit space_id so writes route to this space; plain `/kanban`
       // falls back to the hardcoded demo space the test user is not a
       // member of, and every ck.flow.* event would 403.
-      const spaceId = await patPage.createSpace({
+      const spaceId = await patPage.createRealm({
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",

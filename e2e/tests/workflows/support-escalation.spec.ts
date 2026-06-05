@@ -46,7 +46,7 @@ test.describe("workflow: support escalation", () => {
 
     try {
       // Phase A — escalation space, summary in.
-      const spaceId = await alexPage.createSpace({
+      const spaceId = await alexPage.createRealm({
         title: `Support escalation #1042 ${stamp}`,
         summary: "Backend escalation for checkout failures",
         discoverability: "listed",
@@ -58,7 +58,7 @@ test.describe("workflow: support escalation", () => {
       await stepShot(alexPage.page, testInfo, "A-summary-in");
 
       // Phase B — reply chain: ask → answer → hypothesis.
-      await samPage.gotoTimelineSpace(spaceId);
+      await samPage.gotoTimelineRealm(spaceId);
       await expect(samPage.page.getByTestId("timeline")).toContainText(summary, {
         timeout: 30_000,
       });
@@ -69,7 +69,7 @@ test.describe("workflow: support escalation", () => {
         timeout: 30_000,
       });
 
-      await alexPage.gotoTimelineSpace(spaceId);
+      await alexPage.gotoTimelineRealm(spaceId);
       await expect(alexPage.page.getByTestId("timeline")).toContainText(samAsk, {
         timeout: 30_000,
       });
@@ -80,7 +80,7 @@ test.describe("workflow: support escalation", () => {
         timeout: 30_000,
       });
 
-      await samPage.gotoTimelineSpace(spaceId);
+      await samPage.gotoTimelineRealm(spaceId);
       await expect(samPage.page.getByTestId("timeline")).toContainText(alexAnswer, {
         timeout: 30_000,
       });
@@ -93,14 +93,14 @@ test.describe("workflow: support escalation", () => {
       await stepShot(samPage.page, testInfo, "B-reply-chain");
 
       // Phase C — Alex patches the original summary with root cause.
-      await alexPage.gotoTimelineSpace(spaceId);
+      await alexPage.gotoTimelineRealm(spaceId);
       await expect(alexPage.timelineEvent(summary)).toBeVisible({ timeout: 30_000 });
       await alexPage.timelineEvent(summary).getByTestId("edit-button").click();
       await alexPage.page.getByTestId("edit-composer").locator("textarea").fill(summaryEdited);
       await alexPage.page.getByTestId("save-edit-button").click();
       await expect(alexPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });
       await expect(alexPage.page.getByTestId("write-status")).toContainText(/revised/);
-      await samPage.gotoTimelineSpace(spaceId);
+      await samPage.gotoTimelineRealm(spaceId);
       await expect(samPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });
       await stepShot(alexPage.page, testInfo, "C-summary-patched");
 
@@ -112,7 +112,7 @@ test.describe("workflow: support escalation", () => {
         timeout: 30_000,
       });
 
-      await alexPage.gotoTimelineSpace(spaceId);
+      await alexPage.gotoTimelineRealm(spaceId);
       await expect(alexPage.page.getByTestId("timeline")).toContainText(samDeployed, {
         timeout: 30_000,
       });

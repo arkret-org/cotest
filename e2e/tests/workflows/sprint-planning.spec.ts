@@ -51,7 +51,7 @@ test.describe("workflow: sprint planning", () => {
 
     try {
       // Phase A — Mei spins up the sprint space with both engineers seeded.
-      const spaceId = await meiPage.createSpace({
+      const spaceId = await meiPage.createRealm({
         title: `Sprint 24 ${stamp}`,
         summary: "Sprint planning + claims",
         discoverability: "listed",
@@ -63,7 +63,7 @@ test.describe("workflow: sprint planning", () => {
       await stepShot(meiPage.page, testInfo, "A-kickoff");
 
       // Phase B — both engineers receive the kickoff and reply with claims.
-      await bobPage.gotoTimelineSpace(spaceId);
+      await bobPage.gotoTimelineRealm(spaceId);
       await expect(bobPage.page.getByTestId("timeline")).toContainText(kickoff, {
         timeout: 30_000,
       });
@@ -76,7 +76,7 @@ test.describe("workflow: sprint planning", () => {
       });
       await stepShot(bobPage.page, testInfo, "B-bob-claimed");
 
-      await carolPage.gotoTimelineSpace(spaceId);
+      await carolPage.gotoTimelineRealm(spaceId);
       await expect(carolPage.page.getByTestId("timeline")).toContainText(kickoff, {
         timeout: 30_000,
       });
@@ -90,7 +90,7 @@ test.describe("workflow: sprint planning", () => {
       await stepShot(carolPage.page, testInfo, "B-carol-claimed");
 
       // Phase C — Mei closes the loop after seeing both claims arrive.
-      await meiPage.gotoTimelineSpace(spaceId);
+      await meiPage.gotoTimelineRealm(spaceId);
       await expect(meiPage.timelineEvent(bobClaim)).toBeVisible({ timeout: 30_000 });
       await expect(meiPage.timelineEvent(carolClaim)).toBeVisible({ timeout: 30_000 });
       await meiPage.sendTimelineMessage(spaceId, meiClose);
@@ -98,7 +98,7 @@ test.describe("workflow: sprint planning", () => {
 
       // Both engineers see Mei's wrap-up.
       for (const eng of [bobPage, carolPage]) {
-        await eng.gotoTimelineSpace(spaceId);
+        await eng.gotoTimelineRealm(spaceId);
         await expect(eng.timelineEvent(meiClose)).toBeVisible({ timeout: 30_000 });
       }
     } finally {
@@ -153,7 +153,7 @@ test.describe("workflow: sprint planning", () => {
     const synthesisNote = `Remote synthesis note from Mei ${stamp}`;
 
     try {
-      const spaceId = await meiPage.createSpace({
+      const spaceId = await meiPage.createRealm({
         title: `Sprint board ${stamp}`,
         summary: "Cross-user kanban hydration",
         discoverability: "listed",

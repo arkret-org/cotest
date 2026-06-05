@@ -31,11 +31,11 @@
 
 ### Phase A — alice grant capability 给 bob
 
-1. alice createSpace,seedMembers=[bob, carol, mallory]
-2. alice 进 `/space/${spaceId}/admin` → "Capabilities" 区
+1. alice createRealm,seedMembers=[bob, carol, mallory]
+2. alice 进 `/realms/${spaceId}/admin` → "Capabilities" 区
 3. 点 "Grant" → 选 grantee = bob.did,actions = `[ck.space.write_message]`,constraints = `{ expires_at: +1h }`
 4. yougen 提交 `ck.capability.grant`,event 落到 `ck.cell:ck.component.capability.<grant_id>.v1`
-5. 断言:`/space/${spaceId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
+5. 断言:`/realms/${spaceId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
 
 ### Phase B — bob 用 capability 写消息
 
@@ -67,7 +67,7 @@
 
 ### Phase F — Audit trail
 
-22. alice 查 `/space/${spaceId}/audit` 或调 `GET /_soland/self/audit/events?space_id=<S>&kind=ck.capability.*`
+22. alice 查 `/realms/${spaceId}/audit` 或调 `GET /_soland/self/audit/events?space_id=<S>&kind=ck.capability.*`
 23. 断言:看到一行 grant、一行 delegate、一行 revoke;每行含 grantor / grantee / timestamp / actions / constraints
 
 ## Edge cases

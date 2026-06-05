@@ -27,7 +27,7 @@
 
 ### Phase A — 默认通知
 
-1. alice createSpace,seedMembers=[bob];bob acceptInvite
+1. alice createRealm,seedMembers=[bob];bob acceptInvite
 2. alice 发消息 `M1`
 3. 断言:bob 的 `/notifications` 显示 `M1` 通知;in-app badge unread=1
 

@@ -282,13 +282,13 @@ test.describe("moderation and ban", () => {
 
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
     try {
-      await alicePage.gotoSpaceAdminSection(realmId, "members");
+      await alicePage.gotoRealmAdminSection(realmId, "members");
       const malloryRow = alicePage.page.locator(
         `[data-testid="member-row"][data-member-did="${mallory.did}"]`,
       );
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
       await malloryRow.getByTestId("ban-member-button").click();
-      await expect(alicePage.page.getByTestId("space-admin-panel")).toContainText(/banned/i, {
+      await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(/banned/i, {
         timeout: 30_000,
       });
 

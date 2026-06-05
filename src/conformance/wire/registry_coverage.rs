@@ -413,7 +413,8 @@ pub fn run_error_code_registry_coverage_fixture_suite() -> Result<()> {
 ///
 /// Fixture-decoupled: asserts directly against the canonical registries +
 /// schemas so the new protocol surface can't silently drift:
-/// - `ck.self.applet.install.preview` / `ck.self.applet.install` / `ck.self.applet.revoke` operations exist;
+/// - `ck.self.applet.install.preview` / `ck.self.applet.install` / `ck.self.applet.revoke`
+///   operations exist;
 /// - `ck.schema.applet_package.v1` is registered and its schema requires `registration_epoch` /
 ///   `package_digest` / `proof` and the base `ck.profile.applet_service.v1` profile;
 /// - `applet_registration_payload` now requires `registration_epoch`;

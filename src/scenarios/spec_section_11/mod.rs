@@ -17,12 +17,12 @@
 //!   3. [`session_grant_replay_guard`] — replay of a session_grant with the same nonce MUST be
 //!      rejected by the reducer's replay guard.
 //!   4. [`controller_deactivate_cascade`] — controller deactivate cascades to: (a)
-//!      `ck.self.agent.deactivate` (per agent), (b) `ck.agent.key.revoke`, (c) `ck.capability.revoke`,
-//!      and (d) runtime endpoint revocation. fan-out is deterministic.
+//!      `ck.self.agent.deactivate` (per agent), (b) `ck.agent.key.revoke`, (c)
+//!      `ck.capability.revoke`, and (d) runtime endpoint revocation. fan-out is deterministic.
 //!   5. [`act_on_behalf_attribution`] — every event executed by an agent on behalf of the
 //!      controller MUST carry (`executed_by`, `authorization_ref`, `actor_kind`).
-//!   6. [`sidecar_circle_idempotent_ensure`] — calling `ck.self.agent.sidecar_thread.ensure` twice with
-//!      the same (controller, agent) pair MUST return the same `sidecar_circle_id`.
+//!   6. [`sidecar_circle_idempotent_ensure`] — calling `ck.self.agent.sidecar_thread.ensure` twice
+//!      with the same (controller, agent) pair MUST return the same `sidecar_circle_id`.
 //!   7. [`existence_privacy`] — a non-controller cannot probe for the existence of an
 //!      agent_principal; the answer is indistinguishable from a not-found scope.
 //!   8. [`eligibility_tristate_and_revocation`] — a capability grant's eligibility tri-state

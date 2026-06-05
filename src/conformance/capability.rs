@@ -45,7 +45,7 @@ pub fn run_capability_fixture_suite() -> Result<()> {
 
 pub fn run_capability_facet_fixture_suite() -> Result<()> {
     let grant = FacetGrant {
-        facet_allow: BTreeSet::from(["assignable".to_owned(), "stateful".to_owned()]),
+        allowed_facets: BTreeSet::from(["assignable".to_owned(), "stateful".to_owned()]),
         critical: true,
     };
     let matching = ObjectTarget {
@@ -80,7 +80,7 @@ pub fn run_capability_facet_fixture_suite() -> Result<()> {
 }
 
 struct FacetGrant {
-    facet_allow: BTreeSet<String>,
+    allowed_facets: BTreeSet<String>,
     critical: bool,
 }
 
@@ -93,8 +93,8 @@ impl FacetGrant {
     fn allows(&self, target: &ObjectTarget) -> bool {
         let _ = &target.object_type;
         match &target.facets {
-            Some(facets) => self.facet_allow.is_subset(facets),
-            None => !self.critical && self.facet_allow.is_empty(),
+            Some(facets) => self.allowed_facets.is_subset(facets),
+            None => !self.critical && self.allowed_facets.is_empty(),
         }
     }
 }

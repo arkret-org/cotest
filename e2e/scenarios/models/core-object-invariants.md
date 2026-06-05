@@ -32,7 +32,7 @@
 - 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 共享同一个 coauth；alice 与 bob 的 access token 都来自这个 coauth
 
-(都是 cotest 现有 harness 直接提供的，不需要改 `scripts/run-joint-e2e.ps1`。本 scenario 主要走 soland HTTP API，少量 yougen UI 用于 Phase A 的 Space 创建复用现有 `JointUserPage.createSpace()`。)
+(都是 cotest 现有 harness 直接提供的，不需要改 `scripts/run-joint-e2e.ps1`。本 scenario 主要走 soland HTTP API，少量 yougen UI 用于 Phase A 的 Space 创建复用现有 `JointUserPage.createRealm()`。)
 
 ## Actors
 
@@ -52,10 +52,10 @@
 
 ### Phase A — Common fields integrity（live）
 
-1. **alice** 通过 `JointUserPage.createSpace({...})` 走 `/setup` 多步向导建空间 `S`
+1. **alice** 通过 `JointUserPage.createRealm({...})` 走 `/setup` 多步向导建空间 `S`
    - title = `"models/core-object-invariants Space ${stamp}"`
    - discoverability = `listed`，join_rule = `invite`，history_visibility = `joined`
-2. 断言：`space-lifecycle-flow` 含 `created ck:space:...`，记录 `spaceId`
+2. 断言：`realm-lifecycle-flow` 含 `created ck:space:...`，记录 `spaceId`
 3. **alice** 调 `GET /_soland/self/spaces/${spaceId}`，断言返回 JSON 至少包含以下 wire 字段（spec §3 公共字段在 soland 当前 serializer 上的等价表达）：
    - `space_id` — `id:space` typed prefix，对应 spec `id`
    - `owner` — Space 的 owner DID，对应 spec `created_by` / actor 主体引用
@@ -137,7 +137,7 @@
 - **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
 - **soland gap**：Phase D Relation cardinality 检查需要 soland 实现 `ck.relation.create` reducer 与 `has_default_view` 基数表；当前 `routing/spaces/relation.rs` 存在但 cardinality enforcement 弱。整 phase 标 fixme。
 - **soland gap**：Phase E `/_soland/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → flow 派生"的 path。整 phase 标 fixme。
-- **不需要新 helper**：Phase A 复用 `JointUserPage.createSpace()`、`ensureRegistered`、`issueDevSession`、`openUserPage`，与 `messaging/triad-collaboration` 完全一致。Phase B–E 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
+- **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()`、`ensureRegistered`、`issueDevSession`、`openUserPage`，与 `messaging/triad-collaboration` 完全一致。Phase B–E 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。
 
 ## 总耗时预估

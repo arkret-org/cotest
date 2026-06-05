@@ -35,7 +35,7 @@ export type OpenUserOpts = {
   server?: SolandKey;
 };
 
-export type CreateSpaceOpts = {
+export type CreateRealmOpts = {
   title: string;
   summary?: string;
   discoverability?: string;
@@ -73,10 +73,10 @@ export class JointUserPage {
   }
 
   async gotoSetup() {
-    // yougen's /setup is the Overview; the new-space wizard lives at the
+    // yougen's /setup is the Overview; the Realm wizard lives at the
     // /setup/spaces section. yougen/src/routes.rs §SetupSection.
     await this.page.goto("/setup/spaces", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("space-lifecycle-flow")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("realm-lifecycle-flow")).toBeVisible({ timeout: 120_000 });
   }
 
   async gotoOnboarding() {
@@ -94,22 +94,22 @@ export class JointUserPage {
     await expect(this.page.getByTestId("settings-panel")).toBeVisible({ timeout: 120_000 });
   }
 
-  async gotoSpaceAdmin(spaceId: string) {
-    await this.page.goto(`/space/${spaceId}/admin`, { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
+  async gotoRealmAdmin(realmId: string) {
+    await this.page.goto(`/realms/${realmId}/admin`, { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
   }
 
-  // Navigate to a specific space admin section (Members / Access / etc.).
-  // yougen routes are `/space/:id/admin/:section`; the Overview landing
+  // Navigate to a specific Realm admin section (Members / Access / etc.).
+  // yougen routes are `/realms/:id/admin/:section`; the Overview landing
   // doesn't show member rows or other section-specific testids.
   // After the panel mounts, click the section tab to ensure active_section
   // matches the URL — yougen's initial render can momentarily fall back
   // to Overview while signals settle.
-  async gotoSpaceAdminSection(spaceId: string, section: string) {
-    await this.page.goto(`/space/${spaceId}/admin/${section}`, {
+  async gotoRealmAdminSection(realmId: string, section: string) {
+    await this.page.goto(`/realms/${realmId}/admin/${section}`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(this.page.getByTestId("space-admin-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
     const sectionLabel: Record<string, string> = {
       members: "Members",
       access: "Access",
@@ -120,7 +120,7 @@ export class JointUserPage {
     };
     const label = sectionLabel[section];
     if (label) {
-      const tabs = this.page.getByTestId("space-admin-sections");
+      const tabs = this.page.getByTestId("realm-admin-sections");
       const tab = tabs.getByRole("link", { name: label, exact: true }).first();
       if ((await tab.count()) > 0) {
         await tab.click();
@@ -128,43 +128,43 @@ export class JointUserPage {
     }
   }
 
-  async gotoTimelineSpace(spaceId: string) {
-    await this.page.goto(`/timeline/${spaceId}`, { waitUntil: "domcontentloaded" });
+  async gotoTimelineRealm(realmId: string) {
+    await this.page.goto(`/timeline/${realmId}`, { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
   }
 
-  async createSpace(opts: CreateSpaceOpts): Promise<string> {
+  async createRealm(opts: CreateRealmOpts): Promise<string> {
     await this.gotoSetup();
-    const flow = this.page.getByTestId("space-lifecycle-flow").last();
+    const flow = this.page.getByTestId("realm-lifecycle-flow").last();
 
-    await flow.getByTestId("space-title-input").fill(opts.title);
+    await flow.getByTestId("realm-title-input").fill(opts.title);
     if (opts.summary !== undefined) {
-      await flow.getByTestId("space-summary-input").fill(opts.summary);
+      await flow.getByTestId("realm-summary-input").fill(opts.summary);
     }
-    const basicsNext = flow.getByTestId("new-space-next-button").first();
+    const basicsNext = flow.getByTestId("new-realm-next-button").first();
     await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
     await basicsNext.click();
 
     if (opts.discoverability !== undefined) {
-      await flow.getByTestId("space-discoverability-input").selectOption(opts.discoverability);
+      await flow.getByTestId("realm-discoverability-input").selectOption(opts.discoverability);
     }
     if (opts.joinRule !== undefined) {
-      await flow.getByTestId("space-policy-join-rule-input").selectOption(opts.joinRule);
+      await flow.getByTestId("realm-policy-join-rule-input").selectOption(opts.joinRule);
     }
     if (opts.historyVisibility !== undefined) {
-      await flow.getByTestId("space-policy-history-visibility-input").selectOption(opts.historyVisibility);
+      await flow.getByTestId("realm-policy-history-visibility-input").selectOption(opts.historyVisibility);
     }
     if (opts.encryptionProfile !== undefined) {
       await flow.getByTestId("realm-encryption-profile-input").selectOption(opts.encryptionProfile);
     }
-    const policyNext = flow.getByTestId("new-space-next-button").first();
+    const policyNext = flow.getByTestId("new-realm-next-button").first();
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });
     await policyNext.click();
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
       await flow.getByTestId("seed-members-input").fill(opts.seedMembers.join("\n"));
     }
-    const createButton = flow.getByTestId("create-space-button");
+    const createButton = flow.getByTestId("create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await createButton.click();
 
@@ -175,26 +175,26 @@ export class JointUserPage {
     return match![1];
   }
 
-  // Drive the space admin invite-member form to invite `targetDid` into spaceId.
+  // Drive the Realm admin invite-member form to invite `targetDid` into realmId.
   // The invite-member card lives under the Members section in yougen, not the
   // Overview landing.
-  async inviteFromAdmin(spaceId: string, targetDid: string): Promise<string> {
-    await this.gotoSpaceAdminSection(spaceId, "members");
+  async inviteFromAdmin(realmId: string, targetDid: string): Promise<string> {
+    await this.gotoRealmAdminSection(realmId, "members");
     const invite = this.page.getByTestId("invite-member");
     await expect(invite).toBeVisible({ timeout: 30_000 });
     await invite.getByTestId("invite-target-input").fill(targetDid);
     await invite.getByTestId("send-invite-button").click();
-    await expect(this.page.getByTestId("space-admin-panel")).toContainText(
+    await expect(this.page.getByTestId("realm-admin-panel")).toContainText(
       new RegExp(`invited ${escapeRegex(targetDid)}`),
       { timeout: 30_000 },
     );
-    const text = await this.page.getByTestId("space-admin-panel").innerText();
+    const text = await this.page.getByTestId("realm-admin-panel").innerText();
     const match = text.match(/ck:invite:[a-zA-Z0-9:-]+/);
     expect(match, `invite id after inviting ${targetDid}: ${text}`).not.toBeNull();
     return match![0];
   }
 
-  // Accept a pending invite for this user. Yougen's space-admin invite list
+  // Accept a pending invite for this user. Yougen's realm-admin invite list
   // is session-local, so a fresh-context invitee can't see seed-member invites
   // via the UI. The old REST mutation endpoint was removed; acceptance now
   // flows through the canonical event path as an invite -> join member state.
@@ -260,7 +260,7 @@ export class JointUserPage {
   // Send a message into spaceId's timeline. Asserts persistence write-status.
   async sendTimelineMessage(spaceId: string, body: string) {
     if (!this.page.url().includes(`/timeline/${spaceId}`)) {
-      await this.gotoTimelineSpace(spaceId);
+      await this.gotoTimelineRealm(spaceId);
     }
     const writeResponse = this.page.waitForResponse(
       (response) => {
@@ -290,7 +290,7 @@ export class JointUserPage {
   // Read visible timeline event texts as an array (deduped on `body`).
   async readTimelineTexts(spaceId: string): Promise<string[]> {
     if (!this.page.url().includes(`/timeline/${spaceId}`)) {
-      await this.gotoTimelineSpace(spaceId);
+      await this.gotoTimelineRealm(spaceId);
     }
     const events = this.page.getByTestId("timeline-event");
     const count = await events.count();

@@ -16,8 +16,8 @@
 //!   next `:`) contains any of `.`, `-`, `_`. Spec tightened the regex to `^did:[a-z0-9]+:[^\s]+$`.
 //!
 //! ## events.subscribe payload typing
-//! * **`EventsSubscribeStringPayload`** — the payload of `ck.self.events.subscribe` is now the typed
-//!   `EventsSubscribeFrame` object; any literal where the payload is declared as / typed as
+//! * **`EventsSubscribeStringPayload`** — the payload of `ck.self.events.subscribe` is now the
+//!   typed `EventsSubscribeFrame` object; any literal where the payload is declared as / typed as
 //!   `string` (or `String` / `&str`) is a violation.
 //!
 //! ## cross_signing.publish CAS
@@ -740,7 +740,8 @@ mod tests {
     fn flags_events_subscribe_with_string_type() {
         // DRIFT-ALLOW: scanner self-test asserts the rule fires on a pre-tightening stringly
         // subscribe.
-        let f = scan("fn handle_cx_events_subscribe(payload: String) {} // ck.self.events.subscribe");
+        let f =
+            scan("fn handle_cx_events_subscribe(payload: String) {} // ck.self.events.subscribe");
         assert!(
             f.iter()
                 .any(|r| r.rule == ProtocolDriftRule::EventsSubscribeStringPayload)

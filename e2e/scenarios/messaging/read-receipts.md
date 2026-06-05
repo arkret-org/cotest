@@ -28,7 +28,7 @@
 
 ### Phase A — Setup
 
-1. alice createSpace `S_a`,seedMembers=[bob]
+1. alice createRealm `S_a`,seedMembers=[bob]
 2. bob acceptInvite
 3. space 默认 `disclosure = optional`(yougen 应有默认 setting,或测试侧设置)
 

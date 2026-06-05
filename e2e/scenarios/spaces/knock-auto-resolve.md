@@ -29,7 +29,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 
 ### Phase A — alice 配置 knock_restricted + 全 auto-resolve gates
 
-1. alice createSpace `S`,`join_rule=knock_restricted`
+1. alice createRealm `S`,`join_rule=knock_restricted`
 2. alice 通过 API 写 `ck:cell:space.join_policy.v1:<S>`:
    ```json
    {
@@ -52,7 +52,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
    - 按 combinator=all 校验 gates
    - 调用 verifier:`g-vc` 的 issuer 签名 OK + claim 匹配;`g-captcha` 的 challenge_proof 在 max_proof_age 内
    - 全过 → 接受 join Move
-8. 断言:`/space/<S>/admin` 成员列表含 bob
+8. 断言:`/realms/<S>/admin` 成员列表含 bob
 
 ### Phase C — mallory 自动解析失败
 

@@ -68,9 +68,9 @@
    - history_visibility = `joined`
    - seed_members = `[]`(本次不在创建阶段邀,改用空间管理面 invite 流程,这样能精确捕获 `ck.invite.create` 事件)
 2. 记录 `spaceId`
-3. **alice** 进 `/space/${spaceId}/admin`,通过 `invite-member` 邀请 `bob.did`
+3. **alice** 进 `/realms/${spaceId}/admin`,通过 `invite-member` 邀请 `bob.did`
    - 在 α 侧产生 `ck.invite.create` Event,subject_did = bob.did
-4. 断言:α 侧 `space-admin-panel` 显示 `invited bob.did`
+4. 断言:α 侧 `realm-admin-panel` 显示 `invited bob.did`
 
 ### Phase B — 联邦 push 把 invite 送到 β
 
@@ -97,7 +97,7 @@
 11. bob 触发接受;β 上产生 `ck.invite.accept` Event,refs 指向 `ck.invite.create.event_id`
 12. β 主动把 `ck.invite.accept` push 到 α (反向 federation push)
 13. α 校验后接受;α 上 reducer 收敛 bob 的 `membership=join`
-14. 断言:α 上 `/space/${spaceId}/admin` 的成员列表含 bob.did
+14. 断言:α 上 `/realms/${spaceId}/admin` 的成员列表含 bob.did
 
 ### Phase D — 双向消息推送
 

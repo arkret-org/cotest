@@ -199,22 +199,22 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
-    const spaceId = `ck:space:selftest:${Date.now()}`;
+    const realmId = `ck:space:selftest:${Date.now()}`;
     const invite = await request.post(`${baseUrl}/_soland/admin/audit-agent/invite`, {
-      data: { space_id: spaceId, invite: { event_id: "evt-selftest" } },
+      data: { realm_id: realmId, invite: { event_id: "evt-selftest" } },
     });
     expect(invite.status()).toBe(200);
     const inviteBody = await invite.json();
     expect(inviteBody.agent_id).toBe(identity.did);
     expect(inviteBody.emitted.type).toBe("ck.audit.accessed");
-    expect(inviteBody.emitted.space_id).toBe(spaceId);
+    expect(inviteBody.emitted.realm_id).toBe(realmId);
     expect(typeof inviteBody.emitted.binding_proof).toBe("string");
 
     const accessed = await (
       await request.get(`${baseUrl}/_soland/admin/audit-agent/accessed`)
     ).json();
     expect(
-      (accessed.events as Array<{ space_id: string }>).some((e) => e.space_id === spaceId),
+      (accessed.events as Array<{ realm_id: string }>).some((e) => e.realm_id === realmId),
     ).toBe(true);
 
     const jwks = await (await request.get(`${baseUrl}/jwks`)).json();

@@ -105,7 +105,7 @@ test.describe("applet bridge", () => {
 
       const events = await queryRealmEventsApi(request, aliceToken, spaceId);
       expect(JSON.stringify(events)).toContain(text);
-      await alicePage.gotoTimelineSpace(spaceId);
+      await alicePage.gotoTimelineRealm(spaceId);
       await expect(alicePage.page.getByTestId("timeline")).toContainText(text, {
         timeout: 30_000,
       });

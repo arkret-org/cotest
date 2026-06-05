@@ -85,7 +85,7 @@ test.describe("audited E2EE", () => {
   );
 
   test(
-    "audit-agent's access writes ck.audit.accessed entry; alice in space-admin/audit sees the access record",
+    "audit-agent's access writes ck.audit.accessed entry; alice in realm-admin/audit sees the access record",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-accessed");
       const report = await fileModerationReport(request, setup);

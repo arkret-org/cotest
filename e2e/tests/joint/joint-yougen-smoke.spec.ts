@@ -30,7 +30,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
       jointRealm.spaceId,
       aliceMessage,
     );
-    await jointRealm.alicePage.gotoTimelineSpace(jointRealm.spaceId);
+    await jointRealm.alicePage.gotoTimelineRealm(jointRealm.spaceId);
     await expect(jointRealm.alicePage.timelineEvent(aliceMessage)).toBeVisible({
       timeout: 30_000,
     });
@@ -63,7 +63,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     }
 
     try {
-      const spaceId = await alicePage.createSpace({
+      const spaceId = await alicePage.createRealm({
         title: `joint invite ${stamp}`,
         summary: "regression for write sync_token cursor poisoning",
         discoverability: "listed",

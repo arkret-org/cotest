@@ -127,12 +127,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
         .map_err(|e| anyhow!("expected accept on None → None; got: {e}"))?;
 
     // ── circle_a → circle_a (build a sibling next-state Flow): accept.
-    let mut flow_a_next = Flow::new(
-        flow_id()?,
-        realm_id()?,
-        "Quarterly review v2",
-        actor()?,
-    );
+    let mut flow_a_next = Flow::new(flow_id()?, realm_id()?, "Quarterly review v2", actor()?);
     flow_a_next.scope_circle_id = Some(circle_a()?);
     validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),
@@ -141,12 +136,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     .map_err(|e| anyhow!("expected accept on same-circle update; got: {e}"))?;
 
     // ── Rebind: circle_a → circle_b: reject with scope_rebind_forbidden.
-    let mut flow_b = Flow::new(
-        flow_id()?,
-        realm_id()?,
-        "Quarterly review v3",
-        actor()?,
-    );
+    let mut flow_b = Flow::new(flow_id()?, realm_id()?, "Quarterly review v3", actor()?);
     flow_b.scope_circle_id = Some(circle_b()?);
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),

@@ -42,7 +42,7 @@
 - alice 在 soland_a 上 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 完成
 - bob 在 soland_b 上完成同样的注册 + dev session
 - 两侧 DID 文档暴露 `service` 数组,其中包含 `ck.profile.principal_server.v1` 条目和 `supported_bindings`(至少 `http_json`)
-- alice 已经在 soland_a 上 createSpace,该 space 的 `service_binding_ref` 包含 soland_b 为允许的 federation peer
+- alice 已经在 soland_a 上 createRealm,该 space 的 `service_binding_ref` 包含 soland_b 为允许的 federation peer
 
 ## Steps
 

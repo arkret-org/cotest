@@ -32,7 +32,7 @@
 
 ### Phase A — Setup
 
-1. alice createSpace,seedMembers=[bob, carol]
+1. alice createRealm,seedMembers=[bob, carol]
 2. bob、carol 接受 invite
 
 ### Phase B — Reactions (OR-Set 收敛)

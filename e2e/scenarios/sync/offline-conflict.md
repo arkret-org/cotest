@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move;若离线期间 alice 改了同 cell,冲突进 `bottom_cells_banner`;bob 在 `/space/:id/admin/repair` 用 `prefer-safer-side` 决议;最终 alice/bob 两端收敛。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move;若离线期间 alice 改了同 cell,冲突进 `bottom_cells_banner`;bob 在 `/realms/:id/admin/repair` 用 `prefer-safer-side` 决议;最终 alice/bob 两端收敛。
 
 ## Spec 锚点
 
@@ -27,7 +27,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ### Phase A — Setup space
 
-1. alice createSpace,seedMembers=[bob],bob acceptInvite
+1. alice createRealm,seedMembers=[bob],bob acceptInvite
 2. alice 和 bob 各自打开 `/timeline/<S>`
 
 ### Phase B — bob 离线
@@ -53,7 +53,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
     - bob 提交 `ck.space.update { title: "renamed by bob" }`
     - 取消拦截 → 两条 move 都到 soland,但因为都基于旧 frontier,reducer 检测到 cas-register 冲突
 13. soland 把该 cell 标 `bottom_expose`,生成 `bottom_cells_banner` 数据
-14. 断言:bob `/space/<S>/admin` 进入 → `bottom-cells-banner` 可见;`bottom-cell-row` 显示该 cell 的两个 head
+14. 断言:bob `/realms/<S>/admin` 进入 → `bottom-cells-banner` 可见;`bottom-cell-row` 显示该 cell 的两个 head
 
 ### Phase E — bob 用 prefer-safer-side 决议
 

@@ -58,14 +58,14 @@
 ### Phase B — 默认 allow:invite 触发 /policy/check
 
 4. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入规则:`{ default: { decision: "allow" } }`
-5. **alice** 通过 yougen `/space/${spaceId}/admin` 邀请 **bob**(invite-member → send-invite-button)
+5. **alice** 通过 yougen `/realms/${spaceId}/admin` 邀请 **bob**(invite-member → send-invite-button)
 6. soland 在执行 `ck.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
    - `actor = alice.did`
    - `action = "ck.invite.create"`
    - `resource = { kind: "space", space_id, target: bob.did }`
    - `context = { realm_id, request_id, signed: true }`
 7. mock 返回 `{ decision: "allow", reason: "default_allow", obligations: [] }`
-8. 邀请成功;断言 `space-admin-panel` 状态文本含 `invited ${bob.did}`
+8. 邀请成功;断言 `realm-admin-panel` 状态文本含 `invited ${bob.did}`
 9. 调 `${MOCK_POLICY_SERVER_PORT}/inspect`,断言 `checks` 新增一条,`action = "ck.invite.create"`
 
 ### Phase C — 切换 deny:同样的邀请被拒,UI 显示 reason
@@ -79,7 +79,7 @@
 11. **alice** 再次走 invite-member → send-invite-button(同样邀请 bob)
 12. soland 调 mock,得到 `{ decision: "deny", reason: "external_policy_blocks_user", obligations: [] }`
 13. soland 拒绝写入,返回 HTTP `412`,body `{ errcode: "policy_denied", reason: "external_policy_blocks_user" }`
-14. 断言:yougen 在 `space-admin-panel` 渲染错误文本含 `external_policy_blocks_user`(或 testid `invite-error`)
+14. 断言:yougen 在 `realm-admin-panel` 渲染错误文本含 `external_policy_blocks_user`(或 testid `invite-error`)
 15. `${MOCK_POLICY_SERVER_PORT}/inspect.checks` 再增一条
 
 ### Phase D — deny + obligation:soland 执行 obligation
@@ -128,7 +128,7 @@
 - **yougen 缺口**:邀请失败时的 error 渲染 testid (`invite-error`) 可能需要补;policy reason 文本展示。
 - **mock 缺口**:并行任务的 `mock-policy-server.mjs` 必须支持 `POST /scenarios`(规则注入)、`GET /inspect`(checks + signed_transcript)、ed25519 签名 transcript;这是本测试的硬依赖,本 spec 不重复指定,但任何字段不一致都会让本测试 fail。
 - 每个 `test()` body 内统一在 `try { ... } finally { await Promise.allSettled([...close()]); }` 包起来,与现有 `tests/discovery/notifications.spec.ts` 风格一致。
-- alice 用 `JointUserPage.createSpace` + `JointUserPage.gotoSpaceAdmin` 驱动 invite 流;policy 注入用 `request.post(${MOCK_POLICY_SERVER_PORT}/scenarios)` 直接调 mock。
+- alice 用 `JointUserPage.createRealm` + `JointUserPage.gotoRealmAdmin` 驱动 invite 流;policy 注入用 `request.post(${MOCK_POLICY_SERVER_PORT}/scenarios)` 直接调 mock。
 - `MOCK_POLICY_SERVER_PORT` 在 helpers/env.ts 暂未导出,本测试目前直接读 `process.env.MOCK_POLICY_SERVER_PORT`;后续若稳定可提到 `helpers/env.ts` 的 `mockPolicyServerBaseUrl()`。
 
 ## 总耗时预估

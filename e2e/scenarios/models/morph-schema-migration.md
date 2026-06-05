@@ -4,7 +4,7 @@
 
 把 `models/morph.md` §4.1 (`schema_refs[]` Evolution Policy) 与 `ck.profile.morph.schema_migration_transformations.v1` opt-in profile 当作 e2e 合约:验证 soland 对 `ck.morph.schema_migrate` 与 `ck.morph.update`-on-`schema_refs[]` 两条演进路径的判定 — additive fast-path 必须接受、breaking / transformation 必须 opt-in profile + capability,未声明 profile 时 reducer fail-closed,且支持的 transformation 类型与 capability point 必须严格落在 profile 声明的清单内。同时把 `morph-type-decision-table.json` 当作 reducer 选源真源,断言 soland describe / event 路径不混淆 §4 顺序 1–4 的来源。
 
-不验证:`morph_type` create-lock(见 models 通用 invariants suite, G1.T6)、reducer 对 Morph lifecycle (`active/archived/redacted`) 的 transition 校验、Morph reducer 在跨 Realm capability `morph_type_allow` 上的判定(归 authz/capability-chain)。本文件只聚焦 *schema EVOLUTION over time*。
+不验证:`morph_type` create-lock(见 models 通用 invariants suite, G1.T6)、reducer 对 Morph lifecycle (`active/archived/redacted`) 的 transition 校验、Morph reducer 在跨 Realm capability `allowed_morph_types` 上的判定(归 authz/capability-chain)。本文件只聚焦 *schema EVOLUTION over time*。
 
 ## Spec 锚点
 
@@ -106,7 +106,7 @@
 
 ### Phase E — Type registry alignment (LIVE)
 
-21. **harness** 加载 `cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json` → 收集 `precedence[*].source` 4 项与 `precedence[*].consumed_by[*]` decision name set(`reducer.field_validation`、`capability.morph_type_allow_match`、`view.default_renderer_pick`、...)
+21. **harness** 加载 `cokret-spec/spec/v1/artifacts/registry/morph-type-decision-table.json` → 收集 `precedence[*].source` 4 项与 `precedence[*].consumed_by[*]` decision name set(`reducer.field_validation`、`capability.allowed_morph_types_match`、`view.default_renderer_pick`、...)
 22. **harness** 同时加载 `ck.profile.morph.schema_migration_transformations.v1` profile 块,断言以下结构性约束:
     - `required_event_kinds` 含 `ck.morph.schema_migrate`
     - `additional_requirements` 含 `capability_must`、`from_set_check_must`、`deterministic_transformation_must`

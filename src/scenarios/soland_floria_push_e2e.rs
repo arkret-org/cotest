@@ -74,8 +74,8 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     let floria_gateway_url = floria.base_url().to_owned();
 
     // 3. Spawn soland configured with floria as its outbound push gateway. Soland reads
-    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `ck.edge.push.notify` calls. The helper
-    //    keeps SOLAND_SPEC.extra_env and layers this per-run URL on top.
+    //    `SOLAND_PUSH_GATEWAY_URL` to learn where to forward `ck.edge.push.notify` calls. The
+    //    helper keeps SOLAND_SPEC.extra_env and layers this per-run URL on top.
     let _soland = match try_spawn_with_extra_env(
         &SOLAND_SPEC,
         &[("SOLAND_PUSH_GATEWAY_URL", floria_gateway_url.as_str())],
