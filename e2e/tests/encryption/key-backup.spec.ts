@@ -99,7 +99,7 @@ test.describe("key backup + restore", () => {
       collectA1ProtocolFailures(deviceA.page, protocolFailures);
 
       try {
-        const spaceId = await deviceA.createRealm({
+        const realmId = await deviceA.createRealm({
           title: `A1 MLS restore ${stamp}`,
           summary: "same-account fresh-profile MLS account secret recovery acceptance",
           discoverability: "unlisted",
@@ -113,7 +113,7 @@ test.describe("key backup + restore", () => {
           `A1 historical encrypted card 3 ${stamp}`,
         ];
         for (const card of historicalCards) {
-          await deviceA.sendTimelineMessage(spaceId, card);
+          await deviceA.sendTimelineMessage(realmId, card);
         }
 
         await setupRecoveryVaultPassphrase(deviceA.page, passphrase);
@@ -145,14 +145,14 @@ test.describe("key backup + restore", () => {
           timeout: 90_000,
         });
         await unlockMlsAccountSecret(deviceB.page, passphrase);
-        await deviceB.gotoTimelineRealm(spaceId);
+        await deviceB.gotoTimelineRealm(realmId);
         for (const card of historicalCards) {
           await expect(deviceB.timelineEvent(card)).toBeVisible({ timeout: 90_000 });
         }
 
         const deviceBCard = `A1 restored device writes encrypted card ${stamp}`;
-        await deviceB.sendTimelineMessage(spaceId, deviceBCard);
-        await deviceA.gotoTimelineRealm(spaceId);
+        await deviceB.sendTimelineMessage(realmId, deviceBCard);
+        await deviceA.gotoTimelineRealm(realmId);
         await deviceA.page.reload({ waitUntil: "domcontentloaded" });
         await expect(deviceA.timelineEvent(deviceBCard)).toBeVisible({ timeout: 90_000 });
 
@@ -191,7 +191,7 @@ test.describe("key backup + restore", () => {
       const restoredDescription = `A2 restored-device encrypted detail ${stamp}`;
 
       try {
-        const spaceId = await deviceA.createRealm({
+        const realmId = await deviceA.createRealm({
           title: `A2 MLS Kanban ${stamp}`,
           summary: "kanban encrypted detail MLS restore acceptance",
           discoverability: "unlisted",
@@ -201,7 +201,7 @@ test.describe("key backup + restore", () => {
         });
         const boardId = await createKanbanBoardListAndCard(
           deviceA.page,
-          spaceId,
+          realmId,
           boardTitle,
           listTitle,
           cardTitle,
@@ -242,7 +242,7 @@ test.describe("key backup + restore", () => {
           timeout: 90_000,
         });
         await unlockMlsAccountSecret(deviceB.page, passphrase);
-        await deviceB.page.goto(`/kanban/${spaceId}/board/${boardId}`, {
+        await deviceB.page.goto(`/kanban/${realmId}/board/${boardId}`, {
           waitUntil: "domcontentloaded",
         });
         await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
@@ -258,7 +258,7 @@ test.describe("key backup + restore", () => {
         await updateCardDescription(deviceB.page, cardTitle, restoredDescription);
         await expectEncryptedKanbanSaveErrorsAbsent(deviceB.page);
 
-        await deviceA.page.goto(`/kanban/${spaceId}/board/${boardId}`, {
+        await deviceA.page.goto(`/kanban/${realmId}/board/${boardId}`, {
           waitUntil: "domcontentloaded",
         });
         await expect(deviceA.page.getByTestId("kanban-panel")).toBeVisible({
@@ -416,12 +416,12 @@ async function unlockMlsAccountSecret(page: Page, passphrase: string) {
 
 async function createKanbanBoardListAndCard(
   page: Page,
-  spaceId: string,
+  realmId: string,
   boardTitle: string,
   listTitle: string,
   cardTitle: string,
 ): Promise<string> {
-  await page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
   await page.getByTestId("new-board-toggle").click();
   await page.getByTestId("new-board-title-input").fill(boardTitle);

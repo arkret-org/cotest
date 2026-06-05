@@ -671,7 +671,7 @@ fn scan_discussion_space_ref(
             rule: ProtocolDriftRule::ForbiddenWireField,
             matched_literal: token.to_string(),
             message: format!(
-                "`{token}` is forbidden on the wire (Realm/Space inversion); \
+                "`{token}` is forbidden on the wire; \
                  CKP-0007 also hard-removed its successor `discussion_realm_ref`. \
                  Use `scope_circle_id` (Flow / Space / Morph)."
             ),

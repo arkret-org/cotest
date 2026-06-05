@@ -24,14 +24,14 @@ test.describe("admin section route @fully-implemented", () => {
     });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `Admin section probe ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
 
       // Land directly on /admin/members via hard navigation (no tab click).
-      await alicePage.page.goto(`/realms/${spaceId}/admin/members`, {
+      await alicePage.page.goto(`/realms/${realmId}/admin/members`, {
         waitUntil: "domcontentloaded",
       });
       await expect(alicePage.page.getByTestId("realm-admin-panel")).toBeVisible(

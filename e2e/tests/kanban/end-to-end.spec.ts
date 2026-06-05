@@ -54,11 +54,11 @@ function recordFloorViolations(page: Page): string[] {
 
 async function buildEncryptedBoardAndCard(
   page: Page,
-  spaceId: string,
+  realmId: string,
   stamp: number,
   cardTitle: string,
 ): Promise<void> {
-  await page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
   await page.getByTestId("new-board-toggle").click();
   await page.getByTestId("new-board-title-input").fill(`Enc Board ${stamp}`);
@@ -109,18 +109,18 @@ test.describe("kanban end-to-end", () => {
     const cardB = `Card B ${stamp}`;
 
     try {
-      // Create a space so the kanban view has a selected_space context.
-      const spaceId = await alicePage.createRealm({
-        title: `Kanban Space ${stamp}`,
+      // Create a Realm so the kanban view has a selected Realm context.
+      const realmId = await alicePage.createRealm({
+        title: `Kanban Realm ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-      // Kanban scopes writes to selected_space; navigate with the explicit
-      // space_id so the route resolves to the freshly-created space (plain
+      // Kanban scopes writes to the selected Realm; navigate with the explicit
+      // realm_id so the route resolves to the freshly-created Realm (plain
       // `/kanban` falls back to the first preview, which on a fresh session
-      // is the hardcoded demo space the test user is NOT a member of, and
+      // is the hardcoded demo Realm the test user is NOT a member of, and
       // every ck.flow.* event would 403 with capability_denied).
-      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await alicePage.page.getByTestId("new-board-toggle").click();
       await alicePage.page
@@ -244,12 +244,12 @@ test.describe("kanban end-to-end", () => {
     const third = `Third-${stamp}`;
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `Kanban Column Drag ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await alicePage.page.getByTestId("new-board-toggle").click();
       await alicePage.page.getByTestId("new-board-title-input").fill(`Column Drag ${stamp}`);
@@ -306,12 +306,12 @@ test.describe("kanban end-to-end", () => {
     const third = `Third-${stamp}`;
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `Kanban Order ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await alicePage.page.getByTestId("new-board-toggle").click();
       await alicePage.page.getByTestId("new-board-title-input").fill(`Order Board ${stamp}`);
@@ -435,7 +435,7 @@ test.describe("kanban end-to-end", () => {
       // Encrypted Realm — mirrors the yougen setup-wizard default. This is the
       // single line that distinguishes this case from the plaintext happy
       // paths above and arms the content-encryption floor.
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `Encrypted Kanban ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -443,7 +443,7 @@ test.describe("kanban end-to-end", () => {
         encryptionProfile: "mls_rfc9420",
       });
 
-      await alicePage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await alicePage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
 
       // Board + one column + one card (title only).
@@ -556,14 +556,14 @@ test.describe("kanban end-to-end", () => {
     const floorViolations = recordFloorViolations(alicePage.page);
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `Encrypted Kanban Synthesis ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
       });
-      await buildEncryptedBoardAndCard(alicePage.page, spaceId, stamp, cardTitle);
+      await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
 
       await alicePage.page
         .getByTestId("kanban-card")
@@ -644,14 +644,14 @@ test.describe("kanban end-to-end", () => {
     const floorViolations = recordFloorViolations(alicePage.page);
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `Encrypted Kanban Discussion ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
       });
-      await buildEncryptedBoardAndCard(alicePage.page, spaceId, stamp, cardTitle);
+      await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
 
       await alicePage.page
         .getByTestId("kanban-card")

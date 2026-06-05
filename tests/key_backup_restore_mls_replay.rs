@@ -1,6 +1,6 @@
 //! CT-11 — Key backup restore + MLS history replay (entrypoint).
 //!
-//! Alice has device-A in an E2EE space with 3 messages; uploads an
+//! Alice has device-A in an E2EE Realm with 3 messages; uploads an
 //! Argon2id + XChaCha20-Poly1305 key backup envelope per
 //! `key-management.md` §7.2. Device-A is "lost" (revoked). A new
 //! device-B onboards, claims the backup with an SSK proof, recovers

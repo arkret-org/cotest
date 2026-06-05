@@ -43,7 +43,7 @@ pub use e2ee::{
     run_device_message_negative_fixture_suite, run_megolm_ratchet_kdf_chain_check,
     run_megolm_ratcheting_fixture_suite, run_mls_e2ee_basic_fixture_suite,
 };
-pub use federation::run_multi_space_federation_fixture_suite;
+pub use federation::run_multi_realm_federation_fixture_suite;
 pub use history::{
     run_history_visibility_fixture_suite, run_history_visibility_projection_matrix_check,
     run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,

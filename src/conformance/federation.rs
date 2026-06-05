@@ -25,7 +25,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 let target = input
                     .and_then(|value| value.get("target_uri"))
                     .and_then(Value::as_str)
-                    .unwrap_or("/_cokret/peer/federation/transactions/demo");
+                    .unwrap_or("/_cokret/peer/events");
                 let body = input
                     .and_then(|value| value.get("body"))
                     .cloned()
@@ -190,10 +190,10 @@ fn validate_origin_destination(
 
 fn register_history_head(
     table: &mut HashMap<String, String>,
-    space_id: &str,
+    realm_id: &str,
     head: &str,
 ) -> FederationVerdict {
-    match table.insert(space_id.to_owned(), head.to_owned()) {
+    match table.insert(realm_id.to_owned(), head.to_owned()) {
         Some(existing) if existing != head => FederationVerdict::Quarantined,
         _ => FederationVerdict::Accepted,
     }

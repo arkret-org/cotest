@@ -6,9 +6,9 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 
 ## Spec 锚点
 
-- `models/space-and-place.md` §3.4 — knock_restricted 行 + auto_resolve 全 true 的 OR 合成
-- `models/space-and-place.md` §3.5 — Auto-resolve 路径(直接 join Move)
-- `models/space-and-place.md` §3.3.1 — Gate 类型(claim_required、challenge_response、parent_membership 都是 auto_resolve)
+- `governance/join-policy.md` §4 — knock_restricted 行 + auto_resolve 全 true 的 OR 合成
+- `governance/join-policy.md` §6 — Auto-resolve 路径(直接 join Move)
+- `governance/join-policy.md` §3.1 — Gate 类型(claim_required、challenge_response、parent_membership 都是 auto_resolve)
 - `authz/constraint-schema.md` §10 — claim presentation
 
 ## 拓扑
@@ -19,7 +19,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 
 | 名字 | 角色 |
 |---|---|
-| alice | space owner |
+| alice | Realm owner |
 | bob | applicant,持 valid claims + 能过 captcha |
 | mallory | applicant,无 claims,不能过 |
 | claim-issuer | mock,签发 VC(`did:web:vc-issuer.example`)|
@@ -29,8 +29,8 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 
 ### Phase A — alice 配置 knock_restricted + 全 auto-resolve gates
 
-1. alice createRealm `S`,`join_rule=knock_restricted`
-2. alice 通过 API 写 `ck:cell:space.join_policy.v1:<S>`:
+1. alice createRealm `R`,`join_rule=knock_restricted`
+2. alice 通过 API 写 `ck:cell:realm.join_policy.v1:<R>`:
    ```json
    {
      "gates": [
@@ -52,7 +52,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
    - 按 combinator=all 校验 gates
    - 调用 verifier:`g-vc` 的 issuer 签名 OK + claim 匹配;`g-captcha` 的 challenge_proof 在 max_proof_age 内
    - 全过 → 接受 join Move
-8. 断言:`/realms/<S>/admin` 成员列表含 bob
+8. 断言:`/realms/<R>/admin` 成员列表含 bob
 
 ### Phase C — mallory 自动解析失败
 
@@ -64,7 +64,7 @@ spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且�
 ### Phase D — Cooldown gate(独立 deny)
 
 13. alice 把 join policy 加一条 gate:`{ kind: "cooldown", min_interval_since_leave: "P30D" }`
-14. bob 主动 leave space:`ck.member.state{leave}`
+14. bob 主动 leave Realm:`ck.member.state{leave}`
 15. 立刻试重新 join:gate_proofs 仍正确,但 cooldown gate 命中
 16. 断言:reducer 拒,reason `cooldown_gate_blocking`,独立于 combinator(spec §3.3.1)
 

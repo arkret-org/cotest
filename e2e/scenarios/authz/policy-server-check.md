@@ -58,11 +58,11 @@
 ### Phase B — 默认 allow:invite 触发 /policy/check
 
 4. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入规则:`{ default: { decision: "allow" } }`
-5. **alice** 通过 yougen `/realms/${spaceId}/admin` 邀请 **bob**(invite-member → send-invite-button)
+5. **alice** 通过 yougen `/realms/${realmId}/admin` 邀请 **bob**(invite-member → send-invite-button)
 6. soland 在执行 `ck.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
    - `actor = alice.did`
    - `action = "ck.invite.create"`
-   - `resource = { kind: "space", space_id, target: bob.did }`
+   - `resource = { kind: "realm", realm_id, target: bob.did }`
    - `context = { realm_id, request_id, signed: true }`
 7. mock 返回 `{ decision: "allow", reason: "default_allow", obligations: [] }`
 8. 邀请成功;断言 `realm-admin-panel` 状态文本含 `invited ${bob.did}`

@@ -140,11 +140,11 @@ test.describe("private read marker", () => {
     // @blocking-on: soland#models-private-read-cursor-gap
     // @user-promise: e2e/scenarios/models/private-read-marker.md
     // @expected-live-by: 2026Q3
-    "E10.2 E2EE space notification redaction: server-side GET /_soland/self/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
+    "E10.2 E2EE Realm notification redaction: server-side GET /_soland/self/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
     async () => {
       // spec: discovery/push-notifications.md §4 + private-objects.md §3
-      // soland gap: encrypted-space notification projection redaction path not wired;
-      //   no per_space_mls encryption helper in cotest harness yet.
+      // soland gap: encrypted-realm notification projection redaction path not wired;
+      //   no per_realm_mls encryption helper in cotest harness yet.
     },
   );
 
@@ -152,10 +152,11 @@ test.describe("private read marker", () => {
     // @blocking-on: soland#models-private-read-cursor-gap
     // @user-promise: e2e/scenarios/models/private-read-marker.md
     // @expected-live-by: 2026Q3
-    "E10.3 discussion realm read marker is isolated from parent space marker (account_data key m.read_cursor:<realm_id> is per-realm)",
+    "E10.3 Circle-scoped private Flow read marker is isolated from Realm-default Flow marker (same realm_id, different read_scope)",
     async () => {
-      // spec: models/private-objects.md §3 + models/realm-links.md
-      // soland gap: discussion realm CRUD + per-realm account_data namespacing not yet live.
+      // spec: models/private-objects.md §2 + models/circle.md §7.2
+      // soland gap: per-read_scope account_data namespacing and Circle-scoped
+      // private Flow helpers are not yet live.
     },
   );
 });

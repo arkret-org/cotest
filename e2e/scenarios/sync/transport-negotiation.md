@@ -15,7 +15,7 @@
 - `cokret-spec/spec/v1/zh/sync/service-http-binding.md` §4 — 服务间 origin/destination service DID 绑定
 - `cokret-spec/spec/v1/zh/sync/service-http-binding.md` §5 — 错误 envelope、404 unrecognized_endpoint、405 method_not_allowed
 - `cokret-spec/spec/v1/zh/sync/federation.md` §3.2 — RFC 9421 HTTP Message Signature 在 federation 调用上的具体要求
-- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 — push 协议(复用 `POST /_cokret/peer/federation/push-operations` 在当前 implementation 路径下)
+- `cokret-spec/spec/v1/zh/sync/federation.md` §4.1 — push 协议(复用 `POST /_cokret/peer/peer/events` 在当前 implementation 路径下)
 
 ## 拓扑
 
@@ -50,7 +50,7 @@
 
 1. **soland_a → soland_b**:测试 harness 触发 alice 在 server A 上对 bob 发 `ck.invite.create`(remote DID)
 2. 期望:soland_a 自动构造 federation push 请求
-   - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/federation/push-operations`
+   - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/peer/events`
    - Method: `POST`
    - Headers:
      - `Content-Type: application/json`
@@ -68,15 +68,15 @@
    - 验证 `Content-Digest` 与 body 一致
    - 验证 `Destination-Service-DID` 是自身 DID
    - 验证 nonce / `created` ts 在窗口内(防 replay)
-4. 断言:`POST /_cokret/peer/federation/push-operations` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
+4. 断言:`POST /_cokret/peer/peer/events` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
 5. 断言:bob 通过 `GET /_soland/self/notifications` 在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
 ### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
 
 6. **soland_a** 通过 `GET ${SOLAND_B_PUBLIC_URL}/_cokret/describe` 读取 server B 的 `supported_bindings`
-   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ck.profile.binding.websocket.v1", upgrade_path: "/_cokret/peer/federation/stream"}`
+   - 期望返回中包含 `{kind: "http_json", ...}` 和 `{kind: "websocket_frame", extension_profile_required: "ck.profile.binding.websocket.v1", upgrade_path: "/_cokret/peer/events stream binding"}`
 7. **soland_a** 发起 WebSocket 升级:
-   - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/federation/stream`(`wss://` 在生产、`ws://` 在测试)
+   - URL: `${SOLAND_B_PUBLIC_URL}/_cokret/peer/events stream binding`(`wss://` 在生产、`ws://` 在测试)
    - Headers:`Upgrade: websocket`、`Connection: Upgrade`、`Sec-WebSocket-Key: <random>`、`Sec-WebSocket-Version: 13`、`Sec-WebSocket-Protocol: ck.federation.v1`
    - 同时携带 RFC 9421 `Signature` 对 upgrade 请求的 covered components 签名(handshake 阶段)
 8. **soland_b** 接受 upgrade,返回 `101 Switching Protocols`,后续帧使用 `ck.federation.v1` subprotocol
@@ -109,7 +109,7 @@
 
 ## Observable assertions (合并清单)
 
-- Phase A:POST `/_cokret/peer/federation/push-operations` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
+- Phase A:POST `/_cokret/peer/peer/events` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
 - Phase A:bob `GET /_soland/self/notifications` 看到 invite
 - Phase B:`GET /_cokret/describe` 含 `supported_bindings[].kind=websocket_frame`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ck.federation.v1`
@@ -121,7 +121,7 @@
 ## Edge cases / sub-tests
 
 - **E8.1 签名过期 / 密钥轮换**
-  - soland_a 用一个已过期的 keyid 签 POST /federation/push-operations
+  - soland_a 用一个已过期的 keyid 签 POST /peer/events
   - soland_b MUST 返回 `401` + body `{error: {code: "signature_expired" 或 "unknown_keyid", key_rotation_hint: {current_keyid, valid_from}}}`
   - soland_a 收到 hint 后用新 keyid 重签 → 第二次请求 200
   - 断言:server B 没有把过期签名 push 入库;新签名后入库成功

@@ -1,12 +1,10 @@
-// Discussion track upgrade to a Circle-scoped Flow (CKP-0007).
+// Discussion track upgrade to a Circle-scoped private Flow (CKP-0007).
 // Contract: e2e/scenarios/messaging/discussion-upgrade.md
 // Spec refs:
 //   - models/flow-and-message.md §5, §5.1 (scope_circle_id on Flow)
-//   - models/circle.md (Circle primitive, encryption boundary)
-//   - models/space-hierarchy.md §3-§4 (parent/child confirmed edge)
+//   - models/circle.md (Circle primitive, membership and encryption boundary)
+//   - models/relation.md (confidential_discussion_of)
 //   - discovery/read-receipts.md §2.5 (scope override)
-// History: prior to CKP-0007 the same upgrade lived under Flow.discussion_realm_ref;
-// that field is hard-removed and no longer accepted on the wire.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
@@ -14,7 +12,6 @@ import {
   createSharedRealmViaApi,
   listReadMarkersViaApi,
   listRealmEventsViaApi,
-  sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -32,7 +29,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("discussion upgrade to child space", () => {
+test.describe("discussion upgrade to Circle-scoped private Flow", () => {
   test("API inline discussion track preserves flow_id and thread_id", async ({
     request,
   }) => {
@@ -43,10 +40,10 @@ test.describe("discussion upgrade to child space", () => {
       fixture.aliceToken,
       signedEventEnvelope({
         actorDid: fixture.alice.did,
-        realmId: fixture.parentId,
+        realmId: fixture.realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowIdFromRealmId(fixture.parentId),
+          flow_id: flowIdFromRealmId(fixture.realmId),
           track_name: "discussion",
           thread_id: "discussion",
           content: { kind: "ck.content.text", body },
@@ -59,75 +56,74 @@ test.describe("discussion upgrade to child space", () => {
     const events = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
-      fixture.parentId,
+      fixture.realmId,
     );
     const message = events.find((event) =>
-      JSON.stringify(event.payload).includes(body),
+      JSON.stringify(eventPayload(event)).includes(body),
     );
-    expect(message?.payload).toMatchObject({
-      flow_id: flowIdFromRealmId(fixture.parentId),
+    expect(eventPayload(message)).toMatchObject({
+      flow_id: flowIdFromRealmId(fixture.realmId),
       track_name: "discussion",
       thread_id: "discussion",
     });
   });
 
-  test("API parent and child discussion realms keep message routes separate", async ({
+  test("private discussion Flow stays on the same Realm frontier and carries Circle scope", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(request, "route-separate");
-    const childId = await createSharedRealmViaApi(
+    const fixture = await createDiscussionFixture(request, "same-realm");
+    const publicFlowId = await createFlowViaApi(
       request,
+      fixture.aliceToken,
       fixture.alice,
-      fixture.aliceToken,
-      fixture.bob,
-      fixture.bobToken,
-      { title: `child route ${Date.now()}`, historyVisibility: "shared" },
+      fixture.realmId,
+      "public F1",
     );
-    const parentMessage = await sendPlaintextMessageViaApi(
+    const before = await createDiscussionMessageViaApi(
       request,
       fixture.aliceToken,
-      fixture.parentId,
-      `parent route ${Date.now()}`,
-      { actorDid: fixture.alice.did },
+      fixture.alice,
+      fixture.realmId,
+      publicFlowId,
+      "public discussion",
     );
-    const childMessage = await sendPlaintextMessageViaApi(
+    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+      request,
+      fixture,
+      publicFlowId,
+      { members: [fixture.alice, fixture.bob] },
+    );
+    const after = await createDiscussionMessageViaApi(
       request,
       fixture.aliceToken,
-      childId,
-      `child route ${Date.now()}`,
-      { actorDid: fixture.alice.did },
+      fixture.alice,
+      fixture.realmId,
+      promoted.privateFlowId,
+      "private discussion",
     );
 
-    const parentEvents = await listRealmEventsViaApi(
+    const events = await listRealmEventsViaApi(
       request,
       fixture.bobToken,
-      fixture.parentId,
+      fixture.realmId,
     );
-    const childEvents = await listRealmEventsViaApi(
-      request,
-      fixture.bobToken,
-      childId,
+    const ids = events.map((event) => event.event_id);
+    expect(ids).toEqual(expect.arrayContaining([before.event_id, after.event_id]));
+    expect(JSON.stringify(eventById(events, after.event_id))).toContain(
+      promoted.circleId,
     );
-    expect(parentEvents.map((event) => event.event_id)).toContain(
-      parentMessage.event_id,
-    );
-    expect(parentEvents.map((event) => event.event_id)).not.toContain(
-      childMessage.event_id,
-    );
-    expect(childEvents.map((event) => event.event_id)).toContain(
-      childMessage.event_id,
-    );
-    expect(childEvents.map((event) => event.event_id)).not.toContain(
-      parentMessage.event_id,
-    );
+    expect(eventPayload(eventById(events, after.event_id))).toMatchObject({
+      flow_id: promoted.privateFlowId,
+      track_name: "discussion",
+    });
   });
 
-  test("API child-only member cannot read parent joined-history messages", async ({
+  test("Realm member outside the Circle cannot read Circle-scoped discussion messages", async ({
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser("child-only-alice");
-    const carol = uniqueUser("child-only-carol");
+    const alice = uniqueUser("circle-visibility-alice");
+    const carol = uniqueUser("circle-visibility-carol");
     await Promise.all([
       ensureRegistered(request, alice),
       ensureRegistered(request, carol),
@@ -136,112 +132,116 @@ test.describe("discussion upgrade to child space", () => {
       issueDevSession(request, alice),
       issueDevSession(request, carol),
     ]);
-    const parentId = await createSharedRealmViaApi(
-      request,
-      alice,
-      aliceToken,
-      alice,
-      aliceToken,
-      { title: `parent joined ${stamp}`, historyVisibility: "joined" },
-    );
-    const parentMessage = await sendPlaintextMessageViaApi(
-      request,
-      aliceToken,
-      parentId,
-      `parent hidden ${stamp}`,
-      { actorDid: alice.did },
-    );
-    await createSharedRealmViaApi(
+    const realmId = await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
       carol,
       carolToken,
+      { title: `circle visibility ${stamp}`, historyVisibility: "shared" },
+    );
+    const publicFlowId = await createFlowViaApi(
+      request,
+      aliceToken,
+      alice,
+      realmId,
+      "public visible F1",
+    );
+    const publicMessage = await createDiscussionMessageViaApi(
+      request,
+      aliceToken,
+      alice,
+      realmId,
+      publicFlowId,
+      "realm-visible message",
+    );
+    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+      request,
       {
-        title: `child only ${stamp}`,
-        historyVisibility: "shared",
+        alice,
+        bob: carol,
+        aliceToken,
+        bobToken: carolToken,
+        realmId,
       },
+      publicFlowId,
+      { members: [alice] },
+    );
+    const privateMessage = await createDiscussionMessageViaApi(
+      request,
+      aliceToken,
+      alice,
+      realmId,
+      promoted.privateFlowId,
+      "circle-private message",
     );
 
-    const response = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(parentId)}&limit=50`,
-      { headers: authHeaders(carolToken) },
-    );
-    if (response.status() === 404) {
-      expect(response.status()).toBe(404);
-      return;
-    }
-    expect(response.status()).toBe(200);
-    const body = await response.json();
-    expect(
-      (body.events ?? []).map(
-        (event: Record<string, unknown>) => event.event_id,
-      ),
-    ).not.toContain(parentMessage.event_id);
+    const carolEvents = await listRealmEventsViaApi(request, carolToken, realmId);
+    const carolIds = carolEvents.map((event) => event.event_id);
+    expect(carolIds).toContain(publicMessage.event_id);
+    expect(carolIds).not.toContain(privateMessage.event_id);
   });
 
-  test("API child discussion receipt is scoped to the child realm", async ({
+  test("Circle-scoped read receipt uses realm_id and remains scoped to the private Flow", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(request, "child-receipt");
-    const childId = await createSharedRealmViaApi(
+    const fixture = await createDiscussionFixture(request, "circle-receipt");
+    const publicFlowId = await createFlowViaApi(
       request,
+      fixture.aliceToken,
       fixture.alice,
-      fixture.aliceToken,
-      fixture.bob,
-      fixture.bobToken,
-      { title: `child receipt ${Date.now()}`, historyVisibility: "shared" },
+      fixture.realmId,
+      "receipt public F1",
     );
-    const childMessage = await sendPlaintextMessageViaApi(
+    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+      request,
+      fixture,
+      publicFlowId,
+      { members: [fixture.alice, fixture.bob] },
+    );
+    const privateMessage = await createDiscussionMessageViaApi(
       request,
       fixture.aliceToken,
-      childId,
-      `child receipt ${Date.now()}`,
-      { actorDid: fixture.alice.did },
+      fixture.alice,
+      fixture.realmId,
+      promoted.privateFlowId,
+      "private receipt target",
     );
     const sentAt = new Date();
     const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
       headers: authHeaders(fixture.bobToken),
       data: {
         kind: "ck.receipt.read",
-        realm_id: childId,
+        realm_id: fixture.realmId,
         actor_id: fixture.bob.did,
         device_id: fixture.bob.deviceId,
         sent_at: sentAt.toISOString(),
         expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-        payload: { event_id: childMessage.event_id },
+        payload: { event_id: privateMessage.event_id },
       },
     });
     expect(receipt.status()).toBe(200);
-
     expect(
-      await listReadMarkersViaApi(request, fixture.aliceToken, childId),
-    ).toHaveLength(0);
-    expect(
-      await listReadMarkersViaApi(
-        request,
-        fixture.aliceToken,
-        fixture.parentId,
-      ),
+      await listReadMarkersViaApi(request, fixture.aliceToken, fixture.realmId),
     ).toHaveLength(0);
   });
 
-  test("alice creates Flow F1 in S_parent; alice and bob exchange messages on F1's inline discussion track", async ({
+  test("alice and bob exchange messages on a Realm-default Flow's inline discussion track", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(request, "fixme-inline-flow");
+    const fixture = await createDiscussionFixture(request, "inline-flow");
     const flowId = await createFlowViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
-      fixture.parentId,
+      fixture.realmId,
       "inline F1",
     );
     const aliceMessage = await createDiscussionMessageViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
-      fixture.parentId,
+      fixture.realmId,
       flowId,
       "F1 alice inline",
     );
@@ -249,7 +249,7 @@ test.describe("discussion upgrade to child space", () => {
       request,
       fixture.bobToken,
       fixture.bob,
-      fixture.parentId,
+      fixture.realmId,
       flowId,
       "F1 bob inline",
     );
@@ -257,332 +257,182 @@ test.describe("discussion upgrade to child space", () => {
     const events = await listRealmEventsViaApi(
       request,
       fixture.aliceToken,
-      fixture.parentId,
+      fixture.realmId,
     );
     const ids = events.map((event) => event.event_id);
     expect(ids).toEqual(
       expect.arrayContaining([aliceMessage.event_id, bobMessage.event_id]),
     );
     for (const id of [aliceMessage.event_id, bobMessage.event_id]) {
-      expect(
-        events.find((event) => event.event_id === id)?.payload,
-      ).toMatchObject({ flow_id: flowId, track_name: "discussion" });
+      expect(eventPayload(eventById(events, id))).toMatchObject({
+        flow_id: flowId,
+        track_name: "discussion",
+      });
     }
   });
 
-  test("alice promotes F1 to a Circle scope; F1.scope_circle_id = C.id; ck.circle.create on parent Realm", async ({
+  test("promotion creates Circle, private Flow, and confidential_discussion_of relation", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(request, "fixme-promote");
-    const circleId = typedId("circle");
-    const flowId = await createFlowViaApi(
+    const fixture = await createDiscussionFixture(request, "promote");
+    const publicFlowId = await createFlowViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
-      fixture.parentId,
-      "promoted F1",
+      fixture.realmId,
+      "promoted public F1",
     );
-    await setFlowScopeCircleViaApi(
+    const promoted = await promoteDiscussionToPrivateFlowViaApi(
       request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.parentId,
-      flowId,
-      circleId,
+      fixture,
+      publicFlowId,
+      { members: [fixture.alice, fixture.bob] },
     );
 
-    const parentEvents = await listRealmEventsViaApi(
+    const events = await listRealmEventsViaApi(
       request,
-      fixture.bobToken,
-      fixture.parentId,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    expect(events.map((event) => event.event_kind)).toEqual(
+      expect.arrayContaining([
+        "ck.circle.create",
+        "ck.flow.create",
+        "ck.relation.create",
+      ]),
     );
     expect(
-      parentEvents.find((event) => event.event_kind === "ck.flow.update")
-        ?.payload,
-    ).toMatchObject({
-      flow_id: flowId,
-      patch: { scope_circle_id: { $op: "set", value: circleId } },
+      events.some(
+        (event) =>
+          event.event_kind === "ck.flow.update" &&
+          JSON.stringify(eventPayload(event)).includes("scope_circle_id"),
+      ),
+    ).toBe(false);
+    expect(eventPayload(findFlowCreate(events, promoted.privateFlowId))).toMatchObject({
+      object: {
+        id: promoted.privateFlowId,
+        realm_id: fixture.realmId,
+        scope_circle_id: promoted.circleId,
+      },
     });
-    // The Circle creation event lives on the parent Realm; child Spaces
-    // are no longer minted as part of the discussion-upgrade flow.
-    expect(parentEvents.map((event) => event.event_kind)).toContain(
-      "ck.circle.create",
-    );
+    expect(eventPayload(findRelationCreate(events, promoted.relationId))).toMatchObject({
+      relation_id: promoted.relationId,
+      relation_kind: "confidential_discussion_of",
+      from_ref: promoted.privateFlowId,
+      to_ref: publicFlowId,
+      scope_circle_id: promoted.circleId,
+    });
   });
 
-  test("after promotion, new messages on F1 route to S_discussion, not S_parent; F1 comments view stitches pre+post messages from both spaces", async ({
+  test("private discussion Flow can be MLS-backed while the Realm-default Flow stays plaintext", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(
+    const fixture = await createDiscussionFixture(request, "circle-e2ee");
+    const publicFlowId = await createFlowViaApi(
       request,
-      "fixme-route-after-promote",
-    );
-    const childId = await createSharedRealmViaApi(
-      request,
-      fixture.alice,
       fixture.aliceToken,
-      fixture.bob,
+      fixture.alice,
+      fixture.realmId,
+      "e2ee public F1",
+    );
+    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+      request,
+      fixture,
+      publicFlowId,
+      {
+        members: [fixture.alice, fixture.bob],
+        circleEncryptionProfile: "mls_rfc9420",
+      },
+    );
+
+    const events = await listRealmEventsViaApi(
+      request,
       fixture.bobToken,
-      {
-        title: `route promoted child ${Date.now()}`,
-        historyVisibility: "shared",
-      },
+      fixture.realmId,
     );
-    const flowId = await createFlowViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.parentId,
-      "routed F1",
-    );
-    const pre = await createDiscussionMessageViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.parentId,
-      flowId,
-      "pre promotion",
-    );
-    await setFlowDiscussionRealmViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.parentId,
-      flowId,
-      childId,
-    );
-    const post = await createDiscussionMessageViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      childId,
-      flowId,
-      "post promotion",
-    );
-
-    const parentIds = (
-      await listRealmEventsViaApi(request, fixture.bobToken, fixture.parentId)
-    ).map((event) => event.event_id);
-    const childIds = (
-      await listRealmEventsViaApi(request, fixture.bobToken, childId)
-    ).map((event) => event.event_id);
-    expect(parentIds).toContain(pre.event_id);
-    expect(parentIds).not.toContain(post.event_id);
-    expect(childIds).toContain(post.event_id);
-    expect(childIds).not.toContain(pre.event_id);
-  });
-
-  test("carol invited to S_discussion (not S_parent); carol sees only post-promotion messages; pre-promotion stays in S_parent and is invisible to carol", async ({
-    request,
-  }) => {
-    const stamp = Date.now();
-    const alice = uniqueUser("fixme-child-carol-alice");
-    const bob = uniqueUser("fixme-child-carol-bob");
-    const carol = uniqueUser("fixme-child-carol");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-      ensureRegistered(request, carol),
-    ]);
-    const [aliceToken, bobToken, carolToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-      issueDevSession(request, carol),
-    ]);
-    const parentId = await createSharedRealmViaApi(
-      request,
-      alice,
-      aliceToken,
-      bob,
-      bobToken,
-      {
-        title: `parent no cascade ${stamp}`,
-        historyVisibility: "joined",
-      },
-    );
-    const childId = await createSharedRealmViaApi(
-      request,
-      alice,
-      aliceToken,
-      carol,
-      carolToken,
-      {
-        title: `child no cascade ${stamp}`,
-        historyVisibility: "joined",
-      },
-    );
-    const flowId = await createFlowViaApi(
-      request,
-      aliceToken,
-      alice,
-      parentId,
-      "carol F1",
-    );
-    const pre = await createDiscussionMessageViaApi(
-      request,
-      aliceToken,
-      alice,
-      parentId,
-      flowId,
-      "parent-only pre promotion",
-    );
-    const post = await createDiscussionMessageViaApi(
-      request,
-      aliceToken,
-      alice,
-      childId,
-      flowId,
-      "child-only post promotion",
-    );
-
-    const parentResponse = await request.get(
-      `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(parentId)}&limit=50`,
-      { headers: authHeaders(carolToken) },
-    );
-    if (parentResponse.status() === 200) {
-      const body = await parentResponse.json();
-      expect(
-        (body.events ?? []).map(
-          (event: Record<string, unknown>) => event.event_id,
-        ),
-      ).not.toContain(pre.event_id);
-    } else {
-      expect(parentResponse.status()).toBe(404);
-    }
-    const childIds = (
-      await listRealmEventsViaApi(request, carolToken, childId)
-    ).map((event) => event.event_id);
-    expect(childIds).toContain(post.event_id);
-  });
-
-  test("S_discussion can be E2EE while S_parent stays plaintext; parent's MLS key cannot decrypt child (spec §9)", async ({
-    request,
-  }) => {
-    const fixture = await createDiscussionFixture(request, "fixme-child-e2ee");
-    const childId = await createSharedRealmViaApi(
-      request,
-      fixture.alice,
-      fixture.aliceToken,
-      fixture.bob,
-      fixture.bobToken,
-      {
-        title: `e2ee child ${Date.now()}`,
-        historyVisibility: "shared",
-        encryptionProfile: "mls_rfc9420",
-      },
-    );
-
-    const parentRealm = (
-      await listRealmEventsViaApi(request, fixture.bobToken, fixture.parentId)
-    ).find((event) => event.event_kind === "ck.realm.create");
-    const childRealm = (
-      await listRealmEventsViaApi(request, fixture.bobToken, childId)
-    ).find((event) => event.event_kind === "ck.realm.create");
-    expect(parentRealm?.payload).toMatchObject({
+    const realmCreate = events.find((event) => event.event_kind === "ck.realm.create");
+    const circleCreate = findCircleCreate(events, promoted.circleId);
+    expect(eventPayload(realmCreate)).toMatchObject({
       object: { encryption_profile: "none" },
     });
-    expect(childRealm?.payload).toMatchObject({
+    expect(eventPayload(circleCreate)).toMatchObject({
       object: { encryption_profile: "mls_rfc9420" },
     });
   });
 
-  test("E21.1 orphan scope_circle_id update is projected verbatim", async ({
+  test("unknown scope_circle_id on Flow create is rejected", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(
-      request,
-      "fixme-orphan-discussion",
-    );
-    const flowId = await createFlowViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.parentId,
-      "orphan F1",
-    );
+    const fixture = await createDiscussionFixture(request, "orphan-scope");
     const orphanCircleId = typedId("circle");
     const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(fixture.aliceToken),
       data: signedEventEnvelope({
         actorDid: fixture.alice.did,
-        realmId: fixture.parentId,
+        realmId: fixture.realmId,
+        kind: "ck.flow.create",
+        payload: {
+          object: flowObject(
+            fixture.realmId,
+            typedId("flow"),
+            fixture.alice,
+            "orphan scoped Flow",
+            { scopeCircleId: orphanCircleId },
+          ),
+        },
+      }),
+    });
+    const body = await response.text();
+    expect(response.status(), body).not.toBe(200);
+    expect(body).toMatch(/circle_unknown|circle_not_found|circle_realm_mismatch/);
+  });
+
+  test("scope_circle_id rebind on an existing Flow is rejected", async ({
+    request,
+  }) => {
+    const fixture = await createDiscussionFixture(request, "rebind-scope");
+    const flowId = await createFlowViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.alice,
+      fixture.realmId,
+      "rebind F1",
+    );
+    const circleId = await createDiscussionCircleViaApi(request, fixture, {
+      members: [fixture.alice],
+    });
+
+    const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      headers: authHeaders(fixture.aliceToken),
+      data: signedEventEnvelope({
+        actorDid: fixture.alice.did,
+        realmId: fixture.realmId,
         kind: "ck.flow.update",
         payload: {
           target_ref: flowId,
           flow_id: flowId,
-          patch: { scope_circle_id: { $op: "set", value: orphanCircleId } },
+          patch: { scope_circle_id: { $op: "set", value: circleId } },
         },
       }),
     });
-    expect(response.status()).toBe(200);
-    const events = await listRealmEventsViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.parentId,
-    );
-    expect(
-      events.find(
-        (event) =>
-          event.event_kind === "ck.flow.update" &&
-          JSON.stringify(event.payload).includes(orphanCircleId),
-      )?.payload,
-    ).toMatchObject({
-      flow_id: flowId,
-      patch: { scope_circle_id: { $op: "set", value: orphanCircleId } },
-    });
-  });
-
-  test("E21.F read-receipts policy override: S_discussion.disclosure=required overrides S_parent.disclosure=optional", async ({
-    request,
-  }) => {
-    const fixture = await createDiscussionFixture(
-      request,
-      "fixme-receipt-override",
-    );
-    const childId = await createSharedRealmViaApi(
-      request,
-      fixture.alice,
-      fixture.aliceToken,
-      fixture.bob,
-      fixture.bobToken,
-      { title: `receipt override ${Date.now()}`, historyVisibility: "shared" },
-    );
-    const childMessage = await createDiscussionMessageViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      childId,
-      flowIdFromRealmId(childId),
-      "receipt override child",
-    );
-    const sentAt = new Date();
-    const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
-      headers: authHeaders(fixture.bobToken),
-      data: {
-        kind: "ck.receipt.read",
-        realm_id: childId,
-        actor_id: fixture.bob.did,
-        device_id: fixture.bob.deviceId,
-        sent_at: sentAt.toISOString(),
-        expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-        payload: { event_id: childMessage.event_id, disclosure: "required" },
-      },
-    });
-    expect(receipt.status()).toBe(200);
-    expect(
-      await listReadMarkersViaApi(
-        request,
-        fixture.aliceToken,
-        fixture.parentId,
-      ),
-    ).toHaveLength(0);
+    const body = await response.text();
+    expect(response.status(), body).not.toBe(200);
+    expect(body).toContain("scope_rebind_forbidden");
   });
 });
+
+type DiscussionFixture = {
+  alice: JointUser;
+  bob: JointUser;
+  aliceToken: string;
+  bobToken: string;
+  realmId: string;
+};
 
 async function createDiscussionFixture(
   request: APIRequestContext,
   label: string,
-) {
+): Promise<DiscussionFixture> {
   const stamp = Date.now();
   const alice = uniqueUser(`${label}-alice`);
   const bob = uniqueUser(`${label}-bob`);
@@ -594,18 +444,19 @@ async function createDiscussionFixture(
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const parentId = await createSharedRealmViaApi(
+  const realmId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,
     bob,
     bobToken,
     {
-      title: `${label} parent ${stamp}`,
+      title: `${label} realm ${stamp}`,
       historyVisibility: "shared",
     },
   );
-  return { alice, bob, aliceToken, bobToken, parentId };
+  await joinRealmMemberViaApi(request, aliceToken, alice, realmId, alice.did);
+  return { alice, bob, aliceToken, bobToken, realmId };
 }
 
 async function createFlowViaApi(
@@ -614,6 +465,7 @@ async function createFlowViaApi(
   actor: JointUser,
   realmId: string,
   title: string,
+  opts: { scopeCircleId?: string } = {},
 ) {
   const flowId = typedId("flow");
   await submitSignedEventApi(
@@ -624,24 +476,7 @@ async function createFlowViaApi(
       realmId,
       kind: "ck.flow.create",
       payload: {
-        object: {
-          id: flowId,
-          schema: "ck.schema.flow.v1",
-          realm_id: realmId,
-          title: `${title} ${Date.now()}`,
-          stage: "draft",
-          stage_changed_at: new Date().toISOString(),
-          tracks: {
-            discussion: {
-              is_primary: true,
-              profile: "discussion",
-            },
-          },
-          created_by: actor.did,
-          created_at: new Date().toISOString(),
-          space_id: realmId,
-          fields: {},
-        },
+        object: flowObject(realmId, flowId, actor, title, opts),
       },
     }),
     { context: `create flow ${title}` },
@@ -649,64 +484,205 @@ async function createFlowViaApi(
   return flowId;
 }
 
-async function setFlowScopeCircleViaApi(
-  request: APIRequestContext,
-  token: string,
-  actor: JointUser,
+function flowObject(
   realmId: string,
   flowId: string,
-  circleId: string,
+  actor: JointUser,
+  title: string,
+  opts: { scopeCircleId?: string } = {},
 ) {
-  // CKP-0007: promoting a Flow to its own confidential scope binds the
-  // Flow to a Circle via `scope_circle_id`. The pre-CKP-0007 wire field
-  // `discussion_realm_ref` is in `forbidden-wire-fields` (hard_reject).
+  return {
+    id: flowId,
+    schema: "ck.schema.flow.v1",
+    realm_id: realmId,
+    title: `${title} ${Date.now()}`,
+    stage: "draft",
+    stage_changed_at: new Date().toISOString(),
+    tracks: {
+      discussion: {
+        is_primary: true,
+        profile: "discussion",
+      },
+    },
+    ...(opts.scopeCircleId ? { scope_circle_id: opts.scopeCircleId } : {}),
+    created_by: actor.did,
+    created_at: new Date().toISOString(),
+    fields: {},
+  };
+}
+
+async function promoteDiscussionToPrivateFlowViaApi(
+  request: APIRequestContext,
+  fixture: DiscussionFixture,
+  publicFlowId: string,
+  opts: {
+    members: JointUser[];
+    circleEncryptionProfile?: "none" | "mls_rfc9420";
+  },
+) {
+  const circleId = await createDiscussionCircleViaApi(request, fixture, opts);
+  const privateFlowId = await createFlowViaApi(
+    request,
+    fixture.aliceToken,
+    fixture.alice,
+    fixture.realmId,
+    "private discussion",
+    { scopeCircleId: circleId },
+  );
+  const relationId = await createConfidentialDiscussionRelationViaApi(
+    request,
+    fixture.aliceToken,
+    fixture.alice,
+    fixture.realmId,
+    privateFlowId,
+    publicFlowId,
+    circleId,
+  );
+  return { circleId, privateFlowId, relationId };
+}
+
+async function createDiscussionCircleViaApi(
+  request: APIRequestContext,
+  fixture: DiscussionFixture,
+  opts: {
+    members: JointUser[];
+    circleEncryptionProfile?: "none" | "mls_rfc9420";
+  },
+) {
+  const circleId = typedId("circle");
   await submitSignedEventApi(
     request,
-    token,
+    fixture.aliceToken,
     signedEventEnvelope({
-      actorDid: actor.did,
-      realmId,
+      actorDid: fixture.alice.did,
+      realmId: fixture.realmId,
       kind: "ck.circle.create",
       payload: {
         object: {
           id: circleId,
           schema: "ck.schema.circle.v1",
-          realm_id: realmId,
-          title: `circle for ${flowId}`,
+          realm_id: fixture.realmId,
+          title: `private discussion ${Date.now()}`,
           display: {
-            short_name: "F1",
+            short_name: "DISC",
             color_token: "indigo",
-            symbol: { kind: "glyph", glyph: "shield" },
+            symbol: { kind: "glyph", glyph: "lock" },
           },
           directory_visibility: "members",
           join_rule: "invite",
           history_visibility: "joined",
-          encryption_profile: "mls_rfc9420",
+          encryption_profile: opts.circleEncryptionProfile ?? "none",
           state: "active",
-          created_by: actor.did,
+          created_by: fixture.alice.did,
           created_at: new Date().toISOString(),
         },
       },
     }),
     { context: `create circle ${circleId}` },
   );
+  for (const member of opts.members) {
+    await joinRealmMemberViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.alice,
+      fixture.realmId,
+      member.did,
+    );
+    await submitCircleMemberStateViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.alice,
+      fixture.realmId,
+      circleId,
+      member.did,
+      "active",
+    );
+  }
+  return circleId;
+}
+
+async function joinRealmMemberViaApi(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  realmId: string,
+  memberDid: string,
+) {
   await submitSignedEventApi(
     request,
     token,
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.flow.update",
+      kind: "ck.member.state",
       payload: {
-        target_ref: flowId,
-        flow_id: flowId,
-        patch: {
-          scope_circle_id: { $op: "set", value: circleId },
-        },
+        actor_id: memberDid,
+        member: memberDid,
+        membership: "join",
+        delivery_status: "unroutable",
       },
     }),
-    { context: `set scope_circle_id ${flowId}` },
+    { context: `join ${memberDid}` },
   );
+}
+
+async function submitCircleMemberStateViaApi(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  realmId: string,
+  circleId: string,
+  memberDid: string,
+  state: "active" | "removed" | "banned" | "left" | "invited",
+) {
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: actor.did,
+      realmId,
+      kind: "ck.circle.member.state",
+      payload: {
+        circle_id: circleId,
+        actor: memberDid,
+        actor_id: memberDid,
+        state,
+        sender: actor.did,
+      },
+    }),
+    { context: `circle ${circleId} member ${memberDid} -> ${state}` },
+  );
+}
+
+async function createConfidentialDiscussionRelationViaApi(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  realmId: string,
+  privateFlowId: string,
+  publicFlowId: string,
+  circleId: string,
+) {
+  const relationId = typedId("relation");
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: actor.did,
+      realmId,
+      kind: "ck.relation.create",
+      payload: {
+        relation_id: relationId,
+        relation_kind: "confidential_discussion_of",
+        from_ref: privateFlowId,
+        to_ref: publicFlowId,
+        scope_circle_id: circleId,
+        fields: { role: "promoted_discussion" },
+      },
+    }),
+    { context: `link private discussion ${privateFlowId}` },
+  );
+  return relationId;
 }
 
 async function createDiscussionMessageViaApi(
@@ -733,4 +709,56 @@ async function createDiscussionMessageViaApi(
     context: `discussion message ${body}`,
   });
   return { event_id: String(envelope.event_id) };
+}
+
+function eventById(
+  events: Array<Record<string, unknown>>,
+  eventId: string,
+): Record<string, unknown> {
+  const event = events.find((candidate) => candidate.event_id === eventId);
+  expect(event, `event ${eventId}`).toBeTruthy();
+  return event!;
+}
+
+function findCircleCreate(
+  events: Array<Record<string, unknown>>,
+  circleId: string,
+): Record<string, unknown> {
+  return findEventByPayload(events, "ck.circle.create", circleId);
+}
+
+function findFlowCreate(
+  events: Array<Record<string, unknown>>,
+  flowId: string,
+): Record<string, unknown> {
+  return findEventByPayload(events, "ck.flow.create", flowId);
+}
+
+function findRelationCreate(
+  events: Array<Record<string, unknown>>,
+  relationId: string,
+): Record<string, unknown> {
+  return findEventByPayload(events, "ck.relation.create", relationId);
+}
+
+function findEventByPayload(
+  events: Array<Record<string, unknown>>,
+  kind: string,
+  needle: string,
+): Record<string, unknown> {
+  const event = events.find(
+    (candidate) =>
+      candidate.event_kind === kind &&
+      JSON.stringify(eventPayload(candidate)).includes(needle),
+  );
+  expect(event, `${kind} carrying ${needle}`).toBeTruthy();
+  return event!;
+}
+
+function eventPayload(event: Record<string, unknown> | undefined): Record<string, unknown> {
+  const payload = event?.payload;
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return payload as Record<string, unknown>;
+  }
+  return (event ?? {}) as Record<string, unknown>;
 }

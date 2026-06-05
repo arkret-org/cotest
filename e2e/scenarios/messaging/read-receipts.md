@@ -2,14 +2,14 @@
 
 ## 目标
 
-验证 read receipt 三层语义:client preference(关闭自己的 receipt 发送)、space disclosure policy(`optional`/`required`/`disabled`)、actor-private read marker(多设备同步)。alice 关掉自己的 receipt,bob 看不到 alice 读;alice 重开,bob "catch up";policy=required 时强制覆盖 client 偏好。
+验证 read receipt 三层语义:client preference(关闭自己的 receipt 发送)、Realm disclosure policy(`optional`/`required`/`disabled`)、actor-private read marker(多设备同步)。alice 关掉自己的 receipt,bob 看不到 alice 读;alice 重开,bob "catch up";policy=required 时强制覆盖 client 偏好。
 
 不验证:E2EE 中 receipt 的具体加密路径(留到后续)、基础消息收发(messaging/triad-collaboration)。
 
 ## Spec 锚点
 
 - `discovery/read-receipts.md` §2.1-§2.4 — ephemeral receipt 格式 + debounce + flush
-- `discovery/read-receipts.md` §2.5 — Space disclosure policy(`disabled` / `optional` / `required` / `scope_overrides_allowed`)
+- `discovery/read-receipts.md` §2.5 — Realm disclosure policy(`disabled` / `optional` / `required` / `scope_overrides_allowed`)
 - `discovery/read-receipts.md` §3.1-§3.2 — Read Marker actor-private(多设备同步)
 - `discovery/client-preferences.md` — Read receipt 偏好键
 
@@ -30,13 +30,13 @@
 
 1. alice createRealm `S_a`,seedMembers=[bob]
 2. bob acceptInvite
-3. space 默认 `disclosure = optional`(yougen 应有默认 setting,或测试侧设置)
+3. Realm 默认 `disclosure = optional`(yougen 应有默认 setting,或测试侧设置)
 
 ### Phase B — 默认开启,alice 读 10 条 → bob 看到 receipt
 
 4. bob 在 `S_a` 连发 `M1..M10`
 5. alice 进 timeline,自顶向下滚动阅读
-6. yougen 客户端用 debounce window(≥1s)合并多个 read,在 alice 停顿时发 **一个** `ck.receipt.read` ephemeral,payload `{ space_id, up_to_event: M10.event_id }`
+6. yougen 客户端用 debounce window(≥1s)合并多个 read,在 alice 停顿时发 **一个** `ck.receipt.read` ephemeral,payload `{ realm_id, up_to_event: M10.event_id }`
 7. 断言:bob 视图 `M10` 旁出现 alice 的"已读"头像 + 时间戳(`read-receipt-alice` testid)
 8. bob 视图的 `M9..M1` 也应隐式显示已读(receipt cover 到 `M10` 表示前面都读了)
 
@@ -58,17 +58,17 @@
 19. 客户端发 `ck.receipt.read { up_to_event: M20.event_id }`
 20. 断言:bob 视图 `M16..M20` 都显示 alice 已读;`M11..M15` 仍**未** 显示 alice 已读(receipt 不回溯到关闭期间的消息)
 
-### Phase E — Space disclosure = `required` 强制开
+### Phase E — Realm disclosure = `required` 强制开
 
 21. alice(owner)把 `S_a` 的 read receipt policy 改成 `disclosure = required`
 22. alice 在自己的 `/settings/privacy` 把"Send read receipts"再次关闭(尝试 bypass)
-23. yougen 客户端:检测到 space policy = required,把 toggle 锁定;UI 提示"This space requires read receipts"
+23. yougen 客户端:检测到 Realm policy = required,把 toggle 锁定;UI 提示"This Realm requires read receipts"
 24. bob 再发 `M21`
 25. alice 读
 26. 即使 client preference = false,policy = required 强制让客户端发 receipt
 27. 断言:bob 看到 alice 已读 `M21`
 
-### Phase F — Space disclosure = `disabled`
+### Phase F — Realm disclosure = `disabled`
 
 28. alice 把 policy 改成 `disabled`
 29. bob 发 `M22`
@@ -98,7 +98,7 @@
 - **E22.1 高频滚动 debounce**:alice 1s 内滚过 100 条消息,客户端只发 1 个 receipt(覆盖最远的 event)
 - **E22.2 redacted message receipt**:bob 的 `M5` 被 redact,alice receipt 指向 `M10` 仍合法
 - **E22.3 multi-device receipt 协调**:alice 同时在 device-1/device-2 各读到不同位置;Sync Service 用 HLC 决定 broadcast 哪个 receipt(spec §3.2 末尾)
-- **E22.4 E2EE space 中的 receipt**:E2EE space 中 receipt 是否能"contains keyword" 类规则?客户端本地求值,服务端只见 blind wake(spec push-notifications.md §4.5)
+- **E22.4 E2EE Realm 中的 receipt**:E2EE Realm 中 receipt 是否能"contains keyword" 类规则?客户端本地求值,服务端只见 blind wake(spec push-notifications.md §4.5)
 - **E22.5 toggle 在阅读中**:alice 在读到 `M50` 时关 toggle → 客户端 flush 已 debounce 的 receipt 还是丢弃?spec §2.3 说允许 flush 或 discard,看 yougen 实现
 
 ## Implementation notes

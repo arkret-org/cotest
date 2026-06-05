@@ -11,9 +11,8 @@
 //! are operational, not protocol:
 //!   - heap growth MUST be sub-linear in event count once the steady state is reached (a small
 //!     per-actor and per-Realm working set is expected, but a linear-in-N leak is a bug);
-//!   - p50 / p95 read latency for `GET /_cokret/self/events?realms=...` MUST stay within a
-//!     constant factor of the empty-store latency as the log grows (index-backed read, not full
-//!     scan);
+//!   - p50 / p95 read latency for `GET /_cokret/self/events?realms=...` MUST stay within a constant
+//!     factor of the empty-store latency as the log grows (index-backed read, not full scan);
 //!   - anchor-store row growth MUST be linear in event count (no pathological write amplification),
 //!     but the rate MUST be stable (no super-linear gc-then-rebuild storms).
 //!

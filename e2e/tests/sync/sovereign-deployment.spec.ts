@@ -82,7 +82,7 @@ test.describe("sovereign deployment", () => {
     expect(directory.results).toEqual([]);
     expect(directory.boundary).toBe("external_via_enclave");
 
-    const proxy = await request.post(`${solandBaseUrl("beta")}/_cokret/peer/federation/proxy`, {
+    const proxy = await request.post(`${solandBaseUrl("beta")}/_soland/self/deployment/enclave-proxy`, {
       data: {
         actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
@@ -97,7 +97,7 @@ test.describe("sovereign deployment", () => {
       "beta",
       `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
     );
-    expect(audit.entries.map((entry: any) => entry.action)).toContain("boundary.federation_proxy");
+    expect(audit.entries.map((entry: any) => entry.action)).toContain("boundary.enclave_proxy");
   });
 
   test("E7.2 network outage: soland_main <-> soland_enclave 失联时 enclave 走 store-and-forward,而非客户端 offline outbox", async ({

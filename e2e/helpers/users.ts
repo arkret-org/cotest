@@ -257,10 +257,10 @@ export class JointUserPage {
     }
   }
 
-  // Send a message into spaceId's timeline. Asserts persistence write-status.
-  async sendTimelineMessage(spaceId: string, body: string) {
-    if (!this.page.url().includes(`/timeline/${spaceId}`)) {
-      await this.gotoTimelineRealm(spaceId);
+  // Send a message into realmId's timeline. Asserts persistence write-status.
+  async sendTimelineMessage(realmId: string, body: string) {
+    if (!this.page.url().includes(`/timeline/${realmId}`)) {
+      await this.gotoTimelineRealm(realmId);
     }
     const writeResponse = this.page.waitForResponse(
       (response) => {
@@ -288,9 +288,9 @@ export class JointUserPage {
   }
 
   // Read visible timeline event texts as an array (deduped on `body`).
-  async readTimelineTexts(spaceId: string): Promise<string[]> {
-    if (!this.page.url().includes(`/timeline/${spaceId}`)) {
-      await this.gotoTimelineRealm(spaceId);
+  async readTimelineTexts(realmId: string): Promise<string[]> {
+    if (!this.page.url().includes(`/timeline/${realmId}`)) {
+      await this.gotoTimelineRealm(realmId);
     }
     const events = this.page.getByTestId("timeline-event");
     const count = await events.count();

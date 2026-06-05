@@ -29,7 +29,7 @@
 1. alice 在 device-1 `/onboarding`,选 "Sign in with OIDC"
 2. 重定向 mock IdP → 自动返回 ID token
 3. coauth OIDC bridge 校验 → 创建/绑定 DID → 颁 `ck.session.grant`(TTL 30 分钟)
-4. yougen 拿 `{ did, session_token, refresh_token, control_space_id }`
+4. yougen 拿 `{ did, session_token, refresh_token, control_realm_id }`
 5. 断言:`/_soland/self/account/me` 返回 alice.did
 
 ### Phase B — Device 2 via 设备授权链

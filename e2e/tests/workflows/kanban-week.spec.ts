@@ -41,16 +41,16 @@ test.describe("workflow: kanban week-in-review", () => {
     const planTask = `Plan tomorrow's standup agenda ${stamp}`;
 
     try {
-      // Phase A — kanban opens against a fresh space. Navigate with the
-      // explicit space_id so writes route to this space; plain `/kanban`
-      // falls back to the hardcoded demo space the test user is not a
+      // Phase A — kanban opens against a fresh Realm. Navigate with the
+      // explicit realm_id so writes route to this Realm; plain `/kanban`
+      // falls back to the hardcoded demo Realm the test user is not a
       // member of, and every ck.flow.* event would 403.
-      const spaceId = await patPage.createRealm({
+      const realmId = await patPage.createRealm({
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
-      await patPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await patPage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await patPage.page.getByTestId("new-board-toggle").click();
       await patPage.page
@@ -162,10 +162,10 @@ test.describe("workflow: kanban week-in-review", () => {
         .getAttribute("data-space-container-id");
       expect(todayListId ?? "").toMatch(/^ck:space:/);
       await expect
-        .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue))
+        .poll(async () => flowState(request, realmId, patToken, prFlowIdValue))
         .toBe("active");
       await expect
-        .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue))
+        .poll(async () => flowState(request, realmId, patToken, specFlowIdValue))
         .toBe("active");
 
       // list-archive-button is hover-revealed on the column header — hover
@@ -178,12 +178,12 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue), {
+        .poll(async () => flowState(request, realmId, patToken, prFlowIdValue), {
           timeout: 30_000,
         })
         .toBe("archived");
       await expect
-        .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue), {
+        .poll(async () => flowState(request, realmId, patToken, specFlowIdValue), {
           timeout: 30_000,
         })
         .toBe("archived");
@@ -198,12 +198,12 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => flowState(request, spaceId, patToken, prFlowIdValue), {
+        .poll(async () => flowState(request, realmId, patToken, prFlowIdValue), {
           timeout: 30_000,
         })
         .toBe("active");
       await expect
-        .poll(async () => flowState(request, spaceId, patToken, specFlowIdValue), {
+        .poll(async () => flowState(request, realmId, patToken, specFlowIdValue), {
           timeout: 30_000,
         })
         .toBe("active");
@@ -216,12 +216,12 @@ test.describe("workflow: kanban week-in-review", () => {
 
 async function flowState(
   request: APIRequestContext,
-  spaceId: string,
+  realmId: string,
   token: string,
   flowId: string,
 ): Promise<string | undefined> {
   const resp = await request.get(
-    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(spaceId)}&include_terminal=true`,
+    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}&include_terminal=true`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (resp.status() !== 200) {

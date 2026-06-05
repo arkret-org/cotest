@@ -8,15 +8,15 @@
 //   - §5.1 cross-domain invite
 //
 // Soland implementation status (2026-05 audit):
-//   ✓ POST /_cokret/peer/federation/push-operations handler routed and ingests events
-//   ✓ GET  /_cokret/peer/federation/pull-operations cursor-based
+//   ✓ POST /_cokret/peer/events handler routed and ingests events
+//   ✓ GET  /_cokret/peer/events cursor-based
 //   ✓ Per-event accepted / rejected partial-accept
-//   ✓ Idempotent by operation_id
+//   ✓ Idempotent by event_id
 //   ✓ SOLAND_FEDERATION_PEERS env wires peer URLs + peer service DIDs
-//   ✓ Outbound push worker POSTs local invite/message operations to peers
+//   ✓ Outbound push worker POSTs local invite/message Events to peers
 //   ✓ ck.invite.create, ck.member.state join, and ck.message.create trigger federation push
-//   ✓ backfill-operations pulls peer pages and ingests missing local operations
-//   ✓ operation-frontier exposes deterministic operation-id coverage
+//   ✓ peer events query pulls peer pages and ingests missing local Events
+//   ✓ peer events frontier exposes deterministic Event ID coverage
 //   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
 //   ✗ service_binding_ref.reducer_profile_digest NOT validated
 
@@ -30,13 +30,13 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   acceptInviteApi,
   authHeaders,
-  backfillFederationOperations,
+  queryPeerEventsApi,
   createRealmApi,
   listInvitesApi,
-  makeOperation,
-  operationFrontierApi,
-  pushFederationOperations,
-  rawPushFederationOperations,
+  makeFederationEvent,
+  peerEventFrontierApi,
+  pushFederationEvents,
+  rawPushFederationEvents,
   queryRealmEventsApi,
   sendMessageApi,
   typedId,
@@ -138,7 +138,7 @@ async function waitForEventBody(
 }
 
 test.describe("cross-server federation", () => {
-  test("both soland instances expose /federation/push-operations and /federation/pull-operations endpoints", async ({
+  test("both soland instances expose peer events submit and query endpoints", async ({
     request,
   }) => {
     // Sanity: both servers up and exposing the federation surface.
@@ -149,7 +149,7 @@ test.describe("cross-server federation", () => {
 
     // POST without auth/body should not 404 — endpoint MUST exist.
     const pushProbe = await request.post(
-      `${solandBaseUrl("beta")}/_cokret/peer/federation/push-operations`,
+      `${solandBaseUrl("beta")}/_cokret/peer/events`,
       {
         data: {},
       },
@@ -157,7 +157,7 @@ test.describe("cross-server federation", () => {
     expect(pushProbe.status()).not.toBe(404);
 
     const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?realm_id=ck:realm:probe`,
+      `${solandBaseUrl("beta")}/_cokret/peer/events?realms=ck:realm:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
   });
@@ -255,11 +255,11 @@ test.describe("cross-server federation", () => {
     }
   });
 
-  test("α→β federation push smoke delivers an invite-shaped operation to β pull + invite APIs", async ({
+  test("α→β federation push smoke delivers an invite-shaped Event to β pull + invite APIs", async ({
     request,
   }) => {
     // API-first smoke for G3.S0: the real β federation ingestion and pull
-    // surfaces accept an α-origin operation. The fully automatic yougen
+    // surfaces accept an α-origin Event. The fully automatic yougen
     // invite/accept round trip remains pinned in the richer fixme below.
     const stamp = Date.now();
     const alice = uniqueUser(`s2-outbound-alice-${stamp}`);
@@ -279,9 +279,9 @@ test.describe("cross-server federation", () => {
     );
 
     const realmId = typedId("realm");
-    const inviteOperation = makeOperation({
+    const inviteEvent = makeFederationEvent({
       realmId,
-      objectType: "ck.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: bob.did,
         member: bob.did,
@@ -292,40 +292,40 @@ test.describe("cross-server federation", () => {
       },
     });
 
-    const push = await pushFederationOperations(request, [inviteOperation], {
+    const push = await pushFederationEvents(request, [inviteEvent], {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       server: "beta",
       realmId,
-      serviceBindingRef: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
+      idempotencyKey: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
     });
-    expect(push.accepted).toContain(inviteOperation.operation_id);
+    expect(push.accepted).toContain(inviteEvent.event_id);
     expect(push.rejected ?? []).toEqual([]);
 
-    const replay = await pushFederationOperations(request, [inviteOperation], {
+    const replay = await pushFederationEvents(request, [inviteEvent], {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       server: "beta",
       realmId,
-      serviceBindingRef: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
+      idempotencyKey: `${solandServiceDid("alpha")}#cotest-cross-server-smoke`,
     });
-    expect(replay.accepted).toContain(inviteOperation.operation_id);
+    expect(replay.accepted).toContain(inviteEvent.event_id);
     expect(replay.rejected ?? []).toEqual([]);
 
-    const pull = await request.get(
-      `${solandBaseUrl("beta")}/_cokret/peer/federation/pull-operations?realm_id=${encodeURIComponent(realmId)}&limit=10`,
-    );
-    expect(pull.ok()).toBeTruthy();
-    const pullBody = await pull.json();
+    const pullBody = await queryPeerEventsApi(request, {
+      server: "beta",
+      realmId,
+      limit: 10,
+    });
     expect(
-      (pullBody.operations ?? []).map(
-        (op: { operation_id: string }) => op.operation_id,
+      (pullBody.events ?? []).map(
+        (entry: { event?: { event_id?: string } }) => entry.event?.event_id,
       ),
-    ).toContain(inviteOperation.operation_id);
+    ).toContain(inviteEvent.event_id);
     expect(
-      (pullBody.operations ?? []).filter(
-        (op: { operation_id: string }) =>
-          op.operation_id === inviteOperation.operation_id,
+      (pullBody.events ?? []).filter(
+        (entry: { event?: { event_id?: string } }) =>
+          entry.event?.event_id === inviteEvent.event_id,
       ),
     ).toHaveLength(1);
 
@@ -463,7 +463,7 @@ test.describe("cross-server federation", () => {
     await waitForEventBody(request, aliceToken, realmId, bobBody, "alpha");
   });
 
-  test("Pull / backfill: after a network partition, β fetches missing α events via GET /_cokret/peer/federation/pull-operations", async ({
+  test("peer query recovery: after a network partition, β fetches missing α events via GET /_cokret/peer/events", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -513,12 +513,11 @@ test.describe("cross-server federation", () => {
     await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
 
     const missingBody = `pulled after partition ${stamp}`;
-    const missingOperation = makeOperation({
+    const missingEvent = makeFederationEvent({
       realmId,
-      objectType: "ck.message.create",
+      kind: "ck.message.create",
+      actorDid: alice.did,
       payload: {
-        event_id: typedId("event"),
-        sender: alice.did,
         flow_id: typedId("flow"),
         track_name: "discussion",
         content: {
@@ -528,12 +527,12 @@ test.describe("cross-server federation", () => {
       },
     });
 
-    await pushFederationOperations(request, [missingOperation], {
+    await pushFederationEvents(request, [missingEvent], {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("alpha"),
       server: "alpha",
       realmId,
-      serviceBindingRef: `${solandServiceDid("alpha")}#cotest-partition-source`,
+      idempotencyKey: `${solandServiceDid("alpha")}#cotest-partition-source`,
     });
     await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
@@ -547,34 +546,46 @@ test.describe("cross-server federation", () => {
       },
     );
     expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
-    const alphaFrontier = await operationFrontierApi(request, realmId, {
+    const alphaFrontier = await peerEventFrontierApi(request, realmId, {
       server: "alpha",
     });
-    const betaFrontierBefore = await operationFrontierApi(request, realmId, {
+    const betaFrontierBefore = await peerEventFrontierApi(request, realmId, {
       server: "beta",
     });
-    expect(betaFrontierBefore.frontier_digest).not.toBe(
-      alphaFrontier.frontier_digest,
+    expect(betaFrontierBefore.frontier_root).not.toBe(
+      alphaFrontier.frontier_root,
     );
 
-    const backfill = await backfillFederationOperations(request, {
-      server: "beta",
-      peerUrl: solandBaseUrl("alpha"),
-      peerDid: solandServiceDid("alpha"),
+    const backfill = await queryPeerEventsApi(request, {
+      server: "alpha",
+      sourceDid: solandServiceDid("beta"),
       realmId,
       limit: 100,
     });
-    expect(backfill.rejected ?? []).toEqual([]);
-    expect(backfill.accepted ?? []).toContain(
-      String(missingOperation.operation_id),
+    const backfilledEvents = (backfill.events ?? [])
+      .map((entry: { event?: Record<string, unknown> }) => entry.event)
+      .filter(Boolean) as Array<Record<string, unknown>>;
+    expect(backfilledEvents.map((event) => event.event_id)).toContain(
+      missingEvent.event_id,
+    );
+    const ingest = await pushFederationEvents(request, backfilledEvents, {
+      origin: solandServiceDid("alpha"),
+      destination: solandServiceDid("beta"),
+      server: "beta",
+      realmId,
+      idempotencyKey: `${solandServiceDid("beta")}#cotest-peer-query-recovery`,
+    });
+    expect(ingest.rejected ?? []).toEqual([]);
+    expect(ingest.accepted).toContain(
+      String(missingEvent.event_id),
     );
     await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
 
-    const betaFrontierAfter = await operationFrontierApi(request, realmId, {
+    const betaFrontierAfter = await peerEventFrontierApi(request, realmId, {
       server: "beta",
     });
-    for (const operationId of alphaFrontier.operation_ids) {
-      expect(betaFrontierAfter.operation_ids).toContain(operationId);
+    for (const eventId of alphaFrontier.heads) {
+      expect(betaFrontierAfter.heads).toContain(eventId);
     }
   });
 
@@ -599,12 +610,11 @@ test.describe("cross-server federation", () => {
     request,
   }) => {
     const realmId = typedId("realm");
-    const operation = makeOperation({
+    const event = makeFederationEvent({
       realmId,
-      objectType: "ck.message.create",
+      kind: "ck.message.create",
+      actorDid: "did:web:alice-rfc9421.example",
       payload: {
-        event_id: typedId("event"),
-        sender: "did:web:alice-rfc9421.example",
         flow_id: typedId("flow"),
         track_name: "discussion",
         content: {
@@ -613,12 +623,12 @@ test.describe("cross-server federation", () => {
         },
       },
     });
-    const response = await rawPushFederationOperations(request, [operation], {
+    const response = await rawPushFederationEvents(request, [event], {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       server: "beta",
       realmId,
-      serviceBindingRef: `${solandServiceDid("alpha")}#cotest-rfc9421-negative`,
+      idempotencyKey: `${solandServiceDid("alpha")}#cotest-rfc9421-negative`,
       tamperSignature: true,
     });
     const text = await response.text();

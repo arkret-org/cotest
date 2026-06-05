@@ -1,6 +1,6 @@
 // Knock auto-resolve path (ck.member.state{join, gate_proofs})
 // Contract: e2e/scenarios/spaces/knock-auto-resolve.md
-// Spec: models/space-and-place.md §3.4 + §3.5, §3.3.1 gate types
+// Spec: models/realm-and-space.md §3.4 + §3.5, §3.3.1 gate types
 
 import { test } from "@playwright/test";
 
@@ -13,7 +13,7 @@ test.describe("knock auto-resolve path", () => {
     // @expected-live-by: 2026Q3
     "alice sets join_rule=knock_restricted with gates=[claim_required(auto), challenge_response(auto)]; bob submits ck.member.state{join, gate_proofs[]} and joins directly",
     async () => {
-      // spec: space-and-place.md §3.5
+      // spec: realm-and-space.md §3.5
       // soland gap: join_policy cell + gate verifier; harness gap: mock claim issuer + challenge provider.
     },
   );
@@ -40,7 +40,7 @@ test.describe("knock auto-resolve path", () => {
     // @expected-live-by: 2026Q3
     "cooldown gate independent of combinator: bob leaves then immediately re-applies → rejected with cooldown_gate_blocking",
     async () => {
-      // spec: space-and-place.md §3.3.1 cooldown gate semantics
+      // spec: realm-and-space.md §3.3.1 cooldown gate semantics
     },
   );
 

@@ -1,10 +1,10 @@
-// MLS group encryption (E2EE space lifecycle)
+// MLS group encryption (E2EE Realm lifecycle)
 // Contract: e2e/scenarios/encryption/mls-group.md
 // Spec refs:
 //   - crypto-media/encryption-and-audit.md §2 (MLS architecture)
 //   - §2.2 Welcome/Commit, §2.3 application envelope, §2.4 sync+epoch
 //   - §2.5 Governance Binding, §2.6 KeyPackage
-//   - models/space-and-place.md §2.2 encryption_profile, §3.7.2 E2EE space
+//   - models/realm-and-space.md §2.2 encryption_profile, §3.7.2 E2EE Realm
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -77,7 +77,7 @@ async function createEncryptedRealm(
 }
 
 test.describe("MLS group encryption", () => {
-  test("E2EE space surfaces MLS admin controls and rejects non-members from raw events", async ({
+  test("E2EE Realm surfaces MLS admin controls and rejects non-members from raw events", async ({
     browser,
     request,
   }, testInfo) => {
@@ -95,7 +95,7 @@ test.describe("MLS group encryption", () => {
     });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `S11 E2EE ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -103,14 +103,14 @@ test.describe("MLS group encryption", () => {
         encryptionProfile: "mls_rfc9420",
       });
 
-      await alicePage.gotoRealmAdminSection(spaceId, "security");
+      await alicePage.gotoRealmAdminSection(realmId, "security");
       await expect(alicePage.page.getByTestId("mls-rotation")).toBeVisible({
         timeout: 30_000,
       });
 
       // Non-member access to raw events MUST be rejected.
       const eventsResp = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/events`,
+        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`,
         { headers: { authorization: `Bearer ${malloryToken}` } },
       );
       expect([401, 403, 404, 405]).toContain(eventsResp.status());
@@ -130,7 +130,7 @@ test.describe("MLS group encryption", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S11 MLS create-time ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -138,7 +138,7 @@ test.describe("MLS group encryption", () => {
     });
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/export`,
+      `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
@@ -453,7 +453,7 @@ test.describe("MLS group encryption", () => {
   // @user-promise: e2e/scenarios/encryption/mls-group.md
   // @expected-live-by: 2026Q3
   "carol added in epoch 1 → ck.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async () => {
-    // spec: encryption-and-audit.md §2.4.1, models/space-and-place.md §3.4
+    // spec: encryption-and-audit.md §2.4.1, models/realm-and-space.md §3.4
   });
 
   test("alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms", async ({
@@ -468,20 +468,20 @@ test.describe("MLS group encryption", () => {
       ensureRegistered(request, bob),
     ]);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S11 MLS ban ${stamp}`,
       ownerDid: alice.did,
       history_visibility: "joined",
       encryption_profile: "mls_rfc9420",
     });
-    await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
     const alicePage = await openUserPage(browser, alice, {
       sessionToken: aliceToken,
     });
 
     try {
-      await alicePage.gotoRealmAdminSection(spaceId, "members");
+      await alicePage.gotoRealmAdminSection(realmId, "members");
       const refresh = alicePage.page.getByTestId("refresh-members-button");
       await expect(refresh).toBeVisible({ timeout: 120_000 });
       const bobRow = alicePage.page.getByTestId("member-row").filter({
@@ -507,7 +507,7 @@ test.describe("MLS group encryption", () => {
         { timeout: 30_000 },
       );
 
-      await alicePage.gotoTimelineRealm(spaceId);
+      await alicePage.gotoTimelineRealm(realmId);
       const epochBanner = alicePage.page.getByTestId(
         "epoch-update-required-banner",
       );

@@ -388,7 +388,7 @@ pub fn run_anchorer_cell_fixture_suite() -> Result<()> {
                 }
                 if required_str(expected, "bottom_kind")? != "Conflict" {
                     bail!(
-                        "vector {name} concurrent reconfig must expect bottom_kind=Conflict (split anchorer is a Space-wide pause)"
+                        "vector {name} concurrent reconfig must expect bottom_kind=Conflict (split anchorer is a Realm-wide pause)"
                     );
                 }
                 covered.insert(name);

@@ -7,7 +7,7 @@
 //! device list. Alice from device-A revokes device-B; the test asserts
 //! device-A still works, device-B's bearer is 401, a
 //! `ck.device.list_update` event lists device-B in `left[]`, and the
-//! E2EE space's timeline gains a `ck.mls.commit` with a Remove
+//! E2EE Realm's timeline gains a `ck.mls.commit` with a Remove
 //! proposal targeting device-B.
 //!
 //! See `cotest::scenarios::multi_device_qr_pairing` for the full

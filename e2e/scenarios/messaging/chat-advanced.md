@@ -24,7 +24,7 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | space owner,主驱动 |
+| alice | Realm owner,主驱动 |
 | bob | 成员,被 @-mention、参与 reactions / poll |
 | carol | 成员,投票 / 收 typing 指示 |
 
@@ -57,8 +57,8 @@
 14. alice 发 `M4 = "@bob please confirm"`
 15. yougen 客户端:
     - 解析 `@bob` token,生成 `ck.relation.mention` payload
-    - 在 plain text space:`ck.message.create.payload.mentions = [bob.did]`
-    - 在 E2EE space:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
+    - 在 plain text Realm:`ck.message.create.payload.mentions = [bob.did]`
+    - 在 E2EE Realm:消息正文 encrypted,但 mention 用 `mention-sidecar hash`(SHA256(salt + bob.did))明文携带,让服务端能路由通知
 16. 断言:bob 收到 push notification(检查 yougen 的 in-app notification panel,或测试侧调 `GET /_soland/self/notifications` 查 bob 的队列)
 17. 断言:carol **没**收到 mention 通知(她没被点名)
 
@@ -78,7 +78,7 @@
 ### Phase F — Typing indicator (ephemeral)
 
 25. bob 在 composer 输入"hi" 但不发送
-26. yougen 客户端:每 N ms 发 `ck.typing` ephemeral signal,payload `{ space_id, actor, ttl_ms: 5000 }`
+26. yougen 客户端:每 N ms 发 `ck.typing` ephemeral signal,payload `{ realm_id, actor, ttl_ms: 5000 }`
 27. 断言:alice 的 timeline 上方显示 "bob is typing..." (`chat-typing-indicator` testid)
 28. bob 停止输入 5s+
 29. 断言:alice 视图的 typing 指示消失(过 ttl)
@@ -103,7 +103,7 @@
 ## Edge cases / sub-tests
 
 - **E14.1 reaction 并发竞态**:alice 和 bob 同时对 `M1` 加 + 撤 → OR-Set 仍正确(spec §8.5)
-- **E14.2 mention E2EE sidecar**:E2EE space 中,服务端只能用 hash 路由,**不能**回推出 bob.did;断言服务端 log 不含 bob.did 明文
+- **E14.2 mention E2EE sidecar**:E2EE Realm 中,服务端只能用 hash 路由,**不能**回推出 bob.did;断言服务端 log 不含 bob.did 明文
 - **E14.3 poll closed**:`closes_at` 过后 vote 被 reducer 拒
 - **E14.4 max_selections > 1**:多选 poll;一个 actor 可选 2 个 option;断言计数正确
 - **E14.5 typing 在 redact 后**:bob 发了消息后 redact;typing 指示不应"复活"

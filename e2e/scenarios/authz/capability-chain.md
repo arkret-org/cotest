@@ -11,7 +11,7 @@
 - `authz/capabilities.md` §3.3 — Revoke
 - `authz/capabilities.md` §3.4 — Audit trail
 - `authz/constraint-schema.md` — 约束 grammar(temporal、resource-selector)
-- `authz/resource-selector-grammar.md` — 资源选择器(space-scoped、message-scoped)
+- `authz/resource-selector-grammar.md` — 资源选择器(realm-scoped、message-scoped)
 - `authz/event-auth-state-resolution.md` §3 — Capability 是 allow 的唯一来源
 
 ## 拓扑
@@ -22,7 +22,7 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | space owner,初始 capability 持有者 |
+| alice | Realm owner,初始 capability 持有者 |
 | bob | grantee → delegator |
 | carol | sub-delegatee |
 | mallory | 第三方,不应有任何 capability |
@@ -32,28 +32,28 @@
 ### Phase A — alice grant capability 给 bob
 
 1. alice createRealm,seedMembers=[bob, carol, mallory]
-2. alice 进 `/realms/${spaceId}/admin` → "Capabilities" 区
-3. 点 "Grant" → 选 grantee = bob.did,actions = `[ck.space.write_message]`,constraints = `{ expires_at: +1h }`
+2. alice 进 `/realms/${realmId}/admin` → "Capabilities" 区
+3. 点 "Grant" → 选 grantee = bob.did,actions = `[ck.message.create]`,constraints = `{ expires_at: +1h }`
 4. yougen 提交 `ck.capability.grant`,event 落到 `ck.cell:ck.component.capability.<grant_id>.v1`
-5. 断言:`/realms/${spaceId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
+5. 断言:`/realms/${realmId}/admin` Capabilities 列表显示 bob 的 grant + expires_at
 
 ### Phase B — bob 用 capability 写消息
 
 6. bob 在 timeline 发消息 `M_b`
-7. reducer 校验 bob 持有 `ck.space.write_message` capability + constraint(未过期)→ 接受
+7. reducer 校验 bob 持有 `ck.message.create` capability + constraint(未过期)→ 接受
 8. 断言:`M_b` 渲染
 
 ### Phase C — bob delegate 给 carol(sub-constraint)
 
 9. bob 进 `/settings/capabilities` 或 space admin → "Delegate"
-10. 输入 grantee = carol.did,actions = `[ck.space.write_message]`,sub-constraints = `{ expires_at: +30min }`(在 bob 自己 expiry 之前)
+10. 输入 grantee = carol.did,actions = `[ck.message.create]`,sub-constraints = `{ expires_at: +30min }`(在 bob 自己 expiry 之前)
 11. yougen 提交 `ck.capability.delegate`
 12. 断言:capability tree 显示 alice → bob → carol 三层
 
 ### Phase D — carol 用 delegated capability
 
 13. carol 发消息 `M_c`
-14. reducer 沿 delegation chain 上溯:bob → alice → space owner;全 OK,carol 写入成功
+14. reducer 沿 delegation chain 上溯:bob → alice → Realm owner;全 OK,carol 写入成功
 15. 断言:`M_c` 渲染
 
 ### Phase E — alice revoke bob
@@ -67,12 +67,12 @@
 
 ### Phase F — Audit trail
 
-22. alice 查 `/realms/${spaceId}/audit` 或调 `GET /_soland/self/audit/events?space_id=<S>&kind=ck.capability.*`
+22. alice 查 `/realms/${realmId}/audit` 或调 `GET /_soland/self/audit/events?realm_id=<R>&kind=ck.capability.*`
 23. 断言:看到一行 grant、一行 delegate、一行 revoke;每行含 grantor / grantee / timestamp / actions / constraints
 
 ## Edge cases
 
-- **E20.1 over-grant**:bob 试 delegate carol 一个 bob 自己没有的 action(`ck.space.moderate`)→ reducer 拒,reason `capability_not_held`
+- **E20.1 over-grant**:bob 试 delegate carol 一个 bob 自己没有的 action(`ck.moderation.decision`)→ reducer 拒,reason `capability_not_held`
 - **E20.2 over-expire**:bob 试 delegate 给 carol 一个 expiry 比 bob 自己晚的 → 拒,reason `delegation_exceeds_grantor_expiry`
 - **E20.3 mallory 无 capability 写消息**:reducer 拒,reason `missing_capability`
 - **E20.4 expiry 自动失效**:bob 的 grant 到期后,无需 explicit revoke,后续消息自动被拒

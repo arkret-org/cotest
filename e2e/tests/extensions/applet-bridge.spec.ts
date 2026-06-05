@@ -56,7 +56,7 @@ test.describe("applet bridge", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
         history_visibility: "joined",
@@ -71,17 +71,17 @@ test.describe("applet bridge", () => {
         request,
         aliceToken,
         signed,
-        spaceId,
+        realmId,
         `register-${stamp}`,
       );
       expect(registration.status).toBe("installed");
       expect(registration.bot_actor_did).toMatch(/^did:web:bot-bridge-demo-/);
-      expect(registration.portal_realm_id).toBe(spaceId);
+      expect(registration.portal_realm_id).toBe(realmId);
 
-      await addRealmMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
+      await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_did);
       const accept = await request.post(
         `${registryBase}/bot/${encodeURIComponent(registration.applet_id)}/accept-invite`,
-        { data: { space_id: spaceId } },
+        { data: { realm_id: realmId } },
       );
       expect(accept.status()).toBe(200);
       expect((await accept.json()).status).toBe("joined");
@@ -92,7 +92,7 @@ test.describe("applet bridge", () => {
         data: {
           soland_base_url: solandBaseUrl(),
           applet_id: registration.applet_id,
-          space_id: spaceId,
+          realm_id: realmId,
           external_user: { id: "ext-user-X", display_name: "External X" },
           payload: { kind: "message", text },
         },
@@ -103,9 +103,9 @@ test.describe("applet bridge", () => {
       expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
       expect(String(externalBody.message_id)).toMatch(/^ck:message:/);
 
-      const events = await queryRealmEventsApi(request, aliceToken, spaceId);
+      const events = await queryRealmEventsApi(request, aliceToken, realmId);
       expect(JSON.stringify(events)).toContain(text);
-      await alicePage.gotoTimelineRealm(spaceId);
+      await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.getByTestId("timeline")).toContainText(text, {
         timeout: 30_000,
       });
@@ -126,7 +126,7 @@ test.describe("applet bridge", () => {
         {
           headers: authHeaders(aliceToken),
           data: {
-            effective_scope: { kind: "realm", realm_id: spaceId },
+            effective_scope: { kind: "realm", realm_id: realmId },
             registration_epoch: registration.registration_epoch,
           },
         },
@@ -140,14 +140,14 @@ test.describe("applet bridge", () => {
         data: {
           soland_base_url: solandBaseUrl(),
           applet_id: registration.applet_id,
-          space_id: spaceId,
+          realm_id: realmId,
           external_user: { id: "ext-user-X", display_name: "External X" },
           payload: { kind: "message", text: afterRevokeText },
         },
       });
       expect([403, 409]).toContain(afterRevoke.status());
       expect(wireErrCode(await afterRevoke.json())).toBe("applet_revoked");
-      expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, spaceId))).not.toContain(
+      expect(JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(
         afterRevokeText,
       );
 
@@ -170,7 +170,7 @@ test.describe("applet bridge", () => {
     const aliceToken = await issueDevSession(request, alice);
     const namespace = `bridge.conflict.${stamp}`;
 
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `applet conflict ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -180,7 +180,7 @@ test.describe("applet bridge", () => {
       package_id: `package:bridge:conflict-a-${stamp}`,
       namespace,
     });
-    await installApplet(request, aliceToken, first, spaceId, `conflict-first-${stamp}`);
+    await installApplet(request, aliceToken, first, realmId, `conflict-first-${stamp}`);
 
     const second = await signPackage(request, registryBase, {
       package_id: `package:bridge:conflict-b-${stamp}`,
@@ -190,7 +190,7 @@ test.describe("applet bridge", () => {
       request,
       aliceToken,
       second,
-      spaceId,
+      realmId,
       `conflict-second-${stamp}`,
     );
     expect(denied.status()).toBe(409);
@@ -205,7 +205,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-revoke-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `applet revoke ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -214,8 +214,8 @@ test.describe("applet bridge", () => {
       package_id: `package:bridge:revoke-${stamp}`,
       namespace: `bridge.revoke.${stamp}`,
     });
-    const registration = await installApplet(request, aliceToken, signed, spaceId, `revoke-${stamp}`);
-    await addRealmMemberApi(request, aliceToken, spaceId, registration.bot_actor_did);
+    const registration = await installApplet(request, aliceToken, signed, realmId, `revoke-${stamp}`);
+    await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_did);
 
     const revoke = await request.post(
       `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
@@ -224,7 +224,7 @@ test.describe("applet bridge", () => {
       {
         headers: authHeaders(aliceToken),
         data: {
-          effective_scope: { kind: "realm", realm_id: spaceId },
+          effective_scope: { kind: "realm", realm_id: realmId },
           registration_epoch: registration.registration_epoch,
         },
       },
@@ -237,7 +237,7 @@ test.describe("applet bridge", () => {
         headers: authHeaders(aliceToken),
         data: {
           applet_id: registration.applet_id,
-          realm_id: spaceId,
+          realm_id: realmId,
           payload: { kind: "message", text: `bot after revoke ${stamp}` },
         },
       },
@@ -257,7 +257,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-idem-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `applet idem ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -271,21 +271,21 @@ test.describe("applet bridge", () => {
       request,
       aliceToken,
       signed,
-      spaceId,
+      realmId,
       `idem-${stamp}`,
     );
     expect(firstResponse.status()).toBe(201);
-    const first = installRegistrationFromResponse(signed, spaceId, await firstResponse.json());
+    const first = installRegistrationFromResponse(signed, realmId, await firstResponse.json());
 
     const secondResponse = await rawInstallApplet(
       request,
       aliceToken,
       signed,
-      spaceId,
+      realmId,
       `idem-${stamp}`,
     );
     expect(secondResponse.status()).toBe(200);
-    const second = installRegistrationFromResponse(signed, spaceId, await secondResponse.json());
+    const second = installRegistrationFromResponse(signed, realmId, await secondResponse.json());
     expect(second.applet_id).toBe(first.applet_id);
     expect(second.bot_actor_did).toBe(first.bot_actor_did);
 
@@ -293,7 +293,7 @@ test.describe("applet bridge", () => {
       request,
       aliceToken,
       signed,
-      spaceId,
+      realmId,
       `idem-other-${stamp}`,
     );
     expect(conflict.status()).toBe(409);

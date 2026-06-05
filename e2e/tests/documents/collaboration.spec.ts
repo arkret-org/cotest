@@ -57,7 +57,6 @@ test.describe("Document Morph collaboration", () => {
             id: morphId,
             schema: "ck.schema.morph.v1",
             realm_id: realmId,
-            space_id: realmId,
             morph_type: "document",
             metadata: { title: "Projection draft" },
             stage: "draft",

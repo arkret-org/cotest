@@ -1,6 +1,6 @@
 // GDPR export / erasure / audit / retention
 // Contract: e2e/scenarios/governance/gdpr-audit-retention.md
-// Spec: identity/account-lifecycle.md §3, §8, models/space-and-place.md §2.2 (retention)
+// Spec: identity/account-lifecycle.md §3, §8, models/realm-and-space.md §2.2 (retention)
 
 import { expect, test } from "@playwright/test";
 import {
@@ -14,6 +14,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   listInvitesApi,
+  queryPeerEventsApi,
   queryRealmEventsApi,
   sendMessageApi,
   wireErrCode,
@@ -197,7 +198,7 @@ test.describe("GDPR / audit / retention", () => {
   test("retention_policy.ttl: events older than the TTL are tombstoned (not physically deleted if anchored)", async ({
     request,
   }) => {
-    // spec: space-and-place.md §2.2 — expired timeline content is redacted
+    // spec: realm-and-space.md §2.2 — expired timeline content is redacted
     // while event_id / canonical history remain available for anchored chains.
     const stamp = Date.now();
     const alice = uniqueUser(`s27-retention-${stamp}`);
@@ -348,12 +349,13 @@ test.describe("GDPR / audit / retention", () => {
         )
         .toContain(aliceBody);
 
-      const remoteBefore = await request.get(
-        `${solandBaseUrl("beta")}/_cokret/peer/federation/actors/${encodeURIComponent(alice.did)}/events`,
-        { headers: { authorization: `Bearer ${bobToken}` } },
-      );
-      expect(remoteBefore.status()).toBe(200);
-      const beforeJson = JSON.stringify(await remoteBefore.json());
+      const remoteBefore = await queryPeerEventsApi(request, {
+        server: "beta",
+        actorDid: alice.did,
+        sourceDid: solandServiceDid("alpha"),
+        limit: 100,
+      });
+      const beforeJson = JSON.stringify(remoteBefore);
       expect(beforeJson).toContain(alice.did);
       expect(beforeJson).toContain(aliceBody);
 
@@ -368,12 +370,13 @@ test.describe("GDPR / audit / retention", () => {
       await expect
         .poll(
           async () => {
-            const remoteAfter = await request.get(
-              `${solandBaseUrl("beta")}/_cokret/peer/federation/actors/${encodeURIComponent(alice.did)}/events`,
-              { headers: { authorization: `Bearer ${bobToken}` } },
-            );
-            if (remoteAfter.status() !== 200) return "";
-            return JSON.stringify(await remoteAfter.json());
+            const remoteAfter = await queryPeerEventsApi(request, {
+              server: "beta",
+              actorDid: alice.did,
+              sourceDid: solandServiceDid("alpha"),
+              limit: 100,
+            });
+            return JSON.stringify(remoteAfter);
           },
           { timeout: 60_000 },
         )

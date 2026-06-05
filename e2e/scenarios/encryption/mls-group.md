@@ -1,8 +1,8 @@
-# MLS 群组加密(E2EE Space 生命周期)
+# MLS 群组加密(E2EE Realm 生命周期)
 
 ## 目标
 
-验证 `encryption_profile=mls_rfc9420` 的 space 的完整加密生命周期:alice 创建 E2EE space → bob 通过 MLS welcome 加入 → 双向发加密消息(timeline 渲染明文,服务端只见 ciphertext)→ 增减成员触发 epoch advance → governance_binding 校验。
+验证 `encryption_profile=mls_rfc9420` 的 Realm 的完整加密生命周期:alice 创建 E2EE Realm → bob 通过 MLS welcome 加入 → 双向发加密消息(timeline 渲染明文,服务端只见 ciphertext)→ 增减成员触发 epoch advance → governance_binding 校验。
 
 不验证:加密附件(encryption/encrypted-attachments)、密钥备份(encryption/key-backup)、audited E2EE 反审(encryption/audited-e2ee)、跨服务器 MLS 联邦(后续 scenario)。
 
@@ -17,8 +17,8 @@
 - `crypto-media/encryption-and-audit.md` §2.6 — KeyPackage 发布与索取
 - `crypto-media/encryption-and-audit.md` §5 — Proposal / Commit / epoch 进展
 - `crypto-media/device-lifecycle.md` §9 — `/_cokret/self/keys/keypackages/claim` API
-- `models/space-and-place.md` §2.2 — Space `encryption_profile` 字段
-- `models/space-and-place.md` §3.7.2 — E2EE Space (`encryption_profile=mls_rfc9420`)
+- `models/realm-and-space.md` §2.2 — Realm `encryption_profile` 字段
+- `models/realm-and-space.md` §3.7.2 — E2EE Realm (`encryption_profile=mls_rfc9420`)
 
 ## 拓扑
 
@@ -28,7 +28,7 @@
 
 | 名字 | 角色 | MLS 设备 |
 |---|---|---|
-| alice | space owner + group creator | 1 个 leaf node |
+| alice | Realm owner + group creator | 1 个 leaf node |
 | bob | 第二个 member | 1 个 leaf node |
 | carol | 第三个 member,Phase D 加入,验证 epoch advance | 1 个 leaf node |
 | mallory | 非成员,验证非成员不能解密 | (没 leaf) |
@@ -40,15 +40,15 @@
 
 ## Steps
 
-### Phase A — alice 创建 E2EE space + MLS group genesis
+### Phase A — alice 创建 E2EE Realm + MLS group genesis
 
-1. alice 进 `/setup`,新建 space,**关键字段**:`encryption_profile = "mls_rfc9420"`
+1. alice 进 `/setup`,新建 Realm,**关键字段**:`encryption_profile = "mls_rfc9420"`
 2. yougen 后台:
    - 生成 MLS group context、cipher suite(默认 `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`)
    - 写 `ck.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
-   - 写 `ck.space.create` Move,关联 genesis
-3. 断言:`/realms/${spaceId}/admin/security` 显示 MLS 管理控件
-4. 断言:`GET /_soland/self/spaces/${spaceId}` 返回 `encryption_profile = "mls_rfc9420"`
+   - 写 `ck.realm.create` Move,关联 genesis
+3. 断言:`/realms/${realmId}/admin/security` 显示 MLS 管理控件
+4. 断言:`GET /_soland/self/realms/${realmId}` 返回 `encryption_profile = "mls_rfc9420"`
 
 ### Phase B — bob 加入(Welcome)
 
@@ -60,15 +60,15 @@
    - `governance_binding` 嵌入 `realm_policy_digest` + `membership_frontier` + `reducer_profile_digest`
 7. alice 提交 commit + welcome 到 soland;welcome 通过 durable Event 路由给 bob(spec §2.2.1)
 8. bob yougen 拉 sync → 解 welcome → 派生 epoch 1 secrets
-9. 断言:bob `/timeline/${spaceId}` 可访问,timeline 渲染说"Welcome to encrypted space"
+9. 断言:bob `/timeline/${realmId}` 可访问,timeline 渲染说"Welcome to encrypted Realm"
 
 ### Phase C — 双向加密消息
 
-10. alice 发消息 `M_a`:`payload` 明文 `"alice greet"`,客户端用 epoch 1 的 application key 加密 → AEAD 输出存进 `encrypted_payload`,plaintext metadata 含 `space_id`, `event_kind`, `causal_refs`
+10. alice 发消息 `M_a`:`payload` 明文 `"alice greet"`,客户端用 epoch 1 的 application key 加密 → AEAD 输出存进 `encrypted_payload`,plaintext metadata 含 `realm_id`, `event_kind`, `causal_refs`
 11. soland Sync Service:**只**用 plaintext metadata 路由,不解 `encrypted_payload`(关键 invariant)
 12. bob 拉 sync → 用 epoch 1 application key 解密 → timeline 渲染 `"alice greet"`
 13. 断言:bob timeline 包含 `"alice greet"`
-14. 测试 harness 直接 `GET /_soland/self/spaces/${spaceId}/events?include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
+14. 测试 harness 直接 `GET /_cokret/self/events?realms=${realmId}&include_raw=true` → 断言 returned event 的 payload 是 ciphertext,**不含** 明文 `"alice greet"`
 15. bob 反向发 `M_b`,alice 同步可见,断言对称
 
 ### Phase D — carol 加入触发 epoch advance
@@ -76,7 +76,7 @@
 16. alice `POST /_cokret/self/keys/keypackages/claim?actor=carol.did`
 17. alice 客户端:`ck.mls.commit` Add carol;epoch 1 → epoch 2;新 application key
 18. soland 接受 commit + welcome → carol 拉 welcome → 派生 epoch 2 secrets
-19. 断言:carol `/timeline/${spaceId}` 可见;**但** carol 解 Phase C 的 `M_a` / `M_b`?
+19. 断言:carol `/timeline/${realmId}` 可见;**但** carol 解 Phase C 的 `M_a` / `M_b`?
     - 看 `history_visibility`:joined → carol 看不到加入前的 `M_a/M_b`(spec §3.4 + §2.4.1 `decryption_pending` for pre-join)
 20. alice 发新消息 `M_a_post_carol`,用 epoch 2 key
 21. 断言:三方 timeline 都有 `M_a_post_carol`
@@ -84,7 +84,7 @@
 
 ### Phase E — Membership frontier ≠ MLS epoch → `epoch_update_required`
 
-23. alice 提交 `ck.member.state{ban}` 把 bob 踢出 — 这是 space governance 层动作
+23. alice 提交 `ck.member.state{ban}` 把 bob 踢出 — 这是 Realm governance 层动作
 24. governance frontier 前进;但 MLS commit 还没跟上
 25. alice 客户端在 `max_mls_commit_delay_ms`(默认 30s)内必须发起 MLS Remove + 新 commit
 26. 断言:在 alice 提交 Remove commit 之前的 30s 窗内,客户端 send 应进入 `epoch_update_required` 状态(timeline 显示"Waiting for encryption to set up...")
@@ -93,7 +93,7 @@
 
 ### Phase F — Non-member ciphertext-only
 
-29. mallory(非成员)调 `GET /_soland/self/spaces/${spaceId}/events` → soland 应拒(403 / not a member)
+29. mallory(非成员)调 `GET /_cokret/self/events?realms=${realmId}` → soland 应拒(403 / not a member)
 30. 即使 mallory 拿到 raw event(假设泄漏),没有 epoch key → 无法解密
 
 ## Observable assertions(合并)
@@ -114,7 +114,7 @@
 - **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.realm_policy_digest` → soland 拒绝整批,reducer reason `governance_binding_mismatch`
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
 - **E11.4 加入前已发消息 + history_visibility=shared**:把 Phase D 改用 `history_visibility=shared` — carol 加入后应当能解(spec §3.4 shared rule + §6 offline epoch retention)
-- **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 space 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端
+- **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 Realm 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端
 - **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发 `ck.realm.update` patch `encryption_profile` → soland 拒绝,wire code `realm_encryption_profile_create_locked`(spec realm-and-space.md §2.3;soland operations.rs `operation_touches_encryption_profile`)。防止把已加密 Realm 静默降级成明文。此前 soland 无单测、cotest 无端到端覆盖。
 - **E11.7 Circle encryption_profile create-locked**(fixme,blocking-on soland#circle-submit-validation-gap):在加密 Realm 下按 floor 建 Circle 后,`ck.circle.update` patch `encryption_profile`。**实测确认 gap**:soland 提交时**接受**(返回 200),因为 `operation_schema_for_kind` 无 circle arm → 提交时操作校验整段被跳过;create-lock 只在异步 reducer 兜底(状态安全但响应误导)。修后转 active:断言 wire code `circle_encryption_profile_create_locked`。
 - **E11.8 未就绪不得静默降级**(fixme,blocking-on yougen#mls-not-ready-write-guard):未收 welcome、未恢复账户密钥的同账户新设备尝试写私有内容 → 客户端必须呈现可恢复的"MLS 未就绪"提示并拒绝提交,**绝不**把明文 `ck.flow.update` 发给服务端(也不应触发 `content_encryption_floor_violation`)。需第二设备 rig + 实跑确认未就绪 UX 后从 fixme 升 active。

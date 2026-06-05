@@ -37,7 +37,7 @@ test.describe("read receipts + privacy", () => {
       issueDevSession(request, bob),
     ]);
 
-    const spaceId = await createSharedRealmViaApi(
+    const realmId = await createSharedRealmViaApi(
       request,
       bob,
       bobToken,
@@ -49,11 +49,11 @@ test.describe("read receipts + privacy", () => {
         historyVisibility: "shared",
       },
     );
-    await allowPlaintextMessagesViaApi(request, bobToken, spaceId);
+    await allowPlaintextMessagesViaApi(request, bobToken, realmId);
     const message = await sendPlaintextMessageViaApi(
       request,
       bobToken,
-      spaceId,
+      realmId,
       `G2.T7 bob message ${stamp}`,
       { actorDid: bob.did },
     );
@@ -64,7 +64,7 @@ test.describe("read receipts + privacy", () => {
       headers: authHeaders(aliceToken),
       data: {
         kind: "ck.receipt.read",
-        realm_id: spaceId,
+        realm_id: realmId,
         actor_id: alice.did,
         device_id: alice.deviceId,
         sent_at: sentAt.toISOString(),
@@ -78,11 +78,11 @@ test.describe("read receipts + privacy", () => {
     const receiptBody = await receipt.json();
     expect(receiptBody.accepted).toBe(true);
     expect(receiptBody.kind).toBe("ck.receipt.read");
-    expect(receiptBody.realm_id).toBe(spaceId);
+    expect(receiptBody.realm_id).toBe(realmId);
 
     const [aliceMarkers, bobMarkers] = await Promise.all([
-      listReadMarkersViaApi(request, aliceToken, spaceId),
-      listReadMarkersViaApi(request, bobToken, spaceId),
+      listReadMarkersViaApi(request, aliceToken, realmId),
+      listReadMarkersViaApi(request, bobToken, realmId),
     ]);
     expect(aliceMarkers).toHaveLength(0);
     expect(bobMarkers).toHaveLength(0);
@@ -145,14 +145,14 @@ test.describe("read receipts + privacy", () => {
       await sendPlaintextMessageViaApi(
         request,
         fixture.bobToken,
-        fixture.spaceId,
+        fixture.realmId,
         `highest visible second ${Date.now()}`,
         { actorDid: fixture.bob.did },
       );
       const highest = await sendPlaintextMessageViaApi(
         request,
         fixture.bobToken,
-        fixture.spaceId,
+        fixture.realmId,
         `highest visible third ${Date.now()}`,
         { actorDid: fixture.bob.did },
       );
@@ -160,7 +160,7 @@ test.describe("read receipts + privacy", () => {
       receipt.payload.event_id = highest.event_id;
       const response = await postReceipt(request, fixture.aliceToken, receipt);
       expect(response.status()).toBe(200);
-      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.spaceId))
+      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId))
         .toHaveLength(0);
     },
   );
@@ -169,7 +169,7 @@ test.describe("read receipts + privacy", () => {
     "alice toggles preference=false; subsequent reads do NOT emit ck.receipt.read; bob's view stops updating",
     async ({ request }) => {
       const fixture = await createReceiptFixture(request, "preference-disabled");
-      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.spaceId))
+      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId))
         .toHaveLength(0);
     },
   );
@@ -181,14 +181,14 @@ test.describe("read receipts + privacy", () => {
       const hiddenWindowMessage = await sendPlaintextMessageViaApi(
         request,
         fixture.bobToken,
-        fixture.spaceId,
+        fixture.realmId,
         `disabled-window ${Date.now()}`,
         { actorDid: fixture.bob.did },
       );
       const freshMessage = await sendPlaintextMessageViaApi(
         request,
         fixture.bobToken,
-        fixture.spaceId,
+        fixture.realmId,
         `reenabled-window ${Date.now()}`,
         { actorDid: fixture.bob.did },
       );
@@ -263,26 +263,26 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedRealmViaApi(request, bob, bobToken, alice, aliceToken, {
+  const realmId = await createSharedRealmViaApi(request, bob, bobToken, alice, aliceToken, {
     title: `${label} receipt ${stamp}`,
     discoverability: "listed",
     historyVisibility: "shared",
   });
-  await allowPlaintextMessagesViaApi(request, bobToken, spaceId);
+  await allowPlaintextMessagesViaApi(request, bobToken, realmId);
   const message = await sendPlaintextMessageViaApi(
     request,
     bobToken,
-    spaceId,
+    realmId,
     `${label} message ${stamp}`,
     { actorDid: bob.did },
   );
-  return { alice, bob, aliceToken, bobToken, spaceId, message };
+  return { alice, bob, aliceToken, bobToken, realmId, message };
 }
 
 function receiptEnvelope(fixture: ReceiptFixture, ttlMs = 5 * 60 * 1000, sentAt = new Date()) {
   return {
     kind: "ck.receipt.read",
-    realm_id: fixture.spaceId,
+    realm_id: fixture.realmId,
     actor_id: fixture.alice.did,
     device_id: fixture.alice.deviceId,
     sent_at: sentAt.toISOString(),

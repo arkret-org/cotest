@@ -1,7 +1,7 @@
 // Multi-user project simulation
 // Contract: e2e/scenarios/kanban/project-simulation.md
 // Spec refs:
-//   - models/space-and-place.md §4 (Place), §3 (Join Policy)
+//   - models/realm-and-space.md §4 (Space container), §3 (Join Policy)
 //   - models/flow-and-message.md §3 (Flow fields)
 //   - models/relation.md §3.2 (assigned_to), §6 (conflict resolution)
 
@@ -48,7 +48,7 @@ test.describe("project simulation", () => {
     const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `S16 Sprint ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -57,11 +57,11 @@ test.describe("project simulation", () => {
 
       // acceptInvite throws on non-2xx; success means the invite was
       // accepted server-side and bob/carol are now members.
-      await bobPage.acceptInvite(spaceId);
-      await carolPage.acceptInvite(spaceId);
+      await bobPage.acceptInvite(realmId);
+      await carolPage.acceptInvite(realmId);
 
       // Sanity: alice's admin landing renders.
-      await alicePage.gotoRealmAdmin(spaceId);
+      await alicePage.gotoRealmAdmin(realmId);
       await stepShot(alicePage.page, testInfo, "A-team-joined");
     } finally {
       await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
@@ -85,7 +85,7 @@ test.describe("project simulation", () => {
       const alice = uniqueUser("s16-fsm-alice");
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S16 FSM ${Date.now()}`,
         ownerDid: alice.did,
       });
@@ -98,15 +98,14 @@ test.describe("project simulation", () => {
         aliceToken,
         signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.flow.create",
           createdAt: taskCreatedAt,
           payload: {
             object: {
               id: taskFlowId,
               schema: "ck.schema.flow.v1",
-              realm_id: spaceId,
-              space_id: spaceId,
+              realm_id: realmId,
               title: "Implement login",
               stage: "planned",
               tracks: { discussion: { enabled: true, is_primary: true } },
@@ -123,7 +122,7 @@ test.describe("project simulation", () => {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.flow.update",
           payload: {
             target_ref: taskFlowId,
@@ -140,7 +139,7 @@ test.describe("project simulation", () => {
         aliceToken,
         signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.flow.update",
           payload: {
             target_ref: taskFlowId,
@@ -156,7 +155,7 @@ test.describe("project simulation", () => {
         aliceToken,
         signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.flow.update",
           payload: {
             target_ref: taskFlowId,
@@ -173,15 +172,14 @@ test.describe("project simulation", () => {
         aliceToken,
         signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.flow.create",
           createdAt: incidentCreatedAt,
           payload: {
             object: {
               id: incidentFlowId,
               schema: "ck.schema.flow.v1",
-              realm_id: spaceId,
-              space_id: spaceId,
+              realm_id: realmId,
               title: "SEV-2 checkout outage",
               stage: "in_progress",
               tracks: { discussion: { enabled: true, is_primary: true } },
@@ -198,7 +196,7 @@ test.describe("project simulation", () => {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.flow.update",
           payload: {
             target_ref: incidentFlowId,
@@ -248,7 +246,7 @@ test.describe("project simulation", () => {
     // @expected-live-by: 2026Q3
     "alice archives the entire board; archived board's cards become read-only; archive list view shows the board",
     async () => {
-      // spec: space-and-place.md §4.4 lifecycle/cascade
+      // spec: realm-and-space.md §4.4 lifecycle/cascade
     },
   );
 });

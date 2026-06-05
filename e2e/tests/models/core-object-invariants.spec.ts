@@ -33,7 +33,7 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("core object invariants", () => {
   test(
-    "Phase A — newly created Space exposes spec §3 common fields (id, created_at, actor, lifecycle_state equivalents) on the read-back wire",
+    "Phase A — newly created Realm exposes spec §3 common fields (id, created_at, actor, lifecycle_state equivalents) on the read-back wire",
     async ({ browser, request }, testInfo) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-alice-${stamp}`);
@@ -43,32 +43,32 @@ test.describe("core object invariants", () => {
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
       try {
-        // ── Step 1-2: alice creates Space S via the standard setup wizard
+        // ── Step 1-2: alice creates Realm R via the standard setup wizard
         // (same path messaging/triad-collaboration uses).
-        const spaceId = await alicePage.createRealm({
-          title: `models/core-object-invariants Space ${stamp}`,
+        const realmId = await alicePage.createRealm({
+          title: `models/core-object-invariants Realm ${stamp}`,
           summary: "core object invariants coverage",
           discoverability: "listed",
           joinRule: "invite",
           historyVisibility: "joined",
         });
-        expect(spaceId).toMatch(/^ck:realm:/);
-        await stepShot(alicePage.page, testInfo, "A-alice-space-created");
+        expect(realmId).toMatch(/^ck:realm:/);
+        await stepShot(alicePage.page, testInfo, "A-alice-realm-created");
 
         // ── Step 3: read back the Realm via the soland API and verify the
-        // spec §3 common-field equivalents on the SpaceLifecycleResponse
+        // spec §3 common-field equivalents on the RealmLifecycleResponse
         // serializer. Current wire shape (soland/src/wire.rs
-        // SpaceLifecycleResponse): { ok, realm_id, owner, members, deleted }.
+        // RealmLifecycleResponse): { ok, realm_id, owner, members, deleted }.
         //   - realm_id  ↔ spec `id`              (typed ck:realm: prefix)
         //   - owner     ↔ spec `created_by`      (DID, actor reference)
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
-        const spaceRes = await request.get(
-          `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(spaceId)}`,
+        const realmRes = await request.get(
+          `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
           { headers: aliceAuth },
         );
-        expect(spaceRes.status()).toBe(200);
-        const spaceBody = (await spaceRes.json()) as {
+        expect(realmRes.status()).toBe(200);
+        const realmBody = (await realmRes.json()) as {
           ok?: boolean;
           realm_id?: string;
           owner?: string;
@@ -76,24 +76,24 @@ test.describe("core object invariants", () => {
           deleted?: boolean;
         };
         // Common-field 1: `id` (typed ck:realm: prefix).
-        expect(spaceBody.realm_id).toBe(spaceId);
-        expect(spaceBody.realm_id).toMatch(/^ck:realm:/);
+        expect(realmBody.realm_id).toBe(realmId);
+        expect(realmBody.realm_id).toMatch(/^ck:realm:/);
         // Common-field 2: actor reference (`created_by` equivalent → `owner`).
-        expect(spaceBody.owner).toBe(alice.did);
+        expect(realmBody.owner).toBe(alice.did);
         // Membership invariant: owner must always appear in members.
-        expect(Array.isArray(spaceBody.members)).toBe(true);
-        expect(spaceBody.members ?? []).toContain(alice.did);
+        expect(Array.isArray(realmBody.members)).toBe(true);
+        expect(realmBody.members ?? []).toContain(alice.did);
         // Common-field 3: `lifecycle_state` equivalent (deleted=false ⇒ active).
-        expect(spaceBody.deleted).toBe(false);
+        expect(realmBody.deleted).toBe(false);
 
         // ── Step 4: read the event log for this Realm to recover the
         // `created_at` + `event_id` + `actor_id` + `kind` fields that
-        // SpaceLifecycleResponse does not currently surface. The events
+        // RealmLifecycleResponse does not currently surface. The events
         // query response item shape (soland/src/routing/events/projection.rs
         // projection_event_json) is { event_id, realm_id, event_kind,
         // sender, payload, created_at, ... }.
         const eventsRes = await request.get(
-          `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(spaceId)}&limit=20`,
+          `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`,
           { headers: aliceAuth },
         );
         expect(eventsRes.status()).toBe(200);
@@ -109,7 +109,7 @@ test.describe("core object invariants", () => {
         const events = eventsBody.events ?? [];
         expect(events.length).toBeGreaterThan(0);
 
-        // Find the Space lifecycle / create event — soland writes lifecycle
+        // Find the Realm lifecycle / create event — soland writes lifecycle
         // ops via record_space_lifecycle_operation, so the kind is in the
         // ck.realm.* family. We accept any ck.realm.* event_kind to stay
         // resilient to soland's exact lifecycle op naming.
@@ -128,7 +128,7 @@ test.describe("core object invariants", () => {
         expect(typeof lifecycleEvent.event_kind).toBe("string");
         expect(lifecycleEvent.event_kind?.length ?? 0).toBeGreaterThan(0);
         // Realm scoping: event must reference the Realm we just created.
-        expect(lifecycleEvent.realm_id).toBe(spaceId);
+        expect(lifecycleEvent.realm_id).toBe(realmId);
 
         await stepShot(alicePage.page, testInfo, "A-alice-common-fields-verified");
       } finally {

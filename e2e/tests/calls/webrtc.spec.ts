@@ -55,16 +55,16 @@ test.describe("calls", () => {
       await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
       const aliceToken = await issueDevSession(request, alice);
       const bobToken = await issueDevSession(request, bob);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S18 WebRTC ${stamp}`,
         public: true,
       });
-      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
       const session = await request.post(`${solandBaseUrl()}/_cokret/self/webrtc/sessions`, {
         headers: authHeaders(aliceToken),
         data: {
-          space_id: spaceId,
+          realm_id: realmId,
           participants: [bob.did],
           ttl_ms: 120_000,
         },
@@ -154,10 +154,10 @@ test.describe("calls", () => {
     "alice mutes mic: ck.call.signal{kind=mute_state, muted=true} routes to bob; bob's UI shows muted indicator",
     async ({ browser, request }) => {
       // spec: webrtc-signaling.md §5 + §6
-      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-mute");
+      const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(request, "s18-ui-mute");
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
-        const sessionId = await startUiCall(alicePage.page, spaceId, bob.did);
+        const sessionId = await startUiCall(alicePage.page, realmId, bob.did);
         await alicePage.page.getByTestId("webrtc-mute-button").click();
         await expect(alicePage.page.getByTestId("webrtc-local-mic-status")).toHaveAttribute(
           "data-muted",
@@ -181,10 +181,10 @@ test.describe("calls", () => {
     "alice shares screen: getDisplayMedia track added; ck.call.signal{kind=media_state, screen_share=true} routes",
     async ({ browser, request }) => {
       // spec: webrtc-signaling.md §3 ck.call.screen_share capability
-      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-screen");
+      const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(request, "s18-ui-screen");
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
-        const sessionId = await startUiCall(alicePage.page, spaceId, bob.did);
+        const sessionId = await startUiCall(alicePage.page, realmId, bob.did);
         await alicePage.page.getByTestId("webrtc-screen-share-start-button").click();
         await expect(alicePage.page.getByTestId("webrtc-screen-share-status")).toHaveAttribute(
           "data-state",
@@ -210,10 +210,10 @@ test.describe("calls", () => {
     "hangup terminates peer connections; Call Morph state=ended; duration persisted",
     async ({ browser, request }) => {
       // spec: call-state.md §3
-      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-ui-hangup");
+      const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(request, "s18-ui-hangup");
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
-        const sessionId = await startUiCall(alicePage.page, spaceId, bob.did);
+        const sessionId = await startUiCall(alicePage.page, realmId, bob.did);
         await alicePage.page.getByTestId("webrtc-leave-call-button").click();
         await expect(alicePage.page.getByTestId("call-status-ended")).toBeVisible();
         await expect(alicePage.page.getByTestId("webrtc-call-ended-panel")).toBeVisible();
@@ -236,9 +236,9 @@ test.describe("calls", () => {
     "group call mode=sfu: alice+bob+carol join; recording_policy=allow lets carol start recording (writes recording_blob_ref)",
     async ({ browser, request }) => {
       // spec: call-state.md §2 + webrtc-signaling.md §3 ck.call.record capability
-      const { alice, aliceToken, bob, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-allow");
+      const { alice, aliceToken, bob, carol, carolToken, realmId } = await setupCallRealm(request, "s18-record-allow");
       const session = await createWebrtcSession(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         participants: [bob.did, carol.did],
         mode: "sfu",
         recording_policy: "allow",
@@ -247,7 +247,7 @@ test.describe("calls", () => {
       expect(session.recording_policy).toBe("allow");
       expect(session.participants).toEqual(expect.arrayContaining([bob.did, carol.did]));
 
-      const recording = await startRecording(request, carolToken, session.session_id, spaceId);
+      const recording = await startRecording(request, carolToken, session.session_id, realmId);
       expect(recording.ok).toBe(true);
       expect(recording.recording_started_by).toBe(carol.did);
       expect(recording.recording_policy).toBe("allow");
@@ -255,7 +255,7 @@ test.describe("calls", () => {
 
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {
-        await startUiGroupCall(alicePage.page, spaceId, [bob.did, carol.did]);
+        await startUiGroupCall(alicePage.page, realmId, [bob.did, carol.did]);
         await expect(alicePage.page.getByTestId("webrtc-call-mode")).toHaveAttribute("data-mode", "sfu");
         await expect(alicePage.page.getByTestId("webrtc-recording-policy")).toHaveAttribute(
           "data-policy",
@@ -281,9 +281,9 @@ test.describe("calls", () => {
     "E18.E recording_policy=none rejects carol's recording attempt with failed_precondition reason=recording_policy_violation",
     async ({ request }) => {
       // spec: webrtc-signaling.md §3
-      const { aliceToken, carol, carolToken, spaceId } = await setupCallSpace(request, "s18-record-deny");
+      const { aliceToken, carol, carolToken, realmId } = await setupCallRealm(request, "s18-record-deny");
       const session = await createWebrtcSession(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         participants: [carol.did],
         mode: "sfu",
         recording_policy: "none",
@@ -293,7 +293,7 @@ test.describe("calls", () => {
         `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(session.session_id)}/recording/start`,
         {
           headers: authHeaders(carolToken),
-          data: { space_id: spaceId },
+          data: { realm_id: realmId },
         },
       );
       expect(denied.status()).toBe(412);
@@ -305,9 +305,9 @@ test.describe("calls", () => {
     "E18.F mid-call TURN credential refresh: long calls renew credentials before expiry; call does not drop",
     async ({ request }) => {
       // spec: webrtc-signaling.md §4.1
-      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-turn-refresh");
+      const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(request, "s18-turn-refresh");
       const session = await createWebrtcSession(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         participants: [bob.did],
         mode: "p2p",
         recording_policy: "none",
@@ -320,13 +320,13 @@ test.describe("calls", () => {
       });
 
       const issued = await issueIceConfig(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         call_id: session.session_id,
         actor_id: alice.did,
         device_id: alice.deviceId,
       });
       const refreshed = await refreshIceConfig(request, aliceToken, session.session_id, {
-        space_id: spaceId,
+        realm_id: realmId,
         actor_id: alice.did,
         device_id: alice.deviceId,
       });
@@ -344,22 +344,22 @@ test.describe("calls", () => {
     "E18.7 pairwise pseudonym in TURN credentials: username does not contain alice.did plaintext (spec §6 pseudonymization)",
     async ({ request }) => {
       // spec: webrtc-signaling.md §4.1 (pairwise pseudonym)
-      const { alice, aliceToken, bob, bobToken, spaceId } = await setupCallSpace(request, "s18-turn-pseudonym");
+      const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(request, "s18-turn-pseudonym");
       const session = await createWebrtcSession(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         participants: [bob.did],
         mode: "p2p",
         recording_policy: "none",
       });
 
       const aliceIce = await issueIceConfig(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         call_id: session.session_id,
         actor_id: alice.did,
         device_id: alice.deviceId,
       });
       const bobIce = await issueIceConfig(request, bobToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         call_id: session.session_id,
         actor_id: bob.did,
         device_id: bob.deviceId,
@@ -379,11 +379,11 @@ test.describe("calls", () => {
   );
 });
 
-async function startUiCall(page: Page, spaceId: string, peerDid: string): Promise<string> {
+async function startUiCall(page: Page, realmId: string, peerDid: string): Promise<string> {
   await page.goto("/call", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("call-panel")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("webrtc-panel")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("webrtc-space-id-input").fill(spaceId);
+  await page.getByTestId("webrtc-realm-id-input").fill(realmId);
   await page.getByTestId("webrtc-peer-did-input").fill(peerDid);
   await page.getByTestId("webrtc-call-start-button").click();
   await expect(page.getByTestId("call-status-ringing")).toBeVisible();
@@ -401,11 +401,11 @@ async function startUiCall(page: Page, spaceId: string, peerDid: string): Promis
   return sessionId;
 }
 
-async function startUiGroupCall(page: Page, spaceId: string, participantDids: string[]): Promise<string> {
+async function startUiGroupCall(page: Page, realmId: string, participantDids: string[]): Promise<string> {
   await page.goto("/call", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("call-panel")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("webrtc-panel")).toBeVisible({ timeout: 60_000 });
-  await page.getByTestId("webrtc-space-id-input").fill(spaceId);
+  await page.getByTestId("webrtc-realm-id-input").fill(realmId);
   await page.getByTestId("webrtc-group-participants-input").fill(participantDids.join("\n"));
   await page.getByTestId("webrtc-group-call-start-button").click();
   await expect(page.getByTestId("call-status-active")).toBeVisible();
@@ -463,7 +463,7 @@ async function appendCallSignal(
   return await response.json();
 }
 
-async function setupCallSpace(request: APIRequestContext, label: string) {
+async function setupCallRealm(request: APIRequestContext, label: string) {
   const stamp = Date.now();
   const alice = uniqueUser(`${label}-alice-${stamp}`);
   const bob = uniqueUser(`${label}-bob-${stamp}`);
@@ -476,20 +476,20 @@ async function setupCallSpace(request: APIRequestContext, label: string) {
   const aliceToken = await issueDevSession(request, alice);
   const bobToken = await issueDevSession(request, bob);
   const carolToken = await issueDevSession(request, carol);
-  const spaceId = await createRealmApi(request, aliceToken, {
+  const realmId = await createRealmApi(request, aliceToken, {
     title: `S18 ${label} ${stamp}`,
     public: true,
   });
-  await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
-  await addRealmMemberApi(request, aliceToken, spaceId, carol.did);
-  return { alice, bob, carol, aliceToken, bobToken, carolToken, spaceId };
+  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+  return { alice, bob, carol, aliceToken, bobToken, carolToken, realmId };
 }
 
 async function createWebrtcSession(
   request: APIRequestContext,
   token: string,
   data: {
-    space_id: string;
+    realm_id: string;
     participants: string[];
     mode: string;
     recording_policy: string;
@@ -507,7 +507,7 @@ async function issueIceConfig(
   request: APIRequestContext,
   token: string,
   data: {
-    space_id: string;
+    realm_id: string;
     call_id: string;
     actor_id: string;
     device_id: string;
@@ -526,7 +526,7 @@ async function refreshIceConfig(
   token: string,
   sessionId: string,
   data: {
-    space_id: string;
+    realm_id: string;
     actor_id: string;
     device_id: string;
   },
@@ -546,13 +546,13 @@ async function startRecording(
   request: APIRequestContext,
   token: string,
   sessionId: string,
-  spaceId: string,
+  realmId: string,
 ) {
   const response = await request.post(
     `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
     {
       headers: authHeaders(token),
-      data: { space_id: spaceId },
+      data: { realm_id: realmId },
     },
   );
   expect(response.ok(), "start recording").toBeTruthy();

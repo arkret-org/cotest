@@ -28,9 +28,9 @@
 //!    candidate builder, exercising the same `audience` / `expires_at` / `subject_id` /
 //!    `binding_source` invariants that the live teabay row in T3.4 enforces.
 //!  - **Negative cases** — always run; each builds a malformed candidate and asserts the matching
-//!    `CandidateError` (or `Realm::member_add_with_candidate` rejection) fires. These guard the
-//!    SDK contract surface that downstream callers (yougen, sodmin, future web UI) rely on
-//!    regardless of which directory implementation is in front of them.
+//!    `CandidateError` (or `Realm::member_add_with_candidate` rejection) fires. These guard the SDK
+//!    contract surface that downstream callers (yougen, sodmin, future web UI) rely on regardless
+//!    of which directory implementation is in front of them.
 
 use std::collections::BTreeSet;
 use std::time::Duration;

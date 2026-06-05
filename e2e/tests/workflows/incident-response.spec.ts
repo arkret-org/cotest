@@ -3,7 +3,7 @@
 // Spec refs:
 //   - models/flow-and-message.md §8 (reply / edit / redact)
 //   - discovery/push-notifications.md §3-§4 (routing, priority, DnD override)
-//   - models/space-and-place.md §4 (status board / FSM cells)
+//   - models/realm-and-space.md §4 (status board / FSM cells)
 //   - models/morph.md §2-§4 (postmortem document morph)
 
 import { expect, test } from "@playwright/test";
@@ -55,7 +55,7 @@ test.describe("workflow: incident response", () => {
       const finalSummary = `${alert} Root cause: payment worker rollback fixed DB pool saturation.`;
 
       try {
-        const spaceId = await oncallPage.createRealm({
+        const realmId = await oncallPage.createRealm({
           title: `SEV-2 checkout ${stamp}`,
           summary: "Incident response war room",
           discoverability: "listed",
@@ -63,39 +63,39 @@ test.describe("workflow: incident response", () => {
           historyVisibility: "shared",
           seedMembers: [backend.did, comms.did],
         });
-        await Promise.all([backendPage.acceptInvite(spaceId), commsPage.acceptInvite(spaceId)]);
+        await Promise.all([backendPage.acceptInvite(realmId), commsPage.acceptInvite(realmId)]);
 
-        await oncallPage.sendTimelineMessage(spaceId, alert);
+        await oncallPage.sendTimelineMessage(realmId, alert);
         await oncallPage.timelineEvent(alert).getByTestId("reply-button").click();
         await expect(oncallPage.page.getByTestId("reply-to-banner")).toBeVisible();
-        await oncallPage.sendTimelineMessage(spaceId, ack);
+        await oncallPage.sendTimelineMessage(realmId, ack);
         await expect(oncallPage.timelineEvent(ack).getByTestId("reply-indicator")).toBeVisible({
           timeout: 30_000,
         });
         await stepShot(oncallPage.page, testInfo, "A-alert-ack");
 
-        await backendPage.gotoTimelineRealm(spaceId);
+        await backendPage.gotoTimelineRealm(realmId);
         await expect(backendPage.timelineEvent(alert)).toBeVisible({ timeout: 30_000 });
         await backendPage.timelineEvent(alert).getByTestId("reply-button").click();
-        await backendPage.sendTimelineMessage(spaceId, diagnostic);
+        await backendPage.sendTimelineMessage(realmId, diagnostic);
         await expect(backendPage.timelineEvent(diagnostic).getByTestId("reply-indicator")).toBeVisible({
           timeout: 30_000,
         });
         await stepShot(backendPage.page, testInfo, "B-diagnostic");
 
-        await commsPage.gotoTimelineRealm(spaceId);
+        await commsPage.gotoTimelineRealm(realmId);
         await commsPage.timelineEvent(alert).getByTestId("reply-button").click();
-        await commsPage.sendTimelineMessage(spaceId, publicUpdate);
+        await commsPage.sendTimelineMessage(realmId, publicUpdate);
         await expect(commsPage.timelineEvent(publicUpdate).getByTestId("reply-indicator")).toBeVisible({
           timeout: 30_000,
         });
         await expect(commsPage.page.getByTestId("timeline")).not.toContainText("DB pool saturation");
         await stepShot(commsPage.page, testInfo, "C-public-update");
 
-        await backendPage.gotoTimelineRealm(spaceId);
+        await backendPage.gotoTimelineRealm(realmId);
         await backendPage.timelineEvent(diagnostic).getByTestId("reply-button").click();
-        await backendPage.sendTimelineMessage(spaceId, mitigation);
-        await oncallPage.gotoTimelineRealm(spaceId);
+        await backendPage.sendTimelineMessage(realmId, mitigation);
+        await oncallPage.gotoTimelineRealm(realmId);
         await expect(oncallPage.timelineEvent(mitigation)).toBeVisible({ timeout: 30_000 });
 
         await oncallPage.timelineEvent(alert).getByTestId("edit-button").click();
@@ -113,7 +113,7 @@ test.describe("workflow: incident response", () => {
   test(
     "E-incident.status status FSM rejects Resolved before Mitigated and records each transition in audit",
     async ({ browser, request }) => {
-      // spec: space-and-place.md §4 FSM-style status cells.
+      // spec: realm-and-space.md §4 FSM-style status cells.
       const stamp = Date.now();
       const oncall = uniqueUser("wf-incident-fsm");
       await ensureRegistered(request, oncall);
@@ -121,12 +121,12 @@ test.describe("workflow: incident response", () => {
       const page = await openUserPage(browser, oncall, { sessionToken: token });
 
       try {
-        const spaceId = await page.createRealm({
+        const realmId = await page.createRealm({
           title: `SEV FSM ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
-        await page.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+        await page.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
         await expect(page.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
         await page.page.getByTestId("incident-status-select").selectOption("resolved");
         await page.page.getByTestId("save-incident-status-button").click();
@@ -160,14 +160,14 @@ test.describe("workflow: incident response", () => {
               actor: oncall.did,
               from: "investigating",
               to: "mitigated",
-              space_id: spaceId,
+              realm_id: realmId,
               kind: "incident.status.transition",
             }),
             expect.objectContaining({
               actor: oncall.did,
               from: "mitigated",
               to: "resolved",
-              space_id: spaceId,
+              realm_id: realmId,
               kind: "incident.status.transition",
             }),
           ]),
@@ -199,13 +199,13 @@ test.describe("workflow: incident response", () => {
       const commanderPage = await openUserPage(browser, commander, { sessionToken: commanderToken });
 
       try {
-        const spaceId = await commanderPage.createRealm({
+        const realmId = await commanderPage.createRealm({
           title: `SEV-1 priority ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
 
-        await commanderPage.page.goto(`/timeline/${spaceId}`, { waitUntil: "domcontentloaded" });
+        await commanderPage.page.goto(`/timeline/${realmId}`, { waitUntil: "domcontentloaded" });
         await expect(commanderPage.page.getByTestId("incident-response-controls")).toBeVisible({
           timeout: 120_000,
         });
@@ -219,7 +219,7 @@ test.describe("workflow: incident response", () => {
         await expect(commanderPage.page.getByTestId("timeline")).not.toContainText(blocked);
 
         const safe = `SEV-1 public update: checkout latency is recovering ${stamp}`;
-        await commanderPage.sendTimelineMessage(spaceId, safe);
+        await commanderPage.sendTimelineMessage(realmId, safe);
       } finally {
         await commanderPage.close();
       }
@@ -237,15 +237,15 @@ test.describe("workflow: incident response", () => {
       const page = await openUserPage(browser, oncall, { sessionToken: token });
 
       try {
-        const spaceId = await page.createRealm({
+        const realmId = await page.createRealm({
           title: `SEV Postmortem ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
-        await page.page.goto(`/document/${spaceId}`, { waitUntil: "domcontentloaded" });
+        await page.page.goto(`/document/${realmId}`, { waitUntil: "domcontentloaded" });
         await page.page.getByTestId("document-title-input").fill(`Postmortem ${stamp}`);
         await page.page.getByTestId("document-body-editor").fill("Impact, root cause, action items.");
-        await page.page.getByTestId("document-link-incident-input").fill(spaceId);
+        await page.page.getByTestId("document-link-incident-input").fill(realmId);
         await page.page.getByTestId("save-document-button").click();
         await expect(page.page.getByTestId("document-status")).toContainText(/saved/i, {
           timeout: 30_000,

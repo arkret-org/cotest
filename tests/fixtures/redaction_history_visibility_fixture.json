@@ -5,7 +5,7 @@
   "comment": "B2 Round 24 — redaction reducer × history_visibility composition vectors. Spec authority: data-structures/redaction.md + data-structures/history-visibility.md + authz/event-auth-state-resolution.md. The redaction reducer produces a tombstone (kind=ck.message.redact) that supersedes the target event; history_visibility (cell ck.component.realm.history_visibility.v1) controls who SEES a redacted event vs a fully-removed event vs the original. Authors of the redacted event ALWAYS see it (consent + audit). Members see the tombstone only. world_readable visibility removes the event entirely (no tombstone surface) since non-members cannot prove membership consent. Reverse-redaction is a Move that removes the tombstone (causal or-set remove of the redaction op_id), re-exposing the original.",
   "encoder": {
     "tombstone_kind": "ck.message.redact",
-    "history_visibility_cell": "ck:cell:ck.component.realm.history_visibility.v1:<space_id>",
+    "history_visibility_cell": "ck:cell:ck.component.realm.history_visibility.v1:<realm_id>",
     "history_visibility_lattice": "cas_register",
     "history_visibility_values": ["world_readable", "shared", "joined", "invited"]
   },

@@ -2,14 +2,14 @@
 
 ## 目标
 
-kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/carol 开发)在一个 space 内运行一个完整 sprint 节奏 —— alice 建 board、把任务 assign 给 bob/carol、设 due dates、bob/carol 自己更新 status 推进任务到 done、alice 跨列移动逾期任务、最终 alice archive board。每一步对应一个 spec 事件,并验证 cas-register 的并发安全和 relation 的 cardinality 约束。
+kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/carol 开发)在一个 Realm 内运行一个完整 sprint 节奏 —— alice 建 board、把任务 assign 给 bob/carol、设 due dates、bob/carol 自己更新 status 推进任务到 done、alice 跨列移动逾期任务、最终 alice archive board。每一步对应一个 spec 事件,并验证 cas-register 的并发安全和 relation 的 cardinality 约束。
 
 不验证:基础 kanban CRUD(kanban/end-to-end 已覆盖)、文档协作(documents/collaboration)、加密(encryption/mls-group)。
 
 ## Spec 锚点
 
-- `models/space-and-place.md` §3.5 — 自动解析 join 路径(bob/carol 通过 claim 或 invite 加入)
-- `models/space-and-place.md` §4 — Place
+- `models/realm-and-space.md` §3.5 — 自动解析 join 路径(bob/carol 通过 claim 或 invite 加入)
+- `models/realm-and-space.md` §4 — Space
 - `models/flow-and-message.md` §3 — Flow 字段(`fields.status`、`fields.due_date`)
 - `models/relation.md` §3.2 — `assigned_to` cardinality(many_to_many,但同一 actor only one active assignment per flow)
 - `models/relation.md` §6 — 并发 assignment 的冲突解决(`deterministic_winner` profile)
@@ -23,7 +23,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 | 名字 | 角色 |
 |---|---|
-| alice | PM,space owner |
+| alice | PM,Realm owner |
 | bob | dev,Phase B 加入,负责 Card 1 / Card 3 |
 | carol | dev,Phase B 加入,负责 Card 2 |
 
@@ -32,7 +32,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ### Phase A — alice 建 sprint board
 
 1. alice createRealm `"Sprint 24"`,`joinRule = invite`
-2. alice 建 board `"Sprint 24 board"`(`ck.place.create kind=board`)
+2. alice 建 board `"Sprint 24 board"`(`ck.space.create kind=board`)
 3. 建三个 list:`Todo`、`In Progress`、`Done`
 4. 建三张 Card:
    - `Card 1: "Implement login"` (fields: status=todo, due_date=2026-05-20)
@@ -44,7 +44,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 6. alice `inviteFromAdmin` 邀请 bob、carol
 7. bob、carol `acceptInvite`
-8. 断言:三人都在 space 成员列表
+8. 断言:三人都在 Realm 成员列表
 
 ### Phase C — alice 分配 Cards
 
@@ -89,7 +89,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ### Phase H — Board archive
 
 30. sprint 结束,alice 在 board 视图点 "Archive board"
-31. yougen 提交 `ck.place.update`:`fields.state = "archived"`(或 cascade Move)
+31. yougen 提交 `ck.space.update`:`fields.state = "archived"`(或 cascade Move)
 32. 断言:board 主视图不再列出 Sprint 24 board;archive view 中能找到
 33. 断言:archived board 内的 cards / lists 仍然存在但 read-only(spec §4.4 cascade rules)
 
@@ -106,7 +106,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 ## Edge cases / sub-tests
 
 - **E16.1 unassign**:alice 撤销 Card 1 的 bob assignment → `ck.relation.tombstone`(spec §3.2 tombstoned 状态);bob 视图 Card 1 不再标"assigned to me"
-- **E16.2 bob 离职**:alice 把 bob ban 出 space(`ck.member.state{ban}`)→ bob 名下的 cards 怎么办?spec 不强 cascade;yougen 可能把 assignment 显示为 "orphaned"
+- **E16.2 bob 离职**:alice 把 bob ban 出 Realm(`ck.member.state{ban}`)→ bob 名下的 cards 怎么办?spec 不强 cascade;yougen 可能把 assignment 显示为 "orphaned"
 - **E16.3 status FSM 非法转换**:bob 尝试 Card 1 直接从 todo 跳到 done(跳过 in_progress)→ FSM precondition 失败,reducer 拒(spec §3.8 类比 membership FSM)
 - **E16.4 due date 修改**:alice 改 Card 3 的 due_date,所有 actor 视图更新
 - **E16.5 board search / filter**:在 archive 之前,搜 "Implement" 应找到 Card 1;archive 之后看 archive filter 是否过滤
@@ -114,7 +114,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.relation.create assigned_to`、`ck.place.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `ck.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
+- **soland 缺口**:`ck.relation.create assigned_to`、`ck.space.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `ck.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **yougen 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 

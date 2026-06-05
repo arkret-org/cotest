@@ -1,0 +1,82 @@
+{
+  "profile": "ck.profile.multi_realm_federation_vectors.v1",
+  "version": "2026-05-10",
+  "comment": "E3 Round 27 — Multi-Realm federation between two nodes. Spec authority: federation/move-anchor-replication.md. Builds on E2 (round 26) two-node real-spawn, but extends to N realms under one federation pair. Per-Realm anchor isolation is the core invariant: each Realm has its own anchor frontier; replaying Move from server_a → server_b for Realm X must not affect Realm Y's frontier on either side.",
+  "encoder": {
+    "anchor_id_form": "ax:<realm_id>:<seq>",
+    "frontier_isolation_rule": "anchor frontiers are partitioned by realm_id; cross-Realm operations are forbidden"
+  },
+  "vectors": [
+    {
+      "name": "multi_realm_replay_three_realms_independent_frontiers",
+      "comment": "server_a hosts 3 realms (R1, R2, R3). Each ingests one Move. server_b federates pull on each Realm individually. Each replay updates only the target Realm's frontier on server_b; the other two stay empty.",
+      "realms": ["realm_R1", "realm_R2", "realm_R3"],
+      "moves_on_server_a": [
+        {"realm_id": "realm_R1", "kind": "ck.message.create", "seq": 1},
+        {"realm_id": "realm_R2", "kind": "ck.message.create", "seq": 1},
+        {"realm_id": "realm_R3", "kind": "ck.message.create", "seq": 1}
+      ],
+      "expected": {
+        "outcome": "accept",
+        "per_realm_isolation": true,
+        "server_b_frontier_after_R1_pull": {"realm_R1": 1, "realm_R2": 0, "realm_R3": 0},
+        "server_b_frontier_after_R2_pull": {"realm_R1": 1, "realm_R2": 1, "realm_R3": 0},
+        "server_b_frontier_after_R3_pull": {"realm_R1": 1, "realm_R2": 1, "realm_R3": 1},
+        "rationale": "Per-Realm anchor isolation: each pull updates exactly its target Realm's frontier."
+      }
+    },
+    {
+      "name": "multi_realm_concurrent_move_replay",
+      "comment": "Both server_a and server_b host two realms each (R1 + R2). Both ingest Moves into R1 and R2 simultaneously. Bidirectional federation pull/push converges each Realm independently. After convergence, both nodes show the same frontier per Realm, but R1 and R2 frontiers stay distinct.",
+      "realms": ["realm_R1", "realm_R2"],
+      "moves_on_server_a": [
+        {"realm_id": "realm_R1", "kind": "ck.message.create", "seq": 1},
+        {"realm_id": "realm_R2", "kind": "ck.message.create", "seq": 1}
+      ],
+      "moves_on_server_b": [
+        {"realm_id": "realm_R1", "kind": "ck.message.create", "seq": 2},
+        {"realm_id": "realm_R2", "kind": "ck.message.create", "seq": 2}
+      ],
+      "expected": {
+        "outcome": "accept",
+        "convergence_per_realm": true,
+        "final_R1_frontier_count": 2,
+        "final_R2_frontier_count": 2,
+        "rationale": "After full bidirectional pull, each Realm converges to the same frontier on both nodes. R1 and R2 remain isolated."
+      }
+    },
+    {
+      "name": "multi_realm_cross_realm_move_rejected",
+      "comment": "Negative — a Move payload claims to update realm_R1's frontier from a federation push pulled from realm_R2's anchor stream. The peer must reject with cross_realm_move_forbidden.",
+      "realms": ["realm_R1", "realm_R2"],
+      "push_payload": {
+        "claimed_realm_id": "realm_R1",
+        "actual_anchor_realm_id": "realm_R2",
+        "anchor_id": "ax:realm_R2:1"
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cross_realm_move_forbidden",
+        "rationale": "Anchor scope must equal the declared realm_id; cross-Realm replay is forbidden."
+      }
+    },
+    {
+      "name": "multi_realm_per_realm_anchor_seq_independent",
+      "comment": "Each Realm's anchor sequence number increments independently. After 3 anchors in R1 and 1 in R2, R1.seq=3 and R2.seq=1, NOT a global counter.",
+      "realms": ["realm_R1", "realm_R2"],
+      "anchor_history": [
+        {"realm_id": "realm_R1", "seq": 1},
+        {"realm_id": "realm_R1", "seq": 2},
+        {"realm_id": "realm_R2", "seq": 1},
+        {"realm_id": "realm_R1", "seq": 3}
+      ],
+      "expected": {
+        "outcome": "accept",
+        "R1_max_seq": 3,
+        "R2_max_seq": 1,
+        "no_global_counter": true,
+        "rationale": "Per-Realm sequence numbers — global ordering would leak cross-Realm activity timing."
+      }
+    }
+  ]
+}

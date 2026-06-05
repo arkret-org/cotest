@@ -1,7 +1,7 @@
 // Single-server triad collaboration
 // Contract: e2e/scenarios/messaging/triad-collaboration.md
 // Spec refs:
-//   - models/space-and-place.md §2-§3
+//   - models/realm-and-space.md §2-§3
 //   - models/flow-and-message.md §8, §8.4, §8.5
 
 import { expect, test, type Page } from "@playwright/test";
@@ -55,14 +55,14 @@ test.describe("single-server triad collaboration", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
       title: `triad audit ${stamp}`,
       historyVisibility: "shared",
     });
     const created = await sendPlaintextMessageViaApi(
       request,
       aliceToken,
-      spaceId,
+      realmId,
       `triad create ${stamp}`,
       { actorDid: alice.did },
     );
@@ -74,7 +74,7 @@ test.describe("single-server triad collaboration", () => {
       aliceToken,
       signedEventEnvelope({
         actorDid: alice.did,
-        realmId: spaceId,
+        realmId: realmId,
         kind: "ck.message.revise",
         payload: {
           target_event_id: created.event_id,
@@ -85,7 +85,7 @@ test.describe("single-server triad collaboration", () => {
       { context: "revise message" },
     );
 
-    const beforeRedact = await listRealmEventsViaApi(request, bobToken, spaceId);
+    const beforeRedact = await listRealmEventsViaApi(request, bobToken, realmId);
     expect(beforeRedact.map((event) => event.event_kind)).toEqual(
       expect.arrayContaining(["ck.message.create", "ck.message.revise"]),
     );
@@ -97,7 +97,7 @@ test.describe("single-server triad collaboration", () => {
       aliceToken,
       signedEventEnvelope({
         actorDid: alice.did,
-        realmId: spaceId,
+        realmId: realmId,
         kind: "ck.message.redact",
         payload: {
           target_event_id: created.event_id,
@@ -108,7 +108,7 @@ test.describe("single-server triad collaboration", () => {
       { context: "redact message" },
     );
 
-    const events = await listRealmEventsViaApi(request, bobToken, spaceId);
+    const events = await listRealmEventsViaApi(request, bobToken, realmId);
     expect(events.map((event) => event.event_kind)).toContain("ck.message.revise");
     expect(events.map((event) => event.event_kind)).not.toContain("ck.message.create");
     expect(events.map((event) => event.event_kind)).not.toContain("ck.message.redact");
@@ -133,18 +133,18 @@ test.describe("single-server triad collaboration", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
       title: `triad joined ${stamp}`,
       historyVisibility: "joined",
     });
     const baseMs = Date.now() + 1_000;
     const pre = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: spaceId,
+      realmId: realmId,
       kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
-        flow_id: flowIdFromRealmId(spaceId),
+        flow_id: flowIdFromRealmId(realmId),
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad pre ${stamp}` },
         encrypted: false,
@@ -158,7 +158,7 @@ test.describe("single-server triad collaboration", () => {
       aliceToken,
       signedEventEnvelope({
         actorDid: alice.did,
-        realmId: spaceId,
+        realmId: realmId,
         kind: "ck.member.state",
         createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
         payload: {
@@ -172,11 +172,11 @@ test.describe("single-server triad collaboration", () => {
     );
     const post = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: spaceId,
+      realmId: realmId,
       kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
-        flow_id: flowIdFromRealmId(spaceId),
+        flow_id: flowIdFromRealmId(realmId),
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad post ${stamp}` },
         encrypted: false,
@@ -186,7 +186,7 @@ test.describe("single-server triad collaboration", () => {
       context: "post-join triad message",
     });
 
-    const carolEvents = await listRealmEventsViaApi(request, carolToken, spaceId);
+    const carolEvents = await listRealmEventsViaApi(request, carolToken, realmId);
     const ids = carolEvents.map((event) => event.event_id);
     expect(ids).not.toContain(pre.event_id);
     expect(ids).toContain(post.event_id);
@@ -230,7 +230,7 @@ test.describe("single-server triad collaboration", () => {
 
     try {
       // Phase A — alice creates space, seed-invites bob; bob accepts.
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `S1 Triad ${stamp}`,
         summary: "triad collaboration coverage",
         discoverability: "listed",
@@ -240,14 +240,14 @@ test.describe("single-server triad collaboration", () => {
       });
       await stepShot(alicePage.page, testInfo, "A-alice-space-created");
 
-      await bobPage.acceptInvite(spaceId);
+      await bobPage.acceptInvite(realmId);
       await stepShot(bobPage.page, testInfo, "A-bob-accepted-invite");
 
       // Phase B — alice and bob exchange messages with reply chain + edit.
-      await alicePage.sendTimelineMessage(spaceId, m1);
+      await alicePage.sendTimelineMessage(realmId, m1);
       await stepShot(alicePage.page, testInfo, "B-m1-sent");
 
-      await bobPage.gotoTimelineRealm(spaceId);
+      await bobPage.gotoTimelineRealm(realmId);
       await expect(bobPage.page.getByTestId("timeline")).toContainText(m1, {
         timeout: 30_000,
       });
@@ -259,7 +259,7 @@ test.describe("single-server triad collaboration", () => {
       const m1Event = bobPage.timelineEvent(m1);
       await m1Event.getByTestId("reply-button").click();
       await expect(bobPage.page.getByTestId("reply-to-banner")).toBeVisible();
-      await bobPage.sendTimelineMessage(spaceId, m2);
+      await bobPage.sendTimelineMessage(realmId, m2);
       const m2EventOnBob = bobPage.timelineEvent(m2);
       await expect(m2EventOnBob.getByTestId("reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "B-bob-replied");
@@ -272,32 +272,32 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(bobPage.page, testInfo, "B-bob-edited-m2");
 
       // Alice sees the edited reply.
-      await alicePage.gotoTimelineRealm(spaceId);
+      await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.timelineEvent(m2Edited)).toBeVisible({ timeout: 30_000 });
 
       // Phase C — alice invites carol, carol accepts, carol has restricted history.
-      await alicePage.inviteFromAdmin(spaceId, carol.did);
+      await alicePage.inviteFromAdmin(realmId, carol.did);
       await stepShot(alicePage.page, testInfo, "C-alice-invited-carol");
 
-      await carolPage.acceptInvite(spaceId);
+      await carolPage.acceptInvite(realmId);
       await stepShot(carolPage.page, testInfo, "C-carol-accepted-invite");
 
-      await carolPage.gotoTimelineRealm(spaceId);
-      // Spec models/space-and-place.md §3.4: history_visibility=joined →
+      await carolPage.gotoTimelineRealm(realmId);
+      // Spec models/realm-and-space.md §3.4: history_visibility=joined →
       // carol sees nothing posted before she became a member.
       await expect(carolPage.timelineEvent(m1)).toHaveCount(0);
       await expect(carolPage.timelineEvent(m2Edited)).toHaveCount(0);
       await stepShot(carolPage.page, testInfo, "C-carol-pre-join-hidden");
 
       // Phase D — post-join message reaches all three.
-      await alicePage.sendTimelineMessage(spaceId, m3);
+      await alicePage.sendTimelineMessage(realmId, m3);
       await expect(carolPage.timelineEvent(m3)).toBeVisible({ timeout: 30_000 });
       await expect(bobPage.timelineEvent(m3)).toBeVisible({ timeout: 30_000 });
       await stepShot(carolPage.page, testInfo, "D-carol-sees-m3");
 
       // Phase E — bob redacts his own M2; alice sees tombstone; carol unaffected
       // (she never saw M2 anyway because of history_visibility).
-      await bobPage.gotoTimelineRealm(spaceId);
+      await bobPage.gotoTimelineRealm(realmId);
       const m2Tombstone = bobPage.timelineEvent(m2Edited);
       await m2Tombstone.getByTestId("redact-button").click();
       await bobPage.page.getByTestId("confirm-redact-button").click();
@@ -305,13 +305,13 @@ test.describe("single-server triad collaboration", () => {
       await expect(bobPage.page.getByTestId("write-status")).toContainText(/tombstoned/);
       await stepShot(bobPage.page, testInfo, "E-bob-redacted");
 
-      await alicePage.gotoTimelineRealm(spaceId);
+      await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.getByTestId("redacted-tombstone")).toBeVisible({ timeout: 30_000 });
       // The redacted body should not be visible in plain form anymore.
       await expect(alicePage.page.getByTestId("timeline")).not.toContainText(m2Edited);
       await stepShot(alicePage.page, testInfo, "E-alice-sees-tombstone");
 
-      await carolPage.gotoTimelineRealm(spaceId);
+      await carolPage.gotoTimelineRealm(realmId);
       // Carol only sees M3 (and possibly the tombstone marker for M2, but never
       // its original text).
       await expect(carolPage.timelineEvent(m3)).toBeVisible();
@@ -324,8 +324,8 @@ test.describe("single-server triad collaboration", () => {
   );
 
   test.describe("E1 sub-cases", () => {
-    // E1.1 — soland's POST /_soland/self/spaces/{id}/invite is idempotent on
-    // (space_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
+    // E1.1 — invite creation is idempotent on
+    // (realm_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
     // space.rs:627-644): the second create returns the existing invite_id
     // unchanged. yougen's invite-member button drives the same endpoint via
     // submit_event_envelope, so re-issuing the same invite produces only one
@@ -343,7 +343,7 @@ test.describe("single-server triad collaboration", () => {
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
       try {
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S1 Idempotent Invite ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -355,12 +355,12 @@ test.describe("single-server triad collaboration", () => {
         // caused fresh-nav fails (see scenarios/spaces/admin-section-route.md).
         // We add an explicit waitForInviteCardReady belt-and-suspenders only
         // on the second issue, where the helper's gotoRealmAdmin re-mounts.
-        await alicePage.inviteFromAdmin(spaceId, bob.did);
+        await alicePage.inviteFromAdmin(realmId, bob.did);
 
         // Re-issue same invite — soland MUST treat as idempotent (same
         // invite_id returned for any pending (space, invitee) pair).
         await waitForInviteCardReady(alicePage.page);
-        await alicePage.inviteFromAdmin(spaceId, bob.did);
+        await alicePage.inviteFromAdmin(realmId, bob.did);
 
         // Only one invite row for bob should be visible. Allow up to 30s
         // for the projection to settle — yougen polls /spaces/<id>/admin
@@ -392,7 +392,7 @@ test.describe("single-server triad collaboration", () => {
       const carolToken = await issueDevSession(request, carol);
 
       const preMessage = `pre-join shared message ${stamp}`;
-      const spaceId = await createRealmViaApi(request, aliceToken, {
+      const realmId = await createRealmViaApi(request, aliceToken, {
         title: `S1.2 Shared History ${stamp}`,
         historyVisibility: "shared",
         ownerDid: alice.did,
@@ -400,7 +400,7 @@ test.describe("single-server triad collaboration", () => {
       const pre = await sendPlaintextMessageViaApi(
         request,
         aliceToken,
-        spaceId,
+        realmId,
         preMessage,
         { actorDid: alice.did },
       );
@@ -409,7 +409,7 @@ test.describe("single-server triad collaboration", () => {
         aliceToken,
         signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId: realmId,
           kind: "ck.member.state",
           payload: {
             actor_id: carol.did,
@@ -421,7 +421,7 @@ test.describe("single-server triad collaboration", () => {
         { context: "join carol shared history" },
       );
 
-      const carolEvents = await listRealmEventsViaApi(request, carolToken, spaceId);
+      const carolEvents = await listRealmEventsViaApi(request, carolToken, realmId);
       expect(carolEvents.map((event) => event.event_id)).toContain(pre.event_id);
       expect(JSON.stringify(carolEvents)).toContain(preMessage);
     });

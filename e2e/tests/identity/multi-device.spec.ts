@@ -101,7 +101,7 @@ test.describe("multi-device pairing + revocation", () => {
     // @blocking-on: soland#identity-multi-device-gap
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
-    "after revoke in an E2EE space, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages",
+    "after revoke in an E2EE Realm, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages",
     async () => {
       // spec: device-lifecycle.md §9 + encryption-and-audit.md §2.2
     },

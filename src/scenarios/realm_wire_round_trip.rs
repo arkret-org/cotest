@@ -1,10 +1,8 @@
-//! R2.1 / R2.3 — Realm/Space reversal wire round-trip vectors.
+//! R2.1 / R2.3 — Realm/Space boundary split wire round-trip vectors.
 //!
-//! Phase 2 cross-project contract test for the Realm/Space reversal
-//! (R1.2). After Phase 1 the wire kinds switched as follows:
-//!
-//! - security boundary: `space.*` → `ck.realm.*`
-//! - container: `place.*` → `ck.space.*`
+//! Cross-project contract test for the current Realm/Space boundary split:
+//! Realm event kinds cover the security boundary, and Space event kinds cover
+//! containers inside a Realm.
 //!
 //! This module builds SDK-typed [`cokret_core::Event`] envelopes for
 //! each renamed kind, canonical-encodes them via the SDK encoder, and
@@ -27,7 +25,7 @@ use cokret_core::events::{
 use cokret_core::{Did, Event, Hlc, RealmId};
 use serde_json::{Value, json};
 
-/// Build a minimal SDK-typed [`Event`] for a Realm/Space reversal wire
+/// Build a minimal SDK-typed [`Event`] for a Realm/Space boundary split wire
 /// vector. `realm_id` is the typed `ck:realm:...` security-boundary
 /// identifier; `ck.space.*` event kinds now describe containers inside
 /// that Realm.
@@ -51,8 +49,7 @@ struct WireVector {
 
 /// Positive vectors — every kind listed here MUST round-trip cleanly
 /// and classify into a non-Custom family. If any of these fail it means
-/// the SDK lost or renamed a Realm/Space kind without updating the wire
-/// contract surface.
+/// the SDK drifted from the Realm/Space wire contract surface.
 fn positive_vectors() -> Vec<WireVector> {
     vec![
         WireVector {
@@ -148,7 +145,7 @@ fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String
         .map_err(|err| anyhow!("canonical_sha256 failed for {}: {err}", vector.label))
 }
 
-/// R2.1 — every Realm/Space reversal positive vector survives a
+/// R2.1 — every Realm/Space boundary split positive vector survives a
 /// canonical-encode → JSON-decode → SDK-classify round trip. Soland
 /// wire-accepts the same kinds in `validate_event_envelope`, so any
 /// drift here would show up first as cross-project ingestion failures.

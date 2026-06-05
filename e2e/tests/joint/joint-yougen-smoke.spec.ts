@@ -27,10 +27,10 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
       jointRealm.aliceToken,
       jointRealm.alice.did,
       jointRealm.alicePage.serverUrl,
-      jointRealm.spaceId,
+      jointRealm.realmId,
       aliceMessage,
     );
-    await jointRealm.alicePage.gotoTimelineRealm(jointRealm.spaceId);
+    await jointRealm.alicePage.gotoTimelineRealm(jointRealm.realmId);
     await expect(jointRealm.alicePage.timelineEvent(aliceMessage)).toBeVisible({
       timeout: 30_000,
     });
@@ -63,7 +63,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     }
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `joint invite ${stamp}`,
         summary: "regression for write sync_token cursor poisoning",
         discoverability: "listed",
@@ -71,20 +71,20 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
         historyVisibility: "joined",
         encryptionProfile: "none",
       });
-      await alicePage.inviteFromAdmin(spaceId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.did);
 
       await expect
         .poll(async () => {
           const invites = await listInvitesApi(request, bobToken);
           return invites.some(
-            (invite) => invite.realm_id === spaceId && invite.invitee === bob.did,
+            (invite) => invite.realm_id === realmId && invite.invitee === bob.did,
           );
         }, { timeout: 30_000 })
         .toBe(true);
 
       await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
       const inviteCard = bobPage.page.getByTestId("notification-item").filter({
-        has: bobPage.page.locator(`[title="${spaceId}"]`),
+        has: bobPage.page.locator(`[title="${realmId}"]`),
       });
       await expect(inviteCard).toHaveCount(1, { timeout: 30_000 });
       await expect(inviteCard).toContainText("Realm invite");
@@ -120,13 +120,13 @@ async function submitMessageEvent(
   token: string,
   actorDid: string,
   serverUrl: string,
-  spaceId: string,
+  realmId: string,
   body: string,
 ) {
   const eventId = `ck:event:${uuidV7()}`;
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const payload = {
-    flow_id: flowIdFromSpaceId(spaceId),
+    flow_id: flowIdFromRealmId(realmId),
     track_name: "discussion",
     content: {
       kind: "ck.content.text",
@@ -137,7 +137,7 @@ async function submitMessageEvent(
   const envelope = {
     event_id: eventId,
     kind: "ck.message.create",
-    realm_id: spaceId,
+    realm_id: realmId,
     actor_id: actorDid,
     actor_seq: 9_000_000_000_000_000,
     created_at: createdAt,
@@ -160,8 +160,8 @@ async function submitMessageEvent(
   expect([200, 201], `submit ck.message.create: ${text}`).toContain(response.status());
 }
 
-function flowIdFromSpaceId(spaceId: string): string {
-  const suffix = spaceId.replace(/^ck:(realm|space):/, "");
+function flowIdFromRealmId(realmId: string): string {
+  const suffix = realmId.replace(/^ck:(realm|space):/, "");
   return `ck:flow:${suffix}`;
 }
 

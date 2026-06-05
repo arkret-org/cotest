@@ -9,7 +9,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 - `identity/account-lifecycle.md` §3 — Account states(`erasure_pending`)
 - `identity/account-lifecycle.md` §8 — GDPR-compliant export + erasure
 - `governance/content-moderation.md` — Audit + retention
-- `models/space-and-place.md` §2.2 — Space retention policy 字段
+- `models/realm-and-space.md` §2.2 — Realm retention policy 字段
 
 ## 拓扑
 
@@ -20,7 +20,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 | 名字 | 角色 |
 |---|---|
 | alice | 个人用户,触发 export / erasure |
-| bob | 同 space 成员,验证 alice 抹除后视图 |
+| bob | 同 Realm 成员,验证 alice 抹除后视图 |
 
 ## Steps
 
@@ -63,7 +63,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ### Phase F — Retention policy
 
-18. alice 创建另一个 space `S_short`,`retention_policy: { ttl: "30d" }`
+18. alice 创建另一个 Realm `R_short`,`retention_policy: { ttl: "30d" }`
 19. alice 发消息 `M_old`
 20. 测试 harness 使用旧 `created_at` 或 admin sweep `now` 参数模拟 +31 天
 21. soland retention sweeper 把超过 30 天的 timeline events 改成 tombstone,不物理删除 anchored/canonical event

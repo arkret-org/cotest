@@ -24,21 +24,21 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | space 创建者,kanban 主驱动 |
+| alice | Realm owner,kanban 主驱动 |
 
 (单用户即可覆盖 kanban CRUD;多用户工作流见 kanban/project-simulation)
 
 ## Steps
 
-### Phase A — Setup space
+### Phase A — Setup Realm
 
 1. alice createRealm,`title = "Kanban kanban/end-to-end"`,`discoverability = listed`,`joinRule = invite`,seedMembers=[]
 
 ### Phase B — 建 Board
 
-2. alice 进 `/kanban`(或 space-scoped `/spaces/${spaceId}/kanban`,看 yougen 实现)
+2. alice 进 `/kanban/${realmId}`
 3. 点 "New Board" → 填名字 `"Sprint 23"`
-4. yougen 提交 `ck.space.create`:`{ space_id, kind: "board", title }`
+4. yougen 提交 `ck.space.create`:`{ space_id: boardId, realm_id, kind: "board", title }`
 5. 断言:`/kanban` 页面渲染 board 卡片(`board-card` testid),title 是 `"Sprint 23"`,记录 `boardId`
 
 ### Phase C — 加三个 List
@@ -51,7 +51,7 @@
 ### Phase D — 在 Todo 加两个 Card
 
 10. alice 在 `Todo` 列点 "Add card",填 title `"Card A"`、description `"first task"`
-11. yougen 提交 `ck.flow.create`:`{ space_id, title, content: {text}, fields: { status: "todo" } }`,然后 `ck.relation.create` 把 flow 关到 List(`relation_kind: contains`)
+11. yougen 提交 `ck.flow.create`:`{ realm_id, space_id: todoListId, title, content: {text}, fields: { status: "todo" } }`,然后 `ck.relation.create` 把 flow 关到 List(`relation_kind: contains`)
 12. 同样建 `"Card B"` 在 Todo 列
 13. 断言:Todo 列渲染两张卡片(`flow-card` testid × 2),按创建顺序
 
@@ -69,7 +69,7 @@
 
 ### Phase F — Card 内发 comment
 
-19. alice 点 Card A 进详情(`/spaces/${spaceId}/kanban/cards/${flowId}` 或类似)
+19. alice 点 Card A 进详情(`/kanban/${realmId}/board/${boardId}/task/${flowId}` 或类似)
 20. 进 Discussion 区,发 `"Started this morning"`
 21. yougen 提交 `ck.message.create`,`flow_id = flowId_of_card_A`,落到 Flow 的 discussion track
 22. 断言:Card A 详情页 Comments 区显示该消息(`discussion-message` testid)

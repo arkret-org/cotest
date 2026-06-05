@@ -2,7 +2,7 @@
 
 ## 目标
 
-完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ck.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 passphrase 恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE space 收到的消息。
+完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ck.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 passphrase 恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE Realm 收到的消息。
 
 identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在**消息解密** 和 MLS epoch 重建,identity/recovery 更偏 device identity。
 
@@ -21,7 +21,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 ## 拓扑
 
 - 1 × soland(含 backup storage API)+ 1 × coauth
-- 一个 E2EE space `S_e2ee` 包含 alice + bob
+- 一个 E2EE Realm `R_e2ee` 包含 alice + bob
 
 ## Actors
 
@@ -29,12 +29,12 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 |---|---|---|
 | alice | device-A | 主用户;Phase A 备份,Phase D 在 device-B 恢复 |
 | alice | device-B | "丢失 device-A 后" 的新设备 |
-| bob | 单设备 | 在 `S_e2ee` 中给 alice 发消息(在 device-B 恢复之前) |
+| bob | 单设备 | 在 `R_e2ee` 中给 alice 发消息(在 device-B 恢复之前) |
 
 ## Pre-conditions
 
-- alice 已 onboard,device-A 在 `S_e2ee` 中(epoch N)
-- bob 在 `S_e2ee` 中
+- alice 已 onboard,device-A 在 `R_e2ee` 中(epoch N)
+- bob 在 `R_e2ee` 中
 - alice 的 passphrase 是测试用 `"hunter2-Strong-encryption/key-backup"`
 
 ## Steps
@@ -59,7 +59,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 ### Phase B — bob 在 alice device-A 离线时给 alice 发消息
 
 7. (假设 device-A 关闭、不同步)
-8. bob 在 `S_e2ee` 发消息 `M1`,`M2`,使用 epoch N 的 key
+8. bob 在 `R_e2ee` 发消息 `M1`,`M2`,使用 epoch N 的 key
 9. soland 接受;消息 ciphertext 落到 sync 队列等 alice 拉
 
 ### Phase C — Device-A "丢失"
@@ -83,17 +83,17 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ### Phase E — Device-B 从 MLS commit chain 重建 epoch keys + 解 bob 的消息
 
-18. device-B 拉 `S_e2ee` 的 sync:
+18. device-B 拉 `R_e2ee` 的 sync:
     - 自 epoch 0 起回放 `ck.mls.commit` 事件
     - 用 backup 提供的 `mls_history_backup_key` 派生历史 epoch secrets(spec §2.4 backfill)
     - 当前 epoch 应当 = device-A 离线时的 N(因为没有 commit advance)
 19. device-B 用 epoch N application key 解 `M1`,`M2`
-20. 断言:device-B `/timeline/<S_e2ee>` 显示 `M1`,`M2` 明文
+20. 断言:device-B `/timeline/<R_e2ee>` 显示 `M1`,`M2` 明文
 21. UI 显示 "Recovered X messages, Y epochs"
 
 ### Phase F — Device-B 可以正常收发新消息
 
-22. alice (device-B) 在 `S_e2ee` 发 `M3`
+22. alice (device-B) 在 `R_e2ee` 发 `M3`
 23. bob 拉同步,看到 `M3` 明文
 24. 断言:device-B 的写入路径正常
 

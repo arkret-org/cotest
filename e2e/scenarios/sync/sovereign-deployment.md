@@ -17,7 +17,7 @@
 ## 拓扑
 
 - 1 × `soland_main` (主权主节点) — 假设监听 `http://127.0.0.1:<soland_main_port>`
-- 1 × `soland_enclave` (隔离 enclave 节点) — 假设监听 `http://127.0.0.1:<soland_enclave_port>`,只承载 enclave Realm,不承载主域 space / directory
+- 1 × `soland_enclave` (隔离 enclave 节点) — 假设监听 `http://127.0.0.1:<soland_enclave_port>`,只承载 enclave Realm,不承载主域 Realm / directory
 - 1 × `coauth` (auth server) — 主域和 enclave 都信任同一个 coauth,但 DID resolver policy 分别配置
 - `soland_main` ↔ `soland_enclave` 之间通过 federation pull/push 同步 enclave Realm 的事件流
 
@@ -83,7 +83,7 @@
     - 在 yougen UI 通过 directory 搜索 `S_internal` 的 title → 结果为空(directory 对外部 enclave 用户裁剪)
     - 尝试 `GET <soland_main>/_cokret/find/directory/spaces?q=internal` → 返回空集或 403
 20. **alice_internal** 检查 `S_internal`(主域私密 realm)的成员列表 — bob 不存在;directory 也不会向 enclave 暴露 `S_internal`
-21. 断言:bob 试图通过 enclave 节点 hop 到 main(`POST <soland_enclave>/_cokret/peer/federation/proxy { target: <soland_main>, path: "/_soland/self/realms/..." }` 或类似)→ 拒,reason `enclave_no_upstream_proxy_for_external`
+21. 断言:bob 试图通过 enclave 节点 hop 到 main(`POST <soland_enclave>/_soland/self/deployment/enclave-proxy { target: <soland_main>, path: "/_soland/self/realms/..." }` 或类似)→ 拒,reason `enclave_no_upstream_proxy_for_external`
 
 ### Phase F — Exit + audit
 
@@ -116,7 +116,7 @@
 - **E7.1 escape attempt rejected**:bob 通过各种 vector 尝试 escape 主域:
   - directory 搜索 main domain space → 返回空 / 403
   - 直接调 `GET <soland_main>/_soland/self/realms/<internalRealmId>` → 403,reason `external_user_no_main_access`
-  - 通过 enclave 的 federation proxy 间接到 main → 拒,reason `enclave_no_upstream_proxy_for_external`
+  - 通过 enclave proxy 间接到 main → 拒,reason `enclave_no_upstream_proxy_for_external`
   - 在 enclave space 的 mention 中 `@<alice 在主域的 DID>` → 允许 mention(因为 alice 在 enclave 也是成员),但**不能**通过 mention metadata 拿到 alice 在主域其他 space 的成员关系
 - **E7.2 network outage**:`soland_main ↔ soland_enclave` 链路中断(harness 用 `route.fulfill` 拦掉 federation endpoint):
   - bob 在 enclave 内继续发消息、上传文件 → 应该**成功**(不像 offline 模式 outbox 那样 pending);enclave 节点本地接受并写入
@@ -134,7 +134,7 @@
   - `/_soland/admin/deployment/configure`、`/_soland/admin/deployment/info`、`/_soland/admin/deployment/register-enclave` 提供本地 sovereign main / enclave profile 与 trust chain handshake。
   - `/_soland/admin/deployment/realm.create`、`/_cokret/self/realm/:id` 记录 enclave Realm 的 `deployment_profile`、`hosted_on`、`external_invite_policy`。
   - `/_soland/admin/deployment/external-invite` + `/_soland/self/account/accept-external-invite` 验证 enclave trust roots;main 侧直接注册外部 DID 返回 `did_method_not_trusted`;enclave 侧 rogue DID 返回 `enclave_did_method_not_trusted`。
-  - `/_soland/self/realms/:id`、`/_cokret/find/directory/spaces`、`/_cokret/peer/federation/proxy` 覆盖 external user 的 main-domain escape rejection 与边界审计。
+  - `/_soland/self/realms/:id`、`/_cokret/find/directory/spaces`、`/_soland/self/deployment/enclave-proxy` 覆盖 external user 的 main-domain escape rejection 与边界审计。
   - `/_soland/admin/deployment/store-and-forward/*` 覆盖 enclave upstream outage 下本地 accepted、非客户端 pending、恢复后 drain/ingest 收敛。
 - **harness 已落地**:`scripts/run-joint-e2e.ps1 -DualSoland` 提供 `soland_main` / `soland_enclave` 两节点;本 scenario 的 4 条 contract test 已全部 live。
 - **yougen 后续**:enclave session metadata UI、"enclave sync lag" 标记、directory 裁剪反馈仍可在后续 UI polish 中补;P2-056 当前关闭的是 soland 侧本地开发能力。

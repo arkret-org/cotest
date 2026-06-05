@@ -4,7 +4,7 @@
 
 验证「举报 → moderator 决策 → 封禁 → anchored moderation_state → 后续 Move 被拒」的完整三层 gate 链路:
 
-1. **Capability** 层:owner 的 ban 动作必须先持有 `ck.space.moderate` capability,否则直接 `missing_capability` 拒
+1. **Capability** 层:owner 的 ban 动作必须先持有 `ck.moderation.decision` capability,否则直接 `missing_capability` 拒
 2. **Moderation Policy** 层:ban 决策 MUST anchored,写入 `ck.component.moderation_state.v1` cell,跨 peer 一致
 3. **Personal Blocklist** 层:接收方本地 mute/block 不影响其他人的视图
 
@@ -12,7 +12,7 @@
 
 ## Spec 锚点
 
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.1 — 审核权由 Space Owner 行使
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.1 — 审核权由 Realm Owner 行使
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.2 — 屏蔽是本地行为
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.3 — 举报留痕但不公开
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §2.5.0 — Capability / Moderation / Personal Blocklist 三层判定 (流程图)
@@ -21,7 +21,7 @@
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.2 — 举报原因枚举
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §3.3 — 举报的处理 (只有 moderator 可见、被举报人不通知)
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §4.1-§4.3 — 个人屏蔽是 Actor-Private,不进 cell
-- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.1 — `ck.message.redact` 需要 `ck.space.moderate`
+- `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.1 — `ck.message.redact` 需要 `ck.message.redact`
 - `cokret-spec/spec/v1/zh/governance/content-moderation.md` §5.2 — `ck.member.state{membership="ban"}` 封禁后被封者未来 Operation 被拒
 
 ## 拓扑
@@ -32,7 +32,7 @@
 
 | 名字 | DID | 角色 | 持有的 capability |
 |---|---|---|---|
-| alice | `did:web:alice-s5-<uuid>.example` | space owner + moderator | `ck.space.moderate` |
+| alice | `did:web:alice-s5-<uuid>.example` | Realm owner + moderator | `ck.moderation.decision` / `ck.message.redact` |
 | bob | `did:web:bob-s5-<uuid>.example` | 普通成员;举报人 | (默认成员 capability,无 moderate) |
 | mallory | `did:web:mallory-s5-<uuid>.example` | 普通成员;违规者 (被封禁目标) | (默认成员 capability) |
 | carol | `did:web:carol-s5-<uuid>.example` | 普通成员;旁观者,用于验证 personal blocklist 不广播 | (默认成员 capability) |
@@ -40,23 +40,23 @@
 ## Pre-conditions
 
 - 四个 DID 都注册过、都有有效 dev session token
-- alice 持有 `ck.space.moderate` (作为 owner 默认拥有,通过 yougen 或直接事件链生成)
+- alice 持有 `ck.moderation.decision` 与 `ck.message.redact` (作为 owner 默认拥有,通过 yougen 或直接事件链生成)
 
 ## Steps
 
-### Phase A — 建空间 + 加入所有成员
+### Phase A — 建 Realm + 加入所有成员
 
-1. **alice** `/setup` 建空间 `S`:
+1. **alice** `/setup` 建 Realm `R`:
    - discoverability = `listed`
    - join_rule = `invite`
    - history_visibility = `shared`
    - seed_members = `[bob.did, mallory.did, carol.did]`
-2. 记录 `spaceId`
-3. 断言:alice 的 `/realms/${spaceId}/admin` 显示 4 个成员 (alice + 3 个 seed)
+2. 记录 `realmId`
+3. 断言:alice 的 `/realms/${realmId}/admin` 显示 4 个成员 (alice + 3 个 seed)
 
 ### Phase B — mallory 发违规消息
 
-4. **mallory** 进 `/timeline/${spaceId}` 发 `M_bad = "abusive content ${stamp}"`
+4. **mallory** 进 `/timeline/${realmId}` 发 `M_bad = "abusive content ${stamp}"`
 5. 断言:M_bad 在 alice、bob、carol、mallory 四方 timeline 都可见
 
 ### Phase C — bob 举报 (Reporter 路径,§3.1)
@@ -65,9 +65,9 @@
 7. 测试以 bob 的 token 调用 `POST /_cokret/self/moderation/report`,body:
    ```json
    {
-     "space_id": "<spaceId>",
+     "realm_id": "<realmId>",
      "target_ref": "<M_bad event_id>",
-     "reason": "harassment",
+     "report_reason_code": "harassment",
      "reporter": "<bob.did>"
    }
    ```
@@ -83,7 +83,7 @@
 10. **alice** 调用 `GET /_cokret/self/moderation/reports?realm_id=S` 或 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
 11. **alice** 决定 ban mallory:
     - 调用 `ck.member.state` Move,membership = `ban`,subject = mallory.did
-    - 该 Move 必须签名 + 引用 `ck.space.moderate` capability grant
+    - 该 Move 必须签名 + 引用 `ck.moderation.decision` capability grant
 12. 断言 Capability 层:
     - **sub-test E5.1**:bob (没有 moderate cap) 尝试同样的 ban Move → 被拒,reason_code = `missing_capability`
     - alice 的 ban Move → 被接受
@@ -94,13 +94,13 @@
 
 ### Phase E — Post-ban 拒绝路径 (§5.2)
 
-14. **mallory** 进 `/timeline/${spaceId}` 尝试发新消息 `M_post_ban = "still here ${stamp}"`
+14. **mallory** 进 `/timeline/${realmId}` 尝试发新消息 `M_post_ban = "still here ${stamp}"`
 15. 断言:soland Reducer 拒绝 mallory 的 Operation,返回 `policy_denied` / `member_banned` / 类似 reason_code
 16. 断言:alice / bob / carol 三方的 timeline **不出现** `M_post_ban`
 
 ### Phase F — Tombstone redact (§5.1)
 
-17. **alice** 用 `ck.message.redact` 把原 `M_bad` redact 掉 (需要 `ck.space.moderate`,alice 持有)
+17. **alice** 用 `ck.message.redact` 把原 `M_bad` redact 掉 (需要 `ck.message.redact`,alice 持有)
 18. 断言:三方 (alice、bob、carol) 视图中,`M_bad` 位置渲染为 `redacted-tombstone`,正文不再可见
 19. **sub-test E5.2**:bob (没有 moderate) 尝试 redact 任意他人消息 → `missing_capability`
 
@@ -141,7 +141,7 @@
 - **yougen owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `ck.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
 - **remaining yougen UI 缺口**:举报入口、moderator 报告列表 — 当前 live 测试仍通过 soland HTTP API 直接驱动;后续 UI testid 可在 yougen 任务中补。
-- 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_soland/self/spaces/${spaceId}/cells/ck.component.moderation_state.v1` 或等价 endpoint
+- 测试侧需要直接读 `ck.component.moderation_state.v1` cell 来验证 anchored 状态 — soland 应当暴露 `GET /_cokret/self/events?realms=${realmId}&kinds=ck.moderation.decision` 或等价 projection endpoint
 - 跨 peer 一致性的 frontier 比对在单服务器场景不需要;留到 federation/cross-server+spaces/moderation-ban 组合测试
 
 ## 总耗时预估

@@ -1,4 +1,4 @@
-// Notifications (push prefs / DnD / per-space mute / mark-all-read)
+// Notifications (push prefs / DnD / per-realm mute / mark-all-read)
 // Contract: e2e/scenarios/discovery/notifications.md
 // Spec: discovery/push-notifications.md §2-§4, discovery/client-preferences.md
 
@@ -39,16 +39,16 @@ test.describe("notifications", () => {
     const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `S23 Notif ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         seedMembers: [bob.did],
       });
-      await bobPage.acceptInvite(spaceId);
+      await bobPage.acceptInvite(realmId);
 
       const msg = `S23 note ${stamp}`;
-      await alicePage.sendTimelineMessage(spaceId, msg);
+      await alicePage.sendTimelineMessage(realmId, msg);
 
       // bob navigates to /notifications and should see the new message in the list.
       await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
@@ -66,7 +66,7 @@ test.describe("notifications", () => {
 
   test(
     // @user-promise: e2e/scenarios/discovery/notifications.md
-    "muting a space stops push notifications for new messages but mention still notifies (spec §3 mention override)",
+    "muting a Realm stops push notifications for new messages but mention still notifies (spec §3 mention override)",
     async ({ browser, request }, testInfo) => {
       // spec: push-notifications.md §3 + §4.3.1.
       const stamp = Date.now();
@@ -83,26 +83,26 @@ test.describe("notifications", () => {
       const mentionMsg = `@${bob.handle.replace(/^@/, "")} muted mention override ${stamp}`;
 
       try {
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S23 Muted ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
           seedMembers: [bob.did],
         });
-        await bobPage.acceptInvite(spaceId);
+        await bobPage.acceptInvite(realmId);
 
         await bobPage.page.goto("/notifications/settings", { waitUntil: "domcontentloaded" });
         await expect(bobPage.page.getByTestId("notification-settings-panel")).toBeVisible({
           timeout: 30_000,
         });
-        await bobPage.page.getByTestId("space-notification-target-input").fill(spaceId);
-        await bobPage.page.getByTestId("space-mute-toggle").check();
+        await bobPage.page.getByTestId("realm-notification-target-input").fill(realmId);
+        await bobPage.page.getByTestId("realm-mute-toggle").check();
         await expect(bobPage.page.getByTestId("notification-settings-status")).toContainText(
           /muted/i,
           { timeout: 30_000 },
         );
 
-        await alicePage.sendTimelineMessage(spaceId, normalMsg);
+        await alicePage.sendTimelineMessage(realmId, normalMsg);
         await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
         await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible({
           timeout: 30_000,
@@ -111,7 +111,7 @@ test.describe("notifications", () => {
           bobPage.page.getByTestId("notification-item").filter({ hasText: normalMsg }),
         ).toHaveCount(0);
 
-        await alicePage.sendTimelineMessage(spaceId, mentionMsg);
+        await alicePage.sendTimelineMessage(realmId, mentionMsg);
         await bobPage.page.reload({ waitUntil: "domcontentloaded" });
         await expect(
           bobPage.page.getByTestId("notification-item").filter({ hasText: mentionMsg }),
@@ -142,13 +142,13 @@ test.describe("notifications", () => {
       const resumedMsg = `DND resumed ${stamp}`;
 
       try {
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S23 DND ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
           seedMembers: [bob.did],
         });
-        await bobPage.acceptInvite(spaceId);
+        await bobPage.acceptInvite(realmId);
 
         await bobPage.page.goto("/notifications/settings", { waitUntil: "domcontentloaded" });
         await expect(bobPage.page.getByTestId("notification-settings-panel")).toBeVisible({
@@ -162,7 +162,7 @@ test.describe("notifications", () => {
           { timeout: 30_000 },
         );
 
-        await alicePage.sendTimelineMessage(spaceId, suppressedMsg);
+        await alicePage.sendTimelineMessage(realmId, suppressedMsg);
         await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
         await expect(
           bobPage.page.getByTestId("notification-item").filter({ hasText: suppressedMsg }),
@@ -171,7 +171,7 @@ test.describe("notifications", () => {
         await bobPage.page.goto("/notifications/settings", { waitUntil: "domcontentloaded" });
         await bobPage.page.getByTestId("dnd-enabled-toggle").uncheck();
         await bobPage.page.getByTestId("save-notification-settings-button").click();
-        await alicePage.sendTimelineMessage(spaceId, resumedMsg);
+        await alicePage.sendTimelineMessage(realmId, resumedMsg);
         await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
         await expect(
           bobPage.page.getByTestId("notification-item").filter({ hasText: resumedMsg }),
@@ -237,7 +237,7 @@ test.describe("notifications", () => {
 
   test(
     // @user-promise: e2e/scenarios/discovery/notifications.md
-    "E2EE space with evaluation_locus=client: server sends blind wake; client decrypts and evaluates 'contains_keyword' rule locally",
+    "E2EE Realm with evaluation_locus=client: server sends blind wake; client decrypts and evaluates 'contains_keyword' rule locally",
     async ({ request }) => {
       // spec: push-notifications.md §4.5
       const stamp = Date.now();
@@ -248,18 +248,18 @@ test.describe("notifications", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S23 E2EE Blind Wake ${stamp}`,
         discoverability: "listed",
         history_visibility: "shared",
         encryption_profile: "mls_rfc9420",
       });
-      await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
       await putAccountDataViaEventApi(
         request,
         bobToken,
         bob.did,
-        spaceId,
+        realmId,
         "ck.push_rules",
         {
           rules: [
@@ -275,20 +275,20 @@ test.describe("notifications", () => {
       );
 
       const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
-      const sidecarHash = mentionSidecarHash(spaceId, bob.did);
+      const sidecarHash = mentionSidecarHash(realmId, bob.did);
       const encrypted = signedEventEnvelope({
         actorDid: alice.did,
-        realmId: spaceId,
+        realmId: realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowIdFromRealmId(spaceId),
+          flow_id: flowIdFromRealmId(realmId),
           track_name: "discussion",
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],
           encrypted_content: encryptedEnvelope(
             "ck.message.v1",
             "opaque-ciphertext-for-sealed-keyword",
-            spaceId,
+            realmId,
           ),
         },
       });
@@ -341,14 +341,14 @@ test.describe("notifications", () => {
       const bobDevice2Page = await openUserPage(browser, bobDevice2, { sessionToken: bobToken2 });
 
       try {
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S23 Cross Device ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
           seedMembers: [bob.did],
         });
-        await bobDevice1.acceptInvite(spaceId);
-        await alicePage.sendTimelineMessage(spaceId, `cross-device unread ${stamp}`);
+        await bobDevice1.acceptInvite(realmId);
+        await alicePage.sendTimelineMessage(realmId, `cross-device unread ${stamp}`);
 
         await bobDevice1.page.goto("/notifications", { waitUntil: "domcontentloaded" });
         await expect(bobDevice1.page.getByTestId("unread-count")).toContainText(/[1-9]/, {
@@ -377,8 +377,8 @@ test.describe("notifications", () => {
   );
 });
 
-function mentionSidecarHash(spaceId: string, did: string): string {
-  return createHash("sha256").update(`${spaceId}|${did}`).digest("hex");
+function mentionSidecarHash(realmId: string, did: string): string {
+  return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
 }
 
 function encryptedEnvelope(

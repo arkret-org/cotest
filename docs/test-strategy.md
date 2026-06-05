@@ -70,7 +70,7 @@ asserts only public HTTP behavior plus limited `cokret-rust-sdk` smoke paths.
 
 - `federation_readiness`: remote service discovery and basic cross-instance
   wiring checks.
-- `federation_contract`: transaction/push/pull/verify-actor style contract and
+- `federation_contract`: transaction/push/pull/actor signature verification style contract and
   invalid-input behavior.
 - `federation_collaboration`: cross-server membership, remote message
   propagation, sync visibility, and federated projection behavior.

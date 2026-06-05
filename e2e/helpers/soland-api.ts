@@ -7,6 +7,7 @@ import {
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 
 export type OperationKind =
+  | "circle"
   | "event"
   | "flow"
   | "mls_group"
@@ -14,6 +15,7 @@ export type OperationKind =
   | "mls_welcome"
   | "operation"
   | "realm"
+  | "relation"
   | "space";
 
 export type SignedEventEnvelopeArgs = {
@@ -24,7 +26,6 @@ export type SignedEventEnvelopeArgs = {
   actorSeq?: number;
   createdAt?: string;
   eventId?: string;
-  operationId?: string;
   schemaId?: string;
   proofVerificationMethod?: string;
   anchorRef?: string;
@@ -408,10 +409,6 @@ export function signedEventEnvelope(
       critical_extensions: [],
     },
     payload,
-    unsigned: {
-      local_operation_idempotency_alias:
-        args.operationId ?? typedId("operation"),
-    },
     proofs: [
       eventProof({
         actorDid: args.actorDid,
@@ -485,68 +482,64 @@ export function canonicalTimestamp(date: Date = new Date()): string {
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-export function makeOperation(args: {
-  operationId?: string;
+export function makeFederationEvent(args: {
+  eventId?: string;
+  actorDid?: string;
   realmId: string;
-  objectType: string;
-  operationType?: string;
+  kind: string;
   payload: Record<string, unknown>;
 }) {
-  return {
-    schema: "ck.local.operation_draft.v1",
-    operation_id: args.operationId ?? typedId("operation"),
-    type: "operation",
-    operation_type: args.operationType ?? "create",
-    realm_id: args.realmId,
-    object_id: undefined,
-    object_type: args.objectType,
+  return signedEventEnvelope({
+    eventId: args.eventId,
+    actorDid: args.actorDid ?? "did:web:cotest-federation.example",
+    realmId: args.realmId,
+    kind: args.kind,
+    schemaId: schemaIdForEventKind(args.kind),
     payload: args.payload,
-    created_at: new Date().toISOString(),
-  };
+  });
 }
 
-export async function pushFederationOperations(
+export async function pushFederationEvents(
   request: APIRequestContext,
-  operations: Array<Record<string, unknown>>,
+  events: Array<Record<string, unknown>>,
   opts: {
     origin: string;
     destination?: string;
     realmId: string;
     server?: SolandKey;
-    serviceBindingRef?: string;
+    idempotencyKey?: string;
   },
 ) {
-  const response = await rawPushFederationOperations(request, operations, opts);
+  const response = await rawPushFederationEvents(request, events, opts);
   return await expectJsonOk<{
+    status?: string;
     accepted?: string[];
+    duplicate?: string[];
     rejected?: Array<Record<string, unknown>>;
     quarantine?: unknown[];
-  }>(response, "push federation operations");
+  }>(response, "push federation events");
 }
 
-export async function rawPushFederationOperations(
+export async function rawPushFederationEvents(
   request: APIRequestContext,
-  operations: Array<Record<string, unknown>>,
+  events: Array<Record<string, unknown>>,
   opts: {
     origin: string;
     destination?: string;
     realmId: string;
     server?: SolandKey;
-    serviceBindingRef?: string;
+    idempotencyKey?: string;
     tamperSignature?: boolean;
     relaySourceDid?: string;
   },
 ) {
   const destination = opts.destination ?? solandServiceDid(opts.server);
-  const url = `${solandBaseUrl(opts.server)}/_cokret/peer/federation/push-operations`;
-  const body = stripUndefined({
-    origin: opts.origin,
-    destination,
-    realm_id: opts.realmId,
-    service_binding_ref:
-      opts.serviceBindingRef ?? `${opts.origin}#cotest-federation-smoke`,
-    operations: operations.map(federationOperationWireBody),
-  });
+  const url = `${solandBaseUrl(opts.server)}/_cokret/peer/events`;
+  const body = peerEventsSubmitBody(
+    opts.realmId,
+    events.map(federationEventWireBody),
+    opts.idempotencyKey,
+  );
   const sourceDid = opts.relaySourceDid ?? opts.origin;
   const headers = signedFederationPushHeaders(
     sourceDid,
@@ -563,63 +556,122 @@ export async function rawPushFederationOperations(
   });
 }
 
-function federationOperationWireBody(
-  operation: Record<string, unknown>,
+function federationEventWireBody(
+  event: Record<string, unknown>,
 ): Record<string, unknown> {
-  return stripUndefined(operation) as Record<string, unknown>;
+  return stripUndefined(event) as Record<string, unknown>;
 }
 
-export async function backfillFederationOperations(
+export async function queryPeerEventsApi(
   request: APIRequestContext,
   opts: {
     server?: SolandKey;
-    peerUrl?: string;
-    peerDid?: string;
-    realmId: string;
-    afterCursor?: string;
+    realmId?: string;
+    actorDid?: string;
     limit?: number;
-    maxPages?: number;
+    after?: string;
+    sourceDid?: string;
   },
 ) {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_cokret/peer/federation/backfill-operations`,
-    {
-      data: {
-        peer_url: opts.peerUrl,
-        peer_did: opts.peerDid,
-        realm_id: opts.realmId,
-        after_cursor: opts.afterCursor,
-        limit: opts.limit,
-        max_pages: opts.maxPages,
-      },
-    },
+  const params = new URLSearchParams({
+    limit: String(opts.limit ?? 100),
+  });
+  if (opts.realmId) {
+    params.set("realms", opts.realmId);
+  }
+  if (opts.actorDid) {
+    params.set("actors", opts.actorDid);
+  }
+  if (opts.after) {
+    params.set("after", opts.after);
+  }
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/_cokret/peer/events?${params.toString()}`,
+    { headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server)) },
   );
   return await expectJsonOk<{
-    pulled: number;
-    accepted?: string[];
-    rejected?: Array<Record<string, unknown>>;
+    events: Array<Record<string, unknown>>;
     next_cursor?: string;
+    prev_cursor?: string;
     has_more?: boolean;
-    frontier_before?: Record<string, unknown>;
-    frontier_after?: Record<string, unknown>;
-  }>(response, "backfill federation operations");
+  }>(response, "query peer events");
 }
 
-export async function operationFrontierApi(
+export async function peerEventFrontierApi(
   request: APIRequestContext,
   realmId: string,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: SolandKey; sourceDid?: string } = {},
 ) {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/peer/federation/operation-frontier?realm_id=${encodeURIComponent(realmId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server)) },
   );
   return await expectJsonOk<{
     realm_id: string;
-    operation_count: number;
-    operation_ids: string[];
-    latest_operation_id?: string;
-    frontier_digest: string;
-  }>(response, "federation operation frontier");
+    heads: string[];
+    frontier_root: string;
+    actor_seq_upper_bounds?: Record<string, number>;
+  }>(response, "peer event frontier");
+}
+
+function schemaIdForEventKind(kind: string): string {
+  if (kind === "ck.message.create") {
+    return "ck.schema.message.v1";
+  }
+  if (kind === "ck.message.redact") {
+    return "ck.schema.redaction.v1";
+  }
+  if (kind === "ck.member.state") {
+    return "ck.schema.member_state.v1";
+  }
+  if (kind.startsWith("ck.space.")) {
+    return "ck.schema.space.v1";
+  }
+  return "ck.schema.event.v1";
+}
+
+function peerEventsSubmitBody(
+  realmId: string,
+  events: Array<Record<string, unknown>>,
+  idempotencyKey?: string,
+): Record<string, unknown> {
+  const firstEventId =
+    typeof events[0]?.event_id === "string"
+      ? (events[0].event_id as string)
+      : typedId("event");
+  const bindingPayload = {
+    domain: "ck.peer.events.submit.service_binding.v1",
+    realm_id: realmId,
+    first_event_id: firstEventId,
+  };
+  return stripUndefined({
+    service_binding_ref: {
+      realm_id: realmId,
+      realm_policy_digest: `sha256:${sha256CanonicalJson(bindingPayload)}`,
+      membership_frontier: [firstEventId],
+      delivery_binding_frontier: [firstEventId],
+      destination_service_type: "principal_server",
+      reducer_profile_digest: `sha256:${sha256CanonicalJson({
+        domain: "ck.peer.events.submit.reducer_profile.v1",
+        profile: "ck.reducer.v1",
+      })}`,
+    },
+    events,
+    idempotency_key: idempotencyKey,
+  }) as Record<string, unknown>;
+}
+
+function peerGetHeaders(
+  sourceDid = "did:web:cotest-peer.example",
+  destinationDid: string,
+): Record<string, string> {
+  return {
+    "request-canonical-digest": `sha256:${"0".repeat(64)}`,
+    "source-service-did": sourceDid,
+    "destination-service-did": destinationDid,
+    "source-trust-domain": trustDomainFromServiceDid(sourceDid),
+    "destination-trust-domain": trustDomainFromServiceDid(destinationDid),
+  };
 }
 
 function signedFederationPushHeaders(

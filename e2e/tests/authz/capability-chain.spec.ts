@@ -17,7 +17,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 type GrantBody = {
-  space_id: string;
+  realm_id: string;
   subject: string;
   resource?: string;
   actions: string[];
@@ -72,14 +72,14 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `S20 baseline ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
 
       // mallory (non-member, no capability) attempts to send a message via API.
-      const send = await request.post(`${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/messages`, {
+      const send = await request.post(`${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/messages`, {
         headers: { authorization: `Bearer ${malloryToken}` },
         data: { content: { text: "mallory attempt" } },
       });
@@ -103,7 +103,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `cap grant ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -111,7 +111,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       const expiresAt = plusSeconds(3600);
       const grantResp = await createGrant(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: bob.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -128,7 +128,7 @@ test.describe("capability chain @fully-implemented", () => {
       const check = await authzCheck(request, aliceToken, {
         actor: bob.did,
         action: "ck.message.create",
-        resource: { kind: "space", space_id: spaceId },
+        resource: { kind: "realm", realm_id: realmId },
       });
       expect(check.status()).toBe(200);
       const decision = await check.json();
@@ -158,14 +158,14 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `cap delegate ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
 
       const parentGrant = await createGrant(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: bob.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -176,7 +176,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // bob delegates to carol with a STRICTER (earlier) expires_at.
       const childGrant = await createGrant(request, bobToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: carol.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -190,7 +190,7 @@ test.describe("capability chain @fully-implemented", () => {
       const check = await authzCheck(request, aliceToken, {
         actor: carol.did,
         action: "ck.message.create",
-        resource: { kind: "space", space_id: spaceId },
+        resource: { kind: "realm", realm_id: realmId },
       });
       expect(check.status()).toBe(200);
       const decision = await check.json();
@@ -219,14 +219,14 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `cap revoke ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
 
       const parentResp = await createGrant(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: bob.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -236,7 +236,7 @@ test.describe("capability chain @fully-implemented", () => {
       const parent = await parentResp.json();
 
       const childResp = await createGrant(request, bobToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: carol.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -250,7 +250,7 @@ test.describe("capability chain @fully-implemented", () => {
       const bobBefore = await authzCheck(request, aliceToken, {
         actor: bob.did,
         action: "ck.message.create",
-        resource: { kind: "space", space_id: spaceId },
+        resource: { kind: "realm", realm_id: realmId },
       });
       expect((await bobBefore.json()).allowed).toBe(true);
 
@@ -268,12 +268,12 @@ test.describe("capability chain @fully-implemented", () => {
       const bobAfter = await authzCheck(request, aliceToken, {
         actor: bob.did,
         action: "ck.message.create",
-        resource: { kind: "space", space_id: spaceId },
+        resource: { kind: "realm", realm_id: realmId },
       });
       const carolAfter = await authzCheck(request, aliceToken, {
         actor: carol.did,
         action: "ck.message.create",
-        resource: { kind: "space", space_id: spaceId },
+        resource: { kind: "realm", realm_id: realmId },
       });
       expect((await bobAfter.json()).allowed).toBe(false);
       expect((await carolAfter.json()).allowed).toBe(false);
@@ -301,7 +301,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `cap overgrant ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -309,7 +309,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // alice only gives bob `ck.message.create`.
       const parentResp = await createGrant(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: bob.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -320,7 +320,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // bob tries to delegate `ck.space.moderate` to carol — bob doesn't hold it.
       const childResp = await createGrant(request, bobToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: carol.did,
         resource: "*",
         actions: ["ck.space.moderate"],
@@ -354,7 +354,7 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `cap overexpire ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
@@ -362,7 +362,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // alice gives bob a grant expiring in 30 minutes.
       const parentResp = await createGrant(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: bob.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -373,7 +373,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // bob tries to delegate to carol expiring in 2 hours.
       const childResp = await createGrant(request, bobToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: carol.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -407,14 +407,14 @@ test.describe("capability chain @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `cap audit ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
       });
 
       const parentResp = await createGrant(request, aliceToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: bob.did,
         resource: "*",
         actions: ["ck.message.create"],
@@ -423,7 +423,7 @@ test.describe("capability chain @fully-implemented", () => {
       const parent = await parentResp.json();
 
       const childResp = await createGrant(request, bobToken, {
-        space_id: spaceId,
+        realm_id: realmId,
         subject: carol.did,
         resource: "*",
         actions: ["ck.message.create"],

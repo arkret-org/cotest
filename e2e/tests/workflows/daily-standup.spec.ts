@@ -49,22 +49,22 @@ test.describe("workflow: async daily standup", () => {
 
     try {
       // Phase A — standup space (today's edition).
-      const spaceId = await linPage.createRealm({
+      const realmId = await linPage.createRealm({
         title: `Team Daily ${stamp}`,
         summary: "Async standup channel",
         discoverability: "listed",
         joinRule: "invite",
         seedMembers: [pat.did, quincy.did],
       });
-      await Promise.all([patPage.acceptInvite(spaceId), quincyPage.acceptInvite(spaceId)]);
+      await Promise.all([patPage.acceptInvite(realmId), quincyPage.acceptInvite(realmId)]);
 
       // Phase B — three standups land.
-      await linPage.sendTimelineMessage(spaceId, linStandup);
-      await patPage.sendTimelineMessage(spaceId, patStandup);
-      await quincyPage.sendTimelineMessage(spaceId, quincyStandup);
+      await linPage.sendTimelineMessage(realmId, linStandup);
+      await patPage.sendTimelineMessage(realmId, patStandup);
+      await quincyPage.sendTimelineMessage(realmId, quincyStandup);
 
       for (const actor of [linPage, patPage, quincyPage]) {
-        await actor.gotoTimelineRealm(spaceId);
+        await actor.gotoTimelineRealm(realmId);
         for (const body of [linStandup, patStandup, quincyStandup]) {
           await expect(actor.page.getByTestId("timeline")).toContainText(body, {
             timeout: 30_000,
@@ -74,31 +74,31 @@ test.describe("workflow: async daily standup", () => {
       await stepShot(linPage.page, testInfo, "B-three-standups");
 
       // Phase C — Lin replies on Pat's standup to unblock the PR review.
-      await linPage.gotoTimelineRealm(spaceId);
+      await linPage.gotoTimelineRealm(realmId);
       await expect(linPage.page.getByTestId("timeline")).toContainText(patStandup, {
         timeout: 30_000,
       });
       await linPage.timelineEvent(patStandup).getByTestId("reply-button").click();
       await expect(linPage.page.getByTestId("reply-to-banner")).toBeVisible();
-      await linPage.sendTimelineMessage(spaceId, linUnblockPat);
+      await linPage.sendTimelineMessage(realmId, linUnblockPat);
       await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
       await expect(
         linPage.timelineEvent(linUnblockPat).getByTestId("reply-indicator"),
       ).toBeVisible({ timeout: 30_000 });
 
-      await patPage.gotoTimelineRealm(spaceId);
+      await patPage.gotoTimelineRealm(realmId);
       await expect(patPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
       await stepShot(patPage.page, testInfo, "C-unblock-landed");
 
       // Phase D — Lin realises 30min is wrong and edits the reply.
-      await linPage.gotoTimelineRealm(spaceId);
+      await linPage.gotoTimelineRealm(realmId);
       await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
       await linPage.timelineEvent(linUnblockPat).getByTestId("edit-button").click();
       await linPage.page.getByTestId("edit-composer").locator("textarea").fill(linUnblockPatFixed);
       await linPage.page.getByTestId("save-edit-button").click();
       await expect(linPage.timelineEvent(linUnblockPatFixed)).toBeVisible({ timeout: 30_000 });
       await expect(linPage.page.getByTestId("write-status")).toContainText(/revised/);
-      await patPage.gotoTimelineRealm(spaceId);
+      await patPage.gotoTimelineRealm(realmId);
       await expect(patPage.timelineEvent(linUnblockPatFixed)).toBeVisible({ timeout: 30_000 });
       await stepShot(patPage.page, testInfo, "D-eta-corrected");
     } finally {

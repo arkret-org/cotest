@@ -2,15 +2,15 @@
 
 ## 目标
 
-模拟一个真实场景:Mei(经理)给新人 Yuki 做入职引导。串联 space 创建、邀请、timeline 消息(reply + edit)和 kanban 任务列表。这是一个综合性的"day-1 onboarding"流程,目的是让多个已经可用的原语在同一个用户故事里跑通。
+模拟一个真实场景:Mei(经理)给新人 Yuki 做入职引导。串联 Realm 创建、邀请、timeline 消息(reply + edit)和 kanban 任务列表。这是一个综合性的"day-1 onboarding"流程,目的是让多个已经可用的原语在同一个用户故事里跑通。
 
 不验证:profile 注册细节、多设备配对、E2EE。
 
 ## Spec 锚点
 
-- `models/space-and-place.md` §2-§3 — Space 生命周期、Join Policy
+- `models/realm-and-space.md` §2-§3 — Realm 生命周期、Join Policy、Space container
 - `models/flow-and-message.md` §8 — Message reply/edit
-- `models/space-and-place.md` §4 — Place / Board / List
+- `models/realm-and-space.md` §4 — Space / Board / List
 
 ## 拓扑
 
@@ -20,12 +20,12 @@
 
 | 名字 | 角色 |
 |---|---|
-| mei | 经理,space owner |
+| mei | 经理,Realm owner |
 | yuki | 新人,Phase A 接受邀请 |
 
 ## Steps
 
-### Phase A — Mei 准备入职 space
+### Phase A — Mei 准备入职 Realm
 
 1. Mei `createRealm` `"Welcome to the team"`,`joinRule = invite`,`seedMembers = [yuki.did]`
 2. Yuki `acceptInvite`
@@ -41,7 +41,7 @@
 
 ### Phase C — Yuki 跑完一天
 
-9. Yuki 进 `/kanban`(同 space),看到 Mei 建的四张卡
+9. Yuki 进 `/kanban`(同 Realm),看到 Mei 建的四张卡
 10. Yuki archive `"Set up dev laptop"`(完成了)
 11. Mei 在 timeline 发 `"Great progress today — see you tomorrow"`
 12. Yuki 回复 `"Will do, see you tomorrow!"`

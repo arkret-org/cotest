@@ -27,7 +27,7 @@
 |---|---|---|
 | alice | device-1 (laptop) | 已 onboard,持 PSK |
 | alice | device-2 (phone) | Phase A 新加入 |
-| bob | 任意设备 | 与 alice 在 E2EE space,验证撤销后 MLS Remove 生效 |
+| bob | 任意设备 | 与 alice 在 E2EE Realm,验证撤销后 MLS Remove 生效 |
 
 ## Steps
 
@@ -45,7 +45,7 @@
 
 ### Phase B — 两台设备并发收发
 
-10. alice (device-1) 在 space `S_a` 发消息 `M_d1`
+10. alice (device-1) 在 Realm `R_a` 发消息 `M_d1`
 11. 断言:30s 内 device-2 收到 `M_d1`,timeline 出现
 12. alice (device-2) 发 `M_d2`
 13. 断言:device-1 收到 `M_d2`
@@ -59,7 +59,7 @@
 18. soland reducer:
     - 接受 `ck.device.revoke`
     - 把 device-2 从 alice 的 active device set 移除
-    - 若在 E2EE space:触发 MLS Remove(剔除 device-2 的 leaf node)+ 新 commit + 新 epoch
+    - 若在 E2EE Realm:触发 MLS Remove(剔除 device-2 的 leaf node)+ 新 commit + 新 epoch
 19. 断言:device-1 的 `/settings/devices` 看不到 device-2 了
 
 ### Phase D — 撤销后 Device 2 提交 Move 被拒
@@ -78,7 +78,7 @@
 
 ### Phase F — MLS Remove fan-out
 
-28. bob 在 Phase A 之前已经和 alice 在 E2EE space 中;Phase C 触发 MLS Remove
+28. bob 在 Phase A 之前已经和 alice 在 E2EE Realm 中;Phase C 触发 MLS Remove
 29. bob 拉 sync → 收到新 epoch commit
 30. 断言:bob 的 timeline 上,Phase C 之后的消息使用新 epoch key;device-2 没有这把新 key,理论上**不能解** 新消息(即使绕过本地 revoke 检查)
 

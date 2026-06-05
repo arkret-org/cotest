@@ -201,7 +201,7 @@ pub use wire::{
     run_megolm_ratcheting_fixture_suite, run_membership_fsm_fixture_suite,
     run_mimi_components_fixture_suite, run_mls_e2ee_basic_fixture_suite,
     run_mls_move_covered_frontier_fixture_suite, run_multi_admin_distinct_approver_gate_check,
-    run_multi_space_federation_fixture_suite, run_operation_registry_coverage_fixture_suite,
+    run_multi_realm_federation_fixture_suite, run_operation_registry_coverage_fixture_suite,
     run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
     run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
     run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,
@@ -588,7 +588,7 @@ pub(crate) fn rank_between(left: Option<&str>, right: Option<&str>) -> Result<St
             let left_digit = rank_char_index(left.chars().last().unwrap())?;
             let right_digit = rank_char_index(right.chars().last().unwrap())?;
             if right_digit <= left_digit + 1 {
-                bail!("no space between {left} and {right}");
+                bail!("no Realm between {left} and {right}");
             }
             let middle = (left_digit + right_digit) / 2;
             Ok(format!("{left_prefix}{}", rank_char_at(middle)?))

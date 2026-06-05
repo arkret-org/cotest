@@ -4,12 +4,12 @@
 
 ## 范围
 
-- 出站 `POST /_cokret/peer/federation/push-operations` 带 `Idempotency-Key`、`Content-Digest`、`Signature-Input`、`Signature`。
+- 出站 `POST /_cokret/peer/peer/events` 带 `Idempotency-Key`、`Content-Digest`、`Signature-Input`、`Signature`。
 - 签名 transcript 覆盖 `@method`、`@target-uri`、body digest、source/destination service DID、source/destination trust_domain、canonical request hash。
 - body digest 篡改、缺失 trust_domain、trust_domain mismatch 都会使接收端验签失败。
 - 同 peer + idempotency key 重放不产生第二条 outbox row。
 - service key rotation/revoke 后，旧 signed request 不再能用新 service public key 验过。
-- 入站 `push-operations` 对 tampered `Signature` 返回 4xx，并在错误信息里给出 key rotation refresh hint（由 `federation/cross-server` live case 覆盖）。
+- 入站 `peer events submit` 对 tampered `Signature` 返回 4xx，并在错误信息里给出 key rotation refresh hint（由 `federation/cross-server` live case 覆盖）。
 
 ## 不验证
 

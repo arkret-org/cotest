@@ -54,7 +54,7 @@ test.describe("policy server check", () => {
       ensureRegistered(request, bob),
     ]);
     const aliceToken = await issueDevSession(request, alice);
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 policy config ${stamp}`,
       discoverability: "listed",
       history_visibility: "shared",
@@ -64,7 +64,7 @@ test.describe("policy server check", () => {
     const policyServerUrl = `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`;
 
     const put = await request.put(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(spaceId)}/policy-server`,
+      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
       {
         headers: authHeaders(aliceToken),
         data: {
@@ -80,13 +80,13 @@ test.describe("policy server check", () => {
       put,
       "put realm policy server",
     );
-    expect(projected.realm_id).toBe(spaceId);
+    expect(projected.realm_id).toBe(realmId);
     expect(projected.policy_server_did).toBe(policyServerDid);
     expect(projected.policy_server_url).toBe(policyServerUrl);
     expect(projected.from_org_fallback).toBe(false);
 
     const get = await request.get(
-      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(spaceId)}/policy-server`,
+      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
       { headers: authHeaders(aliceToken) },
     );
     const fetched = await expectJsonOk<Record<string, unknown>>(
@@ -101,9 +101,9 @@ test.describe("policy server check", () => {
         actor: bob.did,
         action: "ck.space.write_message",
         resource: {
-          kind: "space",
-          id: spaceId,
-          space_id: spaceId,
+          kind: "realm",
+          id: realmId,
+          realm_id: realmId,
         },
       },
     });
@@ -151,7 +151,7 @@ test.describe("policy server check", () => {
         });
         expect(realmResp.status()).toBe(200);
 
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S30 policy ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
@@ -164,7 +164,7 @@ test.describe("policy server check", () => {
           { data: { default: { decision: "allow" } } },
         );
         expect(allowScenario.status()).toBe(200);
-        await alicePage.gotoRealmAdmin(spaceId);
+        await alicePage.gotoRealmAdmin(realmId);
         // (drive invite-member → send-invite-button against alicePage; assert
         // realm-admin-panel status contains "invited" + bob.did)
         await stepShot(alicePage.page, testInfo, "policy-allow-invite");
@@ -257,12 +257,12 @@ test.describe("policy server check", () => {
           data: { default: { decision: "allow", delay_ms: 9000 } },
         });
 
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S30 timeout ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
-        void spaceId;
+        void realmId;
         void bob;
         // (drive invite; assert soland responds 412 errcode="policy_denied"
         //  reason="policy_timeout" within ~2s of issuing the request)

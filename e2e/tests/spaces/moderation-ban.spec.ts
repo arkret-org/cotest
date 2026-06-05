@@ -13,8 +13,8 @@ import {
   addRealmMemberApi,
   authHeaders,
   createRealmApi,
-  makeOperation,
-  pushFederationOperations,
+  makeFederationEvent,
+  pushFederationEvents,
   queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
@@ -77,7 +77,7 @@ test.describe("moderation and ban", () => {
       data: {
         realm_id: realmId,
         target_ref: sent.event_id,
-        reason: "harassment",
+        report_reason_code: "harassment",
         description: "S5 abusive content posted by mallory",
         reporter: bob.did,
         evidence_refs: [sent.event_id],
@@ -145,9 +145,9 @@ test.describe("moderation and ban", () => {
     expect(reports.ok()).toBeTruthy();
     expect(JSON.stringify(await reports.json())).toContain(reportBody.report_id);
 
-    const banOperation = makeOperation({
+    const banEvent = makeFederationEvent({
       realmId,
-      objectType: "ck.member.state",
+      kind: "ck.member.state",
       payload: {
         actor_id: mallory.did,
         member: mallory.did,
@@ -156,11 +156,11 @@ test.describe("moderation and ban", () => {
         report_ref: reportBody.report_id,
       },
     });
-    const banPush = await pushFederationOperations(request, [banOperation], {
+    const banPush = await pushFederationEvents(request, [banEvent], {
       origin: solandServiceDid(),
       realmId,
     });
-    expect(banPush.accepted).toContain(banOperation.operation_id);
+    expect(banPush.accepted).toContain(banEvent.event_id);
 
     const realmAfterBan = await request.get(
       `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
@@ -176,9 +176,9 @@ test.describe("moderation and ban", () => {
     });
     expect([401, 403, 404]).toContain(bannedWrite.status());
 
-    const redactOperation = makeOperation({
+    const redactEvent = makeFederationEvent({
       realmId,
-      objectType: "ck.message.redact",
+      kind: "ck.message.redact",
       payload: {
         target_event_id: sent.event_id,
         redacts: sent.event_id,
@@ -186,11 +186,11 @@ test.describe("moderation and ban", () => {
         actor: alice.did,
       },
     });
-    const redactPush = await pushFederationOperations(request, [redactOperation], {
+    const redactPush = await pushFederationEvents(request, [redactEvent], {
       origin: solandServiceDid(),
       realmId,
     });
-    expect(redactPush.accepted).toContain(redactOperation.operation_id);
+    expect(redactPush.accepted).toContain(redactEvent.event_id);
 
     const afterRedactionAlice = await queryRealmEventsApi(request, aliceToken, realmId);
     const afterRedactionBob = await queryRealmEventsApi(request, bobToken, realmId);
@@ -231,28 +231,28 @@ test.describe("moderation and ban", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 
-    const firstBan = makeOperation({
+    const firstBan = makeFederationEvent({
       realmId,
-      objectType: "ck.member.state",
+      kind: "ck.member.state",
       payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
     });
-    const secondBan = makeOperation({
+    const secondBan = makeFederationEvent({
       realmId,
-      objectType: "ck.member.state",
+      kind: "ck.member.state",
       payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
     });
 
-    const first = await pushFederationOperations(request, [firstBan], {
+    const first = await pushFederationEvents(request, [firstBan], {
       origin: solandServiceDid(),
       realmId,
     });
-    expect(first.accepted).toContain(firstBan.operation_id);
+    expect(first.accepted).toContain(firstBan.event_id);
 
-    const second = await pushFederationOperations(request, [secondBan], {
+    const second = await pushFederationEvents(request, [secondBan], {
       origin: solandServiceDid(),
       realmId,
     });
-    expect(second.accepted).toContain(secondBan.operation_id);
+    expect(second.accepted).toContain(secondBan.event_id);
 
     const realm = await request.get(`${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`, {
       headers: authHeaders(aliceToken),

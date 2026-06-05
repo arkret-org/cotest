@@ -16,7 +16,7 @@
         "message_count": 1
       },
       "anchor_payload": {
-        "anchor_id": "ax:space_S1:7",
+        "anchor_id": "ax:realm_R1:7",
         "covered_move_ids": ["mv:abc123"]
       },
       "expected": {
@@ -40,7 +40,7 @@
         "message_count": 1
       },
       "anchor_payload": {
-        "anchor_id": "ax:space_S1:8",
+        "anchor_id": "ax:realm_R1:8",
         "covered_move_ids": ["mv:m1", "mv:m2"]
       },
       "expected": {
@@ -65,7 +65,7 @@
         "message_count": 1
       },
       "anchor_payload": {
-        "anchor_id": "ax:space_S1:7",
+        "anchor_id": "ax:realm_R1:7",
         "covered_move_ids": ["mv:abc123"]
       },
       "duplicate_apply": true,

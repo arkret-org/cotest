@@ -1,7 +1,7 @@
 {
   "profile": "ck.profile.lattice_mixed_kinds_vectors.v1",
   "version": "2026-05-18",
-  "comment": "CT-2 — verifies Cokret state resolution when a single Space has cells of different lattice types (cas-register + or-set + mv-register) updating concurrently. Spec authority: cokret-spec/spec/v1/zh/models/space-and-place.md (lattice cell registry / co_write_policy) + cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md §3 (lattice_op kinds) and §5.3 (per-lattice reference impl). Each cell family has its own lattice; a single Move MAY write multiple cells, and concurrent Moves are resolved per-cell by the cell's own lattice — there is no cross-cell winner reconstruction.",
+  "comment": "CT-2 — verifies Cokret state resolution when a single Space has cells of different lattice types (cas-register + or-set + mv-register) updating concurrently. Spec authority: cokret-spec/spec/v1/zh/models/realm-and-space.md (lattice cell registry / co_write_policy) + cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md §3 (lattice_op kinds) and §5.3 (per-lattice reference impl). Each cell family has its own lattice; a single Move MAY write multiple cells, and concurrent Moves are resolved per-cell by the cell's own lattice — there is no cross-cell winner reconstruction.",
   "notes": [
     "Move objects in these vectors describe protocol-level semantics. Wire-required fields space_id / hlc / sig are elided for readability per the move-anchor-lattice-fixture convention.",
     "Cell ids follow ck:cell:<component>:<subject>; subject placeholders use safe ULIDs and dotted DID forms.",

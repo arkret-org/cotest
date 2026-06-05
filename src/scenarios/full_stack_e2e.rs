@@ -422,7 +422,7 @@ fn step_9_revocation(original: &MemberDeliveryBindingCandidate) -> Result<()> {
 // ── Negative cases ─────────────────────────────────────────────────────────
 
 /// `did_document_fallback_rejected` — `binding_source = did_document_default`
-/// is forbidden at the schema/SDK boundary regardless of Space policy. This
+/// is forbidden at the schema/SDK boundary regardless of Realm policy. This
 /// guards the "policy was never wired so fall back to the DID Document"
 /// loophole that an inattentive directory implementation might leak.
 fn negative_did_document_fallback_rejected() -> Result<()> {

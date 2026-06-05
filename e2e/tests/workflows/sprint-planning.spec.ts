@@ -1,7 +1,7 @@
 // Sprint planning workflow — tech lead + two engineers commit to stories
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
-//   - models/space-and-place.md §2-§4 (Space + Board + List)
+//   - models/realm-and-space.md §2-§4 (Space + Board + List)
 //   - models/flow-and-message.md §8 (reply chain)
 //
 // Realistic story: Tech-lead Mei kicks off a sprint, two engineers reply
@@ -51,38 +51,38 @@ test.describe("workflow: sprint planning", () => {
 
     try {
       // Phase A — Mei spins up the sprint space with both engineers seeded.
-      const spaceId = await meiPage.createRealm({
+      const realmId = await meiPage.createRealm({
         title: `Sprint 24 ${stamp}`,
         summary: "Sprint planning + claims",
         discoverability: "listed",
         joinRule: "invite",
         seedMembers: [bob.did, carol.did],
       });
-      await Promise.all([bobPage.acceptInvite(spaceId), carolPage.acceptInvite(spaceId)]);
-      await meiPage.sendTimelineMessage(spaceId, kickoff);
+      await Promise.all([bobPage.acceptInvite(realmId), carolPage.acceptInvite(realmId)]);
+      await meiPage.sendTimelineMessage(realmId, kickoff);
       await stepShot(meiPage.page, testInfo, "A-kickoff");
 
       // Phase B — both engineers receive the kickoff and reply with claims.
-      await bobPage.gotoTimelineRealm(spaceId);
+      await bobPage.gotoTimelineRealm(realmId);
       await expect(bobPage.page.getByTestId("timeline")).toContainText(kickoff, {
         timeout: 30_000,
       });
       await bobPage.timelineEvent(kickoff).getByTestId("reply-button").click();
       await expect(bobPage.page.getByTestId("reply-to-banner")).toBeVisible();
-      await bobPage.sendTimelineMessage(spaceId, bobClaim);
+      await bobPage.sendTimelineMessage(realmId, bobClaim);
       await expect(bobPage.timelineEvent(bobClaim)).toBeVisible({ timeout: 30_000 });
       await expect(bobPage.timelineEvent(bobClaim).getByTestId("reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(bobPage.page, testInfo, "B-bob-claimed");
 
-      await carolPage.gotoTimelineRealm(spaceId);
+      await carolPage.gotoTimelineRealm(realmId);
       await expect(carolPage.page.getByTestId("timeline")).toContainText(kickoff, {
         timeout: 30_000,
       });
       await carolPage.timelineEvent(kickoff).getByTestId("reply-button").click();
       await expect(carolPage.page.getByTestId("reply-to-banner")).toBeVisible();
-      await carolPage.sendTimelineMessage(spaceId, carolClaim);
+      await carolPage.sendTimelineMessage(realmId, carolClaim);
       await expect(carolPage.timelineEvent(carolClaim)).toBeVisible({ timeout: 30_000 });
       await expect(carolPage.timelineEvent(carolClaim).getByTestId("reply-indicator")).toBeVisible({
         timeout: 30_000,
@@ -90,15 +90,15 @@ test.describe("workflow: sprint planning", () => {
       await stepShot(carolPage.page, testInfo, "B-carol-claimed");
 
       // Phase C — Mei closes the loop after seeing both claims arrive.
-      await meiPage.gotoTimelineRealm(spaceId);
+      await meiPage.gotoTimelineRealm(realmId);
       await expect(meiPage.timelineEvent(bobClaim)).toBeVisible({ timeout: 30_000 });
       await expect(meiPage.timelineEvent(carolClaim)).toBeVisible({ timeout: 30_000 });
-      await meiPage.sendTimelineMessage(spaceId, meiClose);
+      await meiPage.sendTimelineMessage(realmId, meiClose);
       await stepShot(meiPage.page, testInfo, "C-loop-closed");
 
       // Both engineers see Mei's wrap-up.
       for (const eng of [bobPage, carolPage]) {
-        await eng.gotoTimelineRealm(spaceId);
+        await eng.gotoTimelineRealm(realmId);
         await expect(eng.timelineEvent(meiClose)).toBeVisible({ timeout: 30_000 });
       }
     } finally {
@@ -153,16 +153,16 @@ test.describe("workflow: sprint planning", () => {
     const synthesisNote = `Remote synthesis note from Mei ${stamp}`;
 
     try {
-      const spaceId = await meiPage.createRealm({
+      const realmId = await meiPage.createRealm({
         title: `Sprint board ${stamp}`,
         summary: "Cross-user kanban hydration",
         discoverability: "listed",
         joinRule: "invite",
         seedMembers: [bob.did, carol.did],
       });
-      await Promise.all([bobPage.acceptInvite(spaceId), carolPage.acceptInvite(spaceId)]);
+      await Promise.all([bobPage.acceptInvite(realmId), carolPage.acceptInvite(realmId)]);
 
-      await meiPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await meiPage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await meiPage.page.getByTestId("new-board-toggle").click();
       await meiPage.page.getByTestId("new-board-title-input").fill(`Sprint Board ${stamp}`);
@@ -183,7 +183,7 @@ test.describe("workflow: sprint planning", () => {
         ).toBeVisible({ timeout: 30_000 });
       }
 
-      await bobPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await bobPage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(bobPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
       await expect(bobPage.page.getByTestId("board-space-select")).toHaveValue(boardId, {
         timeout: 30_000,
@@ -247,7 +247,7 @@ test.describe("workflow: sprint planning", () => {
         timeout: 60_000,
       });
 
-      await bobPage.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+      await bobPage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(bobPage.page.getByTestId("board-space-select")).toHaveValue(boardId, {
         timeout: 30_000,
       });
@@ -279,7 +279,7 @@ test.describe("workflow: sprint planning", () => {
         ).toBeVisible({ timeout: 30_000 });
       }
       await expect
-        .poll(async () => flowTitlesForBoard(request, spaceId, meiToken, boardId), {
+        .poll(async () => flowTitlesForBoard(request, realmId, meiToken, boardId), {
           timeout: 30_000,
         })
         .toEqual(expect.arrayContaining(stories));
@@ -289,7 +289,7 @@ test.describe("workflow: sprint planning", () => {
         [bobPage, bobToken],
         [carolPage, carolToken],
       ] as const) {
-        await actor.page.goto(`/kanban/${spaceId}`, { waitUntil: "domcontentloaded" });
+        await actor.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
         await expect(actor.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
         await expect(actor.page.getByTestId("board-space-select")).toHaveValue(boardId, {
           timeout: 30_000,
@@ -308,7 +308,7 @@ test.describe("workflow: sprint planning", () => {
           ).toBeVisible({ timeout: 30_000 });
         }
         await expect
-          .poll(async () => flowTitlesForBoard(request, spaceId, token, boardId), {
+          .poll(async () => flowTitlesForBoard(request, realmId, token, boardId), {
             timeout: 30_000,
           })
           .toEqual(expect.arrayContaining(stories));
@@ -333,12 +333,12 @@ test.describe("workflow: sprint planning", () => {
 
 async function flowTitlesForBoard(
   request: APIRequestContext,
-  spaceId: string,
+  realmId: string,
   token: string,
   boardId: string,
 ): Promise<string[]> {
   const resp = await request.get(
-    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(spaceId)}`,
+    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (resp.status() !== 200) {

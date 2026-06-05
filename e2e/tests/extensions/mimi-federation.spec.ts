@@ -81,7 +81,7 @@ test.describe("mimi federation", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const { token, spaceId, roomId } = await createBoundMimiRoom(request, stamp, "e2ee");
+    const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "e2ee");
 
     const unmarked = await request.post(mimiMessagesUrl(roomId), {
       data: {
@@ -148,7 +148,7 @@ test.describe("mimi federation", () => {
       "transcript_bound",
     );
 
-    const events = await queryRealmEventsApi(request, token, spaceId);
+    const events = await queryRealmEventsApi(request, token, realmId);
     const downgradeEvent = eventById(events, String(downgradeBody.cokret_event_id));
     expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
     expect(nested(downgradeEvent, "payload", "content", "ck.morph.e2ee_downgrade")).toBe(
@@ -172,7 +172,7 @@ test.describe("mimi federation", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const { token, spaceId, roomId } = await createBoundMimiRoom(request, stamp, "content");
+    const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "content");
     const rawLocation = `geo:31.2304,121.4737;u=${stamp % 100}`;
 
     const quarantine = await request.post(mimiMessagesUrl(roomId), {
@@ -197,7 +197,7 @@ test.describe("mimi federation", () => {
       "m.location.share.live",
     );
 
-    const events = await queryRealmEventsApi(request, token, spaceId);
+    const events = await queryRealmEventsApi(request, token, realmId);
     const event = eventById(events, String(body.cokret_event_id));
     expect(nested(event, "payload", "content", "kind")).toBe("ck.content.unsupported");
     expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
@@ -212,11 +212,11 @@ async function createBoundMimiRoom(
   request: APIRequestContext,
   stamp: number,
   suffix: string,
-): Promise<{ token: string; spaceId: string; roomId: string }> {
+): Promise<{ token: string; realmId: string; roomId: string }> {
   const alice = uniqueUser(`mimi-${suffix}-${stamp}`);
   await ensureRegistered(request, alice);
   const token = await issueDevSession(request, alice);
-  const spaceId = await createRealmApi(request, token, {
+  const realmId = await createRealmApi(request, token, {
     title: `mimi ${suffix} ${stamp}`,
     discoverability: "listed",
     history_visibility: "joined",
@@ -229,7 +229,7 @@ async function createBoundMimiRoom(
         profile: "ck.profile.mimi_interop.v1",
         mimi_room_uri: `mimi://soland.local/rooms/${roomId}`,
         binding_scope: {
-          space_id: spaceId,
+          realm_id: realmId,
           flow_id: null,
         },
         content_profile: "application/mimi-content",
@@ -238,7 +238,7 @@ async function createBoundMimiRoom(
     },
   });
   expect(update.status()).toBe(200);
-  return { token, spaceId, roomId };
+  return { token, realmId, roomId };
 }
 
 function mimiMessagesUrl(roomId: string): string {

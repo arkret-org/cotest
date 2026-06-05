@@ -1,4 +1,4 @@
-//! Multi-space federation wire-model conformance vectors.
+//! Multi-Realm federation wire-model conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
@@ -6,110 +6,110 @@ use serde_json::{Value, json};
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// E3 Round 27 — multi-space federation. Per-space anchor isolation +
-/// cross-space rejection.
-pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
-    let fixture = load_local_fixture("multi_space_federation_fixture.json")?;
-    validate_profile(&fixture, "ck.profile.multi_space_federation_vectors.v1")?;
+/// E3 Round 27 — Multi-Realm federation. Per-Realm anchor isolation +
+/// cross-Realm rejection.
+pub fn run_multi_realm_federation_fixture_suite() -> Result<()> {
+    let fixture = load_local_fixture("multi_realm_federation_fixture.json")?;
+    validate_profile(&fixture, "ck.profile.multi_realm_federation_vectors.v1")?;
     let vectors = fixture
         .get("vectors")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("multi_space_federation missing vectors[]"))?;
+        .ok_or_else(|| anyhow!("multi_realm_federation missing vectors[]"))?;
     if vectors.len() < 3 {
         bail!(
-            "multi_space_federation requires >= 3 vectors, got {}",
+            "multi_realm_federation requires >= 3 vectors, got {}",
             vectors.len()
         );
     }
     let mut saw_isolation = false;
     let mut saw_concurrent = false;
     let mut saw_cross_reject = false;
-    let mut saw_per_space_seq = false;
+    let mut saw_per_realm_seq = false;
     for v in vectors {
         let name = required_str(v, "name")?;
         let outcome = expected_outcome(v, name)?;
         match name {
-            "multi_space_replay_three_spaces_independent_frontiers" => {
-                let spaces: Vec<&str> = v
-                    .get("spaces")
+            "multi_realm_replay_three_realms_independent_frontiers" => {
+                let realms: Vec<&str> = v
+                    .get("realms")
                     .and_then(Value::as_array)
                     .map(|a| a.iter().filter_map(Value::as_str).collect())
                     .unwrap_or_default();
-                if spaces.len() != 3 {
-                    bail!("vector {name} must list 3 spaces");
+                if realms.len() != 3 {
+                    bail!("vector {name} must list 3 realms");
                 }
                 let isolation = v
-                    .pointer("/expected/per_space_isolation")
+                    .pointer("/expected/per_realm_isolation")
                     .and_then(Value::as_bool)
                     .unwrap_or(false);
                 if !isolation {
-                    bail!("vector {name} expected.per_space_isolation must be true");
+                    bail!("vector {name} expected.per_realm_isolation must be true");
                 }
                 // Sanity check: sequential pulls must monotonically grow only the
-                // pulled space's frontier.
+                // pulled Realm's frontier.
                 let f1 = v
-                    .pointer("/expected/server_b_frontier_after_S1_pull")
+                    .pointer("/expected/server_b_frontier_after_R1_pull")
                     .ok_or_else(|| {
-                        anyhow!("vector {name} missing server_b_frontier_after_S1_pull")
+                        anyhow!("vector {name} missing server_b_frontier_after_R1_pull")
                     })?;
                 let f2 = v
-                    .pointer("/expected/server_b_frontier_after_S2_pull")
+                    .pointer("/expected/server_b_frontier_after_R2_pull")
                     .ok_or_else(|| {
-                        anyhow!("vector {name} missing server_b_frontier_after_S2_pull")
+                        anyhow!("vector {name} missing server_b_frontier_after_R2_pull")
                     })?;
-                if f1.get("space_S1").and_then(Value::as_u64) != Some(1)
-                    || f1.get("space_S2").and_then(Value::as_u64) != Some(0)
+                if f1.get("realm_R1").and_then(Value::as_u64) != Some(1)
+                    || f1.get("realm_R2").and_then(Value::as_u64) != Some(0)
                 {
-                    bail!("vector {name} S1 pull must update only S1");
+                    bail!("vector {name} R1 pull must update only R1");
                 }
-                if f2.get("space_S2").and_then(Value::as_u64) != Some(1) {
-                    bail!("vector {name} S2 pull must bring S2 to 1");
+                if f2.get("realm_R2").and_then(Value::as_u64) != Some(1) {
+                    bail!("vector {name} R2 pull must bring R2 to 1");
                 }
                 if outcome != "accept" {
                     bail!("vector {name} outcome must be accept");
                 }
                 saw_isolation = true;
             }
-            "multi_space_concurrent_move_replay" => {
+            "multi_realm_concurrent_move_replay" => {
                 if outcome != "accept" {
                     bail!("vector {name} outcome must be accept");
                 }
-                let s1 = v
-                    .pointer("/expected/final_S1_frontier_count")
+                let r1 = v
+                    .pointer("/expected/final_R1_frontier_count")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("vector {name} missing final_S1_frontier_count"))?;
-                let s2 = v
-                    .pointer("/expected/final_S2_frontier_count")
+                    .ok_or_else(|| anyhow!("vector {name} missing final_R1_frontier_count"))?;
+                let r2 = v
+                    .pointer("/expected/final_R2_frontier_count")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("vector {name} missing final_S2_frontier_count"))?;
-                if s1 < 2 || s2 < 2 {
+                    .ok_or_else(|| anyhow!("vector {name} missing final_R2_frontier_count"))?;
+                if r1 < 2 || r2 < 2 {
                     bail!(
-                        "vector {name} bidirectional convergence requires both spaces to hold both moves (>= 2 each)"
+                        "vector {name} bidirectional convergence requires both realms to hold both moves (>= 2 each)"
                     );
                 }
                 saw_concurrent = true;
             }
-            "multi_space_cross_space_move_rejected" => {
+            "multi_realm_cross_realm_move_rejected" => {
                 if outcome != "reject" {
                     bail!("vector {name} outcome must be reject");
                 }
-                if expected_reason(v) != Some("cross_space_move_forbidden") {
-                    bail!("vector {name} reason_code must be cross_space_move_forbidden");
+                if expected_reason(v) != Some("cross_realm_move_forbidden") {
+                    bail!("vector {name} reason_code must be cross_realm_move_forbidden");
                 }
                 let claimed = v
-                    .pointer("/push_payload/claimed_space_id")
+                    .pointer("/push_payload/claimed_realm_id")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing claimed_space_id"))?;
+                    .ok_or_else(|| anyhow!("vector {name} missing claimed_realm_id"))?;
                 let actual = v
-                    .pointer("/push_payload/actual_anchor_space_id")
+                    .pointer("/push_payload/actual_anchor_realm_id")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing actual_anchor_space_id"))?;
+                    .ok_or_else(|| anyhow!("vector {name} missing actual_anchor_realm_id"))?;
                 if claimed == actual {
-                    bail!("vector {name} cross-space negative requires claimed != actual space_id");
+                    bail!("vector {name} cross-Realm negative requires claimed != actual realm_id");
                 }
                 saw_cross_reject = true;
             }
-            "multi_space_per_space_anchor_seq_independent" => {
+            "multi_realm_per_realm_anchor_seq_independent" => {
                 if outcome != "accept" {
                     bail!("vector {name} outcome must be accept");
                 }
@@ -124,46 +124,46 @@ pub fn run_multi_space_federation_fixture_suite() -> Result<()> {
                     .get("anchor_history")
                     .and_then(Value::as_array)
                     .ok_or_else(|| anyhow!("vector {name} missing anchor_history"))?;
-                let mut s1_max = 0u64;
-                let mut s2_max = 0u64;
+                let mut r1_max = 0u64;
+                let mut r2_max = 0u64;
                 for h in history {
-                    let space = required_str(h, "realm_id")?;
+                    let realm = required_str(h, "realm_id")?;
                     let seq = h
                         .get("seq")
                         .and_then(Value::as_u64)
                         .ok_or_else(|| anyhow!("anchor_history entry missing seq"))?;
-                    match space {
-                        "space_S1" => s1_max = s1_max.max(seq),
-                        "space_S2" => s2_max = s2_max.max(seq),
-                        other => bail!("vector {name} unexpected space {other}"),
+                    match realm {
+                        "realm_R1" => r1_max = r1_max.max(seq),
+                        "realm_R2" => r2_max = r2_max.max(seq),
+                        other => bail!("vector {name} unexpected Realm {other}"),
                     }
                 }
-                let exp_s1 = v
-                    .pointer("/expected/S1_max_seq")
+                let exp_r1 = v
+                    .pointer("/expected/R1_max_seq")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("vector {name} missing S1_max_seq"))?;
-                let exp_s2 = v
-                    .pointer("/expected/S2_max_seq")
+                    .ok_or_else(|| anyhow!("vector {name} missing R1_max_seq"))?;
+                let exp_r2 = v
+                    .pointer("/expected/R2_max_seq")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("vector {name} missing S2_max_seq"))?;
-                if s1_max != exp_s1 || s2_max != exp_s2 {
+                    .ok_or_else(|| anyhow!("vector {name} missing R2_max_seq"))?;
+                if r1_max != exp_r1 || r2_max != exp_r2 {
                     bail!(
-                        "vector {name} computed seqs ({s1_max},{s2_max}) != expected ({exp_s1},{exp_s2})"
+                        "vector {name} computed seqs ({r1_max},{r2_max}) != expected ({exp_r1},{exp_r2})"
                     );
                 }
-                saw_per_space_seq = true;
+                saw_per_realm_seq = true;
             }
-            other => bail!("multi_space_federation unexpected vector {other}"),
+            other => bail!("multi_realm_federation unexpected vector {other}"),
         }
         emit_vector(
-            "multi_space_federation.vector",
+            "multi_realm_federation.vector",
             v,
             json!({"name": name, "outcome": outcome}),
         );
     }
-    if !(saw_isolation && saw_concurrent && saw_cross_reject && saw_per_space_seq) {
+    if !(saw_isolation && saw_concurrent && saw_cross_reject && saw_per_realm_seq) {
         bail!(
-            "multi_space_federation must cover isolation + concurrent + cross_reject + per_space_seq"
+            "multi_realm_federation must cover isolation + concurrent + cross_reject + per_realm_seq"
         );
     }
     Ok(())

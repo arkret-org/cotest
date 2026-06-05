@@ -1,7 +1,7 @@
 // Knock application + review + cooldown
 // Contract: e2e/scenarios/spaces/knock-application.md
 // Spec refs:
-//   - models/space-and-place.md §3.3-§3.6 (join policy, application, review)
+//   - models/realm-and-space.md §3.3-§3.6 (join policy, application, review)
 //   - §3.11 reuse limits / cooldown
 //
 // Soland implementation status (2026-05 audit):
@@ -40,7 +40,7 @@ test.describe("knock + application + cooldown", () => {
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
     try {
-      const spaceId = await alicePage.createRealm({
+      const realmId = await alicePage.createRealm({
         title: `S6 Knock ${stamp}`,
         summary: "knock + application coverage",
         discoverability: "listed",
@@ -53,7 +53,7 @@ test.describe("knock + application + cooldown", () => {
       // SDK code, so we go through soland's higher-level "knock" REST shim
       // if it exists; otherwise the membership endpoint MAY be wired.
       const knockResp = await request.post(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/members`,
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/members`,
         {
           headers: { authorization: `Bearer ${bobToken}` },
           data: { member: bob.did, action: "knock" },
@@ -68,7 +68,7 @@ test.describe("knock + application + cooldown", () => {
       // Whichever route was used, alice's realm-admin view MUST list bob in
       // an "applicants / knockers" pane. Yougen renders the FSM members
       // table; we just look for bob's DID anywhere in realm-admin-panel.
-      await alicePage.gotoRealmAdmin(spaceId);
+      await alicePage.gotoRealmAdmin(realmId);
       if (knockResp.ok()) {
         await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(bob.did, {
           timeout: 30_000,
@@ -90,7 +90,7 @@ test.describe("knock + application + cooldown", () => {
     // @expected-live-by: 2026Q3
     "E6.A bob submits structured member.application after knocking; alice (with ck.space.join.review) sees the answers and accepts",
     async () => {
-      // spec: models/space-and-place.md §3.6.2-§3.6.3
+      // spec: models/realm-and-space.md §3.6.2-§3.6.3
       // soland gap: member.application{,.review} event kinds not registered;
       //             no /_soland/self/spaces/:id/applications listing endpoint.
     },
@@ -102,7 +102,7 @@ test.describe("knock + application + cooldown", () => {
     // @expected-live-by: 2026Q3
     "E6.B alice's ck.invite.create.refs[role=\"join_authorised_by\"] is required to point at a fresh review accept; reducer rejects re-used or stale refs",
     async () => {
-      // spec: models/space-and-place.md §3.6.5
+      // spec: models/realm-and-space.md §3.6.5
       // soland gap: invite reducer does not enforce the refs binding.
     },
   );
@@ -113,7 +113,7 @@ test.describe("knock + application + cooldown", () => {
     // @expected-live-by: 2026Q3
     "E6.C mallory is rejected by alice and CANNOT re-knock until cooldown_after_reject (default 72h) elapses; cooldown gate independent of combinator",
     async () => {
-      // spec: models/space-and-place.md §3.6, §3.3.1 cooldown gate
+      // spec: models/realm-and-space.md §3.6, §3.3.1 cooldown gate
       // soland gap: no temporal cooldown tracking on member state transitions.
     },
   );
@@ -124,7 +124,7 @@ test.describe("knock + application + cooldown", () => {
     // @expected-live-by: 2026Q3
     "E6.D max_open_applications_per_actor=1 — bob's second open application is rejected before review",
     async () => {
-      // spec: models/space-and-place.md §3.3 + §3.11 reuse limits.
+      // spec: models/realm-and-space.md §3.3 + §3.11 reuse limits.
       // soland gap: application state not tracked.
     },
   );

@@ -30,7 +30,7 @@ test.describe("audited E2EE", () => {
     const token = await issueDevSession(request, alice);
 
     const probe = await request.get(
-      `${solandBaseUrl()}/_soland/self/audit/events?space_id=ck:space:probe`,
+      `${solandBaseUrl()}/_soland/self/audit/events?realm_id=ck:realm:01904100-0000-7000-8000-000000000025`,
       { headers: { authorization: `Bearer ${token}` } },
     );
     expect([200, 401, 403, 404]).toContain(probe.status());
@@ -38,12 +38,12 @@ test.describe("audited E2EE", () => {
   });
 
   test(
-    "alice configures audit_disclosure_policy on E2EE space; ck.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
+    "alice configures audit_disclosure_policy on E2EE Realm; ck.moderation.franking_proof generated for each encrypted message (ciphertext_digest only, no plaintext)",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-frank");
 
       const audit = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -77,7 +77,7 @@ test.describe("audited E2EE", () => {
 
       const inspect = await (await request.get(`${setup.agentBaseUrl}/inspect`)).json();
       expect(JSON.stringify(inspect)).toContain(String(report.report_id));
-      expect(JSON.stringify(inspect)).toContain(setup.spaceId);
+      expect(JSON.stringify(inspect)).toContain(setup.realmId);
 
       const invite = await (await request.get(`${setup.agentBaseUrl}/_soland/admin/audit-agent/inbox`)).json();
       expect(JSON.stringify(invite)).toContain(String(report.report_id));
@@ -91,7 +91,7 @@ test.describe("audited E2EE", () => {
       const report = await fileModerationReport(request, setup);
 
       const accessed = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.audit.accessed`,
+        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.audit.accessed`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const accessedText = await accessed.text();
@@ -108,7 +108,7 @@ test.describe("audited E2EE", () => {
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-tamper");
       const audit = await request.get(
-        `${solandBaseUrl()}/_soland/self/audit/events?space_id=${encodeURIComponent(setup.spaceId)}&kind=ck.moderation.franking_proof`,
+        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.moderation.franking_proof`,
         { headers: authHeaders(setup.aliceToken) },
       );
       const auditText = await audit.text();
@@ -144,7 +144,7 @@ type AuditedSetup = {
   aliceToken: string;
   reporterToken: string;
   reporterDid: string;
-  spaceId: string;
+  realmId: string;
   message: Record<string, unknown>;
   ciphertextDigest: string;
   plaintext: string;
@@ -171,7 +171,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     issueDevSession(request, reporter),
   ]);
 
-  const spaceId = await createRealmApi(request, aliceToken, {
+  const realmId = await createRealmApi(request, aliceToken, {
     title: `S25 audited E2EE ${label} ${Date.now()}`,
     discoverability: "listed",
     history_visibility: "joined",
@@ -186,21 +186,21 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
       assurance: "mock_attested",
     },
   });
-  await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
-  await addRealmMemberApi(request, aliceToken, spaceId, reporter.did);
+  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  await addRealmMemberApi(request, aliceToken, realmId, reporter.did);
 
   const plaintext = `audited plaintext must not leak ${Date.now()}`;
   const ciphertext = `opaque-ciphertext-${label}-${Date.now()}`;
   const ciphertextDigest = sha256Digest(ciphertext);
   const message = signedEventEnvelope({
     actorDid: bob.did,
-    realmId: spaceId,
+    realmId: realmId,
     kind: "ck.message.create",
     payload: {
-      flow_id: flowIdFromRealmId(spaceId),
+      flow_id: flowIdFromRealmId(realmId),
       track_name: "discussion",
       encrypted: true,
-      encrypted_content: encryptedEnvelope("ck.message.v1", ciphertext, spaceId, ciphertextDigest),
+      encrypted_content: encryptedEnvelope("ck.message.v1", ciphertext, realmId, ciphertextDigest),
     },
   });
   await submitSignedEventApi(request, bobToken, message, {
@@ -213,7 +213,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     aliceToken,
     reporterToken,
     reporterDid: reporter.did,
-    spaceId,
+    realmId,
     message,
     ciphertextDigest,
     plaintext,
@@ -224,9 +224,9 @@ async function fileModerationReport(request: APIRequestContext, setup: AuditedSe
   const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
     headers: authHeaders(setup.reporterToken),
     data: {
-      space_id: setup.spaceId,
+      realm_id: setup.realmId,
       target_ref: setup.message.event_id,
-      reason: "harassment",
+      report_reason_code: "harassment",
       reporter: setup.reporterDid,
       description: "moderation report should trigger audit disclosure",
       evidence_refs: [],

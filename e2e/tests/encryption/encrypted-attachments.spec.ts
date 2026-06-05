@@ -1,4 +1,4 @@
-// Encrypted attachments in E2EE space
+// Encrypted attachments in E2EE Realm
 // Contract: e2e/scenarios/encryption/encrypted-attachments.md
 // Spec refs:
 //   - crypto-media/media-and-blob.md §3 (encrypted metadata), §5 (authz + download), §5.1 (no plaintext content-type), §6 (asset privacy)
@@ -44,7 +44,7 @@ test.describe("encrypted attachments", () => {
     // Probe endpoints
     const putResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/put`, {
       headers: { authorization: `Bearer ${token}` },
-      data: { space_id: "ck:space:probe", media_type: "application/octet-stream" },
+      data: { realm_id: "ck:realm:probe", media_type: "application/octet-stream" },
     });
     // Either 4xx for missing body, or 404 if endpoint absent. 5xx is a bug.
     expect(putResp.status()).toBeLessThan(500);
@@ -75,7 +75,7 @@ test.describe("encrypted attachments", () => {
       issueDevSession(request, mallory),
     ]);
 
-    const spaceId = await createRealmApi(request, aliceToken, {
+    const realmId = await createRealmApi(request, aliceToken, {
       title: `S12 encrypted attachments ${Date.now()}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -83,7 +83,7 @@ test.describe("encrypted attachments", () => {
       plaintext_visible_services: [],
       ownerDid: alice.did,
     });
-    await addRealmMemberApi(request, aliceToken, spaceId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
     const ciphertext = Buffer.from(`ciphertext-only-${Date.now()}`, "utf8");
     const ciphertextDigest = sha256Digest(ciphertext);
@@ -100,7 +100,7 @@ test.describe("encrypted attachments", () => {
         ...authHeaders(aliceToken),
         "content-type": "image/png",
         "x-cokret-filename": "cat.png",
-        "x-cokret-realm-id": spaceId,
+        "x-cokret-realm-id": realmId,
         "x-cokret-blob-encrypted": "true",
         "x-cokret-attachment-envelope": JSON.stringify(envelope),
         "x-cokret-content-digest": ciphertextDigest,
@@ -150,7 +150,7 @@ test.describe("encrypted attachments", () => {
     const denied = await malloryDownload.json();
     expect(wireErrCode(denied)).toBe("not_found");
     const deniedText = JSON.stringify(denied);
-    expect(deniedText).not.toContain(spaceId);
+    expect(deniedText).not.toContain(realmId);
     expect(deniedText).not.toContain(body.blob_ref);
 
     const missing = await request.get(

@@ -44,7 +44,7 @@ test.describe("offline sync + conflict repair", () => {
     const m1 = `G2.T3 reconnect m1 ${stamp}`;
     const m2 = `G2.T3 reconnect m2 ${stamp}`;
 
-    const spaceId = await createSharedRealmViaApi(
+    const realmId = await createSharedRealmViaApi(
       request,
       alice,
       aliceToken,
@@ -56,21 +56,21 @@ test.describe("offline sync + conflict repair", () => {
         historyVisibility: "shared",
       },
     );
-    await allowPlaintextMessagesViaApi(request, aliceToken, spaceId);
+    await allowPlaintextMessagesViaApi(request, aliceToken, realmId);
 
-    const before = JSON.stringify(await listRealmEventsViaApi(request, bobToken, spaceId));
+    const before = JSON.stringify(await listRealmEventsViaApi(request, bobToken, realmId));
     expect(before).not.toContain(m1);
     expect(before).not.toContain(m2);
 
-    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m1, { actorDid: alice.did });
-    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, m2, { actorDid: alice.did });
+    await sendPlaintextMessageViaApi(request, aliceToken, realmId, m1, { actorDid: alice.did });
+    await sendPlaintextMessageViaApi(request, aliceToken, realmId, m2, { actorDid: alice.did });
 
     await expect
-      .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, bobToken, spaceId)), {
+      .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, bobToken, realmId)), {
         timeout: 30_000,
       })
       .toContain(m1);
-    const after = JSON.stringify(await listRealmEventsViaApi(request, bobToken, spaceId));
+    const after = JSON.stringify(await listRealmEventsViaApi(request, bobToken, realmId));
     expect(after).toContain(m2);
   });
 
@@ -104,7 +104,7 @@ test.describe("offline sync + conflict repair", () => {
   }) => {
     const fixture = await createBottomConflictFixture(browser, request, "banner");
     try {
-      await fixture.bobPage.gotoRealmAdminSection(fixture.spaceId, "repair");
+      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
       await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toBeVisible({
         timeout: 30_000,
       });
@@ -124,7 +124,7 @@ test.describe("offline sync + conflict repair", () => {
   }) => {
     const fixture = await createBottomConflictFixture(browser, request, "repair");
     try {
-      await fixture.bobPage.gotoRealmAdminSection(fixture.spaceId, "repair");
+      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
       await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toBeVisible({
         timeout: 30_000,
       });
@@ -142,12 +142,12 @@ test.describe("offline sync + conflict repair", () => {
       );
 
       await expect
-        .poll(async () => listBottomCells(request, fixture.bobToken, fixture.spaceId), {
+        .poll(async () => listBottomCells(request, fixture.bobToken, fixture.realmId), {
           timeout: 30_000,
         })
         .toEqual([]);
 
-      await fixture.bobPage.gotoRealmAdminSection(fixture.spaceId, "repair");
+      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
       await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toHaveCount(0);
     } finally {
       await closeBottomFixture(fixture);
@@ -158,7 +158,7 @@ test.describe("offline sync + conflict repair", () => {
     // @blocking-on: soland#sync-offline-conflict-gap
     // @user-promise: e2e/scenarios/sync/offline-conflict.md
     // @expected-live-by: 2026Q3
-    "long offline → on reconnect, pull-operations backfills missing events; bob's timeline catches up to head",
+    "long offline → on reconnect, peer events query backfills missing events; bob's timeline catches up to head",
     async () => {
       // spec: sync/federation.md §4.2 (single-server uses same pull endpoint)
     },
@@ -171,7 +171,7 @@ type BottomConflictFixture = {
   aliceToken: string;
   bobToken: string;
   bobPage: JointUserPage;
-  spaceId: string;
+  realmId: string;
   aliceTitle: string;
 };
 
@@ -188,7 +188,7 @@ async function createBottomConflictFixture(
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedRealmViaApi(
+  const realmId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,
@@ -202,17 +202,17 @@ async function createBottomConflictFixture(
   const basis = `ck:anchor:sha256:${"0".repeat(64)}`;
   const aliceTitle = `renamed by alice ${stamp}`;
   const bobTitle = `renamed by bob ${stamp}`;
-  await submitRealmTitleUpdate(request, aliceToken, alice.did, spaceId, aliceTitle, basis);
-  await submitRealmTitleUpdate(request, bobToken, bob.did, spaceId, bobTitle, basis);
+  await submitRealmTitleUpdate(request, aliceToken, alice.did, realmId, aliceTitle, basis);
+  await submitRealmTitleUpdate(request, bobToken, bob.did, realmId, bobTitle, basis);
   const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-  return { alice, bob, aliceToken, bobToken, bobPage, spaceId, aliceTitle };
+  return { alice, bob, aliceToken, bobToken, bobPage, realmId, aliceTitle };
 }
 
 async function submitRealmTitleUpdate(
   request: APIRequestContext,
   token: string,
   actorDid: string,
-  spaceId: string,
+  realmId: string,
   title: string,
   anchorRef: string,
 ) {
@@ -221,11 +221,11 @@ async function submitRealmTitleUpdate(
     token,
     signedEventEnvelope({
       actorDid,
-      realmId: spaceId,
+      realmId: realmId,
       kind: "ck.realm.update",
       anchorRef,
       payload: {
-        target_ref: spaceId,
+        target_ref: realmId,
         patch: {
           title: { "$op": "set", value: title },
         },
@@ -238,10 +238,10 @@ async function submitRealmTitleUpdate(
 async function listBottomCells(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
 ) {
   const response = await request.get(
-    `${solandBaseUrl()}/_soland/admin/spaces/${encodeURIComponent(spaceId)}/bottom`,
+    `${solandBaseUrl()}/_soland/admin/realms/${encodeURIComponent(realmId)}/bottom`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();

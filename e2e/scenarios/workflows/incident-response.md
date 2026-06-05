@@ -8,13 +8,13 @@
 
 | Actor | 角色 |
 |---|---|
-| oncall | incident commander,创建空间、确认告警、编辑最终摘要 |
+| oncall | incident commander,创建 Realm、确认告警、编辑最终摘要 |
 | backend | owner,诊断根因、发布 mitigation |
 | comms | 对外沟通,只发布脱敏状态更新 |
 
 ## Main flow
 
-1. oncall 创建 `SEV-2 checkout` space,seed backend + comms。
+1. oncall 创建 `SEV-2 checkout` Realm,seed backend + comms。
 2. oncall 发布初始 alert,并 reply ACK。
 3. backend reply 根因诊断。
 4. comms reply 对外更新,断言对外更新不泄漏内部根因细节。
@@ -25,7 +25,7 @@
 
 - **E-incident.status**:状态 FSM 不允许 `investigating -> resolved` 跳过 `mitigated`;合法转移写 audit。
 - **E-incident.priority**:`SEV-1` priority 控件会标记后续公开更新,且 public-update guard 会阻止包含内部根因/token 等敏感细节的更新。
-- **E-incident.postmortem**:postmortem 文档 surface 与 incident space 建结构化 relation payload,并保留版本列表。
+- **E-incident.postmortem**:postmortem 文档 surface 与 incident Realm 建结构化 relation payload,并保留版本列表。
 
 ## Implementation notes
 

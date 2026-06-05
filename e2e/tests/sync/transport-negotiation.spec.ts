@@ -11,8 +11,8 @@
 // HTTP RFC 9421 入站 OK 但出站签名生成不完整。
 // Soland implementation status (2026-05 audit, mirrored from
 // tests/federation/cross-server.spec.ts):
-//   ✓ POST /_cokret/peer/federation/push-operations handler routed
-//   ✓ Basic envelope validation + idempotency on (origin, operation_id)
+//   ✓ POST /_cokret/peer/events handler routed
+//   ✓ Basic envelope validation + idempotency on signed Event IDs
 //   ~ RFC 9421 inbound: partial — Signature-Input parsing works for
 //     simple cases but Content-Digest / nonce window / key-rotation hint
 //     not wired through end-to-end
@@ -76,7 +76,7 @@ test.describe("transport negotiation", () => {
     // without any RFC 9421 signature MUST NOT 404 (route exists) and
     // MUST NOT 200 (signature required). Expected: 400 / 401 / 403.
     const probe = await request.post(
-      `${solandBaseUrl("beta")}/_cokret/peer/federation/push-operations`,
+      `${solandBaseUrl("beta")}/_cokret/peer/events`,
       { data: { events: [] } },
     );
     expect(probe.status()).not.toBe(404);
@@ -99,7 +99,7 @@ test.describe("transport negotiation", () => {
       //
       // Phase A — HTTP baseline (RFC 9421 signed POST):
       //   1. alice@α issues ck.invite.create targeting bob's DID on β
-      //   2. soland_a constructs POST ${SOLAND_B}/_cokret/peer/federation/push-operations with:
+      //   2. soland_a constructs POST ${SOLAND_B}/_cokret/peer/events with:
       //        - Source-Service-DID / Destination-Service-DID headers
       //        - Signature-Input covering (@method @target-uri content-digest
       //          source-service-did destination-service-did)
@@ -112,7 +112,7 @@ test.describe("transport negotiation", () => {
       //
       // Phase B — WebSocket upgrade:
       //   5. soland_a reads β's /_cokret/describe → finds websocket_frame
-      //      entry with upgrade_path /_cokret/peer/federation/stream
+      //      entry with a peer Events streaming binding declared by spec
       //   6. soland_a opens WebSocket with Sec-WebSocket-Protocol: ck.federation.v1
       //      and RFC 9421 Signature on the upgrade request
       //   7. β responds 101 Switching Protocols
@@ -160,20 +160,20 @@ test.describe("transport negotiation", () => {
         expect(solandServiceDid("alpha")).toMatch(/^did:/);
         expect(solandServiceDid("beta")).toMatch(/^did:/);
 
-        const spaceId = await alicePage.createRealm({
+        const realmId = await alicePage.createRealm({
           title: `S8 Transport ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
           historyVisibility: "joined",
         });
-        await alicePage.inviteFromAdmin(spaceId, bob.did);
+        await alicePage.inviteFromAdmin(realmId, bob.did);
         await stepShot(alicePage.page, testInfo, "alpha-phase-a-invite-issued");
 
         // Phase A acceptance: bob's β-bound notifications surface the invite
         // — this only succeeds when α's outbound RFC 9421 push is real.
         await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
         await expect(
-          bobPage.page.getByTestId("notification-item").filter({ hasText: spaceId }),
+          bobPage.page.getByTestId("notification-item").filter({ hasText: realmId }),
         ).toBeVisible({ timeout: 30_000 });
 
         // Phase B / C / D are exercised by the sub-fixme tests below.

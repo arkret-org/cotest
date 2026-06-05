@@ -16,11 +16,10 @@ import {
   solandServiceDid,
 } from "../../helpers/env";
 import {
-  authHeaders,
   createRealmApi,
-  makeOperation,
-  operationFrontierApi,
-  rawPushFederationOperations,
+  makeFederationEvent,
+  peerEventFrontierApi,
+  rawPushFederationEvents,
   sendMessageApi,
   typedId,
   wireErrCode,
@@ -44,9 +43,9 @@ test.describe("federation security hardening", () => {
     );
 
     const realmId = typedId("realm");
-    const op = makeOperation({
+    const op = makeFederationEvent({
       realmId,
-      objectType: "ck.message.create",
+      kind: "ck.message.create",
       payload: {
         event_id: typedId("event"),
         sender: "did:web:alice.alpha.example",
@@ -54,7 +53,7 @@ test.describe("federation security hardening", () => {
         content: { kind: "ck.content.text", body: "denylisted inbound" },
       },
     });
-    const response = await rawPushFederationOperations(request, [op], {
+    const response = await rawPushFederationEvents(request, [op], {
       origin: solandServiceDid("alpha"),
       destination: solandServiceDid("beta"),
       realmId,
@@ -93,47 +92,21 @@ test.describe("federation security hardening", () => {
     await expect
       .poll(
         async () => {
-          const frontier = await operationFrontierApi(request, realmId, { server: "beta" });
-          return frontier.operation_count;
+          const frontier = await peerEventFrontierApi(request, realmId, { server: "beta" });
+          return frontier.heads.length;
         },
         { timeout: 10_000, intervals: [1_000, 2_000] },
       )
       .toBe(0);
   });
 
-  test("private-network federation pull target is rejected by egress guard", async ({
-    request,
-  }) => {
-    test.skip(
-      optionalEnv("COTEST_EXPECT_PRIVATE_EGRESS_BLOCKED") !== "1",
-      "requires soland SOLAND_EGRESS_ALLOW_PRIVATE_NETWORKS=0 and beta configured as a peer",
-    );
-
-    const alice = uniqueUser("fed-egress-alice");
-    await ensureRegistered(request, alice, { server: "alpha" });
-    const aliceToken = await issueDevSession(request, alice, { server: "alpha" });
-    const realmId = await createRealmApi(
-      request,
-      aliceToken,
-      { title: "private egress rejection", public: false },
-      { server: "alpha" },
-    );
-
-    const response = await request.post(
-      `${solandBaseUrl("alpha")}/_cokret/peer/federation/backfill-operations`,
-      {
-        headers: authHeaders(aliceToken),
-        data: {
-          peer_url: solandBaseUrl("beta"),
-          peer_did: solandServiceDid("beta"),
-          realm_id: realmId,
-          limit: 1,
-          max_pages: 1,
-        },
-      },
-    );
-    expect(response.status()).toBeGreaterThanOrEqual(400);
-    const text = await response.text();
-    expect(text).toMatch(/capability_denied|blocked address|private|localhost/i);
-  });
+  test.fixme(
+    "peer resolver private-network egress guard rejects private targets during outbound peer discovery",
+    async () => {
+      // Formal federation peer HTTP is `/_cokret/peer/events*`. The old
+      // deployment-local peer backfill probe has been removed
+      // from this scenario; the remaining test belongs on the outbound peer
+      // resolver once it exposes an operator-visible diagnostic surface.
+    },
+  );
 });

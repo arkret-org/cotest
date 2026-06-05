@@ -436,17 +436,17 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
 
 // ──────────────────── Anchorer cell ────────────────────
 //
-// `ck:cell:ck.component.anchorer.v1:<space_id>` is a cas_register holding the
+// `ck:cell:ck.component.anchorer.v1:<realm_id>` is a cas_register holding the
 // `AnchorerValue` (single_did | threshold(k/n) | open_set | mixed). Each
 // happy-path test below confirms a single anchored Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
 // The conflict test confirms two concurrent reconfigurations Bottom — admins
 // MUST coordinate (this is a safety-critical cell).
 
-fn anchorer_cell(space_suffix: &str) -> CellRef {
+fn anchorer_cell(realm_suffix: &str) -> CellRef {
     cell(
         "ck.component.anchorer.v1",
-        &format!("ck.realm.01js{space_suffix}000000000000000000"),
+        &format!("ck.realm.01js{realm_suffix}000000000000000000"),
     )
 }
 
@@ -527,7 +527,7 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     let lattice = CasRegister;
     let cref = anchorer_cell("05");
     // Two admins concurrently reconfigure the anchorer cell. Spec requires
-    // this to surface Bottom — a "split anchorer" is a Space-wide pause
+    // this to surface Bottom — a "split anchorer" is a Realm-wide pause
     // condition, not a thing you LWW past.
     let ops = vec![
         AnchoredOp::new(
@@ -549,7 +549,7 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     let bottom = match resolved {
         CellState::Bottom(b) => b,
         CellState::Value(_) => {
-            bail!("Anchorer concurrent reconfig MUST Bottom (split anchorer is a Space-wide pause)")
+            bail!("Anchorer concurrent reconfig MUST Bottom (split anchorer is a Realm-wide pause)")
         }
     };
     if !matches!(bottom.kind, cokret_core::BottomKind::Conflict) {
@@ -634,16 +634,16 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 
 // ──────────────────── MLS covered_frontier ────────────────────
 //
-// `ck:cell:ck.component.mls.covered_frontier.v1:<space_id>` is an or_set of
+// `ck:cell:ck.component.mls.covered_frontier.v1:<realm_id>` is an or_set of
 // governance-frontier event refs each MLS commit attests to. Add-only
 // growth is the typical pattern; rotation that purges old refs is rare and
 // gated by capability. These tests confirm the lattice surfaces the union
 // without bottom under normal commit flow.
 
-fn covered_frontier_cell(space_suffix: &str) -> CellRef {
+fn covered_frontier_cell(realm_suffix: &str) -> CellRef {
     cell(
         "ck.component.mls.covered_frontier.v1",
-        &format!("ck.realm.01js{space_suffix}000000000000000000"),
+        &format!("ck.realm.01js{realm_suffix}000000000000000000"),
     )
 }
 

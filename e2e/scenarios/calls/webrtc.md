@@ -69,7 +69,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 ### Phase D — Group call(SFU + recording policy)
 
-22. alice 在 space `S_team` 中点 "Start group call"
+22. alice 在 Realm `R_team` 中点 "Start group call"
 23. Call Morph:`{ mode: "sfu", state: "ringing", participants: [], recording_policy: "allow" }`
 24. bob、carol 收到 invite signal,先后加入(`ck.call.signal { kind: "focus_join" }`)
 25. SFU 媒体路径建立;三人都能听到看到对方

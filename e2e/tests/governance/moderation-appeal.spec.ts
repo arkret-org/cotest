@@ -91,12 +91,12 @@ test.describe("moderation appeal", () => {
         appellant.did,
         decision.decision_id,
       );
-      const spaceAfterBan = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(realmId)}`,
+      const realmAfterBan = await request.get(
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(reviewerToken) },
       );
-      expect(spaceAfterBan.ok()).toBeTruthy();
-      const body = await spaceAfterBan.json();
+      expect(realmAfterBan.ok()).toBeTruthy();
+      const body = await realmAfterBan.json();
       expect(body.members ?? []).not.toContain(appellant.did);
 
       const entrypoint = appellantPage.page.getByTestId("moderation-appeal-entrypoint");

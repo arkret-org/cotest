@@ -2,13 +2,13 @@
 
 ## 目标
 
-技术 lead Mei 在一个 sprint 启动会上和两个工程师(Bob、Carol)共同规划一周的工作:开 sprint space → 介绍 user stories → 在 kanban 上把 backlog 卡片承诺到 Todo → 每个人挑一张 → 在 timeline 上互相 ack。
+技术 lead Mei 在一个 sprint 启动会上和两个工程师(Bob、Carol)共同规划一周的工作:开 sprint Realm → 介绍 user stories → 在 kanban 上把 backlog 卡片承诺到 Todo → 每个人挑一张 → 在 timeline 上互相 ack。
 
 这是个把"messaging + kanban + 多用户协调"串成真实使用流程的综合测试。
 
 ## Spec 锚点
 
-- `models/space-and-place.md` §2-§4 (Space lifecycle / Board / List)
+- `models/realm-and-space.md` §2-§4 (Space lifecycle / Board / List)
 - `models/flow-and-message.md` §8 (reply chain)
 
 ## 拓扑
@@ -19,13 +19,13 @@
 
 | 名字 | 角色 |
 |---|---|
-| mei | tech lead,space owner |
+| mei | tech lead,Realm owner |
 | bob | engineer |
 | carol | engineer |
 
 ## Steps
 
-### Phase A — Sprint kickoff space
+### Phase A — Sprint kickoff Realm
 
 1. Mei `createRealm` `"Sprint 24"`,seed Bob 和 Carol
 2. Bob、Carol `acceptInvite`
@@ -51,7 +51,7 @@
 
 ### Phase D — 三人状态一致
 
-11. Bob/Carol/Mei 各自 reload `/kanban`,都看到:
+11. Bob/Carol/Mei 各自 reload `/kanban/${realmId}`,都看到:
     - `Backlog`:`Story D` + `Story E`
     - `Todo`:`Story A` + `Story B` + `Story C`
     - archived list:`Story A` + `Story B` + `Story C`(因为是 archive + recreate)
@@ -61,7 +61,7 @@
 
 - 步骤 7:Backlog 有 2 张,Todo 有 3 张,archived 列有 3 张
 - 步骤 10:Mei 视图能看到 Bob、Carol 的 reply(reply-indicator)
-- 步骤 11:Bob/Carol fresh `/kanban/:spaceId` mount 都通过 server projection hydrate 同一个 board id、4 个 column 与 Backlog 中的 story cards
+- 步骤 11:Bob/Carol fresh `/kanban/:realmId` mount 都通过 server projection hydrate 同一个 board id、4 个 column 与 Backlog 中的 story cards
 
 ## Edge cases
 

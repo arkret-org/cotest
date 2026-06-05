@@ -131,7 +131,7 @@
 - **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图通过 `POST /_cokret/edge/applet/transactions` 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
 - **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;相同 key 但不同 body 返回 `409 idempotency_key_conflict`
 
-主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建空间或共用 Phase A,以避免 namespace 状态干扰。
+主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建 Realm 或共用 Phase A,以避免 namespace 状态干扰。
 
 ## Implementation notes
 

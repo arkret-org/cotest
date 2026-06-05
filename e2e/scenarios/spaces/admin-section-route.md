@@ -4,7 +4,7 @@
 
 ## 目标
 
-通过 Playwright 直接 `page.goto("/realms/<spaceId>/admin/members")`(不点 admin 导航的 tab,也不经任何 in-app 链接跳转),断言:
+通过 Playwright 直接 `page.goto("/realms/<realmId>/admin/members")`(不点 admin 导航的 tab,也不经任何 in-app 链接跳转),断言:
 1. `realm-admin-panel` 在 hard nav 完成后可见
 2. `realm-admin-active-section` 这个 testid 反映 URL 路径段(本 probe 期望文本为 `"Members"`)
 3. 上述断言在 fresh browser context、fresh login session 下成立 — 也就是说,即使没有任何 client-side state 残留,RealmAdminPanel 也必须从 URL 推出来正确的 active section
@@ -19,7 +19,7 @@
 
 ## 拓扑
 
-- 1 × soland(提供 space 创建)
+- 1 × soland(提供 Realm 创建)
 - 1 × coauth(发 alice 的 dev session)
 - 1 × yougen(被测对象;routing 行为)
 - 1 × Playwright browser context — 一次性 alice user
@@ -37,11 +37,11 @@
 - `alice` 通过 `ensureRegistered(request, alice)` 注册
 - `alice` 通过 `issueDevSession(request, alice)` 拿 token
 - `alice` 在 yougen 通过 `openUserPage(browser, alice, { sessionToken })` 起 browser context(`yougen.config.v1` localStorage 注入)
-- `alice` 通过 `JointUserPage.createRealm(...)` 建一个 `discoverability=listed, joinRule=invite` 的空间,记录 `spaceId`
+- `alice` 通过 `JointUserPage.createRealm(...)` 建一个 `discoverability=listed, joinRule=invite` 的 Realm,记录 `realmId`
 
 ## Steps
 
-1. **alice** `page.goto("/realms/${spaceId}/admin/members", { waitUntil: "domcontentloaded" })` — 关键:hard navigation,不点任何 tab,不经 in-app 链接
+1. **alice** `page.goto("/realms/${realmId}/admin/members", { waitUntil: "domcontentloaded" })` — 关键:hard navigation,不点任何 tab,不经 in-app 链接
 2. 等 `realm-admin-panel` 可见(timeout 120s — yougen 初始化和 server claim 可能慢)
 3. 等 `realm-admin-active-section` 可见(timeout 30s)
 4. 读 `realm-admin-active-section` 的 `textContent().trim()`,日志输出供失败诊断
@@ -67,4 +67,4 @@
 
 ## 总耗时预估
 
-单次跑约 30-60s(主要是 yougen 冷启动 + soland 注册 + space 创建;真正的 routing 断言部分 < 1s)。
+单次跑约 30-60s(主要是 yougen 冷启动 + soland 注册 + Realm 创建;真正的 routing 断言部分 < 1s)。

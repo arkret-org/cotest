@@ -36,7 +36,7 @@ fn synthetic_registry(dir: &std::path::Path) {
       "rejection_level": "hard_reject",
       "replacement": "cx.realm.delivery_binding_policy",
       "allowed_contexts": ["changelog", "legacy_migration", "negative_test"],
-      "notes": "R1.8 Realm/Space inversion: delivery-binding policy attaches to the Realm security boundary, not the Space container."
+      "notes": "delivery-binding policy attaches to the Realm security boundary, not the Space container."
     }
   ]
 }"#,

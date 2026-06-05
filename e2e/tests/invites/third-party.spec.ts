@@ -23,14 +23,14 @@ test.describe("third-party invite", () => {
     // not allowed) is acceptable too — treated as "endpoint absent" for
     // the probe.
     const probe = await request.post(`${solandBaseUrl()}/_cokret/self/invites/third-party`, {
-      data: { space_id: "ck:space:probe", token_commitment: "sha256:0".repeat(64) },
+      data: { realm_id: "ck:realm:probe", token_commitment: "sha256:0".repeat(64) },
     });
     expect([401, 403, 404, 405]).toContain(probe.status());
 
     // With auth: either implemented or absent. 5xx is a bug.
     const authProbe = await request.post(`${solandBaseUrl()}/_cokret/self/invites/third-party`, {
       headers: { authorization: `Bearer ${token}` },
-      data: { space_id: "ck:space:probe", token_commitment: "sha256:0".repeat(64) },
+      data: { realm_id: "ck:realm:probe", token_commitment: "sha256:0".repeat(64) },
     });
     expect(authProbe.status()).toBeLessThan(500);
   });

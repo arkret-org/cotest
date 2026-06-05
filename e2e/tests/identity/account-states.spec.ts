@@ -156,12 +156,12 @@ test.describe("account states", () => {
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const spaceId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
       title: "deactivation visibility",
       ownerDid: alice.did,
     });
     const message = `message before deactivate ${Date.now()}`;
-    await sendPlaintextMessageViaApi(request, aliceToken, spaceId, message, {
+    await sendPlaintextMessageViaApi(request, aliceToken, realmId, message, {
       actorDid: alice.did,
     });
 
@@ -197,7 +197,7 @@ test.describe("account states", () => {
     const searchBody = await search.json();
     expect((searchBody.results as Array<{ did: string }>).some((row) => row.did === alice.did)).toBe(false);
 
-    const events = await listRealmEventsViaApi(request, bobToken, spaceId);
+    const events = await listRealmEventsViaApi(request, bobToken, realmId);
     expect(JSON.stringify(events)).toContain(message);
   });
 

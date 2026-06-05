@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 `encryption_profile=mls_rfc9420` 的 space 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `ck.moderation.franking_proof` 收据(可证存在但不可解密)。
+在 `encryption_profile=mls_rfc9420` 的 Realm 中,alice 给消息附图;bob(成员)能下载并解密看到明文;mallory(非成员)拿不到 ciphertext(opaque 403/404);blob 存储服务**只见 ciphertext**,不知道 plaintext filename / content / size 准确值。Audited 模式下,服务端只看到 `ck.moderation.franking_proof` 收据(可证存在但不可解密)。
 
 不验证:MLS 群组生命周期本身(encryption/mls-group 前置)、密钥备份(encryption/key-backup)、calls 中的媒体(calls/webrtc)。
 
@@ -26,14 +26,14 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | space owner,上传附件 |
+| alice | Realm owner,上传附件 |
 | bob | 成员,下载 + 解密 |
 | mallory | 非成员,验证 ACL |
 | audit-agent (sub-test) | `did:web:audit.example`,持 `ck.audit.read` capability |
 
 ## Pre-conditions
 
-- encryption/mls-group 已实现到能创建 E2EE space 且 alice/bob 都是成员
+- encryption/mls-group 已实现到能创建 E2EE Realm 且 alice/bob 都是成员
 - alice、bob、mallory 都注册
 - Blob Service endpoint 在 soland 同进程或独立
 
@@ -41,14 +41,14 @@
 
 ### Phase A — alice 上传 + 发送加密附件
 
-1. alice 在 E2EE space `S_e2ee` 中准备发消息,附图 `cat.png`(plaintext)
+1. alice 在 E2EE Realm `R_e2ee` 中准备发消息,附图 `cat.png`(plaintext)
 2. yougen 客户端:
    - 生成本地 AEAD key + nonce
    - 用 XChaCha20-Poly1305 加密 `cat.png` → ciphertext
    - 计算 `ciphertext_digest = sha256(ciphertext)`
 3. `POST /_cokret/self/blob/put` 上传:
    - body: ciphertext bytes
-   - meta: `{ space_id, media_type: "application/octet-stream", encryption: { algorithm: "MLS", group_state_ref: { epoch, key_ref } }, ciphertext_digest }`
+   - meta: `{ realm_id, media_type: "application/octet-stream", encryption: { algorithm: "MLS", group_state_ref: { epoch, key_ref } }, ciphertext_digest }`
    - **关键 invariant**:不带明文文件名、不带 plaintext media type
 4. soland Blob Service 返回 `blob_ref: sha256:...`
 5. alice 客户端组消息 `ck.message.create`:
@@ -61,8 +61,8 @@
 7. bob yougen 拉 sync → 解 message → 拿到 plaintext `attachments` 数组
 8. bob 客户端 `GET /_cokret/self/blob/get?blob_ref=<sha>` with `Authorization: Bearer <bob_token>`
 9. soland Blob Service 校验:
-   - bob 是 `S_e2ee` 的当前成员
-   - `covered_frontier_cell` 包含必要的 governance frontier(若 E2EE Space 要求)
+   - bob 是 `R_e2ee` 的当前成员
+   - `covered_frontier_cell` 包含必要的 governance frontier(若 E2EE Realm 要求)
 10. 返回 ciphertext bytes + `Content-Type: application/octet-stream` + `Cache-Control: private, no-store`(spec §5.1)
 11. bob 客户端用 plaintext attachments 里携带的 key_ref → 派生解密 key → 解 ciphertext → 拿到原始 `cat.png`
 12. yougen 渲染图片(lock icon + "Encrypted attachment, X KB")
@@ -76,10 +76,10 @@
 
 ### Phase D — Non-member access denied
 
-17. mallory(非 `S_e2ee` 成员)拿到 `blob_ref`(假设外漏)
+17. mallory(非 `R_e2ee` 成员)拿到 `blob_ref`(假设外漏)
 18. mallory `GET /_cokret/self/blob/get?blob_ref=<sha>` with `mallory_token`
 19. soland 应拒绝;返回**不可区分** 的 opaque 403(同样的错误码 + body 对"不存在"和"无权限"都返回)
-20. 断言:status 403/404;response 不暴露 space_id / blob 是否存在
+20. 断言:status 403/404;response 不暴露 realm_id / blob 是否存在
 
 ### Phase E — Storage 服务只见 ciphertext
 
@@ -89,9 +89,9 @@
 
 ### Phase F — (sub-test E12.4)Audited E2EE 模式
 
-24. 重新建一个 audit-enabled space `S_audit`(`audit_disclosure_policy` 含 audit-agent 的 DID)
-25. alice 在 `S_audit` 发加密附件 — 同 Phase A
-26. audit-agent 拉 `GET /_soland/self/audit/events?space_id=<S_audit>` → 应当看到 `ck.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
+24. 重新建一个 audit-enabled Realm `R_audit`(`audit_disclosure_policy` 含 audit-agent 的 DID)
+25. alice 在 `R_audit` 发加密附件 — 同 Phase A
+26. audit-agent 拉 `GET /_soland/self/audit/events?realm_id=<R_audit>` → 应当看到 `ck.moderation.franking_proof` 收据(franking proof:存在 + 时间戳 + 发送方 DID + ciphertext_digest),**但**不含明文
 27. audit-agent **不能** 直接拿到 plaintext attachment;若要审,需要触发 `ck.audit.accessed`(spec §4),记录到 audit trail
 
 ## Observable assertions(合并)

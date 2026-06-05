@@ -13,7 +13,7 @@
 - `cokret-spec/spec/v1/artifacts/registry/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
 - `cokret-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json` — 被废弃的 profile id
 - `cokret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json` — 5 个上下文绑定的禁用 wire 字段名 (`branch` / `room_kind` / `discussion_space_ref` / `space_frontier` / 含 `kind=room` 的 flow payload)
-- `cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — 6 个 prose / identifier 级别的禁用术语 (`Room` / `Place` / `flow_branch` / ...)
+- `cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — prose / identifier 级别的禁用术语
 - `cokret-spec/spec/v1/artifacts/registry/operation-registry.json` — canonical operation 注册表 (82 个 operation_id × 14 个 surface_groups),HTTP / gRPC / MQ 绑定的唯一真源
 - 关联 OpenAPI 视图: `cokret-spec/spec/v1/artifacts/openapi/cokret-service-api.openapi.yaml` (按 `registry_rules` 中 "MUST NOT introduce/rename/remove operation_id" 的约束,是 operation-registry 的派生 view,不是第二个 namespace)
 - 关联实现: soland `/_cokret/describe` 处的 `implemented_features` / `supported_operations` / `claimed_profiles` 字段 (确切 key 名 see Implementation notes)
@@ -102,7 +102,7 @@
 
 ### Phase F — Forbidden model terms in audit / log surfaces (OPTIONAL fixme)
 
-23. **harness** load `artifacts/registry/forbidden-model-terms.json` → entries 主要是 prose 级别 (`Room`, `Place`, `flow_branch`, `track members`, `Room visibility`, `Realm(kind=list)`)
+23. **harness** load `artifacts/registry/forbidden-model-terms.json` → entries 主要是 prose 级别禁用术语
 24. 收集所有 *string 值* (而非 key) 出现在 `/_cokret/describe` 中的字面量
 25. 断言:no string value contains `\bRoom\b` / `\bPlace\b` (word-boundary,避免误伤 `RoomTitleSection` 这类合成词;同时 `interop_module` / `changelog` 在 describe 中不豁免)
 26. 同样扫描 `/_soland/self/audit/recent` (若 alice 有权限) 与一个 list operation 的 JSON 序列化结果

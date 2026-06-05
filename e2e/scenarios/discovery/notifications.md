@@ -1,8 +1,8 @@
-# 通知(push prefs / DnD / per-space mute / mark-all-read)
+# 通知(push prefs / DnD / per-Realm mute / mark-all-read)
 
 ## 目标
 
-通知偏好的端到端:bob 在 space `S` 中订阅默认通知;mute `S` 后不再收;DnD 时段内静音所有;到期自动恢复;mark-all-read 清空 unread count;mention 触发 push;`evaluation_locus` 在 E2EE 中 client-side 求值。
+通知偏好的端到端:bob 在 Realm `R` 中订阅默认通知;mute `R` 后不再收;DnD 时段内静音所有;到期自动恢复;mark-all-read 清空 unread count;mention 触发 push;`evaluation_locus` 在 E2EE 中 client-side 求值。
 
 ## Spec 锚点
 
@@ -10,7 +10,7 @@
 - `discovery/push-notifications.md` §3 — Notification rules engine
 - `discovery/push-notifications.md` §4.3.1 — Mention routing hint
 - `discovery/push-notifications.md` §4.5 — `evaluation_locus`(server / client)
-- `discovery/client-preferences.md` — 客户端偏好键(notification per-space)
+- `discovery/client-preferences.md` — 客户端偏好键(notification per-Realm)
 
 ## 拓扑
 
@@ -20,7 +20,7 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | space owner,发消息触发通知 |
+| alice | Realm owner,发消息触发通知 |
 | bob | 接收方,调 notification preferences |
 
 ## Steps
@@ -31,17 +31,17 @@
 2. alice 发消息 `M1`
 3. 断言:bob 的 `/notifications` 显示 `M1` 通知;in-app badge unread=1
 
-### Phase B — Mute per-space
+### Phase B — Mute per-Realm
 
-4. bob 进 `/notifications`,点 `S` 旁的 "Mute"
-5. 客户端写 `yougen.preferences.notifications.<spaceId> = "muted"`
+4. bob 进 `/notifications`,点 `R` 旁的 "Mute"
+5. 客户端写 `yougen.preferences.notifications.<realmId> = "muted"`
 6. alice 发 `M2`
 7. 断言:bob 的 `M2` **不**触发 push 通知(in-app badge 不增);消息**仍** 在 timeline(mute ≠ block)
 
-### Phase C — Mention 在 muted space 中也通知(覆盖规则)
+### Phase C — Mention 在 muted Realm 中也通知(覆盖规则)
 
 8. alice 发 `M3 = "@bob urgent"`
-9. spec §3:即使 `S` 被 mute,direct mention 应当通知(可配置)
+9. spec §3:即使 `R` 被 mute,direct mention 应当通知(可配置)
 10. 断言:bob 收到 mention 通知(`mention-notification` testid)
 
 ### Phase D — Do-not-disturb 时段
@@ -62,7 +62,7 @@
 
 ### Phase F — `evaluation_locus` 在 E2EE 中
 
-21. 重建一个 E2EE space,加 notification rule `contains_keyword: "urgent"`(只 client 可求值,因为服务端看不到明文)
+21. 重建一个 E2EE Realm,加 notification rule `contains_keyword: "urgent"`(只 client 可求值,因为服务端看不到明文)
 22. alice 发 `"this is urgent"`
 23. 服务端发 blind wake-up push(spec §4.5)
 24. 客户端解密 → 求值 rule → 显示 urgent notification
@@ -77,7 +77,7 @@
 ## Implementation notes
 
 - **soland 缺口**:notification queue projection、rule engine、mention sidecar(参见 messaging/chat-advanced)
-- **yougen 缺口**:`/notifications` panel 完整 UI、per-space mute toggle、`/settings/notifications` DnD picker
+- **yougen 缺口**:`/notifications` panel 完整 UI、per-Realm mute toggle、`/settings/notifications` DnD picker
 - **harness 缺口**:可选 mock push gateway 接收 push payload(为了断言 push 真发了)
 
 ## 总耗时预估

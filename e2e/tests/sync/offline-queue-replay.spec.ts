@@ -48,7 +48,7 @@ test.describe("offline queue replay", () => {
       await expect(fixture.bobPage.timelineEvent(body)).not.toContainText("(pending)", {
         timeout: 30_000,
       });
-      await expectServerEventsContain(request, fixture.aliceToken, fixture.spaceId, [body]);
+      await expectServerEventsContain(request, fixture.aliceToken, fixture.realmId, [body]);
     } finally {
       await fixture.bobPage.page.context().setOffline(false).catch(() => undefined);
       await closeFixture(fixture);
@@ -66,7 +66,7 @@ test.describe("offline queue replay", () => {
       }
       await fixture.bobPage.page.context().setOffline(false);
 
-      await expectServerEventsContain(request, fixture.aliceToken, fixture.spaceId, bodies);
+      await expectServerEventsContain(request, fixture.aliceToken, fixture.realmId, bodies);
       await expect
         .poll(async () => (await fixture.bobPage.page.getByTestId("timeline").innerText()).includes("(pending)"), {
           timeout: 30_000,
@@ -115,7 +115,7 @@ test.describe("offline queue replay", () => {
         { timeout: 30_000 },
       );
       const serialized = JSON.stringify(
-        await listRealmEventsViaApi(request, fixture.aliceToken, fixture.spaceId),
+        await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId),
       );
       expect(serialized).not.toContain(body);
     } finally {
@@ -132,7 +132,7 @@ type OfflineFixture = {
   bobToken: string;
   alicePage: JointUserPage;
   bobPage: JointUserPage;
-  spaceId: string;
+  realmId: string;
 };
 
 async function createOfflineFixture(
@@ -148,7 +148,7 @@ async function createOfflineFixture(
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const spaceId = await createSharedRealmViaApi(
+  const realmId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,
@@ -163,8 +163,8 @@ async function createOfflineFixture(
     openUserPage(browser, alice, { sessionToken: aliceToken }),
     openUserPage(browser, bob, { sessionToken: bobToken }),
   ]);
-  await Promise.all([alicePage.gotoTimelineRealm(spaceId), bobPage.gotoTimelineRealm(spaceId)]);
-  return { alice, bob, aliceToken, bobToken, alicePage, bobPage, spaceId };
+  await Promise.all([alicePage.gotoTimelineRealm(realmId), bobPage.gotoTimelineRealm(realmId)]);
+  return { alice, bob, aliceToken, bobToken, alicePage, bobPage, realmId };
 }
 
 async function composeMessage(userPage: JointUserPage, body: string) {
@@ -176,15 +176,15 @@ async function composeMessage(userPage: JointUserPage, body: string) {
 async function expectServerEventsContain(
   request: APIRequestContext,
   token: string,
-  spaceId: string,
+  realmId: string,
   bodies: string[],
 ) {
   await expect
-    .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, token, spaceId)), {
+    .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, token, realmId)), {
       timeout: 30_000,
     })
     .toContain(bodies[bodies.length - 1]);
-  const serialized = JSON.stringify(await listRealmEventsViaApi(request, token, spaceId));
+  const serialized = JSON.stringify(await listRealmEventsViaApi(request, token, realmId));
   for (const body of bodies) {
     expect(serialized).toContain(body);
   }
@@ -196,7 +196,7 @@ async function banMember(request: APIRequestContext, fixture: OfflineFixture) {
     fixture.aliceToken,
     signedEventEnvelope({
       actorDid: fixture.alice.did,
-      realmId: fixture.spaceId,
+      realmId: fixture.realmId,
       kind: "ck.member.state",
       payload: {
         actor_id: fixture.bob.did,

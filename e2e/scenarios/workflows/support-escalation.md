@@ -2,14 +2,14 @@
 
 ## 目标
 
-支持工程师 Alex 在客户报问题后,把工单升级给后端工程师 Sam。两人在一个共享 space 里通过 reply chain 讨论,Alex 编辑工单摘要补充新事实,Sam 提出修复方案,最后用 kanban 把工单状态推进到 Resolved。
+支持工程师 Alex 在客户报问题后,把工单升级给后端工程师 Sam。两人在一个共享 Realm 里通过 reply chain 讨论,Alex 编辑工单摘要补充新事实,Sam 提出修复方案,最后用 kanban 把工单状态推进到 Resolved。
 
 这个 scenario 关注"reply chain + edit + kanban 反映状态"的真实使用,跟 sprint-planning 的"批量计划"互补。
 
 ## Spec 锚点
 
 - `models/flow-and-message.md` §8 (reply / edit / redact)
-- `models/space-and-place.md` §4 (Place / Kanban)
+- `models/realm-and-space.md` §4 (Space / Kanban)
 
 ## 拓扑
 
@@ -19,12 +19,12 @@
 
 | 名字 | 角色 |
 |---|---|
-| alex | 一线支持(space owner) |
+| alex | 一线支持(Realm owner) |
 | sam | 后端工程师(升级目标) |
 
 ## Steps
 
-### Phase A — Alex 开 ticket space
+### Phase A — Alex 开 ticket Realm
 
 1. Alex `createRealm` `"Support escalation #1042"`,seed Sam
 2. Sam `acceptInvite`
@@ -60,8 +60,8 @@
 ## Edge cases
 
 - **E-support.1** Alex redact 一条 PII 泄露的 reply,tombstone 显示
-- **E-support.2** Sam 在 ticket space 加另一个工程师 — 升级链扩大(需要 inviteFromAdmin)
-- **E-support.3** Customer 申请加入 ticket space(knock flow)— 需要 knock-application
+- **E-support.2** Sam 在 ticket Realm 加另一个工程师 — 升级链扩大(需要 inviteFromAdmin)
+- **E-support.3** Customer 申请加入 ticket Realm(knock flow)— 需要 knock-application
 
 ## 总耗时预估
 

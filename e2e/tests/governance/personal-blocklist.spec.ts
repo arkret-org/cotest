@@ -10,9 +10,9 @@ import {
   accountSubscribeDeltaApi,
   authHeaders,
   createRealmApi,
-  makeOperation,
+  makeFederationEvent,
   putAccountDataViaEventApi,
-  pushFederationOperations,
+  pushFederationEvents,
   queryRealmEventsApi,
   sendMessageApi,
 } from "../../helpers/soland-api";
@@ -54,8 +54,6 @@ test.describe("personal blocklist", () => {
     expect(accountData.status()).toBe(200);
     expect(await accountData.text()).toContain("delta");
 
-    const hints = await request.get(`${solandBaseUrl()}/_cokret/peer/federation/block-hints`);
-    expect(hints.status()).toBeLessThan(500);
   });
 
   test(
@@ -114,13 +112,6 @@ test.describe("personal blocklist", () => {
           })
           .toBe(true);
 
-        await expect
-          .poll(async () => await blockHintSuppressed(request, alice.did, bob.did), {
-            timeout: 30_000,
-            message: "local federation block hint suppresses bob -> alice push",
-          })
-          .toBe(true);
-
         const m2 = `S31 m2 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m2);
         await alicePage.gotoTimelineRealm(realmId);
@@ -151,13 +142,6 @@ test.describe("personal blocklist", () => {
             message: "alice account_data removed bob block entry",
           })
           .toBe(false);
-        await expect
-          .poll(async () => await blockHintSuppressed(request, alice.did, bob.did), {
-            timeout: 30_000,
-            message: "unblock retracts local federation block hint",
-          })
-          .toBe(false);
-
         const m3 = `S31 m3 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m3);
         await alicePage.gotoTimelineRealm(realmId);
@@ -204,9 +188,9 @@ test.describe("personal blocklist", () => {
       expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(body);
       expect(eventsText(await queryRealmEventsApi(request, carolToken, realmId))).toContain(body);
 
-      const redactOperation = makeOperation({
+      const redactEvent = makeFederationEvent({
         realmId,
-        objectType: "ck.message.redact",
+        kind: "ck.message.redact",
         payload: {
           target_event_id: sent.event_id,
           redacts: sent.event_id,
@@ -214,11 +198,11 @@ test.describe("personal blocklist", () => {
           actor: alice.did,
         },
       });
-      const redactPush = await pushFederationOperations(request, [redactOperation], {
+      const redactPush = await pushFederationEvents(request, [redactEvent], {
         origin: solandServiceDid(),
         realmId,
       });
-      expect(redactPush.accepted).toContain(redactOperation.operation_id);
+      expect(redactPush.accepted).toContain(redactEvent.event_id);
 
       expect(eventsText(await queryRealmEventsApi(request, carolToken, realmId))).not.toContain(body);
     },
@@ -381,19 +365,6 @@ function targetDid(value: unknown): string | undefined {
     });
   }
   return undefined;
-}
-
-async function blockHintSuppressed(
-  request: APIRequestContext,
-  actor: string,
-  blocked: string,
-): Promise<boolean> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_cokret/peer/federation/block-hints?actor=${encodeURIComponent(actor)}&blocked=${encodeURIComponent(blocked)}`,
-  );
-  expect(response.status()).toBe(200);
-  const body = await response.json();
-  return body.suppressed_push === true;
 }
 
 async function readNotificationsText(

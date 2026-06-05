@@ -1,6 +1,6 @@
 // history_visibility=world_readable allows non-members and anonymous read
 // Contract: e2e/scenarios/spaces/history-world-readable.md
-// Spec: models/space-and-place.md §3.4 (cross-table), §3.7 (privacy + non-E2EE only),
+// Spec: models/realm-and-space.md §3.4 (cross-table), §3.7 (privacy + non-E2EE only),
 //        §3.1.3 (mls_rfc9420 + world_readable incompatible)
 // E2E-WORLD-READ-1 — soland/_todos.md.
 
@@ -23,7 +23,7 @@ test.describe("world_readable history @fully-implemented", () => {
     browser,
     request,
   }) => {
-    // spec: space-and-place.md §3.4 — non-members can read events when
+    // spec: realm-and-space.md §3.4 — non-members can read events when
     // history_visibility=world_readable, even on listed/non-public spaces.
     const stamp = Date.now();
     const alice = uniqueUser("worldread-alice");
@@ -65,7 +65,7 @@ test.describe("world_readable history @fully-implemented", () => {
     browser,
     request,
   }) => {
-    // spec: space-and-place.md §3.7 — world_readable also opens the read
+    // spec: realm-and-space.md §3.7 — world_readable also opens the read
     // endpoint to anonymous (no bearer) callers. Discoverability remains
     // `listed`, so the space won't appear in unauthenticated directory
     // queries, but its event stream is readable by id.
@@ -126,7 +126,7 @@ test.describe("world_readable history @fully-implemented", () => {
       // outsider attempts to write a message via API — must be denied even with
       // world_readable history (capability is not granted to non-members).
       const write = await request.post(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(realmId)}/messages`,
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/messages`,
         {
           headers: { authorization: `Bearer ${outsiderToken}` },
           data: { content: { text: "S1.3 outsider tries to write" } },

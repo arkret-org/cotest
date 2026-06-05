@@ -15,7 +15,7 @@ export type JointRealmFixture = {
   bobToken: string;
   alicePage: JointUserPage;
   bobPage: JointUserPage;
-  spaceId: string;
+  realmId: string;
 };
 
 export const test = base.extend<{ jointRealm: JointRealmFixture }>({
@@ -49,7 +49,7 @@ async function createJointTwoUserRealm(
     openUserPage(browser, bob, { sessionToken: bobToken }),
   ]);
 
-  const spaceId = await alicePage.createRealm({
+  const realmId = await alicePage.createRealm({
     title: `joint smoke ${stamp}`,
     summary: "cotest joint harness smoke",
     discoverability: "public",
@@ -58,5 +58,5 @@ async function createJointTwoUserRealm(
     encryptionProfile: "none",
   });
 
-  return { alice, bob, aliceToken, bobToken, alicePage, bobPage, spaceId };
+  return { alice, bob, aliceToken, bobToken, alicePage, bobPage, realmId };
 }

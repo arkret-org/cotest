@@ -152,8 +152,8 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         &push_body,
     )?
     .send()
-        .await
-        .context("push peer events to server_b")?;
+    .await
+    .context("push peer events to server_b")?;
     let status = push_response.status();
     if !(status.is_success() || status.is_client_error()) {
         return Err(anyhow::anyhow!(
@@ -176,7 +176,11 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     )
     .await
     .context("fetch peer events frontier from server_b")?;
-    if frontier_b.get("frontier_root").and_then(Value::as_str).is_none() {
+    if frontier_b
+        .get("frontier_root")
+        .and_then(Value::as_str)
+        .is_none()
+    {
         return Err(anyhow::anyhow!(
             "server_b frontier response must include frontier_root, got: {frontier_b}"
         ));
@@ -194,7 +198,10 @@ fn with_peer_get_headers(
     Ok(builder
         .header("Source-Service-DID", source.service_did())
         .header("Destination-Service-DID", destination.service_did())
-        .header("Source-Trust-Domain", trust_domain_for(source.service_did()))
+        .header(
+            "Source-Trust-Domain",
+            trust_domain_for(source.service_did()),
+        )
         .header(
             "Destination-Trust-Domain",
             trust_domain_for(destination.service_did()),
@@ -211,7 +218,10 @@ fn with_peer_post_headers(
     Ok(builder
         .header("Source-Service-DID", source.service_did())
         .header("Destination-Service-DID", destination.service_did())
-        .header("Source-Trust-Domain", trust_domain_for(source.service_did()))
+        .header(
+            "Source-Trust-Domain",
+            trust_domain_for(source.service_did()),
+        )
         .header(
             "Destination-Trust-Domain",
             trust_domain_for(destination.service_did()),

@@ -34,10 +34,10 @@ test.describe("organization policy inheritance", () => {
   });
 
   test(
-    "acme-org publishes ck.organization.moderation_policy with deny_join targets; spaces under acme inherit the policy automatically",
+    "acme-org publishes ck.organization.moderation_policy with deny_join targets; Realms under acme inherit the policy automatically",
     async ({ request }) => {
       const { alice, mallory, aliceToken, orgDid } = await setupAcmeOrg(request, "s30-inherit");
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 inherited policy ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
@@ -50,10 +50,10 @@ test.describe("organization policy inheritance", () => {
       expect(policy.ok()).toBeTruthy();
       const policyBody = await policy.json();
       expect(policyBody.policy.targets[0].did).toBe(mallory.did);
-      expect(policyBody.applies_to_spaces).toContain(spaceId);
+      expect(policyBody.applies_to_realms).toContain(realmId);
 
       const effective = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/effective-policy`,
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       expect(effective.ok()).toBeTruthy();
@@ -65,10 +65,10 @@ test.describe("organization policy inheritance", () => {
   );
 
   test(
-    "mallory's join attempt on an Acme space is rejected with organization_policy_denied; space-level override requires organization approval",
+    "mallory's join attempt on an Acme Realm is rejected with organization_policy_denied; Realm-level override requires organization approval",
     async ({ request }) => {
       const { alice, mallory, aliceToken, orgDid } = await setupAcmeOrg(request, "s30-deny");
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 deny join ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
@@ -78,7 +78,7 @@ test.describe("organization policy inheritance", () => {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
-          realmId: spaceId,
+          realmId,
           kind: "ck.member.state",
           payload: {
             actor_id: mallory.did,
@@ -92,7 +92,7 @@ test.describe("organization policy inheritance", () => {
       expect(JSON.stringify(await deniedJoin.json())).toContain("organization_policy_denied");
 
       const noApproval = await request.post(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/moderation-policy`,
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -104,7 +104,7 @@ test.describe("organization policy inheritance", () => {
       expect(wireErrCode(await noApproval.json())).toBe("requires_organization_approval");
 
       const withApproval = await request.post(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/moderation-policy`,
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -119,18 +119,18 @@ test.describe("organization policy inheritance", () => {
       );
       expect(withApproval.ok()).toBeTruthy();
 
-      await addRealmMemberApi(request, aliceToken, spaceId, mallory.did);
-      const space = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}`,
+      await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
+      const realm = await request.get(
+        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(aliceToken) },
       );
-      expect(space.ok()).toBeTruthy();
-      expect((await space.json()).members ?? []).toContain(mallory.did);
+      expect(realm.ok()).toBeTruthy();
+      expect((await realm.json()).members ?? []).toContain(mallory.did);
     },
   );
 
   test(
-    "policy update at organization level fans out to all member spaces without per-space rewrites",
+    "policy update at organization level fans out to all member Realms without per-Realm rewrites",
     async ({ request }) => {
       const { aliceToken, orgDid } = await setupAcmeOrg(request, "s30-fanout");
       const first = await createRealmApi(request, aliceToken, {
@@ -162,19 +162,19 @@ test.describe("organization policy inheritance", () => {
       );
       expect(update.ok()).toBeTruthy();
 
-      for (const spaceId of [first, second]) {
+      for (const realmId of [first, second]) {
         const effective = await request.get(
-          `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/effective-policy`,
+          `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
           { headers: authHeaders(aliceToken) },
         );
         expect(effective.ok()).toBeTruthy();
         const body = await effective.json();
         expect(JSON.stringify(body)).toContain("did:web:later-denied.example");
         expect(body.organization_policy_layers?.[0]?.version).toBe(2);
-        expect(body.organization_policy_layers?.[0]?.applies_to_spaces).toEqual(
+        expect(body.organization_policy_layers?.[0]?.applies_to_realms).toEqual(
           expect.arrayContaining([first, second]),
         );
-        expect(body.fanout?.rewrites_space_policy).toBe(false);
+        expect(body.fanout?.rewrites_realm_policy).toBe(false);
       }
     },
   );
@@ -185,7 +185,7 @@ test.describe("organization policy inheritance", () => {
       // spec: discovery-directory.md §2
       const label = `s30-dir-${Date.now()}`;
       const { alice, aliceToken, orgDid } = await setupAcmeOrg(request, label);
-      const spaceId = await createRealmApi(request, aliceToken, {
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 org directory ${Date.now()}`,
         public: true,
         owning_organizations: [orgDid],
@@ -204,8 +204,8 @@ test.describe("organization policy inheritance", () => {
       expect(apiRow, "search-organizations should return the runtime Acme organization").toBeTruthy();
       expect(apiRow.verified_badge ?? apiRow.verified).toBe(true);
       expect(apiRow.member_count).toBe(2);
-      expect(apiRow.spaces).toEqual(expect.arrayContaining([spaceId]));
-      expect(apiRow.space_count).toBeGreaterThanOrEqual(1);
+      expect(apiRow.realms).toEqual(expect.arrayContaining([realmId]));
+      expect(apiRow.realm_count).toBeGreaterThanOrEqual(1);
 
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
       try {

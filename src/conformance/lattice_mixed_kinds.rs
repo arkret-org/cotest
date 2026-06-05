@@ -6,7 +6,7 @@
 //! concurrently in the same Move batch or across the same Anchor frontier.
 //!
 //! Spec authority:
-//!   * `cokret-spec/spec/v1/zh/models/space-and-place.md` (lattice cell registry /
+//!   * `cokret-spec/spec/v1/zh/models/realm-and-space.md` (lattice cell registry /
 //!     `co_write_policy`)
 //!   * `cokret-spec/spec/v1/zh/authz/event-auth-state-resolution.md` §3 (lattice_op kinds) and §5.3
 //!     (per-lattice reference impl)

@@ -369,7 +369,7 @@ conformance_test!(
     /// Round-22 — Event-kind ↔ LatticeKind dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core lattice, no cell_family appears in
-    /// two lattices, namespace is ck.component.*, bottom ∈ {reject, expose},
+    /// two lattices, nameRealm is ck.component.*, bottom ∈ {reject, expose},
     /// and the fixture's expected_cell_family_lattice_bindings exactly matches
     /// the registry.
     event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,
@@ -456,9 +456,9 @@ conformance_test!(
 conformance_test!(
     /// Round-24 D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
     /// join/leave, covered_frontier accumulation, AAD digest pinning).
-    mls_e2ee_basic_fixture_suite_matches_reference_semantics,
-    "mls_e2ee_basic_fixture",
-    cotest::conformance::run_mls_e2ee_basic_fixture_suite,
+    mlR_e2ee_basic_fixture_suite_matches_reference_semantics,
+    "mlR_e2ee_basic_fixture",
+    cotest::conformance::run_mlR_e2ee_basic_fixture_suite,
 );
 
 conformance_test!(
@@ -561,11 +561,11 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-27 E3 — multi-space federation per-space anchor isolation +
-    /// cross-space rejection.
-    multi_space_federation_fixture_suite_matches_reference_semantics,
-    "multi_space_federation_fixture",
-    cotest::conformance::run_multi_space_federation_fixture_suite,
+    /// Round-27 E3 — Multi-Realm federation Per-Realm anchor isolation +
+    /// cross-Realm rejection.
+    multi_realm_federation_fixture_suite_matches_reference_semantics,
+    "multi_realm_federation_fixture",
+    cotest::conformance::run_multi_realm_federation_fixture_suite,
 );
 
 conformance_test!(
@@ -614,7 +614,7 @@ conformance_test!(
 conformance_test!(
     /// CT-2 — mixed lattice cell types (cas-register + or-set + mv-register)
     /// updating concurrently in the same Move batch / Anchor frontier. Spec:
-    /// models/space-and-place.md (lattice cell registry / co_write_policy) +
+    /// models/realm-and-space.md (lattice cell registry / co_write_policy) +
     /// authz/event-auth-state-resolution.md §3 / §5.3.
     lattice_mixed_kinds_suite_matches_reference_semantics,
     "lattice_mixed_kinds",

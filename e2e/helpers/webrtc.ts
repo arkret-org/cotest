@@ -62,7 +62,7 @@ export async function createCallSession(
     {
       headers: authHeaders(token),
       data: {
-        space_id: DEMO_REALM_ID,
+        realm_id: DEMO_REALM_ID,
         participants: [],
         ttl_ms: 90_000,
       },

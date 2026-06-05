@@ -26,16 +26,11 @@ The current default server under test is the sibling
 
 ## Realm vs Space
 
-The harness uses the Phase 1–4 inverted vocabulary when constructing
-fixtures and assertions:
-
 - **Realm:** security boundary — membership, capability, E2EE, federation.
-  Old wire name: `Space`.
 - **Space:** navigation container — board, list, section, calendar bucket.
-  Old wire name: `Place`.
 
-Both legacy and new wire shapes are exercised so the soland reducer's
-back-compat aliases stay covered.
+The harness constructs fixtures with current v1 wire names only:
+`ck.realm.*` for boundary events and `ck.space.*` for container events.
 
 ## Round R4 (protocol review closures)
 

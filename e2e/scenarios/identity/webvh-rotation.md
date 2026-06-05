@@ -30,13 +30,13 @@
 | alice | DID owner;触发轮换 |
 | alice-device-1 | 持有旧 update key |
 | witness-1 | 见证服务,签 entry hash |
-| bob | space 内的其他用户,验证 alice 轮换前后的事件签名 |
+| bob | Realm 内的其他用户,验证 alice 轮换前后的事件签名 |
 
 ## Pre-conditions
 
 - alice 已完成 identity/onboarding onboarding,DID 形如 `did:webvh:<scid>:<host>`,entry 0 已存在
 - witness-1 服务在 resolver policy 的 witness list 里
-- alice 与 bob 在 space `S_a` 中已交换若干消息;alice 的事件都用 entry 0 的 key 签
+- alice 与 bob 在 Realm `R_a` 中已交换若干消息;alice 的事件都用 entry 0 的 key 签
 
 ## Steps
 
@@ -44,7 +44,7 @@
 
 1. bob 调 `GET https://<host>/.well-known/did/webvh/<scid>` 解析 alice 的 DID Document v0(应当 cache)
 2. bob 收到的 alice 历史事件:每条用 alice entry 0 的 key 签;bob 用 v0 DID Doc 的 `verificationMethod` 验签 → 全通过
-3. 断言:`/_soland/self/spaces/S_a/timeline` 上的 alice 事件签名状态都是 ✓
+3. 断言:`GET /_cokret/self/events?realms=R_a` 返回的 alice 事件签名状态都是 ✓
 
 ### Phase B — alice 触发轮换
 
@@ -61,7 +61,7 @@
 
 ### Phase C — 轮换后的新事件用新 key 签
 
-11. alice (device-1) 在 space `S_a` 发新消息 `M_post`
+11. alice (device-1) 在 Realm `R_a` 发新消息 `M_post`
 12. 客户端用 **新** update key 签
 13. bob 拉新 DID Doc → 验签 → 通过
 14. 断言:bob timeline 上 `M_post` 签名 ✓

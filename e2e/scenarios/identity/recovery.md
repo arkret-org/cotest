@@ -30,7 +30,7 @@
 | alice | 主用户;Phase A 设置备份,Phase C 在新设备恢复 |
 | alice-device-1 | 主设备 |
 | alice-device-2 | "丢失"后的新设备(实际是另一个 browser context) |
-| (E2EE 子测试)bob | 与 alice 在同一 E2EE space,恢复后 alice 解 bob 发的旧消息 |
+| (E2EE 子测试)bob | 与 alice 在同一 E2EE Realm,恢复后 alice 解 bob 发的旧消息 |
 
 ## Steps
 
@@ -46,9 +46,9 @@
 5. 服务端**只能存** ciphertext,不接受明文 passphrase
 6. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext
 
-### Phase B — (可选)alice 在 E2EE space 中收发消息
+### Phase B — (可选)alice 在 E2EE Realm 中收发消息
 
-7. alice 与 bob 在 space `S_e2ee` (`encryption_profile=mls_rfc9420`) 中交换若干消息
+7. alice 与 bob 在 Realm `R_e2ee` (`encryption_profile=mls_rfc9420`) 中交换若干消息
 8. 关键:其中至少 1 条消息使用 backup 之前的 MLS epoch key
 
 ### Phase C — Device 1 "丢失",alice 在 Device 2 恢复
@@ -66,7 +66,7 @@
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 
-16. device-2 拉 `S_e2ee` 的 MLS state(commit chain 回放)
+16. device-2 拉 `R_e2ee` 的 MLS state(commit chain 回放)
 17. 用 backup 提供的 MLS history backup key 解 epoch 历史
 18. 断言:Phase B 时 bob 发的消息现在在 device-2 timeline 可见、明文渲染
 
