@@ -1,0 +1,251 @@
+{
+  "suite": "private_chat_privacy_contracts",
+  "version": 1,
+  "source_refs": [
+    "cokret-spec/spec/v1/zh/discovery/client-preferences.md",
+    "cokret-spec/spec/v1/zh/identity/contact-and-direct-conversation.md",
+    "cokret-spec/spec/v1/artifacts/schemas/contact-operations.schema.json",
+    "cokret-spec/spec/v1/artifacts/schemas/event-payload.schema.json",
+    "cokret-spec/spec/v1/artifacts/registry/account-data-type-registry.json"
+  ],
+  "account_data_cases": {
+    "positive": {
+      "name": "realm_private_pin_pinned_true",
+      "key": "ck.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
+      "expect_valid": true,
+      "payload": {
+        "version": 1,
+        "subject": {
+          "kind": "realm",
+          "id": "ck:realm:0196b39d-0000-7000-8000-000000000101"
+        },
+        "local_name": "Pinned Engineering",
+        "note": "Alice private note",
+        "tags": [],
+        "pinned": true,
+        "verified_title_at_save": "Engineering",
+        "verified_owning_organizations_at_save": [
+          "did:web:acme.example"
+        ],
+        "saved_at": "2026-06-06T00:00:00Z",
+        "updated_at": "2026-06-06T00:00:00Z"
+      }
+    },
+    "negative": {
+      "name": "realm_private_pin_subject_id_mismatch",
+      "key": "ck.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101",
+      "expect_valid": false,
+      "expected_error": "realm_remark_subject_mismatch",
+      "payload": {
+        "version": 1,
+        "subject": {
+          "kind": "realm",
+          "id": "ck:realm:0196b39d-0000-7000-8000-000000000102"
+        },
+        "local_name": "Pinned Engineering",
+        "note": "Alice private note",
+        "tags": [],
+        "pinned": true,
+        "verified_title_at_save": "Engineering",
+        "verified_owning_organizations_at_save": [
+          "did:web:acme.example"
+        ],
+        "saved_at": "2026-06-06T00:00:00Z",
+        "updated_at": "2026-06-06T00:00:00Z"
+      }
+    }
+  },
+  "privacy_payload_vectors": [
+    {
+      "name": "realm_remark_not_in_directory_projection",
+      "surface": "directory_projection",
+      "payload": {
+        "operation_id": "ck.find.directory.search_realms",
+        "result": {
+          "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000101",
+          "title": "Engineering",
+          "summary": "Team workspace",
+          "discoverability": "listed",
+          "as_of": "2026-06-06T00:00:00Z",
+          "source_refs": [
+            "ck:event:0196b39d-0000-7000-8000-000000000201"
+          ],
+          "policy_revision": "rev-1"
+        }
+      },
+      "forbidden_fields": [
+        "local_name",
+        "note",
+        "pinned",
+        "realm_remark",
+        "account_data_key"
+      ],
+      "forbidden_literals": [
+        "ck.contacts.realm",
+        "Pinned Engineering",
+        "Alice private note"
+      ]
+    },
+    {
+      "name": "realm_remark_not_in_bridge_payload",
+      "surface": "bridge_payload",
+      "payload": {
+        "operation_id": "ck.open.mimi.notify",
+        "bridge": "mimi_interop",
+        "payload": {
+          "room_id": "mimi-room-7d9e",
+          "notification_type": "blind_wakeup",
+          "target": "opaque-bridge-target"
+        }
+      },
+      "forbidden_fields": [
+        "local_name",
+        "note",
+        "pinned",
+        "realm_remark",
+        "account_data_key"
+      ],
+      "forbidden_literals": [
+        "ck.contacts.realm",
+        "Pinned Engineering",
+        "Alice private note"
+      ]
+    },
+    {
+      "name": "realm_remark_not_in_push_payload",
+      "surface": "push_payload",
+      "payload": {
+        "operation_id": "ck.edge.push.notify",
+        "notification": {
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "message",
+          "push_hint": "new_message",
+          "counts": {
+            "unread": 1
+          }
+        }
+      },
+      "forbidden_fields": [
+        "local_name",
+        "note",
+        "pinned",
+        "realm_remark",
+        "account_data_key"
+      ],
+      "forbidden_literals": [
+        "ck.contacts.realm",
+        "Pinned Engineering",
+        "Alice private note"
+      ]
+    }
+  ],
+  "direct_conversation_vectors": {
+    "resolve_request": {
+      "peer": "did:web:bob.example",
+      "create": true,
+      "idempotency_key": "dm-resolve-alice-bob-20260606"
+    },
+    "resolve_response": {
+      "state": "found",
+      "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
+      "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+      "binding_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000501",
+      "created": false
+    },
+    "binding_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000501",
+    "binding_payload": {
+      "pair_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "participants_unordered": [
+        "did:web:alice.example",
+        "did:web:bob.example"
+      ],
+      "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
+      "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+      "contact_refs": [
+        "ck:event:0196b39d-0000-7000-8000-000000000502",
+        "ck:event:0196b39d-0000-7000-8000-000000000503"
+      ],
+      "member_event_refs": [
+        "ck:event:0196b39d-0000-7000-8000-000000000504",
+        "ck:event:0196b39d-0000-7000-8000-000000000505"
+      ],
+      "main_flow_create_ref": "ck:event:0196b39d-0000-7000-8000-000000000506",
+      "created_at": "2026-06-06T00:00:00Z",
+      "binding_state": "active"
+    },
+    "contact_list_row": {
+      "peer": "did:web:bob.example",
+      "state": "accepted",
+      "request_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000502",
+      "response_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000503",
+      "granted_by_me": [
+        "direct_message"
+      ],
+      "granted_to_me": [
+        "direct_message"
+      ],
+      "bidirectional_scopes": [
+        "direct_message"
+      ],
+      "effective_scopes": [
+        "direct_message"
+      ],
+      "direct_conversation": {
+        "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
+        "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+        "binding_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000501",
+        "state": "active"
+      }
+    },
+    "derived_flow_selection": {
+      "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
+      "binding_main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+      "default_flow_id_for_realm": "ck:flow:0196b39d-0000-7000-8000-000000000499",
+      "selected_main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401"
+    },
+    "pending_contact_negative": {
+      "name": "pending_incoming_contact_must_not_create_dm_realm",
+      "contact_row": {
+        "peer": "did:web:chrid.example",
+        "state": "pending_incoming",
+        "request_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000601",
+        "granted_by_me": [],
+        "granted_to_me": [
+          "direct_message"
+        ],
+        "bidirectional_scopes": []
+      },
+      "resolve_request": {
+        "peer": "did:web:chrid.example",
+        "create": true
+      },
+      "expected_error": {
+        "error_code": "failed_precondition",
+        "reason_code": "contact_not_accepted"
+      },
+      "observed_response": {
+        "state": "not_found"
+      }
+    },
+    "schema_negative_shapes": [
+      {
+        "name": "resolve_request_rejects_target_field",
+        "kind": "request",
+        "body": {
+          "target": "did:web:bob.example",
+          "create": true
+        }
+      },
+      {
+        "name": "resolve_response_rejects_status_and_binding_ref",
+        "kind": "response",
+        "body": {
+          "status": "found",
+          "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
+          "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+          "binding_ref": "ck:event:0196b39d-0000-7000-8000-000000000501"
+        }
+      }
+    ]
+  }
+}

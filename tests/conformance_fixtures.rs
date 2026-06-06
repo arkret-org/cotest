@@ -215,6 +215,16 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Realm private pin + direct conversation privacy contracts. Cotest-local
+    /// fixture pins ck.contacts.realm.<realm_id> subject matching, prevents
+    /// RealmRemark leakage into directory/bridge/push payloads, and locks the
+    /// direct resolver shape to peer/state/binding_event_ref/main_flow_id.
+    private_chat_privacy_contract_suite_matches_reference_semantics,
+    "private_chat_privacy_contract",
+    cotest::conformance::run_private_chat_privacy_contract_suite,
+);
+
+conformance_test!(
     /// C40.5 — security negative profile vectors. Hard-fails bad signatures,
     /// canonical-byte conflicts, schema/payload violations, replay, downgrade,
     /// and query-string auth leakage.

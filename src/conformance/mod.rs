@@ -20,6 +20,7 @@ mod openapi_lint_parity;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
+mod private_chat_privacy;
 mod profile_matrix;
 mod profile_registry;
 mod protocol_artifact_allowlist;
@@ -146,6 +147,7 @@ pub use principal_server_certification::{
     validate_principal_server_certification,
 };
 pub use privacy::run_privacy_security_fixture_suite;
+pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
 pub use profile_matrix::{run_profile_matrix_suite, validate_server_profile_claims};
 pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,

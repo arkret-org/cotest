@@ -329,6 +329,54 @@
       }
     },
     {
+      "name": "rejects_realm_remark_local_name",
+      "expected_reason_code": "forbidden_field",
+      "expected_field_path": "local_name",
+      "payload": {
+        "notification": {
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "message",
+          "local_name": "Pinned Engineering"
+        }
+      }
+    },
+    {
+      "name": "rejects_realm_remark_note",
+      "expected_reason_code": "forbidden_field",
+      "expected_field_path": "note",
+      "payload": {
+        "notification": {
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "message",
+          "note": "Alice private note"
+        }
+      }
+    },
+    {
+      "name": "rejects_realm_remark_pinned",
+      "expected_reason_code": "forbidden_field",
+      "expected_field_path": "pinned",
+      "payload": {
+        "notification": {
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "message",
+          "pinned": true
+        }
+      }
+    },
+    {
+      "name": "rejects_realm_remark_account_data_key",
+      "expected_reason_code": "forbidden_field",
+      "expected_field_path": "account_data_key",
+      "payload": {
+        "notification": {
+          "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
+          "wakeup_kind": "message",
+          "account_data_key": "ck.contacts.realm.ck:realm:0196b39d-0000-7000-8000-000000000101"
+        }
+      }
+    },
+    {
       "name": "rejects_did_literal_in_wrapper",
       "expected_reason_code": "sensitive_literal",
       "expected_field_path": "trace.parent",
