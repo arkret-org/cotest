@@ -62,23 +62,6 @@ test.describe("key backup + restore", () => {
     // yougen gap: /settings/recovery setup wizard.
   });
 
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "device-2 restores from backup with correct passphrase; commitment match → ciphertext decrypted locally; no server oracle", async () => {
-    // spec: key-management.md §7.2-§7.3
-    // soland gap: backup retrieval API.
-    // Key invariant: wrong passphrase fails at commitment stage WITHOUT contacting server.
-  });
-
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "device-2 replays ck.mls.commit chain using backup's mls_history_backup_key; pre-loss E2EE messages decrypt", async () => {
-    // spec: encryption-and-audit.md §2.4 + key-management.md §7.3 step 6
-    // soland gap: MLS epoch backfill on restore.
-  });
-
   test("A1 automatic MLS recovery-key dialogs restore encrypted cards on a fresh browser", async ({
     browser,
     request,
@@ -326,19 +309,6 @@ test.describe("key backup + restore", () => {
     // spec: key-management.md §7.2 line 328
   });
 
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "E13.4 mixed_secret_storage=true is allowed in personal_node profile but rejected in high_assurance", async () => {
-    // spec: key-management.md §7.1
-  });
-
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "E13.7 DELETE backup requires ownership proof (SSK signature); session-token-only DELETE rejected", async () => {
-    // spec: key-management.md §7.4 + §12
-  });
 });
 
 type KeyBackupPut = {

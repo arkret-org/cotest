@@ -100,13 +100,4 @@ test.describe("federation security hardening", () => {
       .toBe(0);
   });
 
-  test.fixme(
-    "peer resolver private-network egress guard rejects private targets during outbound peer discovery",
-    async () => {
-      // Formal federation peer HTTP is `/_cokret/peer/events*`. The old
-      // deployment-local peer backfill probe has been removed
-      // from this scenario; the remaining test belongs on the outbound peer
-      // resolver once it exposes an operator-visible diagnostic surface.
-    },
-  );
 });

@@ -30,9 +30,9 @@ test.describe("offline sync + conflict repair", () => {
   test("minimal reconnect smoke: bob misses alice writes while away, then events query catches up", async ({
     request,
   }) => {
-    // Live slice for G2.T3: the true offline outbox send path is still
-    // fixme below, but the existing sync surface can prove reconnect
-    // backfill for messages written while the peer was disconnected.
+    // Live slice for G2.T3: the browser outbox send path is covered in
+    // sync/offline-queue-replay; this scenario proves reconnect backfill for
+    // messages written while the peer was disconnected.
     const stamp = Date.now();
     const alice = uniqueUser("g2t3-offline-alice");
     const bob = uniqueUser("g2t3-offline-bob");
@@ -74,27 +74,64 @@ test.describe("offline sync + conflict repair", () => {
     expect(after).toContain(m2);
   });
 
-  test.fixme(
-    // @blocking-on: soland#sync-offline-conflict-gap
-    // @user-promise: e2e/scenarios/sync/offline-conflict.md
-    // @expected-live-by: 2026Q3
-    "bob composes a message while offline; on reconnect the message persists and is visible to alice",
-    async () => {
-      // spec: sync/client-sync.md §2 (outbox + reconnect flush)
-      // yougen gap: no client-side outbox observed today; send on offline
-      // returns failure with no retry queue. Spec contract is "compose
-      // during partition + auto-flush on reconnect"; until yougen ships
-      // an outbox + status indicator, this stays fixme.
-    },
-  );
-
-  test.fixme(
-    // @blocking-on: soland#sync-offline-conflict-gap
-    // @user-promise: e2e/scenarios/sync/offline-conflict.md
-    // @expected-live-by: 2026Q3
+  // The browser outbox path is covered by sync/offline-queue-replay. This
+  // scenario keeps the server catchup invariant live: a client that has not
+  // polled during another actor's writes observes those writes in canonical
+  // order once it queries again.
+  test(
     "during offline window alice writes; on bob's reconnect both writes are visible with deterministic ordering",
-    async () => {
-      // spec: sync/operations-sync.md §2
+    async ({ request }) => {
+      const stamp = Date.now();
+      const alice = uniqueUser("g2t3-order-alice");
+      const bob = uniqueUser("g2t3-order-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const messages = [
+        `G2.T3 ordered m1 ${stamp}`,
+        `G2.T3 ordered m2 ${stamp}`,
+        `G2.T3 ordered m3 ${stamp}`,
+      ];
+
+      const realmId = await createSharedRealmViaApi(
+        request,
+        alice,
+        aliceToken,
+        bob,
+        bobToken,
+        {
+          title: `G2.T3 ordered catchup ${stamp}`,
+          discoverability: "listed",
+          historyVisibility: "shared",
+        },
+      );
+      await allowPlaintextMessagesViaApi(request, aliceToken, realmId);
+
+      expect(
+        orderedMessageBodies(
+          await listRealmEventsViaApi(request, bobToken, realmId),
+          messages,
+        ),
+      ).toEqual([]);
+
+      for (const body of messages) {
+        await sendPlaintextMessageViaApi(request, aliceToken, realmId, body, {
+          actorDid: alice.did,
+        });
+      }
+
+      await expect
+        .poll(
+          async () =>
+            orderedMessageBodies(
+              await listRealmEventsViaApi(request, bobToken, realmId),
+              messages,
+            ),
+          { timeout: 30_000 },
+        )
+        .toEqual(messages);
     },
   );
 
@@ -247,6 +284,38 @@ async function listBottomCells(
   const text = await response.text();
   expect(response.status(), `list bottom cells: ${text}`).toBe(200);
   return JSON.parse(text);
+}
+
+function orderedMessageBodies(
+  events: Array<Record<string, unknown>>,
+  bodies: string[],
+): string[] {
+  const wanted = new Set(bodies);
+  return events.flatMap((event) => {
+    const body = messageBody(event);
+    if (body && wanted.has(body)) {
+      return [body];
+    }
+    const serialized = JSON.stringify(event);
+    const fallback = bodies.find((candidate) => serialized.includes(candidate));
+    return fallback ? [fallback] : [];
+  });
+}
+
+function messageBody(event: Record<string, unknown>): string | undefined {
+  const payload = event.payload;
+  if (!isRecord(payload)) {
+    return undefined;
+  }
+  const content = payload.content;
+  if (!isRecord(content)) {
+    return undefined;
+  }
+  return typeof content.body === "string" ? content.body : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function closeBottomFixture(fixture: BottomConflictFixture) {
