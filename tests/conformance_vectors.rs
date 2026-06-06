@@ -203,7 +203,7 @@ fn test_oa_cot_5_share_resolve_open_live() {
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
     //   2. Recipient POSTs `ck.find.directory.resolve_target { address, token }`.
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
-    //      (scope-confusion replay rejected), and returns `DirectoryResolveTargetResBody {
+    //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
     //      target_kind=flow, object_preview, join_rule, as_of, source_refs, via_services }`.
     //   4. Recipient opens the flow; soland's access gate honors the invite link_type (NOT the URL
     //      `lt` hint) for the join decision.

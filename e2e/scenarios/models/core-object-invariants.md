@@ -24,7 +24,7 @@
 - `cokret-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
 - `cokret-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
 - `cokret-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → flow 派生，不依赖预先注册 View
-- `cokret-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionResponse` 形状（`view_id` 缺失时仍能返回派生 projection）
+- `cokret-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionView` 形状（`view_id` 缺失时仍能返回派生 projection）
 
 ## 拓扑
 
@@ -100,7 +100,7 @@
 ### Phase E — View projection fallback（fixme，需要 soland board projection endpoint）
 
 20. **alice** 在新建的 `spaceId` 上请求一个"用户从未注册过"的 view：`GET /_soland/self/spaces/${spaceId}/views/projection?renderer=board`（或 `?kind=collection&renderer=board`）。这是一个全新 Space，没有调用过 `ck.view.create`，因此**不存在**任何 user-defined View 对象。
-21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionResponse`：
+21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionView`：
     - `kind = "collection"`
     - `renderer = "board"`
     - `view_id` 为派生默认（典型实现：`ck:view:default:${spaceId}` 或服务端临时 id；测试侧只断言字段存在 + 是 `ck:view:` typed prefix，不 hardcode 具体 uuid）

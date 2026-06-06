@@ -99,10 +99,10 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
 
 /// Mirror of `lint_artifacts.py::check_policy_check_alignment`.
 ///
-/// * `/_cokret/self/policy/check` POST request/response MUST reference `PolicyCheckRequest` /
-///   `PolicyCheckResponse` components.
-/// * `PolicyCheckRequest.required` MUST include `realm_id`.
-/// * `PolicyCheckResponse.required` MUST include `bound_to`.
+/// * `/_cokret/self/policy/check` POST request/response MUST reference `PolicyCheckRequestBody` /
+///   `PolicyCheckOutcome` components.
+/// * `PolicyCheckRequestBody.required` MUST include `realm_id`.
+/// * `PolicyCheckOutcome.required` MUST include `bound_to`.
 pub fn run_policy_check_alignment_check() -> Result<()> {
     let openapi = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml")?;
     let paths = openapi
@@ -127,14 +127,14 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .and_then(|j| j.get("schema"))
         .and_then(|s| s.get("$ref"))
         .and_then(YamlValue::as_str);
-    if req_ref != Some("#/components/schemas/PolicyCheckRequest") {
+    if req_ref != Some("#/components/schemas/PolicyCheckRequestBody") {
         bail!(
-            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequest, got {req_ref:?} (lint parity)"
+            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequestBody, got {req_ref:?} (lint parity)"
         );
     }
-    if resp_ref != Some("#/components/schemas/PolicyCheckResponse") {
+    if resp_ref != Some("#/components/schemas/PolicyCheckOutcome") {
         bail!(
-            "/_cokret/self/policy/check 200 response must reference PolicyCheckResponse, got {resp_ref:?} (lint parity)"
+            "/_cokret/self/policy/check 200 response must reference PolicyCheckOutcome, got {resp_ref:?} (lint parity)"
         );
     }
 
@@ -143,18 +143,18 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .and_then(|c| c.get("schemas"))
         .ok_or_else(|| anyhow!("openapi components.schemas missing"))?;
     let req_component = components
-        .get("PolicyCheckRequest")
-        .ok_or_else(|| anyhow!("components.schemas.PolicyCheckRequest missing"))?;
+        .get("PolicyCheckRequestBody")
+        .ok_or_else(|| anyhow!("components.schemas.PolicyCheckRequestBody missing"))?;
     let resp_component = components
-        .get("PolicyCheckResponse")
-        .ok_or_else(|| anyhow!("components.schemas.PolicyCheckResponse missing"))?;
+        .get("PolicyCheckOutcome")
+        .ok_or_else(|| anyhow!("components.schemas.PolicyCheckOutcome missing"))?;
     let req_required = yaml_string_array(req_component, "required")?;
     if !req_required.contains("realm_id") {
-        bail!("PolicyCheckRequest.required must include realm_id (lint parity)");
+        bail!("PolicyCheckRequestBody.required must include realm_id (lint parity)");
     }
     let resp_required = yaml_string_array(resp_component, "required")?;
     if !resp_required.contains("bound_to") {
-        bail!("PolicyCheckResponse.required must include bound_to (lint parity)");
+        bail!("PolicyCheckOutcome.required must include bound_to (lint parity)");
     }
     Ok(())
 }

@@ -9,14 +9,14 @@
 //! signed `ck.schema.handle_claim.v1` set. The response schema enforces
 //! `claims[].subject == subject` (byte-equal); mismatches MUST drop or fail
 //! closed (exercised through
-//! [`DirectoryListHandlesForSubjectResBody::validate`]).
+//! [`DirectorySubjectHandleList::validate`]).
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use cokret::identity::{PrimaryHandleSelectInput, select_primary_handle};
 use cokret_core::Did;
 use cokret_core::model::{
-    DirectoryListHandlesForSubjectReqBody, DirectoryListHandlesForSubjectResBody, Handle,
+    DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList, Handle,
     HandleBindingState, HandleClaim,
 };
 
@@ -86,7 +86,7 @@ fn claim_for(
 pub fn run_happy_path_single_claim_vector() -> Result<()> {
     let s = subject()?;
     // Request shape round-trips and carries the holder DID as the lookup key.
-    let req = DirectoryListHandlesForSubjectReqBody {
+    let req = DirectoryListHandlesForSubjectRequestBody {
         subject: s.clone(),
         realm_id: None,
         intent: Some("mention".to_owned()),
@@ -102,7 +102,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
         bail!("request MUST carry `subject` as the reverse-lookup key");
     }
 
-    let res = DirectoryListHandlesForSubjectResBody {
+    let res = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: Some(Handle::parse("alice:acme.example").map_err(|e| anyhow!("h: {e}"))?),
@@ -117,7 +117,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
     }
     // Round-trip the response shape.
     let wire = serde_json::to_value(&res).map_err(|e| anyhow!("serialise res: {e}"))?;
-    let decoded: DirectoryListHandlesForSubjectResBody =
+    let decoded: DirectorySubjectHandleList =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise res: {e}"))?;
     if decoded.subject != s {
         bail!("response subject drifted under round-trip");
@@ -131,7 +131,7 @@ pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
     let s = subject()?;
     let other = Did::new("did:web:mallory.principal.example".to_owned())?;
     // A claim whose subject != response.subject MUST fail closed.
-    let res = DirectoryListHandlesForSubjectResBody {
+    let res = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: vec![claim_for(
             "mallory:acme.example",
@@ -149,7 +149,7 @@ pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
     }
     // The fail-closed remedy is to drop the mismatched claim entirely; an
     // empty (filtered) response then validates.
-    let filtered = DirectoryListHandlesForSubjectResBody {
+    let filtered = DirectorySubjectHandleList {
         claims: vec![],
         ..res
     };
@@ -182,7 +182,7 @@ pub fn run_audience_filter_applied_vector() -> Result<()> {
     if visible.len() != 1 {
         bail!("audience filter MUST drop the context-mismatched claim");
     }
-    let res = DirectoryListHandlesForSubjectResBody {
+    let res = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: visible,
         primary_handle: in_scope.handle.clone(),
@@ -218,7 +218,7 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
     if visible.len() != 1 || visible[0].issuer.as_deref() != Some(ACME_ISSUER) {
         bail!("issuer-trust filter MUST keep only accepted_issuers claims");
     }
-    let res = DirectoryListHandlesForSubjectResBody {
+    let res = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: visible,
         primary_handle: trusted.handle.clone(),
@@ -236,7 +236,7 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
 pub fn run_cursor_pagination_vector() -> Result<()> {
     let s = subject()?;
     // First page: limit=1, has_more=true, opaque next_cursor present.
-    let page1 = DirectoryListHandlesForSubjectResBody {
+    let page1 = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
@@ -256,7 +256,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
     }
 
     // A follow-up request echoes the cursor.
-    let req2 = DirectoryListHandlesForSubjectReqBody {
+    let req2 = DirectoryListHandlesForSubjectRequestBody {
         subject: s.clone(),
         realm_id: None,
         intent: None,
@@ -273,7 +273,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
     }
 
     // Last page: no cursor, has_more=false.
-    let page2 = DirectoryListHandlesForSubjectResBody {
+    let page2 = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: vec![claim_for("alice:other.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
@@ -321,7 +321,7 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
         .clone()
         .ok_or_else(|| anyhow!("selected claim has no handle"))?;
 
-    let res = DirectoryListHandlesForSubjectResBody {
+    let res = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: snapshot.clone(),
         primary_handle: Some(selected_handle.clone()),
@@ -352,7 +352,7 @@ pub fn run_as_of_historical_replay_vector() -> Result<()> {
     // Request carries an as_of timestamp; the directory replays the visible
     // set effective at that instant.
     let historical_as_of = at(2026, 5, 10);
-    let req = DirectoryListHandlesForSubjectReqBody {
+    let req = DirectoryListHandlesForSubjectRequestBody {
         subject: s.clone(),
         realm_id: None,
         intent: None,
@@ -370,7 +370,7 @@ pub fn run_as_of_historical_replay_vector() -> Result<()> {
 
     // The historical response MUST echo the as_of it replayed at (NOT the
     // current wall clock), so downstream caches key off the right instant.
-    let res = DirectoryListHandlesForSubjectResBody {
+    let res = DirectorySubjectHandleList {
         subject: s.clone(),
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,

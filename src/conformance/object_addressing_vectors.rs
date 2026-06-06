@@ -23,13 +23,13 @@
 //!   * scope-confusion: an A-object token fails `verify_token_target` against a B-object address;
 //!     the token's link_type wins over a disagreeing URL `lt` hint (modeled via the
 //!     `effective_link_type` argument).
-//!   * `DirectoryResolveTargetResBody` deserializes the §9.1 common fields (`as_of`, `source_refs`,
+//!   * `DirectoryTargetResolutionOutcome` deserializes the §9.1 common fields (`as_of`, `source_refs`,
 //!     `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
 use cokret_core::model::{
-    AddressAction, DirectoryResolveTargetResBody, LinkType, RealmRef, TargetDescriptor, TargetKind,
+    AddressAction, DirectoryTargetResolutionOutcome, LinkType, RealmRef, TargetDescriptor, TargetKind,
     build_address, build_https_landing, parse_address, target_digest, verify_token_target,
 };
 use serde_json::json;
@@ -489,7 +489,7 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
 // OA-COT-4 — resolve_target response shape
 // ════════════════════════════════════════════════════════════════════════════
 
-/// OA-COT-4.1 — `DirectoryResolveTargetResBody` deserializes the §9.1 common
+/// OA-COT-4.1 — `DirectoryTargetResolutionOutcome` deserializes the §9.1 common
 /// directory fields (`as_of`, `source_refs`, `join_candidates`) and `target_kind`.
 pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let wire = json!({
@@ -532,7 +532,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
         "policy_revision": "rev-7",
         "stale": false
     });
-    let body: DirectoryResolveTargetResBody =
+    let body: DirectoryTargetResolutionOutcome =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise resolve_target res: {e}"))?;
 
     if body.target_kind != TargetKind::Flow {
@@ -591,7 +591,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         "source_refs": ["ck:event:01904100-0000-7000-8000-0000000000e1"],
         "join_candidates": []
     });
-    let body: DirectoryResolveTargetResBody =
+    let body: DirectoryTargetResolutionOutcome =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise realm res: {e}"))?;
 
     if body.target_kind != TargetKind::Realm {

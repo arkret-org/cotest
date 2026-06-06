@@ -13,9 +13,9 @@
 //!   `historical_only`
 //! * **id_kind allowlist** for `object_ref` context: `ck:space:` joins the accepted set
 //! * **schema $defs / OpenAPI component allowlist**: `EventsSubscribeFrame`, `SnapshotBootstrap`,
-//!   `EventsFrontierAccountClientResponse`, `EventsFrontierFederationPeerResponse`,
-//!   `EventsFrontierAnonymousHealthResponse`, `PolicyCheckRequest`, `PolicyCheckResponse`,
-//!   `FederationServiceBindingRef`, `EventsSubmitBatchRequest`, `EventsSubmitFederationRequest`,
+//!   `EventsFrontierAccountClientState`, `EventsFrontierFederationPeerState`,
+//!   `EventsFrontierAnonymousHealthResponse`, `PolicyCheckRequestBody`, `PolicyCheckOutcome`,
+//!   `FederationServiceBindingRef`, `EventsSubmitBatchRequestBody`, `EventsSubmitFederationRequestBody`,
 //!   `third_party_invite`, `space_state_transition_payload`, `space_object_tombstone_payload`
 
 use std::collections::BTreeSet;
@@ -49,14 +49,14 @@ pub const NEW_SCHEMA_DEFS: &[&str] = &[
 
 /// New OpenAPI components introduced by round 4 (d74bb75 + 7446832).
 pub const NEW_OPENAPI_COMPONENTS: &[&str] = &[
-    "EventsSubmitBatchRequest",
-    "EventsSubmitFederationRequest",
+    "EventsSubmitBatchRequestBody",
+    "EventsSubmitFederationRequestBody",
     "FederationServiceBindingRef",
-    "EventsFrontierAccountClientResponse",
-    "EventsFrontierFederationPeerResponse",
+    "EventsFrontierAccountClientState",
+    "EventsFrontierFederationPeerState",
     "EventsFrontierAnonymousHealthResponse",
-    "PolicyCheckRequest",
-    "PolicyCheckResponse",
+    "PolicyCheckRequestBody",
+    "PolicyCheckOutcome",
     "EventsSubscribeFrame",
 ];
 
