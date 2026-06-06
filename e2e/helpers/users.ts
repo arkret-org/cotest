@@ -74,8 +74,8 @@ export class JointUserPage {
 
   async gotoSetup() {
     // yougen's /setup is the Overview; the Realm wizard lives at the
-    // /setup/spaces section. yougen/src/routes.rs §SetupSection.
-    await this.page.goto("/setup/spaces", { waitUntil: "domcontentloaded" });
+    // /setup/realms section. yougen/src/routes.rs §SetupSection.
+    await this.page.goto("/setup/realms", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("realm-lifecycle-flow")).toBeVisible({ timeout: 120_000 });
   }
 
@@ -267,7 +267,7 @@ export class JointUserPage {
         const request = response.request();
         return (
           request.method() === "POST" &&
-          /\/api\/v1\/events(?:\?|$)/.test(response.url()) &&
+          /\/(?:api\/v1|_cokret\/self)\/events(?:\?|$)/.test(response.url()) &&
           (request.postData() ?? "").includes(body)
         );
       },
@@ -445,14 +445,31 @@ export async function openUser(
   });
   page.on("response", (response) => {
     if (response.status() >= 400) {
-      networkLines.push(
-        JSON.stringify({
-          ts: new Date().toISOString(),
-          type: "http-error",
-          status: response.status(),
-          url: response.url(),
-        }),
-      );
+      void response
+        .text()
+        .then((body) => {
+          networkLines.push(
+            JSON.stringify({
+              ts: new Date().toISOString(),
+              type: "http-error",
+              status: response.status(),
+              method: response.request().method(),
+              url: response.url(),
+              body: body.slice(0, 2000),
+            }),
+          );
+        })
+        .catch(() => {
+          networkLines.push(
+            JSON.stringify({
+              ts: new Date().toISOString(),
+              type: "http-error",
+              status: response.status(),
+              method: response.request().method(),
+              url: response.url(),
+            }),
+          );
+        });
     }
   });
   return { context, page, diagnosticsDir, consoleLines, networkLines, serverUrl, sessionToken };
