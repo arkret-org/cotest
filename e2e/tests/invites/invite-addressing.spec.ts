@@ -51,6 +51,7 @@ test.describe("invite addressing", () => {
 
     expect(outcome.status).toBe("deferred");
     expect(outcome.received_at).toMatch(/Z$/);
+    expect(outcome.received_at).not.toContain(".");
   });
 
   test("invite locator resolve is body-only", async ({ request }) => {
@@ -72,8 +73,13 @@ test.describe("invite addressing", () => {
     expect(locator.schema).toBe("ck.schema.principal_locator.v1");
     expect(locator.subject_id).toBe("did:web:locator-subject.example");
     expect(locator.recipient_service_did).toBe(solandServiceDid());
+    expect(locator.issued_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    expect(locator.expires_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     expect(locator.locator_ref_digest).toMatch(/^sha256:/);
     expect(locator.proofs?.[0]?.proof_purpose).toBe("recipient_service_acceptance");
+    expect(locator.proofs?.[0]?.proof?.created_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/,
+    );
 
     const queryLeak = await request.post(
       `${solandBaseUrl()}/_cokret/open/invite-locators/resolve?locator_token=${encodeURIComponent(locatorToken)}`,
