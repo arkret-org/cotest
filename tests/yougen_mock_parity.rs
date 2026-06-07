@@ -13,6 +13,8 @@ use serde_json::{Map, Value, json};
 use serial_test::serial;
 use sha2::{Digest, Sha256};
 
+const MOCK_PARITY_ALICE_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
+
 #[derive(Debug, Deserialize)]
 struct Fixture {
     cases: Vec<ParityCase>,
@@ -84,7 +86,7 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
         &server,
         "did:web:alice-mock-parity.example",
         "@alice-mock-parity",
-        "dev_alice_mock_parity",
+        MOCK_PARITY_ALICE_DEVICE_ID,
     )
     .await?;
     let ctx = TemplateContext {
@@ -235,11 +237,9 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
             let sent_at = Utc::now();
             let expires_at = sent_at + Duration::seconds(30);
             // EphemeralEnvelope's `device_id` is typed as `DeviceId` in the SDK
-            // and must match the `ck:device:<ULID>` shape. `dev_alice_mock_parity`
-            // is a dev-login identifier accepted by `/auth/dev-login`, but it
-            // would make this envelope fail salvo's deserializer with
-            // `bad_request`. Drop the optional field so the typing surface is
-            // what's actually under test.
+            // and must match the `ck:device:<uuidv7>` shape. This fixture omits
+            // the optional field so the typing surface is what's actually under
+            // test.
             Some(json!({
                 "kind": "ck.typing",
                 "realm_id": ctx.realm_id,
@@ -380,7 +380,7 @@ fn call_mock_contract(
             "did": "did:web:alice-mock-parity.example",
             "handle": "@alice-mock-parity",
             "display_name": "alice-mock-parity",
-            "device_id": "dev_alice_mock_parity"
+            "device_id": MOCK_PARITY_ALICE_DEVICE_ID
         },
         "body": body,
     });

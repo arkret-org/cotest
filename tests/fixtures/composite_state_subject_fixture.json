@@ -2,47 +2,13 @@
   "profile": "ck.profile.composite_state_subject_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). C18 (spec 2026-05-08): cx.flow.branch.* renamed to ck.flow.track.*; spec also dropped member/history_visibility/policy_components (Flow tracks no longer carry independent membership/visibility/policy — see Flow.scope_circle_id introduced by CKP-0007). Vectors retained as historical-shape examples to verify the encoding rule, which is kind-independent.",
+  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). Active vectors only use current v1 kinds; removed cx.flow.track.* examples are isolated under deprecated_wire_vectors with historical_only expectations.",
   "encoder": {
     "canonical_json": "RFC 8785 / spec encoding.md §1: sorted object keys, no whitespace, exact JSON string representation",
     "digest": "SHA-256",
     "encoding": "base64url no padding"
   },
   "vectors": [
-    {
-      "name": "flow_track_member_alice",
-      "kind": "cx.flow.track.member",
-      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
-      "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
-    },
-    {
-      "name": "flow_track_member_bob_distinct_subject",
-      "kind": "cx.flow.track.member",
-      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:bob.example"],
-      "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:bob.example\"]",
-      "expected_state_subject": "xxwg91aWIRqUiWy-cIf0m1atHZXgdpahXUybVI2VBaA",
-      "comment": "Same flow + track but a different actor — must hash to a distinct state_subject (collision negative)."
-    },
-    {
-      "name": "flow_track_history_visibility",
-      "kind": "cx.flow.track.history_visibility",
-      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
-      "components_order_source": "[flow_id, track]",
-      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
-      "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34"
-    },
-    {
-      "name": "flow_track_policy_components_same_subject_as_history_visibility",
-      "kind": "cx.flow.track.policy_components",
-      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
-      "components_order_source": "[flow_id, track]",
-      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
-      "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34",
-      "comment": "Two different kinds share the same components_array shape; the state_subject is identical, but reducer keys still differ because slot key includes (space_id, kind) — confirms the subject hash is independent of kind."
-    },
     {
       "name": "device_authorized_alice",
       "kind": "ck.device.authorize",
@@ -61,20 +27,60 @@
       "comment": "device.authorized and device.revoked share a cell via component_slot_alias_of; their cell-subject hash is identical — revoke supersedes grant (cf. consent.grant/revoke + capability.grant/revoke patterns)."
     }
   ],
+  "deprecated_wire_vectors": [
+    {
+      "name": "flow_track_member_alice",
+      "kind": "cx.flow.track.member",
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_order_source": "[flow_id, track, actor_id]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_state_subject": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
+    },
+    {
+      "name": "flow_track_member_bob_distinct_subject",
+      "kind": "cx.flow.track.member",
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:bob.example"],
+      "components_order_source": "[flow_id, track, actor_id]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:bob.example\"]",
+      "expected_state_subject": "lo8teoap1pIrXhsxCDH3Skg3vsN8ljikVdjP_9RyGIQ",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
+      "comment": "Same flow + track but a different actor — historical encoding fixture only; current v1 producers must not emit cx.flow.track.member."
+    },
+    {
+      "name": "flow_track_history_visibility",
+      "kind": "cx.flow.track.history_visibility",
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_order_source": "[flow_id, track]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_state_subject": "ZLsnrz9p9NUKQ-yGp00vWUJVArcmapCqkQGCrgYu0Oo",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
+    },
+    {
+      "name": "flow_track_policy_components_same_subject_as_history_visibility",
+      "kind": "cx.flow.track.policy_components",
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_order_source": "[flow_id, track]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_state_subject": "ZLsnrz9p9NUKQ-yGp00vWUJVArcmapCqkQGCrgYu0Oo",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
+      "comment": "Two removed kinds shared the same components_array shape; retained only to pin historical hash encoding."
+    }
+  ],
   "negative_vectors": [
     {
       "name": "wrong_component_order_collides_into_different_subject",
       "kind": "cx.flow.track.member",
       "components_array": ["main", "ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "If a buggy implementation reorders components_array (e.g. track before flow_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical flow_track_member_alice subject.",
-      "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
+      "must_differ_from": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
       "kind": "cx.flow.track.member",
       "pipe_form": "ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9|main|did:web:alice.example",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
-      "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
+      "must_differ_from": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8"
     }
   ]
 }

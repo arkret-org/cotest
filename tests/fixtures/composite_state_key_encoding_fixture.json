@@ -2,7 +2,7 @@
   "profile": "ck.profile.composite_state_key_encoding_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
+  "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. Active vectors use current v1 kinds and UUIDv7 typed ids; removed cx.flow.track.* examples are isolated under deprecated_wire_vectors with historical_only expectations. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
   "encoder": {
     "canonical_json": "RFC 8785 / encoding.md §1: arrays preserve order, object keys sorted, no whitespace",
     "digest": "SHA-256",
@@ -10,22 +10,6 @@
     "ordering_property": "components_array ordering is deterministic per kind; reordering produces a different hash"
   },
   "vectors": [
-    {
-      "name": "flow_track_member_alice",
-      "kind": "cx.flow.track.member",
-      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
-      "components_order_source": "[flow_id, track, actor_id]",
-      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
-    },
-    {
-      "name": "flow_track_history_visibility_main",
-      "kind": "cx.flow.track.history_visibility",
-      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
-      "components_order_source": "[flow_id, track]",
-      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
-      "expected_state_subject": "PnLpDDBJ577X7p1TRU1sCHzhu56CKUoIiUuTC-oXI34"
-    },
     {
       "name": "device_authorized_alice",
       "kind": "ck.device.authorize",
@@ -37,18 +21,38 @@
     {
       "name": "realm_policy_default",
       "kind": "ck.realm.policy",
-      "components_array": ["ck:realm:01js0sp01000000000000000000", "default"],
+      "components_array": ["ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "default"],
       "components_order_source": "[realm_id, policy_name]",
-      "expected_canonical_json": "[\"ck:realm:01js0sp01000000000000000000\",\"default\"]",
-      "expected_state_subject": "KKLQELTQ04MGrcVGKngqHBPgWwYt1D7C4t8iMqgu_k8"
+      "expected_canonical_json": "[\"ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"default\"]",
+      "expected_state_subject": "P_IbskluscutN7D40mhfaPXknaBYkRLZAvdVfrz3ND8"
     },
     {
       "name": "realm_member_carol",
       "kind": "ck.realm.member",
-      "components_array": ["ck:realm:01js0sp01000000000000000000", "did:web:carol.example"],
+      "components_array": ["ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
-      "expected_canonical_json": "[\"ck:realm:01js0sp01000000000000000000\",\"did:web:carol.example\"]",
-      "expected_state_subject": "XDmQTBsZ8oCrNEgL52vPBGrYLSSAf8GLTEv2nHef0V0"
+      "expected_canonical_json": "[\"ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",
+      "expected_state_subject": "IMygOMFOzXqPRmNlCoQ3lJJ2qVfcw06ZTTBfuMzxR84"
+    }
+  ],
+  "deprecated_wire_vectors": [
+    {
+      "name": "flow_track_member_alice",
+      "kind": "cx.flow.track.member",
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_order_source": "[flow_id, track, actor_id]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_state_subject": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
+    },
+    {
+      "name": "flow_track_history_visibility_main",
+      "kind": "cx.flow.track.history_visibility",
+      "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_order_source": "[flow_id, track]",
+      "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_state_subject": "ZLsnrz9p9NUKQ-yGp00vWUJVArcmapCqkQGCrgYu0Oo",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "flow_track_member_alice_distinct_track",
@@ -56,7 +60,8 @@
       "components_array": ["ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
       "components_order_source": "[flow_id, track, actor_id]",
       "expected_canonical_json": "[\"ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
-      "expected_state_subject": "OP0EsF38fyKuP7qED_VpUC1vAdmNU2oZ12AKpiKenOU",
+      "expected_state_subject": "Jp3e3R9Xh8qHr_1L5JLhcLV_F_vKClruqMGDluhmhEk",
+      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same flow_id + actor_id as flow_track_member_alice but different track segment — must produce a distinct state_subject."
     }
   ],
@@ -66,7 +71,7 @@
       "kind": "cx.flow.track.member",
       "components_array": ["main", "ck:flow:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "Component reordering (track before flow_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
-      "must_differ_from": "i57r-7zLkMnfLas7DeSP2g4_l0jm4mOs6v7bOr7wq0M"
+      "must_differ_from": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8"
     }
   ],
   "reserved_name_negatives": [

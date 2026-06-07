@@ -28,7 +28,7 @@ export type ApiMessage = {
   event_id: string;
   operation_id?: string;
   realm_id: string;
-  sender?: string;
+  actor_id?: string;
   sync_token?: string;
 };
 
@@ -195,7 +195,7 @@ export async function sendPlaintextMessageViaApi(
   return {
     event_id: String(envelope.event_id),
     realm_id: realmId,
-    sender: opts.actorDid,
+    actor_id: opts.actorDid,
   };
 }
 

@@ -275,53 +275,15 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("composite_state_subject fixture missing vectors"))?;
 
-    // C18 wire-break (spec 2026-05-08): cx.flow.branch.* event kinds renamed
-    // to ck.flow.track.*; spec also removed member/history_visibility/
-    // policy_components since tracks no longer carry independent membership/
-    // visibility/policy. Composite-subject encoding rule is unchanged — kept
-    // here as historical-shape vectors (the hash test validates encoding,
-    // independent of whether the kind is currently spec-active).
-    let kinds = [
-        "cx.flow.track.member",
-        "cx.flow.track.history_visibility",
-        "cx.flow.track.policy_components",
-        "ck.device.authorize",
-        "ck.device.revoke",
-    ];
-    let mut covered: std::collections::BTreeSet<&str> = Default::default();
+    let kinds = ["ck.device.authorize", "ck.device.revoke"];
+    let mut covered: std::collections::BTreeSet<String> = Default::default();
 
     for vector in vectors {
-        let name = required_str(vector, "name")?;
-        let kind = required_str(vector, "kind")?;
-        if !kinds.contains(&kind) {
+        let (name, kind) = validate_encoded_vector(vector, "composite_state_subject.encoded")?;
+        if !kinds.contains(&kind.as_str()) {
             bail!("vector {name} kind {kind} is not a registered composite-subject kind");
         }
-        let components = vector
-            .get("components_array")
-            .ok_or_else(|| anyhow!("vector {name} missing components_array"))?;
-        let expected_cj = required_str(vector, "expected_canonical_json")?;
-        let actual_cj = canonical_json(components)?;
-        if actual_cj != expected_cj {
-            bail!("vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}");
-        }
-        let expected_subject = required_str(vector, "expected_state_subject")?;
-        let actual_subject = compute_state_subject(components)?;
-        if actual_subject != expected_subject {
-            bail!(
-                "vector {name} state_subject drift: expected {expected_subject}, got {actual_subject}"
-            );
-        }
         covered.insert(kind);
-        emit_vector(
-            "composite_state_subject.encoded",
-            vector,
-            json!({
-                "name": name,
-                "kind": kind,
-                "state_subject": actual_subject,
-                "canonical_json": actual_cj,
-            }),
-        );
     }
 
     for kind in kinds {
@@ -329,6 +291,7 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
             bail!("composite state subject fixture missing coverage for {kind}");
         }
     }
+    validate_deprecated_wire_vectors(&fixture, "composite_state_subject.deprecated")?;
 
     let negatives = fixture
         .get("negative_vectors")
@@ -381,40 +344,20 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
         .get("vectors")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("composite_state_key_encoding fixture missing vectors[]"))?;
-    if vectors.len() < 5 {
+    if vectors.len() < 3 {
         bail!(
-            "composite_state_key_encoding fixture has {} vectors, expected >= 5",
+            "composite_state_key_encoding fixture has {} vectors, expected >= 3",
             vectors.len()
         );
     }
 
     for v in vectors {
-        let name = required_str(v, "name")?;
-        let components = v
-            .get("components_array")
-            .ok_or_else(|| anyhow!("vector {name} missing components_array"))?;
-        let expected_cj = required_str(v, "expected_canonical_json")?;
-        let actual_cj = canonical_json(components)?;
-        if actual_cj != expected_cj {
-            bail!("vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}");
+        let (name, kind) = validate_encoded_vector(v, "composite_state_key_encoding.encoded")?;
+        if kind.starts_with("cx.") {
+            bail!("active composite state key vector {name} still uses removed kind {kind}");
         }
-        let expected_subject = required_str(v, "expected_state_subject")?;
-        let actual_subject = compute_state_subject(components)?;
-        if actual_subject != expected_subject {
-            bail!(
-                "vector {name} state_subject drift: expected {expected_subject}, got {actual_subject}"
-            );
-        }
-        emit_vector(
-            "composite_state_key_encoding.encoded",
-            v,
-            json!({
-                "name": name,
-                "state_subject": actual_subject,
-                "canonical_json": actual_cj,
-            }),
-        );
     }
+    validate_deprecated_wire_vectors(&fixture, "composite_state_key_encoding.deprecated")?;
 
     // Ordering-negative: the wrong-order array MUST hash to a different subject.
     let ordering = fixture
@@ -495,6 +438,59 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
 
     Ok(())
 }
+
+fn validate_deprecated_wire_vectors(fixture: &Value, transcript_kind: &str) -> Result<()> {
+    let Some(vectors) = fixture
+        .get("deprecated_wire_vectors")
+        .and_then(Value::as_array)
+    else {
+        return Ok(());
+    };
+    for vector in vectors {
+        let name = required_str(vector, "name")?;
+        let kind = required_str(vector, "kind")?;
+        if !kind.starts_with("cx.") {
+            bail!("deprecated wire vector {name} must carry a removed cx.* kind, got {kind}");
+        }
+        if expected_outcome(vector, name)? != "historical_only" {
+            bail!("deprecated wire vector {name} must expect historical_only");
+        }
+        validate_encoded_vector(vector, transcript_kind)?;
+    }
+    Ok(())
+}
+
+fn validate_encoded_vector(vector: &Value, transcript_kind: &str) -> Result<(String, String)> {
+    let name = required_str(vector, "name")?;
+    let kind = required_str(vector, "kind")?;
+    let components = vector
+        .get("components_array")
+        .ok_or_else(|| anyhow!("vector {name} missing components_array"))?;
+    let expected_cj = required_str(vector, "expected_canonical_json")?;
+    let actual_cj = canonical_json(components)?;
+    if actual_cj != expected_cj {
+        bail!("vector {name} canonical_json drift: expected {expected_cj}, got {actual_cj}");
+    }
+    let expected_subject = required_str(vector, "expected_state_subject")?;
+    let actual_subject = compute_state_subject(components)?;
+    if actual_subject != expected_subject {
+        bail!(
+            "vector {name} state_subject drift: expected {expected_subject}, got {actual_subject}"
+        );
+    }
+    emit_vector(
+        transcript_kind,
+        vector,
+        json!({
+            "name": name,
+            "kind": kind,
+            "state_subject": actual_subject,
+            "canonical_json": actual_cj,
+        }),
+    );
+    Ok((name.to_owned(), kind.to_owned()))
+}
+
 fn b64url_nopad(bytes: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }

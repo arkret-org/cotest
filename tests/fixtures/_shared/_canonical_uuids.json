@@ -17,9 +17,5 @@
     "value": "ck:event:7fd5ae82-44e2-7a8a-9a4b-885799114",
     "alias": "demo_event_id_prefix_v1",
     "comment": "state_resolution_quarantine_fixture uses this prefix and increments the trailing 3 hex digits per vector."
-  },
-  "ulid_examples": {
-    "session_grant_mock": "01HZSESSIONGRANTMOCK000000000",
-    "comment": "Used by the bridge_contracts session-grant mock; not a real ULID, but stable across vectors."
   }
 }

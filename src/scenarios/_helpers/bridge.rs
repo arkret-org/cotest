@@ -255,7 +255,7 @@ fn handle_mock_coauth_request(
             "proof_required": true,
             "one_time_use_consumed": true,
             "grant": {
-                "id": "01HZSESSIONGRANTMOCK000000000",
+                "id": "ck:grant:0196419b-0000-7000-8000-000000000901",
                 "issuer": "did:web:coauth.cotest.local",
                 "subject": subject,
                 "service_account_id": "alice-session-grant",

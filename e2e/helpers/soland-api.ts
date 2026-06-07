@@ -297,7 +297,7 @@ export async function sendMessageApi(
   return {
     event_id: String(envelope.event_id),
     realm_id: realmId,
-    sender: actorDid,
+    actor_id: actorDid,
   };
 }
 
@@ -723,7 +723,7 @@ function signedFederationPushHeaders(
 }
 
 function eventProofMode(): EventProofMode {
-  const mode = process.env.COTEST_EVENT_PROOF_MODE ?? "dev-proof";
+  const mode = process.env.COTEST_EVENT_PROOF_MODE ?? "detached-jws";
   if (mode !== "dev-proof" && mode !== "detached-jws") {
     throw new Error(
       `unsupported COTEST_EVENT_PROOF_MODE=${JSON.stringify(mode)}; expected dev-proof or detached-jws`,

@@ -1,0 +1,16 @@
+{
+  "profile": "ck.profile.deprecated_wire_vectors.v1",
+  "version": "2026-06-07",
+  "comment": "Legacy-only record of the pre-v1 bridge mock session grant id. Current protocol fixtures MUST use ck:grant:<uuidv7> instead.",
+  "deprecated_wire_vectors": [
+    {
+      "name": "session_grant_mock_bare_ulid",
+      "legacy_value": "01HZSESSIONGRANTMOCK000000000",
+      "replacement_shape": "ck:grant:<uuidv7>",
+      "expected": {
+        "outcome": "historical_only",
+        "reason_code": "legacy_bare_ulid"
+      }
+    }
+  ]
+}

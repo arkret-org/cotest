@@ -69,6 +69,9 @@ const missingMarkers = requiredSwitchMarkers.filter(
 if (missingMarkers.length > 0) {
   fail(`dev-proof switch is missing markers: ${missingMarkers.join(", ")}`);
 }
+if (!helper.includes('process.env.COTEST_EVENT_PROOF_MODE ?? "detached-jws"')) {
+  fail("COTEST_EVENT_PROOF_MODE must default to detached-jws, not dev-proof");
+}
 
 const total = hits.reduce((sum, hit) => sum + hit.count, 0);
 console.log(
