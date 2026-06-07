@@ -265,7 +265,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
         }),
         json!({
             "mode": "matrix",
-            "rows_by": "fields.assignee",
+            "rows_by": "fields.priority",
             "columns_by": "fields.status",
             "rank": "F"
         }),
