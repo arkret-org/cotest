@@ -1,4 +1,5 @@
 use anyhow::Result;
+use cokret_core::canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -43,12 +44,18 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         }))
         .await?;
     let invite_realm_id = invite_realm["realm_id"].as_str().unwrap().to_owned();
+    let introduction_evidence = json!({"kind": "same_principal_server"});
     let invite_event = alice
         .submit_event(
             &invite_realm_id,
             "ck.invite.create",
             json!({
                 "invitee": bob.actor,
+                "invite_delivery_target": {
+                    "recipient_service_did": server.service_did(),
+                    "recipient_service_type": "principal_server"
+                },
+                "introduction_evidence_digest": canonical_sha256(&introduction_evidence)?,
                 "expires_at": "2026-12-31T00:00:00Z"
             }),
         )

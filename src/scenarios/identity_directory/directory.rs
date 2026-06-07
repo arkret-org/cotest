@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow};
+use cokret_core::canonical::canonical_sha256;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -70,12 +71,18 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let invite_only_realm_id = realm_id_from(&invite_only_realm, "invite_only")?;
     let secret_realm_id = realm_id_from(&secret_realm, "secret")?;
 
+    let introduction_evidence = json!({"kind": "same_principal_server"});
     let invite_event = alice
         .submit_event(
             &invite_only_realm_id,
             "ck.invite.create",
             json!({
                 "invitee": bob.actor,
+                "invite_delivery_target": {
+                    "recipient_service_did": server.service_did(),
+                    "recipient_service_type": "principal_server"
+                },
+                "introduction_evidence_digest": canonical_sha256(&introduction_evidence)?,
                 "expires_at": "2026-12-31T00:00:00Z"
             }),
         )

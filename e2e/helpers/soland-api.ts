@@ -10,6 +10,7 @@ export type OperationKind =
   | "circle"
   | "event"
   | "flow"
+  | "invite"
   | "mls_group"
   | "mls_keypackage"
   | "mls_welcome"
@@ -553,6 +554,53 @@ export async function rawPushFederationEvents(
   return await request.post(url, {
     data: canonicalJson(body),
     headers,
+  });
+}
+
+export type InviteDeliveryRequestBody = {
+  schema: "ck.schema.invite_delivery_request.v1";
+  invite_event: Record<string, unknown>;
+  invite_address: {
+    subject_id: string;
+    recipient_service_did: string;
+    recipient_service_type?: "principal_server";
+  };
+  introduction_evidence: Record<string, unknown>;
+  idempotency_key: string;
+};
+
+export async function submitPeerInviteDeliveryApi(
+  request: APIRequestContext,
+  body: InviteDeliveryRequestBody,
+  opts: {
+    origin: string;
+    destination?: string;
+    server?: SolandKey;
+  },
+) {
+  const response = await rawSubmitPeerInviteDeliveryApi(request, body, opts);
+  return await expectJsonOk<{
+    status: "accepted" | "duplicate" | "deferred";
+    received_at?: string;
+    retry_after_ms?: number;
+  }>(response, "submit peer invite delivery");
+}
+
+export async function rawSubmitPeerInviteDeliveryApi(
+  request: APIRequestContext,
+  body: InviteDeliveryRequestBody,
+  opts: {
+    origin: string;
+    destination?: string;
+    server?: SolandKey;
+  },
+) {
+  const destination =
+    opts.destination ?? body.invite_address.recipient_service_did;
+  const url = `${solandBaseUrl(opts.server)}/_cokret/peer/invites`;
+  return await request.post(url, {
+    data: canonicalJson(body),
+    headers: signedFederationPushHeaders(opts.origin, destination, url, body),
   });
 }
 
