@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   expect,
   type APIRequestContext,
@@ -44,6 +44,21 @@ export type CreateRealmOpts = {
   encryptionProfile?: string;
   seedMembers?: string[];
 };
+
+function buildInviteLocatorUrl(serverUrl: string, subjectDid: string): string {
+  const expiresAt = new Date(Date.now() + 15 * 60_000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+  const locatorToken = Buffer.from(
+    JSON.stringify({
+      subject_id: subjectDid,
+      nonce: randomBytes(18).toString("base64url"),
+      expires_at: expiresAt,
+    }),
+  ).toString("base64url");
+  const base = serverUrl.replace(/\/$/, "");
+  return `${base}/_cokret/open/invite-locators/resolve#token=${locatorToken}`;
+}
 
 export class JointUserPage {
   readonly user: JointUser;
@@ -182,7 +197,9 @@ export class JointUserPage {
     await this.gotoRealmAdminSection(realmId, "members");
     const invite = this.page.getByTestId("invite-member");
     await expect(invite).toBeVisible({ timeout: 30_000 });
-    await invite.getByTestId("invite-target-input").fill(targetDid);
+    await invite
+      .getByTestId("invite-target-input")
+      .fill(buildInviteLocatorUrl(this.serverUrl, targetDid));
     await invite.getByTestId("send-invite-button").click();
     await expect(this.page.getByTestId("realm-admin-panel")).toContainText(
       new RegExp(`invited ${escapeRegex(targetDid)}`),
