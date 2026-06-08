@@ -56,7 +56,7 @@ fn build_realm(
         history_visibility: HistoryVisibility::Joined,
         encryption_profile: EncryptionProfile::None,
         content_encryption_floor: Some(ContentEncryptionFloor::AllowPlaintext),
-        metadata_encryption_profile: Some(CircleMetadataEncryptionFloor::ContentOnly),
+        metadata_encryption_floor: Some(CircleMetadataEncryptionFloor::AllowPlaintext),
         federation_policy,
         retention_policy_id: None,
         avatar_blob_ref: None,
