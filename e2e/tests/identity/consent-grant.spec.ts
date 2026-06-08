@@ -28,12 +28,22 @@ async function requestContact(
   targetDid: string,
   scope: "invite" | "message" | "call",
 ) {
-  await actor.page.goto("/contacts/new", { waitUntil: "domcontentloaded" });
+  // "Add contact" is a popup modal opened from the contacts list, not a
+  // standalone /contacts/new page.
+  await actor.page.goto("/contacts", { waitUntil: "domcontentloaded" });
+  await actor.page.getByTestId("add-contact-button").click();
   await expect(actor.page.getByTestId("contact-request-panel")).toBeVisible({
     timeout: 120_000,
   });
   await actor.page.getByTestId("contact-target-input").fill(targetDid);
-  await selectDxcOption(actor.page.getByTestId("contact-scope-select"), scope);
+  // Scope is selected via checkboxes (direct_message + invite default to
+  // checked). Leave only the requested scope checked.
+  const wantInvite = scope === "invite";
+  const wantDm = scope === "message";
+  const dm = actor.page.getByTestId("contact-scope-direct_message");
+  const inv = actor.page.getByTestId("contact-scope-invite");
+  if ((await dm.isChecked()) !== wantDm) await dm.click();
+  if ((await inv.isChecked()) !== wantInvite) await inv.click();
   await actor.page.getByTestId("send-contact-request-button").click();
   return actor.page.getByTestId("contact-request-status");
 }

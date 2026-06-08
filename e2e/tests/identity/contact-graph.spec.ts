@@ -503,12 +503,14 @@ test.describe("contact graph (same principal server)", () => {
     ).toBeFalsy();
   });
 
-  // S8 (optional): realm member pulls into a Circle without consent. soland
-  // has no circle-member-manage surface today -> skip with a note.
+  // S8: realm member pulled into a Circle without consent. Now implemented and
+  // run for real in `identity/circle-member.spec.ts` (soland ships the
+  // `/_cokret/self/circles/*` admin surface — CKP-0007). Kept here as a
+  // pointer so the contact-graph table stays self-documenting.
   test("S8 circle member manage without consent", async ({ request }) => {
     test.skip(
       true,
-      "soland has no circle member-manage surface (no ck.circle.member.* protocol route); revisit when implemented",
+      "moved to identity/circle-member.spec.ts (real run): admin one-way pull into a Circle, pulled actor does zero operations",
     );
     void request;
   });

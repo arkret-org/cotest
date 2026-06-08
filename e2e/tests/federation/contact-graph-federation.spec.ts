@@ -37,6 +37,7 @@ import {
   listAuthzInvitesCokret,
   requestContactCokret,
   respondContactCokret,
+  tombstoneContactCokret,
 } from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
@@ -327,5 +328,78 @@ test.describe("contact graph federation (α/β)", () => {
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBeTruthy();
+  });
+
+  // Tombstone-fed: cross-PS contact tombstone federates a `ck.contact.tombstoned`
+  // fact to the peer's home Principal Server.
+  //
+  // alice@α and bob@β first become accepted contacts (same federated handshake
+  // as S1-fed). Then alice@α tombstones bob with block_peer=true and addresses
+  // bob's home PS via peer_service_did=β. soland's contact_tombstone handler
+  // federates `ck.contact.tombstoned` over the durable outbox; β's
+  // peer_contacts_submit downgrades its mirrored alice row to `tombstoned`.
+  // Spec contact-and-direct-conversation.md §2/§4.1.
+  test("tombstone-fed cross-PS tombstone downgrades the peer's mirrored row to tombstoned", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`cgf-tomb-alice-${stamp}`);
+    const bob = uniqueUser(`cgf-tomb-bob-${stamp}`);
+    await ensureRegistered(request, alice, { server: "alpha" });
+    await ensureRegistered(request, bob, { server: "beta" });
+    const aliceToken = await issueDevSession(request, alice, {
+      server: "alpha",
+    });
+    const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+    // Federated accepted handshake (reuse S1-fed path).
+    const { outcome } = await requestContactCokret(request, aliceToken, bob.did, {
+      requestedScopes: ["invite"],
+      server: "alpha",
+      recipientServiceDid: solandServiceDid("beta"),
+    });
+    await expect
+      .poll(
+        async () =>
+          (await contactRow(request, bobToken, alice.did, { server: "beta" }))
+            ?.state,
+        { timeout: 30_000, intervals: [500, 1000, 2000] },
+      )
+      .toBe("pending_incoming");
+    await respondContactCokret(request, bobToken, {
+      requestId: outcome.request_event_ref,
+      requester: alice.did,
+      action: "accept",
+      grantedScopes: ["invite"],
+      server: "beta",
+      requesterServiceDid: solandServiceDid("alpha"),
+    });
+    await expect
+      .poll(
+        async () =>
+          (await contactRow(request, aliceToken, bob.did, { server: "alpha" }))
+            ?.state,
+        { timeout: 30_000, intervals: [500, 1000, 2000] },
+      )
+      .toBe("accepted");
+
+    // alice@α tombstones bob, addressing bob's home PS (β) and hard-blocking.
+    const tomb = await tombstoneContactCokret(request, aliceToken, bob.did, {
+      blockPeer: true,
+      peerServiceDid: solandServiceDid("beta"),
+      server: "alpha",
+    });
+    expect(tomb.state).toBe("tombstoned");
+
+    // The `ck.contact.tombstoned` fact federates to β; bob@β's mirrored alice
+    // row downgrades to `tombstoned` once the outbox dispatcher drains.
+    await expect
+      .poll(
+        async () =>
+          (await contactRow(request, bobToken, alice.did, { server: "beta" }))
+            ?.state,
+        { timeout: 30_000, intervals: [500, 1000, 2000] },
+      )
+      .toBe("tombstoned");
   });
 });

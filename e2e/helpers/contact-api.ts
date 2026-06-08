@@ -199,6 +199,10 @@ export async function tombstoneContactCokret(
     revokeScopes?: string[];
     fullPeerRevoke?: boolean;
     blockPeer?: boolean;
+    // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
+    // peer's home service DID so soland federates the `ck.contact.tombstoned`
+    // fact to the peer's Principal Server via `ck.peer.contacts.submit`.
+    peerServiceDid?: string;
     server?: SolandKey;
   } = {},
 ): Promise<ContactTombstoneOutcome> {
@@ -213,6 +217,9 @@ export async function tombstoneContactCokret(
           ? { full_peer_revoke: opts.fullPeerRevoke }
           : {}),
         ...(opts.blockPeer !== undefined ? { block_peer: opts.blockPeer } : {}),
+        ...(opts.peerServiceDid !== undefined
+          ? { peer_service_did: opts.peerServiceDid }
+          : {}),
       },
     },
   );

@@ -206,8 +206,13 @@ export async function addRealmMemberApi(
       realmId,
       kind: "ck.member.state",
       payload: {
+        // `realm_id` inside the payload is a spec-defined membership_payload
+        // property (event-payload.schema.json#/$defs/membership_payload) and is
+        // required by soland's registry-backed payload validator in dev-proof
+        // mode; include it so the membership op validates regardless of the
+        // active proof profile.
+        realm_id: realmId,
         actor_id: memberDid,
-        member: memberDid,
         membership: "join",
         delivery_status: "unroutable",
       },
