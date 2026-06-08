@@ -15,6 +15,7 @@ import {
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { selectDxcOption } from "../../helpers/dxc-select";
 
 test.describe.configure({ mode: "serial" });
 
@@ -128,18 +129,18 @@ test.describe("workflow: incident response", () => {
         });
         await page.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
         await expect(page.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-        await page.page.getByTestId("incident-status-select").selectOption("resolved");
+        await selectDxcOption(page.page.getByTestId("incident-status-select"), "resolved");
         await page.page.getByTestId("save-incident-status-button").click();
         await expect(page.page.getByTestId("incident-status-error")).toContainText(
           /invalid transition|must mitigate first/i,
           { timeout: 30_000 },
         );
-        await page.page.getByTestId("incident-status-select").selectOption("mitigated");
+        await selectDxcOption(page.page.getByTestId("incident-status-select"), "mitigated");
         await page.page.getByTestId("save-incident-status-button").click();
         await expect(page.page.getByTestId("incident-status-current")).toContainText(/mitigated/i, {
           timeout: 30_000,
         });
-        await page.page.getByTestId("incident-status-select").selectOption("resolved");
+        await selectDxcOption(page.page.getByTestId("incident-status-select"), "resolved");
         await page.page.getByTestId("save-incident-status-button").click();
         await expect(page.page.getByTestId("incident-status-current")).toContainText(/resolved/i);
 
@@ -209,7 +210,7 @@ test.describe("workflow: incident response", () => {
         await expect(commanderPage.page.getByTestId("incident-response-controls")).toBeVisible({
           timeout: 120_000,
         });
-        await commanderPage.page.getByTestId("incident-priority-select").selectOption("sev1");
+        await selectDxcOption(commanderPage.page.getByTestId("incident-priority-select"), "sev1");
         await expect(commanderPage.page.getByTestId("incident-priority-select")).toHaveValue("sev1");
         const blocked = `Public update: root cause leaked token ${stamp}`;
         await commanderPage.page.getByTestId("composer-input").fill(blocked);

@@ -19,6 +19,7 @@ import {
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { selectDxcOption } from "../../helpers/dxc-select";
 
 test.describe.configure({ mode: "serial" });
 
@@ -32,7 +33,7 @@ async function requestContact(
     timeout: 120_000,
   });
   await actor.page.getByTestId("contact-target-input").fill(targetDid);
-  await actor.page.getByTestId("contact-scope-select").selectOption(scope);
+  await selectDxcOption(actor.page.getByTestId("contact-scope-select"), scope);
   await actor.page.getByTestId("send-contact-request-button").click();
   return actor.page.getByTestId("contact-request-status");
 }
@@ -276,7 +277,7 @@ test.describe("consent grant", () => {
       await pendingRow.getByTestId("consent-detail-button").click();
       const detail = alicePage.page.getByTestId("consent-pending-detail");
       await expect(detail).toContainText(bob.did);
-      await detail.getByTestId("consent-scope-select").selectOption("message");
+      await selectDxcOption(detail.getByTestId("consent-scope-select"), "message");
       await detail.getByTestId("consent-valid-until-input").fill(
         new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
       );
@@ -340,7 +341,7 @@ test.describe("consent grant", () => {
         await pendingRow.getByTestId("consent-detail-button").click();
         const detail = alicePage.page.getByTestId("consent-pending-detail");
         await expect(detail).toContainText(bob.did);
-        await detail.getByTestId("consent-scope-select").selectOption("invite");
+        await selectDxcOption(detail.getByTestId("consent-scope-select"), "invite");
         await detail.getByTestId("consent-valid-until-input").fill(
           new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         );
@@ -490,7 +491,7 @@ test.describe("consent grant", () => {
         });
         await inviteRow.getByTestId("consent-detail-button").click();
         const detail = alicePage.page.getByTestId("consent-pending-detail");
-        await detail.getByTestId("consent-scope-select").selectOption("invite");
+        await selectDxcOption(detail.getByTestId("consent-scope-select"), "invite");
         await detail.getByTestId("grant-consent-button").click();
         await expectConsentCell(request, aliceToken, alice.did, bob.did, "invite", "granted");
 

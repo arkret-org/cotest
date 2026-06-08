@@ -11,6 +11,7 @@ import {
 } from "@playwright/test";
 import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
 import { signedEventEnvelope } from "./soland-api";
+import { selectDxcOption } from "./dxc-select";
 
 export type JointUser = {
   name: string;
@@ -161,16 +162,16 @@ export class JointUserPage {
     await basicsNext.click();
 
     if (opts.discoverability !== undefined) {
-      await flow.getByTestId("realm-discoverability-input").selectOption(opts.discoverability);
+      await selectDxcOption(flow.getByTestId("realm-discoverability-input"), opts.discoverability);
     }
     if (opts.joinRule !== undefined) {
-      await flow.getByTestId("realm-policy-join-rule-input").selectOption(opts.joinRule);
+      await selectDxcOption(flow.getByTestId("realm-policy-join-rule-input"), opts.joinRule);
     }
     if (opts.historyVisibility !== undefined) {
-      await flow.getByTestId("realm-policy-history-visibility-input").selectOption(opts.historyVisibility);
+      await selectDxcOption(flow.getByTestId("realm-policy-history-visibility-input"), opts.historyVisibility);
     }
     if (opts.encryptionProfile !== undefined) {
-      await flow.getByTestId("realm-encryption-profile-input").selectOption(opts.encryptionProfile);
+      await selectDxcOption(flow.getByTestId("realm-encryption-profile-input"), opts.encryptionProfile);
     }
     const policyNext = flow.getByTestId("new-realm-next-button").first();
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });

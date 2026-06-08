@@ -21,6 +21,7 @@ import {
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { selectDxcOption } from "../../helpers/dxc-select";
 
 test.describe.configure({ mode: "serial" });
 
@@ -155,7 +156,7 @@ test.describe("notifications", () => {
           timeout: 30_000,
         });
         await bobPage.page.getByTestId("dnd-enabled-toggle").check();
-        await bobPage.page.getByTestId("dnd-mode-select").selectOption("now");
+        await selectDxcOption(bobPage.page.getByTestId("dnd-mode-select"), "now");
         await bobPage.page.getByTestId("save-notification-settings-button").click();
         await expect(bobPage.page.getByTestId("notification-settings-status")).toContainText(
           /do not disturb|dnd/i,
