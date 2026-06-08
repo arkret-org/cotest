@@ -18,20 +18,20 @@
 //!
 //! `metadata_encryption_floor` is binary and fully symmetric with
 //! `content_encryption_floor`. The SDK exposes the
-//! [`CircleMetadataEncryptionFloor`] enum but no reducer-pure
+//! [`EncryptionFloor`] enum but no reducer-pure
 //! `validate_metadata_floor_tightens` helper; this scenario pins both the
 //! enum's strictness ordering and a local helper that any future reducer
 //! SHOULD mirror.
 
 use anyhow::{Result, anyhow};
-use cokret_core::CircleMetadataEncryptionFloor;
+use cokret_core::EncryptionFloor;
 use cokret_core::error::REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION;
 
 /// Strictness rank for the two floor values: stricter → larger rank.
-fn rank(floor: CircleMetadataEncryptionFloor) -> u8 {
+fn rank(floor: EncryptionFloor) -> u8 {
     match floor {
-        CircleMetadataEncryptionFloor::AllowPlaintext => 0,
-        CircleMetadataEncryptionFloor::E2eeRequired => 1,
+        EncryptionFloor::AllowPlaintext => 0,
+        EncryptionFloor::E2eeRequired => 1,
     }
 }
 
@@ -41,8 +41,8 @@ fn rank(floor: CircleMetadataEncryptionFloor) -> u8 {
 /// strictness; otherwise `Err` whose message carries the canonical
 /// [`REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION`] reason code.
 fn validate_metadata_floor_tightens(
-    realm_floor: CircleMetadataEncryptionFloor,
-    circle_floor: CircleMetadataEncryptionFloor,
+    realm_floor: EncryptionFloor,
+    circle_floor: EncryptionFloor,
 ) -> Result<()> {
     if rank(circle_floor) >= rank(realm_floor) {
         Ok(())
@@ -60,11 +60,11 @@ fn validate_metadata_floor_tightens(
 /// space_policy?, object_profile?) — the same `max` semantics the spec
 /// uses for write-acceptance.
 fn effective_floor(
-    realm: CircleMetadataEncryptionFloor,
-    circle: Option<CircleMetadataEncryptionFloor>,
-    space_policy: Option<CircleMetadataEncryptionFloor>,
-    object_profile: Option<CircleMetadataEncryptionFloor>,
-) -> CircleMetadataEncryptionFloor {
+    realm: EncryptionFloor,
+    circle: Option<EncryptionFloor>,
+    space_policy: Option<EncryptionFloor>,
+    object_profile: Option<EncryptionFloor>,
+) -> EncryptionFloor {
     let mut best = realm;
     for candidate in [circle, space_policy, object_profile].into_iter().flatten() {
         if rank(candidate) > rank(best) {
@@ -75,7 +75,7 @@ fn effective_floor(
 }
 
 pub async fn metadata_encryption_floor_run() -> Result<()> {
-    use CircleMetadataEncryptionFloor::*;
+    use EncryptionFloor::*;
 
     // ── Strictness order MUST be allow_plaintext < e2ee_required.
     if !(rank(AllowPlaintext) < rank(E2eeRequired)) {
@@ -99,11 +99,11 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
             .to_owned();
         if s != expected {
             return Err(anyhow!(
-                "CircleMetadataEncryptionFloor::{variant:?} MUST serialise to \
+                "EncryptionFloor::{variant:?} MUST serialise to \
                  `{expected}`; got `{s}`"
             ));
         }
-        let parsed: CircleMetadataEncryptionFloor =
+        let parsed: EncryptionFloor =
             serde_json::from_str(&format!("\"{expected}\"")).map_err(|e| anyhow!("parse: {e}"))?;
         if parsed != variant {
             return Err(anyhow!(

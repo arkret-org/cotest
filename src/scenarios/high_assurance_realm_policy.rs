@@ -13,7 +13,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
-    CircleMetadataEncryptionFloor, ContentEncryptionFloor, Did, Discoverability, EncryptionProfile,
+    EncryptionFloor, EncryptionFloor, Did, Discoverability, EncryptionProfile,
     FederationPolicy, HistoryVisibility, JoinRule, Realm, RealmId, SecurityClass,
     TypedTrustDomainId,
 };
@@ -55,8 +55,8 @@ fn build_realm(
         default_join_rule: JoinRule::Invite,
         history_visibility: HistoryVisibility::Joined,
         encryption_profile: EncryptionProfile::None,
-        content_encryption_floor: Some(ContentEncryptionFloor::AllowPlaintext),
-        metadata_encryption_floor: Some(CircleMetadataEncryptionFloor::AllowPlaintext),
+        content_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
+        metadata_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
         federation_policy,
         retention_policy_id: None,
         avatar_blob_ref: None,
