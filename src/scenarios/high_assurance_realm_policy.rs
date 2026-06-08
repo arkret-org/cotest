@@ -13,7 +13,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
-    EncryptionFloor, EncryptionFloor, Did, Discoverability, EncryptionProfile,
+    Did, Discoverability, EncryptionFloor, EncryptionProfile,
     FederationPolicy, HistoryVisibility, JoinRule, Realm, RealmId, SecurityClass,
     TypedTrustDomainId,
 };
