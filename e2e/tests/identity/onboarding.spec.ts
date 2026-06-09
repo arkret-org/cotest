@@ -124,6 +124,26 @@ test.describe("account onboarding", () => {
       expect(current.searchParams.get("resource")).toBe(solandServiceDid());
       expect(current.searchParams.get("response_type")).toBe("code");
       expect(current.searchParams.get("code_challenge")).toBeTruthy();
+      // Regression guard (yougen fix/authorize-device-scope): the authorize
+      // request MUST bind the OAuth session to yougen's stable, persisted
+      // device id via a `urn:cokret:client:device:{id}` scope token. Without
+      // it coauth introspection emits no `org.cokret.device_id`, soland derives
+      // a per-OAuth-session device id that drifts on every re-auth, and the
+      // shared sync cursor fails with `cursor_integrity_invalid` ("cursor
+      // device does not match request device").
+      const requestedScope = current.searchParams.get("scope") ?? "";
+      const deviceScope = requestedScope
+        .split(/\s+/)
+        .find((token) => token.startsWith("urn:cokret:client:device:"));
+      expect(
+        deviceScope,
+        `authorize scope must carry a device-binding token, got: ${requestedScope}`,
+      ).toBeTruthy();
+      // The bound device id (suffix after the scope prefix) must be a real
+      // `ck:device:` identifier, not empty.
+      expect(deviceScope?.slice("urn:cokret:client:device:".length)).toMatch(
+        /^ck:device:/,
+      );
     } finally {
       await page.close();
     }
