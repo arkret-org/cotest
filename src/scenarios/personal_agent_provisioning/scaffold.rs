@@ -6,7 +6,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
-    AccountabilityGrantId, AgentKeyId, AgentSessionId, CAP_ACTION_AGENT_PROVISION, Did,
+    AccountabilityGrantId, AgentInteropSessionId, AgentKeyId, CAP_ACTION_AGENT_PROVISION, Did,
     OP_ACCOUNT_AGENT_KEY_PAIR, OP_AGENT_DEACTIVATE, OP_AGENT_GET, OP_AGENT_GRANT_ATTACH,
     OP_AGENT_GRANT_DETACH, OP_AGENT_LIST, OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME,
     OP_AGENT_ROTATE_KEY, OP_AGENT_SIDECAR_THREAD_ENSURE,
@@ -69,8 +69,10 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
         .map_err(|e| anyhow!("agent principal DID construction: {e}"))?;
     AgentKeyId::new("ck:agent_key:01999999-0000-7000-8000-000000000002".to_owned())
         .map_err(|e| anyhow!("AgentKeyId construction: {e}"))?;
-    AgentSessionId::new("ck:agent_session:01999999-0000-7000-8000-000000000003".to_owned())
-        .map_err(|e| anyhow!("AgentSessionId construction: {e}"))?;
+    AgentInteropSessionId::new(
+        "ck:agent_interop_session:01999999-0000-7000-8000-000000000003".to_owned(),
+    )
+    .map_err(|e| anyhow!("AgentInteropSessionId construction: {e}"))?;
     AccountabilityGrantId::new(
         "ck:accountability_grant:01999999-0000-7000-8000-000000000004".to_owned(),
     )

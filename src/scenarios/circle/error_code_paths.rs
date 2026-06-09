@@ -5,7 +5,7 @@
 //! is a top-level wire error code introduced in CKP-0006 and re-used by the
 //! Circle delivery binding migration path. This scenario pins:
 //!
-//!   - the sub-reason set [`KNOWN_REASON_CODES_CKP_0007`] is exactly 8,
+//!   - the sub-reason set [`KNOWN_REASON_CODES_CKP_0007`] is exactly 10,
 //!   - each sub-reason string is non-empty, lowercase, snake_case, and does not duplicate a known
 //!     reason from another release,
 //!   - the top-level `ERROR_CODE_DELIVERY_BINDING_HANDED_OVER` is registered via
@@ -18,8 +18,9 @@ use anyhow::{Result, anyhow};
 use cokret_core::error::{
     KNOWN_REASON_CODES_CKP_0007, REASON_CIRCLE_ENCRYPTION_BELOW_REALM_FLOOR,
     REASON_CIRCLE_MEMBER_MUST_BE_REALM_MEMBER, REASON_CIRCLE_NOT_ACTIVE,
-    REASON_CIRCLE_REALM_MISMATCH, REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION,
-    REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED, REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
+    REASON_CIRCLE_REALM_MISMATCH, REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
+    REASON_CONTENT_ENCRYPTION_FLOOR_VIOLATION, REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED,
+    REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE, REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
     REASON_SCOPE_REBIND_FORBIDDEN,
 };
 use cokret_core::{
@@ -36,9 +37,9 @@ fn is_snake_case_lowercase(s: &str) -> bool {
 }
 
 pub async fn error_code_paths_run() -> Result<()> {
-    if KNOWN_REASON_CODES_CKP_0007.len() != 8 {
+    if KNOWN_REASON_CODES_CKP_0007.len() != 10 {
         return Err(anyhow!(
-            "CKP-0007 reason-code set MUST be exactly 8; got {} ({:?})",
+            "CKP-0007 reason-code set MUST be exactly 10; got {} ({:?})",
             KNOWN_REASON_CODES_CKP_0007.len(),
             KNOWN_REASON_CODES_CKP_0007
         ));
@@ -69,6 +70,14 @@ pub async fn error_code_paths_run() -> Result<()> {
             REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
             "metadata_encryption_floor_violation",
         ),
+        (
+            REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
+            "content_encryption_floor_downgrade",
+        ),
+        (
+            REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
+            "metadata_encryption_floor_downgrade",
+        ),
     ] {
         if constant != expected {
             return Err(anyhow!(
@@ -91,6 +100,8 @@ pub async fn error_code_paths_run() -> Result<()> {
         REASON_SCOPE_REBIND_FORBIDDEN,
         REASON_EFFECTIVE_SCOPE_REDUCER_MANAGED,
         REASON_METADATA_ENCRYPTION_FLOOR_VIOLATION,
+        REASON_CONTENT_ENCRYPTION_FLOOR_DOWNGRADE,
+        REASON_METADATA_ENCRYPTION_FLOOR_DOWNGRADE,
     ] {
         if !KNOWN_REASON_CODES_CKP_0007.contains(&code) {
             return Err(anyhow!("KNOWN_REASON_CODES_CKP_0007 missing `{code}`"));

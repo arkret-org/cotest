@@ -13,9 +13,8 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
-    Did, Discoverability, EncryptionFloor, EncryptionProfile,
-    FederationPolicy, HistoryVisibility, JoinRule, Realm, RealmId, SecurityClass,
-    TypedTrustDomainId,
+    Did, Discoverability, EncryptionFloor, EncryptionProfile, FederationPolicy, HistoryVisibility,
+    JoinRule, Realm, RealmId, SecurityClass, TypedTrustDomainId,
 };
 
 const REALM_ID: &str = "ck:realm:01904100-0000-7000-8000-000000000aa1";

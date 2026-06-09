@@ -5,7 +5,7 @@
 //! The sub-test here pins:
 //!   1. all 14 actions are present in `AGENT_CAPABILITY_ACTIONS`.
 //!   2. every action is well-formed (snake_case, no whitespace, dot- delimited, prefixed
-//!      `ck.agent.`).
+//!      `ck.agent.` or `ck.self.agent.`).
 //!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
 //!   4. an `accountability_grant` typed-id round-trips through the SDK validator.
@@ -38,11 +38,14 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
         ));
     }
 
-    // (2) Per-action well-formedness.
+    // (2) Per-action well-formedness. Agent capability actions live under the
+    // agent surface — either the bare `ck.agent.*` namespace or the
+    // account-scoped `ck.self.agent.*` trust segment (lifecycle actions such as
+    // provision/pause/resume/deactivate and sidecar_thread.ensure).
     for action in AGENT_CAPABILITY_ACTIONS {
-        if !action.starts_with("ck.agent.") {
+        if !(action.starts_with("ck.agent.") || action.starts_with("ck.self.agent.")) {
             return Err(anyhow!(
-                "capability action `{action}` MUST start with ck.agent."
+                "capability action `{action}` MUST start with ck.agent. or ck.self.agent."
             ));
         }
         if action.contains(char::is_whitespace) {

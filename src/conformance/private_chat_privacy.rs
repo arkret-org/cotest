@@ -180,24 +180,24 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         bail!("direct conversation resolver HTTP binding drifted");
     }
     if operation.get("request_schema_ref").and_then(Value::as_str)
-        != Some("schemas/contact-operations.schema.json#/$defs/direct_conversation_resolve_request")
+        != Some(
+            "schemas/contact-operations.schema.json#/$defs/direct_conversation_resolve_request_body",
+        )
     {
         bail!("direct conversation request schema ref drifted");
     }
     if operation.get("response_schema_ref").and_then(Value::as_str)
-        != Some(
-            "schemas/contact-operations.schema.json#/$defs/direct_conversation_resolve_response",
-        )
+        != Some("schemas/contact-operations.schema.json#/$defs/direct_conversation_resolve_outcome")
     {
         bail!("direct conversation response schema ref drifted");
     }
 
     let contact_schema = load_artifact_json("schemas/contact-operations.schema.json")?;
     let request_def = contact_schema
-        .pointer("/$defs/direct_conversation_resolve_request")
-        .ok_or_else(|| anyhow!("missing direct_conversation_resolve_request schema"))?;
+        .pointer("/$defs/direct_conversation_resolve_request_body")
+        .ok_or_else(|| anyhow!("missing direct_conversation_resolve_request_body schema"))?;
     assert_schema_contract(
-        "direct_conversation_resolve_request",
+        "direct_conversation_resolve_request_body",
         request_def,
         &["peer"],
         &["peer", "create", "idempotency_key"],
@@ -205,10 +205,10 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
     )?;
 
     let response_def = contact_schema
-        .pointer("/$defs/direct_conversation_resolve_response")
-        .ok_or_else(|| anyhow!("missing direct_conversation_resolve_response schema"))?;
+        .pointer("/$defs/direct_conversation_resolve_outcome")
+        .ok_or_else(|| anyhow!("missing direct_conversation_resolve_outcome schema"))?;
     assert_schema_contract(
-        "direct_conversation_resolve_response",
+        "direct_conversation_resolve_outcome",
         response_def,
         &["state"],
         &[

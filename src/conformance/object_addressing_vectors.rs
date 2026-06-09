@@ -23,14 +23,15 @@
 //!   * scope-confusion: an A-object token fails `verify_token_target` against a B-object address;
 //!     the token's link_type wins over a disagreeing URL `lt` hint (modeled via the
 //!     `effective_link_type` argument).
-//!   * `DirectoryTargetResolutionOutcome` deserializes the §9.1 common fields (`as_of`, `source_refs`,
-//!     `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
+//!   * `DirectoryTargetResolutionOutcome` deserializes the §9.1 common fields (`as_of`,
+//!     `source_refs`, `join_candidates`) + `target_kind`; a realm target carries `realm_preview`.
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
 use cokret_core::model::{
-    AddressAction, DirectoryTargetResolutionOutcome, LinkType, RealmRef, TargetDescriptor, TargetKind,
-    build_address, build_https_landing, parse_address, target_digest, verify_token_target,
+    AddressAction, DirectoryTargetResolutionOutcome, LinkType, RealmRef, TargetDescriptor,
+    TargetKind, build_address, build_https_landing, parse_address, target_digest,
+    verify_token_target,
 };
 use serde_json::json;
 

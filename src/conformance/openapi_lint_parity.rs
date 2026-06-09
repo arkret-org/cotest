@@ -99,10 +99,11 @@ pub fn run_service_describe_alignment_check() -> Result<()> {
 
 /// Mirror of `lint_artifacts.py::check_policy_check_alignment`.
 ///
-/// * `/_cokret/self/policy/check` POST request/response MUST reference `PolicyCheckRequestBody` /
-///   `PolicyCheckOutcome` components.
-/// * `PolicyCheckRequestBody.required` MUST include `realm_id`.
-/// * `PolicyCheckOutcome.required` MUST include `bound_to`.
+/// * `/_cokret/self/policy/check` POST request/response MUST reference `PolicyCheckRequest` /
+///   `PolicyCheckResponse` components (thin `$ref` aliases over the
+///   `service-operation-dtos.schema.json` `$defs`).
+/// * The resolved `PolicyCheckRequest` schema's `required` MUST include `realm_id`.
+/// * The resolved `PolicyCheckResponse` schema's `required` MUST include `bound_to`.
 pub fn run_policy_check_alignment_check() -> Result<()> {
     let openapi = load_artifact_yaml("openapi/cokret-service-api.openapi.yaml")?;
     let paths = openapi
@@ -127,14 +128,14 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .and_then(|j| j.get("schema"))
         .and_then(|s| s.get("$ref"))
         .and_then(YamlValue::as_str);
-    if req_ref != Some("#/components/schemas/PolicyCheckRequestBody") {
+    if req_ref != Some("#/components/schemas/PolicyCheckRequest") {
         bail!(
-            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequestBody, got {req_ref:?} (lint parity)"
+            "/_cokret/self/policy/check requestBody must reference PolicyCheckRequest, got {req_ref:?} (lint parity)"
         );
     }
-    if resp_ref != Some("#/components/schemas/PolicyCheckOutcome") {
+    if resp_ref != Some("#/components/schemas/PolicyCheckResponse") {
         bail!(
-            "/_cokret/self/policy/check 200 response must reference PolicyCheckOutcome, got {resp_ref:?} (lint parity)"
+            "/_cokret/self/policy/check 200 response must reference PolicyCheckResponse, got {resp_ref:?} (lint parity)"
         );
     }
 
@@ -142,21 +143,62 @@ pub fn run_policy_check_alignment_check() -> Result<()> {
         .get("components")
         .and_then(|c| c.get("schemas"))
         .ok_or_else(|| anyhow!("openapi components.schemas missing"))?;
-    let req_component = components
-        .get("PolicyCheckRequestBody")
-        .ok_or_else(|| anyhow!("components.schemas.PolicyCheckRequestBody missing"))?;
-    let resp_component = components
-        .get("PolicyCheckOutcome")
-        .ok_or_else(|| anyhow!("components.schemas.PolicyCheckOutcome missing"))?;
-    let req_required = yaml_string_array(req_component, "required")?;
+    let req_component = resolve_openapi_component_schema(components, "PolicyCheckRequest")?;
+    let resp_component = resolve_openapi_component_schema(components, "PolicyCheckResponse")?;
+    let req_required = yaml_string_array(&req_component, "required")?;
     if !req_required.contains("realm_id") {
-        bail!("PolicyCheckRequestBody.required must include realm_id (lint parity)");
+        bail!("PolicyCheckRequest.required must include realm_id (lint parity)");
     }
-    let resp_required = yaml_string_array(resp_component, "required")?;
+    let resp_required = yaml_string_array(&resp_component, "required")?;
     if !resp_required.contains("bound_to") {
-        bail!("PolicyCheckOutcome.required must include bound_to (lint parity)");
+        bail!("PolicyCheckResponse.required must include bound_to (lint parity)");
     }
     Ok(())
+}
+
+/// Resolve an OpenAPI `components.schemas.<name>` node to its concrete schema,
+/// following internal (`#/components/schemas/X`) and external
+/// (`../schemas/<file>#/$defs/<def>`) `$ref` aliases. Mirrors
+/// `lint_artifacts.py::resolve_openapi_component_schema`.
+fn resolve_openapi_component_schema(components: &YamlValue, name: &str) -> Result<YamlValue> {
+    let mut current = components
+        .get(name)
+        .cloned()
+        .ok_or_else(|| anyhow!("components.schemas.{name} missing"))?;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    loop {
+        let Some(ref_str) = current
+            .get("$ref")
+            .and_then(YamlValue::as_str)
+            .map(str::to_owned)
+        else {
+            return Ok(current);
+        };
+        if let Some(internal) = ref_str.strip_prefix("#/components/schemas/") {
+            if !seen.insert(internal.to_owned()) {
+                bail!("cyclic OpenAPI component ref via {name}");
+            }
+            current = components
+                .get(internal)
+                .cloned()
+                .ok_or_else(|| anyhow!("components.schemas.{internal} missing"))?;
+            continue;
+        }
+        // External ref: `../schemas/<file>#/<json-pointer>`.
+        let (file_part, fragment) = ref_str
+            .split_once('#')
+            .ok_or_else(|| anyhow!("external $ref missing fragment: {ref_str}"))?;
+        let relative = file_part.trim_start_matches("../");
+        let doc = load_artifact_yaml(relative)?;
+        let mut node = &doc;
+        for raw_segment in fragment.trim_start_matches('/').split('/') {
+            let segment = raw_segment.replace("~1", "/").replace("~0", "~");
+            node = node
+                .get(&segment)
+                .ok_or_else(|| anyhow!("ref fragment {fragment} not found in {relative}"))?;
+        }
+        return Ok(node.clone());
+    }
 }
 
 /// Mirror of `lint_artifacts.py::check_vector_reference_closure` — verifies

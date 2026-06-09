@@ -14,9 +14,9 @@
 //! * **id_kind allowlist** for `object_ref` context: `ck:space:` joins the accepted set
 //! * **schema $defs / OpenAPI component allowlist**: `EventsSubscribeFrame`, `SnapshotBootstrap`,
 //!   `EventsFrontierAccountClientState`, `EventsFrontierFederationPeerState`,
-//!   `EventsFrontierAnonymousHealthResponse`, `PolicyCheckRequestBody`, `PolicyCheckOutcome`,
-//!   `FederationServiceBindingRef`, `EventsSubmitBatchRequestBody`, `EventsSubmitFederationRequestBody`,
-//!   `third_party_invite`, `space_state_transition_payload`, `space_object_tombstone_payload`
+//!   `PolicyCheckRequestBody`, `PolicyCheckOutcome`, `FederationServiceBindingRef`,
+//!   `EventsSubmitBatchRequestBody`, `EventsSubmitFederationRequestBody`, `third_party_invite`,
+//!   `space_state_transition_payload`, `space_object_tombstone_payload`
 
 use std::collections::BTreeSet;
 
@@ -54,7 +54,6 @@ pub const NEW_OPENAPI_COMPONENTS: &[&str] = &[
     "FederationServiceBindingRef",
     "EventsFrontierAccountClientState",
     "EventsFrontierFederationPeerState",
-    "EventsFrontierAnonymousHealthResponse",
     "PolicyCheckRequestBody",
     "PolicyCheckOutcome",
     "EventsSubscribeFrame",
