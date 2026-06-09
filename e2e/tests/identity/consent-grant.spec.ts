@@ -109,7 +109,10 @@ test.describe("consent grant", () => {
       });
 
       await alicePage.page.getByTestId("consent-new-grant-button").click();
-      await alicePage.page.getByTestId("consent-new-grant-scope-input").fill("message");
+      await selectDxcOption(
+        alicePage.page.getByTestId("consent-new-grant-scope-input"),
+        "message",
+      );
       await alicePage.page.getByTestId("consent-new-grant-grantee-input").fill(bob.did);
       await alicePage.page.getByTestId("consent-new-grant-ttl-input").fill("30d");
       await expect(alicePage.page.getByTestId("consent-new-grant-submit-button")).toBeEnabled();
@@ -118,6 +121,45 @@ test.describe("consent grant", () => {
       await alicePage.page.getByTestId("consent-new-grant-button").click();
       await expect(alicePage.page.getByTestId("consent-new-grant-scope-input")).toHaveCount(0);
       await expect(alicePage.page.getByTestId("consent-grant-empty")).toBeVisible();
+    } finally {
+      await alicePage.close();
+    }
+  });
+
+  test("consent settings can open an outbound consent request", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    // alice asks bob (the holder) to grant her `message` consent via the
+    // `ck.consent.request` entry point; the resulting pending cell surfaces as
+    // an outgoing-request row on alice's settings page.
+    const alice = uniqueUser("consent-request-alice");
+    const bob = uniqueUser("consent-request-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const aliceToken = await issueDevSession(request, alice);
+    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+
+    try {
+      await gotoConsentSettings(alicePage);
+
+      await alicePage.page.getByTestId("consent-request-button").click();
+      await selectDxcOption(
+        alicePage.page.getByTestId("consent-request-scope-input"),
+        "message",
+      );
+      await alicePage.page.getByTestId("consent-request-holder-input").fill(bob.did);
+      await expect(alicePage.page.getByTestId("consent-request-submit-button")).toBeEnabled();
+      await alicePage.page.getByTestId("consent-request-submit-button").click();
+
+      await expect(alicePage.page.getByTestId("write-status")).toContainText(/requested/i, {
+        timeout: 30_000,
+      });
+      // Cell is holder=bob / peer=alice / pending; alice (the peer) may read it.
+      await expectConsentCell(request, aliceToken, bob.did, alice.did, "message", "pending");
+      await expect(
+        alicePage.page.getByTestId("consent-outgoing-request-row").filter({ hasText: bob.did }),
+      ).toBeVisible({ timeout: 30_000 });
+      await stepShot(alicePage.page, testInfo, "consent-outbound-request");
     } finally {
       await alicePage.close();
     }
