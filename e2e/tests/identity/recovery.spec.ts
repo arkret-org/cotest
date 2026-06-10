@@ -1,8 +1,10 @@
 // Account recovery
 // Contract: e2e/scenarios/identity/recovery.md
 // Spec refs:
-//   - identity/key-management.md §3.3 (recovery key + threshold + recovery service)
-//   - §7 (key backup), §7.2 (envelope), §7.3 (restore), §8 (threshold)
+//   - identity/key-management.md §3.3 (24-word Recovery Key = sole
+//     content-recovery credential + threshold + recovery service)
+//   - §7 (key backup), §7.2 (envelope), §7.3 (restore), §7.7 (recovery UI
+//     MUST take the Recovery Key), §7.10 (automatic backup), §8 (threshold)
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -32,10 +34,12 @@ test.describe("account recovery", () => {
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
-    "alice (device-1) configures passphrase-protected backup; envelope uses Argon2id KDF + XChaCha20-Poly1305; key_commitment uploaded",
+    "alice (device-1) generates a 24-word Recovery Key; account-secret envelope (Argon2id KDF + XChaCha20-Poly1305, key_commitment) uploads automatically",
     async () => {
-      // spec: key-management.md §7.1-§7.2
-      // soland gap: ck.schema.key_backup.v1; yougen gap: /settings/recovery wizard.
+      // spec: key-management.md §3.3 / §7.1-§7.2 / §7.10
+      // yougen live surface: /settings/recovery RecoveryPanel
+      // (recovery-key-regenerate); remaining gap is the recovery-policy
+      // binding on soland.
     },
   );
 
@@ -43,9 +47,9 @@ test.describe("account recovery", () => {
     // @blocking-on: soland#identity-recovery-gap
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
-    "device-2 restores account using passphrase; SSK/USK recovered; new device authorized via ck.device.authorize with recovery proof",
+    "device-2 restores account using the 24-word Recovery Key; SSK/USK recovered; new device authorized via ck.device.authorize with recovery proof",
     async () => {
-      // spec: key-management.md §7.3-§7.4, §5.0.1
+      // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1
     },
   );
 
@@ -95,7 +99,7 @@ test.describe("account recovery", () => {
     // @expected-live-by: 2026Q3
     "E8.7 after device-1 revoked, restore still succeeds; historical access honors current membership (not pre-revoke)",
     async () => {
-      // spec: key-management.md §12 line 724
+      // spec: crypto-media/encryption-and-audit.md §2.3.5/§2.4
     },
   );
 });

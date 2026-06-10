@@ -2,19 +2,22 @@
 
 ## 目标
 
-完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ck.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 passphrase 恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE Realm 收到的消息。
+完整的"丢设备 → 新设备恢复 → 历史 E2EE 消息可解"链路。`ck.key_backup.v1` envelope 用 Argon2id 派生密钥 + XChaCha20-Poly1305 加密;new device 通过 24 词 Recovery Key(唯一内容恢复凭证,spec §3.3/§7.7)恢复 backup;再回放 MLS commit chain 把当前 + 必要的旧 epoch keys 派生回来,解之前在 E2EE Realm 收到的消息。
 
 identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在**消息解密** 和 MLS epoch 重建,identity/recovery 更偏 device identity。
 
 ## Spec 锚点
 
+- `identity/key-management.md` §3.3 — Recovery Key = 唯一内容恢复凭证(24 词 BIP-39)
 - `identity/key-management.md` §7 — Key backup 概览
 - `identity/key-management.md` §7.1 — Backup 内容隔离(`backup_class`)
 - `identity/key-management.md` §7.2 — Envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
-- `identity/key-management.md` §7.3 — Restore flow(passphrase, commitment 校验, 解密)
+- `identity/key-management.md` §7.3 — Restore flow(Recovery Key, commitment 校验, 解密)
 - `identity/key-management.md` §7.4 — Ownership proof / decryption proof
-- `identity/key-management.md` §12 — Backup API(`PUT/GET/DELETE /_cokret/self/keys/backups`)
-- `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + API
+- `identity/key-management.md` §7.5.1/§7.5.2 — `passphrase_kdf`(独立 vault passphrase 凭证层 deprecated,仍是合法 wire method)/ `recovery_public_key`(新写入 SHOULD)
+- `identity/key-management.md` §7.7 — Recovery UI:备份解密凭证 MUST 是 Recovery Key
+- `identity/key-management.md` §7.10 — 自动持续备份
+- `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + API(`PUT/GET/DELETE /_cokret/self/keys/backups`)
 - `crypto-media/encryption-and-audit.md` §2.4 — MLS epoch backfill
 - `crypto-media/encryption-and-audit.md` §6 — Offline support, epoch key retention
 
@@ -35,26 +38,37 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 - alice 已 onboard,device-A 在 `R_e2ee` 中(epoch N)
 - bob 在 `R_e2ee` 中
-- alice 的 passphrase 是测试用 `"hunter2-Strong-encryption/key-backup"`
+- alice 在 Phase A 生成的 24 词 Recovery Key 由测试捕获并跨 browser context 传递(UI 只显示一次)
 
 ## Steps
 
-### Phase A — alice 在 device-A 设置 passphrase backup
+### Phase A — alice 在 device-A 生成 Recovery Key(备份自动上传)
 
-1. alice 进 `/settings/recovery` → "Set up key backup"
-2. UI 输入 passphrase 两次,显示强度提示("uses ~60MB memory, ~3 seconds to compute")
-3. 客户端:
-   - Argon2id(salt=random 16 bytes, memoryCost=64MB, iterations=3)→ `derived_key`
-   - XChaCha20-Poly1305 加密 `{ self_signing_key, user_signing_key, mls_history_backup_key }`
+1. alice 进 `/settings/recovery`(RecoveryPanel)点 "Generate"(`recovery-key-regenerate`);或首次创建 encrypted Realm 时自动弹出 `MlsBackupPrompt`(`mls-backup-modal`),点 `mls-backup-submit` 自动生成 — **无用户口令输入**(spec §7.7/§7.10)
+2. UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写(`mls-backup-generated-key` / `recovery-key-current`);本地只保存 SHA-256 指纹,词串不上传
+3. 客户端用 Recovery Key seal 账户 secret:
+   - Argon2id(词串为 KDF 输入;salt=random, memoryCost=64MB, iterations=3)→ `derived_key`
+   - XChaCha20-Poly1305 加密 `{ mls_account_secret(账户 MLS secret), ... }`
    - `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
+   - 同一账户 secret 另上传一份 HPKE `recovery_public_key` envelope(加密给 RK 公钥,§7.5.2 推荐形态)
 4. `PUT /_cokret/self/keys/backups/<backup_id>` body 含:
    - `backup_class: "secret_storage"`
-   - `kdf_params: { algorithm: "argon2id", salt, memory_cost, iterations }`
+   - `kdf_params: { algorithm: "argon2id", salt, memory_cost, iterations }`(`passphrase_kdf` envelope;wire method 仍合法,见 §7.5.1)
    - `ciphertext` (base64)
    - `ciphertext_digest: sha256:...`
    - `key_commitment: sha256:...`
-5. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no passphrase)
-6. UI 显示 "Backup active. Save your passphrase somewhere safe."
+5. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
+6. UI 显示 "Backed up" sync badge(`recovery-key-sync-badge`);此后自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
+> **§7.10 持续备份时序(yougen 实现语义)**:RK 已配置的账号上,任一加密写引发的
+> `ck.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
+> successor envelope PUT 上行;同 Realm 后续 commit 受 **5min min-interval** 合并补传。
+> 服务端可断言:同一 Realm 的连续上传 `series_id` 不变、`series_seq` 严格 +1、带
+> `supersedes`/`supersedes_digest`(每 Realm 单系列,不再堆平行 genesis)。
+> RK 未配置时 commit 路径不产生任何 `mls_history` 上传。
+> `/settings/security` 状态位:`key-backup-history-pending`(未传完最新 epoch 的
+> Realm 数,传完为 "0")、`key-backup-history-last-uploaded-at`(从未传过为 "never")、
+> `key-backup-history-error`(仅出现过失败后渲染);失败 5s 起指数退避,连败 5 次
+> park 待下次 commit 唤醒。恢复侧每个 `mls_history` 系列只全文取回尾部一条(§7.8 配额友好)。
 
 ### Phase B — bob 在 alice device-A 离线时给 alice 发消息
 
@@ -69,11 +83,12 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ### Phase D — Device-B 恢复
 
-12. 开新 browser context = device-B,空 storage,进 `/onboarding`
-13. 选 "Restore from backup",UI 提示输入 passphrase
+12. 开新 browser context = device-B,空 storage,登录进入 app
+13. 检测到服务器存在备份但本地无 MLS state → 自动弹出 `MlsUnlockPrompt`(`mls-unlock-modal`),UI 提示输入 24 词 Recovery Key("Decrypt with Recovery Key";也可走 `/settings/recovery` restore 面板的 `restore-recovery-key` 输入框)
 14. 客户端:
     - 生成本地 device-B key(用于这台设备的 device authorization,后续)
-    - Argon2id 派生(用 backup 提供的 kdf_params)→ derived_key
+    - 输入先做 24 词 BIP-39 校验(非法词串本地拒绝,不发请求)
+    - Argon2id 派生(词串为 KDF 输入,用 backup 提供的 kdf_params)→ derived_key;或对 `recovery_public_key` envelope 做 HPKE open
     - 计算 commitment,与 backup 的 `key_commitment` 比对
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
     - commitment match → 用 derived_key 解 ciphertext → 拿回 SSK / USK / mls_history_backup_key
@@ -103,19 +118,19 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 25. 在 Phase C 之后,device-A 在 mid-recovery 时被远程 revoke
 26. 触发 MLS Remove,生成 epoch N+1,device-A 失去新 key
 27. 但 device-B 已用 backup 恢复了 SSK/USK → device-B 应该被 alice 主动 Add 进 MLS group(via Commit Add)
-28. spec §12 line 724:"old message access honors current membership" — device-B 恢复后,过滤 access by current frontier
+28. spec `crypto-media/encryption-and-audit.md` §2.3.5/§2.4:old message access honors current membership — device-B 恢复后,过滤 access by current frontier
 
 ## Observable assertions(合并)
 
 - Phase A 步骤 5:backup metadata exposed,plaintext 不暴露
-- Phase D 步骤 14(错 passphrase):commitment mismatch,客户端本地拒绝(无服务器 oracle)
+- Phase D 步骤 14(错 Recovery Key):非法 24 词在输入校验即拒;合法但错误的词串在 commitment 阶段本地拒绝(无服务器 oracle)
 - Phase D 步骤 17:device-B 加入 alice device set
 - Phase E 步骤 20:device-B 看到 `M1`、`M2` 明文
 - Phase F 步骤 23:bob 看到 device-B 发的 `M3`
 
 ## Edge cases / sub-tests
 
-- **E13.1 错 passphrase**:客户端 commitment 阶段拒绝;**不发** GET 到服务器(避免服务端做 oracle);客户端连续错 N 次触发本地 cooldown
+- **E13.1 错 Recovery Key**:非法 24 词(不是合法 BIP-39 词表组合)在输入归一化阶段拒绝;合法但错误的词串在 commitment 阶段拒绝;**不发** GET 到服务器(避免服务端做 oracle);客户端连续错 N 次触发本地 cooldown
 - **E13.2 篡改 ciphertext**:digest 校验失败,客户端拒绝(spec §7.2 line 328)
 - **E13.3 backup AAD domain/audience mismatch**:测试改 envelope 的 AAD → 拒绝
 - **E13.4 mixed-domain backup**:`mixed_secret_storage=true` 只在 `personal_node` profile 接受;`high_assurance` 部署 MUST 拒(§7.1)
@@ -125,9 +140,9 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 ## Implementation notes
 
-- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list/get、DELETE ownership proof,以及 yougen Argon2id + XChaCha20-Poly1305 round trip、wrong passphrase local reject、late-recovery banner helper。
+- **当前 live 覆盖**:`encryption/key-backup-restore` 已验证 soland key-backup CRUD、owner 隔离、Argon2id floor、mixed-secret stronger floor、metadata-only list、bearer-only ciphertext read 拒绝(§7.7.1 unlock proof)、DELETE ownership proof,以及 yougen Argon2id + XChaCha20-Poly1305 seal/open round trip、wrong-Recovery-Key local reject(commitment)、24 词 BIP-39 输入校验、late-recovery banner helper。
 - **剩余缺口**:本 scenario 的完整"丢设备 → 新设备授权 → MLS commit chain backfill → 历史 E2EE 消息可解"仍未贯通;`key-backup.spec.ts` 保留这些全链路 fixme。
-- **2026-05-30 A1 live**:`key-backup.spec.ts` 覆盖同账号两个 fresh browser profile 的验收路径:device-A 创建 `mls_rfc9420` realm 并写历史 timeline 卡片、Recovery vault 上传 `mls_account_secret` backup、device-B 空 profile 登录后出现 `MlsUnlockPrompt`、输入口令恢复、device-B 写入后 device-A 可见,同时收集 `keys/backups` PUT 和 subscribe/describe/events/MLS runtime 错误信号。
+- **2026-05-30 A1 live**:`key-backup.spec.ts` 覆盖同账号两个 fresh browser profile 的验收路径:device-A 创建 `mls_rfc9420` realm 并写历史 timeline 卡片、`MlsBackupPrompt` 自动生成 24 词 Recovery Key 并上传 `mls_account_secret` backup、device-B 空 profile 登录后出现 `MlsUnlockPrompt`、输入 24 词恢复、device-B 写入后 device-A 可见,同时收集 `keys/backups` PUT 和 subscribe/describe/events/MLS runtime 错误信号。
 - **2026-06-01 A2 live**:`key-backup.spec.ts` 覆盖 Kanban 专用回归:creator device 新建 encrypted Realm 时必须生成并上传 initial `mls_history` backup;fresh browser restore 后打开同一 Board/Card,保存 card description 时不得出现 `MissingWelcome` 或 `ck.mls.commit` payload `schema_violation`,另一端能看到详情更新。
 - **harness**:Argon2id KDF 计算耗时 ~3s(intentional);测试要给足 timeout
 

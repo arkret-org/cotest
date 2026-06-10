@@ -27,7 +27,7 @@ const CARGO_TEST_TIMEOUT_MS = 240_000;
 test.describe.configure({ mode: "serial" });
 
 test.describe("key backup restore live path", () => {
-  test("Device-A uploads secret_storage backup; list/get expose no passphrase or plaintext", async ({
+  test("Device-A uploads secret_storage backup; list is metadata-only and bearer-only ciphertext GET is refused", async ({
     request,
   }) => {
     const { alice, aliceToken } = await registeredSession(request, "kb-restore-a");
@@ -52,13 +52,15 @@ test.describe("key backup restore live path", () => {
     );
     expect(JSON.stringify(listBody)).not.toMatch(/hunter2|plaintext|self-signing-secret/i);
 
+    // key-management.md §7.7.1/§7.8 — a bearer token alone MUST NOT release
+    // the full ciphertext; the read requires an
+    // `x-cokret-key-backup-unlock-proof` header bound to the envelope.
     const get = await getBackup(request, aliceToken, backupId);
-    expect(get.status()).toBe(200);
-    const fetched = await get.json();
-    expect(fetched.encryption.kdf.name).toBe("argon2id");
-    expect(fetched.encryption.algorithm).toBe("XChaCha20-Poly1305");
-    expect(fetched.ciphertext_digest).toBe(backup.ciphertext_digest);
-    expect(JSON.stringify(fetched)).not.toMatch(/hunter2|plaintext|self-signing-secret/i);
+    expect([401, 403]).toContain(get.status());
+    const refusal = await get.text();
+    expect(refusal).toContain("unlock");
+    expect(refusal).not.toContain(backup.ciphertext as string);
+    expect(refusal).not.toMatch(/hunter2|plaintext|self-signing-secret/i);
   });
 
   test("Device-B cannot enumerate or fetch Alice backup envelope", async ({ request }) => {
@@ -162,8 +164,13 @@ test.describe("key backup restore live path", () => {
   });
 
   test("yougen crypto and late-recovery banner helpers stay live", async () => {
-    await runYougenLibTest("recovery_crypto::tests::encrypt_decrypt_round_trip");
-    await runYougenLibTest("recovery_crypto::tests::decrypt_rejects_wrong_passphrase");
+    // Recovery-Key convergence: the vault-passphrase helpers are gone; the
+    // live client contract is the seal/open vault primitives (fed by the
+    // 24-word Recovery Key), the commitment-based wrong-key reject, and the
+    // BIP-39 24-word input normalization gate.
+    await runYougenLibTest("recovery_crypto::tests::seal_open_round_trip");
+    await runYougenLibTest("recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment");
+    await runYougenLibTest("recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys");
     await runYougenLibTest("late_recovery::tests::from_audit_policy_access_carries_late_recovery_original_event_id");
   });
 });
@@ -198,18 +205,18 @@ function makeBackupBody(
   backupId: string,
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
-  const ciphertext = `vault-ciphertext-${randomUUID()}`;
+  const ciphertext = `backup-ciphertext-${randomUUID()}`;
   const base = {
     backup_id: backupId,
     actor_id: actor.did,
     backup_class: "secret_storage",
     backup_version: "kb_1",
+    // §7.6 series chain — every envelope is a genesis of its own series here.
+    series_id: `ck:backup_series:${randomUUID()}`,
+    series_seq: 0,
     created_at: new Date().toISOString(),
     encryption: {
       recipient_method: "passphrase_kdf",
-      algorithm: "XChaCha20-Poly1305",
-      nonce: "bW9jay14Y2hhY2hhLW5vbmNlLTEyMzQ1Ng",
-      key_commitment: sha256Ref(`commitment:${backupId}`),
       kdf: {
         name: "argon2id",
         params: {
@@ -219,7 +226,17 @@ function makeBackupBody(
           parallelism: 4,
         },
       },
+      // §7.2 AEAD block — passphrase_kdf envelopes MUST carry the
+      // deterministic-nonce `nonce_salt` alongside the AEAD profile.
+      aead: {
+        name: "xchacha20_poly1305",
+        aead_profile: "ck.aead.xchacha20_poly1305.v1",
+        nonce: "bW9jay14Y2hhY2hhLW5vbmNlLTEyMzQ1Ng",
+        nonce_salt: "bW9jay1ub25jZS1zYWx0LTE2Ynl0ZXM",
+      },
     },
+    // §7.2 wrong-credential fail-fast commitment (top-level field).
+    key_commitment: sha256Ref(`commitment:${backupId}`),
     contents: [
       {
         item_type: "self_signing_key",
@@ -234,6 +251,30 @@ function makeBackupBody(
     ],
     ciphertext,
     ciphertext_digest: sha256Ref(ciphertext),
+    // §7.4.1 cross-signing anchored device signature block. soland validates
+    // the shape (typed device id, Ed25519 alg, base64url signature,
+    // ssk_generation >= 1, signed_fields coverage) at PUT time; signature
+    // *verification* happens receiver-side at restore, so a shape-valid
+    // token is sufficient for these storage-contract tests.
+    auth_data: {
+      device_id: "ck:device:01904100-0000-7000-8000-000000000001",
+      verification_method:
+        "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH#z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+      signature_algorithm: "Ed25519",
+      signature: "ZGV2LWJhY2t1cC1zaWduYXR1cmU",
+      ssk_generation: 1,
+      signed_fields: [
+        "backup_id",
+        "actor_id",
+        "backup_class",
+        "backup_version",
+        "series_id",
+        "series_seq",
+        "encryption",
+        "contents",
+        "ciphertext_digest",
+      ],
+    },
   };
   return deepMerge(base, overrides);
 }

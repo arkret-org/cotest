@@ -2,21 +2,23 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(passphrase / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的备份设置、跨设备使用 backup envelope 解密、新设备的 `ck.device.authorize` 写入、E2EE 历史消息解密。
+验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:恢复前的 Recovery Key 生成(备份自动上传)、跨设备使用 backup envelope 解密、新设备的 `ck.device.authorize` 写入、E2EE 历史消息解密。Recovery Key 是唯一的内容恢复用户凭证(spec §3.3/§7.7);独立 vault passphrase 凭证层已弃用(§7.5.1)。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
 ## Spec 锚点
 
-- `identity/key-management.md` §3.3 — Recovery key + threshold scheme + trusted recovery service
+- `identity/key-management.md` §3.3 — Recovery Key(24 词 BIP-39,唯一内容恢复凭证)+ threshold scheme + trusted recovery service
 - `identity/key-management.md` §7 — Key backup 概览,`backup_class` domain
 - `identity/key-management.md` §7.1 — 各 backup_class 的内容隔离
 - `identity/key-management.md` §7.2 — Backup envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
-- `identity/key-management.md` §7.3 — Restore flow
+- `identity/key-management.md` §7.3 — Restore flow(凭证 = Recovery Key;旧 `passphrase_kdf` envelope 仅兼容恢复)
 - `identity/key-management.md` §7.4 — Ownership proof vs decryption proof
+- `identity/key-management.md` §7.5.1 — 独立 vault passphrase 凭证层 deprecated(wire method 仍合法)
+- `identity/key-management.md` §7.7 — Recovery UI:解密凭证 MUST 是 Recovery Key
+- `identity/key-management.md` §7.10 — 自动持续备份
 - `identity/key-management.md` §8 — Threshold recovery service
-- `identity/key-management.md` §12 — Backup API (PUT/GET/DELETE)
-- `crypto-media/device-lifecycle.md` §12 — Key backup durable form
+- `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + Backup API (PUT/GET/DELETE)
 
 ## 拓扑
 
@@ -34,17 +36,18 @@
 
 ## Steps
 
-### Phase A — 设置 passphrase-protected backup
+### Phase A — 生成 Recovery Key(备份自动上传)
 
-1. alice (device-1) 进 `/settings/recovery`
-2. UI 引导 alice 输入 passphrase(强度提示),确认
+1. alice (device-1) 进 `/settings/recovery`(RecoveryPanel)
+2. alice 点 "Generate"(`recovery-key-regenerate`):UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写;本地只存 SHA-256 指纹,词串不上传(spec §3.3/§7.7;首次创建 encrypted Realm 时 `MlsBackupPrompt` 也会自动走同一流程)
 3. 客户端:
-   - Argon2id KDF 生成 derived_key(salt + memoryCost + iterations,固化在 envelope)
-   - 用 XChaCha20-Poly1305 加密 `{ self_signing_key, user_signing_key, MLS history backup key }`
+   - Argon2id KDF 以 24 词词串为输入生成 derived_key(salt + memoryCost + iterations,固化在 envelope)
+   - 用 XChaCha20-Poly1305 加密账户 secret(`mls_account_secret` 等 `secret_storage` 域材料)
    - 计算 `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
+   - 另上传一份 HPKE `recovery_public_key` envelope(加密给 RK 公钥,§7.5.2 推荐形态)
 4. `PUT /_cokret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "secret_storage", kdf_params, ciphertext, ciphertext_digest, key_commitment }`
-5. 服务端**只能存** ciphertext,不接受明文 passphrase
-6. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext
+5. 服务端**只能存** ciphertext,不接受 Recovery Key 词串明文
+6. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext;此后新材料按 §7.10 自动持续备份
 
 ### Phase B — (可选)alice 在 E2EE Realm 中收发消息
 
@@ -54,11 +57,11 @@
 ### Phase C — Device 1 "丢失",alice 在 Device 2 恢复
 
 9. 开新 browser context = device-2,空 localStorage
-10. alice 进 `/onboarding`,选"Restore from backup"
-11. UI 提示输入 passphrase
+10. alice 登录进入 app;检测到服务器有备份但本地无 MLS state → 自动弹出 `MlsUnlockPrompt`(`/recover` 独立路由已不存在;手动入口是 `/settings/recovery` restore 面板)
+11. UI 提示输入 24 词 Recovery Key("Decrypt with Recovery Key")
 12. 客户端:
     - 生成新 device key(本地)
-    - Argon2id 派生 → 计算 key_commitment → 拉 backup envelope → 比对 commitment(快速失败如果 passphrase 错)
+    - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ Argon2id 派生(或 HPKE open `recovery_public_key` envelope)→ 计算 key_commitment → 拉 backup envelope → 比对 commitment(快速失败如果 Recovery Key 错)
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
 13. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
 14. 提交到 soland;soland 校验 recovery policy → 接受
@@ -73,29 +76,29 @@
 ## Observable assertions(合并)
 
 - Phase A 步骤 6:backup metadata 暴露 ✓,plaintext 不暴露 ✓
-- Phase C 步骤 12:passphrase 错误 → 客户端在 commitment 阶段就拒,**不发请求到服务器**(避免 oracle)
+- Phase C 步骤 12:Recovery Key 错误 → 非法 24 词在输入校验即拒;合法但错误的词串在 commitment 阶段拒,**不发请求到服务器**(避免 oracle)
 - Phase C 步骤 15:device-2 成功注册,alice 的 device 列表有 2 台
 - Phase D 步骤 18:历史消息明文渲染
 
 ## Edge cases / sub-tests
 
-- **E8.1 弱 passphrase**:仅 6 字符 → 客户端 UI 拒绝(spec §7.2 强度要求);若 bypass,服务端 MAY 拒绝
+- **E8.1 非法 Recovery Key 输入**:不是 24 个合法 BIP-39 词 → 客户端输入归一化阶段拒绝,不派生不发请求(`normalize_recovery_key_input`;新流程不存在用户自选弱口令,§7.7)
 - **E8.2 篡改 ciphertext**:测试 harness 改 backup 的 1 byte → 客户端 digest 校验失败,MUST 拒绝
-- **E8.3 错 passphrase 重试限制**:连续 N 次 commitment 不匹配 → 客户端要求 cooldown(防止暴力)
-- **E8.4 threshold recovery (3 of 5 shares)**:alice 用恢复 shares 而非 passphrase;3 个 share holder 各自签发响应,客户端拼凑出 recovery key → 解密 envelope。覆盖 `key-management.md §8`
+- **E8.3 错 Recovery Key 重试限制**:连续 N 次 commitment 不匹配 → 客户端要求 cooldown(防止暴力)
+- **E8.4 threshold recovery (3 of 5 shares)**:alice 用恢复 shares 而非 24 词词串;3 个 share holder 各自签发响应,客户端拼凑出 recovery key → 解密 envelope。覆盖 `key-management.md §8`(门限是 recovery policy 层,§7.5.4)
 - **E8.5 trusted recovery service**:走第三方恢复服务(`ck.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
 - **E8.6 Mixed-domain backup**:`mixed_secret_storage=true` only 允许在 `personal_node` profile;`high_assurance` 部署 MUST 拒(§7.1)
-- **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke(spec §5.2);Phase C 恢复仍然成功,但**新设备的 historical access 仍按当前 membership 评估**(spec §12 line 724)
+- **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke(spec §5.2);Phase C 恢复仍然成功,但**新设备的 historical access 仍按当前 membership 评估**(`crypto-media/encryption-and-audit.md` §2.3.5/§2.4)
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.key_backup.v1` schema、recovery policy state machine、recovery proof 校验。整条 scenario 大部分 fixme。
-- **yougen 缺口**:`/settings/recovery` 设置 UI、`/onboarding` 的 Restore from backup 入口。当前不存在;参考 spec §7.1-7.3 的 client UI 暗示。
+- **soland 缺口**:recovery policy state machine、recovery proof(`ck.schema.recovery_session.v1`)与 `ck.device.authorize` 的端到端绑定仍未贯通;key-backup CRUD + series 链 + unlock-proof 门已实现。整条 scenario 的 device-authorize 段仍 fixme。
+- **yougen 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 自动弹 `MlsUnlockPrompt`。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 
 ## 风险 / 前置依赖
 
-- spec §7-§8 是 v1 候选,soland 大概率没实现完整。**整条 fixme 起步**。
+- spec §8(threshold / recovery service)与 §7.4 recovery proof 绑定 soland 实现不完整。**device-authorize 恢复段 fixme 起步**;内容恢复段(MLS account secret)已由 `encryption/key-backup` A1/A2 live 覆盖。
 - E2EE history backup key 是否能跨 MLS epoch 解 backfill,实现复杂度高(spec §7.3 step 6)。
 
 ## 总耗时预估

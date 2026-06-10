@@ -2,7 +2,7 @@
   "profile": "ck.profile.key_backup_encryption_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and ck.schema.key_backup.v1. Client encrypts MLS history / secret-storage material with a passphrase-derived recovery key before PUT /_cokret/self/keys/backups/{backup_id}. Server stores an opaque ck.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
+  "comment": "D4 Round 25 — key backup encryption vectors. Spec authority: identity/key-management.md §7 and ck.schema.key_backup.v1. These are `passphrase_kdf` wire vectors: the client derives the backup root key locally from a KDF secret — since the Recovery-Key convergence (§3.3/§7.7) the user-facing secret is the 24-word Recovery Key, with a standalone vault passphrase kept only as the deprecated §7.5.1 compat layer; `passphrase_kdf` remains a legal wire recipient_method — and encrypts MLS history / secret-storage material before PUT /_cokret/self/keys/backups/{backup_id}. Server stores an opaque ck.schema.key_backup.v1 envelope keyed by backup_id and never sees plaintext. Restore: client downloads the envelope, re-derives the local key from metadata, verifies AEAD, and decrypts locally. Rotation creates a new backup_id or backup_version and uploads a freshly encrypted envelope before old retention expires.",
   "encoder": {
     "kdf": "PBKDF2-HMAC-SHA512",
     "kdf_iterations_min": 600000,

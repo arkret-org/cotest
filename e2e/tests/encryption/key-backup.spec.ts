@@ -1,8 +1,11 @@
 // Key backup + restore
 // Contract: e2e/scenarios/encryption/key-backup.md
 // Spec refs:
-//   - identity/key-management.md §7 (backup), §7.2 (envelope), §7.3 (restore), §12 (API)
-//   - crypto-media/device-lifecycle.md §12 (key backup durable form)
+//   - identity/key-management.md §3.3 (Recovery Key = sole content-recovery
+//     credential), §7 (backup), §7.2 (envelope), §7.3 (restore), §7.7
+//     (recovery UI MUST take the 24-word Recovery Key), §7.10 (automatic
+//     continuous backup)
+//   - crypto-media/device-lifecycle.md §12-§12.1 (key backup durable form + API)
 
 import { expect, test, type Page } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
@@ -56,10 +59,12 @@ test.describe("key backup + restore", () => {
   test.fixme(// @blocking-on: soland#encryption-key-backup-gap
   // @user-promise: e2e/scenarios/encryption/key-backup.md
   // @expected-live-by: 2026Q3
-  "alice sets up passphrase-protected backup via /settings/recovery; Argon2id KDF + XChaCha20-Poly1305 envelope uploaded", async () => {
-    // spec: key-management.md §7.1-§7.2
-    // soland gap: ck.schema.key_backup.v1 schema + recovery policy state.
-    // yougen gap: /settings/recovery setup wizard.
+  "alice generates a 24-word Recovery Key at /settings/recovery (recovery-key-regenerate); account-secret envelopes upload automatically, no user passphrase", async () => {
+    // spec: key-management.md §3.3 / §7.1-§7.2 / §7.7 / §7.10
+    // Remaining gap beyond A1/A2 (which cover the MlsBackupPrompt path):
+    // settings-page generation + rotation + recovery-key-sync-badge wiring,
+    // and the §7.5.2 recovery_public_key envelope alongside the
+    // passphrase_kdf compatibility envelope.
   });
 
   test("A1 automatic MLS recovery-key dialogs restore encrypted cards on a fresh browser", async ({
@@ -298,15 +303,15 @@ test.describe("key backup + restore", () => {
   test.fixme(// @blocking-on: soland#encryption-key-backup-gap
   // @user-promise: e2e/scenarios/encryption/key-backup.md
   // @expected-live-by: 2026Q3
-  "E13.1 wrong passphrase: client rejects at key_commitment stage; no GET issued to server (avoids oracle)", async () => {
-    // spec: key-management.md §7.2
+  "E13.1 wrong Recovery Key: invalid 24-word input rejected at normalization; valid-but-wrong words rejected at key_commitment stage; no GET issued to server (avoids oracle)", async () => {
+    // spec: key-management.md §7.2 / §7.7
   });
 
   test.fixme(// @blocking-on: soland#encryption-key-backup-gap
   // @user-promise: e2e/scenarios/encryption/key-backup.md
   // @expected-live-by: 2026Q3
   "E13.2 tampered ciphertext: digest mismatch → client refuses to decrypt", async () => {
-    // spec: key-management.md §7.2 line 328
+    // spec: key-management.md §7.2
   });
 
 });
@@ -435,7 +440,7 @@ async function createMlsRecoveryBackupFromPrompt(
   return recoveryKey;
 }
 
-async function unlockMlsAccountSecret(page: Page, passphrase: string) {
+async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   await expect(page.getByTestId("mls-unlock-modal")).toBeVisible({
     timeout: 90_000,
   });
@@ -447,7 +452,9 @@ async function unlockMlsAccountSecret(page: Page, passphrase: string) {
     "aria-modal",
     "true",
   );
-  await page.getByTestId("mls-unlock-passphrase").fill(passphrase);
+  // `mls-unlock-passphrase` is the historical testid of the unlock input;
+  // since the Recovery Key convergence it accepts only the 24-word key.
+  await page.getByTestId("mls-unlock-passphrase").fill(recoveryKey);
   await page.getByTestId("mls-unlock-submit").click();
   await expect(page.getByTestId("mls-unlock-status")).toContainText(
     /restored/i,
