@@ -23,7 +23,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_before_grant = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor": bob.actor,
+            "actor_id": bob.actor,
             "action": "manage_space",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
@@ -59,7 +59,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let allowed_after_grant = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor": bob.actor,
+            "actor_id": bob.actor,
             "action": "manage_space",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
@@ -75,7 +75,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     alice.add_member(&realm_id, &bob).await?;
     let member_send = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor": bob.actor,
+            "actor_id": bob.actor,
             "action": "send",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
@@ -99,7 +99,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_send = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor": bob.actor,
+            "actor_id": bob.actor,
             "action": "send",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
@@ -118,7 +118,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let send_after_revoke = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor": bob.actor,
+            "actor_id": bob.actor,
             "action": "send",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
@@ -136,7 +136,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_after_revoke = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor": bob.actor,
+            "actor_id": bob.actor,
             "action": "manage_space",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),

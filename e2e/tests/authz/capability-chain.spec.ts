@@ -43,7 +43,7 @@ async function createGrant(
 async function authzCheck(
   request: import("@playwright/test").APIRequestContext,
   token: string,
-  body: { actor: string; action: string; resource: unknown },
+  body: { actor_id: string; action: string; resource: unknown },
 ) {
   return await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
     headers: { authorization: `Bearer ${token}` },
@@ -126,7 +126,7 @@ test.describe("capability chain @fully-implemented", () => {
       expect(grant.delegated_from).toBeUndefined();
 
       const check = await authzCheck(request, aliceToken, {
-        actor: bob.did,
+        actor_id: bob.did,
         action: "ck.message.create",
         resource: { kind: "realm", realm_id: realmId },
       });
@@ -188,7 +188,7 @@ test.describe("capability chain @fully-implemented", () => {
       expect(child.delegated_from).toBe(parent.grant_id);
 
       const check = await authzCheck(request, aliceToken, {
-        actor: carol.did,
+        actor_id: carol.did,
         action: "ck.message.create",
         resource: { kind: "realm", realm_id: realmId },
       });
@@ -248,7 +248,7 @@ test.describe("capability chain @fully-implemented", () => {
 
       // Sanity: both currently allowed.
       const bobBefore = await authzCheck(request, aliceToken, {
-        actor: bob.did,
+        actor_id: bob.did,
         action: "ck.message.create",
         resource: { kind: "realm", realm_id: realmId },
       });
@@ -266,12 +266,12 @@ test.describe("capability chain @fully-implemented", () => {
 
       // Both must now be rejected.
       const bobAfter = await authzCheck(request, aliceToken, {
-        actor: bob.did,
+        actor_id: bob.did,
         action: "ck.message.create",
         resource: { kind: "realm", realm_id: realmId },
       });
       const carolAfter = await authzCheck(request, aliceToken, {
-        actor: carol.did,
+        actor_id: carol.did,
         action: "ck.message.create",
         resource: { kind: "realm", realm_id: realmId },
       });
