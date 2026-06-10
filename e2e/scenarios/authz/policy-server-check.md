@@ -60,7 +60,7 @@
 4. 通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入规则:`{ default: { decision: "allow" } }`
 5. **alice** 通过 yougen `/realms/${realmId}/admin` 邀请 **bob**(invite-member → send-invite-button)
 6. soland 在执行 `ck.invite.create` 之前 `POST` mock 的 `/policy/check`,携带:
-   - `actor = alice.did`
+   - `actor_id = alice.did`
    - `action = "ck.invite.create"`
    - `resource = { kind: "realm", realm_id, target: bob.did }`
    - `context = { realm_id, request_id, signed: true }`
@@ -103,7 +103,7 @@
 
 21. 调 `${MOCK_POLICY_SERVER_PORT}/inspect`,取 `signed_transcript`(一段 mock-policy-server 用私钥签名的、本测试期间所有 check 的有序记录)
 22. 断言 transcript 的 `kinds` 至少包含本次测试用到的两类 (`ck.invite.create` 的 allow + deny);其 ed25519 签名通过 mock 公开的公钥验证成功
-23. 断言每条 transcript entry 含 `request_id`、`action`、`actor`、`decision`、`occurred_at` 五字段非空
+23. 断言每条 transcript entry 含 `request_id`、`action`、`actor_id`、`decision`、`occurred_at` 五字段非空
 
 ## Observable assertions (合并清单)
 
@@ -117,7 +117,7 @@
 
 - **E3.1 policy server 超时 fail-closed**:通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入 `{ delay_ms: 9000 }`(超过 soland 的 policy check timeout,假设默认 2s);soland 应 fail-closed(`decision = deny`,reason `policy_timeout`),邀请被拒;`/inspect.checks` 可能为空(请求未到 mock)或带 partial 标记
 - **E3.2 多个 policy_source 优先级**:在 realm `ck.realm.policy_server` 之上,再给 alice 当 owner 的 org 设一条 `ck.org.policy_server`(指向同一 mock 的不同 path,如 `/_cokret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)
-- **E3.3 cache_ttl 幂等**:cache_ttl_ms = 5000 时,在 5 秒内对**同一** `{actor, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
+- **E3.3 cache_ttl 幂等**:cache_ttl_ms = 5000 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
 
 (E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)
 

@@ -229,7 +229,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
-                "actor": "did:web:alice.example",
+                "actor_id": "did:web:alice.example",
                 "source": {"service": "soland"}
             })),
         StatusCode::OK,
@@ -246,7 +246,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.realm.destroy",
-                "actor": "did:web:alice.example",
+                "actor_id": "did:web:alice.example",
                 "source": {"service": "soland"}
             })),
         StatusCode::OK,
@@ -263,7 +263,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
-                "actor": "alice",
+                "actor_id": "alice",
                 "source": {"service": "soland"}
             })),
         StatusCode::BAD_REQUEST,

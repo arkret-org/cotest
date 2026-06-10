@@ -236,7 +236,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     // Default allow when no rules match.
     const allowResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
-      data: { action: "ck.member.invite", actor: "did:web:alice", target: "did:web:carol" },
+      data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
     });
     expect(allowResp.status()).toBe(200);
     expect((await allowResp.json()).decision).toBe("allow");
@@ -258,7 +258,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
 
     const denyResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
-      data: { action: "ck.member.invite", actor: "did:web:alice", target: "did:web:bob" },
+      data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:bob" },
     });
     expect(denyResp.status()).toBe(200);
     const denyBody = await denyResp.json();

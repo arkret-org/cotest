@@ -217,7 +217,7 @@ test.describe("policy server check", () => {
         expect(Array.isArray(body.checks)).toBe(true);
         expect(body.signed_transcript).toBeTruthy();
         // (verify ed25519 signature via mock's public key; assert each entry has
-        //  request_id, action, actor, decision, occurred_at)
+        //  request_id, action, actor_id, decision, occurred_at)
       } finally {
         await alicePage.close();
       }

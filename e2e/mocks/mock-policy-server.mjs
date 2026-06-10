@@ -2,13 +2,14 @@
 // (spec: cokret-spec/spec/v1/zh/authz/policy-server.md).
 //
 // The mock evaluates authorization decisions for the joint-e2e harness:
-// callers POST {action, actor, target, context} to /_cokret/self/policy/check
+// callers POST {action, actor_id, target, context} to /_cokret/self/policy/check
 // and the mock looks up a matching rule (configured via /scenarios) and
 // returns {decision, reason?, obligations?, signed_transcript}. The
 // transcript is a JWT-shaped Ed25519 signature so consumers can verify
 // it against /jwks without any shared secret.
 //
-// Lookup precedence for a check {action, actor, target}:
+// Lookup precedence for a check {action, actor_id, target} (rule-table
+// positions remain action:actor:target internally):
 //   1. exact `${action}:${actor}:${target}`
 //   2. `${action}:${actor}:*`
 //   3. `${action}:*:${target}`
@@ -17,7 +18,7 @@
 //   6. defaultDecision (initially "deny" — fail-closed)
 //
 // Endpoints:
-//   POST /_cokret/self/policy/check  { action, actor, target, context }
+//   POST /_cokret/self/policy/check  { action, actor_id, target, context }
 //     Evaluate the rule table; record into InspectLog "checks".
 //   POST /scenarios  { rules: [{action, actor, target, decision, reason,
 //                                obligations}], default }
@@ -100,7 +101,7 @@ function signTranscript({ action, actor, target, decision, reason, obligations, 
     exp: now + 600,
     purpose: "policy_decision_transcript",
     action: action ?? null,
-    actor: actor ?? null,
+    actor_id: actor ?? null,
     target: target ?? null,
     decision,
     reason: reason ?? null,
@@ -162,7 +163,7 @@ const server = createServer(async (req, res) => {
     }
     const match = lookupRule({
       action: body.action,
-      actor: body.actor,
+      actor: body.actor_id,
       target: body.target,
     });
     const decision = match ? match.rule.decision : defaultDecision;
@@ -170,7 +171,7 @@ const server = createServer(async (req, res) => {
     const obligations = match ? match.rule.obligations ?? [] : [];
     const signed_transcript = signTranscript({
       action: body.action,
-      actor: body.actor,
+      actor: body.actor_id,
       target: body.target,
       decision,
       reason,
@@ -179,7 +180,7 @@ const server = createServer(async (req, res) => {
     });
     checksLog.record({
       action: body.action,
-      actor: body.actor ?? null,
+      actor_id: body.actor_id ?? null,
       target: body.target ?? null,
       context: body.context ?? null,
       decision,

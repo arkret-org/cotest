@@ -68,7 +68,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_id": "ck:request:policy-deny",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ck.message.create",
-                "actor": bob.actor,
+                "actor_id": bob.actor,
                 "realm_id": realm_id,
                 "source": {"kind": "realm", "realm_id": realm_id}
             })),
@@ -104,7 +104,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_id": "ck:request:policy-allow",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ck.message.create",
-                "actor": bob.actor,
+                "actor_id": bob.actor,
                 "realm_id": realm_id,
                 "source": {"kind": "realm", "realm_id": realm_id}
             })),
