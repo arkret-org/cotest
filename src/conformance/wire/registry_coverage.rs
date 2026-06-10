@@ -143,7 +143,7 @@ pub fn run_operation_registry_coverage_fixture_suite() -> Result<()> {
         "applet_install_preview_is_extension",
         "applet_install_is_extension",
         "applet_revoke_is_extension",
-        "admin_get_server_status_is_deployment_local",
+        "gate_account_register_is_deployment_local",
         "every_capability_action_target_event_kind_resolves_in_event_kind_registry",
     ] {
         if !covered.contains(required) {

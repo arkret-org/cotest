@@ -106,10 +106,10 @@
           "ck.self.events.query",
           "ck.self.snapshot.head",
           "ck.self.authz.check",
-          "ck.admin.device.revoke",
-          "ck.agent.task.submit",
+          "ck.self.blob.upload",
+          "ck.self.agent.provision",
           "ck.self.applet.install",
-          "ck.media.session.offer"
+          "ck.self.media.ice_config"
         ],
         "supported_event_kinds": [
           "ck.space.create",

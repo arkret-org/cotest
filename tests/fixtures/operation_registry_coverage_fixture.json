@@ -75,9 +75,9 @@
       "expected": { "outcome": "tier_match", "tier": "extension" }
     },
     {
-      "name": "admin_get_server_status_is_deployment_local",
+      "name": "gate_account_register_is_deployment_local",
       "scope": "live_registry",
-      "operation_id": "ck.admin.get_server_status",
+      "operation_id": "ck.gate.account.register",
       "expected": { "outcome": "tier_match", "tier": "deployment_local" }
     },
     {
