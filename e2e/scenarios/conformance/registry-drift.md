@@ -47,7 +47,7 @@
 1. **harness** load `artifacts/registry/removed-event-kinds.json`,filter `entries[*].rejection_level === "hard_reject"`
 2. 对每个 `entry.id` (e.g. `ck.field.position.move`, `ck.realm.lifecycle.set`, `ck.space.policy`),构造一个最小合法 EventEnvelope:
    ```json
-   { "kind": "<removed_id>", "actor_did": "<alice>", "realm_id": "<test_realm>", "payload": {} }
+   { "kind": "<removed_id>", "actor_id": "<alice>", "realm_id": "<test_realm>", "payload": {} }
    ```
 3. `POST /_cokret/self/events` (或等价 `/_cokret/self/events/submit` operation) with bearer token
 4. 断言:

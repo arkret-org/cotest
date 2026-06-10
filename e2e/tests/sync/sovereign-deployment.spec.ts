@@ -170,7 +170,7 @@ test.describe("sovereign deployment", () => {
       {
         data: {
           invite_token: `ck:external_invite:${fixture.short}-rogue`,
-          actor_did: `did:web:rogue-${fixture.stamp}.evil`,
+          actor_id: `did:web:rogue-${fixture.stamp}.evil`,
           target_realm: fixture.enclaveRealmId,
           target_host: solandBaseUrl("beta"),
         },
@@ -225,7 +225,7 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   });
   const acceptBody = await postJson(request, "beta", "/_soland/self/account/accept-external-invite", {
     invite_token: invite.invite_token,
-    actor_did: bobDid,
+    actor_id: bobDid,
     target_realm: invite.target_realm,
     target_host: invite.target_host,
   });

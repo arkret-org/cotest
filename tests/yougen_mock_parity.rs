@@ -248,7 +248,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                 "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
                 "payload": {
                     "actor_id": ctx.alice_did,
-                    "actor_did": ctx.alice_did,
+                    "actor_id": ctx.alice_did,
                     "realm_id": ctx.realm_id,
                     "scope_id": ctx.space_id,
                     "typing": true,

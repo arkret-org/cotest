@@ -216,7 +216,7 @@ test.describe("MLS group encryption", () => {
         headers: authHeaders(bobToken),
         data: {
           keypackage_id: keypackageId,
-          actor_did: bob.did,
+          actor_id: bob.did,
           device_id: bob.deviceId,
           lifetime: {
             not_before: nowSeconds - 60,
@@ -229,7 +229,7 @@ test.describe("MLS group encryption", () => {
     expect(publish.ok()).toBeTruthy();
     const publishBody = await publish.json();
     expect(publishBody.keypackage_id).toBe(keypackageId);
-    expect(publishBody.actor_did).toBe(bob.did);
+    expect(publishBody.actor_id).toBe(bob.did);
     expect(publishBody.device_id).toBe(bob.deviceId);
     expect(publishBody.claimed).toBe(false);
 
@@ -358,7 +358,7 @@ test.describe("MLS group encryption", () => {
     const commitPayload = (label: string, nextEpoch = 1) => ({
       group_id: groupId,
       expected_prev_epoch: 0,
-      leader_actor_did: alice.did,
+      leader_actor_id: alice.did,
       commit_bytes_b64: b64url(label),
       mls_group_id: groupId,
       base_epoch: 0,

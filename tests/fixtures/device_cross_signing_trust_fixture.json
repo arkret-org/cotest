@@ -14,8 +14,8 @@
     {
       "name": "cross_user_trust_full_chain_valid",
       "comment": "Full cross-user transitive chain. Alice's master signs alice's user-signing (intra-user). Alice's user-signing signs bob's master (cross-user trust anchor). Bob's master signs bob's self-signing (intra-user). Bob's self-signing signs bob's device leaf (intra-user). Every link verifies → alice's clients trust the bob device end-to-end.",
-      "trust_anchor_actor_did": "did:web:alice.example",
-      "trusted_actor_did": "did:web:bob.example",
+      "trust_anchor_actor_id": "did:web:alice.example",
+      "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",
@@ -65,8 +65,8 @@
     {
       "name": "cross_user_trust_transitively_trusts_new_bob_device",
       "comment": "After (alice.user-signing → bob.master) anchor exists, bob mints a new device leaf signed by bob.self-signing. Alice's clients accept it without alice re-signing — the trust extends transitively through bob's master.",
-      "trust_anchor_actor_did": "did:web:alice.example",
-      "trusted_actor_did": "did:web:bob.example",
+      "trust_anchor_actor_id": "did:web:alice.example",
+      "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",
@@ -110,8 +110,8 @@
     {
       "name": "alice_master_revocation_invalidates_cross_user_trust",
       "comment": "Alice's master is revoked. Even though alice.user-signing→bob.master signature was valid before, the chain now has a revoked root — clients MUST drop trust into bob's chain via this anchor.",
-      "trust_anchor_actor_did": "did:web:alice.example",
-      "trusted_actor_did": "did:web:bob.example",
+      "trust_anchor_actor_id": "did:web:alice.example",
+      "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",
@@ -142,8 +142,8 @@
     {
       "name": "bob_user_signing_rotation_requires_re_anchor_with_alice",
       "comment": "Bob rotates his user-signing key (e.g. precaution after device compromise). Alice's previous anchor signed bob's OLD user-signing — that no longer covers bob's NEW user-signing. Until alice re-signs the new user-signing, alice's clients must drop trust through this anchor.",
-      "trust_anchor_actor_did": "did:web:alice.example",
-      "trusted_actor_did": "did:web:bob.example",
+      "trust_anchor_actor_id": "did:web:alice.example",
+      "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",
@@ -183,8 +183,8 @@
     {
       "name": "cross_user_signature_alg_mismatch_rejects",
       "comment": "Alice's master is ed25519 but the chain claims an unsupported algorithm for the cross-user signature — clients reject. Sanity check that algorithm policy is enforced cross-user.",
-      "trust_anchor_actor_did": "did:web:alice.example",
-      "trusted_actor_did": "did:web:bob.example",
+      "trust_anchor_actor_id": "did:web:alice.example",
+      "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",

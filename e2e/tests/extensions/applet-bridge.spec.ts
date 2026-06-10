@@ -36,7 +36,7 @@ type SignedPackage = {
 
 type AppletRegistration = {
   applet_id: string;
-  bot_actor_did: string;
+  bot_actor_id: string;
   portal_realm_id: string;
   namespace: string;
   status: string;
@@ -75,10 +75,10 @@ test.describe("applet bridge", () => {
         `register-${stamp}`,
       );
       expect(registration.status).toBe("installed");
-      expect(registration.bot_actor_did).toMatch(/^did:web:bot-bridge-demo-/);
+      expect(registration.bot_actor_id).toMatch(/^did:web:bot-bridge-demo-/);
       expect(registration.portal_realm_id).toBe(realmId);
 
-      await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_did);
+      await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_id);
       const accept = await request.post(
         `${registryBase}/bot/${encodeURIComponent(registration.applet_id)}/accept-invite`,
         { data: { realm_id: realmId } },
@@ -99,7 +99,7 @@ test.describe("applet bridge", () => {
       });
       expect(external.status()).toBe(200);
       const externalBody = await external.json();
-      const ghostActorDid = String(externalBody.ghost_actor_did);
+      const ghostActorDid = String(externalBody.ghost_actor_id);
       expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
       expect(String(externalBody.message_id)).toMatch(/^ck:message:/);
 
@@ -114,7 +114,7 @@ test.describe("applet bridge", () => {
       expect(ghostDoc.status).toBe("active");
       expect(ghostDoc.accountability).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ kind: "bot_actor", did: registration.bot_actor_did }),
+          expect.objectContaining({ kind: "bot_actor", did: registration.bot_actor_id }),
           expect.objectContaining({ kind: "applet_registry", did: signed.signing_did }),
         ]),
       );
@@ -151,7 +151,7 @@ test.describe("applet bridge", () => {
         afterRevokeText,
       );
 
-      const botDoc = await didDocument(request, aliceToken, registration.bot_actor_did);
+      const botDoc = await didDocument(request, aliceToken, registration.bot_actor_id);
       const revokedGhostDoc = await didDocument(request, aliceToken, ghostActorDid);
       expect(botDoc.status).toBe("revoked");
       expect(revokedGhostDoc.status).toBe("revoked");
@@ -215,7 +215,7 @@ test.describe("applet bridge", () => {
       namespace: `bridge.revoke.${stamp}`,
     });
     const registration = await installApplet(request, aliceToken, signed, realmId, `revoke-${stamp}`);
-    await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_did);
+    await addRealmMemberApi(request, aliceToken, realmId, registration.bot_actor_id);
 
     const revoke = await request.post(
       `${solandBaseUrl()}/_cokret/self/applets/${encodeURIComponent(
@@ -245,7 +245,7 @@ test.describe("applet bridge", () => {
     expect(botWrite.status()).toBe(403);
     expect(wireErrCode(await botWrite.json())).toBe("bot_actor_revoked");
 
-    const botDoc = await didDocument(request, aliceToken, registration.bot_actor_did);
+    const botDoc = await didDocument(request, aliceToken, registration.bot_actor_id);
     expect(botDoc.status).toBe("revoked");
   });
 
@@ -287,7 +287,7 @@ test.describe("applet bridge", () => {
     expect(secondResponse.status()).toBe(200);
     const second = installRegistrationFromResponse(signed, realmId, await secondResponse.json());
     expect(second.applet_id).toBe(first.applet_id);
-    expect(second.bot_actor_did).toBe(first.bot_actor_did);
+    expect(second.bot_actor_id).toBe(first.bot_actor_id);
 
     const conflict = await rawInstallApplet(
       request,
@@ -388,7 +388,7 @@ function installRegistrationFromResponse(
 ): AppletRegistration {
   return {
     applet_id: String(response.applet_id),
-    bot_actor_did: String(response.bot_actor_id),
+    bot_actor_id: String(response.bot_actor_id),
     portal_realm_id: realmId,
     namespace:
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??

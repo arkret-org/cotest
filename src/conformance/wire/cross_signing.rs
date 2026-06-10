@@ -191,10 +191,10 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
     for v in vectors {
         let name = required_str(v, "name")?;
         let outcome = expected_outcome(v, name)?;
-        let trust_anchor_actor = required_str(v, "trust_anchor_actor_did")?;
+        let trust_anchor_actor = required_str(v, "trust_anchor_actor_id")?;
         if !trust_anchor_actor.starts_with("did:web:") && !trust_anchor_actor.starts_with("did:ck:")
         {
-            bail!("vector {name} trust_anchor_actor_did must be a did: form");
+            bail!("vector {name} trust_anchor_actor_id must be a did: form");
         }
 
         // Common: alice.master + alice.user-signing must be present in every
@@ -320,7 +320,7 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
         emit_vector(
             "device_cross_signing_trust.vector",
             v,
-            json!({"name": name, "outcome": outcome, "trust_anchor_actor_did": trust_anchor_actor}),
+            json!({"name": name, "outcome": outcome, "trust_anchor_actor_id": trust_anchor_actor}),
         );
     }
     if !(saw_full_chain && saw_transitive && saw_revoke && saw_rotate) {

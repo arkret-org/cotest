@@ -271,7 +271,7 @@ const server = createServer(async (req, res) => {
     res.end(
       JSON.stringify({
         applet_id: botMatch.appletId,
-        bot_actor_did: null,
+        bot_actor_id: null,
         realm_id: body?.realm_id ?? null,
         status: "joined",
       }),

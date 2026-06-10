@@ -90,7 +90,7 @@ function makeAccessedEnvelope({ realm_id, source_event_id, reason }) {
     event_id: `ck:event:audit-accessed:${randomUUID()}`,
     realm_id,
     type: "ck.audit.accessed",
-    actor_did: agentDid,
+    actor_id: agentDid,
     occurred_at: new Date().toISOString(),
     payload: {
       audit_agent_principal_id: agentDid,

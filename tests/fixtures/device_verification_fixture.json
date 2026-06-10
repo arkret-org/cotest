@@ -15,7 +15,7 @@
     {
       "name": "cross_signing_chain_master_signs_self_signing_signs_device_leaf",
       "comment": "Canonical chain: master_key → self_signing_key → device_leaf. The master key signs the self-signing key; the self-signing key signs the device leaf key. Both signatures verify.",
-      "actor_did": "did:web:alice.example",
+      "actor_id": "did:web:alice.example",
       "master_key": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",
@@ -46,7 +46,7 @@
     {
       "name": "user_signing_cross_user_trust_link",
       "comment": "Cross-user trust: alice's user-signing key signs bob's master key, attesting that alice trusts bob's identity. The receiving relying party verifies (alice.user-signing → bob.master) link in addition to bob's own master→self chain.",
-      "actor_did": "did:web:alice.example",
+      "actor_id": "did:web:alice.example",
       "trusted_did": "did:web:bob.example",
       "user_signing_key": {
         "key_id": "did:ck:user:alice#user-signing",
@@ -98,7 +98,7 @@
     {
       "name": "self_signing_key_with_revoked_master_rejects",
       "comment": "Negative-shape variant: the master key has been revoked (e.g. user lost it and rotated to a new master). Any chain rooted at the OLD master MUST reject; clients must follow the new master's chain.",
-      "actor_did": "did:web:alice.example",
+      "actor_id": "did:web:alice.example",
       "master_key": {
         "key_id": "did:ck:user:alice#master",
         "alg": "ed25519",
