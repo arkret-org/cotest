@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: crate-ci/typos@master
         with:
-          config: typos.toml
+          config: .typos.toml
 
   deny:
     name: cargo deny
