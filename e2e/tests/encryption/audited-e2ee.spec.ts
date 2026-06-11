@@ -72,7 +72,7 @@ test.describe("audited E2EE", () => {
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-report");
       const report = await fileModerationReport(request, setup);
-      expect(report.status).toBe("queued");
+      expect(report.status).toBe("submitted");
       expect(report.routed_to).toContain(setup.agentDid);
 
       const inspect = await (await request.get(`${setup.agentBaseUrl}/inspect`)).json();

@@ -283,13 +283,13 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
             .json(&json!({
                 "realm_id": realm_id,
                 "target_ref": ALICE_MESSAGE_EVENT_ID,
-                "reason": "spam",
+                "report_reason_code": "spam",
                 "reporter": BOB_DID
             })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(report["status"], "queued");
+    assert_eq!(report["status"], "submitted");
 
     Ok(())
 }

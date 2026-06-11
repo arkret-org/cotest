@@ -1,4 +1,4 @@
-//! Phase 10 — `/_cokret/self/moderation/report` queueing.
+//! Phase 10 — `/_cokret/self/moderation/report` submission.
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -15,12 +15,12 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
             .json(&json!({
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "ck:event:demo",
-                "reason": "spam",
+                "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
             })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(report["status"], "queued");
+    assert_eq!(report["status"], "submitted");
     Ok(())
 }

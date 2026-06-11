@@ -187,16 +187,14 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
+    // Spec rename: 快照 manifest 自身标识字段为 `id`(snapshot_ref 仅用于外部引用位)。
+    assert!(snapshot["id"].as_str().unwrap().starts_with("ck:snapshot:"));
+    // `ck.self.snapshot.head` 返回完整签名 `ck.schema.snapshot.v1` manifest,
+    // 其 frontier 为 {event_ids, timeline_hlc}。
     assert!(
-        snapshot["snapshot_ref"]
-            .as_str()
-            .unwrap()
-            .starts_with("ck:snapshot:")
-    );
-    assert!(
-        snapshot["frontier"]["message_count"]
-            .as_u64()
-            .is_some_and(|count| count >= 1)
+        snapshot["frontier"]["event_ids"]
+            .as_array()
+            .is_some_and(|ids| !ids.is_empty())
     );
 
     let member_ban = alice

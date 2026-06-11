@@ -73,12 +73,12 @@
 - **E28.1 token cascade**:lock alice → 她在 device-1 / device-2 都被踢出
 - **E28.2 cross-server suspension**:alice 在 α 被 admin suspend → 这个状态如何同步给 β(spec §3 + sync/federation)
 - **E28.3 reactivate**:deactivated 是否能恢复?spec 说 deactivated 通常不可逆(除非走 admin 流程)
-- **E28.4 audit log**:每次状态转换写 `ck.account.state_change { from, to, actor, reason, timestamp }`
+- **E28.4 audit log**:每次状态转换写 `org.cokret.soland.account.state_change { from, to, actor, reason, timestamp }`(产品私有审计语义,不占用协议 `ck.` 前缀)
 - **E28.5 in-flight write 时遇 lock**:alice 正在发消息,触发 lock → 该消息可能落或可能 abort;spec 偏好 abort(safer)
 
 ## Implementation notes
 
-- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/_soland/self/account/deactivate`、`/account/me.state` 与 `ck.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
+- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/_soland/self/account/deactivate`、`/account/me.state` 与 `org.cokret.soland.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
 - **yougen 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
 
 ## 总耗时预估

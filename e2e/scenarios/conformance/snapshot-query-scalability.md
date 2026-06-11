@@ -9,7 +9,7 @@
 ## Spec 锚点
 
 - `cokret-spec/spec/v1/zh/conformance/snapshot-schema.md`
-  - §2 — Snapshot manifest 字段集(snapshot_ref / realm_id / reducer_profile / frontier / event_set_commitment / state_digest / chunks[] / verification_hints / signature)
+  - §2 — Snapshot manifest 字段集(id / realm_id / reducer_profile / frontier / event_set_commitment / state_digest / chunks[] / verification_hints / signature;`snapshot_ref` 仅用于外部引用位)
   - §3 — Chunk descriptor 与 chunk payload canonical shape;`items` 按 `(kind, id)` byte order 排序
   - §4 — `state_digest` = canonical reducer 输出之上的 Merkle root;leaf = `sha256(kind || ":" || id || ":" || sha256(canonical_json(object)))`
   - §5 — Snapshot signature 必须覆盖 manifest payload(去掉 `signature` 自身)的 canonical 编码;签名 DID 必须属于 Realm owner / admin / trusted issuer / witness quorum / policy-approved issuer
@@ -89,7 +89,7 @@
 7. 断言:
    - `response.signature_valid === true`
    - `response.signer_did === vector.expected_signer_did`(spec §5 列出的 5 类签名者之一:Realm owner / creator / admin / trusted snapshot issuer / witness quorum)
-   - 签名 transcript 覆盖范围(snapshot_ref / realm_id / reducer_profile / schema_profile_refs / state_digest / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
+   - 签名 transcript 覆盖范围(id / realm_id / reducer_profile / schema_profile_refs / state_digest / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
 8. 同一 manifest 再 POST 一次:`response.signature` 字段(若回显)对 Ed25519 vector MUST 完全相等(deterministic);ECDSA vector 若存在则 `r/s` 可不同但 `signature_valid` 仍为 true
 9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx 与 `error.code === "snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
 

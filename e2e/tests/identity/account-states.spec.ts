@@ -219,7 +219,7 @@ test.describe("account states", () => {
     const auditActions = (eraseBody.audit_log as Array<{ action: string; target?: unknown }>).map(
       (event) => event.action,
     );
-    expect(auditActions).toContain("ck.account.state_change");
+    expect(auditActions).toContain("org.cokret.soland.account.state_change");
     expect(JSON.stringify(eraseBody.audit_log)).toContain('"to":"erased"');
 
     const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
@@ -237,7 +237,7 @@ test.describe("account states", () => {
     expect((searchBody.results as Array<{ did: string }>).some((row) => row.did === alice.did)).toBe(false);
   });
 
-  test("audit: each state transition writes ck.account.state_change with from/to/actor/reason/timestamp", async ({
+  test("audit: each state transition writes org.cokret.soland.account.state_change with from/to/actor/reason/timestamp", async ({
     request,
   }) => {
     const alice = uniqueUser("s28-audit-alice");
@@ -258,7 +258,7 @@ test.describe("account states", () => {
     expect(audit.status()).toBe(200);
     const auditBody = await audit.json();
     const transition = (auditBody.events as Array<{ action: string; target: Record<string, unknown> }>).find(
-      (event) => event.action === "ck.account.state_change" && event.target?.subject === alice.did,
+      (event) => event.action === "org.cokret.soland.account.state_change" && event.target?.subject === alice.did,
     );
     expect(transition).toBeTruthy();
     expect(transition!.target.from).toBe("active");

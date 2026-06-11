@@ -86,7 +86,7 @@ test.describe("moderation and ban", () => {
     expect(reportResp.ok()).toBeTruthy();
     const reportBody = await reportResp.json();
     expect(reportBody.report_id).toMatch(/^ck:report:/);
-    expect(reportBody.status).toBe("queued");
+    expect(reportBody.status).toBe("submitted");
 
     const reporterReports = await request.get(
       `${solandBaseUrl()}/_cokret/self/moderation/reports?realm_id=${encodeURIComponent(realmId)}`,

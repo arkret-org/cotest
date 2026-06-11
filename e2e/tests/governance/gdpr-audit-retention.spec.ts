@@ -156,7 +156,7 @@ test.describe("GDPR / audit / retention", () => {
     ).toBe(false);
   });
 
-  test("audit log contains ck.audit.exported, ck.audit.erasure_initiated, ck.audit.erasure_receipt entries", async ({
+  test("audit log contains org.cokret.soland.audit.exported, org.cokret.soland.audit.erasure_initiated, ck.audit.erasure_receipt entries", async ({
     request,
   }) => {
     // spec: account-lifecycle.md §3 + §8 — every export / erasure
@@ -184,8 +184,8 @@ test.describe("GDPR / audit / retention", () => {
     const auditEvents = eraseBody.audit_log as Array<{ action: string }>;
     expect(Array.isArray(auditEvents)).toBe(true);
     const actions = auditEvents.map((e) => e.action);
-    expect(actions).toContain("ck.audit.exported");
-    expect(actions).toContain("ck.audit.erasure_initiated");
+    expect(actions).toContain("org.cokret.soland.audit.exported");
+    expect(actions).toContain("org.cokret.soland.audit.erasure_initiated");
     expect(actions).toContain("ck.audit.erasure_receipt");
     const receiptEvent = auditEvents.find((e) => e.action === "ck.audit.erasure_receipt") as
       | { payload?: { schema?: string; outcome?: string; proofs?: unknown[] } }
