@@ -1,4 +1,7 @@
 import { createHash, createPrivateKey, randomBytes, sign } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   expect,
   type APIRequestContext,
@@ -538,6 +541,9 @@ export async function rawPushFederationEvents(
     idempotencyKey?: string;
     tamperSignature?: boolean;
     relaySourceDid?: string;
+    // Negative-coverage hook: submit a digest that diverges from the
+    // receiver's registry-derived value (expect reducer_profile_mismatch).
+    reducerProfileDigestOverride?: string;
   },
 ) {
   const destination = opts.destination ?? solandServiceDid(opts.server);
@@ -546,6 +552,7 @@ export async function rawPushFederationEvents(
     opts.realmId,
     events.map(federationEventWireBody),
     opts.idempotencyKey,
+    { reducerProfileDigest: opts.reducerProfileDigestOverride },
   );
   const sourceDid = opts.relaySourceDid ?? opts.origin;
   const headers = signedFederationPushHeaders(
@@ -684,31 +691,159 @@ function schemaIdForEventKind(kind: string): string {
   return "ck.schema.event.v1";
 }
 
+// ── Federation reducer profile digest ───────────────────────────────────────
+// Spec: cokret-spec/spec/v1/zh/sync/federation.md §4.1.1 (normative). The only
+// machine-readable source for service_binding_ref.reducer_profile_digest is
+// spec/v1/artifacts/registry/reducer-profile-registry.json: resolve the row
+// whose profile_id equals the Realm's declared reducer profile and hash ONLY
+// that row's digest_input object (Cokret canonical JSON → sha256 lowercase
+// hex). Registered vector: ck.vector.federation.reducer_profile_digest.v1
+// (federation-fixture.json case reducer_profile_digest_federation_minimal),
+// used below as a drift guard on the computed value.
+
+// helpers → e2e → cotest → cokret root → cokret-spec/spec/v1/artifacts.
+const SPEC_ARTIFACTS_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "cokret-spec",
+  "spec",
+  "v1",
+  "artifacts",
+);
+
+// The reducer profile soland declares for its federation surface
+// (ck.peer.events.describe → supported_profiles), also the vector's profile.
+export const FEDERATION_REDUCER_PROFILE_ID = "ck.profile.federation_minimal.v1";
+
+const reducerProfileDigestCache = new Map<string, string>();
+
+export function reducerProfileDigest(profileId: string): string {
+  const cached = reducerProfileDigestCache.get(profileId);
+  if (cached) {
+    return cached;
+  }
+  const registry = JSON.parse(
+    readFileSync(
+      join(SPEC_ARTIFACTS_ROOT, "registry", "reducer-profile-registry.json"),
+      "utf8",
+    ),
+  ) as {
+    canonicalization?: string;
+    digest_suite?: string;
+    profiles?: Array<{
+      profile_id?: string;
+      status?: string;
+      digest_input?: unknown;
+    }>;
+  };
+  // federation.md §4.1.1 fail-closed preconditions.
+  if (
+    registry.canonicalization !== "json_jcs" ||
+    registry.digest_suite !== "sha256"
+  ) {
+    throw new Error(
+      "reducer-profile-registry canonicalization/digest_suite unsupported; fail closed",
+    );
+  }
+  const row = (registry.profiles ?? []).find(
+    (profile) => profile.profile_id === profileId,
+  );
+  if (!row || row.status !== "active" || row.digest_input === undefined) {
+    throw new Error(
+      `reducer profile ${profileId} has no active reducer-profile-registry row; fail closed`,
+    );
+  }
+  const digest = `sha256:${sha256CanonicalJson(row.digest_input)}`;
+  if (profileId === FEDERATION_REDUCER_PROFILE_ID) {
+    assertReducerProfileDigestMatchesVector(digest);
+  }
+  reducerProfileDigestCache.set(profileId, digest);
+  return digest;
+}
+
+// Drift guard: the computed digest MUST reproduce the expected value pinned by
+// ck.vector.federation.reducer_profile_digest.v1 in federation-fixture.json.
+function assertReducerProfileDigestMatchesVector(digest: string): void {
+  const fixture = JSON.parse(
+    readFileSync(
+      join(SPEC_ARTIFACTS_ROOT, "fixtures", "federation-fixture.json"),
+      "utf8",
+    ),
+  ) as { cases?: Array<{ name?: string; expected_digest?: string }> };
+  const vectorCase = (fixture.cases ?? []).find(
+    (entry) => entry.name === "reducer_profile_digest_federation_minimal",
+  );
+  if (!vectorCase?.expected_digest) {
+    throw new Error(
+      "federation-fixture.json lacks the reducer_profile_digest_federation_minimal vector case",
+    );
+  }
+  if (vectorCase.expected_digest !== digest) {
+    throw new Error(
+      `computed reducer_profile_digest ${digest} drifted from ` +
+        `ck.vector.federation.reducer_profile_digest.v1 expected ${vectorCase.expected_digest}`,
+    );
+  }
+}
+
+// federation.md §4.1: membership_frontier / delivery_binding_frontier are the
+// sender's causal frontiers (`id[]`). The harness acts as the origin peer of a
+// fabricated realm whose entire causal history is the submitted batch, so the
+// frontier is the batch's head event ids (events no other batch event
+// references via prev_refs).
+function batchFrontierEventIds(
+  events: Array<Record<string, unknown>>,
+): string[] {
+  const referenced = new Set<string>();
+  for (const event of events) {
+    const prevRefs = Array.isArray(event.prev_refs) ? event.prev_refs : [];
+    for (const entry of prevRefs) {
+      if (typeof entry === "string") {
+        referenced.add(entry);
+      } else if (entry && typeof entry === "object") {
+        const id = (entry as Record<string, unknown>).event_id;
+        if (typeof id === "string") {
+          referenced.add(id);
+        }
+      }
+    }
+  }
+  const heads = events
+    .map((event) => event.event_id)
+    .filter(
+      (id): id is string => typeof id === "string" && !referenced.has(id),
+    );
+  return heads.length > 0 ? heads : [typedId("event")];
+}
+
 function peerEventsSubmitBody(
   realmId: string,
   events: Array<Record<string, unknown>>,
   idempotencyKey?: string,
+  overrides: { reducerProfileDigest?: string } = {},
 ): Record<string, unknown> {
-  const firstEventId =
-    typeof events[0]?.event_id === "string"
-      ? (events[0].event_id as string)
-      : typedId("event");
-  const bindingPayload = {
-    domain: "ck.peer.events.submit.service_binding.v1",
-    realm_id: realmId,
-    first_event_id: firstEventId,
-  };
+  const frontier = batchFrontierEventIds(events);
   return stripUndefined({
     service_binding_ref: {
       realm_id: realmId,
-      realm_policy_digest: `sha256:${sha256CanonicalJson(bindingPayload)}`,
-      membership_frontier: [firstEventId],
-      delivery_binding_frontier: [firstEventId],
-      destination_service_type: "principal_server",
-      reducer_profile_digest: `sha256:${sha256CanonicalJson({
-        domain: "ck.peer.events.submit.reducer_profile.v1",
-        profile: "ck.reducer.v1",
+      // Spec v1 registers no computation vector for realm_policy_digest (it
+      // is the sender-local "Realm policy hash", federation.md §4.1 table);
+      // hash an explicitly harness-scoped policy snapshot so the value can
+      // never be mistaken for a spec identifier.
+      realm_policy_digest: `sha256:${sha256CanonicalJson({
+        domain: "cotest.harness.realm_policy_snapshot.v1",
+        realm_id: realmId,
       })}`,
+      membership_frontier: frontier,
+      delivery_binding_frontier: frontier,
+      destination_service_type: "principal_server",
+      // §4.1.1 registry-derived canonical digest (override only exists for
+      // the reducer_profile_mismatch negative case).
+      reducer_profile_digest:
+        overrides.reducerProfileDigest ??
+        reducerProfileDigest(FEDERATION_REDUCER_PROFILE_ID),
     },
     events,
     idempotency_key: idempotencyKey,

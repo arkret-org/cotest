@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{CokretServer, dev_login, expect_api_error, expect_json, expect_response};
+use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 
 fn with_signed_federation_request(
     builder: reqwest::RequestBuilder,
@@ -159,41 +160,6 @@ fn event_canonical_digest(event: &Value) -> Result<String> {
         object.remove("canonical_hash");
     }
     Ok(canonical_sha256(&canonical)?)
-}
-
-fn peer_events_submit_body(
-    realm_id: &str,
-    events: Vec<Value>,
-    idempotency_key: Option<&str>,
-) -> Result<Value> {
-    let first_event_id = events
-        .first()
-        .and_then(|event| event.get("event_id"))
-        .and_then(Value::as_str)
-        .unwrap_or("ck:event:01904100-0000-7000-8000-fedc00000000");
-    let binding_payload = json!({
-        "domain": "ck.peer.events.submit.service_binding.v1",
-        "realm_id": realm_id,
-        "first_event_id": first_event_id,
-    });
-    let mut body = json!({
-        "service_binding_ref": {
-            "realm_id": realm_id,
-            "realm_policy_digest": canonical_sha256(&binding_payload)?,
-            "membership_frontier": [first_event_id],
-            "delivery_binding_frontier": [first_event_id],
-            "destination_service_type": "principal_server",
-            "reducer_profile_digest": canonical_sha256(&json!({
-                "domain": "ck.peer.events.submit.reducer_profile.v1",
-                "profile": "ck.reducer.v1",
-            }))?,
-        },
-        "events": events,
-    });
-    if let Some(key) = idempotency_key {
-        body["idempotency_key"] = Value::String(key.to_owned());
-    }
-    Ok(body)
 }
 
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {

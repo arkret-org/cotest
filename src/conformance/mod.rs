@@ -25,6 +25,7 @@ mod profile_matrix;
 mod profile_registry;
 mod protocol_artifact_allowlist;
 mod redaction;
+mod reducer_profile;
 mod registry;
 mod scaffold_gate;
 mod schema_validation;
@@ -73,6 +74,7 @@ pub use encoding::{
 };
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
+pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
@@ -323,6 +325,12 @@ pub(crate) struct NamedCase {
     pub(crate) covers_vectors: Option<Vec<String>>,
     pub(crate) input: Option<Value>,
     pub(crate) expected: Option<Value>,
+    // ck.vector.federation.reducer_profile_digest.v1 case fields
+    // (federation-fixture.json, registered by cokret-spec ec404fd).
+    pub(crate) canonical_input: Option<Value>,
+    pub(crate) expected_digest: Option<String>,
+    pub(crate) sender_reducer_profile_digest: Option<String>,
+    pub(crate) receiver_reducer_profile_digest: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

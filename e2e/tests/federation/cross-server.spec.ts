@@ -40,6 +40,7 @@ import {
   queryRealmEventsApi,
   sendMessageApi,
   typedId,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -592,10 +593,61 @@ test.describe("cross-server federation", () => {
   test.fixme(// @blocking-on: soland#federation-cross-server-gap
   // @user-promise: e2e/scenarios/federation/cross-server.md
   // @expected-live-by: 2026Q3
-  "reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch", async () => {
-    // spec: §4.1 reducer_profile_digest gate.
-    // soland gap: reducer_profile_digest NOT validated.
-    // Idempotent push replay is live in the API smoke above.
+  "reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch", async ({
+    request,
+  }) => {
+    // spec: federation.md §4.1 service_binding_ref.reducer_profile_digest +
+    // §4.1.1 receiver gate; registered vector
+    // ck.vector.federation.reducer_profile_digest.v1: a digest diverging from
+    // the receiver's registry-derived value MUST reject the WHOLE batch with
+    // reducer_profile_mismatch — no partial accept.
+    // soland gap: reducer_profile_digest NOT validated yet — keep fixme (the
+    // body below is the promotion-ready assertion; promote via
+    // scripts/promote-fixme.ps1 once soland implements the gate).
+    const realmId = typedId("realm");
+    const event = makeFederationEvent({
+      realmId,
+      kind: "ck.message.create",
+      actorDid: "did:web:alice-reducer-mismatch.example",
+      payload: {
+        flow_id: typedId("flow"),
+        track_name: "discussion",
+        content: {
+          kind: "ck.content.text",
+          body: `reducer profile mismatch probe ${Date.now()}`,
+        },
+      },
+    });
+    const response = await rawPushFederationEvents(request, [event], {
+      origin: solandServiceDid("alpha"),
+      destination: solandServiceDid("beta"),
+      server: "beta",
+      realmId,
+      idempotencyKey: `${solandServiceDid("alpha")}#cotest-reducer-profile-mismatch`,
+      // Well-formed sha256:<hex> that cannot equal β's registry-derived
+      // digest for ck.profile.federation_minimal.v1.
+      reducerProfileDigestOverride: `sha256:${"9".repeat(64)}`,
+    });
+    const body = (await response.json()) as {
+      accepted?: string[];
+      duplicate?: string[];
+      rejected?: Array<Record<string, unknown>>;
+    };
+    // Whole-batch rejection: either an error envelope carrying the code, or a
+    // rejected[] entry per event with reason_code=reducer_profile_mismatch.
+    expect(body.accepted ?? []).toEqual([]);
+    expect(body.duplicate ?? []).toEqual([]);
+    if (response.ok()) {
+      const rejected = body.rejected ?? [];
+      expect(rejected.map((entry) => entry.id ?? entry.event_id)).toContain(
+        String(event.event_id),
+      );
+      for (const entry of rejected) {
+        expect(entry.reason_code).toBe("reducer_profile_mismatch");
+      }
+    } else {
+      expect(wireErrCode(body)).toBe("reducer_profile_mismatch");
+    }
   });
 
   test.fixme(// @blocking-on: soland#federation-cross-server-gap

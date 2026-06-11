@@ -230,21 +230,9 @@ fn with_peer_post_headers(
 }
 
 fn peer_service_binding_ref(realm_id: &str, event_ids: &[String]) -> Result<Value> {
-    Ok(json!({
-        "realm_id": realm_id,
-        "realm_policy_digest": canonical_sha256(&json!({
-            "domain": "cotest.peer.events.service_binding.v1",
-            "realm_id": realm_id,
-            "event_ids": event_ids,
-        }))?,
-        "membership_frontier": event_ids,
-        "delivery_binding_frontier": event_ids,
-        "destination_service_type": "principal_server",
-        "reducer_profile_digest": canonical_sha256(&json!({
-            "domain": "cotest.peer.events.reducer_profile.v1",
-            "profile": "ck.reducer.v1",
-        }))?,
-    }))
+    // Spec-aligned binding (federation.md §4.1 / §4.1.1): registry-derived
+    // reducer_profile_digest + harness-scoped realm policy snapshot hash.
+    crate::scenarios::_helpers::federation_binding::peer_service_binding_ref(realm_id, event_ids)
 }
 
 fn trust_domain_for(service_did: &str) -> String {
