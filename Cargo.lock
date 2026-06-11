@@ -547,6 +547,7 @@ dependencies = [
  "cokret-signatures",
  "ed25519-dalek",
  "getrandom 0.4.2",
+ "hex",
  "hkdf 0.13.0",
  "openmls",
  "openmls_basic_credential",
@@ -589,6 +590,7 @@ dependencies = [
  "chrono",
  "cokret-identifiers",
  "getrandom 0.4.2",
+ "hex",
  "regex",
  "serde",
  "serde_json",
@@ -650,6 +652,7 @@ version = "0.3.0"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.4.2",
+ "hex",
  "serde",
  "sha2 0.11.0",
  "thiserror",

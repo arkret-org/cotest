@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "cotest-fuzz"
 version = "0.3.0"
 publish = false
@@ -19,12 +19,15 @@ rust-version = "1.96"
 # force every CI job to install nightly. The crate is exercised only by
 # the dedicated `fuzz` CI job and by manual `cargo fuzz run` invocations.
 
+[workspace.dependencies]
+cotest = {path = ".."}
+libfuzzer-sys = "0.4"
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-cotest = { path = ".." }
+cotest = {workspace = true}
+libfuzzer-sys = {workspace = true}
 
 [[bin]]
 name = "envelope_fuzz"

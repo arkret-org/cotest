@@ -14,61 +14,92 @@ publish = false
 test-with-containers = ["dep:testcontainers"]
 
 [dependencies]
-anyhow = "1.0.102"
 # CT-19 — `arbitrary` powers the wire-envelope fuzz harness in
 # `cotest/src/fuzz/`. Lives in `[dependencies]` rather than
 # `[dev-dependencies]` so the harness types (FuzzEventInput / FuzzMoveInput /
 # ...) and the `fuzz_*` entry points can live in `src/` and be invoked from
 # integration tests under `tests/`.
-arbitrary = { version = "1.4", features = ["derive"] }
-base64 = "0.22.1"
-chacha20poly1305 = { version = "0.10.1", default-features = false, features = ["alloc"] }
-chrono = "0.4.45"
 # Real Ed25519 detached-JWS verification in the security-negative conformance
 # suite (`conformance/security_negative.rs`) so a forged event with a correct
 # digest but invalid signature is actually rejected, not just digest-compared.
-ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std"] }
-cokret-http-client = { path = "../cokret-rust-sdk/crates/http-client" }
-cokret-core = { path = "../cokret-rust-sdk/crates/core", features = ["client"] }
 # R3.2 (cokret-spec @ b56cab1) — the §3.2.1 primary-handle-selection,
 # `claim_digest`, and §3.8.2 mention-render helpers live in the high-level
 # `cokret` facade (`cokret::identity::*`). cotest's primary-handle /
 # mention vectors drive these directly so every implementation agrees on
 # the deterministic selection + canonical claim digest.
-cokret = { path = "../cokret-rust-sdk/crates/sdk" }
 # T5.3 (Round 22) — canonical hash convergence vectors in
 # `tests/canonical_hash_convergence.rs` exercise the high-level
 # `EventProofBuilder` facade alongside the low-level canonical helpers
 # to pin that every Cokret service hashes payloads identically.
-cokret-signatures = { path = "../cokret-rust-sdk/crates/signatures" }
 # lattice round-trip vectors: cotest exercises the SDK's
 # `cokret_core::lattice` module directly to confirm CasRegister / OrSet /
 # Counter / Fsm / MvRegister / OrderedLog implementations match the spec's
 # normative join semantics.
-hkdf = "0.13.0"
-jsonschema = { version = "0.46.5", default-features = false, features = ["resolve-file"] }
-pbkdf2 = { version = "0.13.0", default-features = false, features = ["hmac"] }
-reqwest = { version = "0.13.4", features = ["json"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-serde_yaml = "0.9.34"
-sha2 = "0.11.0"
 # coauth_bootstrap / floria_bootstrap render generated YAML to disk
 # and need a Drop-managed temp file. Pinned to the version already in the
 # lockfile so `cargo test --locked` doesn't try to mutate Cargo.lock.
-tempfile = "3.27.0"
 # C.8 — Linux-only testcontainers integration (see `test-with-containers`
 # feature). Pinned conservatively; the cotest harness only uses the
 # stable `Container` / `RunnableImage` surface so a minor bump in
 # testcontainers itself shouldn't affect us.
-testcontainers = { version = "0.27", optional = true }
-tokio = { version = "1.52.3", features = ["macros", "process", "rt-multi-thread", "time"] }
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
-url = "2.5.8"
+anyhow = {workspace = true}
+arbitrary = {workspace = true,features = ["derive"]}
+base64 = {workspace = true}
+chacha20poly1305 = {workspace = true,default-features = false,features = ["alloc"]}
+chrono = {workspace = true}
+cokret = {workspace = true}
+cokret-core = {workspace = true,features = ["client"]}
+cokret-http-client = {workspace = true}
+cokret-signatures = {workspace = true}
+ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
+hkdf = {workspace = true}
+jsonschema = {workspace = true,default-features = false,features = ["resolve-file"]}
+pbkdf2 = {workspace = true,default-features = false,features = ["hmac"]}
+reqwest = {workspace = true,features = ["json"]}
+serde = {workspace = true,features = ["derive"]}
+serde_json = {workspace = true}
+serde_yaml = {workspace = true}
+sha2 = {workspace = true}
+tempfile = {workspace = true}
+testcontainers = {workspace = true,optional = true}
+tokio = {workspace = true,features = ["macros", "process", "rt-multi-thread", "time"]}
+tracing = {workspace = true}
+tracing-subscriber = {workspace = true,features = ["env-filter", "json"]}
+url = {workspace = true}
 
 [dev-dependencies]
-serial_test = "3.5.0"
 # T8.2 — property tests for canonical-JSON / proof vectors and handle
 # claim validators across the SDK contract surface.
-proptest = { version = "1", default-features = false, features = ["std"] }
+proptest = {workspace = true,default-features = false,features = ["std"]}
+serial_test = {workspace = true}
+
+[workspace]
+resolver = "3"
+
+[workspace.dependencies]
+anyhow = "1.0.102"
+arbitrary = "1.4"
+base64 = "0.22.1"
+chacha20poly1305 = {version = "0.10.1",default-features = false}
+chrono = "0.4.45"
+cokret = {path = "../cokret-rust-sdk/crates/sdk"}
+cokret-core = {path = "../cokret-rust-sdk/crates/core"}
+cokret-http-client = {path = "../cokret-rust-sdk/crates/http-client"}
+cokret-signatures = {path = "../cokret-rust-sdk/crates/signatures"}
+ed25519-dalek = {version = "2.2.0",default-features = false}
+hkdf = "0.13.0"
+jsonschema = {version = "0.46.5",default-features = false}
+pbkdf2 = {version = "0.13.0",default-features = false}
+proptest = {version = "1",default-features = false}
+reqwest = "0.13.4"
+serde = "1.0.228"
+serde_json = "1.0.150"
+serde_yaml = "0.9.34"
+serial_test = "3.5.0"
+sha2 = "0.11.0"
+tempfile = "3.27.0"
+testcontainers = "0.27"
+tokio = "1.52.3"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+url = "2.5.8"
