@@ -10,6 +10,7 @@
 #![allow(clippy::doc_lazy_continuation, clippy::doc_overindented_list_items)]
 
 pub mod circle_rules;
+pub mod cokret_path_rules;
 pub mod conformance;
 pub mod fixtures;
 pub mod fuzz;

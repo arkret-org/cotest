@@ -223,7 +223,7 @@ pub enum FileKind {
 }
 
 impl FileKind {
-    fn from_path(path: &Path) -> Self {
+    pub(crate) fn from_path(path: &Path) -> Self {
         match path
             .extension()
             .and_then(|ext| ext.to_str())
