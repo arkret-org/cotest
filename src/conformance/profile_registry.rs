@@ -100,11 +100,9 @@ const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
     "ck.profile.e2ee_relaxed.v1",
     "ck.profile.directory_service.v1",
     // Round C45 (2026-05-18 main; spec 5ed365c) — federation high-assurance
-    // peer profile, sender_commitment opt-in franking profile, and
-    // morph.schema_migrate transformation profile. All default to
-    // `unsupported` here pending fixture vectors.
+    // peer profile and morph.schema_migrate transformation profile. Both
+    // default to `unsupported` here pending fixture vectors.
     "ck.profile.federation.high_assurance.v1",
-    "ck.profile.franking.sender_commitment.v1",
     "ck.profile.morph.schema_migration_transformations.v1",
 ];
 

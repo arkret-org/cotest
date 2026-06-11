@@ -14,8 +14,8 @@
 //!   flow.
 //! - [`device_messages`] — `/_cokret/self/device_messages` send / duplicate / list / describe + the
 //!   verification-event side path.
-//! - [`key_backups`] — `/_cokret/self/keys/backups/*` PUT / list / GET (unlock-proof gated)
-//!   plus the `/_soland/self/keys/backups/describe` deployment-face descriptor.
+//! - [`key_backups`] — `/_cokret/self/keys/backups/*` PUT / list / GET (unlock-proof gated) plus
+//!   the `/_soland/self/keys/backups/describe` deployment-face descriptor.
 //! - [`backup_delete`] — terminal `DELETE /_cokret/self/keys/backups/{id}`.
 //! - [`blob`] — `/_cokret/self/blob/{upload,get}` (sha mismatch + happy-path range).
 //! - [`push`] — `/_cokret/edge/push/{register-device,notify}` happy + missing-device rejection.

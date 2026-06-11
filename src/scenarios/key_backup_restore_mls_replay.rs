@@ -13,16 +13,16 @@
 //!       * `encryption.kdf = argon2id` (memory_kib≥65536, iterations≥3, parallelism≥1 per soland
 //!         `_todos.md` E2E-KEY-BACKUP-1).
 //!       * `encryption.aead = xchacha20_poly1305`.
-//!       * `key_commitment` MUST be present so clients can verify the entered secret (the
-//!         24-word Recovery Key; legacy vault passphrase only for §7.5.1 compat) locally
-//!         before downloading ciphertext.
+//!       * `key_commitment` MUST be present so clients can verify the entered secret (the 24-word
+//!         Recovery Key; legacy vault passphrase only for §7.5.1 compat) locally before downloading
+//!         ciphertext.
 //!       * Service-side MUST NOT store passphrase / derived key / KDF output.
 //!   - §7.3 "恢复流程" — restore steps:
 //!       1. new device generates fresh device key.
-//!       2. user enters the 24-word Recovery Key (§3.3, the sole user-facing
-//!          content-recovery credential) / collects recovery shares per the
-//!          recovery policy; a legacy vault passphrase is accepted only for
-//!          deprecated `passphrase_kdf` envelopes (§7.5.1, compat-restore).
+//!       2. user enters the 24-word Recovery Key (§3.3, the sole user-facing content-recovery
+//!          credential) / collects recovery shares per the recovery policy; a legacy vault
+//!          passphrase is accepted only for deprecated `passphrase_kdf` envelopes (§7.5.1,
+//!          compat-restore).
 //!       3. client decrypts backup envelope.
 //!       4. client verifies key commitment.
 //!       5. client publishes `recover` or `ck.device.authorize`.
@@ -83,12 +83,12 @@
 //!     E2E-KEY-BACKUP-2 status is "needs SSK `payload=delete:backup_id:nonce` signature"; today
 //!     only session- token DELETE is enforced. Step 5e is partially blocked.
 //!   * **`mls_history_backup_key` semantics + `ck.mls.commit` reducer** — soland now HAS an MLS
-//!     epoch projection (`soland/src/reducer/mls.rs`: `apply_group_genesis` /
-//!     `apply_commit_epoch` enforce the per-group commit-epoch chain, plus keypackage
-//!     publish/claim and durable Welcome enqueue). The server-side commit chain a replayer can
-//!     walk therefore exists; what remains blocked is the *client-side* portion of step 6 —
-//!     deriving historical epoch secrets from the recovered `mls_history_backup_key` and
-//!     decrypting pre-loss ciphertext (the server never holds that material).
+//!     epoch projection (`soland/src/reducer/mls.rs`: `apply_group_genesis` / `apply_commit_epoch`
+//!     enforce the per-group commit-epoch chain, plus keypackage publish/claim and durable Welcome
+//!     enqueue). The server-side commit chain a replayer can walk therefore exists; what remains
+//!     blocked is the *client-side* portion of step 6 — deriving historical epoch secrets from the
+//!     recovered `mls_history_backup_key` and decrypting pre-loss ciphertext (the server never
+//!     holds that material).
 //!   * **SSK proof endpoint per §7.4** — soland does not yet expose a recovery-attestation surface
 //!     (E2E-KEY-BACKUP-2 still open). The `recovery_attestation` field flagged in E2E-KEY-BACKUP-3
 //!     is scoped to threshold recovery, not single-passphrase restore.

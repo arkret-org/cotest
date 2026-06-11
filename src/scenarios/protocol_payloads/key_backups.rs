@@ -5,8 +5,8 @@
 //!
 //! Surface split (G3 namespace audit):
 //! - `PUT/GET/DELETE /_cokret/self/keys/backups/*` — protocol face.
-//! - `GET /_soland/self/keys/backups/describe` — the describe contract is a
-//!   deployment/product surface and is only mounted on the `/_soland` face
+//! - `GET /_soland/self/keys/backups/describe` — the describe contract is a deployment/product
+//!   surface and is only mounted on the `/_soland` face
 //!   (`soland/src/routing/identity/key_backup.rs::legacy_router`).
 //!
 //! Full-ciphertext reads are gated by spec `identity/key-management.md`
