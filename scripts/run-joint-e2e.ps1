@@ -1015,14 +1015,14 @@ try {
             "`$env:MOCK_WITNESS_PORT='$mockWitnessPort'; `$env:MOCK_WITNESS_DID={0}; node {1}"
         ) -f (Quote-PsLiteral $MockWitnessDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-witness" -Command $mockWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockWitnessBaseUrl/_cokret/root/witness/policy" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockWitnessBaseUrl/mock/witness/policy" -TimeoutSeconds 30
         $witnessIndex = 2
         foreach ($witness in $mockWitnessExtraInstances) {
             $extraWitnessCmd = (
                 "`$env:MOCK_WITNESS_PORT='{0}'; `$env:MOCK_WITNESS_DID={1}; node {2}"
             ) -f $witness.port, (Quote-PsLiteral $witness.did), (Quote-PsLiteral (Join-Path $mocksRoot "mock-witness.mjs"))
             $managedServices.Add((Start-ManagedCommand -Name "mock-witness-$witnessIndex" -Command $extraWitnessCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-            Wait-HttpReady -Url "$($witness.base_url)/_cokret/root/witness/policy" -TimeoutSeconds 30
+            Wait-HttpReady -Url "$($witness.base_url)/mock/witness/policy" -TimeoutSeconds 30
             $witnessIndex++
         }
     }

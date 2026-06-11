@@ -129,7 +129,7 @@ def main() -> int:
     src = replace_top_level_section(src, "account", account)
 
     if args.mock_email_base_url:
-        mock_email_send = trailing_slash(args.mock_email_base_url) + "api/v1/verification/send"
+        mock_email_send = trailing_slash(args.mock_email_base_url) + "mock/email/verification/send"
         email = (
             "email:\n"
             "  from: \"Coauth Joint E2E <noreply@joint-e2e.local>\"\n"

@@ -152,15 +152,29 @@ function signedPackage(body) {
       handles: [{ exclusive: true, pattern: `${safe}/*` }],
     },
     requested_scopes: requestedScopesFromBody(body),
-    endpoint_set: body.endpoint_set ?? {
-      transactions: "/_cokret/edge/applet/transactions",
-      actors: "/_cokret/edge/applet/actors/{actor_id}",
-      realms: "/_cokret/edge/applet/realms/{realm_id_or_alias}",
+    endpoint_policy: body.endpoint_policy ?? {
+      endpoints: [
+        {
+          method: "POST",
+          path: "/_cokret/edge/applet/transactions",
+          auth: "webhook_signature",
+        },
+        {
+          method: "GET",
+          path: "/_cokret/edge/applet/actors/{actor_id}",
+          auth: "bearer",
+        },
+        {
+          method: "GET",
+          path: "/_cokret/edge/applet/realms/{realm_id_or_alias}",
+          auth: "bearer",
+        },
+      ],
     },
     webhook_auth: body.webhook_auth ?? {
       type: "http_message_signature",
       key_ref: `${registryDid}#mock-applet-registry-key-1`,
-      algs: ["EdDSA"],
+      accepted_algs: ["EdDSA"],
     },
     receive_events: body.receive_events ?? true,
     receive_ephemeral: body.receive_ephemeral ?? false,
@@ -171,14 +185,15 @@ function signedPackage(body) {
       rate_limit_hint: "test",
     },
     ghost_policy: body.ghost_policy ?? {
-      allow_ghost_actors: true,
-      accountability: ["bot_actor", "applet_registry"],
+      enabled: true,
+      accountability_template: "bot_actor_and_applet_registry",
     },
     delegation_policy: body.delegation_policy ?? {
-      allow_delegated_native_actors: false,
+      enabled: false,
     },
     e2ee_policy: body.e2ee_policy ?? {
-      allow_mls_join: false,
+      enabled: false,
+      mls_join_requested: false,
     },
     registration_epoch:
       body.registration_epoch ??

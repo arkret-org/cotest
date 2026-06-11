@@ -275,7 +275,7 @@ for policy, push, applet, TSP, and MIMI).
 
 When `-StartCoauth -StartMockEmail` are both enabled, the generated Coauth
 config uses the `email.http_webhook` provider with the mock email
-`/_cokret/self/verification/send` endpoint. This keeps joint runs local-only and
+`/mock/email/verification/send` endpoint. This keeps joint runs local-only and
 prevents SMTP/sendmail providers from being exercised by email verification
 paths. The mock endpoint accepts both its native token payload and Coauth's
 generic outbound email webhook payload.
@@ -291,14 +291,14 @@ single-witness env vars and the quorum lists
 | mock | covers spec sections | key endpoints |
 |------|---------------------|---------------|
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
-| `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/_cokret/self/verification/send` (with `ttl_seconds` + `body_html`), `/inbox?to=`, `/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
-| `mock-witness.mjs` | S9 did:webvh rotation | `/_cokret/root/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/policy`, `/health` test hook, `/inspect` |
+| `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/mock/email/verification/send` (with `ttl_seconds` + `body_html`), `/mock/email/verification/inbox?to=`, `/mock/email/verification/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
+| `mock-witness.mjs` | S9 did:webvh rotation | `/mock/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/mock/witness/policy`, `/mock/witness/health` test hook, `/inspect` |
 | `mock-audit-agent.mjs` | S25 audited E2EE / `ck.audit.accessed` | `/_soland/admin/audit-agent/identity` (DID + MLS KeyPackage stub), `/events`, `/invite` (auto-acks with signed `ck.audit.accessed`), `/accessed`, `/inspect`, `/jwks` (Ed25519) |
 | `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_cokret/self/policy/check`, `/_cokret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
-| `mock-push-gateway.mjs` | notification push / blind wake | `/_cokret/edge/push/register`, `/_cokret/edge/push/notify`, `/_cokret/edge/push/inbox`, `/scenarios`, `/jwks` |
+| `mock-push-gateway.mjs` | notification push / blind wake | `/_cokret/edge/push/register-device`, `/_cokret/edge/push/notify`, `/mock/push/inbox`, `/scenarios`, `/jwks` |
 | `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_cokret/edge/applet/register`, `/_cokret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
 | `mock-tsp-endpoint.mjs` | TSP relationship bootstrap / message ACK | `/tsp/relationship-bootstrap`, `/tsp/message`, `/tsp/inbox`, `/tsp/outbox`, `/identity`, `/inspect` |
-| `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/_cokret/open/mimi/join-requests`, `/_cokret/open/mimi/approve`, `/_cokret/open/mimi/outbound`, `/_cokret/open/mimi/inbound`, `/identity`, `/inspect` |
+| `mock-mimi-facade.mjs` | MIMI facade join / pairwise DID / fallback / quarantine | `/mock/mimi/join-requests`, `/mock/mimi/approve`, `/mock/mimi/outbound`, `/mock/mimi/inbound`, `/identity`, `/inspect` |
 
 `e2e/tests/harness/mocks-selftest.spec.ts` is the contract pin for these
 mocks. It is tagged `@fully-implemented` so the `joint-smoke` profile runs

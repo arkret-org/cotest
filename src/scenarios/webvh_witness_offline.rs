@@ -16,8 +16,8 @@
 //!      `did:web:witness.joint-e2e.local`).
 //!   3. Resolve a `did:webvh` and assert the resolver reports `health="healthy"` with a fresh
 //!      witness signature.
-//!   4. Flip witness via `POST /_cokret/root/witness/health {state:"down"}`. Per
-//!      `mock-witness.mjs`, subsequent `/witness/sign` calls return 503 `witness_unavailable`.
+//!   4. Flip witness via `POST /mock/witness/health {state:"down"}`. Per `mock-witness.mjs`,
+//!      subsequent `/witness/sign` calls return 503 `witness_unavailable`.
 //!   5. Within 24h: resolver SHOULD report `degraded_no_witness` (read ok, write disallowed for new
 //!      high-risk DID ops).
 //!   6. Simulate stale-by-clock by either (a) advancing test clock if starid supports a
@@ -36,11 +36,11 @@
 //!
 //! Prerequisite blockers:
 //!   * `mock-witness.mjs` exists (per `cotest/e2e/mocks/mock-witness.mjs`) and supports the `POST
-//!     /_cokret/root/witness/health {state:"down"}` hook verified above. But the Rust harness has
-//!     no helper yet to spawn it standalone — currently it's launched by
-//!     `scripts/run-joint-e2e.ps1`. Need a `spawn_mock_witness()` helper analogous to
-//!     `external_binary::spawn_required` that exec's `node mock-witness.mjs` with
-//!     `MOCK_WITNESS_PORT` and returns a `SpawnedExternalProcess`-ish handle.
+//!     /mock/witness/health {state:"down"}` hook verified above. But the Rust harness has no helper
+//!     yet to spawn it standalone — currently it's launched by `scripts/run-joint-e2e.ps1`. Need a
+//!     `spawn_mock_witness()` helper analogous to `external_binary::spawn_required` that exec's
+//!     `node mock-witness.mjs` with `MOCK_WITNESS_PORT` and returns a `SpawnedExternalProcess`-ish
+//!     handle.
 //!   * `starid` resolver health-state surfacing: the in-process resolver would need to expose
 //!     `degraded_no_witness` / `stale_history` via a diagnostic endpoint (e.g. `GET
 //!     /_cokret/root/identity/health/{did}`). Not yet present in `starid/src/`.
@@ -72,7 +72,7 @@ pub async fn webvh_witness_offline_recovery_run() -> Result<()> {
     //   assert_eq!(h1["state"], "healthy");
     //
     //   // Step 4: flip witness down
-    //   client.post(format!("{}/_cokret/root/witness/health", witness.base_url))
+    //   client.post(format!("{}/mock/witness/health", witness.base_url))
     //         .json(&json!({"state":"down"})).send().await?;
     //
     //   // Step 5: degraded_no_witness within window

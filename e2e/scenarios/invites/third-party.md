@@ -35,7 +35,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
    - `token_commitment = sha256(salt || token)`
    - 生成临时 `verification_public_key`
    - 提交 `ck.invite.third_party { realm_id, token_commitment, verification_public_key, expires_at: +7d }`
-4. yougen 调 mock email service `POST /_cokret/self/verification/send` 把 `token` 通过邮件投递给 bob(out-of-band)
+4. yougen 调 mock email service `POST /mock/email/verification/send` 把 `token` 通过邮件投递给 bob(out-of-band)
 5. 断言:`/realms/${realmId}/admin` 显示 `pending third-party invite to bob@example.com` (`pending-3pid-invite-row` testid)
 6. 断言:`token_commitment` 在事件链里,**plaintext email 不在事件链**(隐私 invariant)
 
@@ -43,7 +43,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
 
 7. bob 在 mock email 收件箱看到含 invite link 的邮件
 8. bob 进 yougen `/onboarding`,通过 passkey/OIDC 注册 → 拿到 `did:webvh:bob`(参见 identity/onboarding)
-9. bob 客户端把 invite token 提交给 verification service `POST /_cokret/self/verification/claim { token, did: bob.did }`
+9. bob 客户端把 invite token 提交给 verification service `POST /mock/email/verification/claim { token, did: bob.did }`
 10. service 校验 token 新鲜性 + claim 数 → 原子消费 → 签 `binding_proof` 说"token holder 的 DID 是 bob"
 
 ### Phase C — bob 提交 `ck.invite.claim`

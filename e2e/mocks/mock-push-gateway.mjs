@@ -11,7 +11,7 @@
 //     gateway accepted a payload without re-revealing E2EE content.
 //
 // Endpoints:
-//   POST /_cokret/edge/push/register
+//   POST /_cokret/edge/push/register-device
 //     body = { pusher_id, app_id, push_key, push_token, device_did, kind, dnd? }
 //     Register a pusher. `kind` ∈ {"http","apns","fcm"}.
 //   POST /_cokret/edge/push/notify
@@ -22,7 +22,7 @@
 //     in the per-pusher inbox and a signed delivery receipt is returned.
 //     `blind_wake=true` requires the payload to look desensitized (no
 //     plaintext-shaped identifiers — enforced as a best-effort lint).
-//   GET  /_cokret/edge/push/inbox?pusher_id=<id>
+//   GET  /mock/push/inbox?pusher_id=<id>
 //     List delivered payloads for that pusher.
 //   POST /scenarios
 //     body = { quiet_hours?: {start, end, tz}, force_failure?: bool }
@@ -252,7 +252,7 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  if (url.pathname === "/_cokret/edge/push/register" && req.method === "POST") {
+  if (url.pathname === "/_cokret/edge/push/register-device" && req.method === "POST") {
     const body = await readJson(req);
     if (
       !body ||
@@ -398,7 +398,7 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/_cokret/edge/push/inbox" && req.method === "GET") {
+  if (url.pathname === "/mock/push/inbox" && req.method === "GET") {
     const pusher_id = url.searchParams.get("pusher_id");
     if (!pusher_id) {
       res.statusCode = 400;
