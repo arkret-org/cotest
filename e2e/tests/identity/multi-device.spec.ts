@@ -7,7 +7,7 @@
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { wireErrCode } from "../../helpers/soland-api";
+import { authHeaders, b64url, typedId, wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -53,6 +53,55 @@ test.describe("multi-device pairing + revocation", () => {
     } finally {
       await Promise.allSettled([device2.close(), device1.close()]);
     }
+  });
+
+  test("existing device approves a new device through ck.gate.account.device_pair", async ({
+    request,
+  }) => {
+    const alice = uniqueUser(`s10-device-pair-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const newDeviceId = typedId("device");
+
+    const pairResp = await request.post(
+      `${solandBaseUrl()}/_cokret/gate/account/device-pair`,
+      {
+        headers: authHeaders(token),
+        data: {
+          pairing_code: b64url(`pair:${newDeviceId}`),
+          new_device_pubkey: {
+            kty: "OKP",
+            kid: newDeviceId,
+            alg: "EdDSA",
+            key: b64url(`pubkey:${newDeviceId}`),
+          },
+          challenge_signature: b64url(`challenge:${newDeviceId}`),
+          display_name: "Alice laptop",
+          device_metadata: {
+            platform: "browser",
+          },
+        },
+      },
+    );
+    expect(pairResp.status()).toBe(200);
+    const pairBody = await pairResp.json();
+    expect(pairBody.device_id).toBe(newDeviceId);
+    expect(pairBody.authorized_event_ref).toMatch(/^ck:event:/);
+
+    const viewer = await request.get(`${solandBaseUrl()}/_cokret/self/account/viewer`, {
+      headers: authHeaders(token),
+    });
+    expect(viewer.status()).toBe(200);
+    const viewerBody = await viewer.json();
+    expect(viewerBody.devices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          device_id: newDeviceId,
+          status: "active",
+          display_name: "Alice laptop",
+        }),
+      ]),
+    );
   });
 
   test.fixme(

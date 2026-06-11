@@ -8,6 +8,7 @@ import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 
 export type OperationKind =
   | "circle"
+  | "device"
   | "event"
   | "flow"
   | "invite"
