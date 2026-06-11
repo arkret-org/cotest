@@ -47,14 +47,13 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow};
-use cokret_core::canonical::canonical_json_bytes;
+use cokret_core::canonical::{canonical_json_bytes, sha256_digest};
 use cokret_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_HISTORICAL_ONLY,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
     Hash, TypedTrustDomainId, federation_trust_domain_transcript_fragment,
 };
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 // ── Canonical pins for the C3 vector ────────────────────────────────────
 
@@ -97,7 +96,7 @@ impl FederationCacheKey {
             "origin_key_state_digest": self.origin_key_state_digest,
         }))
         .unwrap_or_default();
-        format!("sha256:{:x}", Sha256::digest(&canonical))
+        sha256_digest(&canonical)
     }
 
     /// Canonical-replay cache key — drops `origin_key_state_digest`. Used
@@ -113,7 +112,7 @@ impl FederationCacheKey {
             "idempotency_key": self.idempotency_key,
         }))
         .unwrap_or_default();
-        format!("sha256:{:x}", Sha256::digest(&canonical))
+        sha256_digest(&canonical)
     }
 }
 
@@ -226,7 +225,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     });
     let body_x_bytes = canonical_json_bytes(&body_x)
         .map_err(|e| anyhow!("canonical_json_bytes(body_x) failed: {e}"))?;
-    let request_canonical_digest = Hash::new(format!("sha256:{:x}", Sha256::digest(&body_x_bytes)))
+    let request_canonical_digest = Hash::new(sha256_digest(&body_x_bytes))
         .map_err(|e| anyhow!("typed request canonical hash failed: {e}"))?;
 
     // Initial key state (before A revokes / rotates).

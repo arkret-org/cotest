@@ -3,14 +3,15 @@
 //! Every event executed by an agent on behalf of its controller MUST
 //! carry the triple (`executed_by`, `authorization_ref`, `actor_kind`).
 //!   - `executed_by` is the agent's DID.
-//!   - `authorization_ref` is the controller's `accountability_grant_id`.
+//!   - `authorization_ref` is the `EventId` of the controller's `ck.identity.accountability_grant`
+//!     event (the dedicated `ck:accountability_grant:` typed-id family is retired).
 //!   - `actor_kind` is the reducer-stamped `EnvelopeActorKind::Agent`.
 //!
 //! Client-supplied `actor_kind` MUST be rejected with
 //! `actor_kind_self_stamped`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{AccountabilityGrantId, Did, EnvelopeActorKind};
+use cokret_core::{Did, EnvelopeActorKind, EventId};
 
 pub async fn act_on_behalf_attribution_run() -> Result<()> {
     // (a) the EnvelopeActorKind enum has exactly the spec-required
@@ -28,19 +29,15 @@ pub async fn act_on_behalf_attribution_run() -> Result<()> {
     // (c) the triple's types round-trip.
     let executed_by = Did::new("did:web:agent.example.com".to_owned())
         .map_err(|e| anyhow!("executed_by DID: {e}"))?;
-    let authorization_ref = AccountabilityGrantId::new(
-        "ck:accountability_grant:01999999-0000-7000-8000-00000000b005".to_owned(),
-    )
-    .map_err(|e| anyhow!("authorization_ref: {e}"))?;
+    let authorization_ref =
+        EventId::new("ck:event:01999999-0000-7000-8000-00000000b005".to_owned())
+            .map_err(|e| anyhow!("authorization_ref: {e}"))?;
     if !executed_by.as_str().starts_with("did:") {
         return Err(anyhow!("executed_by must be a DID"));
     }
-    if !authorization_ref
-        .as_str()
-        .starts_with("ck:accountability_grant:")
-    {
+    if !authorization_ref.as_str().starts_with("ck:event:") {
         return Err(anyhow!(
-            "authorization_ref must be an accountability_grant typed id"
+            "authorization_ref must be the accountability-grant event's EventId"
         ));
     }
     // TODO(P4-impl): drive a real `ck.message.create` envelope through

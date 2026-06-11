@@ -11,6 +11,6 @@
 //! coverage but lives outside this harness — the smoke test is a regression
 //! guard, not a search.
 
-pub mod anchor_fuzz;
 pub mod envelope_fuzz;
+pub mod seal_fuzz;
 pub mod snapshot_fuzz;

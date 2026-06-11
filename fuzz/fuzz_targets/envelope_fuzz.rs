@@ -9,7 +9,7 @@
 use libfuzzer_sys::fuzz_target;
 
 use cotest::fuzz::envelope_fuzz::{
-    fuzz_anchor_envelope, fuzz_event_envelope, fuzz_move_envelope, fuzz_snapshot_chunk,
+    fuzz_event_envelope, fuzz_move_envelope, fuzz_seal_envelope, fuzz_snapshot_chunk,
 };
 
 fuzz_target!(|data: &[u8]| {
@@ -23,7 +23,7 @@ fuzz_target!(|data: &[u8]| {
     let _ = match selector % 4 {
         0 => fuzz_event_envelope(payload),
         1 => fuzz_move_envelope(payload),
-        2 => fuzz_anchor_envelope(payload),
+        2 => fuzz_seal_envelope(payload),
         _ => fuzz_snapshot_chunk(payload),
     };
 });

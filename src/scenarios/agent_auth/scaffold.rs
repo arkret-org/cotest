@@ -8,7 +8,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
-    AgentKeyId, CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
+    CAP_ACTION_AGENT_ACTION_APPROVE, CAP_ACTION_AGENT_ACTION_REJECT,
     CAP_ACTION_AGENT_ACTION_REQUEST, CAP_ACTION_AGENT_DRAFT_PROPOSE, Did,
 };
 
@@ -41,14 +41,12 @@ pub async fn agent_auth_run() -> Result<()> {
     //     here protects against the smuggle-controller-DID exploit.
     let agent_principal_id = Did::new("did:web:agent.example".to_owned())
         .map_err(|e| anyhow!("agent_principal_id: {e}"))?;
-    let agent_key_id =
-        AgentKeyId::new("ck:agent_key:01999999-0000-7000-8000-00000000a002".to_owned())
-            .map_err(|e| anyhow!("agent_key_id: {e}"))?;
+    // Spec head: the typed `ck:agent_key:` id family is retired. `key_id`
+    // is a plain string, preferring the DID URL verification-method form
+    // (`<agent_principal_did>#<fragment>`).
+    let key_id = "did:web:agent.example#key-1".to_owned();
 
-    let verification_method = format!(
-        "did:web:agent.example#{kid}",
-        kid = agent_key_id.as_str().rsplit(':').next().unwrap_or("")
-    );
+    let verification_method = key_id.clone();
     if !verification_method.contains('#') {
         return Err(anyhow!(
             "verification_method must be a DID URL fragment, got `{verification_method}`"

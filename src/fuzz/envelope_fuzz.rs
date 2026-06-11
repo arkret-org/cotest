@@ -68,8 +68,8 @@ pub struct FuzzEventInput {
     pub prev_refs: Vec<String>,
     pub refs: Vec<ArbRefValue>,
     pub payload: ArbValue,
-    pub include_anchor_ref: bool,
-    pub anchor_ref: String,
+    pub include_seal_ref: bool,
+    pub seal_ref: String,
 }
 
 #[derive(Debug, Arbitrary)]
@@ -102,8 +102,8 @@ impl FuzzEventInput {
             "payload": self.payload.0,
             "proofs": [],
         });
-        if self.include_anchor_ref {
-            envelope["anchor_ref"] = Value::String(self.anchor_ref.clone());
+        if self.include_seal_ref {
+            envelope["seal_ref"] = Value::String(self.seal_ref.clone());
         }
         envelope
     }
@@ -140,7 +140,7 @@ pub struct FuzzMoveInput {
     pub id: String,
     pub issuer: String,
     pub realm_id: String,
-    pub anchor_ref: String,
+    pub seal_ref: String,
     pub hlc_physical_ms: u64,
     pub hlc_logical: u32,
     pub sig_alg: ArbSigAlg,
@@ -180,7 +180,7 @@ impl FuzzMoveInput {
             "realm_id": self.realm_id,
             "preconditions": self.preconditions.iter().map(|v| &v.0).collect::<Vec<_>>(),
             "effects": self.effects.iter().map(|v| &v.0).collect::<Vec<_>>(),
-            "anchor_ref": self.anchor_ref,
+            "seal_ref": self.seal_ref,
             "refs": self.refs.iter().map(|v| &v.0).collect::<Vec<_>>(),
             "hlc": {
                 "physical_ms": self.hlc_physical_ms,
@@ -213,51 +213,54 @@ pub fn fuzz_move_envelope(data: &[u8]) -> Result<(), String> {
     })
 }
 
-// ── Anchor envelope ─────────────────────────────────────────────────────────
+// ── Seal envelope ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Arbitrary)]
-pub struct FuzzAnchorInput {
+pub struct FuzzSealInput {
     pub id: String,
     pub realm_id: String,
     pub predecessor_refs: Vec<String>,
-    pub frontier: Vec<String>,
+    pub delta: Vec<String>,
+    pub control_event_set_root: String,
     pub state_root: String,
-    pub anchored_at: String,
-    pub hlc_physical_ms: u64,
-    pub hlc_logical: u32,
-    pub anchorer_signature: ArbValue,
+    pub completeness_root: String,
+    pub notary_seq: u64,
+    pub sealed_at: String,
+    pub hlc: String,
+    pub notary_signature: ArbValue,
 }
 
-impl FuzzAnchorInput {
+impl FuzzSealInput {
     fn to_json(&self) -> Value {
         json!({
             "id": self.id,
             "realm_id": self.realm_id,
             "predecessor_refs": self.predecessor_refs,
-            "frontier": self.frontier,
+            "delta": self.delta,
+            "control_event_set_root": self.control_event_set_root,
             "state_root": self.state_root,
-            "anchorer_signature": self.anchorer_signature.0,
-            "anchored_at": self.anchored_at,
-            "hlc": {
-                "physical_ms": self.hlc_physical_ms,
-                "logical": self.hlc_logical,
-            },
+            "completeness_root": self.completeness_root,
+            "notary_seq": self.notary_seq,
+            "notary_signature": self.notary_signature.0,
+            "sealed_at": self.sealed_at,
+            "hlc": self.hlc,
         })
     }
 }
 
-/// Fuzz the `Anchor` wire shape. Uses both `from_slice` over the raw bytes
-/// and the artifact-backed `ANCHOR_SCHEMA` validator to exercise both layers.
-pub fn fuzz_anchor_envelope(data: &[u8]) -> Result<(), String> {
+/// Fuzz the `Seal` wire shape. Uses both `from_slice` over the raw bytes
+/// and the artifact-backed `ANCHOR_SCHEMA` validator (SDK constant name;
+/// its value is the current `ck.schema.seal.v1`) to exercise both layers.
+pub fn fuzz_seal_envelope(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<cokret_core::Anchor>(data);
+        let _ = serde_json::from_slice::<cokret_core::Seal>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzAnchorInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzSealInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     fuzz_via_value(&input.to_json(), ANCHOR_SCHEMA, |v| {
-        let _ = serde_json::from_value::<cokret_core::Anchor>(v.clone());
+        let _ = serde_json::from_value::<cokret_core::Seal>(v.clone());
     })
 }
 

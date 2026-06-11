@@ -6,7 +6,7 @@ C.8 — Seed corpora for the cotest fuzz harnesses under
 | Directory                          | Entry point                                    |
 | ---------------------------------- | ---------------------------------------------- |
 | `event_envelope/`                  | `cotest::fuzz::envelope_fuzz::fuzz_event_envelope`     |
-| `anchor_deep/`                     | `cotest::fuzz::anchor_fuzz::fuzz_anchor_deep`          |
+| `seal_deep/`                       | `cotest::fuzz::seal_fuzz::fuzz_seal_deep`              |
 | `snapshot_manifest/`               | `cotest::fuzz::snapshot_fuzz::fuzz_snapshot_manifest`  |
 | `snapshot_chunk_header/`           | `cotest::fuzz::snapshot_fuzz::fuzz_snapshot_chunk_header` |
 

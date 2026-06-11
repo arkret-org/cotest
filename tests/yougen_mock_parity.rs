@@ -11,7 +11,6 @@ use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 use serial_test::serial;
-use sha2::{Digest, Sha256};
 
 const MOCK_PARITY_ALICE_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
 
@@ -573,9 +572,7 @@ fn normalize_value(value: Value) -> Value {
 }
 
 fn sha256_canonical_json(value: &Value) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(canonical_json(value).as_bytes());
-    format!("{:x}", hasher.finalize())
+    cokret_core::canonical::sha256_hex(canonical_json(value).as_bytes())
 }
 
 fn canonical_json(value: &Value) -> String {

@@ -4,15 +4,16 @@
 //!   1. `PROFILE_AGENT_SIDECAR_THREAD` is spelled exactly per registry
 //!      (`ck.profile.agent_sidecar_thread.v1`).
 //!   2. The home-policy constant carries the canonical value `context_realm_preferred` (B-F).
-//!   3. `SidecarCircleId` round-trips through the SDK validator.
+//!   3. A sidecar circle is an ordinary Circle — its id round-trips through the SDK `CircleId`
+//!      validator (the dedicated `ck:sidecar_circle:` typed-id family is retired).
 //!   4. The 3 sidecar capability actions are all present and form a cohesive ensure / write /
 //!      publish fan-out group.
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
-    PROFILE_AGENT_SIDECAR_THREAD, SidecarCircleId,
+    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, CircleId,
+    PROFILE_AGENT_SIDECAR_THREAD,
 };
 
 pub async fn agent_sidecar_thread_run() -> Result<()> {
@@ -31,12 +32,11 @@ pub async fn agent_sidecar_thread_run() -> Result<()> {
         ));
     }
 
-    // (3) typed-id round-trip.
-    let sidecar =
-        SidecarCircleId::new("ck:sidecar_circle:01999999-0000-7000-8000-00000000c001".to_owned())
-            .map_err(|e| anyhow!("SidecarCircleId: {e}"))?;
-    if !sidecar.as_str().starts_with("ck:sidecar_circle:") {
-        return Err(anyhow!("SidecarCircleId lost canonical prefix: {sidecar}"));
+    // (3) typed-id round-trip — sidecar circles are plain Circles.
+    let sidecar = CircleId::new("ck:circle:01999999-0000-7000-8000-00000000c001".to_owned())
+        .map_err(|e| anyhow!("sidecar CircleId: {e}"))?;
+    if !sidecar.as_str().starts_with("ck:circle:") {
+        return Err(anyhow!("sidecar CircleId lost canonical prefix: {sidecar}"));
     }
 
     // (4) The 3 sidecar actions form the canonical ensure/write/publish

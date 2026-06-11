@@ -1,7 +1,7 @@
-//! C.8 — Anchor-envelope deep fuzz harness.
+//! C.8 — Seal-envelope deep fuzz harness.
 //!
-//! Companion to `envelope_fuzz::fuzz_anchor_envelope`: this module
-//! drives a wider set of `Arbitrary` inputs that exercise the anchor
+//! Companion to `envelope_fuzz::fuzz_seal_envelope`: this module
+//! drives a wider set of `Arbitrary` inputs that exercise the Seal
 //! validator's edge cases — long predecessor chains, conflicting kind
 //! discriminators, and malformed signatures.
 //!
@@ -38,33 +38,35 @@ fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
     }
 }
 
-/// Wide-range anchor input. Predecessor refs are bounded to keep the
+/// Wide-range Seal input. Predecessor refs are bounded to keep the
 /// harness linear in input size — without the cap, `arbitrary` happily
 /// produces multi-megabyte vectors that exercise allocator behaviour
 /// rather than the validator.
 const MAX_PREDS: usize = 16;
-const MAX_FRONTIER: usize = 16;
+const MAX_DELTA: usize = 16;
 
 #[derive(Debug, Arbitrary)]
-pub struct FuzzAnchorDeepInput {
+pub struct FuzzSealDeepInput {
     pub id: String,
     pub realm_id: String,
+    pub control_event_set_root: String,
     pub state_root: String,
-    pub anchored_at: String,
-    pub hlc_physical_ms: u64,
-    pub hlc_logical: u32,
+    pub completeness_root: String,
+    pub notary_seq: u64,
+    pub sealed_at: String,
+    pub hlc: String,
     pub include_signature: bool,
     pub sig_alg: ArbSigAlg,
     pub sig_value: String,
     pub sig_key: String,
     pub predecessor_count: u8,
-    pub frontier_count: u8,
+    pub delta_count: u8,
     pub predecessor_template: String,
-    pub frontier_template: String,
+    pub delta_template: String,
 }
 
 #[derive(Debug, Arbitrary)]
-pub enum ArbAnchorKind {
+pub enum ArbSealKind {
     Normal,
     Compaction,
     /// Free-form string — the validator's discriminator MUST reject
@@ -73,7 +75,7 @@ pub enum ArbAnchorKind {
 }
 
 #[allow(dead_code)]
-impl ArbAnchorKind {
+impl ArbSealKind {
     fn as_str(&self) -> &'static str {
         match self {
             Self::Normal => "normal",
@@ -105,30 +107,30 @@ impl ArbSigAlg {
     }
 }
 
-impl FuzzAnchorDeepInput {
+impl FuzzSealDeepInput {
     fn to_json(&self) -> Value {
         let pred_count = (self.predecessor_count as usize).min(MAX_PREDS);
-        let frontier_count = (self.frontier_count as usize).min(MAX_FRONTIER);
+        let delta_count = (self.delta_count as usize).min(MAX_DELTA);
         let predecessor_refs: Vec<Value> = (0..pred_count)
             .map(|i| Value::String(format!("{}-{i}", self.predecessor_template)))
             .collect();
-        let frontier: Vec<Value> = (0..frontier_count)
-            .map(|i| Value::String(format!("{}-{i}", self.frontier_template)))
+        let delta: Vec<Value> = (0..delta_count)
+            .map(|i| Value::String(format!("{}-{i}", self.delta_template)))
             .collect();
         let mut envelope = json!({
             "id": self.id,
             "realm_id": self.realm_id,
             "predecessor_refs": predecessor_refs,
-            "frontier": frontier,
+            "delta": delta,
+            "control_event_set_root": self.control_event_set_root,
             "state_root": self.state_root,
-            "anchored_at": self.anchored_at,
-            "hlc": {
-                "physical_ms": self.hlc_physical_ms,
-                "logical": self.hlc_logical,
-            },
+            "completeness_root": self.completeness_root,
+            "notary_seq": self.notary_seq,
+            "sealed_at": self.sealed_at,
+            "hlc": self.hlc,
         });
         if self.include_signature {
-            envelope["anchorer_signature"] = json!({
+            envelope["notary_signature"] = json!({
                 "alg": self.sig_alg.as_str(),
                 "value": self.sig_value,
                 "key": self.sig_key,
@@ -138,16 +140,17 @@ impl FuzzAnchorDeepInput {
     }
 }
 
-/// Drive an anchor envelope through:
+/// Drive a Seal envelope through:
 ///   1. `from_slice` on the raw fuzz bytes (catches wire parser panics);
-///   2. Schema validator against `ANCHOR_SCHEMA`;
-///   3. Typed `from_value::<Anchor>` deserialization.
-pub fn fuzz_anchor_deep(data: &[u8]) -> Result<(), String> {
+///   2. Schema validator against `ANCHOR_SCHEMA` (SDK constant name; its value is the current
+///      `ck.schema.seal.v1`);
+///   3. Typed `from_value::<Seal>` deserialization.
+pub fn fuzz_seal_deep(data: &[u8]) -> Result<(), String> {
     catch(|| {
-        let _ = serde_json::from_slice::<cokret_core::Anchor>(data);
+        let _ = serde_json::from_slice::<cokret_core::Seal>(data);
     })?;
     let mut unstructured = Unstructured::new(data);
-    let Ok(input) = FuzzAnchorDeepInput::arbitrary(&mut unstructured) else {
+    let Ok(input) = FuzzSealDeepInput::arbitrary(&mut unstructured) else {
         return Ok(());
     };
     let value = input.to_json();
@@ -155,7 +158,7 @@ pub fn fuzz_anchor_deep(data: &[u8]) -> Result<(), String> {
         let _ = registry().validate_value(ANCHOR_SCHEMA, &value);
     })?;
     catch(|| {
-        let _ = serde_json::from_value::<cokret_core::Anchor>(value.clone());
+        let _ = serde_json::from_value::<cokret_core::Seal>(value.clone());
     })
 }
 
@@ -165,16 +168,16 @@ mod tests {
 
     #[test]
     fn empty_input_does_not_panic() {
-        let _ = fuzz_anchor_deep(&[]);
+        let _ = fuzz_seal_deep(&[]);
     }
 
     #[test]
     fn pathological_input_does_not_panic() {
         // Tiny input — forces `Unstructured` to early-return Err, which the
         // harness must handle without panicking.
-        let _ = fuzz_anchor_deep(&[0u8]);
+        let _ = fuzz_seal_deep(&[0u8]);
         // Slightly larger; exercises the discriminator branches.
-        let _ = fuzz_anchor_deep(&[0xff; 64]);
-        let _ = fuzz_anchor_deep(&[0xaa; 4096]);
+        let _ = fuzz_seal_deep(&[0xff; 64]);
+        let _ = fuzz_seal_deep(&[0xaa; 4096]);
     }
 }

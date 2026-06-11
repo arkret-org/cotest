@@ -64,9 +64,12 @@ fn build_realm(
         labels: Vec::new(),
         metadata: std::collections::BTreeMap::new(),
         relation_profiles: Vec::new(),
-        anchor_profile: None,
-        anchorer: None,
-        max_anchor_staleness_ms: None,
+        notary_profile: None,
+        notary: None,
+        // `max_anchor_staleness_ms` 已随双平面拆分退役且无直接后继字段
+        // (renames.json: replacement=null);revocation 滞后由
+        // `revocation_freshness_window_ms` 治理。
+        revocation_freshness_window_ms: None,
         cell_lattices: Vec::new(),
         co_write_policy: None,
         extra: std::collections::BTreeMap::new(),

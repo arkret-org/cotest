@@ -8,12 +8,15 @@
 //!      `ck.agent.` or `ck.self.agent.`).
 //!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
-//!   4. an `accountability_grant` typed-id round-trips through the SDK validator.
+//!   4. an accountability grant is referenced through its `ck.identity.accountability_grant`
+//!      event — the `accountability_grant_ref` is an `EventId` that round-trips through the SDK
+//!      validator (the dedicated `ck:accountability_grant:` typed-id family is retired).
 
 use anyhow::{Result, anyhow};
 use cokret_core::{
-    AGENT_CAPABILITY_ACTIONS, AccountabilityGrantId, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
-    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
+    AGENT_CAPABILITY_ACTIONS, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
+    CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, EventId,
+    events::IDENTITY_ACCOUNTABILITY_GRANT,
 };
 
 /// The 3 aggregate sidecar-thread actions. Each carries a
@@ -79,14 +82,20 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
         }
     }
 
-    // (4) accountability_grant typed-id well-formedness.
-    let grant_id = AccountabilityGrantId::new(
-        "ck:accountability_grant:01999999-0000-7000-8000-0000000ab001".to_owned(),
-    )
-    .map_err(|e| anyhow!("AccountabilityGrantId: {e}"))?;
-    if !grant_id.as_str().starts_with("ck:accountability_grant:") {
+    // (4) accountability grant reference well-formedness. The grant is the
+    //     `ck.identity.accountability_grant` event itself; downstream
+    //     `accountability_grant_ref` / `authorization_ref` fields carry the
+    //     grant event's `EventId`.
+    if IDENTITY_ACCOUNTABILITY_GRANT != "ck.identity.accountability_grant" {
         return Err(anyhow!(
-            "AccountabilityGrantId lost canonical prefix: {grant_id}"
+            "IDENTITY_ACCOUNTABILITY_GRANT spelling drifted: {IDENTITY_ACCOUNTABILITY_GRANT}"
+        ));
+    }
+    let grant_ref = EventId::new("ck:event:01999999-0000-7000-8000-0000000ab001".to_owned())
+        .map_err(|e| anyhow!("accountability_grant_ref EventId: {e}"))?;
+    if !grant_ref.as_str().starts_with("ck:event:") {
+        return Err(anyhow!(
+            "accountability_grant_ref lost canonical event prefix: {grant_ref}"
         ));
     }
 

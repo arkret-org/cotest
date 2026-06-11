@@ -4,7 +4,7 @@
 //! normative scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5.
 //! The fixture itself is symbolic (it describes protocol-level semantics,
 //! eliding wire-required `space_id` / `hlc` / `sig`) — this suite reifies
-//! the symbolic ops as real `LatticeOp` + `AnchoredOp` values, runs the
+//! the symbolic ops as real `LatticeOp` + `SealedOp` values, runs the
 //! lattice's `join`, and asserts that:
 //!
 //! - **OrSet**: deterministic add / remove / commute / idempotence.
@@ -25,7 +25,7 @@
 
 use anyhow::{Result, bail};
 use cokret_core::lattice::{
-    AnchoredOp, CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog,
+    CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
 };
 use cokret_core::{CellRef, LatticeOp, LatticeOpType, MoveId};
 use serde_json::json;
@@ -43,13 +43,13 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     fsm_illegal_transition_returns_bottom()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
     ordered_log_per_issuer_monotonic_append()?;
-    // C10.C extensions (2026-05-09 aggressive batch): Anchorer cell
+    // C10.C extensions (2026-05-09 aggressive batch): Notary cell
     // configurations, conflict repair head_in semantics, MLS covered_frontier.
-    anchorer_cell_single_did_profile_resolves_to_value()?;
-    anchorer_cell_threshold_profile_resolves_to_value()?;
-    anchorer_cell_open_set_profile_resolves_to_value()?;
-    anchorer_cell_mixed_profile_resolves_to_value()?;
-    anchorer_cell_concurrent_reconfig_returns_bottom()?;
+    notary_cell_single_did_profile_resolves_to_value()?;
+    notary_cell_threshold_profile_resolves_to_value()?;
+    notary_cell_open_set_profile_resolves_to_value()?;
+    notary_cell_mixed_profile_resolves_to_value()?;
+    notary_cell_concurrent_reconfig_returns_bottom()?;
     conflict_repair_head_in_move_resolves_existing_bottom()?;
     conflict_repair_resists_self_authorising_winner()?;
     mls_covered_frontier_or_set_accumulates_governance_refs()?;
@@ -168,9 +168,9 @@ fn or_set_basic_add_remove_commute() -> Result<()> {
     // the SAME op order MUST produce the SAME result (deterministic
     // associativity).
     let ops = vec![
-        AnchoredOp::new(m1, op_add("red")),
-        AnchoredOp::new(m2, op_add("blue")),
-        AnchoredOp::new(m3, op_remove("red")),
+        SealedOp::new(m1, op_add("red")),
+        SealedOp::new(m2, op_add("blue")),
+        SealedOp::new(m3, op_remove("red")),
     ];
     let resolved_first = lattice.join(&cref, &ops);
     let resolved_second = lattice.join(&cref, &ops);
@@ -204,9 +204,9 @@ fn or_set_idempotent_re_add_after_remove() -> Result<()> {
         "ck.consent.01js0cc0000000000000000000",
     );
     let ops = vec![
-        AnchoredOp::new(move_id("aa"), op_add("red")),
-        AnchoredOp::new(move_id("bb"), op_remove("red")),
-        AnchoredOp::new(move_id("cc"), op_add("red")),
+        SealedOp::new(move_id("aa"), op_add("red")),
+        SealedOp::new(move_id("bb"), op_remove("red")),
+        SealedOp::new(move_id("cc"), op_add("red")),
     ];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -223,10 +223,10 @@ fn cas_register_concurrent_set_returns_bottom_conflict() -> Result<()> {
         "ck.component.realm.policy.v1",
         "ck.realm.01js0sp0000000000000000000",
     );
-    // Two anchored Moves concurrently set the cell to distinct values.
+    // Two sealed Moves concurrently set the cell to distinct values.
     let ops = vec![
-        AnchoredOp::new(move_id("aa"), op_set(json!({"role": "admin"}))),
-        AnchoredOp::new(move_id("bb"), op_set(json!({"role": "moderator"}))),
+        SealedOp::new(move_id("aa"), op_set(json!({"role": "admin"}))),
+        SealedOp::new(move_id("bb"), op_set(json!({"role": "moderator"}))),
     ];
     let resolved = lattice.join(&cref, &ops);
     let bottom = match resolved {
@@ -258,13 +258,13 @@ fn cas_register_single_set_returns_value() -> Result<()> {
         "ck.component.realm.policy.v1",
         "ck.realm.01js0sp0000000000000000001",
     );
-    let ops = vec![AnchoredOp::new(
+    let ops = vec![SealedOp::new(
         move_id("dd"),
         op_set(json!({"role": "admin"})),
     )];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("CasRegister with a single anchored set must NOT Bottom; got {resolved:?}");
+        bail!("CasRegister with a single sealed set must NOT Bottom; got {resolved:?}");
     }
     Ok(())
 }
@@ -275,9 +275,9 @@ fn counter_pn_sums_increments_and_decrements() -> Result<()> {
     let lattice = Counter;
     let cref = cell("ck.component.counter.v1", "metrics.events.received");
     let ops = vec![
-        AnchoredOp::new(move_id("ee"), op_inc(5)),
-        AnchoredOp::new(move_id("ff"), op_inc(3)),
-        AnchoredOp::new(move_id("11"), op_dec(2)),
+        SealedOp::new(move_id("ee"), op_inc(5)),
+        SealedOp::new(move_id("ff"), op_inc(3)),
+        SealedOp::new(move_id("11"), op_dec(2)),
     ];
     let resolved = lattice.join(&cref, &ops);
     let value = match resolved {
@@ -322,7 +322,7 @@ fn fsm_legal_transition_advances_state() -> Result<()> {
     let lattice = membership_fsm();
     let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
     // Single legal transition: invited → joined.
-    let ops = vec![AnchoredOp::new(
+    let ops = vec![SealedOp::new(
         move_id("22"),
         op_transition(json!("invited"), json!("joined")),
     )];
@@ -340,11 +340,11 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     // same cell — a join of these MUST surface a Bottom because the
     // pre-state can only be one value at a time.
     let ops = vec![
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("33"),
             op_transition(json!("invited"), json!("joined")),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("44"),
             op_transition(json!("joined"), json!("invited")),
         ),
@@ -374,8 +374,8 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
     // as a Value array directly). Either form is acceptable as long as
     // BOTH input values are visible to the caller.
     let ops = vec![
-        AnchoredOp::new(move_id("55"), op_set(json!("Title A"))),
-        AnchoredOp::new(move_id("66"), op_set(json!("Title B"))),
+        SealedOp::new(move_id("55"), op_set(json!("Title A"))),
+        SealedOp::new(move_id("66"), op_set(json!("Title B"))),
     ];
     let resolved = lattice.join(&cref, &ops);
     let surfaces_both = match &resolved {
@@ -414,15 +414,15 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     // Two issuers, both with monotonic issuer_seq. Join must produce a
     // deterministic linearization that includes all entries.
     let ops = vec![
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("77"),
             op_append(json!({"actor": "alice", "msg": "hi"}), 1),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("88"),
             op_append(json!({"actor": "bob", "msg": "hello"}), 1),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("99"),
             op_append(json!({"actor": "alice", "msg": "ack"}), 2),
         ),
@@ -434,113 +434,113 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     Ok(())
 }
 
-// ──────────────────── Anchorer cell ────────────────────
+// ──────────────────── Notary cell ────────────────────
 //
-// `ck:cell:ck.component.anchorer.v1:<realm_id>` is a cas_register holding the
-// `AnchorerValue` (single_did | threshold(k/n) | open_set | mixed). Each
-// happy-path test below confirms a single anchored Move that sets the cell
+// `ck:cell:ck.component.notary.v1:<realm_id>` is a cas_register holding the
+// `NotaryValue` (single_did | threshold(k/n) | open_set | mixed). Each
+// happy-path test below confirms a single sealed Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
 // The conflict test confirms two concurrent reconfigurations Bottom — admins
 // MUST coordinate (this is a safety-critical cell).
 
-fn anchorer_cell(realm_suffix: &str) -> CellRef {
+fn notary_cell(realm_suffix: &str) -> CellRef {
     cell(
-        "ck.component.anchorer.v1",
+        "ck.component.notary.v1",
         &format!("ck.realm.01js{realm_suffix}000000000000000000"),
     )
 }
 
-fn anchorer_cell_single_did_profile_resolves_to_value() -> Result<()> {
+fn notary_cell_single_did_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
-    let cref = anchorer_cell("01");
+    let cref = notary_cell("01");
     let value = json!({
-        "shape": "single_did",
+        "kind": "single_did",
         "did": "did:web:hub.example",
     });
-    let ops = vec![AnchoredOp::new(move_id("a1"), op_set(value))];
+    let ops = vec![SealedOp::new(move_id("a1"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("Anchorer single_did profile must resolve to Value, got {resolved:?}");
+        bail!("Notary single_did profile must resolve to Value, got {resolved:?}");
     }
     Ok(())
 }
 
-fn anchorer_cell_threshold_profile_resolves_to_value() -> Result<()> {
+fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
-    let cref = anchorer_cell("02");
+    let cref = notary_cell("02");
     let value = json!({
-        "shape": "threshold",
+        "kind": "threshold",
         "k": 2,
         "n": 3,
         "members": [
-            "did:web:anchor1.example",
-            "did:web:anchor2.example",
-            "did:web:anchor3.example"
+            "did:web:notary1.example",
+            "did:web:notary2.example",
+            "did:web:notary3.example"
         ],
     });
-    let ops = vec![AnchoredOp::new(move_id("a2"), op_set(value))];
+    let ops = vec![SealedOp::new(move_id("a2"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("Anchorer threshold profile must resolve to Value, got {resolved:?}");
+        bail!("Notary threshold profile must resolve to Value, got {resolved:?}");
     }
     Ok(())
 }
 
-fn anchorer_cell_open_set_profile_resolves_to_value() -> Result<()> {
+fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
-    let cref = anchorer_cell("03");
+    let cref = notary_cell("03");
     let value = json!({
-        "shape": "open_set",
+        "kind": "open_set",
         "members": [
             "did:web:peer1.example",
             "did:web:peer2.example"
         ],
     });
-    let ops = vec![AnchoredOp::new(move_id("a3"), op_set(value))];
+    let ops = vec![SealedOp::new(move_id("a3"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("Anchorer open_set profile must resolve to Value, got {resolved:?}");
+        bail!("Notary open_set profile must resolve to Value, got {resolved:?}");
     }
     Ok(())
 }
 
-fn anchorer_cell_mixed_profile_resolves_to_value() -> Result<()> {
+fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
-    let cref = anchorer_cell("04");
+    let cref = notary_cell("04");
     let value = json!({
-        "shape": "mixed",
+        "kind": "mixed",
         "primary": "did:web:hub.example",
         "recovery_members": [
             "did:web:recovery1.example",
             "did:web:recovery2.example"
         ],
     });
-    let ops = vec![AnchoredOp::new(move_id("a4"), op_set(value))];
+    let ops = vec![SealedOp::new(move_id("a4"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("Anchorer mixed profile must resolve to Value, got {resolved:?}");
+        bail!("Notary mixed profile must resolve to Value, got {resolved:?}");
     }
     Ok(())
 }
 
-fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
+fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     let lattice = CasRegister;
-    let cref = anchorer_cell("05");
-    // Two admins concurrently reconfigure the anchorer cell. Spec requires
-    // this to surface Bottom — a "split anchorer" is a Realm-wide pause
+    let cref = notary_cell("05");
+    // Two admins concurrently reconfigure the notary cell. Spec requires
+    // this to surface Bottom — a "notary split" is a Realm-wide pause
     // condition, not a thing you LWW past.
     let ops = vec![
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("a5"),
             op_set(json!({
-                "shape": "single_did",
+                "kind": "single_did",
                 "did": "did:web:hub-a.example",
             })),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("a6"),
             op_set(json!({
-                "shape": "single_did",
+                "kind": "single_did",
                 "did": "did:web:hub-b.example",
             })),
         ),
@@ -549,12 +549,12 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     let bottom = match resolved {
         CellState::Bottom(b) => b,
         CellState::Value(_) => {
-            bail!("Anchorer concurrent reconfig MUST Bottom (split anchorer is a Realm-wide pause)")
+            bail!("Notary concurrent reconfig MUST Bottom (notary split is a Realm-wide pause)")
         }
     };
     if !matches!(bottom.kind, cokret_core::BottomKind::Conflict) {
         bail!(
-            "Anchorer split Bottom kind expected Conflict, got {:?}",
+            "Notary split Bottom kind expected Conflict, got {:?}",
             bottom.kind
         );
     }
@@ -569,7 +569,7 @@ fn anchorer_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
 // is authorised by recovery_capability, the cas_register sees a single
 // post-anchor op and returns Value, clearing the prior Bottom.
 //
-// At the lattice level (this layer), the test reduces to: a third anchored
+// At the lattice level (this layer), the test reduces to: a third sealed
 // Move with a fresh value, joined alongside an even later Bottom-clearing
 // recovery, MUST resolve to Value. Authorisation is handled at the verify_move
 // layer above the lattice; here we confirm the post-recovery view is clean.
@@ -580,10 +580,10 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
         "ck.component.realm.policy.v1",
         "ck.realm.01js0sp0000000000000000000",
     );
-    // Anchor view AFTER recovery: only the repair Move's anchored op is in
+    // Seal view AFTER recovery: only the repair Move's sealed op is in
     // scope (the earlier conflict pair was rolled back / superseded by the
-    // recovery anchor). Result MUST be Value.
-    let ops = vec![AnchoredOp::new(
+    // recovery Seal). Result MUST be Value.
+    let ops = vec![SealedOp::new(
         move_id("b1"),
         op_set(json!({
             "role": "admin",
@@ -594,7 +594,7 @@ fn conflict_repair_head_in_move_resolves_existing_bottom() -> Result<()> {
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!(
-            "Conflict repair Move (single anchored op post-recovery) must resolve to Value; got {resolved:?}"
+            "Conflict repair Move (single sealed op post-recovery) must resolve to Value; got {resolved:?}"
         );
     }
     Ok(())
@@ -613,7 +613,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
     // ABOVE the lattice; here we confirm the lattice itself doesn't pick a
     // winner just because one payload claims authority.
     let ops = vec![
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("b2"),
             op_set(json!({
                 "role": "admin",
@@ -621,7 +621,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
                 "claims": "winner",
             })),
         ),
-        AnchoredOp::new(move_id("b3"), op_set(json!({"role": "moderator"}))),
+        SealedOp::new(move_id("b3"), op_set(json!({"role": "moderator"}))),
     ];
     let resolved = lattice.join(&cref, &ops);
     if !resolved.is_bottom() {
@@ -653,15 +653,15 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     // Two MLS commits attest to overlapping governance frontier refs; the
     // or_set surfaces the union without bottom.
     let ops = vec![
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("c1"),
             op_add("ck:event:01970e58-0007-7000-8000-000000000001"),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("c2"),
             op_add("ck:event:01970e58-0007-7000-8000-000000000002"),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("c3"),
             op_add("ck:event:01970e58-0007-7000-8000-000000000001"),
         ), // duplicate add
@@ -686,20 +686,20 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     let lattice = OrSet;
     let cref = covered_frontier_cell("c2");
     // After an MLS epoch rotation, a new commit adds a fresh ref; a remove
-    // for an old ref is causally LATER (the rotation Move's anchored move_id
+    // for an old ref is causally LATER (the rotation Move's sealed move_id
     // is later in deterministic order). Because the OR-Set is causal, the
     // remove erases ONLY the matching prior add. The remaining governance
     // ref MUST stay visible.
     let ops = vec![
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("c4"),
             op_add("ck:event:01970e58-0007-7000-8000-000000000003"),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("c5"),
             op_add("ck:event:01970e58-0007-7000-8000-000000000004"),
         ),
-        AnchoredOp::new(
+        SealedOp::new(
             move_id("c6"),
             op_remove("ck:event:01970e58-0007-7000-8000-000000000003"),
         ),

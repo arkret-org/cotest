@@ -9,7 +9,7 @@ rust-version.workspace = true
 rust-version = "1.96"
 
 # P5.1 — cargo-fuzz crate that hosts the three CI fuzz targets
-# (envelope_fuzz / snapshot_fuzz / anchor_fuzz). Each target wraps the
+# (envelope_fuzz / snapshot_fuzz / seal_fuzz). Each target wraps the
 # matching entry point in `cotest::fuzz::*` so the host crate keeps the
 # arbitrary-derived input types and validator wiring.
 #
@@ -44,8 +44,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "anchor_fuzz"
-path = "fuzz_targets/anchor_fuzz.rs"
+name = "seal_fuzz"
+path = "fuzz_targets/seal_fuzz.rs"
 test = false
 doc = false
 bench = false

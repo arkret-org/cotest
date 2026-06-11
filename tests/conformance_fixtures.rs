@@ -187,7 +187,7 @@ conformance_test!(
 conformance_test!(
     /// C10.C — exercises the SDK's `cokret-lattice` crate against the normative
     /// scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5 by reifying
-    /// the symbolic ops as real `LatticeOp` + `AnchoredOp` values and asserting
+    /// the symbolic ops as real `LatticeOp` + `SealedOp` values and asserting
     /// the spec's join semantics (CasRegister conflict → Bottom, OrSet
     /// commutativity, MvRegister multi-value, Counter PN sum, Fsm transitions,
     /// OrderedLog monotonic append).
