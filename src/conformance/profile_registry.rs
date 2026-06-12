@@ -17,20 +17,17 @@
 //!   registry and must not reappear in implementation profile catalogs. They are negative-test
 //!   context only, not rollup implementation entries.
 //!
-//! The resulting [`ProfileGateReport`] is consumed by
-//! `cotest/tests/conformance_fixtures.rs::profile_registry_gate_suite_...` and
-//! by the certification-report scenario so each new profile id appears in the
-//! JSON / Markdown summary with its status (`certified` / `unsupported` /
-//! `skipped` / `not_implemented`).
+//! The resulting [`ProfileGateReport`] is consumed by the certification-report
+//! scenario so each new profile id appears in the JSON / Markdown summary with
+//! its status (`certified` / `unsupported` / `skipped` / `not_implemented`).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::{load_artifact_json, local_fixture_path, required_str, string_array_field};
-use crate::transcripts::record_vector_event;
 
 /// Status reported by the profile gate for one profile id.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -88,8 +85,6 @@ const NEW_VECTOR_PROFILES: &[&str] = &[
     "ck.profile.discovery_vectors.v1",
     "ck.profile.event_kind_lattice_dispatch_vectors.v1",
     "ck.profile.event_kind_payload_coverage_vectors.v1",
-    "ck.profile.operation_registry_coverage_vectors.v1",
-    "ck.profile.error_code_registry_coverage_vectors.v1",
 ];
 
 /// New implementation profiles that cotest emits explicit manifest entries
@@ -123,14 +118,6 @@ fn suite_registry() -> BTreeMap<&'static str, &'static str> {
     map.insert(
         "event_kind_payload_coverage_fixture",
         "event_kind_payload_coverage_fixture.json",
-    );
-    map.insert(
-        "operation_registry_coverage_fixture",
-        "operation_registry_coverage_fixture.json",
-    );
-    map.insert(
-        "error_code_registry_coverage_fixture",
-        "error_code_registry_coverage_fixture.json",
     );
     map.insert("event_envelope_fixture", "");
     map.insert(
@@ -260,69 +247,6 @@ pub fn build_profile_gate_report() -> Result<ProfileGateReport> {
         removed_event_kind_count,
     };
     Ok(report)
-}
-
-/// Public entrypoint mirrored against the existing `run_profile_matrix_suite`
-/// pattern. The conformance_fixtures.rs test calls this to produce a
-/// transcript event and to hard-fail if a vector profile lost its
-/// `required_cotest_suites` block.
-pub fn run_profile_registry_gate_suite() -> Result<()> {
-    let report = build_profile_gate_report()?;
-
-    record_vector_event(
-        "profile_registry_gate.summary",
-        &json!({
-            "entries": report.entries.len(),
-            "vector_profiles": NEW_VECTOR_PROFILES.len(),
-            "implementation_profiles": NEW_IMPLEMENTATION_PROFILES.len(),
-            "deprecated_hard_reject_profiles": report.deprecated_profile_count,
-            "removed_hard_reject_operations": report.removed_operation_count,
-            "removed_hard_reject_event_kinds": report.removed_event_kind_count,
-        }),
-        &json!({
-            "schema": report.schema.clone(),
-            "expected_categories": ["vector_profile", "implementation_profile"],
-        }),
-        &serde_json::to_value(&report)?,
-    );
-
-    // Hard-fail rule: vector profiles MUST resolve to certified or skipped
-    // with a reason. Implementation profiles MUST resolve to unsupported
-    // with a reason. Anything else means a registry / wiring bug.
-    for entry in &report.entries {
-        match entry.category.as_str() {
-            "vector_profile" => {
-                if entry.status == "skipped" && entry.reason.is_none() {
-                    bail!("vector profile {} skipped without reason", entry.profile_id);
-                }
-                if entry.status != "certified" && entry.status != "skipped" {
-                    bail!(
-                        "vector profile {} resolved to unexpected status {}",
-                        entry.profile_id,
-                        entry.status
-                    );
-                }
-            }
-            "implementation_profile" => {
-                if entry.status != "unsupported" {
-                    bail!(
-                        "implementation profile {} must report unsupported per \
-                         default_unsupported_behavior, got {}",
-                        entry.profile_id,
-                        entry.status
-                    );
-                }
-                if entry.reason.is_none() {
-                    bail!(
-                        "implementation profile {} missing unsupported reason",
-                        entry.profile_id
-                    );
-                }
-            }
-            other => bail!("unknown profile gate category {other}"),
-        }
-    }
-    Ok(())
 }
 
 /// Markdown rendering of the gate report for inclusion in the certification

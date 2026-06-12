@@ -47,14 +47,18 @@ pub(crate) fn reducer_profile_digest_input(registry: &Value, profile_id: &str) -
         .and_then(Value::as_str)
         .unwrap_or_default();
     if canonicalization != "json_jcs" {
-        bail!("reducer-profile-registry canonicalization {canonicalization:?} is unsupported; fail closed");
+        bail!(
+            "reducer-profile-registry canonicalization {canonicalization:?} is unsupported; fail closed"
+        );
     }
     let digest_suite = registry
         .get("digest_suite")
         .and_then(Value::as_str)
         .unwrap_or_default();
     if digest_suite != "sha256" {
-        bail!("reducer-profile-registry digest_suite {digest_suite:?} is not active sha256; fail closed");
+        bail!(
+            "reducer-profile-registry digest_suite {digest_suite:?} is not active sha256; fail closed"
+        );
     }
     let row = registry
         .get("profiles")

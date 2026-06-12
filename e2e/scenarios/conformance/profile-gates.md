@@ -167,7 +167,6 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
   已钉住 self_claimed invariant;本场景在 cotest 层重复该 wire-level 断言
 - **catalog loader**:`fs.readFileSync` 同步读(<3000 行,只用一次);ESM 下用
   `fileURLToPath(import.meta.url)` 构造 `__dirname`(参考
-  `cotest/e2e/scripts/summarize-e2e-coverage.mjs`)
 - **no new helper**:不要新增 `helpers/conformance.ts` / `helpers/profile-catalog.ts`,
   catalog 集合构造与读文件逻辑放在 spec 文件顶部
 - **与 G1.T2 边界**:G1.T2 (`service-surface-contract`) 盯通用 wire 形状

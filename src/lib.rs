@@ -9,15 +9,11 @@
 // hundreds of comments would create churn without changing behavior.
 #![allow(clippy::doc_lazy_continuation, clippy::doc_overindented_list_items)]
 
-pub mod circle_rules;
-pub mod cokret_path_rules;
 pub mod conformance;
 pub mod fixtures;
 pub mod fuzz;
 pub mod harness;
-pub mod literal_scanner;
 pub mod profile_validator;
-pub mod protocol_drift_rules;
 pub mod scenarios;
 pub mod transcripts;
 

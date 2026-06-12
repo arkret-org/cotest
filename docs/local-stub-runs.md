@@ -5,9 +5,6 @@ a local soland-stub backend". This document is the source of truth for
 that mode: how to invoke it, what it does and doesn't exercise, and which
 tests are gated on R4 live integration.
 
-For the spec-coverage matrix see
-[`test-strategy.md` → R3 spec-coverage matrix](./test-strategy.md#r3-spec-coverage-matrix).
-
 ## What a stub run is
 
 A "stub run" exercises cotest's e2e vectors against:

@@ -87,7 +87,7 @@ projection of the SDK-pure side.
 |------------------------------------------------|----------------------------------------|
 | `cargo test --workspace` (SDK-pure)            | All `*` cells; no live-server probe.   |
 | `cargo test --workspace -- --ignored` (live)   | All `*` cells PLUS live HTTP probe.    |
-| `integration.yml` nightly                      | Both above; uploads `journey-coverage.json` and `coverage-matrix.md`. |
+| `integration.yml` nightly                      | Live-stack probes plus uploaded live harness artifacts. |
 
 ### Per-profile gating digest
 

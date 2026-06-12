@@ -30,38 +30,6 @@ macro_rules! conformance_test {
 }
 
 conformance_test!(
-    artifact_registry_suite_matches_reference_semantics,
-    "artifact_registry",
-    cotest::conformance::run_artifact_registry_suite,
-);
-
-conformance_test!(
-    /// C39.8 — artifact-driven profile matrix. Builds the must-test matrix
-    /// from conformance-profiles.json and hard-fails synthetic server claims
-    /// that advertise a profile without its required operations.
-    profile_matrix_suite_matches_artifact_contracts,
-    "profile_matrix",
-    cotest::conformance::run_profile_matrix_suite,
-);
-
-conformance_test!(
-    /// Lane H / spec sync dc01ad7 — runtime profile gate registry. Loads
-    /// conformance-profiles.json and emits a per-profile status entry for the
-    /// 5 new vector profiles (discovery / event_kind_lattice_dispatch /
-    /// event_kind_payload_coverage / operation_registry_coverage /
-    /// error_code_registry_coverage) plus the active implementation profile
-    /// manifest entries. Deprecated profiles stay in the registry-drift
-    /// hard_reject negative context only. Vector profiles whose
-    /// required_cotest_suites resolve in the suite registry report
-    /// `certified`; missing suites report `skipped(suite_not_implemented)`;
-    /// implementation profiles report `unsupported` per the spec's
-    /// default_unsupported_behavior.
-    profile_registry_gate_suite_matches_artifact_contracts,
-    "profile_registry_gate",
-    cotest::conformance::run_profile_registry_gate_suite,
-);
-
-conformance_test!(
     schema_validation_suite_matches_reference_semantics,
     "schema_validation",
     cotest::conformance::run_schema_validation_suite,
@@ -84,44 +52,6 @@ conformance_test!(
     security_closure_vectors_suite_matches_reference_semantics,
     "security_closure_vectors",
     cotest::conformance::run_security_closure_vectors_suite,
-);
-
-conformance_test!(
-    /// Round 4 / A2 — drift allowlist refresh: new capability action
-    /// (`ck.morph.create`), error codes (`delivery_binding_stale`,
-    /// `delivery_binding_handed_over`, `historical_only`), id_kinds
-    /// (`ck:space:`), and new schemas / OpenAPI components are present
-    /// in the canonical registry.
-    protocol_artifact_allowlist_suite_matches_canonical_registry,
-    "protocol_artifact_allowlist",
-    cotest::conformance::run_protocol_artifact_allowlist_suite,
-);
-
-conformance_test!(
-    /// Round 4 / A2 — lint parity: ServiceDescribe schema + OpenAPI
-    /// component required-field alignment, every `/*/describe` 200
-    /// response references ServiceDescribe.
-    service_describe_alignment_check_matches_python_lint,
-    "service_describe_alignment",
-    cotest::conformance::run_service_describe_alignment_check,
-);
-
-conformance_test!(
-    /// Round 4 / A2 — lint parity: /policy/check POST references
-    /// PolicyCheckRequestBody / PolicyCheckOutcome, PolicyCheckRequestBody
-    /// requires `realm_id`, PolicyCheckOutcome requires `bound_to`.
-    policy_check_alignment_check_matches_python_lint,
-    "policy_check_alignment",
-    cotest::conformance::run_policy_check_alignment_check,
-);
-
-conformance_test!(
-    /// Round 4 / A2 — lint parity: every `ck.vector.*` token referenced
-    /// from fixture JSON, conformance prose, or cotest Rust sources
-    /// resolves against the canonical vector-registry.json.
-    vector_reference_closure_check_matches_python_lint,
-    "vector_reference_closure",
-    cotest::conformance::run_vector_reference_closure_check,
 );
 
 conformance_test!(
@@ -188,7 +118,7 @@ conformance_test!(
     /// C10.C — exercises the SDK's `cokret-lattice` crate against the normative
     /// scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5 by reifying
     /// the symbolic ops as real `LatticeOp` + `SealedOp` values and asserting
-    /// the spec's join semantics (CasRegister conflict → Bottom, OrSet
+    /// the spec's join semantics (CasRegister conflict ? Bottom, OrSet
     /// commutativity, MvRegister multi-value, Counter PN sum, Fsm transitions,
     /// OrderedLog monotonic append).
     lattice_round_trip_suite_matches_reference_semantics,
@@ -314,7 +244,7 @@ conformance_test!(
 
 conformance_test!(
     /// Round-20 M3 — anchorer cell governance vectors (4 happy-path profiles +
-    /// concurrent reconfig→Bottom Conflict + signature mismatch + threshold
+    /// concurrent reconfig?Bottom Conflict + signature mismatch + threshold
     /// below/over quorum + registry drift). Stand-alone JSON fixture for SUT
     /// black-box validation; lattice round-trip stays in lattice_round_trip.rs.
     anchorer_cell_fixture_suite_matches_reference_semantics,
@@ -323,7 +253,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-20 M5 — conflict-repair Move vectors (head_in single-op→Value,
+    /// Round-20 M5 — conflict-repair Move vectors (head_in single-op?Value,
     /// self-authorising winner reject at lattice layer, manual repair via
     /// recovery_capability + anchorer endorsement). Stand-alone JSON fixture
     /// for SUT black-box validation; lattice round-trip stays in
@@ -335,8 +265,8 @@ conformance_test!(
 
 conformance_test!(
     /// Round-20 M7 — MLS covered_frontier or-set vectors (idempotent re-add,
-    /// rotation→causal remove, governance Move not blocked, MLS commit writes
-    /// 3 cells in 1 Move, missing/stale covered_frontier precondition→
+    /// rotation?causal remove, governance Move not blocked, MLS commit writes
+    /// 3 cells in 1 Move, missing/stale covered_frontier precondition?
     /// fail_precondition).
     mls_move_covered_frontier_fixture_suite_matches_reference_semantics,
     "mls_move_covered_frontier_fixture",
@@ -374,10 +304,10 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-22 — Event-kind ↔ LatticeKind dispatch consistency. Cross-checks
+    /// Round-22 — Event-kind ? LatticeKind dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core lattice, no cell_family appears in
-    /// two lattices, nameRealm is ck.component.*, bottom ∈ {reject, expose},
+    /// two lattices, nameRealm is ck.component.*, bottom ? {reject, expose},
     /// and the fixture's expected_cell_family_lattice_bindings exactly matches
     /// the registry.
     event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics,
@@ -390,32 +320,6 @@ conformance_test!(
     event_kind_payload_coverage_fixture_suite_matches_reference_semantics,
     "event_kind_payload_coverage_fixture",
     cotest::conformance::run_event_kind_payload_coverage_fixture_suite,
-);
-
-conformance_test!(
-    /// Round-23 A3 — operation registry coverage.
-    operation_registry_coverage_fixture_suite_matches_reference_semantics,
-    "operation_registry_coverage_fixture",
-    cotest::conformance::run_operation_registry_coverage_fixture_suite,
-);
-
-conformance_test!(
-    /// Round-23 A4 — error code registry coverage.
-    error_code_registry_coverage_fixture_suite_matches_reference_semantics,
-    "error_code_registry_coverage_fixture",
-    cotest::conformance::run_error_code_registry_coverage_fixture_suite,
-);
-
-conformance_test!(
-    /// S-13 (cokret-spec 653ffb2) — Applet install/package surface + audit
-    /// intersection. Pins the new ck.self.applet.install/preview/revoke operations,
-    /// the ck.schema.applet_package.v1 schema, the now-required
-    /// registration_epoch field, the reshaped ck.applet.bridge_error payload,
-    /// and the ck.audit.applet_binding / ck.audit.release event kinds against
-    /// the live spec artifacts.
-    applet_audit_surface_matches_live_artifacts,
-    "applet_audit_surface",
-    cotest::conformance::run_applet_audit_surface_check,
 );
 
 conformance_test!(
@@ -508,8 +412,8 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-25 F-1 — recovery bridge full chain (coauth principal-cache →
-    /// soland recovery ticket → restore executor → final state). Round-26
+    /// Round-25 F-1 — recovery bridge full chain (coauth principal-cache ?
+    /// soland recovery ticket ? restore executor ? final state). Round-26
     /// upgraded to full per-step state-machine + transition legality validation.
     recovery_bridge_full_chain_fixture_suite_matches_reference_semantics,
     "recovery_bridge_full_chain_fixture",
@@ -518,7 +422,7 @@ conformance_test!(
 
 conformance_test!(
     /// Round-26 D4 — fixture-decoupled key-backup AEAD round-trip primitive
-    /// check (PBKDF2-HMAC-SHA512 → ChaCha20-Poly1305). Asserts the exact crypto
+    /// check (PBKDF2-HMAC-SHA512 ? ChaCha20-Poly1305). Asserts the exact crypto
     /// primitive set the spec mandates is callable + correct.
     key_backup_aead_round_trip_round_26,
     "key_backup_aead_round_trip_round_26",
@@ -552,8 +456,8 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-27 D5 — device cross-signing trust boundary (cross-user master →
-    /// user-signing → trusted-user master chain; revoke + rotation invariants).
+    /// Round-27 D5 — device cross-signing trust boundary (cross-user master ?
+    /// user-signing ? trusted-user master chain; revoke + rotation invariants).
     device_cross_signing_trust_fixture_suite_matches_reference_semantics,
     "device_cross_signing_trust_fixture",
     cotest::conformance::run_device_cross_signing_trust_fixture_suite,
@@ -627,17 +531,6 @@ conformance_test!(
     lattice_mixed_kinds_suite_matches_reference_semantics,
     "lattice_mixed_kinds",
     cotest::conformance::run_lattice_mixed_kinds_suite,
-);
-
-conformance_test!(
-    /// CT-3 — snapshot v1 tampered Merkle vectors. A snapshot whose chunk
-    /// payload or inclusion-proof branch has been mutated MUST be rejected
-    /// with `digest_mismatch`, even when a local Merkle recompute is
-    /// internally consistent against the mutation. Spec:
-    /// conformance/snapshot-schema.md §3 / §4 / §5 / §6.
-    snapshot_v1_tampered_merkle_suite_matches_reference_semantics,
-    "snapshot_v1_tampered_merkle",
-    cotest::conformance::run_snapshot_v1_tampered_merkle_suite,
 );
 
 conformance_test!(

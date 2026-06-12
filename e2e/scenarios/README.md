@@ -31,7 +31,6 @@ e2e/
 - **66 个 playwright spec 文件**
 - **226 live test / 169 fixme / 21 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
 - **9 个 mock service**:OIDC IdP / Email 3PID / WebVH witness / Audit agent / Policy server / Push gateway / Applet registry / TSP endpoint / MIMI facade
-- 数字由 [`scripts/summarize-e2e-coverage.mjs`](../scripts/summarize-e2e-coverage.mjs) 从文件树重算;`--check` 在出现 orphan 或 catalog drift 时返回非零,可挂 CI
 
 ## 19 个 domain
 

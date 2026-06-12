@@ -19,9 +19,7 @@ push tags, or open remote CI-only follow-ups as evidence.
 2. Run the single-spec command locally and keep its run artifact path.
 3. Promote through `scripts/promote-fixme.ps1`, passing `-FeatureId`,
    `-PassedSpecCommand`, and `-EvidencePath`.
-4. Run `node e2e/scripts/fixme-debt-report.mjs --strict` and
-   `node e2e/scripts/summarize-e2e-coverage.mjs --check`.
-5. Commit the promotion together with the evidence reference in the relevant
+4. Commit the promotion together with the evidence reference in the relevant
    todo/report document.
 
 Example:

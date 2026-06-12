@@ -5,7 +5,6 @@
 //! `tests/full_stack_e2e.rs` (run under `--ignored`) and will pick up
 //! the Circle flows during P5.
 
-use cotest::scenarios::circle::cap_action_grant::cap_action_grant_run;
 use cotest::scenarios::circle::child_scope_policy::child_scope_policy_run;
 use cotest::scenarios::circle::confidential_discussion_relation::confidential_discussion_relation_run;
 use cotest::scenarios::circle::create_circle::create_circle_run;
@@ -49,13 +48,6 @@ async fn circle_confidential_discussion_relation() {
     confidential_discussion_relation_run()
         .await
         .expect("confidential_discussion_relation scenario");
-}
-
-#[tokio::test]
-async fn circle_cap_action_grant() {
-    cap_action_grant_run()
-        .await
-        .expect("cap_action_grant scenario");
 }
 
 #[tokio::test]

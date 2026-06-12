@@ -8,15 +8,15 @@
 //!      `ck.agent.` or `ck.self.agent.`).
 //!   3. the three aggregate actions (sidecar_thread.{ensure,write,publish}) are syntactically
 //!      distinguishable from the 8 base lifecycle/ runtime actions.
-//!   4. an accountability grant is referenced through its `ck.identity.accountability_grant`
-//!      event — the `accountability_grant_ref` is an `EventId` that round-trips through the SDK
-//!      validator (the dedicated `ck:accountability_grant:` typed-id family is retired).
+//!   4. an accountability grant is referenced through its `ck.identity.accountability_grant` event
+//!      — the `accountability_grant_ref` is an `EventId` that round-trips through the SDK validator
+//!      (the dedicated `ck:accountability_grant:` typed-id family is retired).
 
 use anyhow::{Result, anyhow};
+use cokret_core::events::IDENTITY_ACCOUNTABILITY_GRANT;
 use cokret_core::{
     AGENT_CAPABILITY_ACTIONS, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE, EventId,
-    events::IDENTITY_ACCOUNTABILITY_GRANT,
 };
 
 /// The 3 aggregate sidecar-thread actions. Each carries a

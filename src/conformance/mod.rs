@@ -16,24 +16,20 @@ mod member_roster_vectors;
 mod mention_rendering_vectors;
 pub mod mock_vector_base;
 mod object_addressing_vectors;
-mod openapi_lint_parity;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
 mod private_chat_privacy;
 mod profile_matrix;
 mod profile_registry;
-mod protocol_artifact_allowlist;
 mod redaction;
 mod reducer_profile;
-mod registry;
 mod scaffold_gate;
 mod schema_validation;
 mod schema_validation_fixture;
 mod security_closure;
 mod security_negative;
 mod sidecar_vectors;
-mod snapshot_v1_tampered_merkle;
 mod state_resolution;
 mod sync;
 mod wire;
@@ -74,7 +70,6 @@ pub use encoding::{
 };
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
-pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
@@ -131,10 +126,6 @@ pub use object_addressing_vectors::{
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,
 };
-pub use openapi_lint_parity::{
-    run_policy_check_alignment_check, run_service_describe_alignment_check,
-    run_vector_reference_closure_check,
-};
 pub use primary_handle_vectors::{
     ALL_PRIMARY_HANDLE_VECTOR_IDS, run_as_of_replay_vs_realtime_vector,
     run_audience_match_wins_vector, run_claim_digest_stable_under_hint_vector,
@@ -150,18 +141,13 @@ pub use principal_server_certification::{
 };
 pub use privacy::run_privacy_security_fixture_suite;
 pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
-pub use profile_matrix::{run_profile_matrix_suite, validate_server_profile_claims};
+pub use profile_matrix::validate_server_profile_claims;
 pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
-    run_profile_registry_gate_suite,
-};
-pub use protocol_artifact_allowlist::{
-    NEW_CAPABILITY_ACTIONS, NEW_ERROR_CODES, NEW_OBJECT_REF_ID_KINDS, NEW_OPENAPI_COMPONENTS,
-    NEW_SCHEMA_DEFS, run_protocol_artifact_allowlist_suite,
 };
 pub use redaction::run_redaction_fixture_suite;
-pub use registry::run_artifact_registry_suite;
+pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,
@@ -183,20 +169,18 @@ pub use sidecar_vectors::{
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
     run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
 };
-pub use snapshot_v1_tampered_merkle::run_snapshot_v1_tampered_merkle_suite;
 pub use state_resolution::{
     run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
 };
 pub use sync::run_sync_fixture_suite;
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
-    run_applet_audit_surface_check, run_composite_state_key_encoding_fixture_suite,
-    run_composite_state_subject_fixture_suite, run_conflict_repair_fixture_suite,
-    run_consent_fixture_suite, run_constraint_evaluation_class_fixture_suite,
-    run_constraint_family_fixture_suite, run_cross_signing_reset_fixture_suite,
-    run_device_cross_signing_trust_fixture_suite, run_device_message_negative_fixture_suite,
-    run_device_verification_fixture_suite, run_discovery_profile_fixture_suite,
-    run_error_code_registry_coverage_fixture_suite, run_event_kind_lattice_dispatch_fixture_suite,
+    run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
+    run_conflict_repair_fixture_suite, run_consent_fixture_suite,
+    run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
+    run_cross_signing_reset_fixture_suite, run_device_cross_signing_trust_fixture_suite,
+    run_device_message_negative_fixture_suite, run_device_verification_fixture_suite,
+    run_discovery_profile_fixture_suite, run_event_kind_lattice_dispatch_fixture_suite,
     run_event_kind_payload_coverage_fixture_suite, run_facet_renderer_query_fixture_suite,
     run_frontier_conflict_resolution_fixture_suite, run_history_visibility_fixture_suite,
     run_history_visibility_projection_matrix_check, run_key_backup_aead_round_trip_check,
@@ -205,24 +189,15 @@ pub use wire::{
     run_megolm_ratcheting_fixture_suite, run_membership_fsm_fixture_suite,
     run_mimi_components_fixture_suite, run_mls_e2ee_basic_fixture_suite,
     run_mls_move_covered_frontier_fixture_suite, run_multi_admin_distinct_approver_gate_check,
-    run_multi_realm_federation_fixture_suite, run_operation_registry_coverage_fixture_suite,
-    run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
-    run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
-    run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,
-    run_restore_full_workflows_fixture_suite, run_state_resolution_quarantine_fixture_suite,
-    run_threshold_multisig_fixture_suite,
+    run_multi_realm_federation_fixture_suite, run_production_signing_fixture_suite,
+    run_read_receipt_policy_fixture_suite, run_recovery_bridge_full_chain_fixture_suite,
+    run_recovery_ticket_state_machine_check, run_redacted_cross_server_fixture_suite,
+    run_redaction_history_visibility_fixture_suite, run_restore_full_workflows_fixture_suite,
+    run_state_resolution_quarantine_fixture_suite, run_threshold_multisig_fixture_suite,
 };
 pub use yougen_client::run_yougen_client_profile_manifest_suite;
 
 // ── Shared fixture types ────────────────────────────────────────────────────
-
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct RegistryManifestEntry {
-    pub(crate) kind: String,
-    pub(crate) source_role: String,
-    pub(crate) source_of_truth: bool,
-    pub(crate) generated_from: Option<String>,
-}
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct EncodingFixture {
@@ -438,13 +413,6 @@ pub(crate) fn load_artifact_json(relative_path: &str) -> Result<Value> {
     let path = spec_artifacts_root().join(relative_path);
     let raw = fs::read_to_string(&path)?;
     serde_json::from_str(&raw)
-        .map_err(|error| anyhow!("failed to parse artifact {}: {error}", path.display()))
-}
-
-pub(crate) fn load_artifact_yaml(relative_path: &str) -> Result<serde_yaml::Value> {
-    let path = spec_artifacts_root().join(relative_path);
-    let raw = fs::read_to_string(&path)?;
-    serde_yaml::from_str(&raw)
         .map_err(|error| anyhow!("failed to parse artifact {}: {error}", path.display()))
 }
 

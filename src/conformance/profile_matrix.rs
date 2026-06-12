@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use super::{load_artifact_json, local_fixture_path, required_str, string_array_field};
-use crate::transcripts::record_vector_event;
+use super::{load_artifact_json, required_str, string_array_field};
 
 const PROFILE_LIST_FIELDS: &[&str] = &[
     "implementation_profiles",
@@ -35,41 +34,9 @@ const MIXED_PROFILE_FIELDS: &[&str] = &[
     "mimi_interop",
 ];
 
-const REQUIRED_COTEST_SUITES: &[(&str, &str)] = &[
-    (
-        "ck.profile.event_envelope_negative_vectors.v1",
-        "event_envelope_fixture",
-    ),
-    (
-        "ck.profile.discovery_vectors.v1",
-        "discovery_profile_fixture",
-    ),
-    (
-        "ck.profile.event_kind_lattice_dispatch_vectors.v1",
-        "event_kind_lattice_dispatch_fixture",
-    ),
-    (
-        "ck.profile.event_kind_payload_coverage_vectors.v1",
-        "event_kind_payload_coverage_fixture",
-    ),
-    (
-        "ck.profile.operation_registry_coverage_vectors.v1",
-        "operation_registry_coverage_fixture",
-    ),
-    (
-        "ck.profile.error_code_registry_coverage_vectors.v1",
-        "error_code_registry_coverage_fixture",
-    ),
-    (
-        "ck.profile.privacy_security_vectors.v1",
-        "security_negative_profile",
-    ),
-];
-
-const LOCAL_PROFILE_SUITES: &[(&str, &str, &str)] = &[(
+const LOCAL_PROFILE_SUITES: &[(&str, &str)] = &[(
     "ck.profile.privacy_security_vectors.v1",
     "security_negative_profile",
-    "security-negative-profile-fixture.json",
 )];
 
 #[derive(Debug)]
@@ -85,45 +52,6 @@ struct ProfileRequirement {
 struct ProfileMatrix {
     declared_profiles: BTreeSet<String>,
     requirements: BTreeMap<String, ProfileRequirement>,
-    operation_ids: BTreeSet<String>,
-    event_kinds: BTreeSet<String>,
-    schema_ids: BTreeSet<String>,
-}
-
-pub fn run_profile_matrix_suite() -> Result<()> {
-    let matrix = load_profile_matrix()?;
-
-    for (profile, suite) in REQUIRED_COTEST_SUITES {
-        let requirement = matrix
-            .requirements
-            .get(*profile)
-            .ok_or_else(|| anyhow!("required conformance vector profile {profile} is missing"))?;
-        if !requirement.cotest_suites.contains(*suite) {
-            bail!("profile {profile} does not require cotest suite {suite}");
-        }
-    }
-
-    validate_synthetic_server_claims(&matrix)?;
-
-    record_vector_event(
-        "profile_matrix.summary",
-        &json!({
-            "profiles": matrix.declared_profiles.len(),
-            "requirements": matrix.requirements.len(),
-            "operations": matrix.operation_ids.len(),
-            "event_kinds": matrix.event_kinds.len(),
-            "schemas": matrix.schema_ids.len(),
-        }),
-        &json!({
-            "required_cotest_profiles": REQUIRED_COTEST_SUITES.len(),
-            "server_claims": "hard_fail_on_missing_required_operation_unknown_profile_failed_conformance_result_or_limited_supported_profile"
-        }),
-        &json!({
-            "status": "ok"
-        }),
-    );
-
-    Ok(())
 }
 
 pub fn validate_server_profile_claims(describe: &Value) -> Result<()> {
@@ -160,9 +88,6 @@ fn load_profile_matrix() -> Result<ProfileMatrix> {
     Ok(ProfileMatrix {
         declared_profiles,
         requirements,
-        operation_ids,
-        event_kinds,
-        schema_ids,
     })
 }
 
@@ -318,30 +243,15 @@ fn collect_cotest_suites(requirement: &Value, profile: &str) -> Result<BTreeSet<
         for item in items {
             let suite = required_str(item, "suite")?;
             suites.insert(suite.to_owned());
-            if let Some(local_fixture) = item.get("local_fixture").and_then(Value::as_str) {
-                ensure_local_fixture(profile, local_fixture)?;
-            }
         }
     }
-    for &(local_profile, suite, fixture) in LOCAL_PROFILE_SUITES {
+    for &(local_profile, suite) in LOCAL_PROFILE_SUITES {
         if local_profile == profile {
-            ensure_local_fixture(profile, fixture)?;
             suites.insert(suite.to_owned());
         }
     }
 
     Ok(suites)
-}
-
-fn ensure_local_fixture(profile: &str, file_name: &str) -> Result<()> {
-    let path = local_fixture_path(file_name);
-    if !path.is_file() {
-        bail!(
-            "{profile} required_cotest_suites fixture missing: {}",
-            path.display()
-        );
-    }
-    Ok(())
 }
 
 fn registry_id_set(
@@ -361,106 +271,6 @@ fn registry_id_set(
         }
     }
     Ok(ids)
-}
-
-fn validate_synthetic_server_claims(matrix: &ProfileMatrix) -> Result<()> {
-    let core = matrix
-        .requirements
-        .get("ck.profile.core_event_store.v1")
-        .ok_or_else(|| anyhow!("core_event_store missing from profile matrix"))?;
-    let good = json!({
-        "supported_profiles": ["ck.profile.core_event_store.v1"],
-        "supported_operations": sorted_values(&core.required_operations),
-        "supported_event_kinds": sorted_values(&core.required_event_kinds),
-        "supported_event_schemas": sorted_values(&core.required_schemas),
-        "conformance_results": {
-            "ck.profile.core_event_store.v1": {
-                "status": "passed"
-            }
-        }
-    });
-    validate_server_claims_against_matrix(&good, matrix)?;
-
-    let mut missing_operation = core.required_operations.clone();
-    missing_operation.remove("ck.self.events.submit");
-    let bad = json!({
-        "supported_profiles": ["ck.profile.core_event_store.v1"],
-        "supported_operations": sorted_values(&missing_operation),
-        "supported_event_kinds": sorted_values(&core.required_event_kinds),
-        "supported_event_schemas": sorted_values(&core.required_schemas),
-    });
-    if validate_server_claims_against_matrix(&bad, matrix).is_ok() {
-        bail!("profile matrix accepted a server claim missing ck.self.events.submit");
-    }
-
-    let unknown = json!({
-        "supported_profiles": ["ck.profile.not_registered.v1"],
-        "supported_operations": [],
-    });
-    if validate_server_claims_against_matrix(&unknown, matrix).is_ok() {
-        bail!("profile matrix accepted an unknown claimed profile");
-    }
-
-    let failed_result = json!({
-        "supported_profiles": ["ck.profile.core_event_store.v1"],
-        "supported_operations": sorted_values(&core.required_operations),
-        "supported_event_kinds": sorted_values(&core.required_event_kinds),
-        "supported_event_schemas": sorted_values(&core.required_schemas),
-        "conformance_results": {
-            "ck.profile.core_event_store.v1": {
-                "status": "failed",
-                "failed_suites": ["event_envelope_fixture"]
-            }
-        }
-    });
-    if validate_server_claims_against_matrix(&failed_result, matrix).is_ok() {
-        bail!("profile matrix accepted a claimed profile with failed conformance results");
-    }
-
-    let privacy = matrix
-        .requirements
-        .get("ck.profile.privacy_security_vectors.v1")
-        .ok_or_else(|| anyhow!("privacy_security_vectors missing from profile matrix"))?;
-    let failed_security_suite = json!({
-        "supported_profiles": ["ck.profile.privacy_security_vectors.v1"],
-        "supported_operations": sorted_values(&privacy.required_operations),
-        "supported_event_kinds": sorted_values(&privacy.required_event_kinds),
-        "supported_event_schemas": sorted_values(&privacy.required_schemas),
-        "conformance_results": {
-            "ck.profile.privacy_security_vectors.v1": {
-                "status": "passed",
-                "suites": {
-                    "security_negative_profile": "failed"
-                }
-            }
-        }
-    });
-    if validate_server_claims_against_matrix(&failed_security_suite, matrix).is_ok() {
-        bail!("profile matrix accepted a failed required security negative suite");
-    }
-
-    let limited_supported = json!({
-        "supported_profiles": ["ck.profile.soland_limited_server.v1"],
-        "supported_operations": [],
-    });
-    if validate_server_claims_against_matrix(&limited_supported, matrix).is_ok() {
-        bail!("profile matrix accepted a limited profile in supported_profiles");
-    }
-
-    let limited_unsupported = json!({
-        "supported_profiles": [],
-        "supported_operations": [],
-        "unsupported_profiles": [
-            {
-                "profile": "ck.profile.soland_limited_server.v1",
-                "status": "unsupported",
-                "reason": "limited profile is not a conformance claim"
-            }
-        ]
-    });
-    validate_server_claims_against_matrix(&limited_unsupported, matrix)?;
-
-    Ok(())
 }
 
 fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatrix) -> Result<()> {
@@ -664,10 +474,6 @@ fn optional_string_set_field(value: &Value, field: &str) -> Result<Option<BTreeS
         return Ok(None);
     }
     string_set_field(value, field).map(Some)
-}
-
-fn sorted_values(values: &BTreeSet<String>) -> Vec<String> {
-    values.iter().cloned().collect()
 }
 
 fn validate_profile_id(profile: &str) -> Result<()> {

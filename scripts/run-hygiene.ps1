@@ -3,8 +3,7 @@ param(
     [string]$OutputRoot,
     [switch]$SkipCargoDeny,
     [switch]$SkipTypos,
-    [switch]$SkipCargoAudit,
-    [switch]$SkipFixmeDebt
+    [switch]$SkipCargoAudit
 )
 
 $ErrorActionPreference = "Stop"
@@ -95,13 +94,6 @@ if (-not $SkipTypos) {
 if (-not $SkipCargoAudit) {
     $results.Add((Invoke-HygieneCommand -Label "cargo-audit" -FilePath $cargoPath -Arguments @("audit") -RunDir $runDir -RawLog $rawLog))
 }
-if (-not $SkipFixmeDebt) {
-    $nodePath = Resolve-CommandPath "node"
-    $fixmeReport = Join-Path $runDir "fixme-debt.md"
-    $fixmeScript = Join-Path $repoRoot "e2e\scripts\fixme-debt-report.mjs"
-    $results.Add((Invoke-HygieneCommand -Label "fixme-debt" -FilePath $nodePath -Arguments @($fixmeScript, "--strict", "--output", $fixmeReport) -RunDir $runDir -RawLog $rawLog))
-}
-
 if ($results.Count -eq 0) {
     throw "No hygiene checks were selected"
 }

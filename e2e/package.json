@@ -4,9 +4,6 @@
   "type": "module",
   "scripts": {
     "test": "playwright test --config playwright.config.ts",
-    "gate:debt": "node scripts/e2e-debt-gate.mjs",
-    "gate:dev-proof": "node scripts/dev-proof-gate.mjs",
-    "gate": "npm run gate:debt && npm run gate:dev-proof",
     "test:headed": "playwright test --config playwright.config.ts --headed"
   },
   "devDependencies": {

@@ -93,10 +93,8 @@ envelope shape — a wire-shape regression cannot ship.
 - `.github/workflows/ci.yml` job `rust` runs the SDK-pure tier on every
   PR. Each toolchain matrix entry (`1.80`, `1.92`) must be green.
 - `.github/workflows/integration.yml` job `joint-bringup` runs the
-  live-server tier nightly against the sibling `soland` checkout.
-  `journey-coverage.json` + `journey-coverage.md` are uploaded as the
-  evidence artifact; consumers should download the most recent
-  successful run before signing off on a §11 compliance claim.
+  live-server tier nightly against the sibling `soland` checkout and uploads
+  the live harness artifacts from the run.
 
 ## Cross-references
 

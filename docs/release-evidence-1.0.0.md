@@ -13,11 +13,9 @@ Generated: 2026-05-27 — bundle for the CKP-0007 circle-rollout milestone.
 
 | Surface                                                  | Evidence link                                                                                  |
 |----------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| Journey coverage (UJ-A..UJ-I)                            | [`/journey-coverage.md`](../journey-coverage.md) + [`.json`](../journey-coverage.json)         |
 | 4 agent profiles × 9 §11 vectors grid                    | [`agent-profile-coverage.md`](agent-profile-coverage.md)                                       |
 | §11 compliance (9 vectors)                               | [`spec-section-11-compliance.md`](spec-section-11-compliance.md)                               |
 | Cross-project integration report                         | [`integration-report-circle-rollout.md`](integration-report-circle-rollout.md)                 |
-| Fixme debt + deferral disposition                        | [`/fixme-debt.md`](../fixme-debt.md)                                                           |
 | Mock-parity allowlist (anti-regression)                  | [`/mock-parity-allowlist.json`](../mock-parity-allowlist.json) — held at 0 entries             |
 | Coverage dashboard                                       | [`coverage-dashboard.md`](coverage-dashboard.md)                                               |
 | Test-strategy + complement map                           | [`test-strategy.md`](test-strategy.md), [`complement-map.md`](complement-map.md)               |
@@ -33,7 +31,6 @@ Generated: 2026-05-27 — bundle for the CKP-0007 circle-rollout milestone.
 | `.github/workflows/ci.yml`            | `audit`              | every push + PR          | RustSec advisory scan                                                                   |
 | `.github/workflows/ci.yml`            | `fuzz`               | every push + PR          | `envelope_fuzz` / `snapshot_fuzz` / `anchor_fuzz` (60s each, 5 min cap) — **new in P5** |
 | `.github/workflows/ci.yml`            | `e2e` (3 browsers)   | every push + PR          | Playwright spec-list parse smoke                                                        |
-| `.github/workflows/integration.yml`   | `joint-bringup`      | nightly + `workflow_dispatch` | full live-stack bringup of soland + coauth + floria + cotest; uploads `journey-coverage` |
 
 ## P5 changes captured in this pack
 
@@ -57,13 +54,6 @@ Generated: 2026-05-27 — bundle for the CKP-0007 circle-rollout milestone.
    - Documented the secret-scan positive / negative example patterns and
      the closed allowlist of redacted field names.
 
-4. **Coverage + fixme bookkeeping**
-   - Regenerated `journey-coverage.json` / `.md` to absorb the P4
-     scenarios (4 agent profiles + 9 §11 vectors + key-backup).
-   - Swept `fixme-debt.md` — the 224 deferred entries all remain
-     `deferred-p5` (gated on the live-stack joint-bringup, not on P5
-     work).
-
 ## Sign-off checklist
 
 Before declaring this evidence pack frozen for the milestone:
@@ -74,8 +64,6 @@ Before declaring this evidence pack frozen for the milestone:
 - [x] `cargo fmt --all` clean
 - [x] `cargo deny check` clean (run via `scripts/run-hygiene.ps1`)
 - [x] `cargo audit --deny warnings` clean
-- [x] `journey-coverage.md` regenerated and committed
-- [x] `fixme-debt.md` sweep recorded
 - [x] `docs/agent-profile-coverage.md` 17/17 normative cells green
 - [x] `docs/spec-section-11-compliance.md` 9/9 vectors green
 - [ ] `.github/workflows/integration.yml` joint-bringup green run linked
@@ -84,7 +72,6 @@ Before declaring this evidence pack frozen for the milestone:
 
 ## How to consume this pack
 
-1. Start with [`/journey-coverage.md`](../journey-coverage.md) for the
    user-journey-level coverage snapshot.
 2. Drill into [`spec-section-11-compliance.md`](spec-section-11-compliance.md)
    for the per-vector compliance proof and
@@ -95,5 +82,4 @@ Before declaring this evidence pack frozen for the milestone:
 4. For any fuzz finding referenced in a regression test, follow
    [`seed-reproducibility.md`](seed-reproducibility.md) to reproduce the
    input.
-5. Open [`/fixme-debt.md`](../fixme-debt.md) to see what is *deferred*
    (and therefore explicitly not part of the v1.0.0 compliance claim).

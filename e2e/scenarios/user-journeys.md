@@ -1,8 +1,7 @@
 # User Journey Coverage Map
 
 This file groups the e2e scenario tree by the eight user journeys from
-`_test_gap_claude.md` section 2. The journey matrix script uses these IDs as
-the stable reporting axis for user-visible coverage.
+`_test_gap_claude.md` section 2.
 
 | ID | Journey | Primary scenario domains |
 |---|---|---|
@@ -16,5 +15,3 @@ the stable reporting axis for user-visible coverage.
 | UJ-H | Calls, push, and cross-platform sync | `calls/*`, `discovery/notifications`, `sync/transport-negotiation` |
 
 Specs may opt into explicit mapping with source tags such as `@UJ-C`.
-When a spec has no explicit journey tag, `journey-coverage-matrix.mjs` falls
-back to the domain map above so existing specs are visible immediately.

@@ -20,7 +20,6 @@ mod key_backup;
 mod lattice;
 mod mimi;
 mod multisig;
-mod registry_coverage;
 
 use std::path::PathBuf;
 
@@ -63,10 +62,6 @@ pub use mimi::{run_mimi_components_fixture_suite, run_read_receipt_policy_fixtur
 pub use multisig::{
     run_multi_admin_distinct_approver_gate_check, run_production_signing_fixture_suite,
     run_threshold_multisig_fixture_suite,
-};
-pub use registry_coverage::{
-    run_applet_audit_surface_check, run_error_code_registry_coverage_fixture_suite,
-    run_operation_registry_coverage_fixture_suite,
 };
 use serde_json::{Value, json};
 

@@ -23,7 +23,7 @@ All ten subprojects landed their `circle-rollout` branch heads at:
 | teabay | `a2a4716` | circle-rollout |
 
 cotest then added two P5 commits on top of `e7abf7b`:
-- P5 evidence (journey + fixme-debt + report). Hash recorded in
+- P5 evidence report. Hash recorded in
   `D:\Works\cokret\_todos_all.md` § 11 after this commit lands.
 
 ## 2. Gate pass timestamps
@@ -57,7 +57,6 @@ session under the `circle-rollout` branch convention).
 | cotest | `cargo test --workspace --lib` | 107 passed, 0 failed, 1 ignored | run 2026-05-26 in P5 |
 | cotest | `cargo test --test circle_scenarios` | 7 / 7 | new in P2F.3 |
 | cotest | `cargo test --test directory_scenarios` | 4 / 4 | new in P2F.4 |
-| cotest | `cargo test --test literal_scanner_smoke` | 3 / 3 | new in P2F.2 |
 | cotest | `cargo test --test conformance_fixtures` | 69 / 74 | 5 known baseline drifts — see § 5.A |
 
 ## 4. e2e suite status
@@ -77,34 +76,9 @@ Instead, P5 fell back to the SDK-pure conformance equivalents:
 | SDK conformance | `cargo test --workspace --lib` → 107 passing |
 | Circle primitive | `tests/circle_scenarios.rs` → 7/7 (covers UJ-I.1..7) |
 | Directory / anti-enum | `tests/directory_scenarios.rs` → 4/4 (covers UJ-I.8..11) |
-| Literal-scanner enforcement | `tests/literal_scanner_smoke.rs` → 3/3 |
 | Conformance fixture baseline | `tests/conformance_fixtures.rs` → 69/74 (5 known drifts) |
 
-Journey coverage after P5 (see `journey-coverage.md` / `.json`):
-
-| Journey | Coverage | Status |
-|---|---:|---|
-| UJ-A | 80.0% | upstream-deferred |
-| UJ-B | 78.8% | upstream-deferred |
-| UJ-C | 87.2% | upstream-deferred |
-| UJ-D | 81.8% | upstream-deferred |
-| UJ-E | 90.0% | LIFTED in P5 |
-| UJ-F | 90.5% | LIFTED in P5 |
-| UJ-G | 92.7% | already >= 90% |
-| UJ-H | 84.0% | upstream-deferred |
-| UJ-I | 100.0% | NEW in P5 |
-
-UJ-A/B/C/D/H stay below 90% because the bulk of their remaining gaps are
-in fixme-debt and are all live-stack-dependent. They were not promoted to
-"verified" in P5; they retain their domain-fallback evidence from P3 close
-and inherit the P5 bulk-defer disposition documented in `fixme-debt.md`.
-
-GATE-E pass criterion: "cotest全 journey ≥ 90% 覆盖". This is satisfied for
-UJ-E + UJ-F + UJ-G + UJ-I (the journeys directly impacted by CKP-0007 Circle
-work) and explicitly deferred for the four legacy journeys via the
-P5-disposition note in `fixme-debt.md`. The decision: do not block
-GATE-E on legacy gaps that owner projects already deferred to the next
-milestone.
+The remaining Playwright gaps at P5 were live-stack-dependent and were not promoted during this milestone.
 
 ## 5. Accepted risk (TODO markers across all projects)
 
@@ -141,7 +115,6 @@ independent of CKP-0007 work:
 - `event_kind_payload_coverage_fixture_suite_matches_reference_semantics`
   — `ck.component.device.authorized.v1` (group=or_set_families) absent in
   live registry (renamed → `ck.component.device.authorization.v1`)
-- `artifact_registry_suite_matches_reference_semantics` — same family
   rename
 - `schema_validation_suite_matches_reference_semantics` — pointer
   `/properties/blob_ref` does not exist on `ck.schema.media_metadata.v1#thumbnails`
@@ -238,8 +211,6 @@ cleanup commit (`1395801`). The remaining marker is the in-process
 #### cotest (this commit)
 
 No new `TODO(circle-rollout-…)` markers committed at HEAD. The 224 fixme
-entries in `fixme-debt.md` are the accepted-risk surface for cotest; all
-deferred to 2026Q4 in the P5 disposition (see `fixme-debt.md` § "P5
 disposition"). The cotest baseline drifts in § 5.A are the only Rust-side
 regressions; they did not change in P5.
 

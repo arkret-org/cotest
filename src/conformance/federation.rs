@@ -187,7 +187,10 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     .as_deref()
                     .ok_or_else(|| anyhow!("{} case lacks receiver digest", case.name))?;
                 if !looks_like_sha256_digest(sender) || !looks_like_sha256_digest(receiver) {
-                    bail!("federation fixture {} digests are not sha256:<hex>", case.name);
+                    bail!(
+                        "federation fixture {} digests are not sha256:<hex>",
+                        case.name
+                    );
                 }
                 let verdict = validate_reducer_profile_digest(sender, receiver);
                 if verdict != Err("reducer_profile_mismatch") {

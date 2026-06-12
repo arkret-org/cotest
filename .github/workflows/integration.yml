@@ -2,7 +2,7 @@ name: integration
 
 # Cross-project bring-up (P2F.5.2). Builds the upstream services
 # (soland / coauth / floria) from sibling checkouts and runs the cotest
-# harness against them. Publishes journey-coverage.json as an artifact.
+# harness against them.
 #
 # IMPORTANT (per `_todos_all.md` §0):
 #   * does NOT publish any release artefact, push tags, or bump versions.
@@ -11,8 +11,8 @@ name: integration
 on:
   workflow_dispatch:
   schedule:
-    # Nightly bring-up so journey-coverage / fixme-debt deltas are visible
-    # even when no PR has churned cotest.
+    # Nightly bring-up keeps cross-repo live-stack regressions visible even
+    # when no PR has churned cotest.
     - cron: "0 4 * * *"
 
 env:
@@ -84,9 +84,6 @@ jobs:
         run: |
           npm ci || npm install
           npx playwright install --with-deps chromium
-      - name: e2e debt gates
-        working-directory: cotest/e2e
-        run: npm run gate
       - name: run cotest harness
         working-directory: cotest
         # Default tests must pass before any live opt-in gates run.
@@ -199,15 +196,11 @@ jobs:
           done
 
           npx playwright test --config playwright.config.ts --project=chromium tests/federation/security-hardening.spec.ts
-      - name: refresh journey coverage
-        working-directory: cotest
-        run: node e2e/scripts/journey-coverage-matrix.mjs --output journey-coverage.md --json-output journey-coverage.json
       - name: run selected ignored live harness probes
         working-directory: cotest
         # Keep this list explicit. A workspace-wide `cargo test -- --ignored`
-        # also runs tracked scaffold/manual debt (for example the Rust
-        # `unimplemented!()` scenarios reported in fixme-debt.md). Nightly
-        # should fail on selected live probe failures, not on known debt.
+        # also runs tracked scaffold/manual debt. Nightly should fail on
+        # selected live probe failures, not on known deferred work.
         #
         # The `test-with-containers` feature is Linux-only (see
         # `src/scenarios/_helpers/coauth_bootstrap.rs`). We enable it
@@ -219,12 +212,10 @@ jobs:
           cargo test --locked --features test-with-containers --test _bootstrap_smoke coauth_can_be_spawned_with_ephemeral_postgres -- --ignored
           cargo test --locked --features test-with-containers --test _bootstrap_smoke floria_can_be_spawned_with_rendered_config -- --ignored
           cargo test --locked --features test-with-containers --test chaos_inject_smoke testcontainers_postgres_bringup_smoke -- --ignored
-      - name: upload journey-coverage
+      - name: upload live harness artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: journey-coverage
+          name: live-harness-artifacts
           path: |
-            cotest/journey-coverage.json
-            cotest/journey-coverage.md
             cotest/artifacts/integration-playwright

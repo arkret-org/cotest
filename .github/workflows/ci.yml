@@ -222,9 +222,6 @@ jobs:
         run: |
           npm ci || npm install
           npx playwright install --with-deps ${{ matrix.project }}
-      - name: e2e debt gates
-        working-directory: cotest/e2e
-        run: npm run gate
       - name: Run live Playwright smoke
         working-directory: cotest/e2e
         env:

@@ -93,10 +93,9 @@ Recommended entrypoints:
   `artifacts/runs/<timestamp>/`, then copies the latest set to
   `artifacts/latest/`.
 - `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
-  advisories/licensing (`cargo deny check`), spelling drift (`typos`),
-  RustSec vulnerabilities (`cargo audit`), and Playwright fixme debt metadata
-  (`fixme-debt-report.mjs --strict`). It writes `raw.log`,
-  `summary.json`, `summary.md`, and per-tool stdout/stderr logs to
+  advisories/licensing (`cargo deny check`), spelling drift (`typos`), and
+  RustSec vulnerabilities (`cargo audit`). It writes `raw.log`, `summary.json`,
+  `summary.md`, and per-tool stdout/stderr logs to
   `artifacts/hygiene/<timestamp>/`.
 - `.\scripts\demote-test.ps1` is the inverse of `promote-fixme.ps1`: it
   temporarily converts a concrete Playwright `test(...)` line into
@@ -295,89 +294,6 @@ Docker networking, host-side execution, and result formatting, see
 [docs/complement-map.md](/E:/Works/cokret/cotest/docs/complement-map.md:1).
 
 The suite is organized by protocol and behavior, not milestone folders.
-
-## Literal Scanner (Protocol Drift Detection)
-
-`cotest` ships a repo-level literal scanner that reads the canonical
-drift-detection artifacts shipped under
-`cokret-spec/spec/v1/artifacts/registry/`:
-
-- `removed-event-kinds.json`
-- `deprecated-profile-ids.json`
-- `removed-operation-ids.json`
-- `forbidden-wire-fields.json`
-- `forbidden-model-terms.json`
-- `renames.json`
-
-and walks a downstream Rust / TypeScript / JSON / Markdown tree looking for
-literal occurrences of `ck.*` event-kind / operation-id strings, deprecated
-profile ids, forbidden wire field names, and forbidden model terms. Each
-finding carries the originating artifact, rejection level, suggested
-replacement, and whether the file context is allowlisted.
-
-### Library entrypoint
-
-```rust
-use cotest::literal_scanner::{scan_default, ScanReport};
-
-let report: ScanReport = scan_default(std::path::Path::new("../yougen"))?;
-for f in report.violations() {
-    eprintln!(
-        "{}:{}:{} {} (artifact={}, level={})",
-        f.path.display(), f.line, f.column,
-        f.matched_token, f.artifact_source, f.rejection_level
-    );
-}
-```
-
-The spec directory is resolved in this order:
-
-1. `COKRET_SPEC_DIR` env var (points at the `cokret-spec` checkout root).
-2. `<cotest crate root>/../cokret-spec` (default sibling layout).
-
-### CLI
-
-A standalone binary is provided as `src/bin/literal_scanner.rs`:
-
-```powershell
-cargo run --bin literal_scanner -- --root ..\yougen --format text
-cargo run --bin literal_scanner -- --root ..\soland --format json --fail-on-violation
-cargo run --bin literal_scanner -- --root ..\yougen --registry-dir ..\cokret-spec\spec\v1\artifacts\registry
-```
-
-Exit codes: `0` clean, `1` violations found (only with `--fail-on-violation`),
-`2` scanner error.
-
-### Allowlists
-
-A finding is marked `allowed_context_match = true` when **either**:
-
-1. The file path falls under one of the canonical compliant directories —
-   `**/compat/**`, `**/interop/**`, `**/interop_matrix/**`,
-   `**/legacy_negative/**`, `**/legacy_migration/**`, `**/migrations/**`,
-   `**/changelog/**`, or any file whose name starts with `CHANGELOG`.
-2. The file contains a magic comment that exempts the artifact id:
-
-   ```rust
-   // cokret-allow: cx.flow.track.member
-   // cokret-allow: cx.flow.track.member, flow_branch
-   // cokret-allow: *      // exempt every artifact in this file
-   ```
-
-   `#`, `<!-- -->`, and `/* */` comment forms are all recognized so the same
-   directive works in shell, Markdown, and block-comment contexts.
-
-The path-glob check additionally verifies the artifact's own
-`allowed_contexts` field permits the inferred context (e.g. an entry that
-only allows `negative_test` will *not* be silenced by a `legacy_migration/`
-path).
-
-### Scope today
-
-The scanner is intentionally a tool — it is **not** wired into CI to fail
-the build yet. The plan is to land the tool now (this milestone) and wire
-it into per-downstream pipelines incrementally as each repo cleans up its
-backlog of legacy literals.
 
 ---
 

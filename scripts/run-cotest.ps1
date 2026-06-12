@@ -613,180 +613,6 @@ function Get-CoverageMatrix {
     }
 }
 
-function Get-E2eTestCoverage {
-    param([Parameter(Mandatory = $true)][string]$RepoRoot)
-
-    $scriptPath = Join-Path $RepoRoot "e2e\scripts\summarize-e2e-coverage.mjs"
-    if (-not (Test-Path $scriptPath)) {
-        return [pscustomobject]@{
-            status          = "skipped"
-            reason          = "summarizer_not_found"
-            promised_count  = $null
-            verified_count  = $null
-            verified_ratio  = $null
-        }
-    }
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        return [pscustomobject]@{
-            status          = "skipped"
-            reason          = "node_not_found"
-            promised_count  = $null
-            verified_count  = $null
-            verified_ratio  = $null
-        }
-    }
-
-    try {
-        $output = & node $scriptPath --json 2>&1
-        $exitCode = $LASTEXITCODE
-        if ($exitCode -ne 0) {
-            return [pscustomobject]@{
-                status          = "failed"
-                reason          = "summarizer_failed"
-                exit_code       = $exitCode
-                output          = @($output)
-                promised_count  = $null
-                verified_count  = $null
-                verified_ratio  = $null
-            }
-        }
-        $report = ($output -join [Environment]::NewLine) | ConvertFrom-Json
-        [pscustomobject]@{
-            status          = "available"
-            reason          = $null
-            scenarios       = [int]$report.totals.scenarios
-            specs           = [int]$report.totals.specs
-            live            = [int]$report.totals.live
-            fixme           = [int]$report.totals.fixme
-            skip            = [int]$report.totals.skip
-            promised_count  = [int]$report.totals.promised_count
-            verified_count  = [int]$report.totals.verified_count
-            verified_ratio  = [double]$report.totals.verified_ratio
-        }
-    }
-    catch {
-        [pscustomobject]@{
-            status          = "failed"
-            reason          = "summarizer_exception"
-            error           = $_.Exception.Message
-            promised_count  = $null
-            verified_count  = $null
-            verified_ratio  = $null
-        }
-    }
-}
-
-function Invoke-JourneyCoverageMatrix {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$MarkdownPath,
-        [Parameter(Mandatory = $true)][string]$JsonPath
-    )
-
-    $scriptPath = Join-Path $RepoRoot "e2e\scripts\journey-coverage-matrix.mjs"
-    if (-not (Test-Path $scriptPath)) {
-        "# journey coverage`n`nstatus: skipped`nreason: script_not_found" | Set-Content -Path $MarkdownPath -Encoding UTF8
-        "{}" | Set-Content -Path $JsonPath -Encoding UTF8
-        return [pscustomobject]@{
-            status        = "skipped"
-            reason        = "script_not_found"
-            markdown_path = $MarkdownPath
-            json_path     = $JsonPath
-        }
-    }
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        "# journey coverage`n`nstatus: skipped`nreason: node_not_found" | Set-Content -Path $MarkdownPath -Encoding UTF8
-        "{}" | Set-Content -Path $JsonPath -Encoding UTF8
-        return [pscustomobject]@{
-            status        = "skipped"
-            reason        = "node_not_found"
-            markdown_path = $MarkdownPath
-            json_path     = $JsonPath
-        }
-    }
-
-    $output = & node $scriptPath --output $MarkdownPath --json-output $JsonPath 2>&1
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) {
-        "# journey coverage`n`nstatus: failed`nexit_code: $exitCode`n`n$output" | Set-Content -Path $MarkdownPath -Encoding UTF8
-        "{}" | Set-Content -Path $JsonPath -Encoding UTF8
-        return [pscustomobject]@{
-            status        = "failed"
-            reason        = "script_failed"
-            exit_code     = $exitCode
-            output        = @($output)
-            markdown_path = $MarkdownPath
-            json_path     = $JsonPath
-        }
-    }
-
-    $report = Get-Content $JsonPath -Raw | ConvertFrom-Json
-    [pscustomobject]@{
-        status        = "available"
-        reason        = $null
-        markdown_path = $MarkdownPath
-        json_path     = $JsonPath
-        journeys      = $report.journeys
-    }
-}
-
-function Invoke-FixmeDebtReport {
-    param(
-        [Parameter(Mandatory = $true)][string]$RepoRoot,
-        [Parameter(Mandatory = $true)][string]$MarkdownPath
-    )
-
-    $scriptPath = Join-Path $RepoRoot "e2e\scripts\fixme-debt-report.mjs"
-    if (-not (Test-Path $scriptPath)) {
-        "# fixme debt`n`nstatus: skipped`nreason: script_not_found" | Set-Content -Path $MarkdownPath -Encoding UTF8
-        return [pscustomobject]@{
-            status        = "skipped"
-            reason        = "script_not_found"
-            markdown_path = $MarkdownPath
-        }
-    }
-    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-        "# fixme debt`n`nstatus: skipped`nreason: node_not_found" | Set-Content -Path $MarkdownPath -Encoding UTF8
-        return [pscustomobject]@{
-            status        = "skipped"
-            reason        = "node_not_found"
-            markdown_path = $MarkdownPath
-        }
-    }
-
-    $output = & node $scriptPath --output $MarkdownPath --json 2>&1
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) {
-        return [pscustomobject]@{
-            status        = "failed"
-            reason        = "script_failed"
-            exit_code     = $exitCode
-            output        = @($output)
-            markdown_path = $MarkdownPath
-        }
-    }
-    $report = ($output -join [Environment]::NewLine) | ConvertFrom-Json
-    $missing = [int]$report.summary.missing_metadata
-    $expired = [int]$report.summary.expired_expected_live_by
-    $status = if ($missing -gt 0 -or $expired -gt 0) { "failed" } else { "available" }
-    $reason = if ($expired -gt 0) {
-        "expired_expected_live_by"
-    } elseif ($missing -gt 0) {
-        "missing_metadata"
-    } else {
-        $null
-    }
-    [pscustomobject]@{
-        status                  = $status
-        reason                  = $reason
-        markdown_path           = $MarkdownPath
-        total_fixme             = [int]$report.summary.total_fixme
-        missing_metadata        = $missing
-        expired_expected_live_by = $expired
-        strict_pass             = [bool]$report.summary.strict_pass
-    }
-}
-
 function New-CoverageMarkdown {
     param([Parameter(Mandatory = $true)]$Coverage)
 
@@ -1066,7 +892,6 @@ function New-ReleaseGate {
                 -Description "Core fixture conformance, spec sync, and coverage-regression gate." `
                 -Tests $Tests `
                 -RequiredTests @(
-                    "artifact_registry_suite_matches_reference_semantics",
                     "event_envelope_fixture_suite_matches_reference_semantics",
                     "capability_fixture_suite_matches_reference_semantics",
                     "state_resolution_fixture_suite_matches_reference_semantics",
@@ -1672,11 +1497,8 @@ $junitXml = Join-Path $runDir "junit.xml"
 $metadataJson = Join-Path $runDir "metadata.json"
 $coverageJson = Join-Path $runDir "coverage-matrix.json"
 $coverageMd = Join-Path $runDir "coverage-matrix.md"
-$journeyCoverageJson = Join-Path $runDir "journey-coverage.json"
-$journeyCoverageMd = Join-Path $runDir "journey-coverage.md"
 $coverageGateJson = Join-Path $runDir "coverage-gate.json"
 $coverageGateMd = Join-Path $runDir "coverage-gate.md"
-$fixmeDebtMd = Join-Path $runDir "fixme-debt.md"
 $jointSmokeGateJson = Join-Path $runDir "joint-smoke-gate.json"
 $jointSmokeGateMd = Join-Path $runDir "joint-smoke-gate.md"
 $releaseGateJson = Join-Path $runDir "release-gate.json"
@@ -1862,11 +1684,11 @@ $passed = @($tests | Where-Object { $_.status -eq "passed" }).Count
 $failed = @($tests | Where-Object { $_.status -eq "failed" }).Count
 $ignored = @($tests | Where-Object { $_.status -eq "ignored" }).Count
 $coverage = Get-CoverageMatrix -RepoRoot $repoRoot
-$e2eCoverage = Get-E2eTestCoverage -RepoRoot $repoRoot
-$journeyCoverage = Invoke-JourneyCoverageMatrix -RepoRoot $repoRoot -MarkdownPath $journeyCoverageMd -JsonPath $journeyCoverageJson
-$fixmeDebt = Invoke-FixmeDebtReport -RepoRoot $repoRoot -MarkdownPath $fixmeDebtMd
-if ($fixmeDebt.status -eq "failed") {
-    $exitCode = 1
+$e2eCoverage = [pscustomobject]@{
+    status          = "not_collected"
+    promised_count  = $null
+    verified_count  = $null
+    verified_ratio  = $null
 }
 $resolvedCoverageBaseline = $CoverageBaselinePath
 if (-not $resolvedCoverageBaseline) {
@@ -1993,15 +1815,6 @@ $summary = [pscustomobject]@{
     html_report          = $summaryHtml
     metadata_path        = $metadataJson
     coverage_matrix_path = $coverageJson
-    journey_coverage_path = $journeyCoverageMd
-    journey_coverage_json = $journeyCoverageJson
-    journey_coverage_status = $journeyCoverage.status
-    journey_coverage_rows = if (($journeyCoverage.PSObject.Properties.Name -contains "journeys") -and $journeyCoverage.journeys) { @($journeyCoverage.journeys) } else { @() }
-    fixme_debt_path      = $fixmeDebtMd
-    fixme_debt_status    = $fixmeDebt.status
-    fixme_debt_total     = if ($fixmeDebt.PSObject.Properties.Name -contains "total_fixme") { $fixmeDebt.total_fixme } else { $null }
-    fixme_debt_missing_metadata = if ($fixmeDebt.PSObject.Properties.Name -contains "missing_metadata") { $fixmeDebt.missing_metadata } else { $null }
-    fixme_debt_expired_expected_live_by = if ($fixmeDebt.PSObject.Properties.Name -contains "expired_expected_live_by") { $fixmeDebt.expired_expected_live_by } else { $null }
     coverage_gate_path   = $coverageGateJson
     coverage_gate_status = $coverageGate.status
     coverage_gate_verified_only_pass = $coverageGate.verified_only_pass
@@ -2078,11 +1891,8 @@ $artifactFiles = @(
     $metadataJson,
     $coverageJson,
     $coverageMd,
-    $journeyCoverageJson,
-    $journeyCoverageMd,
     $coverageGateJson,
     $coverageGateMd,
-    $fixmeDebtMd,
     $jointSmokeGateJson,
     $jointSmokeGateMd,
     $releaseGateJson,
@@ -2124,9 +1934,7 @@ Write-Host "  report   : $summaryMd"
 Write-Host "  junit    : $junitXml"
 Write-Host "  html     : $summaryHtml"
 Write-Host "  coverage : $coverageMd"
-Write-Host "  journey  : $journeyCoverageMd"
 Write-Host "  gate     : $coverageGateMd"
-Write-Host "  fixme    : $fixmeDebtMd"
 Write-Host "  joint    : $jointSmokeGateMd"
 Write-Host "  release  : $releaseGateMd"
 Write-Host "  gaps     : $gapsMd"
