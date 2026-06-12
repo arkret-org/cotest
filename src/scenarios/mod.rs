@@ -37,6 +37,7 @@ pub mod identity_directory;
 pub mod interaction_models;
 pub mod key_backup;
 pub mod key_backup_negative;
+pub mod key_backup_recovery_account_state;
 pub mod key_backup_restore_mls_replay;
 pub mod knock_cooldown_matrix;
 pub mod late_key_recovery_removed_actor;

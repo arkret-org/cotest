@@ -41,13 +41,17 @@
 1. alice (device-1) 进 `/settings/recovery`(RecoveryPanel)
 2. alice 点 "Generate"(`recovery-key-regenerate`):UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写;本地只存 SHA-256 指纹,词串不上传(spec §3.3/§7.7;首次创建 encrypted Realm 时 `MlsBackupPrompt` 也会自动走同一流程)
 3. 客户端:
-   - Argon2id KDF 以 24 词词串为输入生成 derived_key(salt + memoryCost + iterations,固化在 envelope)
-   - 用 XChaCha20-Poly1305 加密账户 secret(`mls_account_secret` 等 `secret_storage` 域材料)
-   - 计算 `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
-   - 另上传一份 HPKE `recovery_public_key` envelope(加密给 RK 公钥,§7.5.2 推荐形态)
-4. `PUT /_cokret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "secret_storage", kdf_params, ciphertext, ciphertext_digest, key_commitment }`
+   - 从 24 词确定性派生 recovery private/public key
+   - 发布或确认 genesis recovery policy accepted
+   - 上传 `backup_class="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope
+   - 用同一个 recovery public key HPKE 加密账户 secret(`mls_account_secret` 等 `secret_storage` 域材料)
+4. `PUT /_cokret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_class: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
 5. 服务端**只能存** ciphertext,不接受 Recovery Key 词串明文
-6. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,metadata 含 kdf_params,**不含** plaintext;此后新材料按 §7.10 自动持续备份
+6. 断言:
+   - `GET /_cokret/root/identity/recovery-policy` 返回 non-null `active_policy`
+   - `GET /_cokret/self/keys/backups?backup_class=did_recovery` 至少 1 条
+   - `GET /_cokret/self/keys/backups?backup_class=secret_storage` 至少 1 条(有本地 account MLS secret 时)
+   - metadata **不含** Recovery Key plaintext;此后新材料按 §7.10 自动持续备份
 
 ### Phase B — (可选)alice 在 E2EE Realm 中收发消息
 
@@ -57,28 +61,31 @@
 ### Phase C — Device 1 "丢失",alice 在 Device 2 恢复
 
 9. 开新 browser context = device-2,空 localStorage
-10. alice 登录进入 app;检测到服务器有备份但本地无 MLS state → 自动弹出 `MlsUnlockPrompt`(`/recover` 独立路由已不存在;手动入口是 `/settings/recovery` restore 面板)
-11. UI 提示输入 24 词 Recovery Key("Decrypt with Recovery Key")
-12. 客户端:
+10. alice 登录进入 app;若当前设备未在 durable device list 中,UI 先进入 existing-device authorization。只有用户确认旧设备不可用,且服务器存在 active policy + `did_recovery` backup 时,才进入 Recovery Key restore。新浏览器不得自动生成第二套 24 词。
+11. 检测到服务器有可用备份但本地无 MLS state → 自动弹出 `MlsUnlockPrompt`(`/recover` 独立路由已不存在;手动入口是 `/settings/recovery` restore 面板)
+12. UI 提示输入已有 24 词 Recovery Key("Decrypt with Recovery Key")
+13. 客户端:
     - 生成新 device key(本地)
-    - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ Argon2id 派生(或 HPKE open `recovery_public_key` envelope)→ 计算 key_commitment → 拉 backup envelope → 比对 commitment(快速失败如果 Recovery Key 错)
+    - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ 派生 recovery private key → HPKE open `recovery_public_key` envelope
     - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
-13. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
-14. 提交到 soland;soland 校验 recovery policy → 接受
-15. 断言:device-2 上 `GET /_soland/self/account/me` 返回 alice.did,设备列表新增 device-2
+14. 客户端签 `ck.device.authorize` (包含 recovery proof,引用 recovery key 或 control signature)
+15. 提交到 soland;soland 校验 recovery policy → 接受
+16. 断言:device-2 上 `GET /_soland/self/account/me` 返回 alice.did,设备列表新增 device-2
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 
-16. device-2 拉 `R_e2ee` 的 MLS state(commit chain 回放)
-17. 用 backup 提供的 MLS history backup key 解 epoch 历史
-18. 断言:Phase B 时 bob 发的消息现在在 device-2 timeline 可见、明文渲染
+17. device-2 拉 `R_e2ee` 的 MLS state(commit chain 回放)
+18. 用 backup 提供的 MLS history backup key 解 epoch 历史
+19. 断言:Phase B 时 bob 发的消息现在在 device-2 timeline 可见、明文渲染
 
 ## Observable assertions(合并)
 
 - Phase A 步骤 6:backup metadata 暴露 ✓,plaintext 不暴露 ✓
-- Phase C 步骤 12:Recovery Key 错误 → 非法 24 词在输入校验即拒;合法但错误的词串在 commitment 阶段拒,**不发请求到服务器**(避免 oracle)
-- Phase C 步骤 15:device-2 成功注册,alice 的 device 列表有 2 台
-- Phase D 步骤 18:历史消息明文渲染
+- Phase A 步骤 6:`active_policy` + `did_recovery` 同时存在才算 recovery configured;仅有本地 `recovery.state.v1` 指纹或 `backups=[]` 必须显示 incomplete
+- Phase C 步骤 10:fresh browser 优先 existing-device authorization;无 active policy / 无 `did_recovery` 时 fail closed,不尝试 recovery proof,不生成新 24 词
+- Phase C 步骤 13:Recovery Key 错误 → 非法 24 词在输入校验即拒;合法但错误的词串在本地 HPKE open / envelope 校验阶段拒,**不发解锁请求到服务器**(避免 oracle)
+- Phase C 步骤 16:device-2 成功注册,alice 的 device 列表有 2 台
+- Phase D 步骤 19:历史消息明文渲染
 
 ## Edge cases / sub-tests
 
@@ -93,7 +100,8 @@
 ## Implementation notes
 
 - **soland 缺口**:recovery policy state machine、recovery proof(`ck.schema.recovery_session.v1`)与 `ck.device.authorize` 的端到端绑定仍未贯通;key-backup CRUD + series 链 + unlock-proof 门已实现。整条 scenario 的 device-authorize 段仍 fixme。
-- **yougen 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 自动弹 `MlsUnlockPrompt`。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
+- **yougen 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 先按 device authorization fail-closed,只有 active policy + backup 可用时才进入输入已有 24 词的 restore。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
+- **legacy migration**:旧 `passphrase_kdf` envelope 仅作为 restore fallback;一旦用它恢复出 account secret,客户端应立即上传 `recipient_method="recovery_public_key"` successor,后续 UI 文案不得把 legacy passphrase 当新的用户凭证。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 
 ## 风险 / 前置依赖
