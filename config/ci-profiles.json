@@ -70,7 +70,7 @@
         "event_envelope_fixture_suite_matches_reference_semantics",
         "capability_fixture_suite_matches_reference_semantics",
         "state_resolution_fixture_suite_matches_reference_semantics",
-        "move_anchor_lattice_fixture_suite_matches_reference_semantics",
+        "cba_lattice_fixture_suite_matches_reference_semantics",
         "lattice_round_trip_suite_matches_reference_semantics",
         "anchor_view_compaction_fixture_suite_matches_reference_semantics",
         "anchorer_cell_fixture_suite_matches_reference_semantics",

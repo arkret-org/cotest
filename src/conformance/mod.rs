@@ -169,9 +169,7 @@ pub use sidecar_vectors::{
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
     run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
 };
-pub use state_resolution::{
-    run_move_anchor_lattice_fixture_suite, run_state_resolution_fixture_suite,
-};
+pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
 pub use sync::run_sync_fixture_suite;
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,

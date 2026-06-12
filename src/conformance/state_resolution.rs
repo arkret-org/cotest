@@ -1,245 +1,407 @@
-//! Move / Anchor / Lattice fixture suite (spec 2026-05-08).
+//! CBA dual-plane lattice fixture suite.
 //!
-//! Validates the `move-anchor-lattice-fixture.json` profile's normative
-//! vectors. The legacy state-slot winner-reconstruction validator that this
-//! file used to host (against `state-resolution-fixture.json`) was removed
-//! when the spec replaced state-slot winner reconstruction with the Move /
-//! Anchor / Lattice three-primitive model. Conformance for state convergence
-//! now lives entirely on this suite plus the per-Lattice reference-impl
-//! sections in `event-auth-state-resolution.md` §5.3.
+//! Validates the `cba-lattice-fixture.json` profile's normative vectors. Data
+//! events use `effects + seal_ref + auth_context` and stay data-plane local or
+//! observed until control-plane seals cover the relevant state. Control moves
+//! use `effects + seal_basis`, may carry preconditions, and only become sealed
+//! after valid seal coverage.
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use super::{load_fixture_value, required_str, validate_profile};
 use crate::transcripts::record_vector_event;
 
-/// Public entry point retained so the release-gate cargo_filter list can
-/// reference both `state_resolution_fixture_suite_matches_reference_semantics`
-/// and `move_anchor_lattice_fixture_suite_matches_reference_semantics` —
-/// both delegate here.
 pub fn run_state_resolution_fixture_suite() -> Result<()> {
-    run_move_anchor_lattice_fixture_suite()
+    run_cba_lattice_fixture_suite()
 }
 
-/// Structural validator for `move-anchor-lattice-fixture.json`.
-///
-/// The fixture is a profile with normative vectors for Move precondition
-/// validation, Anchor batch semantics, cas-register conflict bottom, MLS
-/// commit covered_frontier, anchorer cell ⊥ recovery, signed compaction
-/// equivalence, and Anchor DAG genesis / multi-leaf cases. This suite
-/// runs a static well-formedness check; deeper deterministic re-execution
-/// lives in the SDK's lattice / state-res crates (root C10.A) and in
-/// scenario-level integration tests once a Move/Anchor SUT is wired
-/// through cotest's harness.
-pub fn run_move_anchor_lattice_fixture_suite() -> Result<()> {
-    let value = load_fixture_value("move-anchor-lattice-fixture.json")?;
-    validate_profile(&value, "ck.profile.move_anchor_lattice_vectors.v1")?;
+pub fn run_cba_lattice_fixture_suite() -> Result<()> {
+    let value = load_fixture_value("cba-lattice-fixture.json")?;
+    validate_profile(&value, "ck.profile.cba_lattice_vectors.v1")?;
 
     let vectors = value
         .get("vectors")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("move-anchor-lattice fixture missing vectors[]"))?;
+        .ok_or_else(|| anyhow!("cba lattice fixture missing vectors[]"))?;
     if vectors.is_empty() {
-        bail!("move-anchor-lattice fixture has no vectors");
+        bail!("cba lattice fixture has no vectors");
     }
 
-    let mut seen_atomic = false;
-    let mut seen_cas_bottom = false;
-    let mut seen_anchor_batch_pre_state = false;
-    let mut seen_mls_covered_frontier = false;
-    let mut seen_anchorer_recovery = false;
-    let mut seen_signed_compaction = false;
-    let mut seen_genesis_multi_leaf = false;
+    let mut seen_data_local = false;
+    let mut seen_observation = false;
+    let mut seen_control_seal = false;
+    let mut seen_same_batch = false;
+    let mut seen_data_bottom = false;
+    let mut seen_delta_plane_guard = false;
+    let mut seen_compaction = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
         match name {
-            "multi_cell_ban_revokes_grants_atomically" => {
-                let m = vector
-                    .get("move")
-                    .and_then(Value::as_object)
-                    .ok_or_else(|| anyhow!("vector {name} missing move"))?;
-                require_field(m, "id", name)?;
-                require_field(m, "issuer", name)?;
-                require_field(m, "anchor_ref", name)?;
-                let preconditions = m
-                    .get("preconditions")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("vector {name} move missing preconditions"))?;
-                let effects = m
-                    .get("effects")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("vector {name} move missing effects"))?;
-                if preconditions.len() < 2 {
-                    bail!("vector {name} requires multi-cell precondition set (>=2)");
-                }
-                if effects.len() < 2 {
-                    bail!("vector {name} requires multi-cell atomic effects (>=2)");
-                }
-                let atomicity = vector
-                    .pointer("/expected/atomicity")
-                    .and_then(Value::as_str);
-                if atomicity != Some("all_effects_or_none") {
-                    bail!("vector {name} expected.atomicity must be 'all_effects_or_none'");
-                }
-                seen_atomic = true;
+            "data_event_accepts_without_seal_finality" => {
+                require_str_eq(vector, "/event/plane", "data", name)?;
+                require_non_empty_array(vector, "/event/effects", name)?;
+                require_field(required_object(vector, "/event", name)?, "seal_ref", name)?;
+                require_field(
+                    required_object(vector, "/event", name)?,
+                    "auth_context",
+                    name,
+                )?;
+                require_str_eq(vector, "/expected/event_state", "data_local", name)?;
+                require_bool_eq(vector, "/expected/fanout_allowed", true, name)?;
+                require_bool_eq(vector, "/expected/seal_required_for_accept", false, name)?;
+                require_str_eq(
+                    vector,
+                    "/expected/query_grade_before_observation",
+                    "local",
+                    name,
+                )?;
+                seen_data_local = true;
                 record_vector_event(
-                    "state_resolution.multi_cell_ban_revokes_grants_atomically",
+                    "state_resolution.cba.data_event_accepts_without_seal_finality",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "min_preconditions": 2,
-                        "min_effects": 2,
-                        "atomicity": "all_effects_or_none",
+                        "plane": "data",
+                        "event_state": "data_local",
+                        "seal_required_for_accept": false,
                     }),
                     &json!({
-                        "preconditions": preconditions.len(),
-                        "effects": effects.len(),
-                        "atomicity": atomicity,
+                        "plane": pointer_str(vector, "/event/plane"),
+                        "event_state": pointer_str(vector, "/expected/event_state"),
+                        "seal_required_for_accept": pointer_bool(vector, "/expected/seal_required_for_accept"),
                     }),
                 );
             }
-            "cas_register_conflict_returns_bottom" => {
-                let lat = vector
-                    .pointer("/cell_lattice/lattice")
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| anyhow!("vector {name} missing cell_lattice.lattice"))?;
-                if lat != "cas_register" {
-                    bail!("vector {name} cell_lattice.lattice must be cas_register");
-                }
-                let bot_status = vector
-                    .pointer("/expected/query/status")
-                    .and_then(Value::as_str);
-                if bot_status != Some("bottom") {
-                    bail!("vector {name} expected.query.status must be 'bottom'");
-                }
-                let dep = vector
-                    .pointer("/expected/dependent_move_result")
-                    .and_then(Value::as_str);
-                if dep != Some("fail_bottom") {
-                    bail!("vector {name} dependent_move_result must be 'fail_bottom'");
-                }
-                seen_cas_bottom = true;
+            "data_event_observation_does_not_seal" => {
+                require_field(required_object(vector, "/seal", name)?, "id", name)?;
+                require_non_empty_array(vector, "/seal/delta", name)?;
+                require_field(
+                    required_object(vector, "/seal", name)?,
+                    "data_event_set_root",
+                    name,
+                )?;
+                require_str_eq(vector, "/expected/data_event_state", "data_observed", name)?;
+                require_str_eq(vector, "/expected/query_grade", "observed", name)?;
+                require_bool_eq(vector, "/expected/must_not_report_sealed", true, name)?;
+                seen_observation = true;
                 record_vector_event(
-                    "state_resolution.cas_register_conflict_returns_bottom",
+                    "state_resolution.cba.data_event_observation_does_not_seal",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "lattice_type": "cas_register",
+                        "data_event_state": "data_observed",
+                        "query_grade": "observed",
+                        "must_not_report_sealed": true,
+                    }),
+                    &json!({
+                        "data_event_state": pointer_str(vector, "/expected/data_event_state"),
+                        "query_grade": pointer_str(vector, "/expected/query_grade"),
+                        "must_not_report_sealed": pointer_bool(vector, "/expected/must_not_report_sealed"),
+                    }),
+                );
+            }
+            "control_move_requires_seal_basis_and_seal" => {
+                require_non_empty_array(vector, "/basis/leaves", name)?;
+                require_field(
+                    required_object(vector, "/basis", name)?,
+                    "control_event_set_root",
+                    name,
+                )?;
+                require_field(required_object(vector, "/basis", name)?, "state_root", name)?;
+                require_str_eq(vector, "/control_move/plane", "control", name)?;
+                require_non_empty_array(vector, "/control_move/preconditions", name)?;
+                require_non_empty_array(vector, "/control_move/effects", name)?;
+                require_str_eq(
+                    vector,
+                    "/expected_before_seal/event_state",
+                    "control_pending",
+                    name,
+                )?;
+                require_str_eq(vector, "/expected_before_seal/query_grade", "seen", name)?;
+                require_str_eq(
+                    vector,
+                    "/expected_after_valid_seal/event_state",
+                    "control_sealed",
+                    name,
+                )?;
+                require_str_eq(
+                    vector,
+                    "/expected_after_valid_seal/query_grade",
+                    "sealed",
+                    name,
+                )?;
+                seen_control_seal = true;
+                record_vector_event(
+                    "state_resolution.cba.control_move_requires_seal_basis_and_seal",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "plane": "control",
+                        "before": "control_pending",
+                        "after": "control_sealed",
+                    }),
+                    &json!({
+                        "plane": pointer_str(vector, "/control_move/plane"),
+                        "before": pointer_str(vector, "/expected_before_seal/event_state"),
+                        "after": pointer_str(vector, "/expected_after_valid_seal/event_state"),
+                    }),
+                );
+            }
+            "same_batch_does_not_advance_authorization_basis" => {
+                let batch = required_array(vector, "/batch", name)?;
+                if batch.len() < 2 {
+                    bail!("vector {name} requires at least two batch events");
+                }
+                require_str_eq(vector, "/batch/0/plane", "control", name)?;
+                require_str_eq(vector, "/batch/0/state", "control_pending", name)?;
+                require_str_eq(vector, "/batch/1/plane", "data", name)?;
+                require_str_eq(
+                    vector,
+                    "/expected/second_event_result",
+                    "reject_or_quarantine",
+                    name,
+                )?;
+                require_str_eq(vector, "/expected/reason", "capability_denied", name)?;
+                require_bool_eq(vector, "/expected/same_batch_resolution_only", true, name)?;
+                seen_same_batch = true;
+                record_vector_event(
+                    "state_resolution.cba.same_batch_does_not_advance_authorization_basis",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "first_state": "control_pending",
+                        "second_result": "reject_or_quarantine",
+                        "reason": "capability_denied",
+                    }),
+                    &json!({
+                        "first_state": pointer_str(vector, "/batch/0/state"),
+                        "second_result": pointer_str(vector, "/expected/second_event_result"),
+                        "reason": pointer_str(vector, "/expected/reason"),
+                    }),
+                );
+            }
+            "data_plane_conflict_returns_bottom_without_winner" => {
+                require_str_eq(vector, "/cell_lattice/plane", "data", name)?;
+                require_str_eq(vector, "/cell_lattice/lattice", "cas_register", name)?;
+                require_str_eq(vector, "/cell_lattice/bottom", "reject", name)?;
+                require_array_len_at_least(vector, "/data_events", 2, name)?;
+                require_str_eq(vector, "/expected/query/status", "bottom", name)?;
+                require_str_eq(vector, "/expected/query/bottom/kind", "conflict", name)?;
+                require_array_len_at_least(vector, "/expected/query/bottom/event_ids", 2, name)?;
+                require_str_eq(
+                    vector,
+                    "/expected/dependent_write_result",
+                    "failed_bottom",
+                    name,
+                )?;
+                seen_data_bottom = true;
+                record_vector_event(
+                    "state_resolution.cba.data_plane_conflict_returns_bottom_without_winner",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "plane": "data",
+                        "lattice": "cas_register",
                         "query_status": "bottom",
-                        "dependent_move_result": "fail_bottom",
                     }),
                     &json!({
-                        "lattice_type": lat,
-                        "query_status": bot_status,
-                        "dependent_move_result": dep,
+                        "plane": pointer_str(vector, "/cell_lattice/plane"),
+                        "lattice": pointer_str(vector, "/cell_lattice/lattice"),
+                        "query_status": pointer_str(vector, "/expected/query/status"),
                     }),
                 );
             }
-            "anchor_batch_pre_state_prevents_self_satisfaction" => {
-                let anchor_result = vector
-                    .pointer("/expected/anchor_result")
+            "seal_delta_excludes_data_event_digest" => {
+                require_non_empty_array(vector, "/seal/delta", name)?;
+                let first_delta = required_array(vector, "/seal/delta", name)?
+                    .first()
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow!("vector {name} first seal.delta entry must be string")
+                    })?;
+                let member_plane = vector
+                    .pointer(&format!(
+                        "/seal/delta_member_plane/{}",
+                        escape_pointer(first_delta)
+                    ))
                     .and_then(Value::as_str);
-                if anchor_result != Some("reject") {
-                    bail!("vector {name} expected.anchor_result must be 'reject'");
+                if member_plane != Some("data") {
+                    bail!("vector {name} first seal.delta member must be marked as data plane");
                 }
-                seen_anchor_batch_pre_state = true;
+                require_str_eq(vector, "/expected/seal_result", "reject", name)?;
+                require_str_eq(vector, "/expected/event_state", "rejected_seal", name)?;
+                require_str_eq(
+                    vector,
+                    "/expected/reason",
+                    "delta_contains_data_event",
+                    name,
+                )?;
+                seen_delta_plane_guard = true;
                 record_vector_event(
-                    "state_resolution.anchor_batch_pre_state_prevents_self_satisfaction",
+                    "state_resolution.cba.seal_delta_excludes_data_event_digest",
                     &json!({"vector": vector.clone()}),
-                    &json!({"anchor_result": "reject"}),
-                    &json!({"anchor_result": anchor_result}),
+                    &json!({
+                        "delta_member_plane": "data",
+                        "seal_result": "reject",
+                        "reason": "delta_contains_data_event",
+                    }),
+                    &json!({
+                        "delta_member_plane": member_plane,
+                        "seal_result": pointer_str(vector, "/expected/seal_result"),
+                        "reason": pointer_str(vector, "/expected/reason"),
+                    }),
                 );
             }
-            "mls_commit_move_requires_covered_frontier" => {
-                let verify = vector
-                    .pointer("/expected/verify_move")
-                    .and_then(Value::as_str);
-                if verify != Some("fail_precondition") {
-                    bail!("vector {name} expected.verify_move must be 'fail_precondition'");
+            "open_set_compaction_preserves_control_roots" => {
+                require_array_len_at_least(vector, "/predecessor_refs", 2, name)?;
+                require_field(
+                    required_object(vector, "/compaction_seal", name)?,
+                    "control_event_set_root_must_equal",
+                    name,
+                )?;
+                require_field(
+                    required_object(vector, "/compaction_seal", name)?,
+                    "state_root_must_equal",
+                    name,
+                )?;
+                let delta = required_array(vector, "/compaction_seal/delta", name)?;
+                if !delta.is_empty() {
+                    bail!("vector {name} compaction seal delta must be empty");
                 }
-                seen_mls_covered_frontier = true;
+                require_str_eq(
+                    vector,
+                    "/expected/seal_result",
+                    "accept_when_equivalent_else_reject",
+                    name,
+                )?;
+                require_bool_eq(vector, "/expected/preserves_bottom_diagnostics", true, name)?;
+                require_bool_eq(vector, "/expected/preserves_signature_chain", true, name)?;
+                require_str_eq(
+                    vector,
+                    "/expected/compaction_without_signature",
+                    "reject",
+                    name,
+                )?;
+                seen_compaction = true;
                 record_vector_event(
-                    "state_resolution.mls_commit_move_requires_covered_frontier",
+                    "state_resolution.cba.open_set_compaction_preserves_control_roots",
                     &json!({"vector": vector.clone()}),
-                    &json!({"verify_move": "fail_precondition"}),
-                    &json!({"verify_move": verify}),
+                    &json!({
+                        "seal_result": "accept_when_equivalent_else_reject",
+                        "preserves_bottom_diagnostics": true,
+                        "compaction_without_signature": "reject",
+                    }),
+                    &json!({
+                        "seal_result": pointer_str(vector, "/expected/seal_result"),
+                        "preserves_bottom_diagnostics": pointer_bool(vector, "/expected/preserves_bottom_diagnostics"),
+                        "compaction_without_signature": pointer_str(vector, "/expected/compaction_without_signature"),
+                    }),
                 );
             }
-            "anchorer_cell_bottom_pauses_realm_until_recovery" => {
-                let realm_state = vector
-                    .pointer("/expected/realm_state")
-                    .and_then(Value::as_str);
-                if realm_state != Some("anchorer_paused") {
-                    bail!("vector {name} expected.realm_state must be 'anchorer_paused'");
-                }
-                seen_anchorer_recovery = true;
-                record_vector_event(
-                    "state_resolution.anchorer_cell_bottom_pauses_realm_until_recovery",
-                    &json!({"vector": vector.clone()}),
-                    &json!({"realm_state": "anchorer_paused"}),
-                    &json!({"realm_state": realm_state}),
-                );
-            }
-            "signed_compaction_anchor_equals_effective_view" => {
-                let preserves = vector
-                    .pointer("/expected/preserves_bottom_diagnostics")
-                    .and_then(Value::as_bool);
-                if preserves != Some(true) {
-                    bail!("vector {name} expected.preserves_bottom_diagnostics must be true");
-                }
-                seen_signed_compaction = true;
-                record_vector_event(
-                    "state_resolution.signed_compaction_anchor_equals_effective_view",
-                    &json!({"vector": vector.clone()}),
-                    &json!({"preserves_bottom_diagnostics": true}),
-                    &json!({"preserves_bottom_diagnostics": preserves}),
-                );
-            }
-            "anchor_dag_genesis_and_multi_leaf_join" => {
-                let cases = vector
-                    .get("cases")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("vector {name} missing cases[]"))?;
-                if cases.len() < 4 {
-                    bail!(
-                        "vector {name} requires at least 4 cases (genesis / non-genesis-empty / multi-leaf-view / signed-compaction)"
-                    );
-                }
-                seen_genesis_multi_leaf = true;
-                record_vector_event(
-                    "state_resolution.anchor_dag_genesis_and_multi_leaf_join",
-                    &json!({"vector": vector.clone()}),
-                    &json!({"min_cases": 4}),
-                    &json!({"cases": cases.len()}),
-                );
-            }
-            _ => bail!("unknown move-anchor-lattice vector: {name}"),
+            _ => bail!("unknown cba lattice vector: {name}"),
         }
     }
 
-    if !(seen_atomic
-        && seen_cas_bottom
-        && seen_anchor_batch_pre_state
-        && seen_mls_covered_frontier
-        && seen_anchorer_recovery
-        && seen_signed_compaction
-        && seen_genesis_multi_leaf)
+    if !(seen_data_local
+        && seen_observation
+        && seen_control_seal
+        && seen_same_batch
+        && seen_data_bottom
+        && seen_delta_plane_guard
+        && seen_compaction)
     {
         bail!(
-            "move-anchor-lattice fixture must cover all 7 normative vectors \
-             (atomic / cas_bottom / anchor_batch_pre_state / mls_covered_frontier / \
-              anchorer_recovery / signed_compaction / genesis_multi_leaf)"
+            "cba lattice fixture must cover all 7 normative vectors \
+             (data_local / observation / control_seal / same_batch / data_bottom / \
+              delta_plane_guard / compaction)"
         );
     }
 
     Ok(())
 }
 
+fn required_object<'a>(
+    value: &'a Value,
+    pointer: &str,
+    vector_name: &str,
+) -> Result<&'a Map<String, Value>> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing object at {pointer}"))
+}
+
+fn required_array<'a>(
+    value: &'a Value,
+    pointer: &str,
+    vector_name: &str,
+) -> Result<&'a Vec<Value>> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing array at {pointer}"))
+}
+
+fn require_non_empty_array(value: &Value, pointer: &str, vector_name: &str) -> Result<()> {
+    let array = required_array(value, pointer, vector_name)?;
+    if array.is_empty() {
+        bail!("vector {vector_name} array at {pointer} must not be empty");
+    }
+    Ok(())
+}
+
+fn require_array_len_at_least(
+    value: &Value,
+    pointer: &str,
+    min_len: usize,
+    vector_name: &str,
+) -> Result<()> {
+    let array = required_array(value, pointer, vector_name)?;
+    if array.len() < min_len {
+        bail!("vector {vector_name} array at {pointer} must have at least {min_len} items");
+    }
+    Ok(())
+}
+
+fn require_str_eq(value: &Value, pointer: &str, expected: &str, vector_name: &str) -> Result<()> {
+    let actual = value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing string at {pointer}"))?;
+    if actual != expected {
+        bail!("vector {vector_name} field {pointer} must be {expected:?}, got {actual:?}");
+    }
+    Ok(())
+}
+
+fn require_bool_eq(value: &Value, pointer: &str, expected: bool, vector_name: &str) -> Result<()> {
+    let actual = value
+        .pointer(pointer)
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing bool at {pointer}"))?;
+    if actual != expected {
+        bail!("vector {vector_name} field {pointer} must be {expected}, got {actual}");
+    }
+    Ok(())
+}
+
 fn require_field<'a>(
-    obj: &'a serde_json::Map<String, Value>,
+    obj: &'a Map<String, Value>,
     field: &str,
     vector_name: &str,
 ) -> Result<&'a Value> {
     obj.get(field)
-        .ok_or_else(|| anyhow!("vector {vector_name} move missing field {field}"))
+        .ok_or_else(|| anyhow!("vector {vector_name} object missing field {field}"))
+}
+
+fn pointer_str(value: &Value, pointer: &str) -> Option<String> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+fn pointer_bool(value: &Value, pointer: &str) -> Option<bool> {
+    value.pointer(pointer).and_then(Value::as_bool)
+}
+
+fn escape_pointer(segment: &str) -> String {
+    segment.replace('~', "~0").replace('/', "~1")
 }

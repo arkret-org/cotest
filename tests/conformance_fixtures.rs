@@ -109,14 +109,14 @@ conformance_test!(
 );
 
 conformance_test!(
-    move_anchor_lattice_fixture_suite_matches_reference_semantics,
-    "move_anchor_lattice_fixture",
-    cotest::conformance::run_move_anchor_lattice_fixture_suite,
+    cba_lattice_fixture_suite_matches_reference_semantics,
+    "cba_lattice_fixture",
+    cotest::conformance::run_cba_lattice_fixture_suite,
 );
 
 conformance_test!(
     /// C10.C — exercises the SDK's `cokret-lattice` crate against the normative
-    /// scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5 by reifying
+    /// scenarios from `cba-lattice-fixture.json` by reifying
     /// the symbolic ops as real `LatticeOp` + `SealedOp` values and asserting
     /// the spec's join semantics (CasRegister conflict ? Bottom, OrSet
     /// commutativity, MvRegister multi-value, Counter PN sum, Fsm transitions,

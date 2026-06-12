@@ -1,7 +1,7 @@
 //! C10.C lattice round-trip vectors.
 //!
 //! Exercises the SDK's [`cokret_core::lattice`] module directly against the
-//! normative scenarios from `move-anchor-lattice-fixture.json` §2.2-2.5.
+//! normative scenarios from `cba-lattice-fixture.json`.
 //! The fixture itself is symbolic (it describes protocol-level semantics,
 //! eliding wire-required `space_id` / `hlc` / `sig`) — this suite reifies
 //! the symbolic ops as real `LatticeOp` + `SealedOp` values, runs the
