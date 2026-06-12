@@ -184,6 +184,23 @@ export class JointUserPage {
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await createButton.click();
 
+    // S6 recovery soft-gate (key-management §7.11): creating an end-to-end
+    // encrypted Realm with no recovery path configured prompts the user to set
+    // up the Recovery Key first. Test accounts generally have no recovery
+    // configured, so accept the personal_node override and re-create. The gate
+    // never appears for unencrypted Realms or when recovery is configured.
+    const recoveryGate = this.page.getByTestId("encrypted-realm-recovery-gate").last();
+    const gateAppeared = await recoveryGate
+      .waitFor({ state: "visible", timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (gateAppeared) {
+      await this.page.getByTestId("encrypted-realm-recovery-gate-override").last().click();
+      await expect(recoveryGate).toBeHidden({ timeout: 10_000 });
+      await expect(createButton).toBeEnabled({ timeout: 30_000 });
+      await createButton.click();
+    }
+
     await expect(flow).toContainText(/created ck:realm:/, { timeout: 30_000 });
     const text = await flow.innerText();
     const match = text.match(/created (ck:realm:[^\s]+)/);
