@@ -23,7 +23,7 @@
     {
       "id": "account_profile",
       "method": "GET",
-      "path": "/_soland/self/account/me",
+      "path": "/_cokret/self/account/viewer",
       "auth": "alice"
     },
     {
