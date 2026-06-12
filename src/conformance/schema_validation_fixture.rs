@@ -175,7 +175,7 @@ impl SchemaEnv {
         let openapi = if openapi_path.is_file() {
             let raw = fs::read_to_string(&openapi_path)
                 .with_context(|| format!("read openapi {}", openapi_path.display()))?;
-            let yaml: serde_yaml::Value = serde_yaml::from_str(&raw)?;
+            let yaml: serde_yaml_ng::Value = serde_yaml_ng::from_str(&raw)?;
             Some(yaml_to_json(&yaml)?)
         } else {
             None
@@ -286,7 +286,7 @@ fn split_fragment(input: &str) -> (&str, Option<&str>) {
     }
 }
 
-fn yaml_to_json(value: &serde_yaml::Value) -> Result<Value> {
+fn yaml_to_json(value: &serde_yaml_ng::Value) -> Result<Value> {
     // Round-trip via serde_json to swap representations.
     let s = serde_json::to_string(&value)
         .map_err(|err| anyhow!("yaml to json round-trip failed: {err}"))?;
