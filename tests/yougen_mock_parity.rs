@@ -368,12 +368,11 @@ fn call_mock_contract(
     rendered_path: &str,
     body: Option<Value>,
 ) -> Result<Snapshot> {
-    let path_only = rendered_path
-        .split_once('?')
-        .map_or(rendered_path, |(path, _)| path);
+    let (path_only, query) = split_path_query(rendered_path);
     let request = json!({
         "method": case.method,
         "path": path_only,
+        "query": query,
         "headers": case.headers,
         "account": {
             "did": "did:web:alice-mock-parity.example",
@@ -439,6 +438,16 @@ process.stdout.write(JSON.stringify(context.__result ?? null));
     })
 }
 
+fn split_path_query(path: &str) -> (&str, BTreeMap<String, String>) {
+    let Some((path_only, query)) = path.split_once('?') else {
+        return (path, BTreeMap::new());
+    };
+    let parsed = url::form_urlencoded::parse(query.as_bytes())
+        .into_owned()
+        .collect::<BTreeMap<_, _>>();
+    (path_only, parsed)
+}
+
 async fn call_live_soland(
     server: &CokretServer,
     case: &ParityCase,
@@ -484,7 +493,7 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
         "events_list" => json!({
             "events": snapshot.body.get("events").is_some_and(Value::is_array),
         }),
-        "keys_backups" => json!({
+        "keys_backups" | "keys_backups_did_recovery_filter" => json!({
             "backups": snapshot.body.get("backups").is_some_and(Value::is_array),
         }),
         "devices_pairing_challenge" => json!({

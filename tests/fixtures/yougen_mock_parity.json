@@ -58,6 +58,18 @@
       "auth": "alice"
     },
     {
+      "id": "keys_backups_did_recovery_filter",
+      "method": "GET",
+      "path": "/_cokret/self/keys/backups?backup_class=did_recovery",
+      "auth": "alice"
+    },
+    {
+      "id": "recovery_policy",
+      "method": "GET",
+      "path": "/_cokret/root/identity/recovery-policy",
+      "auth": "alice"
+    },
+    {
       "id": "devices_pairing_challenge",
       "method": "POST",
       "path": "/_cokret/self/devices/pairing-challenge",
