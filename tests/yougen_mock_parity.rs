@@ -471,7 +471,15 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
     let body = match case_id {
         "server_describe" => normalize_server_describe(snapshot.body),
         "account_profile" => json!({
-            "did": normalize_value(snapshot.body.get("did").cloned().unwrap_or(Value::Null)),
+            "principal_id": normalize_value(
+                snapshot
+                    .body
+                    .get("principal_id")
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            ),
+            "state": snapshot.body.get("state").cloned().unwrap_or(Value::Null),
+            "devices": snapshot.body.get("devices").is_some_and(Value::is_array),
         }),
         "events_list" => json!({
             "events": snapshot.body.get("events").is_some_and(Value::is_array),
