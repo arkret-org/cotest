@@ -44,19 +44,33 @@ test.describe("account onboarding", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
-    const bridgeResponse = await request.get(`${coauth}/_cokret/gate/auth/bridge/describe`);
+    const bridgeResponse = await request.get(`${coauth}/_coauth/gate/account/auth/bridge/describe`);
     expect(bridgeResponse.status()).toBe(200);
     const bridge = await bridgeResponse.json();
     expect(bridge.todos).toEqual([]);
     expect(bridge.oauth.supported_flows).toContain("authorization_code_pkce_browser");
-    expect(bridge.passkey.register_start_path).toBe("/_cokret/gate/auth/passkey/register/start");
+    expect(bridge.oauth.browser_bridge_session_path).toBe(
+      "/_coauth/gate/account/auth/oidc/browser-bridge/session",
+    );
+    expect(bridge.oauth.exchange_path).toBe("/_coauth/gate/account/auth/oidc/exchange");
+    expect(bridge.passkey.register_start_path).toBe(
+      "/_coauth/gate/account/auth/passkey/register/start",
+    );
     expect(bridge.cokret.session_grants_introspect_path).toBe(
-      "/_cokret/gate/account/session-grants/introspect",
+      "/_coauth/gate/account/session-grants/introspect",
     );
 
     const user = uniqueUser("p1-025-webvh-email");
+    const exchangeDescribe = await request.get(`${coauth}${bridge.oauth.exchange_describe_path}`);
+    expect(exchangeDescribe.status()).toBe(200);
+    const exchange = await exchangeDescribe.json();
+    expect(exchange.required_fields).toEqual(
+      expect.arrayContaining(["authorization_code", "code_verifier", "device_id"]),
+    );
+    expect(exchange.validation_layers).toContain("cokret_session_grant_issuance");
+
     const bridgeSessionResponse = await request.post(
-      `${coauth}/_cokret/gate/auth/oidc/browser-bridge/session`,
+      `${coauth}${bridge.oauth.browser_bridge_session_path}`,
       {
         data: {
           redirect_uri: "urn:yougen:oauth:callback",
@@ -72,7 +86,7 @@ test.describe("account onboarding", () => {
     expect(bridgeSession.authorize_url).toContain(encodeURIComponent(solandServiceDid()));
     expect(bridgeSession.code_challenge_method).toBe("S256");
 
-    const start = await request.post(`${coauth}/_cokret/gate/auth/register/webvh/start`, {
+    const start = await request.post(`${coauth}/_coauth/gate/account/auth/register/webvh/start`, {
       data: {
         handle: user.handle.slice(1),
         principal_server_url: solandBaseUrl(),
@@ -84,7 +98,7 @@ test.describe("account onboarding", () => {
     expect(started.email_verification_bypass_allowed).toBe(true);
 
     const email = await request.post(
-      `${coauth}/_cokret/gate/auth/register/webvh/${started.registration_id}/email`,
+      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/email`,
       { data: { email: `${user.name}@example.test` } },
     );
     expect(email.status()).toBe(200);
@@ -94,7 +108,7 @@ test.describe("account onboarding", () => {
     expect(emailBody.dev_code).toBeTruthy();
 
     const verify = await request.post(
-      `${coauth}/_cokret/gate/auth/register/webvh/${started.registration_id}/verify-email`,
+      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/verify-email`,
       { data: { code: emailBody.dev_code } },
     );
     expect(verify.status()).toBe(200);
