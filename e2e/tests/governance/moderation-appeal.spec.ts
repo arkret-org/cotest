@@ -92,7 +92,7 @@ test.describe("moderation appeal", () => {
         decision.decision_id,
       );
       const realmAfterBan = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(reviewerToken) },
       );
       expect(realmAfterBan.ok()).toBeTruthy();

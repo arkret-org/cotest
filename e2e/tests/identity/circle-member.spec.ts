@@ -5,14 +5,13 @@
 // placeholder that was `test.skip`'d in contact-graph.spec.ts (soland now ships
 // the `/_cokret/self/circles/*` admin surface — CKP-0007).
 //
-// HTTP face: `/_soland/self/circles` (implementation-local — verified against
-// the live soland binary and cokret-spec; see helpers/circle-api.ts header for
-// the full mod.rs + CKP-0014 §5 reasoning. `/_cokret/self/circles` 404s today).
+// HTTP face: `/_cokret/self/circles` (now a normative Cokret surface — the
+// `ck.self.circle.*` operations are published in the cokret-spec OpenAPI
+// artifact, operation registry, and contract catalog; see helpers/circle-api.ts
+// header for the full reasoning. The legacy `/_soland` mirror was retired).
 // Spec refs: CKP-0007 — `ck.circle.*` data model, reducer invariant
 // `Circle.members ⊆ Realm.members` (`circle_member_must_be_realm_member`), and
-// §8 `ck.circle.member.manage` capability for cross-actor adds. CKP-0014 §5 —
-// Circle administration is a draft `/_cokret` candidate, MUST stay on `/_soland`
-// until accepted into the normative catalog.
+// §8 `ck.circle.member.manage` capability for cross-actor adds.
 //
 // Core property: the pulled actor does ZERO operations — admin's one-way add is
 // authoritative, no `accept` round-trip exists for Circle membership.

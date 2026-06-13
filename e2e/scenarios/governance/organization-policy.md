@@ -35,7 +35,7 @@
 
 4. alice 持 Acme membership;alice createRealm `R_acme`,关联到 `acme-org.did`
 5. soland reducer:`R_acme.organization_ref = acme-org.did`
-6. 断言:Realm `R_acme` 上的 policy chain 含 organization 层(可通过 `GET /_soland/self/realms/<R>/effective-policy` 查)
+6. 断言:Realm `R_acme` 上的 policy chain 含 organization 层(可通过 `GET /_cokret/self/realms/<R>/effective-policy` 查)
 
 ### Phase C — mallory 被 organization 层 deny_join
 
@@ -68,7 +68,7 @@
 
 ## Implementation notes
 
-- **soland 已落地**:`/_cokret/self/organizations` 提供本地 organization registry/policy surface;`ck.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/_soland/self/realms/{id}/effective-policy` 返回 organization layers、fanout Realm list、Realm override。
+- **soland 已落地**:`/_cokret/self/organizations` 提供本地 organization registry/policy surface;`ck.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/_cokret/self/realms/{id}/effective-policy` 返回 organization layers、fanout Realm list、Realm override。
 - **join gate 已落地**:`ck.member.state{membership="join"}` 会读取 inherited organization policy,命中 `deny_join` target 时返回 `organization_policy_denied`。
 - **override approval 已落地**:Realm 级 `allow_join` override 若覆盖组织 `deny_join`,必须携带 `organization_approval`;否则返回 `requires_organization_approval`。
 - **yougen directory 已落地**:Organization directory tab 会显示 verified badge、member count,并根据 linked Realm 数量提示 organization policy inheritance 状态。

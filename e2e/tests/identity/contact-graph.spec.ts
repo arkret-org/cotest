@@ -302,7 +302,7 @@ test.describe("contact graph (same principal server)", () => {
       .poll(
         async () => {
           const resp = await request.get(
-            `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
+            `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
             { headers: authHeaders(bobToken) },
           );
           if (!resp.ok()) return false;

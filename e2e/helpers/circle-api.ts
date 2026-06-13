@@ -1,19 +1,13 @@
-// Circle administration HTTP helpers (`/_soland/self/circles/*`).
+// Circle administration HTTP helpers (`/_cokret/self/circles/*`).
 //
-// Face note (verified against the live soland binary AND cokret-spec, NOT the
-// task brief): Circle administration is an IMPLEMENTATION-LOCAL surface mounted
-// under `/_soland/self/circles`. soland routing/mod.rs mounts
-// `circles::router()` inside `soland_local_router()`, which the app root pushes
-// under `Router::with_path("_soland")` (mod.rs:137/147/241) — it is NOT part of
-// `api_v1_router()` (the `/_cokret` tree). cokret-spec CKP-0014 §5 lists
-// `POST/GET /_cokret/self/circles` as DRAFT candidates only, and CKP-0014's
-// normative rule (line 18) is: "Until an item is accepted into the normative
-// operation catalog and OpenAPI artifacts, implementations MUST NOT mount it
-// under `/_cokret`. Private deployment endpoints MUST use `/_soland/*`." So
-// `/_soland/self/circles` is the spec-correct face today; a hit on
-// `/_cokret/self/circles` returns 404 unrecognized_endpoint on a live soland.
-// (The circles.rs file-header comment claiming `/_cokret/self/circles` is
-// stale/aspirational and contradicts both the live mount and the spec.)
+// Face note: Circle administration is now a NORMATIVE Cokret protocol surface.
+// The `ck.self.circle.*` operations (list/create/get/members/scope-rotate/
+// archive/tombstone) are published in the cokret-spec OpenAPI artifact
+// (`/_cokret/self/circles*`), the operation registry, and the contract catalog,
+// so soland mounts them under the `/_cokret` tree. (Previously these were
+// CKP-0014 §5 implementation-local DRAFT candidates served under
+// `/_soland/self/circles`; they have since been accepted into the normative
+// catalog, and the legacy `/_soland` mirror was retired.)
 //
 // The `ck.circle.*` data model itself is spec-canonical (CKP-0007); this HTTP
 // surface is the convenience wrapper that builds the canonical operations and
@@ -65,7 +59,7 @@ export async function createCircleCokret(
   },
 ): Promise<CircleOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(args.server)}/_soland/self/circles`,
+    `${solandBaseUrl(args.server)}/_cokret/self/circles`,
     {
       headers: authHeaders(token),
       data: {
@@ -89,7 +83,7 @@ export async function getCircleCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<CircleOutcome> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_soland/self/circles/${encodeURIComponent(circleId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<CircleOutcome>(response, `get circle ${circleId}`);
@@ -104,7 +98,7 @@ export async function addCircleMemberRaw(
   args: { actorId: string; state?: string; server?: SolandKey },
 ): Promise<APIResponse> {
   return await request.post(
-    `${solandBaseUrl(args.server)}/_soland/self/circles/${encodeURIComponent(circleId)}/members`,
+    `${solandBaseUrl(args.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/members`,
     {
       headers: authHeaders(token),
       data: {
@@ -137,7 +131,7 @@ export async function removeCircleMemberCokret(
   opts: { server?: SolandKey } = {},
 ): Promise<CircleMembershipOutcome> {
   const response = await request.delete(
-    `${solandBaseUrl(opts.server)}/_soland/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<CircleMembershipOutcome>(

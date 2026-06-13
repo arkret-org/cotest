@@ -316,7 +316,7 @@ test.describe("contact graph federation (α/β)", () => {
       .poll(
         async () => {
           const resp = await request.get(
-            `${solandBaseUrl("beta")}/_soland/self/realms/${encodeURIComponent(realmId)}`,
+            `${solandBaseUrl("beta")}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
             { headers: authHeaders(bobTokenBeta) },
           );
           if (!resp.ok()) return false;

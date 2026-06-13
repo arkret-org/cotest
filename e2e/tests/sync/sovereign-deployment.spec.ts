@@ -69,7 +69,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/_soland/self/realms/${encodeURIComponent(fixture.internalRealmId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
+      `${solandBaseUrl("alpha")}/_cokret/self/realms/${encodeURIComponent(fixture.internalRealmId)}?actor=${encodeURIComponent(fixture.bobDid)}`,
     );
     expect(direct.status()).toBe(403);
     await expectErrorCode(direct, "external_user_no_main_access");
@@ -86,7 +86,7 @@ test.describe("sovereign deployment", () => {
       data: {
         actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
-        path: `/_soland/self/realms/${fixture.internalRealmId}`,
+        path: `/_cokret/self/realms/${fixture.internalRealmId}`,
       },
     });
     expect(proxy.status()).toBe(403);

@@ -102,7 +102,7 @@ async function waitForMember(
     .poll(
       async () => {
         const response = await request.get(
-          `${solandBaseUrl(server)}/_soland/self/realms/${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl(server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -345,7 +345,7 @@ test.describe("cross-server federation", () => {
     );
 
     const betaSpace = await request.get(
-      `${solandBaseUrl("beta")}/_soland/self/realms/${encodeURIComponent(invite!.realm_id)}`,
+      `${solandBaseUrl("beta")}/_cokret/self/realms/${encodeURIComponent(invite!.realm_id)}`,
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();

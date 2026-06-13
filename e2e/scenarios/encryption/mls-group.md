@@ -48,7 +48,7 @@
    - 写 `ck.mls.genesis` Move(epoch 0、初始 ratchet tree、`governance_binding`)
    - 写 `ck.realm.create` Move,关联 genesis
 3. 断言:`/realms/${realmId}/admin/security` 显示 MLS 管理控件
-4. 断言:`GET /_soland/self/realms/${realmId}` 返回 `encryption_profile = "mls_rfc9420"`
+4. 断言:`GET /_cokret/self/realms/${realmId}` 返回 `encryption_profile = "mls_rfc9420"`
 
 ### Phase B — bob 加入(Welcome)
 

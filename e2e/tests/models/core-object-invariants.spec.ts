@@ -64,7 +64,7 @@ test.describe("core object invariants", () => {
         //   - members   ↔ membership invariant   (must contain owner)
         //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
         const realmRes = await request.get(
-          `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
           { headers: aliceAuth },
         );
         expect(realmRes.status()).toBe(200);

@@ -18,11 +18,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let realm_id = alice.create_realm("Policy Document Realm").await?;
     alice.add_member(&realm_id, &bob).await?;
 
-    let initial = expect_json(alice.get("/_soland/self/policies"), StatusCode::OK).await?;
+    let initial = expect_json(alice.get("/_cokret/self/policies"), StatusCode::OK).await?;
     assert!(initial["policies"].as_array().unwrap().is_empty());
 
     let policy = expect_json(
-        alice.post("/_soland/self/policies").json(&json!({
+        alice.post("/_cokret/self/policies").json(&json!({
             "scope": realm_id,
             "subject_ref": bob.actor,
             "policy_type": "ck.message.create",
@@ -39,7 +39,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(policy["owner"], alice.actor);
 
     let listed = expect_json(
-        alice.get(&format!("/_soland/self/policies?scope={realm_id}")),
+        alice.get(&format!("/_cokret/self/policies?scope={realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -47,14 +47,14 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(listed["policies"][0]["policy_id"], policy_id);
 
     let fetched = expect_json(
-        alice.get(&format!("/_soland/self/policies/{policy_id}")),
+        alice.get(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(fetched["payload"]["effect"], "deny");
 
     expect_api_error(
-        bob.get(&format!("/_soland/self/policies/{policy_id}")),
+        bob.get(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -80,7 +80,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(denied["obligations"].as_array().unwrap().len(), 1);
 
     let inactive = expect_json(
-        alice.post("/_soland/self/policies").json(&json!({
+        alice.post("/_cokret/self/policies").json(&json!({
             "policy_id": policy_id,
             "scope": realm_id,
             "subject_ref": bob.actor,
@@ -115,7 +115,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(allowed["reason_code"], "ok");
 
     let hidden_in_default_list =
-        expect_json(alice.get("/_soland/self/policies"), StatusCode::OK).await?;
+        expect_json(alice.get("/_cokret/self/policies"), StatusCode::OK).await?;
     assert!(
         hidden_in_default_list["policies"]
             .as_array()
@@ -124,7 +124,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     );
 
     let visible_with_inactive = expect_json(
-        alice.get("/_soland/self/policies?include_inactive=true"),
+        alice.get("/_cokret/self/policies?include_inactive=true"),
         StatusCode::OK,
     )
     .await?;
@@ -135,21 +135,21 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(visible_with_inactive["policies"][0]["active"], false);
 
     expect_api_error(
-        bob.delete(&format!("/_soland/self/policies/{policy_id}")),
+        bob.delete(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
     let deleted = expect_json(
-        alice.delete(&format!("/_soland/self/policies/{policy_id}")),
+        alice.delete(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(deleted["ok"], true);
 
     expect_api_error(
-        alice.get(&format!("/_soland/self/policies/{policy_id}")),
+        alice.get(&format!("/_cokret/self/policies/{policy_id}")),
         StatusCode::NOT_FOUND,
         "not_found",
     )

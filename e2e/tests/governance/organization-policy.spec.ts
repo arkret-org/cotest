@@ -53,7 +53,7 @@ test.describe("organization policy inheritance", () => {
       expect(policyBody.applies_to_realms).toContain(realmId);
 
       const effective = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
       );
       expect(effective.ok()).toBeTruthy();
@@ -92,7 +92,7 @@ test.describe("organization policy inheritance", () => {
       expect(JSON.stringify(await deniedJoin.json())).toContain("organization_policy_denied");
 
       const noApproval = await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -104,7 +104,7 @@ test.describe("organization policy inheritance", () => {
       expect(wireErrCode(await noApproval.json())).toBe("requires_organization_approval");
 
       const withApproval = await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -121,7 +121,7 @@ test.describe("organization policy inheritance", () => {
 
       await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
       const realm = await request.get(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}`,
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
         { headers: authHeaders(aliceToken) },
       );
       expect(realm.ok()).toBeTruthy();
@@ -164,7 +164,7 @@ test.describe("organization policy inheritance", () => {
 
       for (const realmId of [first, second]) {
         const effective = await request.get(
-          `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
           { headers: authHeaders(aliceToken) },
         );
         expect(effective.ok()).toBeTruthy();

@@ -154,7 +154,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .await?;
 
     let exported = expect_json(
-        alice.get(&format!("/_soland/self/realms/{shared_realm_id}/export")),
+        alice.get(&format!("/_cokret/self/realms/{shared_realm_id}/export")),
         StatusCode::OK,
     )
     .await?;

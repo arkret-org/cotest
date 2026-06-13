@@ -64,7 +64,7 @@ async function expectConsentCell(
   expectedState: "granted" | "revoked" | "expired" | "pending",
 ) {
   const cell = await request.get(
-    `${solandBaseUrl()}/_soland/self/consent/cells/${encodeURIComponent(holderDid)}` +
+    `${solandBaseUrl()}/_cokret/self/consent/cells/${encodeURIComponent(holderDid)}` +
       `?peer=${encodeURIComponent(peerDid)}&scope=${encodeURIComponent(scope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );

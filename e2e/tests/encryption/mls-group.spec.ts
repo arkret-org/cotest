@@ -138,7 +138,7 @@ test.describe("MLS group encryption", () => {
     });
 
     const exportResp = await request.get(
-      `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/export`,
+      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/export`,
       { headers: authHeaders(aliceToken) },
     );
     expect(exportResp.ok()).toBeTruthy();
