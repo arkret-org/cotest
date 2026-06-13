@@ -30,14 +30,12 @@
 //! [`crate::scenarios::_helpers::external_binary::skip_reason`] so a missing
 //! binary surfaces as a descriptive `bail!` rather than a hang.
 
-use std::io::Read;
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use salvo::affix_state;
+use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
 
 use crate::scenarios::_helpers::external_binary::{
@@ -58,7 +56,9 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
     //    run it on plain HTTP (127.0.0.1:<port>) and rely on `custom` pushkin's allow-http branch
     //    (configured via the rendered floria config below) so we don't need a TLS cert just to
     //    exercise the wire shape.
-    let receiver = MockPushReceiver::spawn().context("spawn mock push receiver")?;
+    let receiver = MockPushReceiver::spawn()
+        .await
+        .context("spawn mock push receiver")?;
     let receiver_url = receiver.url().to_owned();
 
     // 2. Spawn floria with a config whose `custom` pushkin points at `receiver_url`, so a live
@@ -109,44 +109,32 @@ pub async fn soland_floria_push_blind_wakeup_e2e_run() -> Result<()> {
 /// In-process HTTP receiver impersonating the operator's custom push endpoint
 /// that floria's `custom` pushkin POSTs blind wakeups to. We capture every
 /// request body so the scenario can assert §4.5 invariants on the wire.
+#[derive(Clone)]
+struct PushReceiverState {
+    notifications: Arc<Mutex<Vec<Value>>>,
+}
+
 struct MockPushReceiver {
     url: String,
-    addr: SocketAddr,
-    stop: Arc<AtomicBool>,
     notifications: Arc<Mutex<Vec<Value>>>,
-    handle: Option<thread::JoinHandle<()>>,
+    _server: crate::scenarios::_helpers::mock_http::MockServer,
 }
 
 impl MockPushReceiver {
-    fn spawn() -> Result<Self> {
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
-        let addr = listener.local_addr()?;
-        let url = format!("http://{addr}/cotest-push-sink");
-        let stop = Arc::new(AtomicBool::new(false));
+    async fn spawn() -> Result<Self> {
         let notifications: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
-        let thread_stop = Arc::clone(&stop);
-        let thread_notifications = Arc::clone(&notifications);
-        let handle = thread::spawn(move || {
-            while !thread_stop.load(Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        let log = Arc::clone(&thread_notifications);
-                        thread::spawn(move || handle_request(stream, log));
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
+        let state = PushReceiverState {
+            notifications: Arc::clone(&notifications),
+        };
+        let router = Router::with_path("cotest-push-sink")
+            .hoop(affix_state::inject(state))
+            .post(push_sink);
+        let server = crate::scenarios::_helpers::mock_http::spawn_mock(router).await?;
+        let url = format!("http://{}/cotest-push-sink", server.addr());
         Ok(Self {
             url,
-            addr,
-            stop,
             notifications,
-            handle: Some(handle),
+            _server: server,
         })
     }
 
@@ -179,42 +167,19 @@ impl MockPushReceiver {
     }
 }
 
-impl Drop for MockPushReceiver {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        let _ = TcpStream::connect(self.addr);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
-    }
-}
-
-fn handle_request(mut stream: TcpStream, notifications: Arc<Mutex<Vec<Value>>>) {
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-    let mut buffer = Vec::new();
-    let mut chunk = [0u8; 4096];
-    loop {
-        match stream.read(&mut chunk) {
-            Ok(0) => break,
-            Ok(n) => {
-                buffer.extend_from_slice(&chunk[..n]);
-                if crate::scenarios::_helpers::mock_http::request_complete(&buffer) {
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
-    }
-    if let Some(body) = crate::scenarios::_helpers::mock_http::parse_json_body(&buffer) {
+#[handler]
+async fn push_sink(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let notifications = depot
+        .obtain::<PushReceiverState>()
+        .expect("push mock state injected")
+        .notifications
+        .clone();
+    if let Ok(body) = req.parse_json::<Value>().await {
         notifications.lock().unwrap().push(body);
     }
     // Floria's custom pushkin expects a 200 with `{"rejected": []}` to mark
     // the delivery as successful (no push token retraction).
-    crate::scenarios::_helpers::mock_http::write_json_response(
-        &mut stream,
-        200,
-        &json!({"rejected": []}),
-    );
+    res.render(Json(json!({ "rejected": [] })));
 }
 
 /// §4.5 blind-wakeup invariant checks — exported for use by the live wiring

@@ -1,14 +1,12 @@
 //! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
 //! and `session_grant_exchange_uses_configured_coauth_introspection`.
-use std::io::Read;
-use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::env;
 use std::sync::{Arc, Mutex};
-use std::time::Duration as StdDuration;
-use std::{env, thread};
 
 use anyhow::Result;
 use reqwest::StatusCode;
+use salvo::affix_state;
+use salvo::prelude::{Depot, Json, Request, Response, Router, handler};
 use serde_json::{Value, json};
 
 use crate::harness::expect_json;
@@ -149,55 +147,39 @@ impl Drop for EnvOverride {
     }
 }
 
+#[derive(Clone)]
+struct CoauthIntrospectionState {
+    subject: String,
+    device_id: String,
+    requests: Arc<Mutex<Vec<Value>>>,
+}
+
 pub struct MockCoauthIntrospectionServer {
     url: String,
-    addr: SocketAddr,
-    stop: Arc<AtomicBool>,
     requests: Arc<Mutex<Vec<Value>>>,
-    handle: Option<thread::JoinHandle<()>>,
+    _server: super::mock_http::MockServer,
 }
 
 impl MockCoauthIntrospectionServer {
-    pub fn spawn(subject: &str, device_id: &str) -> Result<Self> {
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
-        let addr = listener.local_addr()?;
-        let url = format!("http://{addr}/_cokret/gate/account/session-grants/introspect");
-        let stop = Arc::new(AtomicBool::new(false));
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let thread_stop = Arc::clone(&stop);
-        let thread_requests = Arc::clone(&requests);
-        let subject = subject.to_owned();
-        let device_id = device_id.to_owned();
-        let handle = thread::spawn(move || {
-            while !thread_stop.load(Ordering::Relaxed) {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        let request_subject = subject.clone();
-                        let request_device_id = device_id.clone();
-                        let request_log = Arc::clone(&thread_requests);
-                        thread::spawn(move || {
-                            handle_mock_coauth_request(
-                                stream,
-                                &request_subject,
-                                &request_device_id,
-                                request_log,
-                            );
-                        });
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(StdDuration::from_millis(10));
-                    }
-                    Err(_) => break,
-                }
-            }
-        });
+    pub async fn spawn(subject: &str, device_id: &str) -> Result<Self> {
+        let requests: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        let state = CoauthIntrospectionState {
+            subject: subject.to_owned(),
+            device_id: device_id.to_owned(),
+            requests: Arc::clone(&requests),
+        };
+        let router = Router::with_path("_cokret/gate/account/session-grants/introspect")
+            .hoop(affix_state::inject(state))
+            .post(coauth_introspect);
+        let server = super::mock_http::spawn_mock(router).await?;
+        let url = format!(
+            "http://{}/_cokret/gate/account/session-grants/introspect",
+            server.addr()
+        );
         Ok(Self {
             url,
-            addr,
-            stop,
             requests,
-            handle: Some(handle),
+            _server: server,
         })
     }
 
@@ -210,79 +192,55 @@ impl MockCoauthIntrospectionServer {
     }
 }
 
-impl Drop for MockCoauthIntrospectionServer {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        let _ = TcpStream::connect(self.addr);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
-        }
-    }
-}
-
-fn handle_mock_coauth_request(
-    mut stream: TcpStream,
-    subject: &str,
-    device_id: &str,
-    requests: Arc<Mutex<Vec<Value>>>,
-) {
-    let Ok(request) = read_http_request(&mut stream) else {
-        return;
+#[handler]
+async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+    let (subject, device_id, requests) = {
+        let state = depot
+            .obtain::<CoauthIntrospectionState>()
+            .expect("coauth mock state injected");
+        (
+            state.subject.clone(),
+            state.device_id.clone(),
+            Arc::clone(&state.requests),
+        )
     };
-    let request_text = String::from_utf8_lossy(&request);
-    if !request_text
-        .to_ascii_lowercase()
-        .contains("authorization: bearer principal-token")
-    {
-        super::mock_http::write_json_response(&mut stream, 401, &json!({"error": "unauthorized"}));
+    let authorized = req
+        .headers()
+        .get(salvo::http::header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .to_ascii_lowercase()
+                .contains("bearer principal-token")
+        });
+    if !authorized {
+        res.status_code(salvo::http::StatusCode::UNAUTHORIZED);
+        res.render(Json(json!({ "error": "unauthorized" })));
         return;
     }
-    let body = super::mock_http::parse_json_body(&request).unwrap_or_else(|| json!({}));
-    requests
-        .lock()
-        .expect("mock requests lock")
-        .push(body.clone());
+    let body: Value = req.parse_json().await.unwrap_or_else(|_| json!({}));
     let audience = body
         .get("audience")
         .and_then(Value::as_str)
-        .unwrap_or("did:web:missing-audience");
-    super::mock_http::write_json_response(
-        &mut stream,
-        200,
-        &json!({
-            "active": true,
-            "status": "active",
-            "proof_required": true,
-            "one_time_use_consumed": true,
-            "grant": {
-                "id": "ck:grant:0196419b-0000-7000-8000-000000000901",
-                "issuer": "did:web:coauth.cotest.local",
-                "subject": subject,
-                "service_account_id": "alice-session-grant",
-                "device_id": device_id,
-                "audience": audience,
-                "scopes": ["urn:cokret:principal-server:session.bind"],
-                "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
-                "revoked_at": null,
-                "revocation_ref": "ck:session:mock"
-            }
-        }),
-    );
-}
-
-fn read_http_request(stream: &mut TcpStream) -> std::io::Result<Vec<u8>> {
-    stream.set_read_timeout(Some(StdDuration::from_secs(2)))?;
-    let mut request = Vec::new();
-    let mut buffer = [0_u8; 4096];
-    loop {
-        let read = stream.read(&mut buffer)?;
-        if read == 0 {
-            break;
+        .unwrap_or("did:web:missing-audience")
+        .to_owned();
+    requests.lock().expect("mock requests lock").push(body);
+    res.render(Json(json!({
+        "active": true,
+        "status": "active",
+        "proof_required": true,
+        "one_time_use_consumed": true,
+        "grant": {
+            "id": "ck:grant:0196419b-0000-7000-8000-000000000901",
+            "issuer": "did:web:coauth.cotest.local",
+            "subject": subject,
+            "service_account_id": "alice-session-grant",
+            "device_id": device_id,
+            "audience": audience,
+            "scopes": ["urn:cokret:principal-server:session.bind"],
+            "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
+            "revoked_at": null,
+            "revocation_ref": "ck:session:mock"
         }
-        request.extend_from_slice(&buffer[..read]);
-        if super::mock_http::request_complete(&request) {
-            break;
-        }
-    }
-    Ok(request)
+    })));
 }

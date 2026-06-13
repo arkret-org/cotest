@@ -1,56 +1,53 @@
-//! Minimal HTTP server primitives shared by in-process mock servers across
-//! scenarios (e.g. `bridge::MockCoauthIntrospectionServer` and the push-sink
-//! `MockPushReceiver`). These are the stateless request/parse/response helpers;
-//! each scenario keeps its own server struct because their accept-loop handlers
-//! differ (auth checks, response shapes, async wait vs. sync capture).
+//! Shared in-process salvo mock-server primitive.
 //!
-//! Extracted during the round-28 dedup pass (review report 09 §9.3). Behaviour
-//! is byte-for-byte identical to the inline copies these replace.
+//! Replaces the former hand-written `TcpStream` HTTP/1.1 parser (round-28 dedup
+//! pass). Each scenario builds its own [`salvo::Router`] — their handlers differ
+//! (auth checks, capture, response shapes) — and hands it to [`spawn_mock`],
+//! which binds an ephemeral loopback port and serves the router on the current
+//! tokio runtime. The returned [`MockServer`] stops the server (by aborting its
+//! serve task, which drops the listener) when it goes out of scope.
+//!
+//! Using salvo — the same HTTP framework the production servers run on — removes
+//! the bespoke request framing / status-line code (and the old "every non-200
+//! reason is `Unauthorized`" wart) in favour of the framework's correct HTTP
+//! semantics.
 
-use std::io::Write;
-use std::net::TcpStream;
+use std::net::SocketAddr;
 
-use serde_json::Value;
+use anyhow::Result;
+use salvo::Router;
+use salvo::conn::{Listener, TcpListener};
+use salvo::prelude::Server;
+use tokio::task::JoinHandle;
 
-/// Returns `true` once `buffer` holds a complete HTTP request: headers
-/// terminated by `\r\n\r\n` plus a body at least as long as `content-length`
-/// (absent header treated as zero).
-pub fn request_complete(buffer: &[u8]) -> bool {
-    let Some(header_end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") else {
-        return false;
-    };
-    let body_start = header_end + 4;
-    let headers = String::from_utf8_lossy(&buffer[..header_end]);
-    let content_length = headers
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse::<usize>().ok())
-                .flatten()
-        })
-        .unwrap_or(0);
-    buffer.len() >= body_start + content_length
+/// A running in-process salvo mock server bound to an ephemeral loopback port.
+///
+/// Dropping it aborts the serve task, releasing the port.
+pub struct MockServer {
+    addr: SocketAddr,
+    task: JoinHandle<()>,
 }
 
-/// Parses the request body (everything after the `\r\n\r\n` header terminator)
-/// as JSON, returning `None` if the terminator is missing or the body is not
-/// valid JSON.
-pub fn parse_json_body(buffer: &[u8]) -> Option<Value> {
-    let header_end = buffer.windows(4).position(|window| window == b"\r\n\r\n")?;
-    let body = &buffer[header_end + 4..];
-    serde_json::from_slice(body).ok()
+impl MockServer {
+    /// The bound `127.0.0.1:<port>` address the mock is listening on.
+    pub fn addr(&self) -> SocketAddr {
+        self.addr
+    }
 }
 
-/// Writes a `HTTP/1.1 <status> <reason>` JSON response with a `content-length`
-/// header and `connection: close`. Errors writing to the stream are ignored,
-/// matching the best-effort behaviour of the mock servers.
-pub fn write_json_response(stream: &mut TcpStream, status: u16, body: &Value) {
-    let body = body.to_string();
-    let reason = if status == 200 { "OK" } else { "Unauthorized" };
-    let response = format!(
-        "HTTP/1.1 {status} {reason}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    let _ = stream.write_all(response.as_bytes());
+impl Drop for MockServer {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+/// Bind `router` on an ephemeral loopback port and serve it on the current
+/// tokio runtime. Must be called from within a tokio runtime.
+pub async fn spawn_mock(router: Router) -> Result<MockServer> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], crate::harness::free_port()?));
+    let acceptor = TcpListener::new(addr).bind().await;
+    let task = tokio::spawn(async move {
+        Server::new(acceptor).serve(router).await;
+    });
+    Ok(MockServer { addr, task })
 }

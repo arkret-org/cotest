@@ -8,7 +8,7 @@ use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionSer
 pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Result<()> {
     let principal_id = "did:web:alice-session-grant.example";
     let device_id = "ck:device:0196419b-0000-7000-8000-000000000501";
-    let coauth = MockCoauthIntrospectionServer::spawn(principal_id, device_id)?;
+    let coauth = MockCoauthIntrospectionServer::spawn(principal_id, device_id).await?;
     let _env = EnvOverride::set(&[
         ("SOLAND_SESSION_GRANT_INTROSPECTION_URL", Some(coauth.url())),
         (
