@@ -195,7 +195,11 @@ test.describe("account states", () => {
     });
     expect(search.status()).toBe(200);
     const searchBody = await search.json();
-    expect((searchBody.results as Array<{ did: string }>).some((row) => row.did === alice.did)).toBe(false);
+    expect(
+      (
+        searchBody.actors as Array<{ actor_id?: string; preview?: { did?: string } }>
+      ).some((row) => row.actor_id === alice.did || row.preview?.did === alice.did),
+    ).toBe(false);
 
     const events = await listRealmEventsViaApi(request, bobToken, realmId);
     expect(JSON.stringify(events)).toContain(message);
@@ -234,7 +238,11 @@ test.describe("account states", () => {
     });
     expect(search.status()).toBe(200);
     const searchBody = await search.json();
-    expect((searchBody.results as Array<{ did: string }>).some((row) => row.did === alice.did)).toBe(false);
+    expect(
+      (
+        searchBody.actors as Array<{ actor_id?: string; preview?: { did?: string } }>
+      ).some((row) => row.actor_id === alice.did || row.preview?.did === alice.did),
+    ).toBe(false);
   });
 
   test("audit: each state transition writes org.cokret.soland.account.state_change with from/to/actor/reason/timestamp", async ({

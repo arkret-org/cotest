@@ -197,10 +197,13 @@ test.describe("organization policy inheritance", () => {
       });
       expect(apiSearch.ok()).toBeTruthy();
       const searchBody = await apiSearch.json();
-      const apiRow = searchBody.results?.find(
-        (row: { organization_id?: string; organization_did?: string }) =>
-          row.organization_id === orgDid || row.organization_did === orgDid,
+      const apiEnvelope = searchBody.organizations?.find(
+        (row: { organization_did?: string; preview?: { organization_id?: string; organization_did?: string } }) =>
+          row.organization_did === orgDid ||
+          row.preview?.organization_id === orgDid ||
+          row.preview?.organization_did === orgDid,
       );
+      const apiRow = apiEnvelope?.preview ?? apiEnvelope;
       expect(apiRow, "search-organizations should return the runtime Acme organization").toBeTruthy();
       expect(apiRow.verified_badge ?? apiRow.verified).toBe(true);
       expect(apiRow.member_count).toBe(2);

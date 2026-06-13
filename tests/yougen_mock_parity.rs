@@ -502,21 +502,21 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
         "directory_search_realms" => {
             // The harness creates a non-deterministic number of realms before
             // this case runs, and the per-item `name`/`description` text is
-            // free-form. Collapse to "results is an array, items expose the
+            // free-form. Collapse to "realms is an array, items expose the
             // expected key set" — that's what callers (yougen UI) bind to.
             let first_keys: Vec<String> = snapshot
                 .body
-                .get("results")
+                .get("realms")
                 .and_then(Value::as_array)
-                .and_then(|results| results.first())
+                .and_then(|realms| realms.first())
                 .and_then(Value::as_object)
                 .map(|item| item.keys().cloned().collect())
                 .unwrap_or_default();
             let mut keys = first_keys;
             keys.sort();
             json!({
-                "results_is_array": snapshot.body.get("results").is_some_and(Value::is_array),
-                "result_item_keys": keys,
+                "realms_is_array": snapshot.body.get("realms").is_some_and(Value::is_array),
+                "realm_item_keys": keys,
                 "next_cursor_present": snapshot.body.get("next_cursor").is_some(),
             })
         }

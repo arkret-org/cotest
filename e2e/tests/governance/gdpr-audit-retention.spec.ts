@@ -133,7 +133,9 @@ test.describe("GDPR / audit / retention", () => {
     });
     const beforeBody = await before.json();
     expect(
-      (beforeBody.results as Array<{ did: string }>).some((r) => r.did === alice.did),
+      (
+        beforeBody.actors as Array<{ actor_id?: string; preview?: { did?: string } }>
+      ).some((r) => r.actor_id === alice.did || r.preview?.did === alice.did),
       "alice must be visible to bob pre-erasure",
     ).toBe(true);
 
@@ -151,7 +153,9 @@ test.describe("GDPR / audit / retention", () => {
     });
     const afterBody = await after.json();
     expect(
-      (afterBody.results as Array<{ did: string }>).some((r) => r.did === alice.did),
+      (
+        afterBody.actors as Array<{ actor_id?: string; preview?: { did?: string } }>
+      ).some((r) => r.actor_id === alice.did || r.preview?.did === alice.did),
       "alice MUST NOT appear in directory after erasure",
     ).toBe(false);
   });

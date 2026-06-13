@@ -120,7 +120,14 @@ test.describe("discovery", () => {
     });
     expect(search.status()).toBe(200);
     const body = await search.json();
-    const bobRow = (body.results as Array<{ did: string }>).find((r) => r.did === bob.did);
+    const bobEnvelope = (
+      body.actors as Array<{
+        actor_id?: string;
+        display_name?: string;
+        preview?: { did?: string; display_name?: string; bio?: string; avatar_url?: string };
+      }>
+    ).find((r) => r.actor_id === bob.did || r.preview?.did === bob.did);
+    const bobRow = bobEnvelope?.preview ?? bobEnvelope;
     expect(bobRow, "bob must appear in directory search results").toBeTruthy();
     expect((bobRow as { display_name: string }).display_name).toBe(newDisplay);
     expect((bobRow as { bio?: string }).bio).toBe(newBio);
@@ -211,16 +218,21 @@ test.describe("discovery", () => {
     });
     expect(orgResp.status()).toBe(200);
     const body = await orgResp.json();
-    expect(Array.isArray(body.results)).toBe(true);
-    expect(body.results.length).toBeGreaterThanOrEqual(1);
-    const demo = body.results.find(
-      (r: { organization_id?: string; handle?: string }) =>
-        r.organization_id === "ck:org:demo" || r.handle === "@cokret-demo",
+    expect(Array.isArray(body.organizations)).toBe(true);
+    expect(body.organizations.length).toBeGreaterThanOrEqual(1);
+    const demoEnvelope = body.organizations.find(
+      (r: {
+        organization_did?: string;
+        handle?: string;
+        preview?: { organization_id?: string; handle?: string; name?: string; actor_count?: number };
+      }) =>
+        r.preview?.organization_id === "ck:org:demo" || r.preview?.handle === "@cokret-demo",
     );
+    const demo = demoEnvelope?.preview;
     expect(demo, "demo organization must appear in search results").toBeTruthy();
-    expect(typeof demo.name).toBe("string");
-    expect(demo.name.length).toBeGreaterThan(0);
-    expect(typeof demo.actor_count).toBe("number");
+    expect(typeof demo!.name).toBe("string");
+    expect(demo!.name!.length).toBeGreaterThan(0);
+    expect(typeof demo!.actor_count).toBe("number");
 
     // UI smoke — the Organizations tab renders the result row.
     const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
