@@ -44,7 +44,7 @@ Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds:
 - **schema-validation-fixture runner** — positive and negative cases
   exercised against `schema_ref`.
 - **Round R4 literal-scanner rules** — bad DID method segments,
-  string-payload `ck.events.subscribe` usage, `ck.cross_signing.publish`
+  string-payload `ck.self.events.stream.subscribe` usage, `ck.cross_signing.publish`
   without `expected_previous_generation`, and
   `compute_audit_policy_version_digest` calls with fewer than 4 arguments.
 - **Drift-validator allowlists extended** for the new capability action

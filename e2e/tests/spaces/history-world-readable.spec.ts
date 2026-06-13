@@ -53,7 +53,7 @@ test.describe("world_readable history @fully-implemented", () => {
       );
       expect(events.status()).toBe(200);
       const body = await events.json();
-      // Response shape is the spec's `ck.self.events.query` envelope; we only
+      // Response shape is the spec's `ck.self.events.query.scan` envelope; we only
       // need the request to be accepted, not its body content.
       expect(body).toBeDefined();
     } finally {

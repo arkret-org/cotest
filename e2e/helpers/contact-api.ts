@@ -201,7 +201,7 @@ export async function tombstoneContactCokret(
     blockPeer?: boolean;
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
     // peer's home service DID so soland federates the `ck.contact.tombstoned`
-    // fact to the peer's Principal Server via `ck.peer.contacts.submit`.
+    // fact to the peer's Principal Server via `ck.peer.contacts.command.submit`.
     peerServiceDid?: string;
     server?: SolandKey;
   } = {},

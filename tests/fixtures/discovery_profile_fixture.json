@@ -46,16 +46,16 @@
         "extension_present": false,
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.events.submit",
-          "ck.self.events.frontier",
-          "ck.self.account.subscribe"
+          "ck.self.events.command.submit",
+          "ck.self.events.query.frontier",
+          "ck.self.account.stream.subscribe"
         ],
         "client_must_not_call": [
-          "ck.self.blob.upload",
-          "ck.self.media.ice_config",
-          "ck.self.moderation.report",
-          "ck.edge.applet.ping",
-          "ck.open.mimi.submit_message"
+          "ck.self.blob.upload.create",
+          "ck.self.media.query.ice_config",
+          "ck.self.moderation.command.report",
+          "ck.edge.applet.query.ping",
+          "ck.open.mimi.command.submit_message"
         ]
       }
     },
@@ -74,13 +74,13 @@
         "extension_surfaces": ["blob_storage"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.blob.upload",
-          "ck.self.blob.head",
-          "ck.self.blob.get"
+          "ck.self.blob.upload.create",
+          "ck.self.blob.resource.head",
+          "ck.self.blob.resource.get"
         ],
         "client_must_not_call": [
-          "ck.self.media.ice_config",
-          "ck.self.moderation.report"
+          "ck.self.media.query.ice_config",
+          "ck.self.moderation.command.report"
         ],
         "comment_c16": "Post-C16 (spec 2026-05-08) blob_storage was split out as its own surface from a previous combined media-like surface. A SUT advertising blob_storage gets blob ops only — NOT realtime_media, NOT moderation_reports."
       }
@@ -100,12 +100,12 @@
         "extension_surfaces": ["realtime_media"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.media.ice_config"
+          "ck.self.media.query.ice_config"
         ],
         "client_must_not_call": [
-          "ck.self.blob.upload",
-          "ck.self.blob.get",
-          "ck.self.moderation.report"
+          "ck.self.blob.upload.create",
+          "ck.self.blob.resource.get",
+          "ck.self.moderation.command.report"
         ],
         "comment_c16": "realtime_media (the WebRTC ICE config surface) does NOT imply blob_storage; the spec split is enforced at discovery."
       }
@@ -125,13 +125,13 @@
         "extension_surfaces": ["moderation_reports"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ck.self.moderation.report"
+          "ck.self.moderation.command.report"
         ],
         "client_must_not_call": [
-          "ck.self.blob.upload",
-          "ck.self.media.ice_config",
-          "ck.edge.applet.ping",
-          "ck.open.mimi.report_abuse"
+          "ck.self.blob.upload.create",
+          "ck.self.media.query.ice_config",
+          "ck.edge.applet.query.ping",
+          "ck.open.mimi.command.report_abuse"
         ],
         "comment_c16": "moderation_reports is the post-C16 canonical surface name. Pre-C16 fixtures used `moderation`; this is now drift and would fail validator surface-name lookup."
       }
@@ -152,12 +152,12 @@
         "interop_bridge_present": true,
         "interop_bridge_surfaces": ["mimi_interop"],
         "client_can_call": [
-          "ck.open.mimi.submit_message",
-          "ck.open.mimi.room_update",
-          "ck.open.mimi.request_consent"
+          "ck.open.mimi.command.submit_message",
+          "ck.open.mimi.command.update_room",
+          "ck.open.mimi.command.request_consent"
         ],
         "client_must_not_call": [
-          "ck.edge.applet.ping"
+          "ck.edge.applet.query.ping"
         ],
         "comment": "interop_bridge tier surfaces MUST be explicitly advertised, and only when the external protocol is actually supported. Advertising mimi_interop does NOT imply applet or any extension surface."
       }
@@ -178,12 +178,12 @@
         "interop_bridge_present": true,
         "interop_bridge_surfaces": ["applet"],
         "client_can_call": [
-          "ck.edge.applet.ping",
-          "ck.edge.applet.describe",
-          "ck.edge.applet.transaction"
+          "ck.edge.applet.query.ping",
+          "ck.edge.applet.query.describe",
+          "ck.edge.applet.command.transaction"
         ],
         "client_must_not_call": [
-          "ck.open.mimi.submit_message"
+          "ck.open.mimi.command.submit_message"
         ]
       }
     }
@@ -201,7 +201,7 @@
       "expected": {
         "outcome": "reject_call",
         "rejection_reason": "interop_bridge_surface_not_advertised",
-        "client_attempted_call": "ck.open.mimi.submit_message",
+        "client_attempted_call": "ck.open.mimi.command.submit_message",
         "comment": "Discovery client tries to invoke a MIMI bridge op against an SUT that did NOT advertise mimi_interop and does NOT support MIMI. The SUT MUST reject (or 404) and the discovery client MUST gate the call on the advertised set, not on naive heuristics."
       }
     },
@@ -216,7 +216,7 @@
       "expected": {
         "outcome": "reject_call",
         "rejection_reason": "extension_surface_not_advertised",
-        "client_attempted_call": "ck.self.blob.upload",
+        "client_attempted_call": "ck.self.blob.upload.create",
         "comment": "Calling an extension op (blob.upload) on a core-only SUT MUST be rejected. Extension surfaces are NEVER implied by core."
       }
     },
@@ -232,8 +232,8 @@
       "expected": {
         "outcome": "reject_call",
         "rejection_reason": "extension_surface_not_advertised",
-        "client_attempted_call": "ck.self.events.submit",
-        "comment": "Even though mimi_interop's bridge ops have a `bridges_to` link to in-spec ops (e.g. ck.open.mimi.submit_message bridges_to ck.self.events.submit), advertising mimi_interop is NOT advertising events_sync. The events_sync surface IS advertised here so the call would actually succeed — the negative is the reverse direction: a discovery client must NOT advertise mimi_interop and assume that gives it events_sync access. The SUT here did advertise events_sync, so this vector is structural: the client must call ops via the actual advertised surface, not via a bridge implication."
+        "client_attempted_call": "ck.self.events.command.submit",
+        "comment": "Even though mimi_interop's bridge ops have a `bridges_to` link to in-spec ops (e.g. ck.open.mimi.command.submit_message bridges_to ck.self.events.command.submit), advertising mimi_interop is NOT advertising events_sync. The events_sync surface IS advertised here so the call would actually succeed — the negative is the reverse direction: a discovery client must NOT advertise mimi_interop and assume that gives it events_sync access. The SUT here did advertise events_sync, so this vector is structural: the client must call ops via the actual advertised surface, not via a bridge implication."
       }
     }
   ]

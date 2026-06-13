@@ -54,13 +54,13 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let failed = serde_json::json!({
         "supported_profiles": ["ck.profile.core_event_store.v1"],
         "supported_operations": [
-            "ck.server.describe",
-            "ck.self.events.describe",
-            "ck.self.events.submit",
-            "ck.self.events.get",
-            "ck.self.events.resolve",
-            "ck.self.events.query",
-            "ck.self.events.frontier"
+            "ck.server.query.describe",
+            "ck.self.events.query.describe",
+            "ck.self.events.command.submit",
+            "ck.self.events.resource.get",
+            "ck.self.events.query.resolve",
+            "ck.self.events.query.scan",
+            "ck.self.events.query.frontier"
         ],
         "supported_event_kinds": [
             "ck.space.create",

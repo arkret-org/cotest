@@ -232,7 +232,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: "ck:realm:01904100-0000-7000-8000-000000000999",
-      kind: "ck.edge.applet.transaction",
+      kind: "ck.edge.applet.command.transaction",
       payload: { transaction_id: "ck:txn:profile-gate", params: {} },
     });
 

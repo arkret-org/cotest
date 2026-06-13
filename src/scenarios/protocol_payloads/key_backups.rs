@@ -158,7 +158,7 @@ async fn describe_backup_surfaces(server: &CokretServer, token: &str) -> Result<
     assert_eq!(key_backups_describe["schema"], "ck.schema.key_backup.v1");
     assert_eq!(
         key_backups_describe["operations"][0],
-        "ck.self.keys.backups.put"
+        "ck.self.keys.backups.resource.replace"
     );
     Ok(())
 }

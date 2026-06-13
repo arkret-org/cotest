@@ -189,7 +189,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     .await?;
     // Spec rename: 快照 manifest 自身标识字段为 `id`(snapshot_ref 仅用于外部引用位)。
     assert!(snapshot["id"].as_str().unwrap().starts_with("ck:snapshot:"));
-    // `ck.self.snapshot.head` 返回完整签名 `ck.schema.snapshot.v1` manifest,
+    // `ck.self.snapshot.query.manifest_head` 返回完整签名 `ck.schema.snapshot.v1` manifest,
     // 其 frontier 为 {event_ids, timeline_hlc}。
     assert!(
         snapshot["frontier"]["event_ids"]

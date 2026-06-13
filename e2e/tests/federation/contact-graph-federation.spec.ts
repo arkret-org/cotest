@@ -9,7 +9,7 @@
 //
 // Cross-PS contact federation (spec contact-and-direct-conversation.md §2/§4.1):
 // the contact request/respond protocol face delivers signed `ck.contact.*`
-// facts to the target holder's home PS via `ck.peer.contacts.submit`
+// facts to the target holder's home PS via `ck.peer.contacts.command.submit`
 // (`POST /_cokret/peer/contacts`) over the durable federation outbox. The
 // requester addresses the remote target with `recipient_service_did`; the
 // responder addresses the remote requester with `requester_service_did`

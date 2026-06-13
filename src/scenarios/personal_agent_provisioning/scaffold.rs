@@ -45,19 +45,19 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
             "duplicate personal-agent operation ids: {PERSONAL_AGENT_OPERATIONS:?}"
         ));
     }
-    if OP_AGENT_PROVISION != "ck.self.agent.provision" {
+    if OP_AGENT_PROVISION != "ck.self.agent.command.provision" {
         return Err(anyhow!(
             "OP_AGENT_PROVISION spelling drifted: {OP_AGENT_PROVISION}"
         ));
     }
-    if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.agent_key_pair" {
+    if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.command.pair_agent_key" {
         return Err(anyhow!(
             "OP_ACCOUNT_AGENT_KEY_PAIR spelling drifted: {OP_ACCOUNT_AGENT_KEY_PAIR}"
         ));
     }
 
     // (b) Provisioning capability action constant matches the registry.
-    if CAP_ACTION_AGENT_PROVISION != "ck.self.agent.provision" {
+    if CAP_ACTION_AGENT_PROVISION != "ck.self.agent.command.provision" {
         return Err(anyhow!(
             "CAP_ACTION_AGENT_PROVISION spelling drifted: {CAP_ACTION_AGENT_PROVISION}"
         ));
@@ -93,7 +93,7 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
         ));
     }
 
-    // TODO(P4-impl): drive a real `ck.self.agent.provision` envelope through
+    // TODO(P4-impl): drive a real `ck.self.agent.command.provision` envelope through
     // the reducer (the controller-self capability binding + first agent
     // key authorize chain is server-side TODO per soland P2-impl).
 

@@ -714,7 +714,7 @@ const SPEC_ARTIFACTS_ROOT = resolve(
 );
 
 // The reducer profile soland declares for its federation surface
-// (ck.peer.events.describe → supported_profiles), also the vector's profile.
+// (ck.peer.events.query.describe → supported_profiles), also the vector's profile.
 export const FEDERATION_REDUCER_PROFILE_ID = "ck.profile.federation_minimal.v1";
 
 const reducerProfileDigestCache = new Map<string, string>();

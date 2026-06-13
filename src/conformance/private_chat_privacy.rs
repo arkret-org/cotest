@@ -171,9 +171,11 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         .flatten()
         .find(|operation| {
             operation.get("operation_id").and_then(Value::as_str)
-                == Some("ck.self.direct_conversation.resolve")
+                == Some("ck.self.direct_conversation.command.resolve")
         })
-        .ok_or_else(|| anyhow!("operation registry missing ck.self.direct_conversation.resolve"))?;
+        .ok_or_else(|| {
+            anyhow!("operation registry missing ck.self.direct_conversation.command.resolve")
+        })?;
     if operation.get("http").and_then(Value::as_str)
         != Some("POST /_cokret/self/direct-conversations/resolve")
     {
@@ -255,7 +257,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_artifacts",
-        &json!({"operation_id": "ck.self.direct_conversation.resolve"}),
+        &json!({"operation_id": "ck.self.direct_conversation.command.resolve"}),
         &json!({
             "http": "POST /_cokret/self/direct-conversations/resolve",
             "request_field": "peer",

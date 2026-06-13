@@ -118,9 +118,9 @@ test.describe("describes soland surface @fully-implemented", () => {
     }
 
     // §4.2 + service-api-schema.mdx §2.1 — every principal server must surface
-    // at least ck.server.describe + ck.self.events.submit on supported_operations.
-    expect(body.supported_operations, "exposes ck.server.describe").toContain("ck.server.describe");
-    expect(body.supported_operations, "exposes ck.self.events.submit").toContain("ck.self.events.submit");
+    // at least ck.server.query.describe + ck.self.events.command.submit on supported_operations.
+    expect(body.supported_operations, "exposes ck.server.query.describe").toContain("ck.server.query.describe");
+    expect(body.supported_operations, "exposes ck.self.events.command.submit").toContain("ck.self.events.command.submit");
 
     await testInfo.attach("soland-describe", {
       body: JSON.stringify(body, null, 2),

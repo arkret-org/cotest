@@ -16,7 +16,7 @@
           "ck.profile.principal_server.v1"
         ],
         "supported_operations": [
-          "ck.server.describe"
+          "ck.server.query.describe"
         ],
         "limits": {
           "profile_status": {
@@ -40,7 +40,7 @@
       },
       "describe": {
         "service": "floria",
-        "operation_id": "ck.edge.push.notify",
+        "operation_id": "ck.edge.push.command.notify",
         "supported_profiles": [
           "ck.profile.push_gateway.v1"
         ],

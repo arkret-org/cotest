@@ -129,7 +129,7 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
     let _alice =
         Did::new(ALICE_DID.to_owned()).context("starid MUST mint a parseable did:web for Alice")?;
-    // Build the rest of the candidate as if `ck.find.directory.resolve_handle`
+    // Build the rest of the candidate as if `ck.find.directory.query.resolve_handle`
     // returned it (T3.5 pattern).
     sample_candidate()
 }
@@ -191,7 +191,7 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
 
 // ── Step 3: teabay directory resolve_handle ────────────────────────────────
 
-/// teabay's `ck.find.directory.resolve_handle` (T3.4) filters candidates against
+/// teabay's `ck.find.directory.query.resolve_handle` (T3.4) filters candidates against
 /// the target Space's `allowed_recipient_services` and emits the same
 /// candidate shape we constructed above. At the SDK layer the validator is
 /// the same gate teabay re-runs on the wire — we exercise it with

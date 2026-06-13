@@ -25,7 +25,7 @@ use super::{canonical_json, load_artifact_json, sha256_prefixed};
 const REDUCER_PROFILE_REGISTRY: &str = "registry/reducer-profile-registry.json";
 
 /// The reducer profile soland declares for its federation surface
-/// (`ck.peer.events.describe` → `supported_profiles`), and the profile pinned
+/// (`ck.peer.events.query.describe` → `supported_profiles`), and the profile pinned
 /// by the registered conformance vector.
 pub const FEDERATION_MINIMAL_PROFILE_ID: &str = "ck.profile.federation_minimal.v1";
 

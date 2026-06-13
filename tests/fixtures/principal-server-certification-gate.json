@@ -47,13 +47,13 @@
           }
         },
         "supported_operations": [
-          "ck.server.describe",
-          "ck.self.account.describe",
-          "ck.self.account.subscribe",
-          "ck.self.events.subscribe",
-          "ck.self.events.query",
-          "ck.self.snapshot.head",
-          "ck.self.authz.check"
+          "ck.server.query.describe",
+          "ck.self.account.query.describe",
+          "ck.self.account.stream.subscribe",
+          "ck.self.events.stream.subscribe",
+          "ck.self.events.query.scan",
+          "ck.self.snapshot.query.manifest_head",
+          "ck.self.authz.query.check"
         ],
         "supported_event_kinds": [
           "ck.space.create",
@@ -99,17 +99,17 @@
           }
         },
         "supported_operations": [
-          "ck.server.describe",
-          "ck.self.account.describe",
-          "ck.self.account.subscribe",
-          "ck.self.events.subscribe",
-          "ck.self.events.query",
-          "ck.self.snapshot.head",
-          "ck.self.authz.check",
-          "ck.self.blob.upload",
-          "ck.self.agent.provision",
-          "ck.self.applet.install",
-          "ck.self.media.ice_config"
+          "ck.server.query.describe",
+          "ck.self.account.query.describe",
+          "ck.self.account.stream.subscribe",
+          "ck.self.events.stream.subscribe",
+          "ck.self.events.query.scan",
+          "ck.self.snapshot.query.manifest_head",
+          "ck.self.authz.query.check",
+          "ck.self.blob.upload.create",
+          "ck.self.agent.command.provision",
+          "ck.self.applet.command.install",
+          "ck.self.media.query.ice_config"
         ],
         "supported_event_kinds": [
           "ck.space.create",

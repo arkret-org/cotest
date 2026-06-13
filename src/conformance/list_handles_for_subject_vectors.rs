@@ -1,4 +1,4 @@
-//! `ck.find.directory.list_handles_for_subject` conformance vectors (VECT-COT-3).
+//! `ck.find.directory.query.list_handles_for_subject` conformance vectors (VECT-COT-3).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.0` +
 //! `artifacts/schemas/list-handles-for-subject-response.schema.json`

@@ -219,7 +219,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
 
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
-        "operation": "ck.self.events.submit",
+        "operation": "ck.self.events.command.submit",
         "envelopes": [{"kind": "ck.message.text", "payload": {"body": "federation-c3"}}],
         "idempotency_key": "idem-c3-001",
     });
@@ -305,7 +305,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     let first = server_b.receive(&initial_key, dest_td.as_str(), || {
         json!({
             "ok": true,
-            "operation": "ck.self.events.submit",
+            "operation": "ck.self.events.command.submit",
             "accepted": 1,
             "request_canonical_digest": request_canonical_digest.as_str(),
         })

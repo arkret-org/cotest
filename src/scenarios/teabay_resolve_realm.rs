@@ -1,4 +1,4 @@
-//! TB-2 — `ck.find.directory.resolve_realm` three-lookup fixture for teabay.
+//! TB-2 — `ck.find.directory.query.resolve_realm` three-lookup fixture for teabay.
 //!
 //! Per spec §9, `resolve_realm` accepts any of `realm_id`, `alias`,
 //! `invite_token`, or `signed_link` as the lookup key. **Per the current

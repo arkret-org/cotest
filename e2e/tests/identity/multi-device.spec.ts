@@ -55,7 +55,7 @@ test.describe("multi-device pairing + revocation", () => {
     }
   });
 
-  test("existing device approves a new device through ck.gate.account.device_pair", async ({
+  test("existing device approves a new device through ck.gate.account.command.pair_device", async ({
     request,
   }) => {
     const alice = uniqueUser(`s10-device-pair-${Date.now()}`);

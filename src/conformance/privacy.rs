@@ -61,7 +61,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .and_then(|expected| expected.get("same_http_status"))
                     .and_then(Value::as_u64)
                     == Some(404);
-                let op_ok = matches!(op_id, Some("ck.find.directory.resolve_realm"));
+                let op_ok = matches!(op_id, Some("ck.find.directory.query.resolve_realm"));
                 if !op_ok || !same_http_ok {
                     bail!(
                         "privacy fixture {} no longer proves indistinguishable resolve errors",
@@ -72,7 +72,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     "privacy.hidden_realm_resolve_indistinguishable",
                     &json!({"operation_id": case.operation_id.clone()}),
                     &json!({
-                        "operation_id": "ck.find.directory.resolve_realm",
+                        "operation_id": "ck.find.directory.query.resolve_realm",
                         "same_http_status": 404,
                     }),
                     &json!({
@@ -123,12 +123,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     anyhow!("privacy fixture {} missing operation_ids", case.name)
                 })?;
                 for required in [
-                    "ck.find.directory.search_realms",
-                    "ck.find.directory.resolve_realm",
-                    "ck.find.directory.resolve_target",
-                    "ck.find.directory.announce",
-                    "ck.find.directory.withdraw",
-                    "ck.find.directory.private_contact_discovery",
+                    "ck.find.directory.query.search_realms",
+                    "ck.find.directory.query.resolve_realm",
+                    "ck.find.directory.query.resolve_target",
+                    "ck.find.directory.command.announce",
+                    "ck.find.directory.command.withdraw",
+                    "ck.find.directory.query.private_contact_discovery",
                 ] {
                     if !operation_ids.iter().any(|operation| operation == required) {
                         bail!(

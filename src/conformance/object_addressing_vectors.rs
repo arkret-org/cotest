@@ -1,4 +1,4 @@
-//! CKP-0011 shareable object-addressing + `ck.find.directory.resolve_target`
+//! CKP-0011 shareable object-addressing + `ck.find.directory.query.resolve_target`
 //! conformance vectors (OA-COT-1..4).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.1` (resolve_target +
@@ -508,7 +508,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "service_did": "did:web:relay.example",
                 "service_type": "principal_server",
                 "role": "primary",
-                "operations": ["ck.self.events.submit"],
+                "operations": ["ck.self.events.command.submit"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 0,
                 "source": "directory_ingest",
@@ -521,7 +521,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "service_did": "did:web:teabay.example",
                 "service_type": "principal_server",
                 "role": "mirror",
-                "operations": ["ck.self.events.submit"],
+                "operations": ["ck.self.events.command.submit"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 1,
                 "source": "directory_ingest",
