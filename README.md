@@ -1,6 +1,6 @@
 # cotest
 
-> **Spec target**: [cokret-spec @ c2848a4](../cokret-spec) (R3.4 sync 2026-05-31)
+> **Spec target**: [cokret-spec @ a77b995](../cokret-spec) (R4 sync; see "Round R4" below)
 
 `cotest` is an out-of-repository black-box Cokret server test harness modeled
 after Complement. It starts real server processes or real server containers,
@@ -135,14 +135,14 @@ the `TEABAY_BIN`/sibling-binary convention.
 - `docker`: spawn the SUT from `COTEST_SUT_IMAGE` with Docker while the Rust
   tests remain host-side, similar to Complement.
 
-See [docs/runtime-workflow.md](/E:/Works/cokret/cotest/docs/runtime-workflow.md:1)
+See [docs/runtime-workflow.md](./docs/runtime-workflow.md)
 for the full startup model, Docker image contract, and result artifacts.
 
 ## Layout
 
-- `src/harness.rs`: process lifecycle, test actor helpers, and shared HTTP
+- `src/harness/`: process lifecycle, test actor helpers, and shared HTTP
   assertion utilities.
-- `src/conformance.rs`: artifact-driven offline conformance runner wired to
+- `src/conformance/`: artifact-driven offline conformance runner wired to
   `cokret-spec/spec/v1/artifacts` schemas, registries, profiles, OpenAPI, non-HTTP
   bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
@@ -291,7 +291,7 @@ on-call engineer chases.
 
 For the runtime model comparison against Complement, including image creation,
 Docker networking, host-side execution, and result formatting, see
-[docs/complement-map.md](/E:/Works/cokret/cotest/docs/complement-map.md:1).
+[docs/complement-map.md](./docs/complement-map.md).
 
 The suite is organized by protocol and behavior, not milestone folders.
 

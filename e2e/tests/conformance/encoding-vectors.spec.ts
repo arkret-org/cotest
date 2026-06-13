@@ -18,7 +18,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import { conformanceBaseUrl } from "../../helpers/env";
 import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -144,7 +144,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -170,7 +170,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         data: {
           vector_id: v.vector_id,
@@ -204,7 +204,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         // The soland reject classifier triggers off `vector_id` containing
         // `reject_malformed_json` — input shape is irrelevant to the reject
@@ -238,7 +238,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -262,7 +262,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         data: { vector_id: v.vector_id, input: v.input },
       },
@@ -296,7 +296,7 @@ test.describe("conformance encoding vectors", () => {
       signing_key_ref: "alice.dev_key",
     };
     const resp1 = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/sign`,
+      `${conformanceBaseUrl()}/sign`,
       { data: body1 },
     );
     expect(resp1.status()).toBe(200);
@@ -311,7 +311,7 @@ test.describe("conformance encoding vectors", () => {
     // signature (Ed25519 is deterministic by construction; soland's seed is
     // derived from signing_key_ref so the key is also stable).
     const resp2 = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/sign`,
+      `${conformanceBaseUrl()}/sign`,
       { data: body1 },
     );
     expect(resp2.status()).toBe(200);
@@ -362,7 +362,7 @@ test.describe("conformance encoding vectors", () => {
 
     const clocks = (v.input as string[]).map(hlcToClockEntry);
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/hlc-merge`,
+      `${conformanceBaseUrl()}/hlc-merge`,
       {
         data: { vector_id: v.vector_id, clocks },
       },
@@ -387,7 +387,7 @@ test.describe("conformance encoding vectors", () => {
     const v = vector!;
 
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/hlc-merge`,
+      `${conformanceBaseUrl()}/hlc-merge`,
       {
         // Vector_id contains `logical_overflow` which trips soland's reject
         // branch — clocks list is irrelevant to the reject dispatch.
@@ -425,7 +425,7 @@ test.describe("conformance encoding vectors", () => {
     const shuffled = [events[2], events[0], events[1]];
 
     const respA = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/cursor`,
+      `${conformanceBaseUrl()}/cursor`,
       { data: { vector_id: v.vector_id, events, reduce_round: 1 } },
     );
     expect(respA.status()).toBe(200);
@@ -433,7 +433,7 @@ test.describe("conformance encoding vectors", () => {
     expect(typeof bodyA.cursor).toBe("string");
 
     const respB = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/cursor`,
+      `${conformanceBaseUrl()}/cursor`,
       {
         data: {
           vector_id: v.vector_id,
@@ -489,7 +489,7 @@ test.describe("conformance encoding vectors", () => {
     // canonical-bytes hash shape — see the wire-shape mismatch note in the
     // task report.
     const resp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/envelope`,
+      `${conformanceBaseUrl()}/envelope`,
       {
         data: { vector_id: v.vector_id, envelope: v.cleartext_metadata },
       },
@@ -500,7 +500,7 @@ test.describe("conformance encoding vectors", () => {
     expect(body.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     // Determinism: re-post the same envelope should yield identical digest.
     const resp2 = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/envelope`,
+      `${conformanceBaseUrl()}/envelope`,
       {
         data: { vector_id: v.vector_id, envelope: v.cleartext_metadata },
       },
@@ -544,7 +544,7 @@ test.describe("conformance encoding vectors", () => {
     };
 
     const ownerResp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/redact`,
+      `${conformanceBaseUrl()}/redact`,
       {
         data: {
           vector_id: "ck.vector.redaction.owner_view.synthetic.v1",
@@ -563,7 +563,7 @@ test.describe("conformance encoding vectors", () => {
     expect(ownerBody.projected_event?.redacted_because).toBeUndefined();
 
     const guestResp = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/redact`,
+      `${conformanceBaseUrl()}/redact`,
       {
         data: {
           vector_id: "ck.vector.redaction.guest_view.synthetic.v1",
@@ -616,7 +616,7 @@ test.describe("conformance encoding vectors", () => {
     request,
   }, testInfo) => {
     const probe = await request.post(
-      `${solandBaseUrl()}/_cokret/self/conformance/encode`,
+      `${conformanceBaseUrl()}/encode`,
       {
         data: {
           vector_id: "ck.vector.encoding.canonical_json.basic.v1",

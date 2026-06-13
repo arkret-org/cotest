@@ -74,13 +74,24 @@ test.describe("sovereign deployment", () => {
     expect(direct.status()).toBe(403);
     await expectErrorCode(direct, "external_user_no_main_access");
 
-    const directory = await getJson(
-      request,
-      "alpha",
-      `/_cokret/find/directory/spaces?q=internal&actor=${encodeURIComponent(fixture.bobDid)}`,
+    // Directory discovery is over Realms (the replication/security boundary),
+    // not pre-inversion "spaces". spec: find/directory/search-realms
+    // (DirectoryRealmSearchOutcome → { realms[], has_more }). The escape-isolation
+    // assertion is that the external user cannot discover the internal Realm:
+    // the authorized search returns an empty realm set.
+    const directoryResp = await request.post(
+      `${solandBaseUrl("alpha")}/_cokret/find/directory/search-realms`,
+      {
+        data: {
+          query: "internal",
+          requester: fixture.bobDid,
+        },
+      },
     );
-    expect(directory.results).toEqual([]);
-    expect(directory.boundary).toBe("external_via_enclave");
+    expect(directoryResp.status(), await directoryResp.text()).toBe(200);
+    const directory = await directoryResp.json();
+    expect(directory.realms).toEqual([]);
+    expect(directory.has_more).toBe(false);
 
     const proxy = await request.post(`${solandBaseUrl("beta")}/_soland/self/deployment/enclave-proxy`, {
       data: {

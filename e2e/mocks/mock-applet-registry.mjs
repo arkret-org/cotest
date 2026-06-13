@@ -314,25 +314,36 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "missing_soland_base_url_or_authorization" }));
       return;
     }
-    const upstream = await fetch(
-      `${String(solandBase).replace(/\/$/, "")}/_cokret/edge/applet/transactions`,
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization,
-          "Idempotency-Key":
-            body.idempotency_key ??
-            `external-${body.applet_id}-${body.external_user?.id ?? "bot"}-${Date.now()}`,
+    let upstream;
+    try {
+      upstream = await fetch(
+        `${String(solandBase).replace(/\/$/, "")}/_cokret/edge/applet/transactions`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization,
+            "Idempotency-Key":
+              body.idempotency_key ??
+              `external-${body.applet_id}-${body.external_user?.id ?? "bot"}-${Date.now()}`,
+          },
+          body: JSON.stringify({
+            applet_id: body.applet_id,
+            realm_id: body.realm_id,
+            external_user: body.external_user,
+            payload: body.payload,
+          }),
         },
-        body: JSON.stringify({
-          applet_id: body.applet_id,
-          realm_id: body.realm_id,
-          external_user: body.external_user,
-          payload: body.payload,
-        }),
-      },
-    );
+      );
+    } catch (err) {
+      // soland unreachable / connection refused / timeout: degrade to a
+      // structured 502 instead of letting the rejected promise escape the
+      // createServer async callback (process-level unhandledRejection) and
+      // leaving the client hung with no status written.
+      res.statusCode = 502;
+      res.end(JSON.stringify({ error: "upstream_unreachable", detail: String(err) }));
+      return;
+    }
     res.statusCode = upstream.status;
     res.end(await upstream.text());
     return;

@@ -25,6 +25,13 @@ export function solandBaseUrl(key: SolandKey = "default"): string {
   return requiredEnv("COTEST_SOLAND_BASE_URL").replace(/\/$/, "");
 }
 
+// Conformance debug endpoints live on soland's product face (/_soland/self/conformance/*),
+// not the protocol face. The spec OpenAPI defines no conformance/* path, and soland mounts
+// conformance::router() under /_soland/self. Tests must target this product-face base.
+export function conformanceBaseUrl(key: SolandKey = "default"): string {
+  return `${solandBaseUrl(key)}/_soland/self/conformance`;
+}
+
 export function solandServiceDid(key: SolandKey = "default"): string {
   if (key === "alpha") {
     return optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ?? "did:web:soland-alpha.joint-e2e.local";

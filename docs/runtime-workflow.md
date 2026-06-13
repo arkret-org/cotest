@@ -59,7 +59,7 @@ The harness reads these environment variables:
 
 ### Docker image contract
 
-The default image asset is [docker/soland.Dockerfile](/E:/Works/cokret/cotest/docker/soland.Dockerfile:1).
+The default image asset is [docker/soland.Dockerfile](../docker/soland.Dockerfile).
 It is built from the workspace root one level above `cotest`, because `soland`
 depends on the sibling checkout `cokret-rust-sdk`. The workspace root
 `.dockerignore` trims the build context so Docker only receives the `soland`,
@@ -95,7 +95,7 @@ identical between `process` and `docker` modes.
 This script:
 
 - uses `E:\Works\cokret` as the Docker build context by default
-- reads [docker/soland.Dockerfile](/E:/Works/cokret/cotest/docker/soland.Dockerfile:1)
+- reads [docker/soland.Dockerfile](../docker/soland.Dockerfile)
 - expects sibling `soland` and `cokret-rust-sdk` checkouts to exist
 - produces `cotest-soland:latest` unless `-ImageTag` overrides it
 - accepts Docker cache controls through `-CacheFrom`, `-CacheTo`, `-Pull`, and

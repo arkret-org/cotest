@@ -17,11 +17,11 @@ applies the same pattern to Cokret.
 - Complement's out-of-repo discipline maps to keeping reusable logic in `src/`
   and leaving `tests/` as wrappers only.
 - Complement's base-image workflow maps to `COTEST_SUT_IMAGE` plus
-  [docker/soland.Dockerfile](/E:/Works/cokret/cotest/docker/soland.Dockerfile:1)
-  and [scripts/build-soland-image.ps1](/E:/Works/cokret/cotest/scripts/build-soland-image.ps1:1),
+  [docker/soland.Dockerfile](../docker/soland.Dockerfile)
+  and [scripts/build-soland-image.ps1](../scripts/build-soland-image.ps1),
   including Docker cache controls for CI builds.
 - Complement's result-formatting story maps to
-  [scripts/run-cotest.ps1](/E:/Works/cokret/cotest/scripts/run-cotest.ps1:1),
+  [scripts/run-cotest.ps1](../scripts/run-cotest.ps1),
   which emits raw logs, redacted HTTP transcripts, and Markdown/JSON summaries
   under `artifacts/`.
 
@@ -34,10 +34,10 @@ Complement typically expects a prebuilt homeserver image selected through
 `cotest` now mirrors that model like this:
 
 - Image build entrypoint:
-  [scripts/build-soland-image.ps1](/E:/Works/cokret/cotest/scripts/build-soland-image.ps1:1)
+  [scripts/build-soland-image.ps1](../scripts/build-soland-image.ps1)
   builds `cotest-soland:latest`.
 - Image source:
-  [docker/soland.Dockerfile](/E:/Works/cokret/cotest/docker/soland.Dockerfile:1)
+  [docker/soland.Dockerfile](../docker/soland.Dockerfile)
   compiles `soland` together with the sibling `cokret-rust-sdk` checkout.
 - Build context control:
   `E:\Works\cokret\.dockerignore` limits Docker context to the trees needed
@@ -63,7 +63,7 @@ optionally pretty-prints `go test -json` output with `gotestfmt`.
 - host-side `cargo test`
 - SUT spawned as either child process or Docker container
 - one script entrypoint for execution:
-  [scripts/run-cotest.ps1](/E:/Works/cokret/cotest/scripts/run-cotest.ps1:1)
+  [scripts/run-cotest.ps1](../scripts/run-cotest.ps1)
 - persisted result artifacts:
   `artifacts/runs/<timestamp>/raw.log`,
   `artifacts/runs/<timestamp>/transcript.ndjson`,
@@ -84,7 +84,7 @@ an explicit result surface comparable to Complement's formatter pipeline,
 without making users reconstruct the run from terminal scrollback.
 
 In addition to runtime results, `cotest` now has an offline fixture-driven
-conformance surface in [src/conformance.rs](/E:/Works/cokret/cotest/src/conformance.rs:1),
+conformance surface in [src/conformance/](../src/conformance/),
 which consumes the spec-owned machine-readable artifacts under
 `cokret-spec/spec/v1/artifacts`: schemas, registries, profiles, OpenAPI, non-HTTP
 bindings, and fixtures. Complement does not need this exact layer because

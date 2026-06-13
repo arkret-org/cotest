@@ -1,4 +1,4 @@
-FROM rust:1.92-bookworm AS build
+FROM rust:1.96-bookworm AS build
 
 WORKDIR /workspace
 ENV RUSTFLAGS="-C link-arg=-lssl -C link-arg=-lcrypto"
@@ -8,7 +8,7 @@ COPY soland ./soland
 WORKDIR /workspace/soland
 RUN cargo build --release
 
-FROM rust:1.92-bookworm
+FROM rust:1.96-bookworm
 
 WORKDIR /app
 COPY --from=build /workspace/soland/target/release/soland /usr/local/bin/soland
