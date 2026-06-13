@@ -483,6 +483,16 @@ export async function submitSignedEventApi(
   return JSON.parse(text) as Record<string, unknown>;
 }
 
+// KNOWN IMPLEMENTATION COUPLING (COT-06-004 / SPEC-CR-006):
+// The protocol defines NO convention that a Realm's default discussion Flow
+// reuses the Realm UUID. `ck:realm:<uuid>` and `ck:flow:<uuid>` are independent
+// id kinds (registry/id-kind-registry.json) that do not derive from each other.
+// Deriving the flow id from the realm id below relies on soland's internal
+// minting rule and will break against any implementation that mints default
+// flows differently. The spec-faithful path is to discover the default Flow via
+// the projection face (`/_cokret/self/projection/flows?realm_id=...`); that
+// migration is blocked on SPEC-CR-006 (no deterministic "default flow" marker
+// exists in ProjectionFlowRow / flow.schema.json yet).
 export function flowIdFromRealmId(realmId: string): string {
   const suffix = realmId.replace(/^ck:realm:/, "");
   return `ck:flow:${suffix}`;
