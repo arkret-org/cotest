@@ -89,7 +89,7 @@ test.describe("capability chain @fully-implemented", () => {
     }
   });
 
-  test("alice grants bob ck.space.write_message with expires_at=+1h; the grant is effective via /authz/check", async ({
+  test("alice grants bob ck.message.create with expires_at=+1h; the grant is effective via /authz/check", async ({
     browser,
     request,
   }) => {

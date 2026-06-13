@@ -99,7 +99,7 @@ test.describe("policy server check", () => {
     const denied = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
       data: {
         actor_id: bob.did,
-        action: "ck.space.write_message",
+        action: "ck.message.create",
         resource: {
           kind: "realm",
           id: realmId,
