@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow};
 use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
 use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -10,7 +10,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::harness::{CokretServer, dev_login, expect_api_error, expect_json, expect_response};
+use crate::harness::{
+    CokretServer, dev_login, expect_api_error, expect_json, expect_response, submit_event,
+};
 use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 
 fn with_signed_federation_request(
@@ -25,6 +27,46 @@ fn with_signed_federation_request(
     let content_digest =
         ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = canonical_sha256(body)?;
+    with_signed_federation_request_digests(
+        builder,
+        method,
+        target_url,
+        destination,
+        source_service_did,
+        content_digest,
+        request_canonical_digest,
+    )
+}
+
+fn with_signed_federation_empty_request(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    destination: &CokretServer,
+    source_service_did: &str,
+) -> Result<reqwest::RequestBuilder> {
+    let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = sha256_digest([]);
+    with_signed_federation_request_digests(
+        builder,
+        method,
+        target_url,
+        destination,
+        source_service_did,
+        content_digest,
+        request_canonical_digest,
+    )
+}
+
+fn with_signed_federation_request_digests(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    destination: &CokretServer,
+    source_service_did: &str,
+    content_digest: String,
+    request_canonical_digest: String,
+) -> Result<reqwest::RequestBuilder> {
     let source_trust_domain = trust_domain_from_service_did(source_service_did);
     let destination_service_did = destination.service_did();
     let destination_trust_domain = trust_domain_from_service_did(destination_service_did);
@@ -148,6 +190,37 @@ fn signed_federation_event(
     Ok(event)
 }
 
+fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&str]) -> Value {
+    json!({
+        "object": {
+            "id": realm_id,
+            "schema": "ck.schema.realm.v1",
+            "title": "Federation Contract Realm",
+            "summary": "federation contract fixture",
+            "trust_domain": trust_domain_from_service_did(creator),
+            "created_by": creator,
+            "schema_refs": ["ck.schema.realm.v1"],
+            "default_discoverability": "invite_only",
+            "default_join_rule": "invite",
+            "history_visibility": "shared",
+            "encryption_profile": "none",
+            "security_class": "standard",
+            "federation_policy": "open",
+            "notary_profile": "single_did",
+            "digest_algorithm": "sha256",
+            "plaintext_visible_services": visible_services,
+            "notary": {
+                "type": "single_did",
+                "did": creator,
+                "recovery_members": ["did:web:recovery-federation-contract.cotest.local"],
+                "controller_organization": creator,
+                "recovery_controller_organizations": ["did:web:recovery-org-federation-contract.cotest.local"]
+            },
+            "created_at": "2026-05-02T00:00:00Z"
+        }
+    })
+}
+
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     let server = CokretServer::spawn("federation-invalid").await?;
 
@@ -158,7 +231,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_request",
+        "bad_json",
     )
     .await?;
     expect_api_error(
