@@ -1,0 +1,8 @@
+python.exe : operation completeness report drift: spec/v1/artifacts/reports/operation-completeness-report.json (run pyt
+hon tools/gen_operation_completeness_report.py)
+At D:\Works\cokret\cotest\scripts\run-cotest.ps1:1368 char:15
++     $output = & $PythonExe $pipelineScript check 2>&1
++               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (operation compl...ness_report.py):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 

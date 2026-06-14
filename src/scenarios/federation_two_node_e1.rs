@@ -23,7 +23,7 @@
 //! is locatable (and silently skips otherwise).
 
 use anyhow::{Context, Result};
-use cokret_core::canonical::canonical_sha256;
+use cokret_core::canonical::{canonical_sha256, sha256_digest};
 use cokret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -119,7 +119,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         })?;
     let event_envelopes = events_a_list
         .iter()
-        .filter_map(|entry| entry.get("event").cloned())
+        .map(|entry| entry.get("event").unwrap_or(entry).clone())
         .map(|event| {
             serde_json::from_value::<cokret_core::Event>(event)
                 .context("parse peer event envelope into SDK Event")
@@ -207,7 +207,7 @@ fn with_peer_get_headers(
             "Destination-Trust-Domain",
             trust_domain_for(destination.service_did()),
         )
-        .header("Request-Canonical-Digest", canonical_sha256(&json!({}))?))
+        .header("Request-Canonical-Digest", sha256_digest([])))
 }
 
 fn with_peer_post_headers(

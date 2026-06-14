@@ -37,7 +37,10 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(resolve["did_document"]["id"], "did:web:alice.example");
+    assert_eq!(
+        resolve["did_document"]["document"]["id"],
+        "did:web:alice.example"
+    );
 
     Ok(())
 }
