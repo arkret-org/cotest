@@ -214,10 +214,10 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 fn pinned_r3_2_inputs() -> (
     cokret_core::RealmId,
     cokret_core::Did,
-    Vec<cokret_core::model::EffectiveIdentityEntry>,
-    Vec<cokret_core::model::RosterHandleClaimDigestEntry>,
+    Vec<cokret_core::models::EffectiveIdentityEntry>,
+    Vec<cokret_core::models::RosterHandleClaimDigestEntry>,
 ) {
-    use cokret_core::model::{
+    use cokret_core::models::{
         EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
         RosterHandleClaimDigestEntry,
     };
@@ -260,7 +260,7 @@ fn pinned_r3_2_inputs() -> (
 
 #[test]
 fn r3_2_identity_digests_match_pinned_baseline() {
-    use cokret_core::model::{
+    use cokret_core::models::{
         MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();
@@ -296,7 +296,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
 #[test]
 #[ignore = "diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline"]
 fn dump_r3_2_identity_digests() {
-    use cokret_core::model::{
+    use cokret_core::models::{
         MemberIdentitySegment, member_display_state_digest, member_identity_effective_set_digest,
     };
     let (realm, actor, events, claims) = pinned_r3_2_inputs();

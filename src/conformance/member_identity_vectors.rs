@@ -20,8 +20,8 @@
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
 //! SDK-pure — they exercise the canonical-bytes helpers
 //! ([`IdentityPayloadCarrier::carrier_sha256`],
-//! [`cokret_core::model::effective_identity_events`],
-//! [`cokret_core::model::member_identity_effective_set_digest`],
+//! [`cokret_core::models::effective_identity_events`],
+//! [`cokret_core::models::member_identity_effective_set_digest`],
 //! [`MemberIdentity::canonical_payload_sha256`]) plus the
 //! `member_identity_*` error-code constants exported from
 //! [`cokret_core::error`]. Live integration is layered on top in
@@ -34,7 +34,7 @@ use cokret_core::error::{
     ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
     ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH, ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
 };
-use cokret_core::model::{
+use cokret_core::models::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
     MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,

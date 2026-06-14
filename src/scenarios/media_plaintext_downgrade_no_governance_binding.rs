@@ -28,7 +28,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::Error;
-use cokret_core::model::{
+use cokret_core::models::{
     MediaDecryptPolicyValue, MediaPlaintextService, derive_media_decrypt_metadata_digest,
     verify_media_decrypt_metadata,
 };

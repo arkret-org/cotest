@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use cokret_core::events::kinds;
-use cokret_core::model::{
+use cokret_core::models::{
     DraftKind, MessageId, RealmId, draft_account_data_key, saved_account_data_key,
     scheduled_send_account_data_key, search_index_manifest_account_data_key,
     snooze_account_data_key, validate_private_account_data_key,

@@ -22,7 +22,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{TimeZone, Utc};
-use cokret_core::model::{
+use cokret_core::models::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
     MemberRosterEntry, MembershipState, RosterHandleClaimDigestEntry, member_display_state_digest,
 };
