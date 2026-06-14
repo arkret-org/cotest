@@ -6,7 +6,7 @@
 //!   - `ck.vector.sidecar.existence_privacy.v1`
 //!   - `ck.vector.sidecar.multi_agent_publish.v1`
 //!
-//! Wire-shape pins only. Live `POST /agents/{id}/sidecar-thread:ensure`
+//! Wire-shape pins only. Live `POST /_cokret/self/agent-sidecar-threads:ensure`
 //! and the multi-agent fan-out reducer path land in soland P2-impl;
 //! this suite hard-fails on registry drift today.
 

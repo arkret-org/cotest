@@ -25,11 +25,14 @@ export function solandBaseUrl(key: SolandKey = "default"): string {
   return requiredEnv("COTEST_SOLAND_BASE_URL").replace(/\/$/, "");
 }
 
-// Conformance debug endpoints live on soland's product face (/_soland/self/conformance/*),
-// not the protocol face. The spec OpenAPI defines no conformance/* path, and soland mounts
-// conformance::router() under /_soland/self. Tests must target this product-face base.
+// Conformance debug endpoints live on the spec-reserved test-only namespace
+// `/_cokret/_conformance/*` (service-http-binding.md §2.1.2). The leading `_`
+// marks `_conformance` as a reserved test-only segment, NOT a production
+// trust-surface classifier; it is profile-gated on `ck.profile.conformance_harness.v1`
+// and production builds MUST 404 the whole namespace. Tests target this base;
+// the harness only reaches it when the server runs under the conformance build profile.
 export function conformanceBaseUrl(key: SolandKey = "default"): string {
-  return `${solandBaseUrl(key)}/_soland/self/conformance`;
+  return `${solandBaseUrl(key)}/_cokret/_conformance`;
 }
 
 export function solandServiceDid(key: SolandKey = "default"): string {

@@ -302,6 +302,134 @@ test.describe("applet bridge", () => {
   });
 });
 
+// COT-03-001 — inbound transaction-push per-delivery source signature negatives.
+// Spec: extensions/applet-integration.md §7.3.1 (双向对称 normative). The inbound
+// direction app/bridge → cokret edge (`POST /_cokret/edge/applet/transactions`)
+// MUST verify an RFC 9421 HTTP Message Signature per delivery BEFORE processing any
+// event / side-effect; a transaction push carrying only `Authorization: Bearer`
+// (no `Signature`) MUST be rejected. These are pure negatives — they assert the
+// receiver fails closed with the spec failure codes, so a soland that skips inbound
+// source-signature verification (letting any bearer holder ghost-write under the
+// "external applet delivery" identity) turns these into red, instead of being masked
+// by the green happy path. The matching positive path (registry-private-key RFC 9421
+// signature over @method/@target-uri/content-digest + Source-Service-DID) is driven
+// by the bridge happy-path test once soland implements verification.
+test.describe("applet inbound transaction push — per-delivery source signature negatives", () => {
+  const TRANSACTIONS_PATH = "/_cokret/edge/applet/transactions";
+
+  // Minimal well-formed transaction-push body. Source DID / events are realistic
+  // enough that the request reaches the signature gate rather than failing on shape.
+  function transactionPushBody(stamp: number) {
+    return {
+      source_service_did: "did:web:applet-bridge.joint-e2e.local",
+      events: [
+        {
+          external_event_id: `ext-evt-${stamp}`,
+          kind: "message",
+          external_ref: { source_network: "demo-bridge", external_user_id: "ext-user-X" },
+          payload: { kind: "message", text: `inbound push ${stamp}` },
+        },
+      ],
+    };
+  }
+
+  // §7.3.1 failure codes carry the discriminating `reason`; `error.code` is the
+  // generic `unauthorized`. Read the reason directly (NOT via wireErrCode, which
+  // would surface `code` first).
+  function signatureReason(body: unknown): string | undefined {
+    if (!body || typeof body !== "object") {
+      return undefined;
+    }
+    const record = body as Record<string, unknown>;
+    const nested =
+      record.error && typeof record.error === "object"
+        ? (record.error as Record<string, unknown>)
+        : undefined;
+    const direct = record.reason;
+    const inner = nested?.reason;
+    if (typeof direct === "string") {
+      return direct;
+    }
+    if (typeof inner === "string") {
+      return inner;
+    }
+    return undefined;
+  }
+
+  async function setupBearer(request: APIRequestContext): Promise<string> {
+    const stamp = Date.now();
+    const alice = uniqueUser(`applet-inbound-${stamp}`);
+    await ensureRegistered(request, alice);
+    return issueDevSession(request, alice);
+  }
+
+  test("missing Signature (bearer-only) inbound transaction push → 401 http_signature_required", async ({
+    request,
+  }) => {
+    const token = await setupBearer(request);
+    const stamp = Date.now();
+    // Only Authorization: Bearer, NO Signature / Signature-Input. §7.3.1: MUST reject.
+    const resp = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
+      headers: {
+        ...authHeaders(token),
+        "Source-Service-DID": "did:web:applet-bridge.joint-e2e.local",
+        "Idempotency-Key": `inbound-nosig-${stamp}`,
+      },
+      data: transactionPushBody(stamp),
+    });
+    expect(resp.status()).toBe(401);
+    expect(signatureReason(await resp.json())).toBe("http_signature_required");
+  });
+
+  test("invalid/forged Signature inbound transaction push → 401 http_signature_invalid", async ({
+    request,
+  }) => {
+    const token = await setupBearer(request);
+    const stamp = Date.now();
+    // Structurally present but cryptographically bogus signature — cannot verify
+    // against any registration service DID verification method. §7.3.1: reject.
+    const resp = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
+      headers: {
+        ...authHeaders(token),
+        "Source-Service-DID": "did:web:applet-bridge.joint-e2e.local",
+        "Idempotency-Key": `inbound-badsig-${stamp}`,
+        "Content-Digest": "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
+        "Signature-Input":
+          'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-did" "destination-service-did" "idempotency-key");created=1700000000;expires=1700000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
+        Signature: "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
+      },
+      data: transactionPushBody(stamp),
+    });
+    expect(resp.status()).toBe(401);
+    expect(signatureReason(await resp.json())).toBe("http_signature_invalid");
+  });
+
+  test("expired signature window inbound transaction push → 401 signature_window_invalid", async ({
+    request,
+  }) => {
+    const token = await setupBearer(request);
+    const stamp = Date.now();
+    // created/expires far in the past → outside the §7.3.1 freshness window
+    // (expires-created ≤ 300s, created within ±30s skew, expires not past). Even
+    // a byte-identical replay after replay-cache eviction MUST be rejected on the
+    // created/expires check alone.
+    const expired = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
+      headers: {
+        ...authHeaders(token),
+        "Source-Service-DID": "did:web:applet-bridge.joint-e2e.local",
+        "Idempotency-Key": `inbound-expired-${stamp}`,
+        "Content-Digest": "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
+        "Signature-Input":
+          'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-did" "destination-service-did" "idempotency-key");created=1000000000;expires=1000000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
+        Signature: "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
+      },
+      data: transactionPushBody(stamp),
+    });
+    expect(expired.status()).toBe(401);
+    expect(signatureReason(await expired.json())).toBe("signature_window_invalid");
+  });
+});
+
 function requireMockAppletRegistry(): string {
   const registryBase = mockAppletRegistryBaseUrl();
   test.skip(!registryBase, "mock-applet-registry not started for this run");

@@ -13,11 +13,13 @@
 // Fixtures: cokret-spec/spec/v1/artifacts/fixtures/ck.vector.snapshot.*.json,
 //           ck.vector.query.*.json, ck.vector.scalability.*.json
 //
-// Phases A-E exercise soland's /_soland/self/conformance/{snapshot,query} HTTP
-// endpoints directly (product/debug face; the protocol face /_cokret has no
-// conformance/* path). These endpoints are debug/conformance surfaces only;
-// production deployments must not advertise ck.profile.conformance.vectors.v1
-// unless they explicitly enable the route.
+// Phases A-E exercise the test-only conformance endpoints under the
+// spec-reserved namespace /_cokret/_conformance/{snapshot,query}
+// (service-http-binding.md §2.1.2). The leading `_` marks `_conformance` as a
+// reserved test-only segment, NOT a production trust-surface; the namespace is
+// profile-gated on ck.profile.conformance_harness.v1 and production builds MUST
+// 404 it. These endpoints are debug/conformance surfaces only and never enter
+// the production operation registry.
 //
 // The remaining tests in this file are intentionally narrow:
 //   - Phase F: harness-only vector loader smoke (filesystem read; never
@@ -25,7 +27,7 @@
 //     when the fixtures directory has zero matching files today.
 //   - Phase G: optional surface probe of GET /_cokret/describe to
 //     assert the surface is *internally consistent* (does NOT claim the
-//     ck.profile.conformance.vectors.v1 profile while the endpoint is 404,
+//     ck.profile.conformance_harness.v1 profile while the endpoint is 404,
 //     OR if it does claim it then the endpoint must respond with something
 //     other than 404). This is the same "claim ⇔ surface" sanity used by
 //     registry-drift / profile-gates.
@@ -353,16 +355,16 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     }
   });
 
-  test("Phase G — /server/describe surface is internally consistent re conformance.vectors profile", async ({
+  test("Phase G — /server/describe surface is internally consistent re conformance_harness profile", async ({
     request,
   }, testInfo) => {
     // Optional surface probe — the assertion is "the surface is internally
     // consistent", NOT "the endpoint works". Two outcomes are acceptable:
-    //   (a) /server/describe does NOT claim ck.profile.conformance.vectors.v1
-    //       → any status from /_soland/self/conformance/snapshot (incl. 404) is OK,
+    //   (a) /server/describe does NOT claim ck.profile.conformance_harness.v1
+    //       → any status from /_cokret/_conformance/snapshot (incl. 404) is OK,
     //         because the server isn't promising the endpoint exists.
-    //   (b) /server/describe DOES claim ck.profile.conformance.vectors.v1
-    //       → /_soland/self/conformance/snapshot MUST NOT return 404 (anything else
+    //   (b) /server/describe DOES claim ck.profile.conformance_harness.v1
+    //       → /_cokret/_conformance/snapshot MUST NOT return 404 (anything else
     //         — 200/400/401/405/501 — is acceptable; 404 alone would mean the
     //         claim is a lie).
 
@@ -381,16 +383,16 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     )
       ? describe.claimed_profiles
       : [];
-    const claimsConformanceVectors = claimedProfiles.some(
-      (entry) => entry?.profile_id === "ck.profile.conformance.vectors.v1",
+    const claimsConformanceHarness = claimedProfiles.some(
+      (entry) => entry?.profile_id === "ck.profile.conformance_harness.v1",
     );
 
-    await testInfo.attach("describe-claims-conformance-vectors", {
-      body: String(claimsConformanceVectors),
+    await testInfo.attach("describe-claims-conformance-harness", {
+      body: String(claimsConformanceHarness),
       contentType: "text/plain",
     });
 
-    if (!claimsConformanceVectors) {
+    if (!claimsConformanceHarness) {
       // Branch (a): nothing to enforce; surface is consistent by definition.
       return;
     }
@@ -408,7 +410,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     });
     expect(
       probe.status(),
-      `server claims ck.profile.conformance.vectors.v1 but /_soland/self/conformance/snapshot returned 404 — surface is inconsistent`,
+      `server claims ck.profile.conformance_harness.v1 but /_cokret/_conformance/snapshot returned 404 — surface is inconsistent`,
     ).not.toBe(404);
   });
 });
