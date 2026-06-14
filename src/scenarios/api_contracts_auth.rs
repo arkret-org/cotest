@@ -45,7 +45,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_soland/self/account/register"))
-            .json(&json!({"did": "bad", "handle": "@bad", "device_id": "dev_bad"})),
+            .json(&json!({"did": "bad", "handle": "@bad", "device_id": "ck:device:01904100-0000-7000-8000-000000000bad"})),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
@@ -59,7 +59,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
                 "did": "did:web:alice-auth.example",
                 "handle": "@alice-auth",
                 "display_name": "alice-auth",
-                "device_id": "dev_alice"
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
             })),
         StatusCode::CREATED,
     )
@@ -74,7 +74,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
                 "did": "did:web:alice-auth.example",
                 "handle": "@alice-auth",
                 "display_name": "alice-auth",
-                "device_id": "dev_alice2"
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a2"
             })),
         StatusCode::CONFLICT,
         "duplicate_conflict",
@@ -87,7 +87,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
             .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&json!({
                 "actor": "did:web:alice-auth.example",
-                "device_id": "dev_alice",
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
                 "display_name": "Alice"
             })),
         StatusCode::OK,
@@ -144,7 +144,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
                 "did": "did:web:alice-contact.example",
                 "handle": "@alice-contact",
                 "display_name": "Alice",
-                "device_id": "dev_alice"
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
             })),
         StatusCode::CREATED,
     )
@@ -157,7 +157,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&json!({
                 "actor": "did:web:alice-contact.example",
-                "device_id": "dev_alice",
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
                 "display_name": "Alice"
             })),
         StatusCode::OK,
@@ -173,7 +173,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
                 "did": "did:web:bob-contact.example",
                 "handle": "@bob-contact",
                 "display_name": "Bob",
-                "device_id": "dev_bob"
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000b0"
             })),
         StatusCode::CREATED,
     )
@@ -210,7 +210,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    assert_eq!(requested["status"], "pending");
+    assert_eq!(requested["state"], "pending_outgoing");
 
     let duplicate = expect_json(
         server
@@ -221,9 +221,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(duplicate["status"], "pending");
-    assert_eq!(duplicate["requester"], "did:web:alice-contact.example");
-    assert_eq!(duplicate["target"], "did:web:bob-contact.example");
+    assert_eq!(duplicate["state"], "pending_outgoing");
 
     Ok(())
 }

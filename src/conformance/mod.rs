@@ -297,6 +297,7 @@ pub(crate) struct NamedCase {
     pub(crate) operation_ids: Option<Vec<String>>,
     pub(crate) covers_vectors: Option<Vec<String>>,
     pub(crate) input: Option<Value>,
+    pub(crate) inputs: Option<Vec<Value>>,
     pub(crate) expected: Option<Value>,
     // ck.vector.federation.reducer_profile_digest.v1 case fields
     // (federation-fixture.json, registered by cokret-spec ec404fd).

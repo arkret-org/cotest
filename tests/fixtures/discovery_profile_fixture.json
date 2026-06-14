@@ -16,19 +16,29 @@
       "events_sync"
     ],
     "extension": [
-      "directory_discovery",
-      "blob_storage",
-      "realtime_media",
-      "authz_policy",
-      "moderation_reports",
+      "account_data",
       "agent_runtime",
+      "applet_install",
+      "authz_policy",
+      "blob_storage",
+      "circle_management",
+      "consent_management",
+      "contact_lifecycle",
       "device_and_keys",
-      "push",
+      "directory_discovery",
+      "invite_locator_handoff",
+      "moderation_reports",
+      "peer_federation",
       "projection_lifecycle",
-      "applet_install"
+      "push",
+      "read_cursor",
+      "realm_governance_links",
+      "realm_read",
+      "realtime_media"
     ],
     "interop_bridge": [
       "applet",
+      "applet_ghost",
       "mimi_interop"
     ]
   },

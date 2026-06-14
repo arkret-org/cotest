@@ -14,13 +14,23 @@ const BLOB_REALM_MEMBER_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = CokretServer::spawn("delivery-keys").await?;
-    let token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let token = dev_login(
+        &server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
 
     expect_api_error(
         server
             .http()
             .post(server.url("/_cokret/self/keys/upload"))
-            .json(&json!({"device_id": "dev_alice"})),
+            .json(&json!({
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+                "one_time_keys": {},
+                "fallback_keys": {},
+                "device_signature": {"alg": "EdDSA", "signature": "alice-device"}
+            })),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -40,8 +50,8 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/self/keys/upload"))
             .bearer_auth(&token)
             .json(&json!({
-                "device_id": "dev_other",
-                "one_time_keys": [],
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000f0",
+                "one_time_keys": {},
                 "fallback_keys": {},
                 "device_signature": {"alg": "EdDSA", "signature": "wrong-device"}
             })),
@@ -56,12 +66,14 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/self/keys/upload"))
             .bearer_auth(&token)
             .json(&json!({
-                "device_id": "dev_alice",
-                "one_time_keys": [{
-                    "algorithm": "signed_curve25519",
-                    "key_id": "otk1",
-                    "key": "single-use"
-                }],
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+                "one_time_keys": {
+                    "signed_curve25519:otk1": {
+                        "algorithm": "signed_curve25519",
+                        "key_id": "otk1",
+                        "key": "single-use"
+                    }
+                },
                 "fallback_keys": {},
                 "device_signature": {"alg": "EdDSA", "signature": "alice-device"}
             })),
@@ -76,14 +88,15 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"dev_alice": "signed_curve25519"}
+                    "did:web:alice.example": {"ck:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        first_claim["one_time_keys"]["did:web:alice.example"]["dev_alice"]["key"],
+        first_claim["one_time_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+            ["key"],
         "single-use"
     );
 
@@ -94,7 +107,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .bearer_auth(&token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"dev_alice": "signed_curve25519"}
+                    "did:web:alice.example": {"ck:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
@@ -112,7 +125,12 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
 
 pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Result<()> {
     let server = CokretServer::spawn("device-delivery").await?;
-    let token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let token = dev_login(
+        &server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
 
     expect_api_error(
         server
@@ -146,9 +164,10 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "dev_alice": {
-                            "type": "ck.mls.application",
-                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device")
+                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                            "kind": "ck.mls.application",
+                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device"),
+                            "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
                 }
@@ -156,7 +175,10 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(send["delivered"]["did:web:alice.example"][0], "dev_alice");
+    assert_eq!(
+        send["delivered"]["did:web:alice.example"][0],
+        "ck:device:01904100-0000-7000-8000-0000000000a1"
+    );
 
     let duplicate = expect_json(
         server
@@ -167,9 +189,10 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .json(&json!({
                 "messages": {
                     "did:web:alice.example": {
-                        "dev_alice": {
-                            "type": "ck.mls.application",
-                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device")
+                        "ck:device:01904100-0000-7000-8000-0000000000a1": {
+                            "kind": "ck.mls.application",
+                            "content": encrypted_envelope("ck.mls.application", "opaque-to-device"),
+                            "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
                 }
@@ -177,7 +200,11 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         StatusCode::OK,
     )
     .await?;
-    assert!(duplicate["delivered"].as_object().unwrap().is_empty());
+    assert!(
+        duplicate["delivered"]
+            .as_object()
+            .is_none_or(serde_json::Map::is_empty)
+    );
 
     let delivered = expect_json(
         server
@@ -188,11 +215,11 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     )
     .await?;
     assert_eq!(
-        delivered["events"][0]["content"]["content"]["ciphertext"],
+        delivered["messages"][0]["content"]["ciphertext"],
         "opaque-to-device"
     );
     assert!(
-        delivered["events"][0]["content"]["content"]
+        delivered["messages"][0]["content"]
             .get("plaintext")
             .is_none()
     );
@@ -208,7 +235,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         StatusCode::OK,
     )
     .await?;
-    assert!(drained["events"].as_array().unwrap().is_empty());
+    assert!(drained["messages"].as_array().unwrap().is_empty());
 
     Ok(())
 }
@@ -216,13 +243,24 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let server = CokretServer::spawn("blob-media").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client("did:web:bob-blob.example", "@bob-blob", "dev_bob")
+        .register_client(
+            "did:web:bob-blob.example",
+            "@bob-blob",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
     let carol = server
-        .register_client("did:web:carol-blob.example", "@carol-blob", "dev_carol")
+        .register_client(
+            "did:web:carol-blob.example",
+            "@carol-blob",
+            "ck:device:01904100-0000-7000-8000-000000000ca0",
+        )
         .await?;
     let realm_id = create_blob_access_realm(&alice, &bob).await?;
 
@@ -378,10 +416,10 @@ fn signed_realm_create_event(
             "encryption_profile": "none",
             "security_class": "standard",
             "federation_policy": "open",
-            "anchor_profile": "single_did",
+            "notary_profile": "single_did",
             "digest_algorithm": "sha256",
             "plaintext_visible_services": [service_did],
-            "anchorer": {
+            "notary": {
                 "type": "single_did",
                 "did": actor_id,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
@@ -410,6 +448,7 @@ fn signed_membership_event(
     membership: &str,
 ) -> Result<Value> {
     let payload = json!({
+        "realm_id": realm_id,
         "actor_id": member_actor,
         "membership": membership,
         "delivery_status": "unroutable"
@@ -458,12 +497,17 @@ fn signed_event(
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let server = CokretServer::spawn("push-moderation").await?;
-    let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let alice = dev_login(
+        &server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
     let bob = register_account(
         &server,
         "did:web:bob-delivery.example",
         "@bob-delivery",
-        "dev_bob",
+        "ck:device:01904100-0000-7000-8000-0000000000b0",
     )
     .await?;
 
@@ -483,8 +527,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
                 "notification": {
-                    "devices": [{"device_id": "unknown-device"}],
-                    "body": "plaintext leak"
+                    "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000ff"}],
+                    "content": {"body": "plaintext leak"}
                 }
             })),
         StatusCode::BAD_REQUEST,
@@ -496,7 +540,9 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
-                "notification": {"devices": [{"device_id": "unknown-device"}]}
+                "notification": {
+                    "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000ff"}]
+                }
             })),
         StatusCode::OK,
     )
@@ -509,8 +555,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/self/moderation/report"))
             .json(&json!({
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ck:event:demo",
-                "reason": "spam",
+                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
             })),
         StatusCode::UNAUTHORIZED,
@@ -524,8 +570,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .bearer_auth(&alice)
             .json(&json!({
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ck:event:demo",
-                "reason": "spam",
+                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             })),
         StatusCode::FORBIDDEN,
@@ -539,8 +585,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .bearer_auth(&bob)
             .json(&json!({
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ck:event:demo",
-                "reason": "spam",
+                "target_ref": "ck:event:0196419b-0000-7000-8000-000000000001",
+                "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             })),
         StatusCode::FORBIDDEN,

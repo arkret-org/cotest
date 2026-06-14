@@ -11,68 +11,81 @@
   "expected_cell_family_lattice_bindings": {
     "comment": "Canonical lattice per cell-family. Mirrors the LIVE event-kind-registry.json exactly. soland/src/reducer/lattice_kinds.rs::default_lattice_registry may add SDK-side families ahead of the spec; once those land in the spec registry they MUST be added here. Future spec drift surfaces here as a hard failure.",
     "or_set_families": [
-      "ck.component.consent.grant.v1",
-      "ck.component.capability.grant.v1",
+      "ck.component.agent.key.v1",
       "ck.component.capability.delegate.v1",
       "ck.component.capability.derived.v1",
-      "ck.component.session.grant.v1",
+      "ck.component.capability.grant.v1",
+      "ck.component.consent.grant.v1",
       "ck.component.device.authorization.v1",
       "ck.component.device.list_update.v1",
-      "ck.component.agent.key.v1"
+      "ck.component.message.reactions.v1",
+      "ck.component.moderation_state.v1",
+      "ck.component.notary_fault.v1",
+      "ck.component.pin.v1",
+      "ck.component.session.grant.v1"
     ],
     "cas_register_families": [
-      "ck.component.realm.policy.v1",
-      "ck.component.realm.read_receipt_policy.v1",
-      "ck.component.realm.history_visibility.v1",
-      "ck.component.realm.join_rule.v1",
-      "ck.component.realm.discovery.v1",
-      "ck.component.realm.preview_policy.v1",
-      "ck.component.realm.organization.v1",
-      "ck.component.realm.upgrade.v1",
-      "ck.component.realm.archive.v1",
-      "ck.component.realm.freeze.v1",
-      "ck.component.realm.tombstone.v1",
-      "ck.component.realm.destroy.v1",
-      "ck.component.realm.moderation_policy.v1",
-      "ck.component.realm.history_sharing_policy.v1",
-      "ck.component.realm.asset_privacy_policy.v1",
-      "ck.component.realm.delivery_binding_policy.v1",
-      "ck.component.realm.policy_components.v1",
-      "ck.component.realm.policy_server.v1",
-      "ck.component.realm.plaintext_visible_services.v1",
-      "ck.component.realm.media_service.v1",
-      "ck.component.realm.schema.v1",
-      "ck.component.realm.inheritance_policy.v1",
       "ck.component.circle.member.v1",
       "ck.component.circle.tombstone.v1",
-      "ck.component.strand.fields.v1",
+      "ck.component.cross_signing.publish.v1",
+      "ck.component.key_backup.active_series.v1",
+      "ck.component.morph.stage.v1",
+      "ck.component.realm.archive.v1",
+      "ck.component.realm.asset_privacy_policy.v1",
+      "ck.component.realm.delivery_binding_policy.v1",
+      "ck.component.realm.destroy.v1",
+      "ck.component.realm.disappearing_policy.v1",
+      "ck.component.realm.discovery.v1",
+      "ck.component.realm.freeze.v1",
+      "ck.component.realm.history_sharing_policy.v1",
+      "ck.component.realm.history_visibility.v1",
+      "ck.component.realm.inheritance_policy.v1",
+      "ck.component.realm.join_rule.v1",
+      "ck.component.realm.media_service.v1",
+      "ck.component.realm.moderation_policy.v1",
+      "ck.component.realm.organization.v1",
+      "ck.component.realm.plaintext_visible_services.v1",
+      "ck.component.realm.policy.v1",
+      "ck.component.realm.policy_components.v1",
+      "ck.component.realm.policy_server.v1",
+      "ck.component.realm.preview_policy.v1",
+      "ck.component.realm.read_receipt_policy.v1",
+      "ck.component.realm.schema.v1",
+      "ck.component.realm.search_policy.v1",
+      "ck.component.realm.set_default_strand.v1",
+      "ck.component.realm.tombstone.v1",
+      "ck.component.realm.upgrade.v1",
+      "ck.component.space.parent.v1",
+      "ck.component.strand.metadata.v1",
       "ck.component.strand.position.v1",
       "ck.component.strand.stage.v1",
       "ck.component.strand.tracks.v1",
-      "ck.component.strand.watch.v1",
-      "ck.component.morph.stage.v1",
-      "ck.component.space.parent.v1",
-      "ck.component.cross_signing.publish.v1"
+      "ck.component.strand.watch.v1"
     ],
     "fsm_families": [
+      "ck.component.agent.status.v1",
+      "ck.component.call.state.v1",
       "ck.component.member.state.v1",
-      "ck.component.agent.status.v1"
+      "ck.component.moderation.appeal.v1"
     ],
     "ordered_log_families": [
+      "ck.component.account.status.v1",
+      "ck.component.circle.create.v1",
+      "ck.component.contact.fact_log.v1",
+      "ck.component.cross_signing.reset.v1",
+      "ck.component.direct_conversation.binding.v1",
+      "ck.component.member.identity.v1",
+      "ck.component.policy.rule.v1",
       "ck.component.realm.create.v1",
       "ck.component.realm.link.v1",
-      "ck.component.account.status.v1",
-      "ck.component.policy.rule.v1",
-      "ck.component.cross_signing.reset.v1",
-      "ck.component.circle.create.v1",
-      "ck.component.member.identity.v1"
+      "ck.component.strand.discussion.timeline.v1"
     ],
     "mv_register_families": [
+      "ck.component.mimi.room_binding.v1",
       "ck.component.profile.create.v1",
       "ck.component.view.create.v1",
-      "ck.component.view.update.v1",
       "ck.component.view.reconcile.v1",
-      "ck.component.mimi.room_binding.v1"
+      "ck.component.view.update.v1"
     ]
   },
   "vectors": [
@@ -123,7 +136,7 @@
       "expected": {
         "outcome": "lattice_match",
         "lattice": "cas_register",
-        "rationale": "Every family in `expected_cell_family_lattice_bindings.cas_register_families` MUST resolve to lattice=cas-register in the live event-kind-registry. Includes anchorer + mls.epoch — both governance-critical."
+        "rationale": "Every family in `expected_cell_family_lattice_bindings.cas_register_families` MUST resolve to lattice=cas-register in the live event-kind-registry."
       }
     },
     {
@@ -132,7 +145,7 @@
       "expected": {
         "outcome": "lattice_match",
         "lattice": "fsm",
-        "rationale": "Member-state FSM is the only fsm-lattice family in the spec snapshot."
+        "rationale": "Every family in `expected_cell_family_lattice_bindings.fsm_families` MUST resolve to lattice=fsm in the live event-kind-registry."
       }
     },
     {

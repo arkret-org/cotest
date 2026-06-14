@@ -16,7 +16,7 @@ const PROFILE_LIST_FIELDS: &[&str] = &[
     "hash_extension_profiles",
     "hardening_profiles",
     "vector_profiles",
-    "anchor_profiles",
+    "notary_profiles",
     // Round 2+3 (2026-05-20): the spec's conformance-profiles.json now
     // declares a `candidate_profiles` group for unregistered workflow
     // concept/action profiles gated fail-closed (see

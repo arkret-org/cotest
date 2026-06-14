@@ -56,7 +56,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
 
     let rejected_policy = expect_api_error_code(
         alice
-            .post("/_soland/root/identity/recovery-policy")
+            .post("/_cokret/root/identity/recovery-policy")
             .json(&unsigned_recovery_policy(
                 &principal_id,
                 &verification_method,
@@ -163,10 +163,22 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Value {
                 "enc": "Y290ZXN0LWVuYw"
             }
         },
+        "domain_separation": {
+            "hkdf_info": "cokret-key-backup/did_recovery/recovery_policy/v1",
+            "subdomain": "recovery_policy",
+            "aead_aad": {
+                "schema": "ck.schema.key_backup.v1",
+                "actor_id": principal_id,
+                "device_id": DEVICE_A,
+                "backup_class": "did_recovery",
+                "backup_version": "kb_1",
+                "created_at": "2026-05-30T00:00:00Z",
+                "item_types": ["recovery_secret"]
+            }
+        },
         "contents": [
             {
-                "item_type": "recovery_secret",
-                "description": "opaque encrypted DID recovery bootstrap secret"
+                "item_type": "recovery_secret"
             }
         ],
         "ciphertext": "cotest-did-recovery-ciphertext",
@@ -184,6 +196,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Value {
                 "series_id",
                 "series_seq",
                 "encryption",
+                "domain_separation",
                 "contents",
                 "ciphertext_digest",
                 "recovery_policy_ref"

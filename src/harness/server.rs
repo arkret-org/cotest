@@ -13,6 +13,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::assertions::expect_json;
+use super::canonical_device_id;
 use super::client::TestActorClient;
 use super::event_builder::{dev_login, register_account};
 
@@ -351,7 +352,7 @@ impl CokretServer {
 
     pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
         let token = dev_login(self, actor, device_id).await?;
-        self.actor_client(actor, device_id, token)
+        self.actor_client(actor, &canonical_device_id(device_id), token)
     }
 
     pub async fn register_client(
@@ -361,7 +362,7 @@ impl CokretServer {
         device_id: &str,
     ) -> Result<TestActorClient> {
         let token = register_account(self, did, handle, device_id).await?;
-        self.actor_client(did, device_id, token)
+        self.actor_client(did, &canonical_device_id(device_id), token)
     }
 
     fn actor_client(&self, actor: &str, device_id: &str, token: String) -> Result<TestActorClient> {

@@ -23,7 +23,10 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     let group = TestServerGroup::single("account-subscribe-long-poll").await?;
     let server = group.server(0);
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let realm_id = alice.create_realm("Long-Poll Recovery Realm").await?;
     alice
@@ -113,8 +116,7 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     .await?;
     let wake_elapsed = wake_start.elapsed();
     let sent_event = waker.await.expect("waker task did not panic")?;
-    let sent_event_id = sent_event["event_id"]
-        .as_str()
+    let sent_event_id = submitted_event_id(&sent_event)
         .ok_or_else(|| anyhow!("send response missing event_id: {sent_event}"))?;
 
     assert!(
@@ -132,6 +134,19 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     );
 
     Ok(())
+}
+
+fn submitted_event_id(response: &Value) -> Option<&str> {
+    response
+        .get("event_id")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            response
+                .get("accepted")
+                .and_then(Value::as_array)
+                .and_then(|accepted| accepted.first())
+                .and_then(Value::as_str)
+        })
 }
 
 async fn fetch_account_subscribe(

@@ -4,7 +4,7 @@
 //!
 //! ```ignore
 //! let server = CokretServer::spawn("my-scenario").await?;
-//! let alice = server.register_client("did:web:alice.example", "@alice", "dev_alice").await?;
+//! let alice = server.register_client("did:web:alice.example", "@alice", "ck:device:01904100-0000-7000-8000-0000000000a1").await?;
 //! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
 //!
@@ -13,7 +13,7 @@
 //! ```ignore
 //! let alice = TestActorBuilder::new(&server, "@alice")
 //!     .with_did("did:web:alice.example")
-//!     .with_device("dev_alice")
+//!     .with_device("ck:device:01904100-0000-7000-8000-0000000000a1")
 //!     .with_realm("Some Realm")
 //!     .create()
 //!     .await?;
@@ -213,7 +213,7 @@ impl<'a> TestActorBuilder<'a> {
         Ok(TestActor {
             handle: display_handle,
             did,
-            primary_device_id: primary_device,
+            primary_device_id: crate::harness::canonical_device_id(&primary_device),
             realms: seeded,
             client,
         })
@@ -229,6 +229,8 @@ mod tests {
 
     #[test]
     fn defaults_derive_did_and_device_from_handle() {
+        use crate::harness::canonical_device_id;
+
         // Build the spec without driving create() so we can assert the
         // derivations the builder applies. We use a dummy server reference
         // by leaking a never-spawned CokretServer through a builder method
@@ -241,7 +243,10 @@ mod tests {
         let bare = raw.strip_prefix('@').unwrap_or(raw);
         assert_eq!(bare, "alice");
         assert_eq!(format!("did:web:{bare}.example"), "did:web:alice.example");
-        assert_eq!(format!("dev_{bare}"), "dev_alice");
+        assert_eq!(
+            canonical_device_id(&format!("dev_{bare}")),
+            "ck:device:01904100-0000-7000-8000-0000000000a1"
+        );
     }
 
     #[test]

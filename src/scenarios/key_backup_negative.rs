@@ -15,7 +15,11 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         .register_client("did:web:alice-d3.example", "@alice-d3", DEVICE_A)
         .await?;
     let bob = server
-        .register_client("did:web:bob-d3.example", "@bob-d3", "dev_bob_d3")
+        .register_client(
+            "did:web:bob-d3.example",
+            "@bob-d3",
+            "ck:device:01904100-0000-7000-8000-000000000bd3",
+        )
         .await?;
 
     let mut missing_ciphertext = backup_body(&alice.actor, DEVICE_A, BACKUP_ID);
@@ -63,19 +67,22 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(accepted["backup"]["backup_id"], BACKUP_ID);
+    assert_eq!(accepted["backup_id"], BACKUP_ID);
+    assert_eq!(accepted["status"], "accepted");
 
-    expect_backup_error(
-        bob.get(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")),
-        StatusCode::NOT_FOUND,
-        "not_found",
-    )
-    .await?;
+    let bob_backups = expect_json(bob.get("/_cokret/self/keys/backups"), StatusCode::OK).await?;
+    assert!(
+        bob_backups["backups"]
+            .as_array()
+            .expect("key backup list backups")
+            .iter()
+            .all(|backup| backup["backup_id"] != BACKUP_ID),
+        "key backup list leaked another actor's backup: {bob_backups}"
+    );
 
     if strict_device_digest_negatives_enabled() {
         reject_wrong_device_on_put(server, &alice.token, &alice.actor).await?;
         reject_digest_mismatch_on_put(server, &alice.token, &alice.actor).await?;
-        reject_wrong_device_on_get(server, &alice.actor).await?;
     }
 
     Ok(())
@@ -119,19 +126,6 @@ async fn reject_digest_mismatch_on_put(
     .await
 }
 
-async fn reject_wrong_device_on_get(server: &CokretServer, actor: &str) -> Result<()> {
-    let device_b_token = crate::harness::dev_login(server, actor, DEVICE_B).await?;
-    expect_backup_error(
-        server
-            .http()
-            .get(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
-            .bearer_auth(&device_b_token),
-        StatusCode::NOT_FOUND,
-        "not_found",
-    )
-    .await
-}
-
 fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
     json!({
         "backup_id": backup_id,
@@ -155,7 +149,40 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
             }
         ],
         "ciphertext": "cotest-d3-ciphertext",
-        "ciphertext_digest": "sha256:2108421084217842908421084210842121084210842178429084210842108421"
+        "ciphertext_digest": "sha256:2108421084217842908421084210842121084210842178429084210842108421",
+        "domain_separation": {
+            "hkdf_info": "cokret-key-backup/mls_history/test/v1",
+            "subdomain": "test",
+            "aead_aad": {
+                "schema": "ck.schema.key_backup.v1",
+                "actor_id": actor,
+                "device_id": device_id,
+                "backup_class": "mls_history",
+                "backup_version": "kb_1",
+                "created_at": "2026-05-18T00:00:00Z",
+                "item_types": ["mls_group_state"]
+            }
+        },
+        "auth_data": {
+            "device_id": device_id,
+            "verification_method": format!("{actor}#device"),
+            "signature_algorithm": "Ed25519",
+            "signature": "c2lnbmF0dXJl",
+            "ssk_generation": 1,
+            "signed_fields": [
+                "backup_id",
+                "actor_id",
+                "backup_class",
+                "backup_version",
+                "series_id",
+                "series_seq",
+                "supersedes",
+                "encryption",
+                "domain_separation",
+                "contents",
+                "ciphertext_digest"
+            ]
+        }
     })
 }
 

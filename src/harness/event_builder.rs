@@ -7,7 +7,9 @@ use serde_json::{Value, json};
 use super::assertions::expect_json;
 use super::proof::refresh_event_proof;
 use super::server::CokretServer;
-use super::{NEXT_EVENT_SEQ, member_join_payload, next_typed_id, realm_create_payload};
+use super::{
+    NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
+};
 
 pub async fn register_account(
     server: &CokretServer,
@@ -15,6 +17,7 @@ pub async fn register_account(
     handle: &str,
     device_id: &str,
 ) -> Result<String> {
+    let device_id = canonical_device_id(device_id);
     expect_json(
         server
             .http()
@@ -22,17 +25,17 @@ pub async fn register_account(
             .json(&json!({
                 "did": did,
                 "handle": handle,
-                "display_name": handle.trim_start_matches('@'),
-                "device_id": device_id
+                "display_name": handle.trim_start_matches('@')
             })),
         StatusCode::CREATED,
     )
     .await?;
 
-    dev_login(server, did, device_id).await
+    dev_login(server, did, &device_id).await
 }
 
 pub async fn dev_login(server: &CokretServer, actor: &str, device_id: &str) -> Result<String> {
+    let device_id = canonical_device_id(device_id);
     let login = expect_json(
         server
             .http()
@@ -95,7 +98,7 @@ pub async fn add_member(
         actor,
         realm_id,
         "ck.member.state",
-        member_join_payload(member),
+        member_join_payload(realm_id, member),
         StatusCode::OK,
     )
     .await?;
@@ -136,7 +139,7 @@ pub async fn submit_event(
     status: StatusCode,
 ) -> Result<Value> {
     let event = event_envelope(actor, realm_id, kind, payload);
-    expect_json(
+    let mut body = expect_json(
         server
             .http()
             .post(server.url("/_cokret/self/events"))
@@ -144,7 +147,11 @@ pub async fn submit_event(
             .json(&event),
         status,
     )
-    .await
+    .await?;
+    if status.is_success() {
+        ensure_submit_event_id(&mut body, &event);
+    }
+    Ok(body)
 }
 
 pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, mut payload: Value) -> Value {
@@ -235,6 +242,30 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
             object.remove("thread_id");
         }
         _ => {}
+    }
+}
+
+pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Value) {
+    let Some(object) = body.as_object_mut() else {
+        return;
+    };
+    if object.contains_key("event_id") {
+        return;
+    }
+    let accepted_id = object
+        .get("accepted")
+        .and_then(Value::as_array)
+        .and_then(|accepted| accepted.first())
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let event_id = accepted_id.or_else(|| {
+        event
+            .get("event_id")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+    });
+    if let Some(event_id) = event_id {
+        object.insert("event_id".to_owned(), Value::String(event_id));
     }
 }
 

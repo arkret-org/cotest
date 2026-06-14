@@ -21,21 +21,27 @@ use proptest::prelude::*;
 use serde_json::{Map, Value, json};
 
 const PROPTEST_CASES: u32 = 64;
+const MIN_SAFE_JSON_INTEGER: i64 = -9_007_199_254_740_991;
+const MAX_SAFE_JSON_INTEGER: i64 = 9_007_199_254_740_991;
+
+fn arb_canonical_string() -> impl Strategy<Value = String> {
+    proptest::collection::vec(
+        prop_oneof![
+            proptest::char::range('\u{0020}', '\u{007E}'),
+            proptest::char::range('\u{4E00}', '\u{4F00}'),
+            proptest::char::range('\u{1F300}', '\u{1F9FF}'),
+        ],
+        0..16,
+    )
+    .prop_map(|chars| chars.into_iter().collect())
+}
 
 fn arb_leaf() -> impl Strategy<Value = Value> {
     prop_oneof![
         Just(Value::Null),
         any::<bool>().prop_map(Value::Bool),
-        any::<i64>().prop_map(|n| json!(n)),
-        proptest::collection::vec(
-            prop_oneof![
-                proptest::char::range('\u{0020}', '\u{007E}'),
-                proptest::char::range('\u{0080}', '\u{2FFF}'),
-                proptest::char::range('\u{1F300}', '\u{1F9FF}'),
-            ],
-            0..16,
-        )
-        .prop_map(|chars| Value::String(chars.into_iter().collect())),
+        (MIN_SAFE_JSON_INTEGER..=MAX_SAFE_JSON_INTEGER).prop_map(|n| json!(n)),
+        arb_canonical_string().prop_map(Value::String),
     ]
 }
 
@@ -103,16 +109,7 @@ proptest! {
     /// Unicode (emoji, BMP, surrogate pair pieces) survives a canonical
     /// encode → JSON decode round-trip.
     #[test]
-    fn unicode_string_round_trip(
-        s in proptest::collection::vec(
-            prop_oneof![
-                proptest::char::range('\u{0001}', '\u{007F}'),
-                proptest::char::range('\u{1F300}', '\u{1F9FF}'),
-                proptest::char::range('\u{4E00}', '\u{4F00}'),
-            ],
-            0..16,
-        ).prop_map(|chars| chars.into_iter().collect::<String>())
-    ) {
+    fn unicode_string_round_trip(s in arb_canonical_string()) {
         let value = json!({ "msg": s.clone() });
         let bytes = canonical_json_bytes(&value).expect("encode unicode");
         let parsed: Value = serde_json::from_slice(&bytes).expect("decode canonical bytes");

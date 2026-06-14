@@ -20,10 +20,17 @@ fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let server = CokretServer::spawn("directory-privacy").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client("did:web:bob-privacy.example", "@bob-privacy", "dev_bob")
+        .register_client(
+            "did:web:bob-privacy.example",
+            "@bob-privacy",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
 
     let public_realm = alice
@@ -77,6 +84,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             &invite_only_realm_id,
             "ck.invite.create",
             json!({
+                "invite_id": "ck:invite:0196419b-0000-7000-8000-000000000202",
                 "invitee": bob.actor,
                 "invite_delivery_target": {
                     "recipient_service_did": server.service_did(),
@@ -102,7 +110,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let anonymous_search_ids: BTreeSet<_> = anonymous_search["results"]
+    let anonymous_search_ids: BTreeSet<_> = anonymous_search["realms"]
         .as_array()
         .unwrap()
         .iter()
@@ -162,7 +170,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         .unwrap()
         .iter()
         .find(|invite| invite["realm_id"].as_str() == Some(invite_only_realm_id.as_str()))
-        .and_then(|invite| invite["invite_token"].as_str())
+        .and_then(|invite| invite["join_rule_snapshot"]["invite_token"].as_str())
         .ok_or_else(|| anyhow!("missing invite token for invite-only Realm: {invites}"))?;
     let invite_only_resolved = expect_json(
         server
@@ -205,7 +213,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     assert!(
-        anonymous_bob_actors["results"]
+        anonymous_bob_actors["actors"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -220,9 +228,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     assert!(
-        anonymous_bob_users["results"]
+        anonymous_bob_users["users"]
             .as_array()
-            .unwrap()
+            .expect("search-users response users")
             .is_empty()
     );
 
@@ -235,7 +243,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     assert_eq!(
-        anonymous_alice["results"][0]["did"],
+        anonymous_alice["actors"][0]["actor_id"],
         "did:web:alice.example"
     );
 
@@ -247,7 +255,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     assert!(
-        alice_before_contact["results"]
+        alice_before_contact["actors"]
             .as_array()
             .unwrap()
             .is_empty()
@@ -259,9 +267,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(bob_self["results"][0]["did"], bob.actor);
+    assert_eq!(bob_self["actors"][0]["actor_id"], bob.actor);
 
-    expect_json(
+    let request = expect_json(
         alice
             .post("/_soland/self/contacts/request")
             .json(&json!({"target": bob.actor})),
@@ -270,6 +278,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     .await?;
     expect_json(
         bob.post("/_soland/self/contacts/respond").json(&json!({
+            "request_id": request["request_event_ref"],
             "requester": alice.actor,
             "action": "accept"
         })),
@@ -284,7 +293,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(alice_after_contact["results"][0]["did"], bob.actor);
+    assert_eq!(alice_after_contact["actors"][0]["actor_id"], bob.actor);
 
     let alice_user_after_contact = expect_json(
         alice
@@ -294,7 +303,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     assert_eq!(
-        alice_user_after_contact["results"][0]["handle"],
+        alice_user_after_contact["users"][0]["handle"],
         "bob-privacy:directory-privacy.cotest.local"
     );
 
@@ -307,7 +316,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     assert!(
-        anonymous_after_contact["results"]
+        anonymous_after_contact["actors"]
             .as_array()
             .unwrap()
             .is_empty()

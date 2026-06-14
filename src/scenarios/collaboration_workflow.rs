@@ -13,10 +13,18 @@ const BOB_HANDLE: &str = "@cotest-collab-bob";
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let server = CokretServer::spawn("collaboration-workflow").await?;
     let alice = server
-        .register_client(ALICE_DID, "@cotest-collab-alice", "dev_alice")
+        .register_client(
+            ALICE_DID,
+            "@cotest-collab-alice",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client(BOB_DID, BOB_HANDLE, "dev_bob")
+        .register_client(
+            BOB_DID,
+            BOB_HANDLE,
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
 
     expect_status(
@@ -26,7 +34,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .json(&json!({
                 "did": BOB_DID,
                 "handle": BOB_HANDLE,
-                "device_id": "dev_bob2"
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000b2"
             })),
         StatusCode::CONFLICT,
     )
@@ -40,11 +48,13 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let hidden_results = hidden_bob["results"].as_array().unwrap();
+    let hidden_results = hidden_bob["users"]
+        .as_array()
+        .expect("search-users response users");
     assert!(
         !hidden_results
             .iter()
-            .any(|result| result["subject"].as_str() == Some(BOB_DID))
+            .any(|result| result["did"].as_str() == Some(BOB_DID))
     );
 
     let me = expect_json(
@@ -64,15 +74,18 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::CREATED,
     )
     .await?;
-    assert_eq!(requested["status"], "pending");
+    assert_eq!(requested["state"], "pending_outgoing");
 
     let accepted = expect_json(
-        bob.post("/_soland/self/contacts/respond")
-            .json(&json!({"requester": ALICE_DID, "action": "accept"})),
+        bob.post("/_soland/self/contacts/respond").json(&json!({
+            "request_id": requested["request_event_ref"],
+            "requester": ALICE_DID,
+            "action": "accept"
+        })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(accepted["status"], "accepted");
+    assert_eq!(accepted["state"], "accepted");
 
     let visible_bob = expect_json(
         alice
@@ -82,16 +95,16 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     )
     .await?;
     assert!(
-        visible_bob["results"]
+        visible_bob["users"]
             .as_array()
-            .unwrap()
+            .expect("search-users response users")
             .iter()
-            .any(|result| result["subject"].as_str() == Some(BOB_DID))
+            .any(|result| result["did"].as_str() == Some(BOB_DID))
     );
 
     let realm_id = create_collaboration_realm(&alice).await?;
     let created_space = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{realm_id}")),
+        alice.get(&format!("/_cokret/self/realms/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -111,6 +124,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             &realm_id,
             "ck.member.state",
             json!({
+                "realm_id": realm_id,
                 "actor_id": BOB_DID,
                 "membership": "join",
                 "delivery_status": "unroutable"
@@ -119,7 +133,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_join["status"], "accepted");
     let with_bob = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{realm_id}")),
+        alice.get(&format!("/_cokret/self/realms/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -181,9 +195,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     );
 
     let snapshot = expect_json(
-        server
-            .http()
-            .get(server.url(&format!("/_cokret/self/snapshot/head?realm_id={realm_id}"))),
+        alice
+            .get("/_cokret/self/snapshot/head")
+            .query(&[("realm_id", realm_id.as_str())]),
         StatusCode::OK,
     )
     .await?;
@@ -202,6 +216,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             &realm_id,
             "ck.member.state",
             json!({
+                "realm_id": realm_id,
                 "actor_id": BOB_DID,
                 "membership": "ban",
                 "delivery_status": "unroutable"
@@ -210,7 +225,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
     assert_eq!(member_ban["status"], "accepted");
     let removed = expect_json(
-        alice.get(&format!("/_soland/self/spaces/{realm_id}")),
+        alice.get(&format!("/_cokret/self/realms/{realm_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -287,10 +302,10 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
                     "encryption_profile": "none",
                     "security_class": "standard",
                     "federation_policy": "restricted",
-                    "anchor_profile": "single_did",
+                    "notary_profile": "single_did",
                     "digest_algorithm": "sha256",
                     "plaintext_visible_services": [alice.service_did()],
-                    "anchorer": {
+                    "notary": {
                         "type": "single_did",
                         "did": &alice.actor,
                         "recovery_members": ["did:web:recovery-anchorer.cotest.local"],

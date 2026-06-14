@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
 use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -11,13 +11,14 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, TestServerGroup, encrypted_envelope, expect_account_subscribe_delta, expect_json,
-    expect_text, register_account, submit_event,
+    CokretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
+    expect_json, expect_text, register_account, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 
-const ALICE_DID: &str = "did:web:cotest-fed-alice.example";
-const BOB_DID: &str = "did:web:cotest-fed-bob-b.example";
+const ALICE_DID: &str = "did:web:federation-collaboration-0.cotest.local";
+const BOB_DID: &str = "did:web:federation-collaboration-1.cotest.local";
+const REALM_CREATE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc011ab000";
 const ALICE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000001";
 const BOB_JOIN_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000002";
 const BOB_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000003";
@@ -26,8 +27,20 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
     let server_a = group.server(0);
     let server_b = group.server(1);
-    let alice = register_account(server_a, ALICE_DID, "@cotest-fed-alice", "dev_alice").await?;
-    let bob = register_account(server_b, BOB_DID, "@cotest-fed-bob-b", "dev_bob_b").await?;
+    let alice = register_account(
+        server_a,
+        ALICE_DID,
+        "@cotest-fed-alice",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
+    let bob = register_account(
+        server_b,
+        BOB_DID,
+        "@cotest-fed-bob-b",
+        "ck:device:01904100-0000-7000-8000-0000000000bb",
+    )
+    .await?;
 
     let describe_a = expect_json(
         server_a.http().get(server_a.url("/_cokret/describe")),
@@ -50,9 +63,14 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(bob_document["did_document"]["id"], BOB_DID);
+    assert_eq!(bob_document["did_document"]["document"]["id"], BOB_DID);
 
-    let realm_id = create_federated_realm(server_a, &alice).await?;
+    let visible_services = vec![
+        server_a.service_did().to_owned(),
+        server_b.service_did().to_owned(),
+    ];
+    let realm_id = create_federated_realm(server_a, &alice, &visible_services).await?;
+    add_member(server_a, &alice, ALICE_DID, &realm_id, BOB_DID).await?;
     // Federation ck.message.create Event payload carries the message
     // addressing/identity fields soland's federation projection consumes
     // (event_id, actor_id, strand_id, track_name, content). The forbidden wire
@@ -64,12 +82,20 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         realm_id.strip_prefix("ck:realm:").unwrap_or(&realm_id)
     );
 
+    let realm_create = signed_federation_event(
+        REALM_CREATE_EVENT_ID,
+        "ck.realm.create",
+        &realm_id,
+        ALICE_DID,
+        1,
+        federated_realm_payload(&realm_id, &visible_services),
+    )?;
     let alice_message = signed_federation_event(
         ALICE_MESSAGE_EVENT_ID,
         "ck.message.create",
         &realm_id,
         ALICE_DID,
-        1,
+        2,
         json!({
             "strand_id": strand_id.clone(),
             "track_name": "discussion",
@@ -83,15 +109,20 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         BOB_JOIN_EVENT_ID,
         "ck.member.state",
         &realm_id,
-        BOB_DID,
-        1,
+        ALICE_DID,
+        3,
         json!({
+            "realm_id": realm_id,
+            "actor_id": BOB_DID,
             "membership": "join",
             "delivery_status": "unroutable"
         }),
     )?;
-    let a_to_b_body =
-        peer_events_submit_body(&realm_id, vec![alice_message, bob_join], Some("a-to-b-01"))?;
+    let a_to_b_body = peer_events_submit_body(
+        &realm_id,
+        vec![realm_create, alice_message, bob_join],
+        Some("a-to-b-01"),
+    )?;
     let a_to_b_url = server_b.url("/_cokret/peer/events");
     let pushed_to_b = expect_json(
         with_federation_trust_headers(
@@ -105,13 +136,27 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_json_array_contains(&pushed_to_b["accepted"], ALICE_MESSAGE_EVENT_ID);
-    assert_json_array_contains(&pushed_to_b["accepted"], BOB_JOIN_EVENT_ID);
+    assert_json_array_contains(
+        &pushed_to_b["accepted"],
+        REALM_CREATE_EVENT_ID,
+        &pushed_to_b,
+    );
+    assert_json_array_contains(
+        &pushed_to_b["accepted"],
+        ALICE_MESSAGE_EVENT_ID,
+        &pushed_to_b,
+    );
+    assert_json_array_contains(&pushed_to_b["accepted"], BOB_JOIN_EVENT_ID, &pushed_to_b);
 
+    let pulled_url = server_b.url(&format!("/_cokret/peer/events?realms={realm_id}"));
     let pulled_on_b = expect_json(
-        server_b
-            .http()
-            .get(server_b.url(&format!("/_cokret/peer/events?realms={realm_id}"))),
+        with_federation_trust_headers_empty(
+            server_b.http().get(&pulled_url),
+            "GET",
+            &pulled_url,
+            server_a,
+            server_b,
+        )?,
         StatusCode::OK,
     )
     .await?;
@@ -120,7 +165,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|event| event["event"]["event_id"] == ALICE_MESSAGE_EVENT_ID),
+            .any(|event| event["event_id"] == ALICE_MESSAGE_EVENT_ID),
         "server B pull did not include alice federation message: {pulled_on_b}"
     );
 
@@ -135,7 +180,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     assert!(
         sync_timeline_events(&bob_sync, &realm_id)?
             .iter()
-            .any(|event| event["content"]["body"] == "hello bob from server a"),
+            .any(|event| event_body(event) == Some("hello bob from server a")),
         "bob sync did not include alice federation message: {bob_sync}"
     );
 
@@ -144,7 +189,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck.message.create",
         &realm_id,
         BOB_DID,
-        2,
+        1,
         json!({
             "strand_id": strand_id,
             "track_name": "discussion",
@@ -168,7 +213,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(txn["accepted"][0], BOB_MESSAGE_EVENT_ID);
+    assert_json_array_contains(&txn["accepted"], BOB_MESSAGE_EVENT_ID, &txn);
     let alice_sync = expect_account_subscribe_delta(
         server_a
             .http()
@@ -180,7 +225,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     assert!(
         sync_timeline_events(&alice_sync, &realm_id)?
             .iter()
-            .any(|event| event["content"]["body"] == "hello alice from server b"),
+            .any(|event| event_body(event) == Some("hello alice from server b")),
         "alice sync did not include bob federation reply: {alice_sync}"
     );
 
@@ -190,12 +235,14 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .post(server_b.url("/_cokret/self/keys/upload"))
             .bearer_auth(&bob)
             .json(&json!({
-                "device_id": "dev_bob_b",
-                "one_time_keys": [{
-                    "algorithm": "signed_curve25519",
-                    "key_id": "bob-otk1",
-                    "key": "bob-one-time"
-                }],
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000bb",
+                "one_time_keys": {
+                    "signed_curve25519:bob-otk1": {
+                        "algorithm": "signed_curve25519",
+                        "key_id": "bob-otk1",
+                        "key": "bob-one-time"
+                    }
+                },
                 "fallback_keys": {},
                 "device_signature": {"alg": "EdDSA", "signature": "bob-device-signature"}
             })),
@@ -213,9 +260,10 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .json(&json!({
                 "messages": {
                     BOB_DID: {
-                        "dev_bob_b": {
-                            "type": "ck.mls.welcome",
-                            "content": encrypted_envelope("ck.mls.welcome", "opaque-cross-server-welcome")
+                        "ck:device:01904100-0000-7000-8000-0000000000bb": {
+                            "kind": "ck.mls.welcome",
+                            "content": encrypted_envelope("ck.mls.welcome", "opaque-cross-server-welcome"),
+                            "expires_at": "2026-12-31T00:00:00Z"
                         }
                     }
                 }
@@ -234,7 +282,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )
     .await?;
     assert_eq!(
-        received["events"][0]["content"]["content"]["ciphertext"],
+        received["messages"][0]["content"]["ciphertext"],
         "opaque-cross-server-welcome"
     );
 
@@ -267,7 +315,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .post(server_b.url("/_cokret/edge/push/register-device"))
             .bearer_auth(&bob)
             .json(&json!({
-                "device_id": "dev_bob_b",
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000bb",
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
@@ -297,7 +345,11 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     Ok(())
 }
 
-async fn create_federated_realm(server: &CokretServer, alice: &str) -> Result<String> {
+async fn create_federated_realm(
+    server: &CokretServer,
+    alice: &str,
+    visible_services: &[String],
+) -> Result<String> {
     let realm_id = "ck:realm:01904100-0000-7000-8000-fedc011ab001".to_owned();
     let created = submit_event(
         server,
@@ -305,39 +357,43 @@ async fn create_federated_realm(server: &CokretServer, alice: &str) -> Result<St
         ALICE_DID,
         &realm_id,
         "ck.realm.create",
-        json!({
-            "object": {
-                "id": &realm_id,
-                "schema": "ck.schema.realm.v1",
-                "title": "Federated Collaboration Space",
-                "summary": "cross server collaboration",
-                "trust_domain": "ck:trust_domain:federation-collaboration.cotest.local",
-                "created_by": ALICE_DID,
-                "schema_refs": ["ck.schema.realm.v1"],
-                "default_discoverability": "invite_only",
-                "default_join_rule": "invite",
-                "history_visibility": "shared",
-                "encryption_profile": "none",
-                "security_class": "standard",
-                "federation_policy": "open",
-                "anchor_profile": "single_did",
-                "digest_algorithm": "sha256",
-                "plaintext_visible_services": [server.service_did()],
-                "anchorer": {
-                    "type": "single_did",
-                    "did": ALICE_DID,
-                    "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
-                    "controller_organization": "did:web:federation-collaboration.cotest.local",
-                    "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
-                },
-                "created_at": "2026-05-02T00:00:00Z"
-            }
-        }),
+        federated_realm_payload(&realm_id, visible_services),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(created["status"], "accepted");
     Ok(realm_id)
+}
+
+fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value {
+    json!({
+        "object": {
+            "id": realm_id,
+            "schema": "ck.schema.realm.v1",
+            "title": "Federated Collaboration Space",
+            "summary": "cross server collaboration",
+            "trust_domain": "ck:trust_domain:federation-collaboration.cotest.local",
+            "created_by": ALICE_DID,
+            "schema_refs": ["ck.schema.realm.v1"],
+            "default_discoverability": "invite_only",
+            "default_join_rule": "invite",
+            "history_visibility": "shared",
+            "encryption_profile": "none",
+            "security_class": "standard",
+            "federation_policy": "open",
+            "notary_profile": "single_did",
+            "digest_algorithm": "sha256",
+            "plaintext_visible_services": visible_services,
+            "notary": {
+                "type": "single_did",
+                "did": ALICE_DID,
+                "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
+                "controller_organization": "did:web:federation-collaboration.cotest.local",
+                "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
+            },
+            "created_at": "2026-05-02T00:00:00Z"
+        }
+    })
 }
 
 fn signed_federation_event(
@@ -359,6 +415,9 @@ fn signed_federation_event(
             .context("invalid federation event HLC")?,
         payload,
     )?;
+    event.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")
+        .context("invalid fixed federation event timestamp")?
+        .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
     let event_digest =
@@ -388,6 +447,46 @@ fn with_federation_trust_headers(
     let content_digest =
         ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
     let request_canonical_digest = canonical_sha256(body)?;
+    with_federation_trust_headers_for_digest(
+        builder,
+        method,
+        target_url,
+        source,
+        destination,
+        content_digest,
+        request_canonical_digest,
+    )
+}
+
+fn with_federation_trust_headers_empty(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    source: &CokretServer,
+    destination: &CokretServer,
+) -> Result<reqwest::RequestBuilder> {
+    let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = sha256_digest([]);
+    with_federation_trust_headers_for_digest(
+        builder,
+        method,
+        target_url,
+        source,
+        destination,
+        content_digest,
+        request_canonical_digest,
+    )
+}
+
+fn with_federation_trust_headers_for_digest(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    source: &CokretServer,
+    destination: &CokretServer,
+    content_digest: String,
+    request_canonical_digest: String,
+) -> Result<reqwest::RequestBuilder> {
     let source_service_did = source.service_did();
     let destination_service_did = destination.service_did();
     let source_trust_domain = trust_domain_for(source_service_did);
@@ -449,7 +548,7 @@ fn trust_domain_for(service_did: &str) -> String {
 
 fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
-    hasher.update(b"soland:anchorer-ephemeral:");
+    hasher.update(b"soland:notary-ephemeral:");
     hasher.update(service_did.as_bytes());
     let seed: [u8; 32] = hasher.finalize().into();
     signing_key_from_seed(&seed)
@@ -468,13 +567,21 @@ fn sync_timeline_events<'a>(delta: &'a Value, realm_id: &str) -> Result<&'a Vec<
         })
 }
 
-fn assert_json_array_contains(array: &Value, expected: &str) {
+fn event_body(event: &Value) -> Option<&str> {
+    event
+        .pointer("/content/body")
+        .or_else(|| event.pointer("/payload/content/body"))
+        .or_else(|| event.pointer("/payload/body"))
+        .and_then(Value::as_str)
+}
+
+fn assert_json_array_contains(array: &Value, expected: &str, context: &Value) {
     assert!(
         array
             .as_array()
             .unwrap()
             .iter()
             .any(|value| value.as_str() == Some(expected)),
-        "expected {array} to contain {expected}"
+        "expected {array} to contain {expected}; response: {context}"
     );
 }

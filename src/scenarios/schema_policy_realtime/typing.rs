@@ -8,13 +8,24 @@ use crate::harness::{CokretServer, expect_api_error, expect_json};
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = CokretServer::spawn("typing-push-rules").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client("did:web:bob-typing.example", "@bob-typing", "dev_bob")
+        .register_client(
+            "did:web:bob-typing.example",
+            "@bob-typing",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
     let carol = server
-        .register_client("did:web:carol-typing.example", "@carol-typing", "dev_carol")
+        .register_client(
+            "did:web:carol-typing.example",
+            "@carol-typing",
+            "ck:device:01904100-0000-7000-8000-000000000ca0",
+        )
         .await?;
 
     let realm_id = alice.create_realm("Typing And Push Realm").await?;

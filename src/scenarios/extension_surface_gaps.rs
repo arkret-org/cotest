@@ -8,7 +8,10 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
     let group = TestServerGroup::single("extension-surface-applet").await?;
     let server = group.server(0);
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let realm_id = alice.create_realm("Applet Surface Realm").await?;
 
@@ -44,11 +47,14 @@ pub async fn applet_lifecycle_surfaces_are_not_advertised_until_routes_exist() -
     Ok(())
 }
 
-pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() -> Result<()> {
+pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-agent").await?;
     let server = group.server(0);
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let realm_id = alice.create_realm("Agent Surface Realm").await?;
 
@@ -63,10 +69,41 @@ pub async fn agent_lifecycle_surfaces_are_not_advertised_until_routes_exist() ->
         .iter()
         .filter_map(|operation| operation.as_str())
         .collect::<Vec<_>>();
-    assert!(
-        !advertised
-            .iter()
-            .any(|operation| operation.contains("agent"))
+    for required in [
+        "ck.self.agent.command.provision",
+        "ck.self.agent.query.list",
+        "ck.self.agent.resource.get",
+        "ck.self.agent.command.pause",
+        "ck.self.agent.command.resume",
+        "ck.self.agent.command.deactivate",
+        "ck.self.agent.command.rotate_key",
+        "ck.self.agent.grant.command.attach",
+        "ck.self.agent.grant.resource.delete",
+        "ck.self.agent.sidecar_thread.command.ensure",
+    ] {
+        assert!(
+            advertised.contains(&required),
+            "missing advertised agent operation {required}; advertised={advertised:#?}"
+        );
+    }
+
+    let empty_list = expect_json(alice.get("/_cokret/self/agents"), StatusCode::OK).await?;
+    assert!(empty_list["agents"].as_array().unwrap().is_empty());
+
+    let provisioned = expect_json(
+        alice.post("/_cokret/self/agents").json(&json!({
+            "display_name": "Planner",
+            "agent_slug": "planner"
+        })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    assert_eq!(
+        provisioned["agent_principal_id"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("did:web:agent-"),
+        true
     );
 
     expect_api_error(

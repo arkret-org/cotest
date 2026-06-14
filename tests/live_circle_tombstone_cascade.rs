@@ -71,15 +71,27 @@ async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_ci
     // in development mode; alice + bob are the future Circle members.
     let admin = stack
         .soland
-        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
+        .register_client(
+            "did:web:admin.ckp0007.example",
+            "@admin",
+            "ck:device:01904100-0000-7000-8000-00000000ad01",
+        )
         .await?;
     let alice = stack
         .soland
-        .register_client("did:web:alice.ckp0007.example", "@alice", "dev_alice")
+        .register_client(
+            "did:web:alice.ckp0007.example",
+            "@alice",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = stack
         .soland
-        .register_client("did:web:bob.ckp0007.example", "@bob", "dev_bob")
+        .register_client(
+            "did:web:bob.ckp0007.example",
+            "@bob",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
 
     let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007tomb01".to_owned())

@@ -79,11 +79,19 @@ async fn circle_write_requires_both_capability_grant_and_membership() -> Result<
     //       starts with zero grants.
     let admin = stack
         .soland
-        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
+        .register_client(
+            "did:web:admin.ckp0007.example",
+            "@admin",
+            "ck:device:01904100-0000-7000-8000-00000000ad01",
+        )
         .await?;
     let actor_y = stack
         .soland
-        .register_client("did:web:y.ckp0007.example", "@y", "dev_y")
+        .register_client(
+            "did:web:y.ckp0007.example",
+            "@y",
+            "ck:device:01904100-0000-7000-8000-0000000000e3",
+        )
         .await?;
     let _ = actor_y.actor.as_str();
 

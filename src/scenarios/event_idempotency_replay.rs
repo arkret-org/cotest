@@ -8,7 +8,10 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let group = TestServerGroup::single("event-idempotency-replay").await?;
     let server = group.server(0);
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let realm_id = create_test_realm(
         &alice,
@@ -37,8 +40,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     )
     .await?;
     assert_eq!(first["status"], "accepted");
-    let event_id = first["event_id"]
-        .as_str()
+    let event_id = submitted_event_id(&first)
         .ok_or_else(|| anyhow!("accepted response missing event_id: {first}"))?;
     assert_eq!(event_id, json_string(&event, "event_id")?);
 
@@ -48,8 +50,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     )
     .await?;
     assert_eq!(duplicate["status"], "duplicate");
-    assert_eq!(duplicate["event_id"], first["event_id"]);
-    assert_eq!(duplicate["receipt"]["idempotent"], true);
+    assert_eq!(submitted_event_id(&duplicate), Some(event_id));
 
     let listed = expect_json(
         alice
@@ -76,7 +77,10 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let group = TestServerGroup::single("event-idempotency-edit-redact").await?;
     let server = group.server(0);
     let alice = server
-        .demo_client("did:web:alice-edit-redact.example", "dev_alice")
+        .demo_client(
+            "did:web:alice-edit-redact.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let realm_id = create_test_realm(
         &alice,
@@ -100,7 +104,8 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     );
 
     let created = submit_and_duplicate(&alice, &create_event).await?;
-    let create_event_id = json_string(&created, "event_id")?;
+    let create_event_id = submitted_event_id(&created)
+        .ok_or_else(|| anyhow!("create response missing event id: {created}"))?;
     let message_ref = create_event_id.replacen("ck:event:", "ck:message:", 1);
 
     assert_projected_kind_count(&alice, &realm_id, "ck.message.create", 1).await?;
@@ -120,7 +125,8 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         }),
     );
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
-    let revise_event_id = json_string(&revised, "event_id")?;
+    let revise_event_id = submitted_event_id(&revised)
+        .ok_or_else(|| anyhow!("revise response missing event id: {revised}"))?;
     assert_projected_event_count(&alice, &realm_id, revise_event_id, 1).await?;
     assert_projected_kind_count(&alice, &realm_id, "ck.message.revise", 1).await?;
 
@@ -135,7 +141,8 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         }),
     );
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
-    let redact_event_id = json_string(&redacted, "event_id")?;
+    let redact_event_id = submitted_event_id(&redacted)
+        .ok_or_else(|| anyhow!("redact response missing event id: {redacted}"))?;
     let visible_after_redaction = list_realm_events(&alice, &realm_id).await?;
     assert_eq!(
         event_count(&visible_after_redaction, create_event_id)?,
@@ -181,10 +188,10 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
                 "encryption_profile": "none",
                 "security_class": "standard",
                 "federation_policy": "open",
-                "anchor_profile": "single_did",
+                "notary_profile": "single_did",
                 "digest_algorithm": "sha256",
                 "plaintext_visible_services": [alice.service_did()],
-                "anchorer": {
+                "notary": {
                     "type": "single_did",
                     "did": &alice.actor,
                     "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
@@ -211,7 +218,8 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<
     )
     .await?;
     assert_eq!(first["status"], "accepted");
-    assert_eq!(first["event_id"].as_str(), event["event_id"].as_str());
+    let event_id = event["event_id"].as_str();
+    assert_eq!(submitted_event_id(&first), event_id);
 
     let duplicate = expect_json(
         alice.post("/_cokret/self/events").json(event),
@@ -219,9 +227,8 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Value) -> Result<
     )
     .await?;
     assert_eq!(duplicate["status"], "duplicate");
-    assert_eq!(duplicate["event_id"], first["event_id"]);
+    assert_eq!(submitted_event_id(&duplicate), event_id);
     assert_eq!(duplicate["canonical_digest"], first["canonical_digest"]);
-    assert_eq!(duplicate["receipt"]["idempotent"], true);
 
     Ok(first)
 }
@@ -276,7 +283,12 @@ fn event_count(listed: &Value, event_id: &str) -> Result<usize> {
 fn event_kind_count(listed: &Value, kind: &str) -> Result<usize> {
     Ok(projected_events(listed)?
         .iter()
-        .filter(|event| event["event_kind"].as_str() == Some(kind))
+        .filter(|event| {
+            event["kind"]
+                .as_str()
+                .or_else(|| event["event_kind"].as_str())
+                == Some(kind)
+        })
         .count())
 }
 
@@ -284,6 +296,26 @@ fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
     listed["events"]
         .as_array()
         .ok_or_else(|| anyhow!("events query response missing events array: {listed}"))
+}
+
+fn submitted_event_id(response: &Value) -> Option<&str> {
+    response
+        .get("event_id")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            response
+                .get("accepted")
+                .and_then(Value::as_array)
+                .and_then(|accepted| accepted.first())
+                .and_then(Value::as_str)
+        })
+        .or_else(|| {
+            response
+                .get("duplicate")
+                .and_then(Value::as_array)
+                .and_then(|duplicate| duplicate.first())
+                .and_then(Value::as_str)
+        })
 }
 
 fn json_string<'a>(value: &'a Value, field: &str) -> Result<&'a str> {

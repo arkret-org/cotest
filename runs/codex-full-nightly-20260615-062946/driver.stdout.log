@@ -1,0 +1,2 @@
+=== cotest invocation: full-nightly ===
+Running cargo test --tests --no-fail-fast -- --nocapture

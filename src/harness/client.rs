@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
-use super::event_builder::event_envelope;
+use super::event_builder::{ensure_submit_event_id, event_envelope};
 use super::{member_join_payload, next_typed_id, realm_create_payload};
 
 #[derive(Clone)]
@@ -86,7 +86,7 @@ impl TestActorClient {
         self.submit_event(
             realm_id,
             "ck.member.state",
-            member_join_payload(&member.actor),
+            member_join_payload(realm_id, &member.actor),
         )
         .await
     }
@@ -106,11 +106,13 @@ impl TestActorClient {
 
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
         let event = event_envelope(&self.actor, realm_id, kind, payload);
-        expect_json(
+        let mut body = expect_json(
             self.post("/_cokret/self/events").json(&event),
             StatusCode::OK,
         )
-        .await
+        .await?;
+        ensure_submit_event_id(&mut body, &event);
+        Ok(body)
     }
 
     pub async fn sync(&self) -> Result<Value> {

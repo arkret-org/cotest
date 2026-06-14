@@ -9,10 +9,17 @@ const REQUEST_HASH: &str =
 pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()> {
     let server = CokretServer::spawn("policy-documents").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client("did:web:bob-policy.example", "@bob-policy", "dev_bob")
+        .register_client(
+            "did:web:bob-policy.example",
+            "@bob-policy",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
 
     let realm_id = alice.create_realm("Policy Document Realm").await?;

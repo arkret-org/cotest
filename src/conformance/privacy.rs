@@ -228,6 +228,173 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "blind_index_stale_posting_fail_closed" => {
+                let inputs = case
+                    .inputs
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing inputs", case.name))?;
+                let expected = case
+                    .expected
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+                for required_flag in [
+                    "must_not_return_unauthorized_hit",
+                    "may_omit_authorized_hit",
+                    "stale_posting_rejected_or_filtered",
+                ] {
+                    if expected.get(required_flag).and_then(Value::as_bool) != Some(true) {
+                        bail!(
+                            "privacy fixture {} flag {required_flag} is not true",
+                            case.name
+                        );
+                    }
+                }
+                if expected.get("audit_reason").and_then(Value::as_str)
+                    != Some("search_stale_posting_filtered")
+                {
+                    bail!(
+                        "privacy fixture {} missing stale posting audit reason",
+                        case.name
+                    );
+                }
+                if inputs.len() < 4 {
+                    bail!(
+                        "privacy fixture {} must cover revoked capability, visibility, redaction/expiry, and MLS epoch rotation",
+                        case.name
+                    );
+                }
+
+                let mut filtered = 0usize;
+                for input in inputs {
+                    let state_change = input
+                        .get("state_change")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "privacy fixture {} stale posting input missing state_change",
+                                case.name
+                            )
+                        })?;
+                    let digest = input
+                        .get("posting_digest")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "privacy fixture {} stale posting input missing posting_digest",
+                                case.name
+                            )
+                        })?;
+                    if !is_sha256_digest(digest) {
+                        bail!(
+                            "privacy fixture {} stale posting input has invalid digest {digest}",
+                            case.name
+                        );
+                    }
+                    if is_fail_closed_search_state_change(state_change) {
+                        filtered += 1;
+                    } else {
+                        bail!(
+                            "privacy fixture {} unexpected stale posting state_change {state_change}",
+                            case.name
+                        );
+                    }
+                }
+
+                record_vector_event(
+                    "privacy.blind_index_stale_posting_fail_closed",
+                    &json!({"inputs": inputs, "input_count": inputs.len()}),
+                    &json!({
+                        "returned_hits": 0,
+                        "audit_reason": "search_stale_posting_filtered",
+                    }),
+                    &json!({
+                        "filtered_postings": filtered,
+                        "returned_hits": 0,
+                        "audit_reason": expected.get("audit_reason").cloned(),
+                    }),
+                );
+            }
+            "search_result_not_authorization_proof" => {
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
+                let expected = case
+                    .expected
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+                for required_flag in [
+                    "client_or_projection_revalidates_visibility",
+                    "unauthorized_hit_omitted_or_stubbed",
+                ] {
+                    if expected.get(required_flag).and_then(Value::as_bool) != Some(true) {
+                        bail!(
+                            "privacy fixture {} flag {required_flag} is not true",
+                            case.name
+                        );
+                    }
+                }
+                if input.get("post_query_visibility").and_then(Value::as_str)
+                    != Some("not_authorized")
+                {
+                    bail!(
+                        "privacy fixture {} must exercise post-query not_authorized visibility",
+                        case.name
+                    );
+                }
+                let hit_digest = input
+                    .pointer("/candidate_hit/object_ref_digest")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing candidate hit digest", case.name)
+                    })?;
+                if !is_sha256_digest(hit_digest) {
+                    bail!(
+                        "privacy fixture {} candidate hit digest is invalid: {hit_digest}",
+                        case.name
+                    );
+                }
+
+                let stub = unauthorized_search_result_stub();
+                if stub.get("visibility").and_then(Value::as_str) != Some("locked")
+                    || stub.get("opaque_ref").and_then(Value::as_str) != Some("fixed_length")
+                {
+                    bail!(
+                        "privacy fixture {} unauthorized stub shape drifted",
+                        case.name
+                    );
+                }
+                let forbidden = expected
+                    .get("must_not_include")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| {
+                        anyhow!("privacy fixture {} missing must_not_include", case.name)
+                    })?;
+                for field in forbidden {
+                    let field = field.as_str().ok_or_else(|| {
+                        anyhow!(
+                            "privacy fixture {} must_not_include entry must be string",
+                            case.name
+                        )
+                    })?;
+                    if stub.get(field).is_some() {
+                        bail!(
+                            "privacy fixture {} unauthorized search stub leaked field {field}",
+                            case.name
+                        );
+                    }
+                }
+
+                record_vector_event(
+                    "privacy.search_result_not_authorization_proof",
+                    &json!({"candidate_hit": input.get("candidate_hit").cloned()}),
+                    &json!({"visibility": "locked", "opaque_ref": "fixed_length"}),
+                    &json!({
+                        "stub": stub,
+                        "forbidden_field_count": forbidden.len(),
+                    }),
+                );
+            }
             "pairwise_did_resolve_proof" => {
                 let no_proof = resolve_private_did(None);
                 let with_proof = resolve_private_did(Some("holder-proof"));
@@ -281,7 +448,7 @@ fn anti_enumeration_blob_error(_hidden: bool) -> &'static str {
 
 fn blind_wakeup_payload() -> Value {
     json!({
-        "device_id": "dev_alice",
+        "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
         "wakeup": true
     })
 }
@@ -298,4 +465,27 @@ fn forwarded_encrypted_payload() -> Value {
         "ciphertext": "opaque-ciphertext",
         "content_type": "ck.mls.application"
     })
+}
+
+fn unauthorized_search_result_stub() -> Value {
+    json!({
+        "visibility": "locked",
+        "opaque_ref": "fixed_length"
+    })
+}
+
+fn is_fail_closed_search_state_change(state_change: &str) -> bool {
+    matches!(
+        state_change,
+        "capability_revoked"
+            | "history_visibility_private"
+            | "redaction_or_expiry"
+            | "mls_epoch_rotate"
+    )
+}
+
+fn is_sha256_digest(digest: &str) -> bool {
+    digest
+        .strip_prefix("sha256:")
+        .is_some_and(|hex| hex.len() == 64 && hex.chars().all(|ch| ch.is_ascii_hexdigit()))
 }

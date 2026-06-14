@@ -34,7 +34,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8",
+      "expected_state_subject": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
@@ -43,7 +43,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:bob.example"],
       "components_order_source": "[strand_id, track, actor_id]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:bob.example\"]",
-      "expected_state_subject": "lo8teoap1pIrXhsxCDH3Skg3vsN8ljikVdjP_9RyGIQ",
+      "expected_state_subject": "-CHf_M2mF4bKnEtC10HrVkrsv0eTEfOXd-b1bbeyLQU",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same strand + track but a different actor — historical encoding fixture only; current v1 producers must not emit cx.strand.track.member."
     },
@@ -53,7 +53,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
-      "expected_state_subject": "ZLsnrz9p9NUKQ-yGp00vWUJVArcmapCqkQGCrgYu0Oo",
+      "expected_state_subject": "YPdgraaCA5NGx7Pf_2JBr878BtR3_SX0Wjd3vsC2dW0",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
@@ -62,7 +62,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
-      "expected_state_subject": "ZLsnrz9p9NUKQ-yGp00vWUJVArcmapCqkQGCrgYu0Oo",
+      "expected_state_subject": "YPdgraaCA5NGx7Pf_2JBr878BtR3_SX0Wjd3vsC2dW0",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Two removed kinds shared the same components_array shape; retained only to pin historical hash encoding."
     }
@@ -73,14 +73,14 @@
       "kind": "cx.strand.track.member",
       "components_array": ["main", "ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "If a buggy implementation reorders components_array (e.g. track before strand_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical strand_track_member_alice subject.",
-      "must_differ_from": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8"
+      "must_differ_from": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
       "kind": "cx.strand.track.member",
       "pipe_form": "ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9|main|did:web:alice.example",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
-      "must_differ_from": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8"
+      "must_differ_from": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84"
     }
   ]
 }

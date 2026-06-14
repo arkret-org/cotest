@@ -64,9 +64,10 @@ pub async fn knock_cooldown_matrix_run() -> Result<()> {
     //
     //   let server = CokretServer::spawn("knock-cooldown-matrix").await?;
     //   let alice = register_account(&server, "did:web:alice.example",
-    //                                "@alice", "dev_alice").await?;
-    //   let bob   = register_account(&server, "did:web:bob.example",
-    //                                "@bob",   "dev_bob").await?;
+    //                                "@alice",
+    // "ck:device:01904100-0000-7000-8000-0000000000a1").await?;   let bob   =
+    // register_account(&server, "did:web:bob.example",                                "@bob",
+    // "ck:device:01904100-0000-7000-8000-0000000000b0").await?;
     //
     //   let realm_id = create_knock_realm(&server, &alice,
     //       "Knock Test Realm", /*application_ttl=*/"10s",

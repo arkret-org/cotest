@@ -1,0 +1,484 @@
+
+running 122 tests
+test conformance::capability::boundary_tests::boundary_fixture_count_is_at_least_thirty ... ok
+test conformance::agent_vectors::tests::all_five_agent_vectors_run_clean ... ok
+test conformance::cursor_vectors::tests::both_cursor_vectors_run_clean ... ok
+test conformance::lattice_mixed_kinds::tests::suite_passes_against_local_fixture ... ok
+test conformance::capability::boundary_tests::boundary_suite_runs_clean ... ok
+test conformance::mock_vector_base::tests::skipped_live_leg_is_not_a_failure ... ok
+test conformance::mock_vector_base::tests::matching_outputs_pass ... ok
+test conformance::mention_rendering_vectors::tests::mention_rendering_vector_suite_runs_clean ... ok
+test conformance::list_handles_for_subject_vectors::tests::list_handles_for_subject_vector_suite_runs_clean ... ok
+test conformance::mock_vector_base::tests::mismatched_outputs_fail ... ok
+test conformance::member_roster_vectors::tests::member_roster_vector_suite_runs_clean ... ok
+test conformance::media_binding::tests::all_nine_media_binding_vectors_run_clean ... ok
+test conformance::primary_handle_vectors::tests::primary_handle_vector_suite_runs_clean ... ok
+test conformance::blind_payload::tests::shared_blind_payload_vectors_pass ... ok
+test conformance::reducer_profile::tests::federation_minimal_digest_matches_registered_vector ... ok
+test conformance::reducer_profile::tests::unknown_profile_fails_closed ... ok
+test conformance::security_negative::tests::verifier_rejects_mismatched_event_digest ... ok
+test conformance::security_closure::tests::compare_detects_audit_reason_drift ... ok
+test conformance::member_identity_vectors::tests::member_identity_vector_suite_runs_clean ... ok
+test conformance::security_closure::tests::compare_succeeds_on_round_trip ... ok
+test conformance::object_addressing_vectors::tests::object_addressing_vector_suite_runs_clean ... ok
+test conformance::sidecar_vectors::tests::all_four_sidecar_vectors_run_clean ... ok
+test conformance::security_closure::tests::spec_fixture_round_trips ... ok
+test fixtures::builders::tests::defaults_derive_did_and_device_from_handle ... ok
+test fixtures::builders::tests::handle_without_at_prefix_is_normalised_for_display ... ok
+test fixtures::scaffold::tests::unique_label_is_monotonic_and_includes_pid ... ok
+test fixtures::scaffold::tests::unique_labels_disambiguate_repeated_callers ... ok
+test conformance::security_negative::tests::verifier_rejects_wrong_signing_key ... ok
+test conformance::security_negative::tests::verifier_rejects_correct_digest_but_tampered_signature ... ok
+test fixtures::timeline::tests::display_renders_header_and_rows ... ok
+test conformance::security_negative::tests::verifier_accepts_valid_signature ... ok
+test fixtures::timeline::tests::empty_transcript_renders_placeholder ... ok
+test fixtures::timeline::tests::missing_file_yields_empty_timeline_with_source ... ok
+test fixtures::timeline::tests::parses_event_envelope_and_get_request ... ok
+test profile_validator::tests::permitted_roles_for_includes_self_admin_interop ... ok
+test conformance::private_chat_privacy::tests::private_chat_privacy_contract_fixture_runs ... ok
+test scenarios::agent_delegation_policy::scaffold::tests::delegation_grid_pinned ... ok
+test scenarios::agent_auth::scaffold::tests::agent_auth_profile_pins_runtime_attestation_baseline ... ok
+test scenarios::agent_sidecar_thread::scaffold::tests::sidecar_profile_pinned ... ok
+test scenarios::alsoknownas_verifier_authority::tests::server_attestation_never_authority ... ok
+test scenarios::chaos_inject::tests::chaos_injectable_dispatches_each_kind ... ok
+test scenarios::chaos_inject::tests::chaos_kind_labels_are_stable_and_distinct ... ok
+test scenarios::chaos_inject::tests::simulate_disk_full_carries_enospc_shaped_payload ... ok
+test scenarios::chaos_inject::tests::simulate_network_timeout_maps_to_timed_out_kind ... ok
+test scenarios::circle::child_scope_policy::tests::child_scope_policy_enforces_each_mode ... ok
+test scenarios::circle::confidential_discussion_relation::tests::relation_round_trip ... ok
+test scenarios::circle::create_circle::tests::happy_path_circle_round_trips ... ok
+test scenarios::circle::effective_scope_mismatch::tests::envelope_payload_scope_mismatch_rejected ... ok
+test scenarios::circle::error_code_paths::tests::ckp_0007_reason_codes_well_formed_and_registered ... ok
+test scenarios::circle::history_visibility_floor::tests::effective_history_visibility_takes_stricter ... ok
+test scenarios::circle::member_state_machine::tests::member_state_machine_table_matches_spec ... ok
+test scenarios::circle::member_strict_subset::tests::strict_subset_accept_and_reject ... ok
+test scenarios::circle::metadata_encryption_floor::tests::metadata_floor_only_tightens ... ok
+test scenarios::circle::scope_circle_id_immutability::tests::scope_circle_id_is_immutable_across_updates ... ok
+test scenarios::circle::strand_scope_visibility::tests::effective_scope_circle_round_trip ... ok
+test scenarios::consent_revoke_scope_any_cascade::tests::consent_cascade_pin_matches_spec ... ok
+test scenarios::consent_revoke_scope_any_cascade::tests::t17_consent_cascade_contract ... ok
+test scenarios::cross_signing_reset_cross_domain::tests::cross_domain_replay_pin_matches_sdk ... ok
+test scenarios::cross_signing_reset_cross_domain::tests::reset_event_id_mismatch_pin_matches_sdk ... ok
+test scenarios::did_format_normalization::tests::did_validator_baseline ... ok
+test scenarios::directory::anti_enumeration_buckets::tests::buckets_round_trip ... ok
+test scenarios::directory::circle_not_indexed::tests::directory_filter_drops_circle_scope ... ok
+test scenarios::directory::latency_jitter::tests::latency_envelope_accepts_and_rejects ... ok
+test scenarios::directory::takedown_audit_log::tests::audit_row_validates ... ok
+test scenarios::e2ee_relaxed_window_negative::tests::hard_ceiling_value_is_300_000_ms ... ok
+test scenarios::e2ee_relaxed_window_negative::tests::relaxed_compliance_mutex_pin_matches_sdk ... ok
+test scenarios::e2ee_relaxed_window_negative::tests::relaxed_window_ceiling_pin_matches_sdk ... ok
+test scenarios::federation_idempotency_after_revoke::tests::historical_only_marker_pin_matches_spec ... ok
+test scenarios::federation_idempotency_after_revoke::tests::t14_federation_replay_after_key_revoke_contract ... ok
+test scenarios::federation_idempotency_historical_only::tests::cache_key_composition_includes_origin_key_state_digest ... ok
+test scenarios::federation_idempotency_historical_only::tests::federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values ... ok
+test scenarios::federation_idempotency_historical_only::tests::historical_only_reason_pin_matches_sdk_constant ... ok
+test scenarios::federation_idempotency_historical_only::tests::live_multi_server_federation_historical_only_docker_e2e ... ignored, TODO(federation-idempotency-e2e-docker): needs live soland + teabay + key rotation harness
+test scenarios::federation_idempotency_historical_only::tests::scenario_federation_idempotency_historical_only_in_memory ... ok
+test scenarios::high_assurance_realm_policy::tests::high_assurance_accepts_closed_restricted_quarantine ... ok
+test scenarios::high_assurance_realm_policy::tests::high_assurance_rejects_open_federation ... ok
+test scenarios::high_assurance_realm_policy::tests::standard_realm_accepts_open_federation ... ok
+test scenarios::key_backup::first_backup_gate::tests::gate_blocks_then_permits ... ok
+test scenarios::key_backup::post_reset_stale::tests::stale_window_detected ... ok
+test scenarios::key_backup::recovery_schemas::tests::recovery_schemas_pinned ... ok
+test scenarios::key_backup::series_chain_broken::tests::errcode_constant_pinned ... ok
+test scenarios::key_backup::series_predecessor_not_found::tests::predecessor_check_pinned ... ok
+test scenarios::key_backup::series_seq_not_monotonic::tests::monotonic_advance_only ... ok
+test scenarios::late_key_recovery_removed_actor::tests::late_recovery_reason_pin_matches_sdk ... ok
+test scenarios::late_key_recovery_removed_actor::tests::t16_late_recovery_removed_actor_contract ... ok
+test scenarios::media_plaintext_downgrade_no_governance_binding::tests::d_member_recompute_mismatch_refuses_media ... ok
+test scenarios::media_plaintext_downgrade_no_governance_binding::tests::media_plaintext_codes_pin_matches_sdk ... ok
+test scenarios::media_plaintext_downgrade_no_governance_binding::tests::t12_media_plaintext_binding_contract ... ok
+test scenarios::moderation_appeal_strand_end_to_end::tests::appeal_kinds_are_distinct_and_well_formed ... ok
+test scenarios::moderation_appeal_strand_end_to_end::tests::moderation_appeal_wire_pins_match_sdk ... ok
+test scenarios::moderation_appeal_strand_end_to_end::tests::t06_moderation_appeal_contract ... ok
+test scenarios::chaos_inject::tests::shutdown_outcome_is_clean_exit_only_for_graceful_success ... ok
+test scenarios::oob_code_entropy_and_lockout::tests::oob_low_entropy_pin_matches_sdk ... ok
+test scenarios::oob_code_entropy_and_lockout::tests::oob_three_strike_pin_matches_spec ... ok
+test scenarios::oob_code_entropy_and_lockout::tests::t15_oob_three_strike_lockout_contract ... ok
+test scenarios::personal_agent_provisioning::scaffold::tests::provisioning_profile_pins_surface ... ok
+test scenarios::presign_blob_fail_closed::tests::blob_redacted_pin_matches_sdk ... ok
+test scenarios::presign_blob_fail_closed::tests::legal_hold_pin_matches_sdk ... ok
+test scenarios::presign_blob_fail_closed::tests::presign_response_headers_pinned ... ok
+test scenarios::presign_blob_fail_closed::tests::t11_presign_fail_closed_contract ... ok
+test scenarios::realm_wire_round_trip::tests::round_trip_positive_vectors ... ok
+test scenarios::seal_canonical_no_self_reference::tests::seal_canonical_bytes_exclude_self_reference ... ok
+test scenarios::spec_section_11::act_on_behalf_attribution::tests::triple_attribution_pinned ... ok
+test scenarios::spec_section_11::controller_deactivate_cascade::tests::cascade_chain_pinned ... ok
+test scenarios::spec_section_11::eligibility_tristate_and_revocation::tests::tri_state_transitions_pinned ... ok
+test scenarios::spec_section_11::existence_privacy::tests::existence_privacy_baseline ... ok
+test scenarios::spec_section_11::multi_agent_publish_attribution::tests::attribution_is_per_event ... ok
+test scenarios::spec_section_11::pairing_expiry_auto_revoke::tests::pairing_expiry_invariant ... ok
+test scenarios::spec_section_11::provisioning_pairing_grant_order::tests::order_constants_pinned ... ok
+test scenarios::spec_section_11::session_grant_replay_guard::tests::replay_guard_baseline ... ok
+test scenarios::spec_section_11::sidecar_circle_idempotent_ensure::tests::ensure_is_deterministic ... ok
+test scenarios::security_closure_vectors::tests::every_vector_id_is_loadable ... ok
+test scenarios::security_closure_vectors::tests::every_vector_runner_contract_round_trips ... ok
+test fuzz::seal_fuzz::tests::empty_input_does_not_panic ... ok
+test scenarios::chaos_inject::tests::graceful_shutdown_test_reaps_fast_exit ... ok
+test fuzz::snapshot_fuzz::tests::empty_input_does_not_panic_manifest ... ok
+test fuzz::snapshot_fuzz::tests::empty_input_does_not_panic_chunk_header ... ok
+test fuzz::snapshot_fuzz::tests::four_kib_random_does_not_panic ... ok
+test fuzz::seal_fuzz::tests::pathological_input_does_not_panic ... ok
+test conformance::handle_claim_rejection_vectors::tests::handle_claim_rejection_vector_suite_runs_clean ... ok
+test fixtures::timeline::tests::panic_hook_renders_timeline_for_inline_transcript ... ok
+test conformance::schema_validation_fixture::tests::spec_fixture_runs ... ok
+
+test result: ok. 121 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.11s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test coauth_can_be_spawned_with_ephemeral_postgres ... ignored
+test dump_patched_coauth_config ... ignored
+test ephemeral_postgres_starts_and_stops ... ignored
+test floria_can_be_spawned_with_rendered_config ... ignored
+test four_service_joint_smoke ... ignored
+
+test result: ok. 0 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test account_subscribe_skips_quiet_realms_and_long_polls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
+
+
+running 4 tests
+test agent_delegation_policy_profile ... ok
+test personal_agent_provisioning_profile ... ok
+test agent_auth_profile ... ok
+test agent_sidecar_thread_profile ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test account_auth_and_session_edges_are_enforced ... ok
+test framework_errors_and_invalid_json_use_cokret_envelopes ... ok
+test contact_edges_are_rejected ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.21s
+
+
+running 2 tests
+test authz_grant_lifecycle_and_audit_work ... ok
+test presence_push_policy_and_ice_contracts_work ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+
+running 3 tests
+test starid_optional_resolver_profile_is_discoverable ... ok
+test principal_bridge_contracts_are_discoverable ... ok
+test session_grant_exchange_uses_configured_coauth_introspection ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.54s
+
+
+running 6 tests
+test dump_canonical_digests ... ignored, diagnostic — run with --nocapture to print canonical digests
+test dump_r3_2_identity_digests ... ignored, diagnostic — run with --nocapture to regenerate the R3.2 identity digest baseline
+test canonical_bytes_are_stable_across_key_permutations ... ok
+test sdk_canonical_sha256_matches_pinned_vectors ... ok
+test r3_2_identity_digests_match_pinned_baseline ... ok
+test event_proof_builder_matches_low_level_canonical_helpers ... ok
+
+test result: ok. 4 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test offline_live_stack_report_marks_unconfigured_services_explicitly ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test chaos_inject_smoke ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test chaos_kill_midwrite_then_restart_recovery ... ignored, destructive process-kill chaos test; requires COTEST_SOLAND_DATABASE_URL or Docker for ephemeral Postgres
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+test circle_confidential_discussion_relation ... ok
+test circle_error_code_paths ... ok
+test circle_effective_scope_mismatch ... ok
+test circle_create_round_trip ... ok
+test circle_history_visibility_floor ... ok
+test circle_child_scope_policy ... ok
+test circle_metadata_encryption_floor ... ok
+test circle_member_state_machine ... ok
+test circle_strand_scope_visibility ... ok
+test circle_member_strict_subset ... ok
+test circle_scope_circle_id_immutability ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test account_contact_space_message_sync_workflow ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+
+running 1 test
+test concurrent_circle_member_delta_preserves_canonical_order ... ignored, C.8 concurrent Circle member delta — needs live soland stack to observe reducer ordering; SDK-level invariant runs unconditionally
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 65 tests
+test blind_payload_sanitizer_vectors ... ok
+test capability_facet_suite_matches_reference_semantics ... ok
+test cba_lattice_fixture_suite_matches_reference_semantics ... ok
+test anchorer_cell_fixture_suite_matches_reference_semantics ... ok
+test anchor_view_compaction_fixture_suite_matches_reference_semantics ... ok
+test capability_fixture_suite_matches_reference_semantics ... ok
+test constraint_family_fixture_suite_matches_reference_semantics ... ok
+test coauth_account_lifecycle_fixture_suite_matches_reference_semantics ... ok
+test composite_state_subject_fixture_suite_matches_reference_semantics ... ok
+test conflict_repair_fixture_suite_matches_reference_semantics ... ok
+test history_visibility_projection_matrix_round_26 ... ok
+test constraint_evaluation_class_fixture_suite_matches_reference_semantics ... ok
+test composite_state_key_encoding_fixture_suite_matches_reference_semantics ... ok
+test cross_signing_reset_fixture_suite_matches_reference_semantics ... ok
+test deprecated_event_alias_suite_matches_reference_semantics ... ok
+test device_cross_signing_trust_fixture_suite_matches_reference_semantics ... ok
+test device_message_negative_fixture_suite_matches_reference_semantics ... ok
+test device_verification_fixture_suite_matches_reference_semantics ... ok
+test discovery_profile_fixture_suite_matches_reference_semantics ... ok
+test encoding_fixture_suite_matches_reference_semantics ... ok
+test event_envelope_fixture_suite_matches_reference_semantics ... ok
+test event_kind_lattice_dispatch_fixture_suite_matches_reference_semantics ... ok
+test event_kind_payload_coverage_fixture_suite_matches_reference_semantics ... ok
+test facet_renderer_query_suite_matches_reference_semantics ... ok
+test federation_fixture_suite_matches_reference_semantics ... ok
+test frontier_conflict_resolution_fixture_suite_matches_reference_semantics ... ok
+test history_visibility_fixture_suite_matches_reference_semantics ... ok
+test consent_fixture_suite_matches_reference_semantics ... ok
+test key_backup_aead_round_trip_round_26 ... ok
+test schema_validation_fixture_suite_matches_reference_semantics ... ok
+test late_arriving_anchor_fixture_suite_matches_reference_semantics ... ok
+test mls_move_covered_frontier_fixture_suite_matches_reference_semantics ... ok
+test principal_server_certification_gate_suite_matches_reference_semantics ... ok
+test multi_admin_distinct_approver_gate_round_27 ... ok
+test multi_realm_federation_fixture_suite_matches_reference_semantics ... ok
+test private_chat_privacy_contract_suite_matches_reference_semantics ... ok
+test privacy_security_fixture_suite_matches_reference_semantics ... ok
+test lattice_mixed_kinds_suite_matches_reference_semantics ... ok
+test late_arriving_anchor_idempotency_round_27 ... ok
+test lattice_round_trip_suite_matches_reference_semantics ... ok
+test live_describe_profile_gate_suite_matches_reference_semantics ... ok
+test megolm_ratchet_kdf_chain_round_26 ... ok
+test megolm_ratcheting_fixture_suite_matches_reference_semantics ... ok
+test mimi_components_fixture_suite_matches_reference_semantics ... ok
+test mls_e2ee_basic_fixture_suite_matches_reference_semantics ... ok
+test membership_fsm_fixture_suite_matches_reference_semantics ... ok
+test read_receipt_policy_fixture_suite_matches_reference_semantics ... ok
+test production_signing_fixture_suite_matches_reference_semantics ... ok
+test redaction_fixture_suite_matches_reference_semantics ... ok
+test projection_position_discriminator_suite_matches_reference_semantics ... ok
+test recovery_bridge_full_chain_fixture_suite_matches_reference_semantics ... ok
+test redaction_history_visibility_fixture_suite_matches_reference_semantics ... ok
+test redacted_cross_server_fixture_suite_matches_reference_semantics ... ok
+test recovery_ticket_state_machine_round_26 ... ok
+test scaffold_profile_gate_suite_matches_reference_semantics ... ok
+test key_backup_encryption_fixture_suite_matches_reference_semantics ... ok
+test restore_full_workflows_fixture_suite_matches_reference_semantics ... ok
+test schema_validation_suite_matches_reference_semantics ... ok
+test security_closure_vectors_suite_matches_reference_semantics ... ok
+test security_negative_profile_suite_matches_reference_semantics ... ok
+test state_resolution_fixture_suite_matches_reference_semantics ... ok
+test state_resolution_quarantine_fixture_suite_matches_reference_semantics ... ok
+test sync_fixture_suite_matches_reference_semantics ... ok
+test yougen_client_profile_manifest_suite_matches_reference_semantics ... ok
+test threshold_multisig_fixture_suite_matches_reference_semantics ... ok
+
+test result: ok. 65 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.00s
+
+
+running 30 tests
+test test_1_agent_fsm_active_paused_active_deactivated_terminal ... ignored, R3.1: soland agent FSM reducer wiring not yet implemented
+test test_2_media_token_exchange_happy_path_plus_negatives ... ignored, R3.1: soland/floria `POST /rtc/token` issuer not yet implemented
+test test_3_accountable_principals_strict_reject_profile_toggle ... ignored, R3.1: soland strict_reject reducer branch not yet implemented
+test test_5_recovery_policy_state_machine_live ... ignored, R3.1: soland recovery reducer + witness-revoke check not yet implemented
+test test_6_handle_homograph_script_mix_or_nfc_variant_reject ... ignored, R3.1: soland / starid / teabay wire-level homograph reject not yet implemented
+test test_7_cx_member_identity_update_live ... ignored, R3.1: soland MID reducer + ck.profile.update field-level delta wiring not yet implemented
+test test_8_handle_rename_round_trip_live ... ignored, R3.1: live coauth + soland + teabay handle wire rename not yet visible at runtime
+test test_cot_1_handle_reassignment_full_strand_live ... ignored, R3.2-followup: soland MID reducer + coauth issuer + yougen/floria refresh not yet wired for the end-to-end handle reassignment strand
+test test_cot_1_mention_render_fallback_transitions_live ... ignored, R3.2-followup: yougen §3.8.2 mention renderer fallback transitions (verified → cached → name-only → unresolved) not yet observable live
+test test_cot_1_teabay_list_handles_for_subject_end_to_end_live ... ignored, R3.2-followup: teabay POST /_cokret/find/directory/list-handles-for-subject endpoint not yet reachable end-to-end across services
+test cursor_vector_suite_runs_clean ... ok
+test test_oa_cot_5_share_resolve_open_live ... ignored, R3.3-followup: needs teabay strand/message access-gate
+test agent_payloads_fixture_loads_and_has_canonical_shape ... ok
+test media_binding_vector_suite_runs_clean ... ok
+test test_7_cx_member_identity_update_replacement_shape ... ok
+test recovery_policy_fixture_loads_and_has_canonical_shape ... ok
+test sidecar_vector_suite_runs_clean ... ok
+test agent_vector_suite_runs_clean ... ok
+test test_8_handle_rename_round_trip_sdk_shape ... ok
+test member_roster_vector_suite_runs_clean ... ok
+test mention_rendering_vector_suite_runs_clean ... ok
+test list_handles_for_subject_vector_suite_runs_clean ... ok
+test test_4_cursor_opaque_round_trip_stateful_only ... ok
+test primary_handle_vector_suite_runs_clean ... ok
+test vect_cot_vector_registry_is_mechanically_complete ... ok
+test recovery_receipt_fixture_loads_and_has_canonical_shape ... ok
+test test_5_recovery_policy_fixture_state_machine_shape ... ok
+test object_addressing_vector_suite_runs_clean ... ok
+test member_identity_vector_suite_runs_clean ... ok
+test handle_claim_rejection_vector_suite_runs_clean ... ok
+
+test result: ok. 19 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+
+running 4 tests
+test push_and_moderation_edges_are_enforced ... ok
+test key_upload_query_and_claim_edges_are_enforced ... ok
+test blob_integrity_head_range_and_missing_edges_work ... ok
+test to_device_messages_are_idempotent_opaque_and_drained_once ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.59s
+
+
+running 2 tests
+test did_format_normalization ... ok
+test alsoknownas_verifier_authority ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 4 tests
+test directory_circle_not_indexed ... ok
+test directory_anti_enumeration_buckets ... ok
+test directory_latency_jitter ... ok
+test directory_takedown_audit_log ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test teabay_directory_service_profile_is_discoverable ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test duplicate_edit_and_redaction_replay_project_once ... ok
+test duplicate_event_submit_is_idempotent_and_projects_once ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+
+running 1 test
+test backfill_pages_recover_messages_missing_from_limited_client_page ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+
+running 2 tests
+test agent_lifecycle_surfaces_are_advertised_when_routes_exist ... ok
+test applet_lifecycle_surfaces_are_not_advertised_until_routes_exist ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.94s
+
+
+running 1 test
+test cross_server_collaboration_strand_works ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+
+running 3 tests
+test federation_remote_operations_project_to_sync_and_index ... FAILED
+test federation_endpoints_reject_invalid_input_shapes ... FAILED
+test federation_replay_snapshot_and_redaction_contracts_work ... FAILED
+
+failures:
+
+failures:
+    federation_endpoints_reject_invalid_input_shapes
+    federation_remote_operations_project_to_sync_and_index
+    federation_replay_snapshot_and_redaction_contracts_work
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s
+
+
+running 1 test
+test federation_partition_then_heal_converges_on_canonical_frontier ... ignored, C.8 controlled partition simulation; opt-in only — full 3-soland wire version tracked under CT-1
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test two_sut_instances_are_isolated_and_federation_ready ... FAILED
+
+failures:
+
+failures:
+    two_sut_instances_are_isolated_and_federation_ready
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+
+running 1 test
+test three_server_fork_quarantine_converges_on_canonical_frontier ... ignored, needs soland E2E-FED-1 (outbound HTTP federation push) + E2E-FED-2 (RFC 9421 verify) + §4.5 peer frontier comparison surface (`GET /_cokret/peer/events/frontier` + `duplicate_conflict` reason_code) — see CT-1
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test two_node_federation_harness_starts ... FAILED
+
+failures:
+
+failures:
+    two_node_federation_harness_starts
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.33s
+
+
+running 1 test
+test full_stack_e2e ... ignored, T8.1 — full multi-service E2E; live leg spawns coauth/starid/soland/teabay/floria. Run with --ignored when all *_BIN env vars (or sibling-checkout builds) are available.
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test fuzz_envelope_smoke ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.45s
+
+
+running 1 test
+test handle_to_join_e2e ... ignored, T3.5 — exercises the Handle → Join chain; live leg spawns coauth/soland/teabay binaries. Run with --ignored when COAUTH_BIN / SOLAND_BIN / TEABAY_BIN (or sibling-checkout builds) are available.
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test high_assurance_rejects_open_federation ... ok
+test high_assurance_accepts_closed_restricted_quarantine ... ok
+test standard_realm_accepts_open_federation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test contacts_invites_listing_export_and_audit_work ... ok
+test identity_surface_and_receipts_work ... ok
+test directory_discoverability_and_actor_privacy_work ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.02s
+
+
+running 1 test

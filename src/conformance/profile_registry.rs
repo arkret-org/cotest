@@ -285,7 +285,7 @@ fn collect_declared_implementation_profiles(profiles: &Value) -> Result<BTreeSet
         "interop_compat_profiles",
         "encoding_extension_profiles",
         "hash_extension_profiles",
-        "anchor_profiles",
+        "notary_profiles",
     ] {
         for profile in string_array_field(profiles, field)? {
             declared.insert(profile.to_owned());

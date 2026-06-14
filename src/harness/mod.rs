@@ -37,10 +37,53 @@ pub use server::{CokretServer, TestServerGroup};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 
+pub(crate) fn canonical_device_id(input: &str) -> String {
+    if input.starts_with("ck:device:") {
+        return input.to_owned();
+    }
+
+    let suffix = match input {
+        "dev_admin" => "00000000ad01",
+        "dev_alice" => "0000000000a1",
+        "dev_alice2" => "0000000000a2",
+        "dev_alice_b" => "0000000000ab",
+        "dev_bad" => "000000000bad",
+        "dev_bob" => "0000000000b0",
+        "dev_bob2" => "0000000000b2",
+        "dev_bob_a" => "0000000000ba",
+        "dev_bob_b" => "0000000000bb",
+        "dev_bob_d3" => "000000000bd3",
+        "dev_carol" => "000000000ca0",
+        "dev_chaos_midwrite" => "00000000c0de",
+        "dev_dave" => "000000000da0",
+        "dev_in" => "0000000000e1",
+        "dev_missing" => "00000000dead",
+        "dev_other" => "0000000000f0",
+        "dev_outsider" => "00000000e005",
+        "dev_probe_circle" => "00000000e007",
+        "dev_probe_realm" => "00000000e006",
+        "dev_realm_only" => "00000000e002",
+        "dev_x" => "0000000000e4",
+        "dev_y" => "0000000000e3",
+        _ => return format!("ck:device:01904100-0000-7000-8000-{:012x}", fnv1a_48(input)),
+    };
+    format!("ck:device:01904100-0000-7000-8000-{suffix}")
+}
+
+fn fnv1a_48(input: &str) -> u64 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in input.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash & 0x0000_ffff_ffff_ffff
+}
+
 /// Canonical `ck.member.state` join payload shared by the harness `add_member`
 /// helpers so the member.state default shape lives in one place.
-pub(crate) fn member_join_payload(actor_id: &str) -> Value {
+pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
     json!({
+        "realm_id": realm_id,
         "actor_id": actor_id,
         "membership": "join",
         "delivery_status": "unroutable"
@@ -104,9 +147,9 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
             "plaintext_visible_services": plaintext_visible_services,
             "security_class": "standard",
             "federation_policy": "restricted",
-            "anchor_profile": "single_did",
+            "notary_profile": "single_did",
             "digest_algorithm": "sha256",
-            "anchorer": {
+            "notary": {
                 "type": "single_did",
                 "did": actor,
                 "recovery_members": ["did:web:recovery.soland.local"],

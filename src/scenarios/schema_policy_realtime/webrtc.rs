@@ -7,13 +7,24 @@ use crate::harness::{CokretServer, expect_api_error, expect_json};
 pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let server = CokretServer::spawn("webrtc-signaling").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let carol = server
-        .register_client("did:web:carol-webrtc.example", "@carol-webrtc", "dev_carol")
+        .register_client(
+            "did:web:carol-webrtc.example",
+            "@carol-webrtc",
+            "ck:device:01904100-0000-7000-8000-000000000ca0",
+        )
         .await?;
     let dave = server
-        .register_client("did:web:dave-webrtc.example", "@dave-webrtc", "dev_dave")
+        .register_client(
+            "did:web:dave-webrtc.example",
+            "@dave-webrtc",
+            "ck:device:01904100-0000-7000-8000-000000000da0",
+        )
         .await?;
 
     let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";

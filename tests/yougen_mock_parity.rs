@@ -247,7 +247,6 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                 "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
                 "payload": {
                     "actor_id": ctx.alice_did,
-                    "actor_id": ctx.alice_did,
                     "realm_id": ctx.realm_id,
                     "scope_id": ctx.space_id,
                     "typing": true,
@@ -304,9 +303,9 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
             "encryption_profile": "none",
             "security_class": "standard",
             "federation_policy": "open",
-            "anchor_profile": "single_did",
+            "notary_profile": "single_did",
             "digest_algorithm": "sha256",
-            "anchorer": {
+            "notary": {
                 "type": "single_did",
                 "did": ctx.alice_did,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
@@ -329,11 +328,11 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "actor_id": ctx.alice_did,
         "actor_seq": actor_seq,
         "created_at": "2026-05-22T10:00:00Z",
+        "hlc": format!("01970e589d21-{:04x}-a13f9c2e", actor_seq & 0xffff),
         "prev_refs": [],
         "refs": [],
         "requirements": {
-            "schema": ["ck.schema.realm.v1"],
-            "critical_extensions": []
+            "schema": ["ck.schema.realm.v1"]
         },
         "payload": payload,
         "preconditions": [{
@@ -357,7 +356,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str, actor_
         "proofs": [{
             "type": "dev-proof",
             "verification_method": format!("{}#device", ctx.alice_did),
-            "payload_digest": format!("sha256:{}", sha256_canonical_json(&payload))
+            "payload_digest": canonical_payload_digest(&payload)
         }]
     })
 }
@@ -585,32 +584,8 @@ fn normalize_value(value: Value) -> Value {
     }
 }
 
-fn sha256_canonical_json(value: &Value) -> String {
-    cokret_core::canonical::sha256_hex(canonical_json(value).as_bytes())
-}
-
-fn canonical_json(value: &Value) -> String {
-    match value {
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => value.to_string(),
-        Value::Array(values) => {
-            let parts = values
-                .iter()
-                .map(canonical_json)
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("[{parts}]")
-        }
-        Value::Object(object) => {
-            let parts = object
-                .iter()
-                .map(|(key, value)| {
-                    format!("{}:{}", Value::String(key.clone()), canonical_json(value))
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("{{{parts}}}")
-        }
-    }
+fn canonical_payload_digest(payload: &Value) -> String {
+    cokret_core::canonical::canonical_sha256(payload).expect("payload JSON is canonicalizable")
 }
 
 fn is_dynamic_key(key: &str) -> bool {

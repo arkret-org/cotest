@@ -24,7 +24,10 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(resolved["did_document"]["id"], "did:web:alice.example");
+    assert_eq!(
+        resolved["did_document"]["document"]["id"],
+        "did:web:alice.example"
+    );
 
     let document = expect_json(
         server
@@ -33,7 +36,10 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(document["did_document"]["id"], "did:web:alice.example");
+    assert_eq!(
+        document["did_document"]["document"]["id"],
+        "did:web:alice.example"
+    );
 
     let log = expect_json(
         server
@@ -50,23 +56,34 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
             .post(server.url("/_cokret/root/identity/submit-did-operation"))
             .json(&json!({
                 "did": "did:web:alice.example",
+                "did_method": "did:web",
                 "seq": 1,
-                "did_document": {
-                    "id": "did:web:alice.example",
-                    "verification_method": [{
-                        "id": "did:web:alice.example#key-1",
-                        "type": "JsonWebKey2020",
-                        "controller": "did:web:alice.example",
-                        "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": "dev"}
-                    }],
-                    "authentication": ["did:web:alice.example#key-1"],
-                    "service": [{
-                        "id": "#soland",
-                        "type": "CokretPrincipalServer",
-                        "serviceEndpoint": "https://alice.example"
-                    }]
+                "operation": {
+                    "type": "replace",
+                    "state": {
+                        "id": "did:web:alice.example",
+                        "verificationMethod": [{
+                            "id": "did:web:alice.example#key-1",
+                            "type": "JsonWebKey2020",
+                            "controller": "did:web:alice.example",
+                            "publicKeyJwk": {"kty": "OKP", "crv": "Ed25519", "x": "dev"}
+                        }],
+                        "authentication": ["did:web:alice.example#key-1"],
+                        "service": [{
+                            "id": "#soland",
+                            "type": "CokretPrincipalServer",
+                            "serviceEndpoint": "https://alice.example"
+                        }]
+                    }
                 },
-                "proofs": [{"kid": "did:web:alice.example#key-1", "sig": "dev"}]
+                "proofs": [{
+                    "kind": "detached_jws",
+                    "alg": "EdDSA",
+                    "verification_method": "did:web:alice.example#key-1",
+                    "event_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "created_at": "2026-05-02T00:00:00Z",
+                    "jws": "a..b"
+                }]
             })),
         StatusCode::OK,
     )
@@ -88,7 +105,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     );
     assert_eq!(resolved_after_submit["seq"], 1);
     assert_eq!(
-        resolved_after_submit["did_document"]["authentication"][0],
+        resolved_after_submit["did_document"]["document"]["authentication"][0],
         "did:web:alice.example#key-1"
     );
 

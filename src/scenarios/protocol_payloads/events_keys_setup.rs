@@ -27,7 +27,7 @@ async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> 
         2,
         &realm_id,
         "did:web:alice.example",
-        "dev_alice",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
         "ck:thread:adapter",
         "hello",
     )?;
@@ -42,7 +42,7 @@ async fn submit_adapter_event(server: &CokretServer, token: &str) -> Result<()> 
     )
     .await?;
     assert_eq!(submit["status"], "accepted");
-    assert_eq!(submit["event_id"], ADAPTER_MESSAGE_EVENT_ID);
+    assert_eq!(submit["accepted"][0], ADAPTER_MESSAGE_EVENT_ID);
 
     Ok(())
 }
@@ -65,7 +65,7 @@ async fn create_adapter_realm(server: &CokretServer, token: &str) -> Result<Stri
     )
     .await?;
     assert_eq!(submit["status"], "accepted");
-    assert_eq!(submit["event_id"], ADAPTER_REALM_CREATE_EVENT_ID);
+    assert_eq!(submit["accepted"][0], ADAPTER_REALM_CREATE_EVENT_ID);
 
     Ok(ADAPTER_REALM_ID.to_owned())
 }
@@ -92,9 +92,9 @@ fn signed_realm_create_event(
             "encryption_profile": "none",
             "security_class": "standard",
             "federation_policy": "open",
-            "anchor_profile": "single_did",
+            "notary_profile": "single_did",
             "digest_algorithm": "sha256",
-            "anchorer": {
+            "notary": {
                 "type": "single_did",
                 "did": actor_id,
                 "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
@@ -189,12 +189,14 @@ async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<(
             .post(server.url("/_cokret/self/keys/upload"))
             .bearer_auth(token)
             .json(&json!({
-                "device_id": "dev_alice",
-                "one_time_keys": [{
-                    "algorithm": "signed_curve25519",
-                    "key_id": "otk1",
-                    "key": "one-time"
-                }],
+                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
+                "one_time_keys": {
+                    "signed_curve25519:otk1": {
+                        "algorithm": "signed_curve25519",
+                        "key_id": "otk1",
+                        "key": "one-time"
+                    }
+                },
                 "fallback_keys": {"signed_curve25519:fallback": {"key": "fallback-key"}},
                 "device_signature": {"alg": "EdDSA", "signature": "alice-device-signature"}
             })),
@@ -208,12 +210,13 @@ async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<(
             .http()
             .post(server.url("/_cokret/self/keys/query"))
             .bearer_auth(token)
-            .json(&json!({"device_keys": {"did:web:alice.example": ["dev_alice"]}})),
+            .json(&json!({"device_keys": {"did:web:alice.example": ["ck:device:01904100-0000-7000-8000-0000000000a1"]}})),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        query_keys["device_keys"]["did:web:alice.example"]["dev_alice"]["device_signature"]["signature"],
+        query_keys["device_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+            ["device_signature"]["signature"],
         "alice-device-signature"
     );
 
@@ -224,14 +227,15 @@ async fn upload_and_inspect_keys(server: &CokretServer, token: &str) -> Result<(
             .bearer_auth(token)
             .json(&json!({
                 "one_time_keys": {
-                    "did:web:alice.example": {"dev_alice": "signed_curve25519"}
+                    "did:web:alice.example": {"ck:device:01904100-0000-7000-8000-0000000000a1": "signed_curve25519"}
                 }
             })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        claimed["one_time_keys"]["did:web:alice.example"]["dev_alice"]["key"],
+        claimed["one_time_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+            ["key"],
         "one-time"
     );
     Ok(())

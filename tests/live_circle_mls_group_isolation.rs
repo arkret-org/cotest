@@ -92,14 +92,18 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
     //       requirement for cryptographic-isolation verification).
     let admin = stack
         .soland
-        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
+        .register_client(
+            "did:web:admin.ckp0007.example",
+            "@admin",
+            "ck:device:01904100-0000-7000-8000-00000000ad01",
+        )
         .await?;
     let client_realm_default = stack
         .soland
         .register_client(
             "did:web:probe.ckp0007.example",
             "@probe-realm",
-            "dev_probe_realm",
+            "ck:device:01904100-0000-7000-8000-00000000e006",
         )
         .await?;
     let client_circle_only = stack
@@ -107,7 +111,7 @@ async fn circle_mls_group_independent_from_realm_default_group() -> Result<()> {
         .register_client(
             "did:web:probe.ckp0007.example",
             "@probe-circle",
-            "dev_probe_circle",
+            "ck:device:01904100-0000-7000-8000-00000000e007",
         )
         .await?;
 

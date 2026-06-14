@@ -190,7 +190,7 @@ fn validate_event_envelope_negative_case(
     let event = required_field(input, "event")?;
     let mut context = EventEnvelopeContext::default_for_durable_history();
     if let Some(scope) = input.get("wire_scope").and_then(Value::as_str) {
-        context.durable_history = scope == "durable_history";
+        context.durable_history = matches!(scope, "durable_event" | "durable_history");
     }
     if let Some(features) = input.get("supported_features").and_then(Value::as_array) {
         context.supported_features = features
@@ -386,8 +386,13 @@ fn validate_event_envelope(
         "hlc",
         "prev_refs",
         "refs",
+        "causal_refs",
         "preconditions",
         "effects",
+        "seal_ref",
+        "conflict_keys_digest",
+        "auth_context",
+        "seal_basis",
         "anchor_ref",
         "redacts",
         "payload",

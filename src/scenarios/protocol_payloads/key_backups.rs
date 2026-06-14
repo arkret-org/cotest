@@ -1,19 +1,19 @@
-//! Phase 3 — key-backup surfaces: PUT / list / describe / GET.
+//! Phase 3 — key-backup surfaces: PUT / list / describe / unlock.
 //!
 //! Stores Alice's MLS-history backup, enumerates the collection, walks the
-//! key-backup descriptor, and fetches the stored backup back.
+//! key-backup descriptor, and exercises the unlock-proof gate.
 //!
 //! Surface split (G3 namespace audit):
-//! - `PUT/GET/DELETE /_cokret/self/keys/backups/*` — protocol face.
+//! - `PUT/DELETE /_cokret/self/keys/backups/*`, `GET /_cokret/self/keys/backups`, and `POST
+//!   /_cokret/self/keys/backups/{id}/unlock` — protocol face.
 //! - `GET /_soland/self/keys/backups/describe` — the describe contract is a deployment/product
 //!   surface and is only mounted on the `/_soland` face
 //!   (`soland/src/routing/identity/key_backup.rs::legacy_router`).
 //!
 //! Full-ciphertext reads are gated by spec `identity/key-management.md`
-//! §7.7.1: every `GET /_cokret/self/keys/backups/{id}` MUST carry an
-//! `x-cokret-key-backup-unlock-proof` header (a device-signed
-//! `ck.schema.key_backup_unlock_proof.v1` transcript bound to the envelope);
-//! a bearer token alone MUST be refused.
+//! §7.7.1: every `POST /_cokret/self/keys/backups/{id}/unlock` MUST carry a
+//! body `{proof: ck.schema.key_backup_unlock_proof.v1}` bound to the envelope;
+//! a bearer token without that body proof MUST be refused.
 
 use anyhow::Result;
 use base64::Engine as _;
@@ -33,7 +33,7 @@ const ACTOR_ID: &str = "did:web:alice.example";
 /// [`super::events_keys_device_blob_push_and_moderation_surfaces_work`]: the
 /// unlock proof binds `requesting_device_id` to the authenticated session
 /// device.
-const DEVICE_ID: &str = "dev_alice";
+const DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
 const SERIES_ID: &str = "ck:backup_series:01964137-0000-7000-8000-000000000000";
 /// Typed device id carried inside the envelope (`auth_data.device_id` must be
 /// a `ck:device:` typed id; it is not required to equal the session device).
@@ -51,8 +51,8 @@ pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     put_backup(server, token).await?;
     list_backups(server, token).await?;
     describe_backup_surfaces(server, token).await?;
-    get_backup_requires_unlock_proof(server, token).await?;
-    get_backup(server, token).await?;
+    unlock_backup_requires_body_proof(server, token).await?;
+    unlock_backup_reaches_trust_anchor(server, token).await?;
     Ok(())
 }
 
@@ -66,8 +66,8 @@ async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(backup_put["state"], "accepted");
-    assert_eq!(backup_put["backup"]["backup_id"], BACKUP_ID);
+    assert_eq!(backup_put["status"], "accepted");
+    assert_eq!(backup_put["backup_id"], BACKUP_ID);
     Ok(())
 }
 
@@ -100,8 +100,25 @@ fn signed_backup_envelope() -> Result<serde_json::Value> {
                 "epoch": 0
             }
         ],
+        "retention": {
+            "delete_after": "2020-01-01T00:00:00Z",
+            "legal_hold": false
+        },
         "ciphertext": "ciphertext",
         "ciphertext_digest": CIPHERTEXT_DIGEST,
+        "domain_separation": {
+            "hkdf_info": "cokret-key-backup/mls_history/test/v1",
+            "subdomain": "test",
+            "aead_aad": {
+                "schema": "ck.schema.key_backup.v1",
+                "actor_id": ACTOR_ID,
+                "device_id": ENVELOPE_DEVICE_ID,
+                "backup_class": "mls_history",
+                "backup_version": "kb_1",
+                "created_at": "2026-04-26T00:00:00Z",
+                "item_types": ["mls_group_state"]
+            }
+        },
         "auth_data": {
             "device_id": ENVELOPE_DEVICE_ID,
             "verification_method": verification_method,
@@ -114,7 +131,9 @@ fn signed_backup_envelope() -> Result<serde_json::Value> {
                 "backup_version",
                 "series_id",
                 "series_seq",
+                "supersedes",
                 "encryption",
+                "domain_separation",
                 "contents",
                 "ciphertext_digest"
             ]
@@ -164,50 +183,43 @@ async fn describe_backup_surfaces(server: &CokretServer, token: &str) -> Result<
 }
 
 /// Spec §7.7.1 / §7.8 — a bearer token alone MUST NOT release the full
-/// ciphertext: the read is refused without the unlock-proof header.
-async fn get_backup_requires_unlock_proof(server: &CokretServer, token: &str) -> Result<()> {
-    let response = server
-        .http()
-        .get(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
-        .bearer_auth(token)
-        .send()
-        .await?;
-    assert_eq!(
-        response.status(),
-        StatusCode::FORBIDDEN,
-        "bearer-only key-backup ciphertext read must be refused"
-    );
-    let body = response.text().await?;
-    assert!(
-        body.contains("unlock"),
-        "refusal should point at the unlock-proof requirement: {body}"
-    );
-    Ok(())
-}
-
-async fn get_backup(server: &CokretServer, token: &str) -> Result<()> {
-    let backup_get = expect_json(
+/// ciphertext: unlock is refused without a body proof.
+async fn unlock_backup_requires_body_proof(server: &CokretServer, token: &str) -> Result<()> {
+    let body = expect_json(
         server
             .http()
-            .get(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}")))
+            .post(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
-            .header("x-cokret-key-backup-unlock-proof", unlock_proof_header()?),
-        StatusCode::OK,
+            .json(&json!({})),
+        StatusCode::BAD_REQUEST,
     )
     .await?;
-    assert_eq!(backup_get["backup_id"], BACKUP_ID);
-    assert_eq!(backup_get["backup_class"], "mls_history");
+    assert_eq!(body["error"]["code"], "bad_request");
     Ok(())
 }
 
-/// Build a `ck.schema.key_backup_unlock_proof.v1` header value: a canonical
+async fn unlock_backup_reaches_trust_anchor(server: &CokretServer, token: &str) -> Result<()> {
+    let unlock = expect_json(
+        server
+            .http()
+            .post(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}/unlock")))
+            .bearer_auth(token)
+            .json(&json!({ "proof": unlock_proof()? })),
+        StatusCode::UNAUTHORIZED,
+    )
+    .await?;
+    assert_eq!(unlock["error"]["code"], "untrusted_backup_signature");
+    Ok(())
+}
+
+/// Build a `ck.schema.key_backup_unlock_proof.v1` body value: a canonical
 /// JSON transcript bound to the stored envelope, signed by an Ed25519 device
 /// key whose `verification_method` resolves via `did:key`.
 ///
 /// No durable recovery-session record exists for this synthetic session id,
 /// so soland's session-binding check is skipped (device-signed decrypt proof
 /// path); the shape, envelope binding, and signature are still verified.
-fn unlock_proof_header() -> Result<String> {
+fn unlock_proof() -> Result<serde_json::Value> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
@@ -224,7 +236,6 @@ fn unlock_proof_header() -> Result<String> {
         "proof_digest": "sha256:84a51084210842108421084210842108421084210842108421084210842108aa",
         "issued_at": "2026-04-26T00:00:00Z",
         "auth_data": {
-            "device_id": DEVICE_ID,
             "verification_method": verification_method,
             "signature_algorithm": "Ed25519",
             "signed_fields": [
@@ -247,5 +258,5 @@ fn unlock_proof_header() -> Result<String> {
     let canonical = canonical_json_bytes(&proof)?;
     let signature = signing_key.sign(&canonical);
     proof["auth_data"]["signature"] = json!(URL_SAFE_NO_PAD.encode(signature.to_bytes()));
-    Ok(serde_json::to_string(&proof)?)
+    Ok(proof)
 }

@@ -116,10 +116,10 @@ pub async fn soak_100x10k_run() -> Result<()> {
     //
     //   // Step 2: setup actors + shared Realm
     //   let alice = register_account(&server, "did:web:alice.example",
-    //                                "@alice", "dev_alice").await?;
-    //   let realm_id = create_realm(&server, &alice, "Soak Realm").await?;
-    //   let mut actors = Vec::with_capacity(N_ACTORS);
-    //   for i in 0..N_ACTORS {
+    //                                "@alice",
+    // "ck:device:01904100-0000-7000-8000-0000000000a1").await?;   let realm_id =
+    // create_realm(&server, &alice, "Soak Realm").await?;   let mut actors =
+    // Vec::with_capacity(N_ACTORS);   for i in 0..N_ACTORS {
     //       let did = format!("did:web:soak{i}.example");
     //       let a = register_account(&server, &did, &format!("@soak{i}"),
     //                                &format!("dev_soak{i}")).await?;

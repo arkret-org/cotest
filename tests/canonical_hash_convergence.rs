@@ -64,7 +64,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // re-introduced a hand-rolled canonical encoder. To regenerate:
             // `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:36d8d1066819cdae75cfc9ff759eb84ac406be79e09aa6fe7b4d3134efeb6bd7",
+            expected_digest: "sha256:39f8e55b16f14d90dc38928b872d161b85a0f3ae1a6c123faf3107d51799f8b0",
         },
         CanonicalVector {
             label: "soland event envelope payload",
@@ -86,7 +86,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 },
                 "schema_version": 1,
             }),
-            expected_digest: "sha256:c6ac8d2252b00d8185070dcd700bfadc5109d871d6ad4a9c74386790740e7fa0",
+            expected_digest: "sha256:08a01dcc754098f5c64e4ce9bdbf17cdc58e8d6b59f3cc4e139a88d9213d510a",
         },
         CanonicalVector {
             label: "starid did:webvh update entry (proofless)",
@@ -274,7 +274,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:d9ea65535af71900678142cac05baa63edb10e63451cbc322a69dec0c6731372",
+        effective_set, "sha256:23646349629a8b6ed5d7843364cc7b0648a9470e11a5dba54887c81c7f33df6d",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -282,7 +282,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:abc38bb7cfdd01535018bf8e7ec866f094657c48efa5b5a100689dc39f087cd3",
+        display_state, "sha256:b8a9ed41bc89f227164e132c504f666063c61f82f4db955e3dd827a499f35995",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

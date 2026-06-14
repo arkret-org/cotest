@@ -89,7 +89,7 @@ fn trust_domain_from_service_did(service_did: &str) -> String {
 
 fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
     let mut hasher = Sha256::new();
-    hasher.update(b"soland:anchorer-ephemeral:");
+    hasher.update(b"soland:notary-ephemeral:");
     hasher.update(service_did.as_bytes());
     let seed: [u8; 32] = hasher.finalize().into();
     signing_key_from_seed(&seed)
@@ -361,7 +361,12 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
 
 pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<()> {
     let server = CokretServer::spawn("federation-project").await?;
-    let alice = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let alice = dev_login(
+        &server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
     let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fe20";
     let event_id = "ck:event:0196419b-0000-7000-8000-00000000fe22";
     let event = signed_federation_event(

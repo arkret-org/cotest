@@ -25,6 +25,24 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+function Add-RawLogLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [AllowNull()][string]$Value = ""
+    )
+
+    for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        try {
+            Add-Content -LiteralPath $Path -Value $Value -Encoding UTF8
+            return
+        }
+        catch [System.IO.IOException] {
+            Start-Sleep -Milliseconds (50 * ($attempt + 1))
+        }
+    }
+    Add-Content -LiteralPath $Path -Value $Value -Encoding UTF8
+}
+
 function Test-DockerImagePresent {
     param([Parameter(Mandatory = $true)][string]$ImageTag)
 
@@ -74,8 +92,8 @@ function Invoke-JointSmokeGate {
         $args += "-SkipNpmInstall"
     }
 
-    Add-Content -Path $RawLog -Value ""
-    Add-Content -Path $RawLog -Value "=== $OutputName $RunProfile ==="
+    Add-RawLogLine -Path $RawLog -Value ""
+    Add-RawLogLine -Path $RawLog -Value "=== $OutputName $RunProfile ==="
     $startedAt = Get-Date
     $childLabel = ($OutputName -replace '[^A-Za-z0-9_.-]', '_')
     $childStdout = Join-Path $RunDir "$childLabel.stdout.log"
@@ -91,7 +109,9 @@ function Invoke-JointSmokeGate {
     $exitCode = $process.ExitCode
     foreach ($path in @($childStdout, $childStderr)) {
         if (Test-Path $path) {
-            Get-Content $path | Add-Content -Path $RawLog
+            foreach ($line in Get-Content -LiteralPath $path) {
+                Add-RawLogLine -Path $RawLog -Value $line
+            }
         }
     }
     $finishedAt = Get-Date
@@ -241,7 +261,7 @@ function Invoke-CargoTestInvocation {
     )
 
     $header = "=== cotest invocation: $Label ==="
-    $header | Add-Content -Path $RawLog -Encoding UTF8
+    Add-RawLogLine -Path $RawLog -Value $header
     Write-Host $header
     Write-Host ("Running cargo {0}" -f ($CargoArgs -join " "))
 
@@ -263,7 +283,7 @@ function Invoke-CargoTestInvocation {
                 continue
             }
             foreach ($line in Get-Content $path) {
-                $line | Add-Content -Path $RawLog -Encoding UTF8
+                Add-RawLogLine -Path $RawLog -Value $line
                 Write-Host $line
             }
         }
@@ -1120,8 +1140,12 @@ function Get-UnresolvedTodoItems {
     param([Parameter(Mandatory = $true)][string]$TodoPath)
 
     $items = New-Object System.Collections.Generic.List[object]
+    if (-not (Test-Path -LiteralPath $TodoPath)) {
+        return @()
+    }
+
     $currentSection = "root"
-    foreach ($line in Get-Content $TodoPath) {
+    foreach ($line in Get-Content -LiteralPath $TodoPath) {
         if ($line -match '^##\s+(?<section>.+)$') {
             $currentSection = $Matches.section.Trim()
             continue

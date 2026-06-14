@@ -10,7 +10,10 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // Alice is the demo identity the server pre-seeds at boot; the builder is
     // for fresh accounts only.
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     // Bob / Carol / Dave are freshly registered via the builder. Default
     // derivations (`did:web:<bare-handle>.example` and `dev_<bare-handle>`)
@@ -18,17 +21,17 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // each gets an explicit `-interaction` suffix in the DID/device.
     let bob_actor = TestActorBuilder::new(&server, "@bob-interaction")
         .with_did("did:web:bob-interaction.example")
-        .with_device("dev_bob")
+        .with_device("ck:device:01904100-0000-7000-8000-0000000000b0")
         .create()
         .await?;
     let carol_actor = TestActorBuilder::new(&server, "@carol-interaction")
         .with_did("did:web:carol-interaction.example")
-        .with_device("dev_carol")
+        .with_device("ck:device:01904100-0000-7000-8000-000000000ca0")
         .create()
         .await?;
     let dave_actor = TestActorBuilder::new(&server, "@dave-interaction")
         .with_did("did:web:dave-interaction.example")
-        .with_device("dev_dave")
+        .with_device("ck:device:01904100-0000-7000-8000-000000000da0")
         .create()
         .await?;
     let bob = bob_actor.client();
@@ -123,15 +126,9 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         )
         .await?;
     assert_eq!(marker["status"], "accepted");
-    assert_eq!(
-        marker["event"]["payload"]["position"]["event_id"],
-        sent["event_id"]
-    );
-    assert_eq!(marker["event"]["payload"]["read_scope"]["kind"], "thread");
-    assert_eq!(
-        marker["event"]["payload"]["read_scope"]["ref"],
-        thread_root_ref
-    );
+    let marker_event_id = marker["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("read cursor submit response missing event_id: {marker}"))?;
 
     let markers = expect_json(
         dave.get(&format!("/_cokret/self/events?realms={realm_id}&limit=50")),
@@ -149,8 +146,10 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .collect::<Vec<_>>();
     assert!(
         marker_events.iter().any(|event| {
-            event["payload"]["position"]["event_id"] == sent["event_id"]
+            event["event_id"] == marker_event_id
+                && event["payload"]["position"]["event_id"] == sent["event_id"]
                 && event["payload"]["read_scope"]["ref"] == thread_root_ref
+                && event["payload"]["read_scope"]["kind"] == "thread"
         }),
         "events query did not include accepted read cursor marker: {markers}"
     );

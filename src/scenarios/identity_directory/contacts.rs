@@ -11,13 +11,20 @@ use crate::harness::{
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let server = CokretServer::spawn("directory-workflow").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client("did:web:bob-directory.example", "@bob-directory", "dev_bob")
+        .register_client(
+            "did:web:bob-directory.example",
+            "@bob-directory",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
 
-    expect_json(
+    let request = expect_json(
         alice
             .post("/_soland/self/contacts/request")
             .json(&json!({"target": bob.actor})),
@@ -26,6 +33,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     .await?;
     expect_json(
         bob.post("/_soland/self/contacts/respond").json(&json!({
+            "request_id": request["request_event_ref"],
             "requester": alice.actor,
             "action": "accept"
         })),
@@ -50,6 +58,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             &invite_realm_id,
             "ck.invite.create",
             json!({
+                "invite_id": "ck:invite:0196419b-0000-7000-8000-000000000201",
                 "invitee": bob.actor,
                 "invite_delivery_target": {
                     "recipient_service_did": server.service_did(),
@@ -75,7 +84,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         serde_json::to_string_pretty(&invites)?
     );
     assert_eq!(invites["invites"][0]["realm_id"], invite_realm_id);
-    let invite_token = invites["invites"][0]["invite_token"].as_str().unwrap();
+    let invite_token = invites["invites"][0]["join_rule_snapshot"]["invite_token"]
+        .as_str()
+        .unwrap();
 
     expect_status(
         server
@@ -111,7 +122,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(listed_search["results"][0]["realm_id"], listed_realm_id);
+    assert_eq!(listed_search["realms"][0]["realm_id"], listed_realm_id);
 
     let unlisted_realm = alice
         .create_realm_with(json!({
@@ -128,7 +139,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert!(unlisted_search["results"].as_array().unwrap().is_empty());
+    assert!(unlisted_search["realms"].as_array().unwrap().is_empty());
 
     let unlisted_resolve = expect_json(
         server
@@ -175,7 +186,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let waited_sync = expect_response(
         alice
             .get("/_cokret/self/account/subscribe?catchup=true")
-            .header("x-cokret-wait-for", sent["sync_token"].as_str().unwrap())
+            .header("x-cokret-wait-for", sent["cursor"].as_str().unwrap())
             .header("accept", "application/x-ndjson"),
         StatusCode::OK,
     )

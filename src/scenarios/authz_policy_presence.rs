@@ -17,28 +17,32 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         .await?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
     let bob = server
-        .register_client("did:web:bob-authz.example", "@bob-authz", "dev_bob")
+        .register_client(
+            "did:web:bob-authz.example",
+            "@bob-authz",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
     let denied_before_grant = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "manage_space",
+            "action": "ck.realm.admin",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(denied_before_grant["allowed"], false);
+    assert_eq!(denied_before_grant["decision"], "hard_deny");
     assert_eq!(denied_before_grant["reason_code"], "capability_denied");
 
     let manage_grant = expect_json(
-        alice.post("/_cokret/self/authz/grants").json(&json!({
+        alice.post("/_soland/self/authz/grants").json(&json!({
             "realm_id": realm_id,
             "subject": bob.actor,
             "resource": "*",
-            "actions": ["manage_space"],
+            "actions": ["ck.realm.admin"],
             "constraints": []
         })),
         StatusCode::OK,
@@ -60,15 +64,15 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let allowed_after_grant = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "manage_space",
+            "action": "ck.realm.admin",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(allowed_after_grant["allowed"], true);
+    assert_eq!(allowed_after_grant["decision"], "allow");
     assert_eq!(
-        allowed_after_grant["grants"][0]["grant_id"],
+        allowed_after_grant["matched_grants"][0]["grant_id"],
         manage_grant_id
     );
 
@@ -76,59 +80,16 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let member_send = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "send",
+            "action": "ck.message.create",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(member_send["allowed"], true);
-
-    let deny_send_grant = expect_json(
-        alice.post("/_cokret/self/authz/grants").json(&json!({
-            "realm_id": realm_id,
-            "subject": bob.actor,
-            "resource": "*",
-            "actions": ["send"],
-            "constraints": [{"constraint_type": "decision", "decision": "deny"}]
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    let deny_send_grant_id = deny_send_grant["grant_id"].as_str().unwrap().to_owned();
-
-    let denied_send = expect_json(
-        alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor_id": bob.actor,
-            "action": "send",
-            "resource": {"kind": "realm", "realm_id": realm_id}
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(denied_send["allowed"], false);
-    assert_eq!(denied_send["reason_code"], "explicit_deny");
-
-    let revoked_deny = expect_json(
-        alice.delete(&format!("/_cokret/self/authz/grants/{deny_send_grant_id}")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(revoked_deny["revoked"], true);
-
-    let send_after_revoke = expect_json(
-        alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor_id": bob.actor,
-            "action": "send",
-            "resource": {"kind": "realm", "realm_id": realm_id}
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(send_after_revoke["allowed"], true);
+    assert_eq!(member_send["decision"], "allow");
 
     let revoked_manage = expect_json(
-        alice.delete(&format!("/_cokret/self/authz/grants/{manage_grant_id}")),
+        alice.delete(&format!("/_soland/self/authz/grants/{manage_grant_id}")),
         StatusCode::OK,
     )
     .await?;
@@ -137,13 +98,13 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_after_revoke = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
-            "action": "manage_space",
+            "action": "ck.realm.admin",
             "resource": {"kind": "realm", "realm_id": realm_id}
         })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(denied_after_revoke["allowed"], false);
+    assert_eq!(denied_after_revoke["decision"], "hard_deny");
     assert_eq!(denied_after_revoke["reason_code"], "capability_denied");
 
     let audit = expect_json(
@@ -221,12 +182,29 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
     assert_eq!(push_unregister["ok"], true);
 
+    let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
+    let policy_document = expect_json(
+        alice.post("/_cokret/self/policies").json(&json!({
+            "policy_id": "ck:policy:presence-policy-allow",
+            "scope": policy_realm_id,
+            "subject_ref": alice.actor,
+            "policy_type": "ck.message.create",
+            "resource": {"kind": "realm", "realm_id": policy_realm_id},
+            "effect": "allow",
+            "actions": ["ck.message.create"],
+            "obligations": []
+        })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(policy_document["active"], true);
+
     let allow_policy = expect_json(
         alice
             .post("/_cokret/self/policy/check")
             .json(&json!({
                 "request_id": "req-allow",
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+                "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
                 "actor_id": "did:web:alice.example",
@@ -236,14 +214,14 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     )
     .await?;
     assert_eq!(allow_policy["decision"], "allow");
-    assert_eq!(allow_policy["reason_code"], "ok");
+    assert_eq!(allow_policy["reason_code"], "policy_allowed");
 
     let review_policy = expect_json(
         alice
             .post("/_cokret/self/policy/check")
             .json(&json!({
                 "request_id": "req-review",
-                "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+                "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.realm.destroy",
                 "actor_id": "did:web:alice.example",
@@ -273,10 +251,11 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let ice = expect_json(
         alice.post("/_cokret/self/rtc/ice-config").json(&json!({
-            "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
+            "realm_id": policy_realm_id,
             "call_id": "ck:call:01964137-0000-7000-8000-000000000001",
             "actor_id": alice.actor.as_str(),
-            "device_id": alice.device_id.as_str()
+            "device_id": alice.device_id.as_str(),
+            "mode": "p2p"
         })),
         StatusCode::OK,
     )

@@ -26,7 +26,7 @@ use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_
 
 const TEST_NAME: &str = "chaos-midwrite";
 const ACTOR_DID: &str = "did:web:chaos-midwrite.cotest.local";
-const DEVICE_ID: &str = "dev_chaos_midwrite";
+const DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-00000000c0de";
 const SERVICE_DID: &str = "did:web:chaos-midwrite.cotest.local";
 const REALM_ID: &str = "ck:realm:019e5fbd-0000-7000-8000-000000000016";
 
@@ -159,10 +159,10 @@ fn chaos_realm_event() -> Value {
                 "encryption_profile": "none",
                 "security_class": "standard",
                 "federation_policy": "open",
-                "anchor_profile": "single_did",
+                "notary_profile": "single_did",
                 "digest_algorithm": "sha256",
                 "plaintext_visible_services": [SERVICE_DID],
-                "anchorer": {
+                "notary": {
                     "type": "single_did",
                     "did": ACTOR_DID,
                     "recovery_members": ["did:web:recovery-chaos-midwrite.cotest.local"],

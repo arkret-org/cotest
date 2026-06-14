@@ -42,7 +42,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8",
+      "expected_state_subject": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
@@ -51,7 +51,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
-      "expected_state_subject": "ZLsnrz9p9NUKQ-yGp00vWUJVArcmapCqkQGCrgYu0Oo",
+      "expected_state_subject": "YPdgraaCA5NGx7Pf_2JBr878BtR3_SX0Wjd3vsC2dW0",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
@@ -60,7 +60,7 @@
       "components_array": ["ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
       "expected_canonical_json": "[\"ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
-      "expected_state_subject": "Jp3e3R9Xh8qHr_1L5JLhcLV_F_vKClruqMGDluhmhEk",
+      "expected_state_subject": "W9a0EsHYHDjLgbcNzP3LfnBmmuVJiX5XzOFrdz_i5IA",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same strand_id + actor_id as strand_track_member_alice but different track segment — must produce a distinct state_subject."
     }
@@ -71,7 +71,7 @@
       "kind": "cx.strand.track.member",
       "components_array": ["main", "ck:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "Component reordering (track before strand_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
-      "must_differ_from": "j1sd_sx0zKknqWpw_HXZvbAu9DfSph1GeYubvrclWL8"
+      "must_differ_from": "a9wuZd967db1NqRcD2_8zu-Xk-Qk5vVyATcfYls9X84"
     }
   ],
   "reserved_name_negatives": [

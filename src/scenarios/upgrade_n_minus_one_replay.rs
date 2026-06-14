@@ -138,9 +138,9 @@ pub async fn upgrade_n_minus_one_replay_run() -> Result<()> {
     //       &[("DATABASE_URL", &pg_url_for(&pg_schema))],
     //   ).await?;
     //   let alice = register_account(&server_old, "did:web:alice.example",
-    //                                "@alice", "dev_alice").await?;
-    //   let realm_id = create_realm(&server_old, &alice, "Upgrade Realm").await?;
-    //   let mut sent = Vec::new();
+    //                                "@alice",
+    // "ck:device:01904100-0000-7000-8000-0000000000a1").await?;   let realm_id =
+    // create_realm(&server_old, &alice, "Upgrade Realm").await?;   let mut sent = Vec::new();
     //   for i in 0..16 {
     //       sent.push(send_message(&server_old, &alice, &realm_id,
     //                              &format!("hello {i}")).await?);

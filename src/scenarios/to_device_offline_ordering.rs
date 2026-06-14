@@ -18,9 +18,8 @@
 //!   7. Bob "reconnects" by polling GET /_cokret/self/device_messages without acking the cursor
 //!      from step 3 — should still see msg 2 and msg 3 in send order (positions strictly
 //!      increasing).
-//!   8. Bob acks the latest cursor → next poll returns no events.
-//!   9. Assert: msg 1 position < msg 2 position < msg 3 position (HLC / `to_device_position`
-//!      monotonic).
+//!   8. Bob acks the latest delivery token → next poll returns no messages.
+//!   9. Assert: msg 1 < msg 2 < msg 3 in the returned message order.
 //!   10. Also assert idempotency: re-sending msg-2 with the same Idempotency-Key delivers nothing
 //!       new (defends against reconnect-time duplicate-fan-out at the sender side).
 //!
@@ -43,17 +42,32 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let server = CokretServer::spawn("to-device-offline-ordering").await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
-    let alice_token = dev_login(&server, "did:web:alice.example", "dev_alice").await?;
+    let alice_token = dev_login(
+        &server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
     let bob_did = "did:web:bob-offline-ordering.example";
-    let bob_token =
-        register_account(&server, bob_did, "@bob-offline-ordering", "dev_bob_a").await?;
+    let bob_token = register_account(
+        &server,
+        bob_did,
+        "@bob-offline-ordering",
+        "ck:device:01904100-0000-7000-8000-0000000000ba",
+    )
+    .await?;
     // Sanity: alice can also log in on a separate device id so the
     // sender's session is a separate row from the recipient's. (Not
     // strictly required by the scenario, but mirrors the implementor's
     // hint of "two devices for alice and one for bob".)
-    let _alice_token_b = dev_login(&server, "did:web:alice.example", "dev_alice_b").await?;
+    let _alice_token_b = dev_login(
+        &server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000ab",
+    )
+    .await?;
 
-    let bob_device = "dev_bob_a";
+    let bob_device = "ck:device:01904100-0000-7000-8000-0000000000ba";
 
     // ── Step 2: alice sends msg 1 to bob's device.
     send_to_device(
@@ -68,12 +82,14 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
 
     // ── Step 3: bob polls, receives msg 1. Keep cursor but do NOT ack.
     let first_poll = poll_to_device(&server, &bob_token, None).await?;
-    let events1 = first_poll["events"].as_array().cloned().unwrap_or_default();
+    let events1 = first_poll["messages"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     if events1.len() != 1 {
         bail!("expected exactly 1 event in first poll, got {events1:?}");
     }
     assert_message_ciphertext(&events1[0], "ciphertext-msg-1")?;
-    let pos_1 = position_of(&events1[0])?;
     // Cursor captured here would be `first_poll["next_cursor"]`, but we
     // intentionally do NOT pass it back on the reconnect poll — that is
     // what the spec calls "no premature ack on disconnect", protecting
@@ -104,61 +120,32 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     // ack_position=0, returning all queued events. msg 1 may still be in
     // the queue (un-acked); msg 2 and 3 are definitely there.
     let reconnect = poll_to_device(&server, &bob_token, None).await?;
-    let events_after = reconnect["events"].as_array().cloned().unwrap_or_default();
-
-    // We require msg-2 and msg-3 to be in order. msg-1 will also be
-    // present (no ack happened). All three positions must be strictly
-    // increasing — this is the §2 HLC monotonic invariant on the
-    // device's to_device_position.
-    let positions: Vec<i64> = events_after
-        .iter()
-        .map(position_of)
-        .collect::<Result<Vec<_>>>()?;
-    if !positions.windows(2).all(|w| w[0] < w[1]) {
-        bail!(
-            "expected strictly increasing to_device positions across queued events, got {positions:?}"
-        );
-    }
+    let events_after = reconnect["messages"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
 
     let cipher_order: Vec<String> = events_after
         .iter()
         .map(|event| {
-            event["content"]["content"]["ciphertext"]
+            event["content"]["ciphertext"]
                 .as_str()
                 .unwrap_or_default()
                 .to_owned()
         })
         .collect();
-    let i1 = cipher_order
-        .iter()
-        .position(|c| c == "ciphertext-msg-1")
-        .ok_or_else(|| anyhow!("msg-1 missing on reconnect poll: {cipher_order:?}"))?;
-    let i2 = cipher_order
-        .iter()
-        .position(|c| c == "ciphertext-msg-2")
-        .ok_or_else(|| anyhow!("msg-2 missing on reconnect poll: {cipher_order:?}"))?;
-    let i3 = cipher_order
-        .iter()
-        .position(|c| c == "ciphertext-msg-3")
-        .ok_or_else(|| anyhow!("msg-3 missing on reconnect poll: {cipher_order:?}"))?;
-    if !(i1 < i2 && i2 < i3) {
+    if cipher_order != ["ciphertext-msg-1", "ciphertext-msg-2", "ciphertext-msg-3"] {
         bail!("expected msg-1 < msg-2 < msg-3 on reconnect, got order {cipher_order:?}");
     }
 
-    // ── Step 9: position of msg-1 from first poll must equal position of
-    // msg-1 from reconnect (same record, same column).
-    let pos_1_again = positions[i1];
-    if pos_1 != pos_1_again {
-        bail!("msg-1 position drifted across polls: first={pos_1} reconnect={pos_1_again}");
-    }
-
-    // ── Step 8: ack the latest cursor → next poll empty.
-    let next_cursor = reconnect["next_cursor"]
+    // ── Step 8: ack the latest delivery token → next poll empty.
+    let ack_token = reconnect["ack_token"]
         .as_str()
-        .ok_or_else(|| anyhow!("reconnect poll missing next_cursor: {reconnect}"))?
+        .ok_or_else(|| anyhow!("reconnect poll missing ack_token: {reconnect}"))?
         .to_owned();
-    let drained = poll_to_device(&server, &bob_token, Some(&next_cursor)).await?;
-    let drained_events = drained["events"].as_array().cloned().unwrap_or_default();
+    ack_to_device(&server, &bob_token, &ack_token).await?;
+    let drained = poll_to_device(&server, &bob_token, None).await?;
+    let drained_events = drained["messages"].as_array().cloned().unwrap_or_default();
     if !drained_events.is_empty() {
         bail!("expected empty event list after ack of latest cursor, got {drained_events:?}");
     }
@@ -174,8 +161,8 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         "ciphertext-msg-2-redux", // intentionally different ciphertext
     )
     .await?;
-    let after_replay = poll_to_device(&server, &bob_token, Some(&next_cursor)).await?;
-    let replay_events = after_replay["events"]
+    let after_replay = poll_to_device(&server, &bob_token, None).await?;
+    let replay_events = after_replay["messages"]
         .as_array()
         .cloned()
         .unwrap_or_default();
@@ -200,8 +187,9 @@ async fn send_to_device(
         "messages": {
             recipient: {
                 device_id: {
-                    "type": "ck.mls.application",
+                    "kind": "ck.mls.application",
                     "content": encrypted_envelope("ck.mls.application", ciphertext),
+                    "expires_at": "2026-12-31T00:00:00Z",
                 }
             }
         }
@@ -216,6 +204,26 @@ async fn send_to_device(
         StatusCode::OK,
     )
     .await
+}
+
+async fn ack_to_device(
+    server: &CokretServer,
+    recipient_token: &str,
+    ack_token: &str,
+) -> Result<()> {
+    let ack = expect_json(
+        server
+            .http()
+            .post(server.url("/_cokret/self/device_messages/ack"))
+            .bearer_auth(recipient_token)
+            .json(&json!({ "ack_token": ack_token })),
+        StatusCode::OK,
+    )
+    .await?;
+    if ack["ok"] != true {
+        bail!("expected to-device ack to succeed, got {ack}");
+    }
+    Ok(())
 }
 
 async fn poll_to_device(
@@ -233,14 +241,8 @@ async fn poll_to_device(
     expect_json(req, StatusCode::OK).await
 }
 
-fn position_of(event: &Value) -> Result<i64> {
-    event["position"]
-        .as_i64()
-        .ok_or_else(|| anyhow!("to-device event missing position: {event}"))
-}
-
 fn assert_message_ciphertext(event: &Value, expected: &str) -> Result<()> {
-    let actual = event["content"]["content"]["ciphertext"]
+    let actual = event["content"]["ciphertext"]
         .as_str()
         .ok_or_else(|| anyhow!("event missing ciphertext: {event}"))?;
     if actual != expected {

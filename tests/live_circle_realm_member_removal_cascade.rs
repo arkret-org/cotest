@@ -80,19 +80,35 @@ async fn realm_member_left_cascades_to_every_circle_membership() -> Result<()> {
     // ── 2. Register admin + alice (stays) + bob (Circle-only proxy) + X.
     let admin = stack
         .soland
-        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
+        .register_client(
+            "did:web:admin.ckp0007.example",
+            "@admin",
+            "ck:device:01904100-0000-7000-8000-00000000ad01",
+        )
         .await?;
     let _alice_client = stack
         .soland
-        .register_client("did:web:alice.ckp0007.example", "@alice", "dev_alice")
+        .register_client(
+            "did:web:alice.ckp0007.example",
+            "@alice",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let _bob_client = stack
         .soland
-        .register_client("did:web:bob.ckp0007.example", "@bob", "dev_bob")
+        .register_client(
+            "did:web:bob.ckp0007.example",
+            "@bob",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
     let _x_client = stack
         .soland
-        .register_client("did:web:x.ckp0007.example", "@xeno", "dev_x")
+        .register_client(
+            "did:web:x.ckp0007.example",
+            "@xeno",
+            "ck:device:01904100-0000-7000-8000-0000000000e4",
+        )
         .await?;
 
     let realm_id = RealmId::new("ck:realm:0196419b-0000-7000-8000-ckp0007memb01".to_owned())

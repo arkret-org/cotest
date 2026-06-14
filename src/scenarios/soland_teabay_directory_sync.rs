@@ -58,7 +58,11 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
     // update call below.
     let alice = stack
         .soland
-        .register_client("did:web:alice.example", "@alice", "dev_alice")
+        .register_client(
+            "did:web:alice.example",
+            "@alice",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
 
     let http = reqwest::Client::builder()

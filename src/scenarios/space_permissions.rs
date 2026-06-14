@@ -11,9 +11,19 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     // CT-12: scaffold-driven, parallel-safe.
     let scaffold = crate::fixtures::TestScaffold::fresh("space-permissions").await?;
     let server = scaffold.server();
-    let alice = dev_login(server, "did:web:alice.example", "dev_alice").await?;
-    let bob =
-        register_account(server, "did:web:bob-space.example", "@bob-space", "dev_bob").await?;
+    let alice = dev_login(
+        server,
+        "did:web:alice.example",
+        "ck:device:01904100-0000-7000-8000-0000000000a1",
+    )
+    .await?;
+    let bob = register_account(
+        server,
+        "did:web:bob-space.example",
+        "@bob-space",
+        "ck:device:01904100-0000-7000-8000-0000000000b0",
+    )
+    .await?;
 
     expect_api_error(
         server
@@ -50,9 +60,9 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                         "plaintext_visible_services": [server.service_did()],
                         "security_class": "standard",
                         "federation_policy": "restricted",
-                        "anchor_profile": "single_did",
+                        "notary_profile": "single_did",
                         "digest_algorithm": "sha256",
-                        "anchorer": {
+                        "notary": {
                             "type": "single_did",
                             "did": "did:web:alice.example",
                             "recovery_members": ["did:web:recovery.soland.local"],
@@ -82,6 +92,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
                 &realm_id,
                 "ck.member.state",
                 json!({
+                    "realm_id": realm_id,
                     "actor_id": "did:web:bob-space.example",
                     "membership": "join",
                     "delivery_status": "unroutable"
@@ -107,10 +118,17 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
     let server = CokretServer::spawn("space-visibility").await?;
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = server
-        .register_client("did:web:bob-visible.example", "@bob-visible", "dev_bob")
+        .register_client(
+            "did:web:bob-visible.example",
+            "@bob-visible",
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
     let created = alice
         .create_realm_with(json!({

@@ -13,11 +13,14 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     // `demo_client` directly here. Bob is freshly created via the builder so
     // we can demonstrate the new fixture surface in a real scenario.
     let alice = server
-        .demo_client("did:web:alice.example", "dev_alice")
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
         .await?;
     let bob = TestActorBuilder::new(server, "@bob-backfill")
         .with_did("did:web:bob-backfill.example")
-        .with_device("dev_bob")
+        .with_device("ck:device:01904100-0000-7000-8000-0000000000b0")
         .create()
         .await?;
     let bob_client = bob.client();
@@ -57,7 +60,11 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         };
         let page = expect_json(alice.get(&path), StatusCode::OK).await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());
-        if !page["limited"].as_bool().unwrap_or(false) {
+        if !page["has_more"]
+            .as_bool()
+            .or_else(|| page["limited"].as_bool())
+            .unwrap_or(false)
+        {
             break;
         }
         cursor = page["next_cursor"].as_str().map(ToOwned::to_owned);
@@ -65,7 +72,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let recovered_message_ids = collected
         .iter()
-        .filter(|event| event["event_kind"] == "ck.message.create")
+        .filter(|event| event_kind(event) == Some("ck.message.create"))
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect::<Vec<_>>();
     assert_eq!(
@@ -83,6 +90,12 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     }
 
     Ok(())
+}
+
+fn event_kind(event: &Value) -> Option<&str> {
+    event["kind"]
+        .as_str()
+        .or_else(|| event["event_kind"].as_str())
 }
 
 fn json_array<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>> {

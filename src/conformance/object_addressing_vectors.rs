@@ -585,6 +585,8 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         "realm_preview": {
             "realm_id": format!("ck:realm:{R}"),
             "title": "Acme HQ",
+            "as_of": "2026-05-27T00:00:00Z",
+            "policy_revision": "rev-1",
             "preview": { "member_count": 42 }
         },
         "join_rule": "invite",

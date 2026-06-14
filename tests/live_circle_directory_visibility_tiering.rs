@@ -129,14 +129,18 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
     // ── 2. Register admin + three probe identities.
     let admin = stack
         .soland
-        .register_client("did:web:admin.ckp0007.example", "@admin", "dev_admin")
+        .register_client(
+            "did:web:admin.ckp0007.example",
+            "@admin",
+            "ck:device:01904100-0000-7000-8000-00000000ad01",
+        )
         .await?;
     let outsider = stack
         .soland
         .register_client(
             "did:web:outsider.ckp0007.example",
             "@outsider",
-            "dev_outsider",
+            "ck:device:01904100-0000-7000-8000-00000000e005",
         )
         .await?;
     let realm_only = stack
@@ -144,12 +148,16 @@ async fn circle_directory_visibility_tiers_project_correctly() -> Result<()> {
         .register_client(
             "did:web:realm-only.ckp0007.example",
             "@realm-only",
-            "dev_realm_only",
+            "ck:device:01904100-0000-7000-8000-00000000e002",
         )
         .await?;
     let circle_member = stack
         .soland
-        .register_client("did:web:incircle.ckp0007.example", "@incircle", "dev_in")
+        .register_client(
+            "did:web:incircle.ckp0007.example",
+            "@incircle",
+            "ck:device:01904100-0000-7000-8000-0000000000e1",
+        )
         .await?;
     let _ = (
         outsider.actor.as_str(),
