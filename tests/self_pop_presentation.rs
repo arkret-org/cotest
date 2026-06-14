@@ -40,7 +40,11 @@ fn sign_self_request(
     created: i64,
     expires: i64,
 ) -> SignedRequest {
-    let mut covered = vec![Component::Method, Component::TargetUri, Component::Authority];
+    let mut covered = vec![
+        Component::Method,
+        Component::TargetUri,
+        Component::Authority,
+    ];
     let mut names = vec!["\"@method\"", "\"@target-uri\"", "\"@authority\""];
     let mut headers: Vec<(String, String)> = Vec::new();
     let digest = if body.is_empty() {
@@ -139,7 +143,15 @@ fn signed_self_write_is_accepted() {
     let now = 1_716_000_000;
     let body = br#"{"hello":"world"}"#;
     let req = sign_self_request(
-        &key, "kid-1", "POST", URI, AUTHORITY, PATH, body, now, now + 120,
+        &key,
+        "kid-1",
+        "POST",
+        URI,
+        AUTHORITY,
+        PATH,
+        body,
+        now,
+        now + 120,
     );
     verify_self_pop(&req, &key.verifying_key(), now).expect("valid PoP accepted");
 }
@@ -148,7 +160,17 @@ fn signed_self_write_is_accepted() {
 fn signed_self_read_without_body_is_accepted() {
     let key = test_key(8);
     let now = 1_716_000_000;
-    let req = sign_self_request(&key, "kid-1", "GET", URI, AUTHORITY, PATH, b"", now, now + 120);
+    let req = sign_self_request(
+        &key,
+        "kid-1",
+        "GET",
+        URI,
+        AUTHORITY,
+        PATH,
+        b"",
+        now,
+        now + 120,
+    );
     verify_self_pop(&req, &key.verifying_key(), now).expect("body-less signed GET accepted");
 }
 

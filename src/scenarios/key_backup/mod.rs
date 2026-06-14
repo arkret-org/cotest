@@ -10,7 +10,8 @@
 //!   - **first_backup_gate** — inception key retire is rejected unless a
 //!     `backup_class=did_recovery` envelope has been published first.
 //!   - **post_reset_stale** — cross-signing reset accepted ↦ existing `secret_storage` envelopes
-//!     have 24h to publish a successor, else recovery strand rejects with `backup_post_reset_stale`.
+//!     have 24h to publish a successor, else recovery strand rejects with
+//!     `backup_post_reset_stale`.
 //!
 //! Also: `recovery_policy` + `recovery_receipt` schema id acceptance.
 //!

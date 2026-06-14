@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{Did, EventId, StrandId, RealmId};
+use cokret_core::{Did, EventId, RealmId, StrandId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 

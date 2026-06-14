@@ -174,8 +174,8 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 // SDK-pure vectors over `cokret_core::models::*` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
 //     keyword/order/missing-via, realm-id vs alias.
-//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks strand/message identity,
-//     omitted-key (not null) canonical shape.
+//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks strand/message
+//     identity, omitted-key (not null) canonical shape.
 //   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected, token link_type wins over
 //     URL `lt` hint.
 //   * OA-COT-4 (2 cases) — resolve_target response shape: §9.1 common fields
@@ -205,8 +205,8 @@ fn test_oa_cot_5_share_resolve_open_live() {
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
     //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
     //      target_kind=strand, object_preview, join_rule, as_of, source_refs, via_services }`.
-    //   4. Recipient opens the strand; soland's access gate honors the invite link_type (NOT the URL
-    //      `lt` hint) for the join decision.
+    //   4. Recipient opens the strand; soland's access gate honors the invite link_type (NOT the
+    //      URL `lt` hint) for the join decision.
     unreachable!("integration target gated on teabay strand/message access-gate (R3.3)");
 }
 

@@ -28,9 +28,9 @@
 //!    `CokretServer::register_client` helper.)
 //!
 //! 2. Generate a fresh `ck:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
-//!    The QR payload itself is a yougen-side UI concern (`verify-device` strand); cotest synthesizes
-//!    the equivalent API calls without driving the QR code itself — this matches the spec note that
-//!    "QR is the transport, not the trust primitive".
+//!    The QR payload itself is a yougen-side UI concern (`verify-device` strand); cotest
+//!    synthesizes the equivalent API calls without driving the QR code itself — this matches the
+//!    spec note that "QR is the transport, not the trust primitive".
 //!
 //! 3. From device-A, generate the cross-signing key (SSK) if alice hasn't published one already,
 //!    then submit: a. `ck.cross_signing.publish` (if needed) — binds PSK → SSK. b.

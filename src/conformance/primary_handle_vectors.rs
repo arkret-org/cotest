@@ -117,7 +117,7 @@ fn chosen_handle(claim: &HandleClaim) -> Result<String> {
 pub fn run_empty_candidate_fallback_vector() -> Result<()> {
     let s = subject()?;
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &[],
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -142,7 +142,7 @@ pub fn run_single_candidate_passthrough_vector() -> Result<()> {
         None,
     )?];
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -180,7 +180,7 @@ pub fn run_audience_match_wins_vector() -> Result<()> {
     )?;
     let snapshot = vec![newer, audience_scoped];
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
@@ -218,7 +218,7 @@ pub fn run_holder_flag_wins_over_most_recent_vector() -> Result<()> {
     )?;
     let snapshot = vec![newer, holder_flagged];
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
@@ -256,7 +256,7 @@ pub fn run_most_recent_wins_when_neither_vector() -> Result<()> {
     )?;
     let snapshot = vec![older, newer];
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -283,7 +283,7 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
     let snapshot = vec![from_other, from_acme];
     // ACME listed first → more trusted → wins the tie.
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
@@ -331,7 +331,7 @@ pub fn run_tie_break_by_created_at_vector() -> Result<()> {
     )?;
     let snapshot = vec![earlier, later];
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -368,7 +368,7 @@ pub fn run_tie_break_by_claim_digest_vector() -> Result<()> {
     };
     let snapshot = vec![c1, c2];
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -410,7 +410,7 @@ pub fn run_holder_primary_null_skips_layer_vector() -> Result<()> {
     // With holder_primary=null the holder layer is empty, so selection
     // falls through to most-recent.
     let input = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -453,7 +453,7 @@ pub fn run_as_of_replay_vs_realtime_vector() -> Result<()> {
     // Historical replay at as_of=2026-05-10: claim not yet issued → Step 0
     // drops it → no selection.
     let replay = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted(&[ACME_ISSUER]),
@@ -542,7 +542,7 @@ pub fn run_policy_snapshot_as_of_replay_vector() -> Result<()> {
     // historical replay output deterministically.
     let policy_v1 = accepted(&[OTHER_ISSUER]);
     let replay_v1 = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
         accepted_issuers: &policy_v1,

@@ -19,8 +19,8 @@
 //!      existence of F2 is itself confidential to Circle members; even a redacted edge would leak
 //!      the Circle's activity), and a directory query for F2 against teabay MUST 404 (NOT 403 —
 //!      anti-enumeration; 403 would confirm existence).
-//!   5. teabay projection cross-check: the directory's `directory/spaces` / `directory/strands` query
-//!      as a Realm-but-not-Circle member MUST return F1 only; F2 MUST be absent (NOT
+//!   5. teabay projection cross-check: the directory's `directory/spaces` / `directory/strands`
+//!      query as a Realm-but-not-Circle member MUST return F1 only; F2 MUST be absent (NOT
 //!      redacted-present).
 //!
 //! Gating mirrors the other `live_circle_*` tests: `#[ignore]` + soft
@@ -121,9 +121,9 @@ async fn confidential_discussion_of_edge_invisible_to_non_circle_members() -> Re
     //         POST /_cokret/self/realms/<rid>/circles                   (admin)
     //         POST /_cokret/self/realms/<rid>/members                   add incircle + realm-only
     //         POST /_cokret/self/circles/<cid>/members                  add incircle only
-    //         POST /_cokret/self/realms/<rid>/strands                     create F1 (scope_circle_id:
-    // null)         POST /_cokret/self/realms/<rid>/strands                     create F2
-    // (scope_circle_id: <cid>)         POST /_cokret/self/relations
+    //         POST /_cokret/self/realms/<rid>/strands                     create F1
+    // (scope_circle_id: null)         POST /_cokret/self/realms/<rid>/strands
+    // create F2 (scope_circle_id: <cid>)         POST /_cokret/self/relations
     // kind=confidential_discussion_of, from=F1, to=F2         GET
     // /_cokret/self/strands/<F1>/relations as incircle       expect edge present + F2 hint
     // GET  /_cokret/self/strands/<F1>/relations as realm-only     expect F2 edge OMITTED

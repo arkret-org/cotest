@@ -119,8 +119,8 @@ pub use mention_rendering_vectors::{
 };
 pub use object_addressing_vectors::{
     ALL_OBJECT_ADDRESSING_VECTOR_IDS, run_grammar_fail_closed_vector,
-    run_object_addressing_vector_suite, run_realm_strand_message_forms_vector,
-    run_realm_id_vs_alias_vector, run_resolve_target_common_fields_vector,
+    run_object_addressing_vector_suite, run_realm_id_vs_alias_vector,
+    run_realm_strand_message_forms_vector, run_resolve_target_common_fields_vector,
     run_resolve_target_realm_preview_vector, run_scheme_fragment_equivalence_vector,
     run_scope_confusion_replay_vector, run_scope_token_link_type_wins_vector,
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,

@@ -21,7 +21,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
-use cokret_core::{CircleId, Did, Strand, StrandId, RealmId};
+use cokret_core::{CircleId, Did, RealmId, Strand, StrandId};
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {
@@ -112,7 +112,9 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     let parsed_a: Strand =
         serde_json::from_value(json_a).map_err(|e| anyhow!("parse strand_a: {e}"))?;
     if parsed_a.scope_circle_id.as_ref().map(|c| c.as_str()) != Some(circle_a()?.as_str()) {
-        return Err(anyhow!("Strand.scope_circle_id round-trip lost the binding"));
+        return Err(anyhow!(
+            "Strand.scope_circle_id round-trip lost the binding"
+        ));
     }
 
     // ── Same prev/next: accept.

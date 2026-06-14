@@ -307,7 +307,7 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     // The directory's `primary_handle` field MUST equal the §3.2.1
     // selection output for the same context + policy.
     let selection = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted,

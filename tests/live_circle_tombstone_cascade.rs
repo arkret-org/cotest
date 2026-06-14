@@ -10,10 +10,10 @@
 //!   4. Create N child Strands whose `scope_circle_id` references the Circle.
 //!   5. Issue `ck.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
 //!      the projection, b) any further write into the Circle is rejected with `failed_precondition`
-//!      / sub-reason `circle_not_active`, c) child Strand projections surface as unavailable through
-//!      the sync API (`history_visibility` clamped, deliverability flag cleared) per CKP-0007
-//!      cascade rules, d) Circle members see the Circle in their client-side list as `tombstoned`
-//!      (not silently disappeared).
+//!      / sub-reason `circle_not_active`, c) child Strand projections surface as unavailable
+//!      through the sync API (`history_visibility` clamped, deliverability flag cleared) per
+//!      CKP-0007 cascade rules, d) Circle members see the Circle in their client-side list as
+//!      `tombstoned` (not silently disappeared).
 //!   6. Repeat the exercise one level up: tombstone the parent Realm with a *fresh* Realm + Circle
 //!      and assert every Circle in that Realm is cascade-tombstoned (CKP-0007: Realm tombstone
 //!      implies Circle tombstone for every Circle whose `realm_id` matches).

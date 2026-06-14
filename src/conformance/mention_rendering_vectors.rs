@@ -82,7 +82,7 @@ fn empty_selection<'a>(
     snapshot: &'a [HandleClaim],
 ) -> PrimaryHandleSelectInput<'a> {
     PrimaryHandleSelectInput {
-        subject_id: subject,
+        subject_id: subject.as_str(),
         context: None,
         claim_set_snapshot: snapshot,
         accepted_issuers: &[],
@@ -152,7 +152,7 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     ];
     let accepted = vec![issuer_string()];
     let selection = PrimaryHandleSelectInput {
-        subject_id: &s,
+        subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
         accepted_issuers: &accepted,
