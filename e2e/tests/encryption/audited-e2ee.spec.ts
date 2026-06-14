@@ -10,7 +10,7 @@ import {
   addRealmMemberApi,
   authHeaders,
   createRealmApi,
-  flowIdFromRealmId,
+  resolveDefaultFlowId,
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
@@ -192,12 +192,13 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   const plaintext = `audited plaintext must not leak ${Date.now()}`;
   const ciphertext = `opaque-ciphertext-${label}-${Date.now()}`;
   const ciphertextDigest = sha256Digest(ciphertext);
+  const flowId = await resolveDefaultFlowId(request, bobToken, realmId);
   const message = signedEventEnvelope({
     actorDid: bob.did,
     realmId: realmId,
     kind: "ck.message.create",
     payload: {
-      flow_id: flowIdFromRealmId(realmId),
+      flow_id: flowId,
       track_name: "discussion",
       encrypted: true,
       encrypted_content: encryptedEnvelope("ck.message.v1", ciphertext, realmId, ciphertextDigest),

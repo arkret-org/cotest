@@ -15,7 +15,7 @@ import {
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  flowIdFromRealmId,
+  resolveDefaultFlowId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -34,6 +34,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "inline-track");
+    const defaultFlowId = await resolveDefaultFlowId(request, fixture.aliceToken, fixture.realmId);
     const body = `inline discussion ${Date.now()}`;
     await submitSignedEventApi(
       request,
@@ -43,7 +44,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
         realmId: fixture.realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowIdFromRealmId(fixture.realmId),
+          flow_id: defaultFlowId,
           track_name: "discussion",
           thread_id: "discussion",
           content: { kind: "ck.content.text", body },
@@ -62,7 +63,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       JSON.stringify(eventPayload(event)).includes(body),
     );
     expect(eventPayload(message)).toMatchObject({
-      flow_id: flowIdFromRealmId(fixture.realmId),
+      flow_id: defaultFlowId,
       track_name: "discussion",
       thread_id: "discussion",
     });

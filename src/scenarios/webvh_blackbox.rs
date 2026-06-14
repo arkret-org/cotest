@@ -11,16 +11,20 @@
 
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 
-/// Spawn a `starid` binary and assert 5 webvh conformance vectors:
+/// Spawn a `starid` binary and assert 4 webvh conformance vectors:
 ///   1. /health              — liveness pings 200
-///   2. /describe            — supported_methods includes "did:webvh"
-///   3. /_cokret/root/identity/describe — exposes profile/contract metadata
-///   4. /openapi.yaml        — published openapi document is reachable
-///   5. negative GET on POST-only `/_cokret/root/webvh/dids` returns 404 or 405
+///   2. /_cokret/root/identity/describe — exposes profile/contract metadata
+///   3. /openapi.yaml        — published openapi document is reachable
+///   4. negative GET on POST-only `/_cokret/root/webvh/dids` returns 404 or 405
+///
+/// STA-07-002: the legacy starid `/describe` liveness probe (asserting
+/// `supported_methods` advertises `did:webvh`) has been removed — that route no
+/// longer exists; canonical discovery flows exclusively through
+/// `/_cokret/root/identity/describe`.
 pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     let proc = spawn_required(&STARID_SPEC)
         .await
@@ -39,22 +43,7 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
         bail!("/health did not report ok=true: {body}");
     }
 
-    // ── Vector 2: /describe advertises webvh ──────────────────────────────
-    let resp = client.get(proc.url("/describe")).send().await?;
-    if !resp.status().is_success() {
-        bail!("/describe returned {}", resp.status());
-    }
-    let body: serde_json::Value = resp.json().await?;
-    let methods = body
-        .get("supported_methods")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| anyhow!("/describe missing supported_methods[]"))?;
-    let advertises_webvh = methods.iter().any(|m| m.as_str() == Some("did:webvh"));
-    if !advertises_webvh {
-        bail!("/describe does not list did:webvh in supported_methods: {body}");
-    }
-
-    // ── Vector 3: /_cokret/root/identity/describe surfaces profile metadata ─────
+    // ── Vector 2: /_cokret/root/identity/describe surfaces profile metadata ─────
     let resp = client
         .get(proc.url("/_cokret/root/identity/describe"))
         .send()
@@ -70,7 +59,7 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
         bail!("identity/describe missing profile/profiles/contract: {body}");
     }
 
-    // ── Vector 4: /openapi.yaml is reachable + non-empty ──────────────────
+    // ── Vector 3: /openapi.yaml is reachable + non-empty ──────────────────
     let resp = client.get(proc.url("/openapi.yaml")).send().await?;
     if !resp.status().is_success() {
         bail!("/openapi.yaml returned {}", resp.status());
@@ -80,7 +69,7 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
         bail!("/openapi.yaml body did not contain openapi marker");
     }
 
-    // ── Vector 5: GET on a POST-only route surfaces 405/404 ───────────────
+    // ── Vector 4: GET on a POST-only route surfaces 405/404 ───────────────
     let resp = client
         .get(proc.url("/_cokret/root/webvh/dids"))
         .send()

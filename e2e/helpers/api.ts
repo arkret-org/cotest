@@ -2,7 +2,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import {
   createRealmApi,
-  flowIdFromRealmId,
+  resolveDefaultFlowId,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
@@ -165,7 +165,7 @@ export async function allowPlaintextMessagesViaApi(
 // delegating would change the signer and add a network round-trip. Since
 // `sendMessageApi`'s exported signature must not change, the flow is kept here
 // and shares the same primitives (signedEventEnvelope/submitSignedEventApi/
-// flowIdFromRealmId) to prevent canonical drift.
+// resolveDefaultFlowId) to prevent canonical drift.
 export async function sendPlaintextMessageViaApi(
   request: APIRequestContext,
   token: string,
@@ -174,12 +174,13 @@ export async function sendPlaintextMessageViaApi(
   opts: { actorDid?: string; server?: SolandKey } = {},
 ): Promise<ApiMessage> {
   expect(opts.actorDid, "sendPlaintextMessageViaApi requires opts.actorDid for canonical events").toBeTruthy();
+  const flowId = await resolveDefaultFlowId(request, token, realmId, { server: opts.server });
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
     realmId,
     kind: "ck.message.create",
     payload: {
-      flow_id: flowIdFromRealmId(realmId),
+      flow_id: flowId,
       track_name: "discussion",
       content: {
         kind: "ck.content.text",

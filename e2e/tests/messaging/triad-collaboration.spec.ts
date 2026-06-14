@@ -14,7 +14,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import {
   canonicalTimestamp,
-  flowIdFromRealmId,
+  resolveDefaultFlowId,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -138,13 +138,14 @@ test.describe("single-server triad collaboration", () => {
       historyVisibility: "joined",
     });
     const baseMs = Date.now() + 1_000;
+    const defaultFlowId = await resolveDefaultFlowId(request, aliceToken, realmId);
     const pre = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmId,
       kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
-        flow_id: flowIdFromRealmId(realmId),
+        flow_id: defaultFlowId,
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad pre ${stamp}` },
         encrypted: false,
@@ -176,7 +177,7 @@ test.describe("single-server triad collaboration", () => {
       kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
-        flow_id: flowIdFromRealmId(realmId),
+        flow_id: defaultFlowId,
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad post ${stamp}` },
         encrypted: false,

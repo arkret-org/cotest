@@ -13,7 +13,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
   createRealmApi,
-  flowIdFromRealmId,
+  resolveDefaultFlowId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -89,6 +89,7 @@ test.describe("Document Morph collaboration", () => {
       { context: "link document morph relation" },
     );
 
+    const flowId = await resolveDefaultFlowId(request, token, realmId);
     await submitSignedEventApi(
       request,
       token,
@@ -97,7 +98,7 @@ test.describe("Document Morph collaboration", () => {
         realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowIdFromRealmId(realmId),
+          flow_id: flowId,
           thread_id: morphId,
           track_name: "discussion",
           content: {

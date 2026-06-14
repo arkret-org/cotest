@@ -77,7 +77,10 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     assert_eq!(external_root["kind"], "external");
     assert_eq!(external_root["profile"], "ck.identity.webvh.provider.v1");
     assert_eq!(external_root["base_url"], "http://starid.cotest.local");
-    assert_eq!(external_root["freshness_probe"], "/describe");
+    // STA-07-002: dropped the `freshness_probe == "/describe"` assertion — the
+    // legacy starid `/describe` liveness route has been removed, so probing it is
+    // no longer a contract; freshness now flows through the canonical
+    // identity/describe + receipts endpoints asserted above.
     assert!(
         external_root["expected_trust_domain"]
             .as_str()

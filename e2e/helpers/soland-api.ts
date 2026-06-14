@@ -297,13 +297,14 @@ export async function sendMessageApi(
   opts: { server?: SolandKey; encrypted?: boolean; createdAt?: string } = {},
 ) {
   const actorDid = await currentActorDidApi(request, token, opts);
+  const flowId = await resolveDefaultFlowId(request, token, realmId, { server: opts.server });
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
     kind: "ck.message.create",
     createdAt: opts.createdAt,
     payload: {
-      flow_id: flowIdFromRealmId(realmId),
+      flow_id: flowId,
       track_name: "discussion",
       content: {
         kind: "ck.content.text",
@@ -495,19 +496,55 @@ export async function submitSignedEventApi(
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-// KNOWN IMPLEMENTATION COUPLING (COT-06-004 / SPEC-CR-006):
-// The protocol defines NO convention that a Realm's default discussion Flow
-// reuses the Realm UUID. `ck:realm:<uuid>` and `ck:flow:<uuid>` are independent
-// id kinds (registry/id-kind-registry.json) that do not derive from each other.
-// Deriving the flow id from the realm id below relies on soland's internal
-// minting rule and will break against any implementation that mints default
-// flows differently. The spec-faithful path is to discover the default Flow via
-// the projection face (`/_cokret/self/projection/flows?realm_id=...`); that
-// migration is blocked on SPEC-CR-006 (no deterministic "default flow" marker
-// exists in ProjectionFlowRow / flow.schema.json yet).
-export function flowIdFromRealmId(realmId: string): string {
-  const suffix = realmId.replace(/^ck:realm:/, "");
-  return `ck:flow:${suffix}`;
+// COT-06-004: discover a Realm's default discussion Flow via the projection face
+// instead of deriving it from the Realm UUID. `ck:realm:<uuid>` and
+// `ck:flow:<uuid>` are independent id kinds (registry/id-kind-registry.json)
+// that do not derive from each other; the previous `flowIdFromRealmId` helper
+// hard-coded soland's internal minting rule. The spec-faithful source of truth
+// is the Realm projection's authoritative `default_flow_id` (nullable), with the
+// Flow projection's derived `is_default` marker as a fallback discovery path.
+export async function resolveDefaultFlowId(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: { server?: SolandKey } = {},
+): Promise<string> {
+  // Primary: Realm projection carries the authoritative default_flow_id.
+  const realmResp = await request.get(
+    `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  if (realmResp.ok()) {
+    const realm = (await realmResp.json()) as { default_flow_id?: unknown };
+    if (typeof realm.default_flow_id === "string" && realm.default_flow_id) {
+      return realm.default_flow_id;
+    }
+  }
+
+  // Fallback: discover via the Flow projection's derived is_default marker.
+  const flowsResp = await request.get(
+    `${solandBaseUrl(opts.server)}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  expect(
+    flowsResp.ok(),
+    `resolveDefaultFlowId: flow projection for ${realmId} returned ${flowsResp.status()}`,
+  ).toBeTruthy();
+  const body = (await flowsResp.json()) as {
+    flows?: Array<{ flow_id?: string; is_default?: boolean }>;
+    items?: Array<{ flow_id?: string; is_default?: boolean }>;
+  };
+  const flows = Array.isArray(body.flows)
+    ? body.flows
+    : Array.isArray(body.items)
+      ? body.items
+      : [];
+  const def = flows.find((flow) => flow.is_default === true);
+  expect(
+    def?.flow_id,
+    `resolveDefaultFlowId: no default flow (is_default) found for realm ${realmId}`,
+  ).toBeTruthy();
+  return def!.flow_id!;
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {

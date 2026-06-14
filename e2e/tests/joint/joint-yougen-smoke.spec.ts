@@ -125,8 +125,9 @@ async function submitMessageEvent(
 ) {
   const eventId = `ck:event:${uuidV7()}`;
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const flowId = await resolveDefaultFlowId(request, token, serverUrl, realmId);
   const payload = {
-    flow_id: flowIdFromRealmId(realmId),
+    flow_id: flowId,
     track_name: "discussion",
     content: {
       kind: "ck.content.text",
@@ -160,9 +161,50 @@ async function submitMessageEvent(
   expect([200, 201], `submit ck.message.create: ${text}`).toContain(response.status());
 }
 
-function flowIdFromRealmId(realmId: string): string {
-  const suffix = realmId.replace(/^ck:(realm|space):/, "");
-  return `ck:flow:${suffix}`;
+// COT-06-004: discover the default Flow via projection rather than deriving it
+// from the Realm UUID. This joint harness submits against an explicit serverUrl
+// (true soland process), so it cannot reuse the shared solandBaseUrl-bound
+// helper; the discovery logic mirrors it: authoritative Realm `default_flow_id`
+// first, Flow projection `is_default` marker as fallback.
+async function resolveDefaultFlowId(
+  request: APIRequestContext,
+  token: string,
+  serverUrl: string,
+  realmId: string,
+): Promise<string> {
+  const realmResp = await request.get(
+    `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  if (realmResp.ok()) {
+    const realm = (await realmResp.json()) as { default_flow_id?: unknown };
+    if (typeof realm.default_flow_id === "string" && realm.default_flow_id) {
+      return realm.default_flow_id;
+    }
+  }
+  const flowsResp = await request.get(
+    `${serverUrl}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  expect(
+    flowsResp.ok(),
+    `resolveDefaultFlowId: flow projection for ${realmId} returned ${flowsResp.status()}`,
+  ).toBeTruthy();
+  const body = (await flowsResp.json()) as {
+    flows?: Array<{ flow_id?: string; is_default?: boolean }>;
+    items?: Array<{ flow_id?: string; is_default?: boolean }>;
+  };
+  const flows = Array.isArray(body.flows)
+    ? body.flows
+    : Array.isArray(body.items)
+      ? body.items
+      : [];
+  const def = flows.find((flow) => flow.is_default === true);
+  expect(
+    def?.flow_id,
+    `resolveDefaultFlowId: no default flow (is_default) found for realm ${realmId}`,
+  ).toBeTruthy();
+  return def!.flow_id!;
 }
 
 function uuidV7(): string {
