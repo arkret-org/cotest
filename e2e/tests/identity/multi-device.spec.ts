@@ -7,7 +7,14 @@
 
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { authHeaders, b64url, typedId, wireErrCode } from "../../helpers/soland-api";
+import {
+  authHeaders,
+  b64url,
+  principalControlRealmForDid,
+  signedEventEnvelope,
+  typedId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -168,8 +175,19 @@ test.describe("multi-device pairing + revocation", () => {
     const aliceToken = await issueDevSession(request, alice);
 
     const selfRevoke = await request.post(
-      `${solandBaseUrl()}/_cokret/self/devices/${encodeURIComponent(alice.deviceId)}/revoke`,
-      { headers: { authorization: `Bearer ${aliceToken}` }, data: {} },
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: principalControlRealmForDid(alice.did),
+          kind: "ck.device.revoke",
+          payload: {
+            principal_id: alice.did,
+            device_id: alice.deviceId,
+          },
+        }),
+      },
     );
     expect(selfRevoke.status()).toBe(400);
     const body = await selfRevoke.json();

@@ -16,8 +16,7 @@
 //!     `ck.device.list_update` event in the principal control stream. Clients MUST expose the
 //!     device list delta via sync.
 //!   - §9 / `key-management.md` §5.2 "设备吊销" — revocation:
-//!       * publish `ck.device.revoke` (or call `POST /_cokret/self/devices/ {device_id}/revoke`
-//!         which mints the event).
+//!       * publish `ck.device.revoke` on the principal control stream.
 //!       * for every MLS group the revoked device participated in, issue an MLS `Remove` proposal +
 //!         commit so the device's epoch keys no longer decrypt new content.
 //!
@@ -39,29 +38,24 @@
 //!    per §5.1 canonical input. c. `ck.device.authorize` for device-B with the
 //!    `cross_signing_binding` field carrying the §5.2 signature.
 //!
-//!     Today soland accepts these via `POST /_cokret/self/devices/authorize-
-//!     pairing` (current `device::device_authorize_pairing`); the
+//!     The transport hook is the standard account gate device-pair command; the
 //!     cross-signing field is NOT yet validated end-to-end.
 //!
-//! 4. Assert `GET /_cokret/self/devices` returns both device-A and device-B with
+//! 4. Assert the account device projection returns both device-A and device-B with
 //!    `verification_state="verified"` (or `"cross_signed"` once soland exposes the §5.2 trust state
-//!    distinction). NB: soland does not currently surface a `GET /_cokret/self/devices` route — the
-//!    existing inventory is only readable via the per-device admin surfaces. This is one of the
-//!    prerequisite gaps.
+//!    distinction). The projection may be observed through viewer or account sync surfaces.
 //!
 //! 5. Wrap alice + a second principal (`bob`) into an E2EE Realm `R` so that "MLS Remove fanout"
 //!    has a non-trivial member set. device-B joins `R` via a Welcome → Commit roundtrip (today this
 //!    is also stubbed out in soland; MLS group state is not durable server-side per the `mls` grep
 //!    showing no `ck.mls.*` handlers).
 //!
-//! 6. From device-A, revoke device-B: `POST /_cokret/self/devices/{device-B}/revoke` Assert: a.
-//!    response 200 with `revoked_device_id == device-B` and a `revoked_at` timestamp. b. device-A
-//!    still works (its session is unaffected). c. device-B's bearer token returns 401 on `GET
-//!    /_cokret/self/ account/me` (the post-round-23 `cannot_self_revoke` + revoke surface; verified
-//!    via the existing `device::device_revoke` handler). d. For the E2EE Realm `R` that alice +
-//!    device-B were in: a `ck.mls.commit` event with a `Remove` proposal MUST appear in the Realm
-//!    timeline within a bounded delay (per §9 + §6 device list sync). Alice's sync should observe
-//!    both:
+//! 6. From device-A, revoke device-B by submitting `ck.device.revoke` into alice's principal
+//!    control Realm. Assert: a. the event is accepted and targets device-B. b. device-A still works
+//!    (its session is unaffected). c. device-B's bearer token returns 401 on account reads. d. For
+//!    the E2EE Realm `R` that alice + device-B were in: a `ck.mls.commit` event with a `Remove`
+//!    proposal MUST appear in the Realm timeline within a bounded delay (per §9 + §6 device list
+//!    sync). Alice's sync should observe both:
 //!             * `ck.device.list_update` with device-B in `left[]`,
 //!             * `ck.mls.commit` with `proposals[].type == "remove"`.
 //!
@@ -69,13 +63,11 @@
 //! ## Status — `#[ignore]`'d
 //!
 //! Prerequisite blockers (soland-side):
-//!   * **`GET /_cokret/self/devices`** — soland has `POST /devices/pairing- challenge`, `POST
-//!     /devices/authorize-pairing`, and `POST /devices/{device_id}/revoke` but no list/index
-//!     endpoint. Step 4 blocks here.
-//!   * **`cross_signing_binding` validation** — `device::device_ authorize_pairing` stores the
-//!     pairing record but does NOT verify the §5.2 SSK signature, the PSK → SSK chain, or the
-//!     canonical signing input. Step 3c can be SUBMITTED today but is not yet enforced as a
-//!     `cross_signed` vs. `unverified` distinction.
+//!   * **Account device projection** — viewer/account-sync must expose the full device inventory
+//!     and §5.2 trust state. Step 4 blocks here.
+//!   * **`cross_signing_binding` validation** — the standard pairing/authorization path must verify
+//!     the §5.2 SSK signature, the PSK → SSK chain, and the canonical signing input before marking
+//!     a device `cross_signed`.
 //!   * **MLS state machine** — `grep mls` in soland turns up only
 //!     `routing/federation/move_anchor.rs` (anchor frontier) and `routing/interop/mimi.rs` (interop
 //!     shim). There is no server-side `ck.mls.commit` reducer, no MLS group state, and no
@@ -117,8 +109,8 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   //   { "device_id": device_b,
     //   //     "verify_key": base64url(device_b_verify_key),
     //   //     "pairing_challenge_nonce": ... }
-    //   // cotest bypasses the visual QR roundtrip and calls the pairing-
-    //   // challenge / authorize-pairing API directly.
+    //   // cotest bypasses the visual QR roundtrip and calls the standard
+    //   // pairing/event APIs directly.
 
     // ── Step 3: cross-signing binding from device-A ─────────────────────
     //
@@ -145,12 +137,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //       }),
     //   )).send().await?;
     //
-    //   // 3b + 3c. pairing-challenge → authorize-pairing with
-    //   //          cross_signing_binding:
-    //   let challenge: Value = alice.post("/_cokret/self/devices/pairing-challenge")
-    //       .json(&json!({"device_id": device_b}))
-    //       .send().await?.json().await?;
-    //
+    //   // 3b + 3c. account gate pairing with cross_signing_binding:
     //   let canonical = format!(
     //       "ck-device-trust-bind-v1\n{}",
     //       canonical_json(json!({
@@ -163,30 +150,35 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let ssk_sig = ssk_signing_key.sign(canonical.as_bytes());
     //
     //   expect_json(
-    //       alice.post("/_cokret/self/devices/authorize-pairing")
+    //       alice.post("/_cokret/gate/account/device-pair")
     //           .json(&json!({
-    //               "device_id": device_b,
-    //               "challenge_id": challenge["challenge_id"],
-    //               "display_name": "Alice iPad",
-    //               "verify_key": base64url(device_b_verify_key),
-    //               "cross_signing_binding": {
-    //                   "verification_method": <SSK verification method>,
+    //               "pairing_code": <qr_pairing_code>,
+    //               "new_device_pubkey": {
+    //                   "kid": device_b,
     //                   "alg": "EdDSA",
-    //                   "ssk_generation": 1,
-    //                   "signature": base64url(ssk_sig),
+    //                   "key": base64url(device_b_verify_key),
     //               },
-    //               "proof": {"alg": "dev-none"},
+    //               "challenge_signature": <device_b_challenge_signature>,
+    //               "display_name": "Alice iPad",
+    //               "device_metadata": {
+    //                   "cross_signing_binding": {
+    //                       "verification_method": <SSK verification method>,
+    //                       "alg": "EdDSA",
+    //                       "ssk_generation": 1,
+    //                       "signature": base64url(ssk_sig),
+    //                   },
+    //               },
     //           })),
     //       StatusCode::OK,
     //   ).await?;
 
     // ── Step 4: assert both devices visible + verified ──────────────────
     //
-    //   let devices = expect_json(
-    //       alice.get("/_cokret/self/devices"),
+    //   let account = expect_json(
+    //       alice.get("/_cokret/self/account/viewer"),
     //       StatusCode::OK,
     //   ).await?;
-    //   let entries = devices["devices"].as_array().unwrap();
+    //   let entries = account["devices"].as_array().unwrap();
     //   assert_eq!(entries.len(), 2);
     //   let by_id: HashMap<_, _> = entries.iter()
     //       .map(|d| (d["device_id"].as_str().unwrap(), d)).collect();
@@ -195,7 +187,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   assert_eq!(by_id[&device_b.as_str()]["verification_state"],
     //              "cross_signed");
     //
-    // NB: today this endpoint does not exist — see "blockers" above.
+    // NB: full verified-state projection is still a prerequisite gap.
 
     // ── Step 5: create E2EE Realm + add both devices to MLS group ───────
     //
@@ -220,11 +212,18 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //
     //   // 6a. revoke
     //   let revoke = expect_json(
-    //       alice.post(&format!("/_cokret/self/devices/{device_b}/revoke")),
+    //       alice.post("/_cokret/self/events").json(&event_envelope(
+    //           &alice.actor,
+    //           <principal_control_realm_id>,
+    //           "ck.device.revoke",
+    //           json!({
+    //               "principal_id": alice.actor,
+    //               "device_id": device_b,
+    //           }),
+    //       )),
     //       StatusCode::OK,
     //   ).await?;
-    //   assert_eq!(revoke["revoked_device_id"], device_b);
-    //   assert!(revoke["revoked_at"].is_string());
+    //   assert_eq!(revoke["accepted"][0]["kind"], "ck.device.revoke");
     //
     //   // 6b. device-A still works:
     //   expect_status(alice.get("/_soland/self/account/me"), StatusCode::OK).await?;
@@ -276,11 +275,11 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
 
     unimplemented!(
         "CT-9 multi-device QR pairing + MLS Remove — blocked on soland \
-         E2E-MULTI-DEV-1: needs (a) `GET /_cokret/self/devices` list endpoint, \
-         (b) `cross_signing_binding` validation in `device::device_\
-         authorize_pairing`, (c) full MLS state machine + \
+         E2E-MULTI-DEV-1: needs (a) account device projection, \
+         (b) `cross_signing_binding` validation in the standard \
+         pairing authorization path, (c) full MLS state machine + \
          `ck.mls.commit` reducer with Remove-proposal fanout on \
-         `device::device_revoke`, and (d) `ck.device.list_update` \
+         `ck.device.revoke`, and (d) `ck.device.list_update` \
          emission per spec §6. The scaffolded test body above documents \
          every assertion in the implementer's terms. See module docs + \
          soland/_todos.md E2E-MULTI-DEV-1 + spec device-lifecycle.md \

@@ -70,13 +70,6 @@
       "auth": "alice"
     },
     {
-      "id": "devices_pairing_challenge",
-      "method": "POST",
-      "path": "/_cokret/self/devices/pairing-challenge",
-      "auth": "alice",
-      "body": { "device_id": "ck:device:01904100-0000-7000-8000-0000000000b2" }
-    },
-    {
       "id": "ephemeral",
       "method": "POST",
       "path": "/_cokret/self/ephemeral",

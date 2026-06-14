@@ -50,10 +50,9 @@
 //!       * upload via `PUT /_cokret/self/keys/backups/{backup_id}` (current soland surface; see
 //!         `routing/identity/key_backup.rs`).
 //!     Validate the response is 200 with `ok=true`.
-//! 4. "Lose" device-A: revoke it via `POST /_cokret/self/devices/{device-A}/revoke` issued from a
-//!    sibling device (per CT-9 `cannot_self_revoke` invariant). Today we'd need a second authorized
-//!    device to drive the revoke; the scaffold uses an alternative `ck.device.revoke` direct-event
-//!    submission as a stand-in.
+//! 4. "Lose" device-A: revoke it by submitting `ck.device.revoke` from a sibling device (per CT-9
+//!    `cannot_self_revoke` invariant). Today we'd need a second authorized device to drive the
+//!    revoke, so the scaffold uses a direct event submission as a stand-in.
 //! 5. Onboard new device-B:
 //!       * generate a fresh `ck:device:<uuidv7>` and Ed25519 keypair.
 //!       * dev-login (or full recovery via SSK proof — see §7.4) to get a bearer.
@@ -237,9 +236,17 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   let pair_token = ... pair via CT-9 flow ...;
     //   expect_json(
     //       server.http()
-    //             .post(server.url(&format!(
-    //                 "/_cokret/self/devices/{device_a}/revoke")))
-    //             .bearer_auth(&pair_token),
+    //             .post(server.url("/_cokret/self/events"))
+    //             .bearer_auth(&pair_token)
+    //             .json(&event_envelope(
+    //                 &alice.actor,
+    //                 <principal_control_realm_id>,
+    //                 "ck.device.revoke",
+    //                 json!({
+    //                     "principal_id": alice.actor,
+    //                     "device_id": device_a,
+    //                 }),
+    //             )),
     //       StatusCode::OK,
     //   ).await?;
 

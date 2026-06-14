@@ -47,6 +47,18 @@ export function typedId(kind: OperationKind): string {
   return `ck:${kind}:${uuidV7()}`;
 }
 
+export function principalControlRealmForDid(did: string): string {
+  const digest = createHash("sha256")
+    .update("ck:realm:principal-control:v1:")
+    .update(did)
+    .digest();
+  const bytes = Buffer.from(digest.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `ck:realm:${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
 export function b64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
