@@ -540,7 +540,7 @@ function Get-DirectoryFingerprint {
     $items = Get-ChildItem -Path $RootPath -Recurse -File | Sort-Object FullName
     $builder = New-Object System.Text.StringBuilder
     foreach ($item in $items) {
-        $hash = (Get-FileHash -Algorithm SHA256 -Path $item.FullName).Hash.ToLowerInvariant()
+        $hash = Get-Sha256FileHex -Path $item.FullName
         [void]$builder.AppendLine("$($item.FullName)|$hash")
     }
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($builder.ToString())
@@ -552,6 +552,21 @@ function Get-DirectoryFingerprint {
         $sha.Dispose()
     }
     return "sha256:{0}" -f ([System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant())
+}
+
+function Get-Sha256FileHex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $digest = $sha.ComputeHash($stream)
+        return [System.BitConverter]::ToString($digest).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
 }
 
 function Get-SutMetadata {
