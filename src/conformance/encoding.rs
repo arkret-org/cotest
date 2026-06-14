@@ -224,10 +224,10 @@ fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
 }
 
 fn rank_order_entry_id(entry: &Value) -> Result<String> {
-    if let Some(value) = entry.get("flow_id").and_then(Value::as_str) {
+    if let Some(value) = entry.get("strand_id").and_then(Value::as_str) {
         return Ok(value.to_owned());
     }
-    bail!("encoding rank_order entry missing flow_id");
+    bail!("encoding rank_order entry missing strand_id");
 }
 
 // ── Projection position discriminator fixture suite ─────────────────────────

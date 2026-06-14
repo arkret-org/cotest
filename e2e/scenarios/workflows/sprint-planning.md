@@ -9,7 +9,7 @@
 ## Spec 锚点
 
 - `models/realm-and-space.md` §2-§4 (Space lifecycle / Board / List)
-- `models/flow-and-message.md` §8 (reply chain)
+- `models/strand-and-message.md` §8 (reply chain)
 
 ## 拓扑
 
@@ -36,7 +36,7 @@
 
 5. Mei 进 `/kanban`,建 4 列:`Backlog`、`Todo`、`Doing`、`Done`
 6. Mei 在 `Backlog` 列加 5 张卡:
-   - `Story A: User auth flow`
+   - `Story A: User auth strand`
    - `Story B: Payment gateway integration`
    - `Story C: Analytics dashboard`
    - `Story D: Email templates refactor`

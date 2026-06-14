@@ -33,11 +33,11 @@
 //!     scenarios under `cotest/e2e/tests/` are separate from the Rust cotest suite.
 //!   * No coauth+sodmin joint bootstrap from `CokretServer` / `TestServerGroup`. The
 //!     `_helpers/coauth_bootstrap.rs` module handles coauth alone, not sodmin.
-//!   * Sodmin device revoke flow itself: the admin route `POST
+//!   * Sodmin device revoke strand itself: the admin route `POST
 //!     /api/admin/v1/accounts/{account_id}/devices/{device_id}/revoke` exists in coauth (per
 //!     `sodmin/src/api/coauth_devices_admin.rs`), so once a bootstrap is present this scenario
 //!     could bypass the UI and call the API directly as a stepping stone. That would not exercise
-//!     the click-flow but would prove the cascade — file as a follow-up if/when the UI driver is
+//!     the click-strand but would prove the cascade — file as a follow-up if/when the UI driver is
 //!     too costly.
 //!   * Soland session-invalidation-on-device-revoke cascade is the real unknown: soland does not
 //!     currently subscribe to coauth device revocation events. The §9 "device list update MUST" +

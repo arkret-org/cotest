@@ -13,12 +13,12 @@
 //!
 //! Grammar invariants pinned here:
 //!   * `web+cokret:` ⇄ HTTPS-fragment forms parse to the SAME ParsedAddress.
-//!   * realm-only / flow / message hierarchy forms.
+//!   * realm-only / strand / message hierarchy forms.
 //!   * unknown keyword and wrong hierarchy order fail closed (`parse_address` returns Err); retired
 //!     `via` hints are ignored.
 //!   * `<realm>` disambiguation: UUIDv7 → RealmRef::RealmId, dotted/domain → RealmRef::Alias.
 //!   * `target_digest` covers ONLY the identity tuple + link_type — adding / removing action/tok/lt
-//!     does NOT change it; switching flow/message DOES; absent hierarchy fields are OMITTED (not
+//!     does NOT change it; switching strand/message DOES; absent hierarchy fields are OMITTED (not
 //!     `null`) in the canonical shape.
 //!   * scope-confusion: an A-object token fails `verify_token_target` against a B-object address;
 //!     the token's link_type wins over a disagreeing URL `lt` hint (modeled via the
@@ -40,7 +40,7 @@ use serde_json::json;
 pub const VECTOR_ID_OA_GRAMMAR_SCHEME_EQUIVALENCE: &str =
     "ck.cotest_vector.object_addressing.grammar.scheme_fragment_equivalence.v1";
 pub const VECTOR_ID_OA_GRAMMAR_HIERARCHY_FORMS: &str =
-    "ck.cotest_vector.object_addressing.grammar.realm_flow_message_forms.v1";
+    "ck.cotest_vector.object_addressing.grammar.realm_strand_message_forms.v1";
 pub const VECTOR_ID_OA_GRAMMAR_FAIL_CLOSED: &str =
     "ck.cotest_vector.object_addressing.grammar.fail_closed.v1";
 pub const VECTOR_ID_OA_GRAMMAR_REALM_DISAMBIGUATION: &str =
@@ -93,10 +93,10 @@ const LANDING: &str = "https://share.cokret.example";
 /// round-trip back through the parser.
 pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
     // Same logical address expressed in both envelopes.
-    let scheme_form = format!("web+cokret:realm/{R}/flow/{F}?via={VIA}&action=join");
+    let scheme_form = format!("web+cokret:realm/{R}/strand/{F}?via={VIA}&action=join");
     let from_scheme = parse_address(&scheme_form).map_err(|e| anyhow!("parse scheme form: {e}"))?;
 
-    let landing_form = format!("{LANDING}/#realm/{R}/flow/{F}?via={VIA}&action=join");
+    let landing_form = format!("{LANDING}/#realm/{R}/strand/{F}?via={VIA}&action=join");
     let from_landing =
         parse_address(&landing_form).map_err(|e| anyhow!("parse landing form: {e}"))?;
 
@@ -127,41 +127,41 @@ pub fn run_scheme_fragment_equivalence_vector() -> Result<()> {
     Ok(())
 }
 
-/// OA-COT-1.2 — realm-only / flow / message hierarchy forms parse to the right
-/// class (`is_realm` / `is_flow` / `is_message`) with the expected segments.
-pub fn run_realm_flow_message_forms_vector() -> Result<()> {
-    // Realm-only: no flow/message.
+/// OA-COT-1.2 — realm-only / strand / message hierarchy forms parse to the right
+/// class (`is_realm` / `is_strand` / `is_message`) with the expected segments.
+pub fn run_realm_strand_message_forms_vector() -> Result<()> {
+    // Realm-only: no strand/message.
     let realm =
         parse_address(&format!("web+cokret:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
-    if !realm.is_realm() || realm.is_flow() || realm.is_message() {
+    if !realm.is_realm() || realm.is_strand() || realm.is_message() {
         bail!("realm-only form MUST classify as realm");
     }
-    if realm.flow.is_some() || realm.message.is_some() {
-        bail!("realm-only form MUST NOT carry flow/message segments");
+    if realm.strand.is_some() || realm.message.is_some() {
+        bail!("realm-only form MUST NOT carry strand/message segments");
     }
     if realm.realm != RealmRef::RealmId(R.to_owned()) {
         bail!("realm-only realm segment MUST be a RealmId");
     }
 
-    // Flow: realm/<r>/flow/<f>. Retired `via` is ignored if present.
-    let flow = parse_address(&format!("web+cokret:realm/{R}/flow/{F}?via={VIA}"))
-        .map_err(|e| anyhow!("flow: {e}"))?;
-    if !flow.is_flow() || flow.is_realm() || flow.is_message() {
-        bail!("flow form MUST classify as flow");
+    // Strand: realm/<r>/strand/<f>. Retired `via` is ignored if present.
+    let strand = parse_address(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))
+        .map_err(|e| anyhow!("strand: {e}"))?;
+    if !strand.is_strand() || strand.is_realm() || strand.is_message() {
+        bail!("strand form MUST classify as strand");
     }
-    if flow.flow.as_deref() != Some(F) || flow.message.is_some() {
-        bail!("flow form segments drifted");
+    if strand.strand.as_deref() != Some(F) || strand.message.is_some() {
+        bail!("strand form segments drifted");
     }
 
-    // Message: realm/<r>/flow/<f>/m/<msg>. Retired `via` is ignored if present.
+    // Message: realm/<r>/strand/<f>/m/<msg>. Retired `via` is ignored if present.
     let msg = parse_address(&format!(
-        "web+cokret:realm/{R}/flow/{F}/m/{M}?via={VIA}&action=reply"
+        "web+cokret:realm/{R}/strand/{F}/m/{M}?via={VIA}&action=reply"
     ))
     .map_err(|e| anyhow!("message: {e}"))?;
-    if !msg.is_message() || msg.is_realm() || msg.is_flow() {
+    if !msg.is_message() || msg.is_realm() || msg.is_strand() {
         bail!("message form MUST classify as message");
     }
-    if msg.flow.as_deref() != Some(F) || msg.message.as_deref() != Some(M) {
+    if msg.strand.as_deref() != Some(F) || msg.message.as_deref() != Some(M) {
         bail!("message form segments drifted");
     }
     if msg.action != AddressAction::Reply {
@@ -173,12 +173,12 @@ pub fn run_realm_flow_message_forms_vector() -> Result<()> {
 /// OA-COT-1.3 — fail-closed grammar: an unknown path keyword, a wrong
 /// hierarchy order MUST make `parse_address` return `Err`.
 pub fn run_grammar_fail_closed_vector() -> Result<()> {
-    // Unknown keyword (not in the v1 legal set realm/flow/m) — forward-compat
+    // Unknown keyword (not in the v1 legal set realm/strand/m) — forward-compat
     // fail-closed, never a fork.
     for unknown in [
         format!("web+cokret:space/{R}"),
         format!("web+cokret:realm/{R}/thread/{F}?via={VIA}"),
-        format!("web+cokret:realm/{R}/flow/{F}/reply/{M}?via={VIA}"),
+        format!("web+cokret:realm/{R}/strand/{F}/reply/{M}?via={VIA}"),
     ] {
         if parse_address(&unknown).is_ok() {
             bail!("unknown keyword MUST fail closed: {unknown}");
@@ -187,8 +187,8 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
 
     // Wrong hierarchy order.
     for misordered in [
-        format!("web+cokret:flow/{F}/realm/{R}?via={VIA}"),
-        // `m/` without an intermediate `flow/` level.
+        format!("web+cokret:strand/{F}/realm/{R}?via={VIA}"),
+        // `m/` without an intermediate `strand/` level.
         format!("web+cokret:realm/{R}/m/{M}?via={VIA}"),
     ] {
         if parse_address(&misordered).is_ok() {
@@ -196,11 +196,11 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
         }
     }
 
-    // Control: flow/message addresses without `via` now parse; join routing
+    // Control: strand/message addresses without `via` now parse; join routing
     // comes from Directory `join_candidates[]`.
-    parse_address(&format!("web+cokret:realm/{R}/flow/{F}"))
-        .map_err(|e| anyhow!("control: flow without via MUST parse: {e}"))?;
-    parse_address(&format!("web+cokret:realm/{R}/flow/{F}/m/{M}"))
+    parse_address(&format!("web+cokret:realm/{R}/strand/{F}"))
+        .map_err(|e| anyhow!("control: strand without via MUST parse: {e}"))?;
+    parse_address(&format!("web+cokret:realm/{R}/strand/{F}/m/{M}"))
         .map_err(|e| anyhow!("control: message without via MUST parse: {e}"))?;
     Ok(())
 }
@@ -249,15 +249,15 @@ fn digest_for(addr: &str) -> Result<String> {
 /// identity tuple does NOT change `target_digest` (the digest is computed over
 /// the identity tuple + link_type only).
 pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
-    // Baseline flow target (reference link).
-    let base = digest_for(&format!("web+cokret:realm/{R}/flow/{F}?via={VIA}"))?;
+    // Baseline strand target (reference link).
+    let base = digest_for(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))?;
     if !base.starts_with("sha256:") {
         bail!("target_digest MUST be a `sha256:<hex>` digest; got {base}");
     }
 
     // Extra via hints + an action hint — identity unchanged → same digest.
     let more_hints = digest_for(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via=did:web:a&via=did:web:b&action=join"
+        "web+cokret:realm/{R}/strand/{F}?via=did:web:a&via=did:web:b&action=join"
     ))?;
     if base != more_hints {
         bail!("adding via/action hints MUST NOT change target_digest");
@@ -269,7 +269,7 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // in their (ignored) hints. The invite/reference distinction is asserted
     // separately below.
     let no_hints = digest_for(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&action=view"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&action=view"
     ))?;
     if base != no_hints {
         bail!("the default action=view hint MUST NOT change target_digest");
@@ -279,10 +279,10 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     // digest, but a token's `tok` value never does. Build two invite addresses
     // with different tokens but the same identity — same digest.
     let invite_tok_x = digest_for(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&lt=invite&tok=token-x"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=token-x"
     ))?;
     let invite_tok_y = digest_for(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&lt=invite&tok=token-y"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=token-y"
     ))?;
     if invite_tok_x != invite_tok_y {
         bail!("the opaque `tok` value MUST NOT change target_digest");
@@ -294,24 +294,24 @@ pub fn run_target_digest_ignores_hints_vector() -> Result<()> {
     Ok(())
 }
 
-/// OA-COT-2.2 — switching `flow_id` or `message_id` DOES change the digest
+/// OA-COT-2.2 — switching `strand_id` or `message_id` DOES change the digest
 /// (scope identity is bound into the digest).
 pub fn run_target_digest_tracks_object_vector() -> Result<()> {
-    let flow_a = digest_for(&format!("web+cokret:realm/{R}/flow/{F}?via={VIA}"))?;
-    let flow_b = digest_for(&format!("web+cokret:realm/{R}/flow/{F2}?via={VIA}"))?;
-    if flow_a == flow_b {
-        bail!("switching flow_id MUST change target_digest");
+    let strand_a = digest_for(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))?;
+    let strand_b = digest_for(&format!("web+cokret:realm/{R}/strand/{F2}?via={VIA}"))?;
+    if strand_a == strand_b {
+        bail!("switching strand_id MUST change target_digest");
     }
 
-    let message = digest_for(&format!("web+cokret:realm/{R}/flow/{F}/m/{M}?via={VIA}"))?;
-    if flow_a == message {
-        bail!("promoting flow → message MUST change target_digest");
+    let message = digest_for(&format!("web+cokret:realm/{R}/strand/{F}/m/{M}?via={VIA}"))?;
+    if strand_a == message {
+        bail!("promoting strand → message MUST change target_digest");
     }
 
-    // Realm-only differs from any flow under it.
+    // Realm-only differs from any strand under it.
     let realm = digest_for(&format!("web+cokret:realm/{R}"))?;
-    if realm == flow_a {
-        bail!("a realm target MUST differ from a flow target under it");
+    if realm == strand_a {
+        bail!("a realm target MUST differ from a strand target under it");
     }
     Ok(())
 }
@@ -323,12 +323,12 @@ pub fn run_target_digest_tracks_object_vector() -> Result<()> {
 /// and differs from a descriptor whose absent fields were serialized as
 /// `null`.
 pub fn run_target_digest_omits_absent_vector() -> Result<()> {
-    // Realm-only target → flow_id / message_id absent.
+    // Realm-only target → strand_id / message_id absent.
     let realm =
         parse_address(&format!("web+cokret:realm/{R}")).map_err(|e| anyhow!("realm: {e}"))?;
     let desc = TargetDescriptor::from_parsed(&realm);
-    if desc.flow_id.is_some() || desc.message_id.is_some() {
-        bail!("realm-only descriptor MUST have absent flow_id / message_id");
+    if desc.strand_id.is_some() || desc.message_id.is_some() {
+        bail!("realm-only descriptor MUST have absent strand_id / message_id");
     }
     if desc.realm_id != format!("ck:realm:{R}") {
         bail!(
@@ -342,7 +342,7 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     let obj = serialized
         .as_object()
         .ok_or_else(|| anyhow!("descriptor MUST serialize to an object"))?;
-    if obj.contains_key("flow_id") || obj.contains_key("message_id") {
+    if obj.contains_key("strand_id") || obj.contains_key("message_id") {
         bail!(
             "absent hierarchy levels MUST be omitted, NOT serialized (even as null); \
              got keys {:?}",
@@ -361,7 +361,7 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     let digest = target_digest(&desc).map_err(|e| anyhow!("digest: {e}"))?;
 
     let omitted_bytes = b"{\"link_type\":\"reference\",\"realm_id\":\"ck:realm:01904100-0000-7000-8000-0000000000aa\"}";
-    let null_bytes = b"{\"flow_id\":null,\"link_type\":\"reference\",\"message_id\":null,\"realm_id\":\"ck:realm:01904100-0000-7000-8000-0000000000aa\"}";
+    let null_bytes = b"{\"strand_id\":null,\"link_type\":\"reference\",\"message_id\":null,\"realm_id\":\"ck:realm:01904100-0000-7000-8000-0000000000aa\"}";
     let omitted_expected = super::sha256_prefixed(omitted_bytes);
     let null_expected = super::sha256_prefixed(null_bytes);
 
@@ -394,13 +394,13 @@ fn token_descriptor_for(addr: &str) -> Result<TargetDescriptor> {
 /// parsed for a different object B (cross-object replay rejected). The matching
 /// case validates as a positive control.
 pub fn run_scope_confusion_replay_vector() -> Result<()> {
-    // Token minted for flow A.
+    // Token minted for strand A.
     let addr_a = parse_address(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&lt=invite&tok=t"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_a: {e}"))?;
     let token_desc = token_descriptor_for(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&lt=invite&tok=t"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))?;
 
     // Positive control: A-token validates against the A-address.
@@ -408,22 +408,22 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
         bail!("an A-object token MUST validate against its own A-address");
     }
 
-    // Replay onto a different flow B → MUST fail closed.
+    // Replay onto a different strand B → MUST fail closed.
     let addr_b = parse_address(&format!(
-        "web+cokret:realm/{R}/flow/{F2}?via={VIA}&lt=invite&tok=t"
+        "web+cokret:realm/{R}/strand/{F2}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_b: {e}"))?;
     if verify_token_target(&token_desc, &addr_b, LinkType::Invite) {
         bail!("an A-object token MUST NOT validate against a B-object address (scope confusion)");
     }
 
-    // Replay onto a message under the same flow → still a different object.
+    // Replay onto a message under the same strand → still a different object.
     let addr_msg = parse_address(&format!(
-        "web+cokret:realm/{R}/flow/{F}/m/{M}?via={VIA}&lt=invite&tok=t"
+        "web+cokret:realm/{R}/strand/{F}/m/{M}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("addr_msg: {e}"))?;
     if verify_token_target(&token_desc, &addr_msg, LinkType::Invite) {
-        bail!("a flow-scoped token MUST NOT validate against a message under it");
+        bail!("a strand-scoped token MUST NOT validate against a message under it");
     }
     Ok(())
 }
@@ -433,14 +433,14 @@ pub fn run_scope_confusion_replay_vector() -> Result<()> {
 /// the comparison is performed under the (trusted) effective link_type, not
 /// whatever the untrusted address query claimed.
 pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
-    // The token was minted as an INVITE for flow A.
+    // The token was minted as an INVITE for strand A.
     let token_desc = token_descriptor_for(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&lt=invite&tok=t"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))?;
 
     // The presented URL, however, was DOWNGRADED to a reference link (the
     // attacker stripped `lt=invite`). Its parsed link_type is Reference.
-    let downgraded = parse_address(&format!("web+cokret:realm/{R}/flow/{F}?via={VIA}"))
+    let downgraded = parse_address(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))
         .map_err(|e| anyhow!("downgraded: {e}"))?;
     if downgraded.link_type != LinkType::Reference {
         bail!("vector setup: the downgraded URL MUST parse as a reference link");
@@ -464,7 +464,7 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
     // Symmetric case: a reference token presented under an invite URL still
     // compares under the trusted (reference) link_type → no privilege escalation.
     let ref_token = {
-        let parsed = parse_address(&format!("web+cokret:realm/{R}/flow/{F}?via={VIA}"))
+        let parsed = parse_address(&format!("web+cokret:realm/{R}/strand/{F}?via={VIA}"))
             .map_err(|e| anyhow!("ref token addr: {e}"))?;
         TargetDescriptor::from_parsed(&parsed)
     };
@@ -472,7 +472,7 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
         bail!("vector setup: reference token descriptor MUST carry Reference link_type");
     }
     let upgraded_url = parse_address(&format!(
-        "web+cokret:realm/{R}/flow/{F}?via={VIA}&lt=invite&tok=t"
+        "web+cokret:realm/{R}/strand/{F}?via={VIA}&lt=invite&tok=t"
     ))
     .map_err(|e| anyhow!("upgraded url: {e}"))?;
     // Under the trusted Reference link_type the reference token matches; it
@@ -494,8 +494,8 @@ pub fn run_scope_token_link_type_wins_vector() -> Result<()> {
 /// directory fields (`as_of`, `source_refs`, `join_candidates`) and `target_kind`.
 pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let wire = json!({
-        "target_kind": "flow",
-        "object_preview": { "flow_id": format!("ck:flow:{F}"), "title": "Launch planning" },
+        "target_kind": "strand",
+        "object_preview": { "strand_id": format!("ck:strand:{F}"), "title": "Launch planning" },
         "join_rule": "knock",
         "as_of": "2026-05-27T00:00:00Z",
         "source_refs": [
@@ -536,8 +536,8 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     let body: DirectoryTargetResolutionOutcome =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise resolve_target res: {e}"))?;
 
-    if body.target_kind != TargetKind::Flow {
-        bail!("target_kind MUST deserialize to TargetKind::Flow");
+    if body.target_kind != TargetKind::Strand {
+        bail!("target_kind MUST deserialize to TargetKind::Strand");
     }
     // §9.1 common fields.
     let expected_as_of = Utc
@@ -558,17 +558,17 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
     if candidate_services != vec!["did:web:relay.example", "did:web:teabay.example"] {
         bail!("join_candidates common field MUST round-trip in order");
     }
-    // A flow target carries object_preview (opaque), not realm_preview.
+    // A strand target carries object_preview (opaque), not realm_preview.
     if body.realm_preview.is_some() {
-        bail!("a flow target MUST NOT carry realm_preview");
+        bail!("a strand target MUST NOT carry realm_preview");
     }
     if body.object_preview.is_none() {
-        bail!("a flow target MUST carry the opaque object_preview");
+        bail!("a strand target MUST carry the opaque object_preview");
     }
 
     // Re-serialize and confirm the common fields survive the round trip.
     let reser = serde_json::to_value(&body).map_err(|e| anyhow!("reserialise: {e}"))?;
-    if reser.get("target_kind").and_then(|v| v.as_str()) != Some("flow") {
+    if reser.get("target_kind").and_then(|v| v.as_str()) != Some("strand") {
         bail!("target_kind MUST survive round-trip serialization");
     }
     if reser.get("as_of").is_none() || reser.get("source_refs").is_none() {
@@ -608,7 +608,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
     if preview.title.as_deref() != Some("Acme HQ") {
         bail!("realm_preview.title MUST round-trip");
     }
-    // A realm target MUST NOT carry an object_preview (that is flow/message).
+    // A realm target MUST NOT carry an object_preview (that is strand/message).
     if body.object_preview.is_some() {
         bail!("a realm target MUST NOT carry object_preview");
     }
@@ -626,7 +626,7 @@ pub fn run_object_addressing_vector_suite() -> Result<()> {
     }
     // OA-COT-1 — grammar (4 cases).
     run_scheme_fragment_equivalence_vector()?;
-    run_realm_flow_message_forms_vector()?;
+    run_realm_strand_message_forms_vector()?;
     run_grammar_fail_closed_vector()?;
     run_realm_id_vs_alias_vector()?;
     // OA-COT-2 — target_digest stability (3 cases).

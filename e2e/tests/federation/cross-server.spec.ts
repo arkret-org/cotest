@@ -519,7 +519,7 @@ test.describe("cross-server federation", () => {
       kind: "ck.message.create",
       actorDid: alice.did,
       payload: {
-        flow_id: typedId("flow"),
+        strand_id: typedId("strand"),
         track_name: "discussion",
         content: {
           kind: "ck.content.text",
@@ -610,7 +610,7 @@ test.describe("cross-server federation", () => {
       kind: "ck.message.create",
       actorDid: "did:web:alice-reducer-mismatch.example",
       payload: {
-        flow_id: typedId("flow"),
+        strand_id: typedId("strand"),
         track_name: "discussion",
         content: {
           kind: "ck.content.text",
@@ -667,7 +667,7 @@ test.describe("cross-server federation", () => {
       kind: "ck.message.create",
       actorDid: "did:web:alice-rfc9421.example",
       payload: {
-        flow_id: typedId("flow"),
+        strand_id: typedId("strand"),
         track_name: "discussion",
         content: {
           kind: "ck.content.text",

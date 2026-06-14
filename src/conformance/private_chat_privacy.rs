@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use cokret_core::{Did, EventId, FlowId, RealmId};
+use cokret_core::{Did, EventId, StrandId, RealmId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -58,17 +58,17 @@ struct DirectConversationVectors {
     binding_event_ref: String,
     binding_payload: Value,
     contact_list_row: Value,
-    derived_flow_selection: DerivedFlowSelection,
+    derived_strand_selection: DerivedStrandSelection,
     pending_contact_negative: PendingContactNegative,
     schema_negative_shapes: Vec<SchemaNegativeShape>,
 }
 
 #[derive(Debug, Deserialize)]
-struct DerivedFlowSelection {
+struct DerivedStrandSelection {
     realm_id: String,
-    binding_main_flow_id: String,
-    default_flow_id_for_realm: String,
-    selected_main_flow_id: String,
+    binding_main_strand_id: String,
+    default_strand_id_for_realm: String,
+    selected_main_strand_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -203,7 +203,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         request_def,
         &["peer"],
         &["peer", "create", "idempotency_key"],
-        &["target", "realm_id", "main_flow_id"],
+        &["target", "realm_id", "main_strand_id"],
     )?;
 
     let response_def = contact_schema
@@ -216,11 +216,11 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         &[
             "state",
             "realm_id",
-            "main_flow_id",
+            "main_strand_id",
             "binding_event_ref",
             "created",
         ],
-        &["status", "binding_ref", "default_flow_id"],
+        &["status", "binding_ref", "default_strand_id"],
     )?;
 
     let event_payload_schema = load_artifact_json("schemas/event-payload.schema.json")?;
@@ -234,25 +234,25 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "pair_key",
             "participants_unordered",
             "realm_id",
-            "main_flow_id",
+            "main_strand_id",
             "contact_refs",
             "member_event_refs",
-            "main_flow_create_ref",
+            "main_strand_create_ref",
             "created_at",
         ],
         &[
             "pair_key",
             "participants_unordered",
             "realm_id",
-            "main_flow_id",
+            "main_strand_id",
             "contact_refs",
             "member_event_refs",
-            "main_flow_create_ref",
+            "main_strand_create_ref",
             "created_at",
             "binding_state",
             "supersedes_binding_ref",
         ],
-        &["default_flow_id", "status", "binding_ref"],
+        &["default_strand_id", "status", "binding_ref"],
     )?;
 
     record_vector_event(
@@ -263,7 +263,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
             "request_field": "peer",
             "response_field": "state",
             "binding_field": "binding_event_ref",
-            "main_flow_id_from_binding": true,
+            "main_strand_id_from_binding": true,
         }),
         &json!({
             "http": operation.get("http").cloned(),
@@ -412,7 +412,7 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
     validate_resolve_request_shape(&vectors.resolve_request)?;
     validate_resolve_response_shape(&vectors.resolve_response)?;
     validate_binding_payload(&vectors.binding_event_ref, &vectors.binding_payload)?;
-    validate_resolver_uses_binding_main_flow(vectors)?;
+    validate_resolver_uses_binding_main_strand(vectors)?;
     validate_contact_list_row(vectors)?;
     validate_pending_contact_negative(&vectors.pending_contact_negative)?;
     validate_schema_negative_shapes(&vectors.schema_negative_shapes)?;
@@ -427,13 +427,13 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
         &json!({
             "request_peer_field": true,
             "response_state_field": true,
-            "binding_main_flow_used": true,
+            "binding_main_strand_used": true,
             "pending_contact_no_realm_created": true,
         }),
         &json!({
             "response_state": vectors.resolve_response.get("state").cloned(),
-            "response_main_flow_id": vectors.resolve_response.get("main_flow_id").cloned(),
-            "binding_main_flow_id": vectors.binding_payload.get("main_flow_id").cloned(),
+            "response_main_strand_id": vectors.resolve_response.get("main_strand_id").cloned(),
+            "binding_main_strand_id": vectors.binding_payload.get("main_strand_id").cloned(),
         }),
     );
     Ok(())
@@ -462,7 +462,7 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
         &[
             "state",
             "realm_id",
-            "main_flow_id",
+            "main_strand_id",
             "binding_event_ref",
             "created",
         ],
@@ -476,7 +476,7 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     }
     if matches!(state, "found" | "created") {
         validate_realm_id(required_str(value, "realm_id")?)?;
-        validate_flow_id(required_str(value, "main_flow_id")?)?;
+        validate_strand_id(required_str(value, "main_strand_id")?)?;
         validate_event_id(required_str(value, "binding_event_ref")?)?;
     }
     Ok(())
@@ -491,10 +491,10 @@ fn validate_binding_payload(binding_event_ref: &str, payload: &Value) -> Result<
             "pair_key",
             "participants_unordered",
             "realm_id",
-            "main_flow_id",
+            "main_strand_id",
             "contact_refs",
             "member_event_refs",
-            "main_flow_create_ref",
+            "main_strand_create_ref",
             "created_at",
             "binding_state",
             "supersedes_binding_ref",
@@ -505,8 +505,8 @@ fn validate_binding_payload(binding_event_ref: &str, payload: &Value) -> Result<
         bail!("direct conversation pair_key must not be a handle string");
     }
     validate_realm_id(required_str(payload, "realm_id")?)?;
-    validate_flow_id(required_str(payload, "main_flow_id")?)?;
-    validate_event_id(required_str(payload, "main_flow_create_ref")?)?;
+    validate_strand_id(required_str(payload, "main_strand_id")?)?;
+    validate_event_id(required_str(payload, "main_strand_create_ref")?)?;
 
     let participants = value_array(required_field(payload, "participants_unordered")?)?;
     if participants.len() != 2 {
@@ -533,39 +533,39 @@ fn validate_binding_payload(binding_event_ref: &str, payload: &Value) -> Result<
     Ok(())
 }
 
-fn validate_resolver_uses_binding_main_flow(vectors: &DirectConversationVectors) -> Result<()> {
+fn validate_resolver_uses_binding_main_strand(vectors: &DirectConversationVectors) -> Result<()> {
     let response_realm_id = required_str(&vectors.resolve_response, "realm_id")?;
-    let response_main_flow_id = required_str(&vectors.resolve_response, "main_flow_id")?;
+    let response_main_strand_id = required_str(&vectors.resolve_response, "main_strand_id")?;
     let response_binding_ref = required_str(&vectors.resolve_response, "binding_event_ref")?;
     let binding_realm_id = required_str(&vectors.binding_payload, "realm_id")?;
-    let binding_main_flow_id = required_str(&vectors.binding_payload, "main_flow_id")?;
+    let binding_main_strand_id = required_str(&vectors.binding_payload, "main_strand_id")?;
 
     if response_realm_id != binding_realm_id {
         bail!("resolver response realm_id must come from direct conversation binding");
     }
-    if response_main_flow_id != binding_main_flow_id {
-        bail!("resolver response main_flow_id must come from direct conversation binding");
+    if response_main_strand_id != binding_main_strand_id {
+        bail!("resolver response main_strand_id must come from direct conversation binding");
     }
     if response_binding_ref != vectors.binding_event_ref {
         bail!("resolver response binding_event_ref must identify the binding event");
     }
 
-    let selection = &vectors.derived_flow_selection;
+    let selection = &vectors.derived_strand_selection;
     validate_realm_id(&selection.realm_id)?;
-    validate_flow_id(&selection.binding_main_flow_id)?;
-    validate_flow_id(&selection.default_flow_id_for_realm)?;
-    validate_flow_id(&selection.selected_main_flow_id)?;
+    validate_strand_id(&selection.binding_main_strand_id)?;
+    validate_strand_id(&selection.default_strand_id_for_realm)?;
+    validate_strand_id(&selection.selected_main_strand_id)?;
     if selection.realm_id != response_realm_id {
-        bail!("derived flow selection realm_id must match resolver response");
+        bail!("derived strand selection realm_id must match resolver response");
     }
-    if selection.binding_main_flow_id != binding_main_flow_id {
-        bail!("derived flow selection binding_main_flow_id must match binding");
+    if selection.binding_main_strand_id != binding_main_strand_id {
+        bail!("derived strand selection binding_main_strand_id must match binding");
     }
-    if selection.selected_main_flow_id != selection.binding_main_flow_id {
-        bail!("direct conversation selection must use binding_main_flow_id");
+    if selection.selected_main_strand_id != selection.binding_main_strand_id {
+        bail!("direct conversation selection must use binding_main_strand_id");
     }
-    if selection.selected_main_flow_id == selection.default_flow_id_for_realm {
-        bail!("direct conversation selection must not fall back to default_flow_id_for_realm");
+    if selection.selected_main_strand_id == selection.default_strand_id_for_realm {
+        bail!("direct conversation selection must not fall back to default_strand_id_for_realm");
     }
     Ok(())
 }
@@ -596,10 +596,10 @@ fn validate_contact_list_row(vectors: &DirectConversationVectors) -> Result<()> 
     if required_str(summary, "realm_id")? != required_str(&vectors.resolve_response, "realm_id")? {
         bail!("contact direct_conversation realm_id must match resolver response");
     }
-    if required_str(summary, "main_flow_id")?
-        != required_str(&vectors.resolve_response, "main_flow_id")?
+    if required_str(summary, "main_strand_id")?
+        != required_str(&vectors.resolve_response, "main_strand_id")?
     {
-        bail!("contact direct_conversation main_flow_id must match resolver response");
+        bail!("contact direct_conversation main_strand_id must match resolver response");
     }
     Ok(())
 }
@@ -621,7 +621,7 @@ fn validate_pending_contact_negative(case: &PendingContactNegative) -> Result<()
     {
         bail!("pending contact negative must fail with contact_not_accepted");
     }
-    for forbidden in ["realm_id", "main_flow_id", "binding_event_ref"] {
+    for forbidden in ["realm_id", "main_strand_id", "binding_event_ref"] {
         if case.observed_response.get(forbidden).is_some() {
             bail!("pending contact negative must not create or return `{forbidden}`");
         }
@@ -713,8 +713,8 @@ fn validate_realm_id(value: &str) -> Result<()> {
         .map_err(|err| anyhow!("{err}"))
 }
 
-fn validate_flow_id(value: &str) -> Result<()> {
-    FlowId::new(value)
+fn validate_strand_id(value: &str) -> Result<()> {
+    StrandId::new(value)
         .map(|_| ())
         .map_err(|err| anyhow!("{err}"))
 }

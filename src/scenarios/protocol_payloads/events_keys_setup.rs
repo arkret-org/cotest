@@ -144,7 +144,7 @@ fn signed_message_event(
     body: &str,
 ) -> Result<Value> {
     let payload = json!({
-        "flow_id": "ck:flow:0196419b-0000-7000-8000-000000000001",
+        "strand_id": "ck:strand:0196419b-0000-7000-8000-000000000001",
         "track_name": "discussion",
         "content": {
             "kind": "ck.content.text",

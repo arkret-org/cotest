@@ -42,7 +42,7 @@ pub mod key_backup_restore_mls_replay;
 pub mod knock_cooldown_matrix;
 pub mod late_key_recovery_removed_actor;
 pub mod media_plaintext_downgrade_no_governance_binding;
-pub mod moderation_appeal_flow_end_to_end;
+pub mod moderation_appeal_strand_end_to_end;
 pub mod multi_device_qr_pairing;
 pub mod oob_code_entropy_and_lockout;
 pub mod personal_agent_provisioning;

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// D2 Round 24 — device verification flow vectors: cross-signing chain, SAS,
+/// D2 Round 24 — device verification strand vectors: cross-signing chain, SAS,
 /// emoji code.
 pub fn run_device_verification_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("device_verification_fixture.json")?;

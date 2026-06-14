@@ -174,7 +174,7 @@ that the smoke matrix does not exercise:
 - `directory-tabs.spec.ts` covers the protocol-objects, spaces, organizations,
   actors, and handles directory tabs plus the four-axis search policy banner
   and contact tooling form.
-- `consent-flow.spec.ts` drives the `consent-grant-demo` card in
+- `consent-strand.spec.ts` drives the `consent-grant-demo` card in
   `/settings/privacy`, validating empty-input feedback and the Move submission
   status for both `consent-grant-submit` and `consent-revoke-submit`.
 - `quarantine-smoke.spec.ts` renders `/quarantine`, exercises
@@ -411,7 +411,7 @@ Defaults the builder applies when fields are omitted:
 
 `with_device` can be called multiple times: the first call sets the primary
 device id, additional calls populate `TestActor.additional_devices` for
-scenarios that want to drive multi-device flows. Scenarios that need a
+scenarios that want to drive multi-device strands. Scenarios that need a
 working second-device client should call
 `server.demo_client(&actor.did, &device_label)` against the recorded labels.
 

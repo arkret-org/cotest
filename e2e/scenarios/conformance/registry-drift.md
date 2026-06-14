@@ -12,7 +12,7 @@
 - `cokret-spec/spec/v1/artifacts/registry/removed-event-kinds.json` — 32 个被移除的 `ck.*` event.kind,`hard_reject` rejection level
 - `cokret-spec/spec/v1/artifacts/registry/removed-operation-ids.json` — 11 个被移除的 operation id (HTTP / gRPC / MQ binding)
 - `cokret-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json` — 被废弃的 profile id
-- `cokret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json` — 5 个上下文绑定的禁用 wire 字段名 (`branch` / `room_kind` / `discussion_space_ref` / `space_frontier` / 含 `kind=room` 的 flow payload)
+- `cokret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json` — 5 个上下文绑定的禁用 wire 字段名 (`branch` / `room_kind` / `discussion_space_ref` / `space_frontier` / 含 `kind=room` 的 strand payload)
 - `cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json` — prose / identifier 级别的禁用术语
 - `cokret-spec/spec/v1/artifacts/registry/operation-registry.json` — canonical operation 注册表 (82 个 operation_id × 14 个 surface_groups),HTTP / gRPC / MQ 绑定的唯一真源
 - 关联 OpenAPI 视图: `cokret-spec/spec/v1/artifacts/openapi/cokret-service-api.openapi.yaml` (按 `registry_rules` 中 "MUST NOT introduce/rename/remove operation_id" 的约束,是 operation-registry 的派生 view,不是第二个 namespace)
@@ -59,7 +59,7 @@
 
 ### Phase B — Removed operation IDs hard-reject
 
-6. **harness** load `artifacts/registry/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `ck.flow.track.member.add`, `ck.realm.lifecycle.set.apply`)
+6. **harness** load `artifacts/registry/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `ck.strand.track.member.add`, `ck.realm.lifecycle.set.apply`)
 7. 对每个 `entry.id`,尝试通过 soland 的 generic operation endpoint 调用:
    - 若 soland 暴露 `POST /_cokret/self/operations/{operation_id}` → POST with `{}` body + bearer
    - 否则 fallback 到 `POST /_cokret/self/server/operation/invoke` with `{ operation_id, input: {} }` body

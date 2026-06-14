@@ -234,7 +234,7 @@ fn validate_bad_schema_payload(case: &Value) -> Result<SecurityDecision> {
         let has_body = ["content", "encrypted_content", "blob_refs"]
             .iter()
             .any(|field| payload.get(*field).is_some());
-        if payload.get("flow_id").and_then(Value::as_str).is_none() || !has_body {
+        if payload.get("strand_id").and_then(Value::as_str).is_none() || !has_body {
             return Ok(SecurityDecision::reject("schema_violation"));
         }
     }
@@ -413,7 +413,7 @@ mod tests {
             "prev_refs": [],
             "refs": [],
             "payload": {
-                "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
+                "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
                 "track_name": "discussion",
                 "content": {"kind": "ck.content.text", "body": "signed body"}
             }

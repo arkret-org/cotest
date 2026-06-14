@@ -222,7 +222,7 @@
     },
     {
       "name": "admin_override_audit_view_for_banned_member",
-      "comment": "Round 26 B4 余下 — admin holds ck.recovery.read.history.v1 and uses it to read a specific event for a banned member's investigation. The recovery_capability + audit_log requirement composes: admin sees the original via audit_view + audit_log is emitted. This is a second admin_override vector to cover the more complex investigation flow.",
+      "comment": "Round 26 B4 余下 — admin holds ck.recovery.read.history.v1 and uses it to read a specific event for a banned member's investigation. The recovery_capability + audit_log requirement composes: admin sees the original via audit_view + audit_log is emitted. This is a second admin_override vector to cover the more complex investigation strand.",
       "history_visibility": "joined",
       "admin_override": {
         "admin_did": "did:web:admin2.example",

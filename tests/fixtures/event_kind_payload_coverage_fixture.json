@@ -166,9 +166,9 @@
       "payload_shape": { "rule_id": "rule_001", "expression": "actor.role == 'admin'" }
     },
     {
-      "name": "flow_move_cas_register",
-      "event_kind": "ck.flow.move",
-      "cell_family": "ck.component.flow.position.v1",
+      "name": "strand_move_cas_register",
+      "event_kind": "ck.strand.move",
+      "cell_family": "ck.component.strand.position.v1",
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "rank": "K1", "space_id": "ck:space:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }

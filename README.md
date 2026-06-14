@@ -153,7 +153,7 @@ for the full startup model, Docker image contract, and result artifacts.
   mapping used by the runner.
 - `docs/test-strategy.md`: harness model and suite grouping.
 - `docs/complement-map.md`: how Complement concepts map onto Cokret.
-- `docs/runtime-workflow.md`: runtime modes, Docker image flow, runner scripts,
+- `docs/runtime-workflow.md`: runtime modes, Docker image strand, runner scripts,
   and result presentation.
 
 ## Coverage Groups
@@ -165,7 +165,7 @@ for the full startup model, Docker image contract, and result artifacts.
   capability, sync, federation, privacy/security, and state-resolution fixtures
   loaded from `cokret-spec/spec/v1/artifacts`.
 - Multi-server surface: federation readiness, contract validation, and
-  cross-server collaboration flows.
+  cross-server collaboration strands.
 
 ## Result Artifacts
 

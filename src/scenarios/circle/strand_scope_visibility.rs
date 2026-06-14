@@ -1,4 +1,4 @@
-//! P2F.3 — Circle-scoped Flow envelopes stamp `EffectiveScope::Circle`.
+//! P2F.3 — Circle-scoped Strand envelopes stamp `EffectiveScope::Circle`.
 //!
 //! Pins the serde shape of [`cokret_core::EffectiveScope`] for both
 //! variants (`Realm` and `Circle`) and asserts that the Circle variant
@@ -19,7 +19,7 @@ fn circle_id() -> Result<CircleId> {
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 
-pub async fn flow_scope_visibility_run() -> Result<()> {
+pub async fn strand_scope_visibility_run() -> Result<()> {
     // Realm-only scope: shape `{ "kind": "realm", "realm_id": "..." }`.
     let realm = EffectiveScope::Realm {
         realm_id: realm_id()?,
@@ -85,6 +85,6 @@ mod tests {
 
     #[tokio::test]
     async fn effective_scope_circle_round_trip() {
-        flow_scope_visibility_run().await.unwrap();
+        strand_scope_visibility_run().await.unwrap();
     }
 }

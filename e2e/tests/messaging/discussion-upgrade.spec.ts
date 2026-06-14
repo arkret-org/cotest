@@ -1,7 +1,7 @@
-// Discussion track upgrade to a Circle-scoped private Flow (CKP-0007).
+// Discussion track upgrade to a Circle-scoped private Strand (CKP-0007).
 // Contract: e2e/scenarios/messaging/discussion-upgrade.md
 // Spec refs:
-//   - models/flow-and-message.md §5, §5.1 (scope_circle_id on Flow)
+//   - models/strand-and-message.md §5, §5.1 (scope_circle_id on Strand)
 //   - models/circle.md (Circle primitive, membership and encryption boundary)
 //   - models/relation.md (confidential_discussion_of)
 //   - discovery/read-receipts.md §2.5 (scope override)
@@ -15,7 +15,7 @@ import {
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -29,12 +29,12 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("discussion upgrade to Circle-scoped private Flow", () => {
-  test("API inline discussion track preserves flow_id and thread_id", async ({
+test.describe("discussion upgrade to Circle-scoped private Strand", () => {
+  test("API inline discussion track preserves strand_id and thread_id", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "inline-track");
-    const defaultFlowId = await resolveDefaultFlowId(request, fixture.aliceToken, fixture.realmId);
+    const defaultStrandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
     const body = `inline discussion ${Date.now()}`;
     await submitSignedEventApi(
       request,
@@ -44,7 +44,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
         realmId: fixture.realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: defaultFlowId,
+          strand_id: defaultStrandId,
           track_name: "discussion",
           thread_id: "discussion",
           content: { kind: "ck.content.text", body },
@@ -63,17 +63,17 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       JSON.stringify(eventPayload(event)).includes(body),
     );
     expect(eventPayload(message)).toMatchObject({
-      flow_id: defaultFlowId,
+      strand_id: defaultStrandId,
       track_name: "discussion",
       thread_id: "discussion",
     });
   });
 
-  test("private discussion Flow stays on the same Realm frontier and carries Circle scope", async ({
+  test("private discussion Strand stays on the same Realm frontier and carries Circle scope", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "same-realm");
-    const publicFlowId = await createFlowViaApi(
+    const publicStrandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
@@ -85,13 +85,13 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
-      publicFlowId,
+      publicStrandId,
       "public discussion",
     );
-    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+    const promoted = await promoteDiscussionToPrivateStrandViaApi(
       request,
       fixture,
-      publicFlowId,
+      publicStrandId,
       { members: [fixture.alice, fixture.bob] },
     );
     const after = await createDiscussionMessageViaApi(
@@ -99,7 +99,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
-      promoted.privateFlowId,
+      promoted.privateStrandId,
       "private discussion",
     );
 
@@ -114,7 +114,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       promoted.circleId,
     );
     expect(eventPayload(eventById(events, after.event_id))).toMatchObject({
-      flow_id: promoted.privateFlowId,
+      strand_id: promoted.privateStrandId,
       track_name: "discussion",
     });
   });
@@ -141,7 +141,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       carolToken,
       { title: `circle visibility ${stamp}`, historyVisibility: "shared" },
     );
-    const publicFlowId = await createFlowViaApi(
+    const publicStrandId = await createStrandViaApi(
       request,
       aliceToken,
       alice,
@@ -153,10 +153,10 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       aliceToken,
       alice,
       realmId,
-      publicFlowId,
+      publicStrandId,
       "realm-visible message",
     );
-    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+    const promoted = await promoteDiscussionToPrivateStrandViaApi(
       request,
       {
         alice,
@@ -165,7 +165,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
         bobToken: carolToken,
         realmId,
       },
-      publicFlowId,
+      publicStrandId,
       { members: [alice] },
     );
     const privateMessage = await createDiscussionMessageViaApi(
@@ -173,7 +173,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       aliceToken,
       alice,
       realmId,
-      promoted.privateFlowId,
+      promoted.privateStrandId,
       "circle-private message",
     );
 
@@ -183,21 +183,21 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     expect(carolIds).not.toContain(privateMessage.event_id);
   });
 
-  test("Circle-scoped read receipt uses realm_id and remains scoped to the private Flow", async ({
+  test("Circle-scoped read receipt uses realm_id and remains scoped to the private Strand", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "circle-receipt");
-    const publicFlowId = await createFlowViaApi(
+    const publicStrandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
       "receipt public F1",
     );
-    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+    const promoted = await promoteDiscussionToPrivateStrandViaApi(
       request,
       fixture,
-      publicFlowId,
+      publicStrandId,
       { members: [fixture.alice, fixture.bob] },
     );
     const privateMessage = await createDiscussionMessageViaApi(
@@ -205,7 +205,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
-      promoted.privateFlowId,
+      promoted.privateStrandId,
       "private receipt target",
     );
     const sentAt = new Date();
@@ -227,11 +227,11 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     ).toHaveLength(0);
   });
 
-  test("alice and bob exchange messages on a Realm-default Flow's inline discussion track", async ({
+  test("alice and bob exchange messages on a Realm-default Strand's inline discussion track", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(request, "inline-flow");
-    const flowId = await createFlowViaApi(
+    const fixture = await createDiscussionFixture(request, "inline-strand");
+    const strandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
@@ -243,7 +243,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
-      flowId,
+      strandId,
       "F1 alice inline",
     );
     const bobMessage = await createDiscussionMessageViaApi(
@@ -251,7 +251,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       fixture.bobToken,
       fixture.bob,
       fixture.realmId,
-      flowId,
+      strandId,
       "F1 bob inline",
     );
 
@@ -266,27 +266,27 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     );
     for (const id of [aliceMessage.event_id, bobMessage.event_id]) {
       expect(eventPayload(eventById(events, id))).toMatchObject({
-        flow_id: flowId,
+        strand_id: strandId,
         track_name: "discussion",
       });
     }
   });
 
-  test("promotion creates Circle, private Flow, and confidential_discussion_of relation", async ({
+  test("promotion creates Circle, private Strand, and confidential_discussion_of relation", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "promote");
-    const publicFlowId = await createFlowViaApi(
+    const publicStrandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
       "promoted public F1",
     );
-    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+    const promoted = await promoteDiscussionToPrivateStrandViaApi(
       request,
       fixture,
-      publicFlowId,
+      publicStrandId,
       { members: [fixture.alice, fixture.bob] },
     );
 
@@ -298,20 +298,20 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     expect(events.map((event) => event.event_kind)).toEqual(
       expect.arrayContaining([
         "ck.circle.create",
-        "ck.flow.create",
+        "ck.strand.create",
         "ck.relation.create",
       ]),
     );
     expect(
       events.some(
         (event) =>
-          event.event_kind === "ck.flow.update" &&
+          event.event_kind === "ck.strand.update" &&
           JSON.stringify(eventPayload(event)).includes("scope_circle_id"),
       ),
     ).toBe(false);
-    expect(eventPayload(findFlowCreate(events, promoted.privateFlowId))).toMatchObject({
+    expect(eventPayload(findStrandCreate(events, promoted.privateStrandId))).toMatchObject({
       object: {
-        id: promoted.privateFlowId,
+        id: promoted.privateStrandId,
         realm_id: fixture.realmId,
         scope_circle_id: promoted.circleId,
       },
@@ -319,27 +319,27 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     expect(eventPayload(findRelationCreate(events, promoted.relationId))).toMatchObject({
       relation_id: promoted.relationId,
       relation_kind: "confidential_discussion_of",
-      from_ref: promoted.privateFlowId,
-      to_ref: publicFlowId,
+      from_ref: promoted.privateStrandId,
+      to_ref: publicStrandId,
       scope_circle_id: promoted.circleId,
     });
   });
 
-  test("private discussion Flow can be MLS-backed while the Realm-default Flow stays plaintext", async ({
+  test("private discussion Strand can be MLS-backed while the Realm-default Strand stays plaintext", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "circle-e2ee");
-    const publicFlowId = await createFlowViaApi(
+    const publicStrandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
       fixture.realmId,
       "e2ee public F1",
     );
-    const promoted = await promoteDiscussionToPrivateFlowViaApi(
+    const promoted = await promoteDiscussionToPrivateStrandViaApi(
       request,
       fixture,
-      publicFlowId,
+      publicStrandId,
       {
         members: [fixture.alice, fixture.bob],
         circleEncryptionProfile: "mls_rfc9420",
@@ -361,7 +361,7 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     });
   });
 
-  test("unknown scope_circle_id on Flow create is rejected", async ({
+  test("unknown scope_circle_id on Strand create is rejected", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "orphan-scope");
@@ -371,13 +371,13 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       data: signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.realmId,
-        kind: "ck.flow.create",
+        kind: "ck.strand.create",
         payload: {
-          object: flowObject(
+          object: strandObject(
             fixture.realmId,
-            typedId("flow"),
+            typedId("strand"),
             fixture.alice,
-            "orphan scoped Flow",
+            "orphan scoped Strand",
             { scopeCircleId: orphanCircleId },
           ),
         },
@@ -388,11 +388,11 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
     expect(body).toMatch(/circle_unknown|circle_not_found|circle_realm_mismatch/);
   });
 
-  test("scope_circle_id rebind on an existing Flow is rejected", async ({
+  test("scope_circle_id rebind on an existing Strand is rejected", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "rebind-scope");
-    const flowId = await createFlowViaApi(
+    const strandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
       fixture.alice,
@@ -408,10 +408,10 @@ test.describe("discussion upgrade to Circle-scoped private Flow", () => {
       data: signedEventEnvelope({
         actorDid: fixture.alice.did,
         realmId: fixture.realmId,
-        kind: "ck.flow.update",
+        kind: "ck.strand.update",
         payload: {
-          target_ref: flowId,
-          flow_id: flowId,
+          target_ref: strandId,
+          strand_id: strandId,
           patch: { scope_circle_id: { $op: "set", value: circleId } },
         },
       }),
@@ -460,7 +460,7 @@ async function createDiscussionFixture(
   return { alice, bob, aliceToken, bobToken, realmId };
 }
 
-async function createFlowViaApi(
+async function createStrandViaApi(
   request: APIRequestContext,
   token: string,
   actor: JointUser,
@@ -468,33 +468,33 @@ async function createFlowViaApi(
   title: string,
   opts: { scopeCircleId?: string } = {},
 ) {
-  const flowId = typedId("flow");
+  const strandId = typedId("strand");
   await submitSignedEventApi(
     request,
     token,
     signedEventEnvelope({
       actorDid: actor.did,
       realmId,
-      kind: "ck.flow.create",
+      kind: "ck.strand.create",
       payload: {
-        object: flowObject(realmId, flowId, actor, title, opts),
+        object: strandObject(realmId, strandId, actor, title, opts),
       },
     }),
-    { context: `create flow ${title}` },
+    { context: `create strand ${title}` },
   );
-  return flowId;
+  return strandId;
 }
 
-function flowObject(
+function strandObject(
   realmId: string,
-  flowId: string,
+  strandId: string,
   actor: JointUser,
   title: string,
   opts: { scopeCircleId?: string } = {},
 ) {
   return {
-    id: flowId,
-    schema: "ck.schema.flow.v1",
+    id: strandId,
+    schema: "ck.schema.strand.v1",
     realm_id: realmId,
     title: `${title} ${Date.now()}`,
     stage: "draft",
@@ -512,17 +512,17 @@ function flowObject(
   };
 }
 
-async function promoteDiscussionToPrivateFlowViaApi(
+async function promoteDiscussionToPrivateStrandViaApi(
   request: APIRequestContext,
   fixture: DiscussionFixture,
-  publicFlowId: string,
+  publicStrandId: string,
   opts: {
     members: JointUser[];
     circleEncryptionProfile?: "none" | "mls_rfc9420";
   },
 ) {
   const circleId = await createDiscussionCircleViaApi(request, fixture, opts);
-  const privateFlowId = await createFlowViaApi(
+  const privateStrandId = await createStrandViaApi(
     request,
     fixture.aliceToken,
     fixture.alice,
@@ -535,11 +535,11 @@ async function promoteDiscussionToPrivateFlowViaApi(
     fixture.aliceToken,
     fixture.alice,
     fixture.realmId,
-    privateFlowId,
-    publicFlowId,
+    privateStrandId,
+    publicStrandId,
     circleId,
   );
-  return { circleId, privateFlowId, relationId };
+  return { circleId, privateStrandId, relationId };
 }
 
 async function createDiscussionCircleViaApi(
@@ -660,8 +660,8 @@ async function createConfidentialDiscussionRelationViaApi(
   token: string,
   actor: JointUser,
   realmId: string,
-  privateFlowId: string,
-  publicFlowId: string,
+  privateStrandId: string,
+  publicStrandId: string,
   circleId: string,
 ) {
   const relationId = typedId("relation");
@@ -675,13 +675,13 @@ async function createConfidentialDiscussionRelationViaApi(
       payload: {
         relation_id: relationId,
         relation_kind: "confidential_discussion_of",
-        from_ref: privateFlowId,
-        to_ref: publicFlowId,
+        from_ref: privateStrandId,
+        to_ref: publicStrandId,
         scope_circle_id: circleId,
         fields: { role: "promoted_discussion" },
       },
     }),
-    { context: `link private discussion ${privateFlowId}` },
+    { context: `link private discussion ${privateStrandId}` },
   );
   return relationId;
 }
@@ -691,7 +691,7 @@ async function createDiscussionMessageViaApi(
   token: string,
   actor: JointUser,
   realmId: string,
-  flowId: string,
+  strandId: string,
   body: string,
 ) {
   const envelope = signedEventEnvelope({
@@ -699,7 +699,7 @@ async function createDiscussionMessageViaApi(
     realmId,
     kind: "ck.message.create",
     payload: {
-      flow_id: flowId,
+      strand_id: strandId,
       track_name: "discussion",
       thread_id: "discussion",
       content: { kind: "ck.content.text", body: `${body} ${Date.now()}` },
@@ -728,11 +728,11 @@ function findCircleCreate(
   return findEventByPayload(events, "ck.circle.create", circleId);
 }
 
-function findFlowCreate(
+function findStrandCreate(
   events: Array<Record<string, unknown>>,
-  flowId: string,
+  strandId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ck.flow.create", flowId);
+  return findEventByPayload(events, "ck.strand.create", strandId);
 }
 
 function findRelationCreate(

@@ -7,7 +7,7 @@
 不验证(明确区分):
 - Realm-level ban / kick / quarantine — 那是**服务端**对内容/成员的强制隔离,见 `spaces/moderation-ban`、`governance/content-moderation` 的 quarantine 流程
 - mute(通知静默,消息仍可见)— 见 `discovery/notifications.md`
-- appeal flow — 见 `governance/organization-policy`
+- appeal strand — 见 `governance/organization-policy`
 
 ## Spec 锚点
 

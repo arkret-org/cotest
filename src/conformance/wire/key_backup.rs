@@ -496,7 +496,7 @@ pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
                 }
                 if (distinct.len() as u64) < req {
                     bail!(
-                        "vector {name} positive flow needs >= {req} distinct admin_dids; got {}",
+                        "vector {name} positive strand needs >= {req} distinct admin_dids; got {}",
                         distinct.len()
                     );
                 }

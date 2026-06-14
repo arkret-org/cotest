@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/kanban/project-simulation.md
 // Spec refs:
 //   - models/realm-and-space.md §4 (Space container), §3 (Join Policy)
-//   - models/flow-and-message.md §3 (Flow fields)
+//   - models/strand-and-message.md §3 (Strand fields)
 //   - models/relation.md §3.2 (assigned_to), §6 (conflict resolution)
 
 import { expect, test } from "@playwright/test";
@@ -80,7 +80,7 @@ test.describe("project simulation", () => {
   );
 
   test(
-    "status FSM: Card transitions todo → in_progress → done via ck.flow.update; invalid transition (todo → done direct) rejected by FSM cell",
+    "status FSM: Card transitions todo → in_progress → done via ck.strand.update; invalid transition (todo → done direct) rejected by FSM cell",
     async ({ request }) => {
       const alice = uniqueUser("s16-fsm-alice");
       await ensureRegistered(request, alice);
@@ -89,8 +89,8 @@ test.describe("project simulation", () => {
         title: `S16 FSM ${Date.now()}`,
         ownerDid: alice.did,
       });
-      const taskFlowId = typedId("flow");
-      const incidentFlowId = typedId("flow");
+      const taskStrandId = typedId("strand");
+      const incidentStrandId = typedId("strand");
       const taskCreatedAt = canonicalTimestamp();
 
       await submitSignedEventApi(
@@ -99,12 +99,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.flow.create",
+          kind: "ck.strand.create",
           createdAt: taskCreatedAt,
           payload: {
             object: {
-              id: taskFlowId,
-              schema: "ck.schema.flow.v1",
+              id: taskStrandId,
+              schema: "ck.schema.strand.v1",
               realm_id: realmId,
               title: "Implement login",
               stage: "planned",
@@ -115,7 +115,7 @@ test.describe("project simulation", () => {
             },
           },
         }),
-        { context: "create todo card flow" },
+        { context: "create todo card strand" },
       );
 
       const badDone = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
@@ -123,16 +123,16 @@ test.describe("project simulation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.flow.update",
+          kind: "ck.strand.update",
           payload: {
-            target_ref: taskFlowId,
-            flow_id: taskFlowId,
+            target_ref: taskStrandId,
+            strand_id: taskStrandId,
             patch: { fields: { status: "done" } },
           },
         }),
       });
       expect(badDone.status()).toBe(412);
-      expect(wireErrCode(await badDone.json())).toBe("flow_status_transition_invalid");
+      expect(wireErrCode(await badDone.json())).toBe("strand_status_transition_invalid");
 
       await submitSignedEventApi(
         request,
@@ -140,10 +140,10 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.flow.update",
+          kind: "ck.strand.update",
           payload: {
-            target_ref: taskFlowId,
-            flow_id: taskFlowId,
+            target_ref: taskStrandId,
+            strand_id: taskStrandId,
             patch: { fields: { status: "in_progress" } },
           },
         }),
@@ -156,10 +156,10 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.flow.update",
+          kind: "ck.strand.update",
           payload: {
-            target_ref: taskFlowId,
-            flow_id: taskFlowId,
+            target_ref: taskStrandId,
+            strand_id: taskStrandId,
             patch: { fields: { status: "done" } },
           },
         }),
@@ -173,12 +173,12 @@ test.describe("project simulation", () => {
         signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.flow.create",
+          kind: "ck.strand.create",
           createdAt: incidentCreatedAt,
           payload: {
             object: {
-              id: incidentFlowId,
-              schema: "ck.schema.flow.v1",
+              id: incidentStrandId,
+              schema: "ck.schema.strand.v1",
               realm_id: realmId,
               title: "SEV-2 checkout outage",
               stage: "in_progress",
@@ -189,7 +189,7 @@ test.describe("project simulation", () => {
             },
           },
         }),
-        { context: "create investigating incident flow" },
+        { context: "create investigating incident strand" },
       );
 
       const badResolved = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
@@ -197,16 +197,16 @@ test.describe("project simulation", () => {
         data: signedEventEnvelope({
           actorDid: alice.did,
           realmId: realmId,
-          kind: "ck.flow.update",
+          kind: "ck.strand.update",
           payload: {
-            target_ref: incidentFlowId,
-            flow_id: incidentFlowId,
+            target_ref: incidentStrandId,
+            strand_id: incidentStrandId,
             patch: { fields: { status: "resolved" } },
           },
         }),
       });
       expect(badResolved.status()).toBe(412);
-      expect(wireErrCode(await badResolved.json())).toBe("flow_status_transition_invalid");
+      expect(wireErrCode(await badResolved.json())).toBe("strand_status_transition_invalid");
     },
   );
 
@@ -216,7 +216,7 @@ test.describe("project simulation", () => {
     // @expected-live-by: 2026Q3
     "due_date past today renders as overdue badge on the card UI",
     async () => {
-      // spec: flow-and-message.md §3 (fields are opaque to reducer; UI semantics).
+      // spec: strand-and-message.md §3 (fields are opaque to reducer; UI semantics).
     },
   );
 

@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 Cokret 与外部 MIMI (IETF Messaging Interoperability) 网络通过 MIMI Provider Facade 互通的完整链路:Realm 声明 `federation_profile = "mimi_interop"` → 外部 MIMI 用户经 facade 申请加入 → soland 通过 facade 验证 MIMI identity 并生成 pairwise DID → 双向消息在 Cokret Flow/Message 与 MIMI room/event 之间双向翻译 → consent / E2EE / content kind 在跨网络边界上得到正确处理。
+验证 Cokret 与外部 MIMI (IETF Messaging Interoperability) 网络通过 MIMI Provider Facade 互通的完整链路:Realm 声明 `federation_profile = "mimi_interop"` → 外部 MIMI 用户经 facade 申请加入 → soland 通过 facade 验证 MIMI identity 并生成 pairwise DID → 双向消息在 Cokret Strand/Message 与 MIMI room/event 之间双向翻译 → consent / E2EE / content kind 在跨网络边界上得到正确处理。
 
 不验证:同质 Cokret server 之间的联邦 (见 federation/cross-server)、Matrix 专属桥接 (out of scope for v1 core)、MIMI Provider Facade 本身的内部实现细节 (它是 extension profile,v1 core 不要求实现)。
 
@@ -10,7 +10,7 @@
 
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §1 — MIMI Provider Facade 总览;Cokret 把外部 MIMI 网络当作一个外部 federation peer 看待
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §2 — Realm `federation_profile = "mimi_interop"` 字段语义;暴露 MIMI endpoint
-- `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §3 — Room binding:Cokret Flow ↔ MIMI room 的双向映射;event ↔ Message 翻译
+- `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §3 — Room binding:Cokret Strand ↔ MIMI room 的双向映射;event ↔ Message 翻译
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §4 — Content mapping:MIMI 标准 content type ↔ `ck.morph` content kind;未知类型 quarantine
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §5 — Policy mapping:Cokret join_rule / history_visibility ↔ MIMI room policy
 - `cokret-spec/spec/v1/zh/extensions/mimi-interop.md` §6 — Identity bridging:MIMI 用户 → pairwise DID;同一个 MIMI 身份在不同 Realm 中产生不同 pairwise DID
@@ -50,7 +50,7 @@
    - join_rule = `invite`
    - history_visibility = `joined`
    - `ck.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
-2. 断言:`realm-lifecycle-flow` 显示 `created ck:realm:...`,记录 `realmId`
+2. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
 4. alice 调 `GET /_cokret/self/realm/${realmId}/federation/mimi/endpoint`
    - 断言:返回 200,body 含 `mimi_endpoint_url`(facade 已在 soland 中绑定该 Realm)、`room_binding_id`
@@ -91,7 +91,7 @@
 
 19. alice 收到 bob_mimi 的请求 (Phase B 的 inbound),实际上隐含了一次 consent 决策:approve 等价于授予 bob_mimi 在该 Realm 中的成员权限,但**不**等价于跨 Realm 的全局 consent
 20. 断言:bob_mimi 的 pairwise DID 只对当前 Realm `R` 有效;尝试在另一个 Realm `R2` 中以同一 pairwise DID 投递消息应被拒绝
-21. cross-link 到 identity/consent-grant scenario:Cokret 的 consent flow 在 MIMI 互通中由 pairwise DID 的 scoping 隐式提供
+21. cross-link 到 identity/consent-grant scenario:Cokret 的 consent strand 在 MIMI 互通中由 pairwise DID 的 scoping 隐式提供
 
 ## Observable assertions (合并清单)
 

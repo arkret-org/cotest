@@ -12,7 +12,7 @@ const baseURL =
 // COT-08-004: file-level parallelism across spec files. Per-test state is
 // isolated via `uniqueUser` / unique handles (the large majority of specs), and
 // within-file ordering is preserved (`fullyParallel: false`) so multi-step
-// flows stay intact. The worker count is env-tunable so CI can match it to the
+// strands stay intact. The worker count is env-tunable so CI can match it to the
 // shared soland/yougen stack's capacity — set `COTEST_PW_WORKERS=1` to fall
 // back to fully serial. Specs that share fixed identities or assert global
 // directory/federation state must either isolate (prefer `uniqueUser`) or tag

@@ -50,7 +50,7 @@
 //     verify the Ed25519 signature over the envelope payload. The mock
 //     records the signature but does not cryptographically verify it
 //     (unless `force_signature_failure` is set) — joint-e2e asserts the
-//     *flow*, not the wire-level crypto.
+//     *strand*, not the wire-level crypto.
 //   - The endpoint's own VID is auto-generated per run unless the
 //     MOCK_TSP_ENDPOINT_VID env var is provided, so harness runs sharing
 //     a persistent store cannot cross-contaminate.

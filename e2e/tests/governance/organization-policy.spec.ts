@@ -241,7 +241,7 @@ test.describe("organization policy inheritance", () => {
     // @blocking-on: soland#governance-organization-policy-gap
     // @user-promise: e2e/scenarios/governance/organization-policy.md
     // @expected-live-by: 2026Q3
-    "appeal flow: mallory submits appeal via policy.appeal.endpoint; moderator reviews; possible override",
+    "appeal strand: mallory submits appeal via policy.appeal.endpoint; moderator reviews; possible override",
     async () => {},
   );
 });

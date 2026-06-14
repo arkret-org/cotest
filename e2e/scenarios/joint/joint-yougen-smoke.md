@@ -4,7 +4,7 @@
 
 Prove the joint harness can run a real yougen web build against a real soland process.
 
-## Flow
+## Strand
 
 1. Register Alice and Bob through soland.
 2. Open two isolated yougen browser contexts with dev sessions.

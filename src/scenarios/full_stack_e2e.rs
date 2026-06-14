@@ -1,7 +1,7 @@
 //! T8.1 — Full multi-service end-to-end conformance scenario.
 //!
 //! Stitches the cross-project pieces shipped across T1–T7 into one black-box
-//! flow. The scenario covers:
+//! strand. The scenario covers:
 //!
 //!   1. **starid mint** — Alice's DID is resolvable against starid (live HTTP probe when STARID_BIN
 //!      is set; otherwise an SDK-level Did::new gate so the canonical-form rejection still runs).
@@ -29,7 +29,7 @@
 //! Always run:
 //!  - DID Document fallback: `binding_source = did_document_default` is rejected even when no Space
 //!    policy is wired.
-//!  - Stable push id leak: a blind payload that smuggles `space_id` / `flow_id` / `event_id` MUST
+//!  - Stable push id leak: a blind payload that smuggles `space_id` / `strand_id` / `event_id` MUST
 //!    be rejected by the sanitizer.
 //!  - Placeholder proof: production-mode soland rejects the yougen `jws="a..b"` placeholder (T1.3
 //!    surface — best-effort live probe).
@@ -68,7 +68,7 @@ const ALICE_HANDLE: &str = "alice:acme.example";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
 const TARGET_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-fullstacke2e1";
-const STABLE_FLOW_ID: &str = "ck:flow:0196419b-0000-7000-8000-fullstackflow";
+const STABLE_STRAND_ID: &str = "ck:strand:0196419b-0000-7000-8000-fullstackflow";
 const STABLE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-fullstackevt0";
 const SOURCE_REF_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-srcref0000001";
 
@@ -250,7 +250,7 @@ fn step_5_yougen_mock_send_message() -> Result<Value> {
         "actor_id": BOB_DID,
         "actor_seq": 1,
         "realm_id": TARGET_REALM_ID,
-        "flow_id": STABLE_FLOW_ID,
+        "strand_id": STABLE_STRAND_ID,
         "created_at": Utc::now().to_rfc3339(),
         "hlc": "1747613100000-0-cotest-yougen",
         "prev_refs": [],
@@ -352,7 +352,7 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
         "realm_id",
         "realm_id",
         "space_name",
-        "flow_id",
+        "strand_id",
         "message_body",
         "body",
     ];
@@ -443,13 +443,13 @@ fn negative_did_document_fallback_rejected() -> Result<()> {
 }
 
 /// `stable_push_id_leak_rejected` — a blind payload smuggling
-/// `realm_id` / `space_id` / `flow_id` / `event_id` MUST be rejected by the
+/// `realm_id` / `space_id` / `strand_id` / `event_id` MUST be rejected by the
 /// sanitizer.
 fn negative_stable_push_id_leak_rejected() -> Result<()> {
     let leaks: &[(&str, Value)] = &[
         ("realm_id", json!(TARGET_REALM_ID)),
         ("realm_id", json!(TARGET_REALM_ID)),
-        ("flow_id", json!(STABLE_FLOW_ID)),
+        ("strand_id", json!(STABLE_STRAND_ID)),
         ("event_id", json!(STABLE_EVENT_ID)),
     ];
     for (key, value) in leaks {

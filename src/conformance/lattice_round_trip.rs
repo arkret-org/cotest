@@ -365,8 +365,8 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
 fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
     let lattice = MvRegister;
     let cref = cell(
-        "ck.component.flow.title.v1",
-        "ck.flow.01js0fl0000000000000000000",
+        "ck.component.strand.title.v1",
+        "ck.strand.01js0fl0000000000000000000",
     );
     // MvRegister surfaces multiple concurrent values. The SDK's reference
     // implementation defaults to a Bottom-shaped result with both heads in
@@ -638,7 +638,7 @@ fn conflict_repair_resists_self_authorising_winner() -> Result<()> {
 // governance-frontier event refs each MLS commit attests to. Add-only
 // growth is the typical pattern; rotation that purges old refs is rare and
 // gated by capability. These tests confirm the lattice surfaces the union
-// without bottom under normal commit flow.
+// without bottom under normal commit strand.
 
 fn covered_frontier_cell(realm_suffix: &str) -> CellRef {
     cell(

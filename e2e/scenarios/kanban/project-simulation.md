@@ -10,8 +10,8 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 - `models/realm-and-space.md` §3.5 — 自动解析 join 路径(bob/carol 通过 claim 或 invite 加入)
 - `models/realm-and-space.md` §4 — Space
-- `models/flow-and-message.md` §3 — Flow 字段(`fields.status`、`fields.due_date`)
-- `models/relation.md` §3.2 — `assigned_to` cardinality(many_to_many,但同一 actor only one active assignment per flow)
+- `models/strand-and-message.md` §3 — Strand 字段(`fields.status`、`fields.due_date`)
+- `models/relation.md` §3.2 — `assigned_to` cardinality(many_to_many,但同一 actor only one active assignment per strand)
 - `models/relation.md` §6 — 并发 assignment 的冲突解决(`deterministic_winner` profile)
 - `authz/event-auth-state-resolution.md` §3.2 — Effect: fsm 转换 + multi-cell Moves
 
@@ -48,7 +48,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ### Phase C — alice 分配 Cards
 
-9. alice 在 Card 1 详情点 "Assign" → 选 bob.did → 提交 `ck.relation.create`:`{ relation_kind: "assigned_to", source: Card1.flow_id, target: bob.did, fields: { role: "primary" } }`
+9. alice 在 Card 1 详情点 "Assign" → 选 bob.did → 提交 `ck.relation.create`:`{ relation_kind: "assigned_to", source: Card1.strand_id, target: bob.did, fields: { role: "primary" } }`
 10. 同理 alice 把 Card 2 分给 carol,Card 3 分给 bob
 11. 断言:Card 1 / Card 3 卡片上显示 bob 的头像;Card 2 显示 carol 的头像
 12. 断言:bob 进 yougen,`/notifications` 或 dashboard 显示"You were assigned to: Card 1, Card 3"
@@ -57,9 +57,9 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 13. bob 在 Card 1 点 "Move to In Progress"
 14. yougen 提交两个动作:
-    - `ck.flow.move` 把 Card 1 从 `Todo.child_order` 挪到 `InProgress.child_order`
-    - `ck.flow.update`:`fields.status = "in_progress"`,这是 FSM 转换(spec §3.2 Effect: fsm)
-15. 若 yougen 把 status 建模为独立 FSM cell(`ck:cell:ck.component.flow.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
+    - `ck.strand.move` 把 Card 1 从 `Todo.child_order` 挪到 `InProgress.child_order`
+    - `ck.strand.update`:`fields.status = "in_progress"`,这是 FSM 转换(spec §3.2 Effect: fsm)
+15. 若 yougen 把 status 建模为独立 FSM cell(`ck:cell:ck.component.strand.status_fsm.v1`),precondition 是 `from=todo`、effect `to=in_progress`
 16. 断言:Card 1 在 InProgress 列;alice/bob/carol 三方视图一致
 17. bob 继续 → `in_progress → done`
 
@@ -114,7 +114,7 @@ kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/ca
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.relation.create assigned_to`、`ck.space.update state=archived`、cascade rules — 多数 partial。Flow `fields.status` FSM 已由 `ck.flow.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
+- **soland 缺口**:`ck.relation.create assigned_to`、`ck.space.update state=archived`、cascade rules — 多数 partial。Strand `fields.status` FSM 已由 `ck.strand.update` reducer preflight 覆盖(todo → in_progress → done、investigating → mitigated → resolved)
 - **yougen 缺口**:assignment UI、due date picker、archive board 按钮、逾期红色标记、`assigned-to-actor` testid
 - **测试侧难点**:Phase G 需要并发提交,Playwright 的 single-context 比较难;可能要用 fetch API 直接打 soland 模拟双设备
 

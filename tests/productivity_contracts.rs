@@ -99,7 +99,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
         .validate_payload(
             kinds::RSVP_SET,
             &json!({
-                "event_ref": "ck:flow:01904100-0000-7000-8000-000000000001",
+                "event_ref": "ck:strand:01904100-0000-7000-8000-000000000001",
                 "status": "accepted",
                 "occurrence": null
             }),
@@ -110,7 +110,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             .validate_payload(
                 kinds::RSVP_SET,
                 &json!({
-                    "event_ref": "ck:flow:01904100-0000-7000-8000-000000000001",
+                    "event_ref": "ck:strand:01904100-0000-7000-8000-000000000001",
                     "status": "yes",
                     "occurrence": null
                 }),
@@ -120,8 +120,8 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     );
 
     let pin_scope = json!({
-        "kind": "flow",
-        "id": "ck:flow:01904100-0000-7000-8000-000000000001"
+        "kind": "strand",
+        "id": "ck:strand:01904100-0000-7000-8000-000000000001"
     });
     catalog
         .validate_payload(

@@ -135,8 +135,8 @@ test.describe("contact graph (same principal server)", () => {
   });
 
   // S3: already friends (direct_message) -> resolve direct conversation
-  // (create=true) -> realm_id + main_flow_id -> exchange a message.
-  test("S3 friends via direct_message -> resolve direct conversation (realm_id + main_flow_id, both sides converge)", async ({
+  // (create=true) -> realm_id + main_strand_id -> exchange a message.
+  test("S3 friends via direct_message -> resolve direct conversation (realm_id + main_strand_id, both sides converge)", async ({
     request,
   }) => {
     const alice = uniqueUser("cg-s3-alice");
@@ -177,11 +177,11 @@ test.describe("contact graph (same principal server)", () => {
     );
     expect(["created", "found"]).toContain(resolved.state);
     expect(resolved.realm_id).toMatch(/^ck:realm:/);
-    expect(resolved.main_flow_id).toMatch(/^ck:flow:/);
+    expect(resolved.main_strand_id).toMatch(/^ck:strand:/);
     const realmId = resolved.realm_id!;
 
     // Both sides converge on the same canonical 1:1 binding (same realm_id +
-    // main_flow_id), and the binding is surfaced on each contact row's
+    // main_strand_id), and the binding is surfaced on each contact row's
     // direct_conversation summary.
     const bobResolved = await resolveDirectConversationCokret(
       request,
@@ -190,7 +190,7 @@ test.describe("contact graph (same principal server)", () => {
       { create: true },
     );
     expect(bobResolved.realm_id).toBe(realmId);
-    expect(bobResolved.main_flow_id).toBe(resolved.main_flow_id);
+    expect(bobResolved.main_strand_id).toBe(resolved.main_strand_id);
 
     const aliceRow = await contactRow(request, aliceToken, bob.did);
     expect(aliceRow?.direct_conversation?.realm_id).toBe(realmId);
@@ -198,7 +198,7 @@ test.describe("contact graph (same principal server)", () => {
 
     // Message leg (live): `direct_conversation.resolve(create=true)` now stands
     // up a real event-log DM Realm (ck.realm.create + both members' join +
-    // main ck.flow.create), so a ck.message.create into the bound main flow is
+    // main ck.strand.create), so a ck.message.create into the bound main strand is
     // accepted AND readable by the peer through the canonical event read API.
     // spec contact-and-direct-conversation.md §6 step5 / §7 / §8.
     const body = `dm body ${Date.now()}`;
@@ -210,7 +210,7 @@ test.describe("contact graph (same principal server)", () => {
         realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: resolved.main_flow_id!,
+          strand_id: resolved.main_strand_id!,
           track_name: "discussion",
           content: { kind: "ck.content.text", body },
         },

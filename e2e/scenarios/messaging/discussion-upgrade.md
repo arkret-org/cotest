@@ -1,15 +1,15 @@
-# Discussion scope 升级为独立 Flow + Circle
+# Discussion scope 升级为独立 Strand + Circle
 
 ## 目标
 
-一个 Flow 的 discussion track 内消息增长后，alice 把后续私密讨论迁移到一条新的 discussion Flow，并把新 Flow 绑定到 Realm 内的窄 Circle。原 Flow 的 synthesis / discussion 保留在原 effective scope；新讨论 Flow 通过 `confidential_discussion_of` Relation 指回原 Flow。协议层不使用 `discussion_space_ref`，也不把 Space 当成成员、访问策略或 E2EE 边界。
+一个 Strand 的 discussion track 内消息增长后，alice 把后续私密讨论迁移到一条新的 discussion Strand，并把新 Strand 绑定到 Realm 内的窄 Circle。原 Strand 的 synthesis / discussion 保留在原 effective scope；新讨论 Strand 通过 `confidential_discussion_of` Relation 指回原 Strand。协议层不使用 `discussion_space_ref`，也不把 Space 当成成员、访问策略或 E2EE 边界。
 
 ## Spec 锚点
 
-- `models/flow-and-message.md` §5 — Flow 只有一个 effective scope；track 不拥有独立 access
-- `models/circle.md` §7.2 — "宽 synthesis + 窄 discussion" 用两个 Flow + Relation 表达
+- `models/strand-and-message.md` §5 — Strand 只有一个 effective scope；track 不拥有独立 access
+- `models/circle.md` §7.2 — "宽 synthesis + 窄 discussion" 用两个 Strand + Relation 表达
 - `models/relation.md` §3.2 — `promoted_from_discussion` / 语义 Relation
-- `authz/resource-selector-grammar.md` — Flow / Circle / Realm scoped selector
+- `authz/resource-selector-grammar.md` — Strand / Circle / Realm scoped selector
 - `discovery/read-receipts.md` §2.5 — Circle 可在 Realm policy 允许时进一步收紧 read receipt policy
 
 ## 拓扑
@@ -20,30 +20,30 @@
 
 | 名字 | 角色 |
 |---|---|
-| alice | 原 Flow owner，触发升级 |
+| alice | 原 Strand owner，触发升级 |
 | bob | 原 discussion 参与者 |
 | carol | Phase D 新加入私密 Circle 的成员 |
 
 ## Steps
 
-### Phase A — 创建原 Flow + 初期 discussion
+### Phase A — 创建原 Strand + 初期 discussion
 
 1. alice createRealm `R_parent`, seedMembers=[bob]
-2. alice 在 `R_parent` 中创建 Flow `F_public`，`scope_circle_id = null`，discussion track 默认启用
+2. alice 在 `R_parent` 中创建 Strand `F_public`，`scope_circle_id = null`，discussion track 默认启用
 3. alice、bob 在 `F_public` discussion 中互发 10 条消息 `M1..M10`
 4. 断言:两人都看到 `M1..M10` 在 `F_public` 详情的 Comments 区
 
-### Phase B — alice 创建窄 Circle + discussion Flow
+### Phase B — alice 创建窄 Circle + discussion Strand
 
 5. alice 在 `F_public` 详情点 "Promote discussion to private thread"
 6. yougen 客户端:
    - 创建 Circle `C_discussion`，members=[alice, bob]，必要时设置 `encryption_profile = "mls_rfc9420"`
-   - 创建新 Flow `F_discussion`，`scope_circle_id = C_discussion.id`
+   - 创建新 Strand `F_discussion`，`scope_circle_id = C_discussion.id`
    - 创建 Relation `confidential_discussion_of`：`from_ref = F_discussion.id`，`to_ref = F_public.id`
    - 在 `F_public` 上写入展示用 metadata / relation projection，指向 `F_discussion`
 7. 断言:`F_public` 详情 UI 提示 "Discussion promoted to private thread"
 
-### Phase C — 新消息路由到 discussion Flow
+### Phase C — 新消息路由到 discussion Strand
 
 8. alice 在 promoted discussion 输入新消息 `M11`
 9. yougen 客户端因为当前 composer 绑定 `F_discussion`，提交 `ck.message.create` 到 `F_discussion` 的 discussion track
@@ -65,24 +65,24 @@
 
 ## Observable assertions
 
-- Phase A 步骤 4:`M1..M10` 在原 Flow discussion
+- Phase A 步骤 4:`M1..M10` 在原 Strand discussion
 - Phase B 步骤 7:升级后 UI 提示并创建 `C_discussion` + `F_discussion`
-- Phase C 步骤 10-11:新消息路由到新 Flow，原 Flow 不被追加新消息
-- Phase D 步骤 14:carol 看不到 pre-upgrade 原 Flow 消息
-- Phase E 步骤 18:Circle policy 对新 discussion Flow 生效
+- Phase C 步骤 10-11:新消息路由到新 Strand，原 Strand 不被追加新消息
+- Phase D 步骤 14:carol 看不到 pre-upgrade 原 Strand 消息
+- Phase E 步骤 18:Circle policy 对新 discussion Strand 生效
 
 ## Edge cases / sub-tests
 
-- **E21.1 Circle 不存在**:alice 把 `scope_circle_id` 指向不存在的 Circle → reducer 拒绝 `ck.flow.create` / `ck.flow.update`,reason `circle_not_found` 或 `circle_realm_mismatch`
-- **E21.2 scope rebind forbidden**:已存在的 `F_public` 不允许把 `scope_circle_id` 从 null 改成 `C_discussion`;必须创建新 Flow
-- **E21.3 relation 缺失**:存在 `F_discussion` 但没有 `confidential_discussion_of` relation 时，UI 不应把它展示为原 Flow 的 promoted discussion
+- **E21.1 Circle 不存在**:alice 把 `scope_circle_id` 指向不存在的 Circle → reducer 拒绝 `ck.strand.create` / `ck.strand.update`,reason `circle_not_found` 或 `circle_realm_mismatch`
+- **E21.2 scope rebind forbidden**:已存在的 `F_public` 不允许把 `scope_circle_id` 从 null 改成 `C_discussion`;必须创建新 Strand
+- **E21.3 relation 缺失**:存在 `F_discussion` 但没有 `confidential_discussion_of` relation 时，UI 不应把它展示为原 Strand 的 promoted discussion
 - **E21.4 E2EE Circle key 独立**:Realm 默认明文、Circle E2EE 时，`F_discussion` 消息必须加密；Realm 默认 E2EE、Circle E2EE 时，也必须使用 Circle scope 的 key material
 - **E21.5 跨服务器 Circle member**:carol 的 principal server 在 β，`C_discussion` membership / key delivery 走 federation peer API
 
 ## Implementation notes
 
 - **soland 缺口**:Circle-backed `scope_circle_id` enforcement、`confidential_discussion_of` relation profile、promoted thread projection。
-- **yougen 缺口**:"Promote discussion" 按钮、创建 Circle + discussion Flow 的组合 UI、promoted thread summary / drill-in UI。
+- **yougen 缺口**:"Promote discussion" 按钮、创建 Circle + discussion Strand 的组合 UI、promoted thread summary / drill-in UI。
 - **协议禁项**:`discussion_space_ref` / `discussion_realm_ref` 都不得出现在当前 wire；测试必须 hard-reject 这些字段。
 
 ## 总耗时预估

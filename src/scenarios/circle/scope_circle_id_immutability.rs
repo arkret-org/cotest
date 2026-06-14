@@ -10,7 +10,7 @@
 //! The companion scenario [`effective_scope_mismatch`] pins the
 //! *envelope-vs-payload* consistency check (same event, two declared
 //! scopes). This scenario instead pins the *prev-vs-next* check on the
-//! materialised object — i.e. two `ck.flow.update` events for the same
+//! materialised object — i.e. two `ck.strand.update` events for the same
 //! `entity_id` whose `scope_circle_id` values diverge MUST be rejected by
 //! `validate_no_scope_rebind(prev, next)` with the
 //! `scope_rebind_forbidden` reason code.
@@ -21,7 +21,7 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::error::REASON_SCOPE_REBIND_FORBIDDEN;
-use cokret_core::{CircleId, Did, Flow, FlowId, RealmId};
+use cokret_core::{CircleId, Did, Strand, StrandId, RealmId};
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {
@@ -29,12 +29,12 @@ fn realm_id() -> Result<RealmId> {
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
-fn flow_id() -> Result<FlowId> {
-    // `Flow::new` now takes a typed `FlowId` (was a raw String). The id MUST be
-    // a strict `ck:flow:<uuid7>` literal; all four prev/next states below share
-    // the same entity id so the scope-rebind helper compares the same Flow.
-    FlowId::new("ck:flow:0196419b-0000-7000-8000-000000000605".to_owned())
-        .map_err(|e| anyhow!("flow id: {e}"))
+fn strand_id() -> Result<StrandId> {
+    // `Strand::new` now takes a typed `StrandId` (was a raw String). The id MUST be
+    // a strict `ck:strand:<uuid7>` literal; all four prev/next states below share
+    // the same entity id so the scope-rebind helper compares the same Strand.
+    StrandId::new("ck:strand:0196419b-0000-7000-8000-000000000605".to_owned())
+        .map_err(|e| anyhow!("strand id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
@@ -53,7 +53,7 @@ fn actor() -> Result<Did> {
         .map_err(|e| anyhow!("actor did: {e}"))
 }
 
-/// Reducer-pure invariant: for two sequential states of the same Flow /
+/// Reducer-pure invariant: for two sequential states of the same Strand /
 /// Space / Morph entity (`prev`, `next`), the `scope_circle_id` MUST NOT
 /// change. Specifically:
 ///   - `None → None`         OK (Realm-default stays Realm-default)
@@ -92,27 +92,27 @@ fn validate_no_scope_rebind(prev: Option<&CircleId>, next: Option<&CircleId>) ->
 }
 
 pub async fn scope_circle_id_immutability_run() -> Result<()> {
-    // ── Build a Flow with scope_circle_id=Some(circle_a) and confirm it
+    // ── Build a Strand with scope_circle_id=Some(circle_a) and confirm it
     //    serialises to wire shape with the field set.
-    let mut flow_a = Flow::new(flow_id()?, realm_id()?, "Quarterly review", actor()?);
-    flow_a.scope_circle_id = Some(circle_a()?);
+    let mut strand_a = Strand::new(strand_id()?, realm_id()?, "Quarterly review", actor()?);
+    strand_a.scope_circle_id = Some(circle_a()?);
 
     let json_a: Value =
-        serde_json::to_value(&flow_a).map_err(|e| anyhow!("serialise flow_a: {e}"))?;
+        serde_json::to_value(&strand_a).map_err(|e| anyhow!("serialise strand_a: {e}"))?;
     let scope_field = json_a
         .get("scope_circle_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow!("Flow JSON missing scope_circle_id; got {json_a:?}"))?;
+        .ok_or_else(|| anyhow!("Strand JSON missing scope_circle_id; got {json_a:?}"))?;
     if scope_field != circle_a()?.as_str() {
         return Err(anyhow!(
-            "Flow.scope_circle_id wire value drifted; expected {}, got {scope_field}",
+            "Strand.scope_circle_id wire value drifted; expected {}, got {scope_field}",
             circle_a()?.as_str()
         ));
     }
-    let parsed_a: Flow =
-        serde_json::from_value(json_a).map_err(|e| anyhow!("parse flow_a: {e}"))?;
+    let parsed_a: Strand =
+        serde_json::from_value(json_a).map_err(|e| anyhow!("parse strand_a: {e}"))?;
     if parsed_a.scope_circle_id.as_ref().map(|c| c.as_str()) != Some(circle_a()?.as_str()) {
-        return Err(anyhow!("Flow.scope_circle_id round-trip lost the binding"));
+        return Err(anyhow!("Strand.scope_circle_id round-trip lost the binding"));
     }
 
     // ── Same prev/next: accept.
@@ -126,21 +126,21 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     validate_no_scope_rebind(None, None)
         .map_err(|e| anyhow!("expected accept on None → None; got: {e}"))?;
 
-    // ── circle_a → circle_a (build a sibling next-state Flow): accept.
-    let mut flow_a_next = Flow::new(flow_id()?, realm_id()?, "Quarterly review v2", actor()?);
-    flow_a_next.scope_circle_id = Some(circle_a()?);
+    // ── circle_a → circle_a (build a sibling next-state Strand): accept.
+    let mut strand_a_next = Strand::new(strand_id()?, realm_id()?, "Quarterly review v2", actor()?);
+    strand_a_next.scope_circle_id = Some(circle_a()?);
     validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),
-        flow_a_next.scope_circle_id.as_ref(),
+        strand_a_next.scope_circle_id.as_ref(),
     )
     .map_err(|e| anyhow!("expected accept on same-circle update; got: {e}"))?;
 
     // ── Rebind: circle_a → circle_b: reject with scope_rebind_forbidden.
-    let mut flow_b = Flow::new(flow_id()?, realm_id()?, "Quarterly review v3", actor()?);
-    flow_b.scope_circle_id = Some(circle_b()?);
+    let mut strand_b = Strand::new(strand_id()?, realm_id()?, "Quarterly review v3", actor()?);
+    strand_b.scope_circle_id = Some(circle_b()?);
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),
-        flow_b.scope_circle_id.as_ref(),
+        strand_b.scope_circle_id.as_ref(),
     ) {
         Ok(()) => {
             return Err(anyhow!(
@@ -158,11 +158,11 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     }
 
     // ── Rebind: circle_a → None: reject (Circle → Realm-default).
-    let mut flow_none = Flow::new(flow_id()?, realm_id()?, "downgrade", actor()?);
-    flow_none.scope_circle_id = None;
+    let mut strand_none = Strand::new(strand_id()?, realm_id()?, "downgrade", actor()?);
+    strand_none.scope_circle_id = None;
     match validate_no_scope_rebind(
         parsed_a.scope_circle_id.as_ref(),
-        flow_none.scope_circle_id.as_ref(),
+        strand_none.scope_circle_id.as_ref(),
     ) {
         Ok(()) => {
             return Err(anyhow!(
@@ -180,7 +180,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     }
 
     // ── Rebind: None → circle_b: reject (Realm-default → Circle).
-    match validate_no_scope_rebind(None, flow_b.scope_circle_id.as_ref()) {
+    match validate_no_scope_rebind(None, strand_b.scope_circle_id.as_ref()) {
         Ok(()) => {
             return Err(anyhow!(
                 "expected reject on None → circle_b rebind; got accept"
@@ -199,7 +199,7 @@ pub async fn scope_circle_id_immutability_run() -> Result<()> {
     // ── Wire round-trip the rebind-rejection envelopes: pin that both
     //    prev / next survive serde without dropping scope_circle_id.
     let prev_json = serde_json::to_value(&parsed_a).map_err(|e| anyhow!("serialise prev: {e}"))?;
-    let next_json = serde_json::to_value(&flow_b).map_err(|e| anyhow!("serialise next: {e}"))?;
+    let next_json = serde_json::to_value(&strand_b).map_err(|e| anyhow!("serialise next: {e}"))?;
     let prev_field = prev_json
         .get("scope_circle_id")
         .and_then(|v| v.as_str())

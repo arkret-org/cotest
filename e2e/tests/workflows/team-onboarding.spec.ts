@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/workflows/team-onboarding.md
 // Spec refs:
 //   - models/realm-and-space.md §2-§3 (Space + Join Policy)
-//   - models/flow-and-message.md §8 (reply/edit)
+//   - models/strand-and-message.md §8 (reply/edit)
 //
 // Realistic story: Manager Mei creates a welcome space, seeds Yuki, exchanges
 // a reply + edit timeline thread, and wraps the day with a short reply.
@@ -101,7 +101,7 @@ test.describe("workflow: team onboarding", () => {
     // @expected-live-by: 2026Q3
     "E-onboarding.1 mei pins the welcome message so yuki keeps seeing it at the top",
     async () => {
-      // yougen gap: pinned-message UI; spec models/flow-and-message.md §8.6.
+      // yougen gap: pinned-message UI; spec models/strand-and-message.md §8.6.
     },
   );
 

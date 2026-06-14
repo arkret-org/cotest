@@ -174,7 +174,7 @@ fn vect_cot_vector_registry_is_mechanically_complete() {
 // SDK-pure vectors over `cokret_core::model::*` object-addressing surface:
 //   * OA-COT-1 (4 cases) — grammar: scheme⇄fragment equivalence, hierarchy forms, fail-closed
 //     keyword/order/missing-via, realm-id vs alias.
-//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks flow/message identity,
+//   * OA-COT-2 (3 cases) — target_digest: ignores via/action/tok/lt, tracks strand/message identity,
 //     omitted-key (not null) canonical shape.
 //   * OA-COT-3 (2 cases) — scope confusion: cross-object replay rejected, token link_type wins over
 //     URL `lt` hint.
@@ -192,27 +192,27 @@ fn object_addressing_vector_suite_runs_clean() {
 // The SDK-pure OA-COT-1..4 vectors above lock the wire grammar + token target
 // binding + resolve_target response shape. The full live leg (a client mints a
 // shareable link, teabay's resolve_target resolves it, and the recipient opens
-// the flow/message subject through the access gate) lands once teabay's
-// flow/message access-gate is reachable end-to-end.
+// the strand/message subject through the access gate) lands once teabay's
+// strand/message access-gate is reachable end-to-end.
 
 #[test]
-#[ignore = "R3.3-followup: needs teabay flow/message access-gate"]
+#[ignore = "R3.3-followup: needs teabay strand/message access-gate"]
 fn test_oa_cot_5_share_resolve_open_live() {
     // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
-    //   1. Author shares a flow as `web+cokret:realm/<r>/flow/<f>?via=<teabay>
+    //   1. Author shares a strand as `web+cokret:realm/<r>/strand/<f>?via=<teabay>
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
     //   2. Recipient POSTs `ck.find.directory.query.resolve_target { address, token }`.
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
     //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
-    //      target_kind=flow, object_preview, join_rule, as_of, source_refs, via_services }`.
-    //   4. Recipient opens the flow; soland's access gate honors the invite link_type (NOT the URL
+    //      target_kind=strand, object_preview, join_rule, as_of, source_refs, via_services }`.
+    //   4. Recipient opens the strand; soland's access gate honors the invite link_type (NOT the URL
     //      `lt` hint) for the join decision.
-    unreachable!("integration target gated on teabay flow/message access-gate (R3.3)");
+    unreachable!("integration target gated on teabay strand/message access-gate (R3.3)");
 }
 
 // ─── R3.2 / TEST-COT-1 — live integration scenarios (shape-level only) ────
 //
-// These pin the full cross-service flows that the R3.2 wire changes enable.
+// These pin the full cross-service strands that the R3.2 wire changes enable.
 // The SDK-pure vector suites above already lock the wire shapes; the live
 // wiring (soland MID reducer + teabay list_handles_for_subject endpoint +
 // yougen §3.8.2 renderer transitions) lands as the upstream services finish
@@ -221,8 +221,8 @@ fn test_oa_cot_5_share_resolve_open_live() {
 
 #[test]
 #[ignore = "R3.2-followup: soland MID reducer + coauth issuer + yougen/floria refresh \
-            not yet wired for the end-to-end handle reassignment flow"]
-fn test_cot_1_handle_reassignment_full_flow_live() {
+            not yet wired for the end-to-end handle reassignment strand"]
+fn test_cot_1_handle_reassignment_full_strand_live() {
     // Live integration (soland ↔ SDK ↔ yougen ↔ coauth):
     //   1. coauth issues handle claim H1 for subject S (binding_state=verified).
     //   2. All views (roster member_display_state_digest, list_handles_for_subject, yougen mention

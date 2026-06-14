@@ -11,9 +11,9 @@
 - `cokret-spec/spec/v1/zh/models/realm-and-space.md` §2 — Space 概念与字段
 - `cokret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — `default_join_rule` 与 discoverability / history_visibility 三个轴独立
 - `cokret-spec/spec/v1/zh/models/realm-and-space.md` §3.8 — Membership 状态机扩展
-- `cokret-spec/spec/v1/zh/models/flow-and-message.md` §8 — Message 概览
-- `cokret-spec/spec/v1/zh/models/flow-and-message.md` §8.4 — Chat 模式示例 (mention、reply、reaction、edit 的事件链)
-- `cokret-spec/spec/v1/zh/models/flow-and-message.md` §8.5 — 冲突与收敛规则 (revision chain、redact tombstone)
+- `cokret-spec/spec/v1/zh/models/strand-and-message.md` §8 — Message 概览
+- `cokret-spec/spec/v1/zh/models/strand-and-message.md` §8.4 — Chat 模式示例 (mention、reply、reaction、edit 的事件链)
+- `cokret-spec/spec/v1/zh/models/strand-and-message.md` §8.5 — 冲突与收敛规则 (revision chain、redact tombstone)
 
 ## 拓扑
 
@@ -47,7 +47,7 @@
    - join_rule = `invite`
    - history_visibility = `joined` ← 关键:carol 加入前的消息对她不可见
    - seed_members = `[bob.did]` ← 在 Seed 步骤填,触发 alice 对 bob 的 invite 事件
-2. 断言:`realm-lifecycle-flow` 显示 `created ck:realm:...`,记录 `realmId`
+2. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
 3. **bob** 加载 yougen,进入 Realm;隐式接受 invite (现有 helper 的行为是 seed members 已经被 alice 直接加成员,等于 invite + accept 一起);如果未来 yougen 把 invite/accept 拆开,这里要补一个 `bob 接受邀请` 的子步
 4. 断言:bob 的 `/realms/${realmId}/admin` 可访问、`realm-admin-panel` 渲染
 

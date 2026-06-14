@@ -4,7 +4,7 @@
 
 Prove `ck.self.events.command.submit` batch mode is a real protocol response path and that `ck.realm.create` materializes the creator's initial Realm membership before subsequent owner writes.
 
-## Flow
+## Strand
 
 1. Register Alice and issue a dev session.
 2. Submit a batch body `{ events: [ck.realm.create], idempotency_key }` to `POST /_cokret/self/events`.

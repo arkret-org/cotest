@@ -124,7 +124,7 @@ test.describe("transport negotiation", () => {
       // Phase C — TSP binding (optional extension):
       //  10. soland_a announces ck.profile.binding.tsp.v1 in supported_bindings
       //  11. soland_b chooses TSP via ck.transport.negotiate
-      //  12. subsequent events flow inside TSP relationship envelopes
+      //  12. subsequent events strand inside TSP relationship envelopes
       //      (outer wrapper carries sender/receiver VID; inner = EventEnvelope)
       //  13. RFC 9421 NOT required on TSP-wrapped traffic — envelope crypto
       //      binding replaces HTTP-layer signature
@@ -133,7 +133,7 @@ test.describe("transport negotiation", () => {
       //  14. force-close the WebSocket connection
       //  15. soland_a's binding state machine moves
       //      tsp → websocket_frame → http_json (skipping unavailable layers)
-      //  16. next outbound event flows over HTTP/JSON, signed RFC 9421
+      //  16. next outbound event strands over HTTP/JSON, signed RFC 9421
       //  17. bob receives the event within 30s; binding.fallback{from=ws,to=http}
       //      counter increments
 

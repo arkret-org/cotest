@@ -92,12 +92,12 @@ export class JointUserPage {
     // yougen's /setup is the Overview; the Realm wizard lives at the
     // /setup/realms section. yougen/src/routes.rs §SetupSection.
     await this.page.goto("/setup/realms", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("realm-lifecycle-flow")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({ timeout: 120_000 });
   }
 
   async gotoOnboarding() {
     await this.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("account-flow")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("account-strand")).toBeVisible({ timeout: 120_000 });
   }
 
   async gotoDirectory() {
@@ -151,36 +151,36 @@ export class JointUserPage {
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
     await this.gotoSetup();
-    const flow = this.page.getByTestId("realm-lifecycle-flow").last();
+    const strand = this.page.getByTestId("realm-lifecycle-strand").last();
 
-    await flow.getByTestId("realm-title-input").fill(opts.title);
+    await strand.getByTestId("realm-title-input").fill(opts.title);
     if (opts.summary !== undefined) {
-      await flow.getByTestId("realm-summary-input").fill(opts.summary);
+      await strand.getByTestId("realm-summary-input").fill(opts.summary);
     }
-    const basicsNext = flow.getByTestId("new-realm-next-button").first();
+    const basicsNext = strand.getByTestId("new-realm-next-button").first();
     await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
     await basicsNext.click();
 
     if (opts.discoverability !== undefined) {
-      await selectDxcOption(flow.getByTestId("realm-discoverability-input"), opts.discoverability);
+      await selectDxcOption(strand.getByTestId("realm-discoverability-input"), opts.discoverability);
     }
     if (opts.joinRule !== undefined) {
-      await selectDxcOption(flow.getByTestId("realm-policy-join-rule-input"), opts.joinRule);
+      await selectDxcOption(strand.getByTestId("realm-policy-join-rule-input"), opts.joinRule);
     }
     if (opts.historyVisibility !== undefined) {
-      await selectDxcOption(flow.getByTestId("realm-policy-history-visibility-input"), opts.historyVisibility);
+      await selectDxcOption(strand.getByTestId("realm-policy-history-visibility-input"), opts.historyVisibility);
     }
     if (opts.encryptionProfile !== undefined) {
-      await selectDxcOption(flow.getByTestId("realm-encryption-profile-input"), opts.encryptionProfile);
+      await selectDxcOption(strand.getByTestId("realm-encryption-profile-input"), opts.encryptionProfile);
     }
-    const policyNext = flow.getByTestId("new-realm-next-button").first();
+    const policyNext = strand.getByTestId("new-realm-next-button").first();
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });
     await policyNext.click();
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
-      await flow.getByTestId("seed-members-input").fill(opts.seedMembers.join("\n"));
+      await strand.getByTestId("seed-members-input").fill(opts.seedMembers.join("\n"));
     }
-    const createButton = flow.getByTestId("create-realm-button");
+    const createButton = strand.getByTestId("create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await createButton.click();
 
@@ -201,8 +201,8 @@ export class JointUserPage {
       await createButton.click();
     }
 
-    await expect(flow).toContainText(/created ck:realm:/, { timeout: 30_000 });
-    const text = await flow.innerText();
+    await expect(strand).toContainText(/created ck:realm:/, { timeout: 30_000 });
+    const text = await strand.innerText();
     const match = text.match(/created (ck:realm:[^\s]+)/);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];
@@ -232,7 +232,7 @@ export class JointUserPage {
   // Accept a pending invite for this user. Yougen's realm-admin invite list
   // is session-local, so a fresh-context invitee can't see seed-member invites
   // via the UI. The old REST mutation endpoint was removed; acceptance now
-  // flows through the canonical event path as an invite -> join member state.
+  // strands through the canonical event path as an invite -> join member state.
   async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
     const token = this.session.sessionToken;

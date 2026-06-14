@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/workflows/sprint-planning.md
 // Spec refs:
 //   - models/realm-and-space.md §2-§4 (Space + Board + List)
-//   - models/flow-and-message.md §8 (reply chain)
+//   - models/strand-and-message.md §8 (reply chain)
 //
 // Realistic story: Tech-lead Mei kicks off a sprint, two engineers reply
 // claiming user stories. The kanban cross-user hydration path is live;
@@ -145,7 +145,7 @@ test.describe("workflow: sprint planning", () => {
     const doing = `Doing-${stamp}`;
     const done = `Done-${stamp}`;
     const stories = [
-      `Story A: User auth flow ${stamp}`,
+      `Story A: User auth strand ${stamp}`,
       `Story B: Payment gateway integration ${stamp}`,
       `Story C: Analytics dashboard ${stamp}`,
     ];
@@ -279,7 +279,7 @@ test.describe("workflow: sprint planning", () => {
         ).toBeVisible({ timeout: 30_000 });
       }
       await expect
-        .poll(async () => flowTitlesForBoard(request, realmId, meiToken, boardId), {
+        .poll(async () => strandTitlesForBoard(request, realmId, meiToken, boardId), {
           timeout: 30_000,
         })
         .toEqual(expect.arrayContaining(stories));
@@ -308,7 +308,7 @@ test.describe("workflow: sprint planning", () => {
           ).toBeVisible({ timeout: 30_000 });
         }
         await expect
-          .poll(async () => flowTitlesForBoard(request, realmId, token, boardId), {
+          .poll(async () => strandTitlesForBoard(request, realmId, token, boardId), {
             timeout: 30_000,
           })
           .toEqual(expect.arrayContaining(stories));
@@ -331,28 +331,28 @@ test.describe("workflow: sprint planning", () => {
   );
 });
 
-async function flowTitlesForBoard(
+async function strandTitlesForBoard(
   request: APIRequestContext,
   realmId: string,
   token: string,
   boardId: string,
 ): Promise<string[]> {
   const resp = await request.get(
-    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}`,
+    `${solandBaseUrl()}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (resp.status() !== 200) {
     return [];
   }
   const body = await resp.json();
-  const flows = Array.isArray(body.flows)
-    ? body.flows
+  const strands = Array.isArray(body.strands)
+    ? body.strands
     : Array.isArray(body.items)
       ? body.items
       : [];
-  return flows
-    .filter((flow: { board_space_id?: string }) => flow.board_space_id === boardId)
-    .map((flow: { title?: string }) => flow.title)
+  return strands
+    .filter((strand: { board_space_id?: string }) => strand.board_space_id === boardId)
+    .map((strand: { title?: string }) => strand.title)
     .filter((title: unknown): title is string => typeof title === "string")
     .sort();
 }

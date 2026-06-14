@@ -125,9 +125,9 @@ async function submitMessageEvent(
 ) {
   const eventId = `ck:event:${uuidV7()}`;
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  const flowId = await resolveDefaultFlowId(request, token, serverUrl, realmId);
+  const strandId = await resolveDefaultStrandId(request, token, serverUrl, realmId);
   const payload = {
-    flow_id: flowId,
+    strand_id: strandId,
     track_name: "discussion",
     content: {
       kind: "ck.content.text",
@@ -161,12 +161,12 @@ async function submitMessageEvent(
   expect([200, 201], `submit ck.message.create: ${text}`).toContain(response.status());
 }
 
-// COT-06-004: discover the default Flow via projection rather than deriving it
+// COT-06-004: discover the default Strand via projection rather than deriving it
 // from the Realm UUID. This joint harness submits against an explicit serverUrl
 // (true soland process), so it cannot reuse the shared solandBaseUrl-bound
-// helper; the discovery logic mirrors it: authoritative Realm `default_flow_id`
-// first, Flow projection `is_default` marker as fallback.
-async function resolveDefaultFlowId(
+// helper; the discovery logic mirrors it: authoritative Realm `default_strand_id`
+// first, Strand projection `is_default` marker as fallback.
+async function resolveDefaultStrandId(
   request: APIRequestContext,
   token: string,
   serverUrl: string,
@@ -177,34 +177,34 @@ async function resolveDefaultFlowId(
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (realmResp.ok()) {
-    const realm = (await realmResp.json()) as { default_flow_id?: unknown };
-    if (typeof realm.default_flow_id === "string" && realm.default_flow_id) {
-      return realm.default_flow_id;
+    const realm = (await realmResp.json()) as { default_strand_id?: unknown };
+    if (typeof realm.default_strand_id === "string" && realm.default_strand_id) {
+      return realm.default_strand_id;
     }
   }
   const flowsResp = await request.get(
-    `${serverUrl}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}`,
+    `${serverUrl}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   expect(
     flowsResp.ok(),
-    `resolveDefaultFlowId: flow projection for ${realmId} returned ${flowsResp.status()}`,
+    `resolveDefaultStrandId: strand projection for ${realmId} returned ${flowsResp.status()}`,
   ).toBeTruthy();
   const body = (await flowsResp.json()) as {
-    flows?: Array<{ flow_id?: string; is_default?: boolean }>;
-    items?: Array<{ flow_id?: string; is_default?: boolean }>;
+    strands?: Array<{ strand_id?: string; is_default?: boolean }>;
+    items?: Array<{ strand_id?: string; is_default?: boolean }>;
   };
-  const flows = Array.isArray(body.flows)
-    ? body.flows
+  const strands = Array.isArray(body.strands)
+    ? body.strands
     : Array.isArray(body.items)
       ? body.items
       : [];
-  const def = flows.find((flow) => flow.is_default === true);
+  const def = strands.find((strand) => strand.is_default === true);
   expect(
-    def?.flow_id,
-    `resolveDefaultFlowId: no default flow (is_default) found for realm ${realmId}`,
+    def?.strand_id,
+    `resolveDefaultStrandId: no default strand (is_default) found for realm ${realmId}`,
   ).toBeTruthy();
-  return def!.flow_id!;
+  return def!.strand_id!;
 }
 
 function uuidV7(): string {

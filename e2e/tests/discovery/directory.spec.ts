@@ -15,7 +15,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("discovery", () => {
-  test("alice and bob complete the contact request → accept → list → directory-visible flow", async ({
+  test("alice and bob complete the contact request → accept → list → directory-visible strand", async ({
     browser,
     request,
   }, testInfo) => {

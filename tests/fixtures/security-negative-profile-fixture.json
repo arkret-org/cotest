@@ -20,7 +20,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
             "body": "signed body"
           },
           "proofs": [
@@ -57,7 +57,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
             "body": "canonical body a"
           },
           "proofs": []
@@ -73,7 +73,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
             "body": "canonical body b"
           },
           "proofs": []
@@ -101,7 +101,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "body": "missing flow_id"
+            "body": "missing strand_id"
           },
           "proofs": []
         }
@@ -132,7 +132,7 @@
           "prev_refs": [],
           "refs": [],
           "payload": {
-            "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
             "body": "replay"
           },
           "proofs": []
@@ -171,7 +171,7 @@
             ]
           },
           "payload": {
-            "flow_id": "ck:flow:01970e589d21-7000-8000-000000000010",
+            "strand_id": "ck:strand:01970e589d21-7000-8000-000000000010",
             "body": "must not downgrade"
           },
           "proofs": []

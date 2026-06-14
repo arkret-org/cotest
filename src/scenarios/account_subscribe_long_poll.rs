@@ -7,7 +7,7 @@
 //!    semantics.
 //! 2. Incremental delta frames omit realms whose timeline position and `realm_meta.updated_at` are
 //!    both unchanged since the cursor was issued. The realm's baseline
-//!    (`summary`/`flows`/`state_after`/ `members`) is no longer re-sent on every quiet poll.
+//!    (`summary`/`strands`/`state_after`/ `members`) is no longer re-sent on every quiet poll.
 
 use std::time::{Duration, Instant};
 

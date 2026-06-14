@@ -148,7 +148,7 @@ conformance_test!(
     /// Realm private pin + direct conversation privacy contracts. Cotest-local
     /// fixture pins ck.contacts.realm.<realm_id> subject matching, prevents
     /// RealmRemark leakage into directory/bridge/push payloads, and locks the
-    /// direct resolver shape to peer/state/binding_event_ref/main_flow_id.
+    /// direct resolver shape to peer/state/binding_event_ref/main_strand_id.
     private_chat_privacy_contract_suite_matches_reference_semantics,
     "private_chat_privacy_contract",
     cotest::conformance::run_private_chat_privacy_contract_suite,
@@ -374,7 +374,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-24 D2 — device verification flow (cross-signing chain, SAS, OOB
+    /// Round-24 D2 — device verification strand (cross-signing chain, SAS, OOB
     /// emoji code).
     device_verification_fixture_suite_matches_reference_semantics,
     "device_verification_fixture",

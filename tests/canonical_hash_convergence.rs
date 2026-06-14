@@ -81,7 +81,7 @@ fn vectors() -> Vec<CanonicalVector> {
                         "kind": "ck.content.text",
                         "body": "hello"
                     },
-                    "flow_id": "ck:flow:01904100-0000-7000-8000-6c663fa0205f",
+                    "strand_id": "ck:strand:01904100-0000-7000-8000-6c663fa0205f",
                     "track_name": "discussion",
                 },
                 "schema_version": 1,

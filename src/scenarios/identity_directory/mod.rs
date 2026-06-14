@@ -2,7 +2,7 @@
 //!
 //! Each submodule is single-responsibility:
 //! - [`identity`] — `/_cokret/root/identity/*` describe/resolve/document/log/submit/receipts.
-//! - [`contacts`] — contacts/invites listing/export/audit flow.
+//! - [`contacts`] — contacts/invites listing/export/audit strand.
 //! - [`directory`] — directory discoverability + actor-privacy projections.
 //!
 //! No private helpers exist between scenarios in this family.

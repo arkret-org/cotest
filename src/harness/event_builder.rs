@@ -187,13 +187,13 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
 
     match kind {
         "ck.message.create" => {
-            let flow_id = realm_id
+            let strand_id = realm_id
                 .strip_prefix("ck:realm:")
-                .map(|suffix| format!("ck:flow:{suffix}"))
-                .unwrap_or_else(|| "ck:flow:01904100-0000-7000-8000-f10dc0000001".to_owned());
+                .map(|suffix| format!("ck:strand:{suffix}"))
+                .unwrap_or_else(|| "ck:strand:01904100-0000-7000-8000-f10dc0000001".to_owned());
             object
-                .entry("flow_id".to_owned())
-                .or_insert_with(|| Value::String(flow_id));
+                .entry("strand_id".to_owned())
+                .or_insert_with(|| Value::String(strand_id));
             object
                 .entry("track_name".to_owned())
                 .or_insert_with(|| Value::String("discussion".to_owned()));

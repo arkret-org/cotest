@@ -21,7 +21,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         &realm_id,
         "ck.message.create",
         json!({
-            "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
+            "strand_id": "ck:strand:01999999-0000-7000-8000-00000000feed",
             "track_name": "discussion",
             "content": {
                 "kind": "ck.content.text",
@@ -89,7 +89,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         &realm_id,
         "ck.message.create",
         json!({
-            "flow_id": "ck:flow:01999999-0000-7000-8000-00000000feed",
+            "strand_id": "ck:strand:01999999-0000-7000-8000-00000000feed",
             "track_name": "discussion",
             "content": {
                 "kind": "ck.content.text",

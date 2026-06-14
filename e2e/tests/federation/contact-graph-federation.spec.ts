@@ -135,14 +135,14 @@ test.describe("contact graph federation (α/β)", () => {
   // grant locally on α. That gives α's resolver both preconditions it needs:
   // an accepted contact for the pair AND a peer-granted direct_message
   // consent. So alice@α can resolve a canonical DM binding (realm_id +
-  // main_flow_id) without any further cross-PS plumbing.
+  // main_strand_id) without any further cross-PS plumbing.
   //
   // Scope note (honest): the resulting DM Realm is materialized locally on α
   // (alice's home PS) with bob added as a member there. A true symmetric
-  // cross-PS DM Realm — where bob@β projects the same realm/flow and the
+  // cross-PS DM Realm — where bob@β projects the same realm/strand and the
   // message timeline replicates both ways — requires cross-PS realm + MLS
   // group replication, which is out of scope here. This test pins the binding
-  // leg (resolve converges to a canonical realm_id/main_flow_id on α); the
+  // leg (resolve converges to a canonical realm_id/main_strand_id on α); the
   // cross-PS message round-trip is documented as out of scope, not asserted.
   test("S3-fed cross-PS direct conversation resolves a binding on α after federated accept", async ({
     request,
@@ -204,7 +204,7 @@ test.describe("contact graph federation (α/β)", () => {
     const body = await resolved.json();
     expect(["created", "found"]).toContain(body.state);
     expect(body.realm_id).toMatch(/^ck:realm:/);
-    expect(body.main_flow_id).toMatch(/^ck:flow:/);
+    expect(body.main_strand_id).toMatch(/^ck:strand:/);
     // The cross-PS message round-trip (bob@β reading alice's DM message) is out
     // of scope: the DM Realm lives on α and is not replicated to β. Documented,
     // not asserted.

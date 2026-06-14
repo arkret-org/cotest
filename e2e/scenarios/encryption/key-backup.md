@@ -12,7 +12,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - `identity/key-management.md` §7 — Key backup 概览
 - `identity/key-management.md` §7.1 — Backup 内容隔离(`backup_class`)
 - `identity/key-management.md` §7.2 — Envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
-- `identity/key-management.md` §7.3 — Restore flow(Recovery Key, commitment 校验, 解密)
+- `identity/key-management.md` §7.3 — Restore strand(Recovery Key, commitment 校验, 解密)
 - `identity/key-management.md` §7.4 — Ownership proof / decryption proof
 - `identity/key-management.md` §7.5.1/§7.5.2 — `passphrase_kdf`(独立 vault passphrase 凭证层 deprecated,仍是合法 wire method)/ `recovery_public_key`(新写入 SHOULD)
 - `identity/key-management.md` §7.7 — Recovery UI:备份解密凭证 MUST 是 Recovery Key

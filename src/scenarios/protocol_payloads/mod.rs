@@ -11,7 +11,7 @@
 //!
 //! Submodules — each is a single async helper representing one protocol phase:
 //! - [`events_keys_setup`] — `/_cokret/self/events` plus `/_cokret/self/keys/{upload,query,claim}`
-//!   flow.
+//!   strand.
 //! - [`device_messages`] — `/_cokret/self/device_messages` send / duplicate / list / describe + the
 //!   verification-event side path.
 //! - [`key_backups`] — `/_cokret/self/keys/backups/*` PUT / list / GET (unlock-proof gated) plus

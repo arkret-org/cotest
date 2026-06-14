@@ -12,7 +12,7 @@
 - `identity/key-management.md` §7 — Key backup 概览,`backup_class` domain
 - `identity/key-management.md` §7.1 — 各 backup_class 的内容隔离
 - `identity/key-management.md` §7.2 — Backup envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
-- `identity/key-management.md` §7.3 — Restore flow(凭证 = Recovery Key;旧 `passphrase_kdf` envelope 仅兼容恢复)
+- `identity/key-management.md` §7.3 — Restore strand(凭证 = Recovery Key;旧 `passphrase_kdf` envelope 仅兼容恢复)
 - `identity/key-management.md` §7.4 — Ownership proof vs decryption proof
 - `identity/key-management.md` §7.5.1 — 独立 vault passphrase 凭证层 deprecated(wire method 仍合法)
 - `identity/key-management.md` §7.7 — Recovery UI:解密凭证 MUST 是 Recovery Key

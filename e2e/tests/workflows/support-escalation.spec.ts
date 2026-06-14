@@ -1,7 +1,7 @@
 // Support escalation workflow — frontline Alex hands off to backend Sam
 // Contract: e2e/scenarios/workflows/support-escalation.md
 // Spec refs:
-//   - models/flow-and-message.md §8 (reply / edit / redact)
+//   - models/strand-and-message.md §8 (reply / edit / redact)
 //
 // Realistic story: Alex opens an escalation space for ticket #1042 and seeds
 // Sam. They walk a reply chain (summary → ask → answer → hypothesis → fix

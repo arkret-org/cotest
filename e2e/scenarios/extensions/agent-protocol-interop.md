@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 cokret v1 在 agent-protocol-interop extension profile 下的完整 handoff 闭环:Alice 通过 yougen 选定一个支持 A2A/ACP 的 agent endpoint → 完成 capability approval (含 human-approval gate) → soland 校验 endpoint 与目标 DID Document 的 service binding 一致 → 颁发 `ck.agent.protocol_session.start` 并把执行权移交给外部 agent runtime → 远端 agent 通过节流 `protocol_session.status` 回写进度并最终回写 `protocol_session.result` (含 audit_binding) → result 被 reducer 接受后 publish 一个 Flow/Morph 落地到 source space → audit chain 上 `start / status* / result` 全链能被 yougen agents-panel 验证签名通过。
+验证 cokret v1 在 agent-protocol-interop extension profile 下的完整 handoff 闭环:Alice 通过 yougen 选定一个支持 A2A/ACP 的 agent endpoint → 完成 capability approval (含 human-approval gate) → soland 校验 endpoint 与目标 DID Document 的 service binding 一致 → 颁发 `ck.agent.protocol_session.start` 并把执行权移交给外部 agent runtime → 远端 agent 通过节流 `protocol_session.status` 回写进度并最终回写 `protocol_session.result` (含 audit_binding) → result 被 reducer 接受后 publish 一个 Strand/Morph 落地到 source space → audit chain 上 `start / status* / result` 全链能被 yougen agents-panel 验证签名通过。
 
 过程中 cokret 始终持有身份 / capability / 任务登记 / 审计,外部协议只承担实时执行通道。
 
@@ -55,7 +55,7 @@
 ### Phase A — Agent endpoint discovery (§5.1 / §6 步骤 1 / §7 `ck.agent.protocol.discover`)
 
 1. **alice** 进入 yougen `/agents`,断言 `agents-panel` 渲染 (live probe);
-2. **alice** 通过 `agent-register-form` 录入 `remote_agent.did` + `protocol = "a2a"` + `capabilities = "flow.read,flow.publish"`,点 `agent-register-submit-button`;
+2. **alice** 通过 `agent-register-form` 录入 `remote_agent.did` + `protocol = "a2a"` + `capabilities = "strand.read,strand.publish"`,点 `agent-register-submit-button`;
 3. 断言 `agent-register-status` 文本包含 `event_id`,且 `agent-endpoint-row` 出现一条以 `remote_agent.did` 为 head 的记录;
 4. **harness** 调 `GET /_cokret/root/identity/${remote_agent.did}/did-document` 拉 DID Document,断言其中 `service[].serviceEndpoint` 与 mock-agent-runtime base URL 字节级相等 (spec §6 步骤 4 的 host pinning 前置条件);
 5. **local_agent** (通过 harness HTTP) 调 `POST /_cokret/self/agents/discover` (gap),传 `{ agent_id: remote_agent.did }`;断言返回 `{ supported_protocols: ["a2a", "acp"], agent_card_url, metadata_url }`,且 protocol 列表与 §11 adapter registry 合法 ID 子集一致 (`a2a` / `acp` / `mcp_bridge` / `http_custom`)。
@@ -78,11 +78,11 @@
 
 ### Phase D — Publish-to-source (§5.4 / §6 步骤 8-9)
 
-16. **mock-agent-runtime** 模拟终态,向 soland 回写 `ck.agent.protocol_session.result` 事件 body:`{ session_id, status: "completed", result_objects: [{ object_type: "flow", object_ref: "ck:flow:<uuid>", track: "synthesis", role: "primary_result" }], artifacts: [{ artifact_type: "text", object_ref: "ck:morph:<uuid>", hash: "sha256:..." }], external_transcript_digest: "sha256:...", completed_at: "<iso>" }`;
+16. **mock-agent-runtime** 模拟终态,向 soland 回写 `ck.agent.protocol_session.result` 事件 body:`{ session_id, status: "completed", result_objects: [{ object_type: "strand", object_ref: "ck:strand:<uuid>", track: "synthesis", role: "primary_result" }], artifacts: [{ artifact_type: "text", object_ref: "ck:morph:<uuid>", hash: "sha256:..." }], external_transcript_digest: "sha256:...", completed_at: "<iso>" }`;
 17. soland 用 `REFERENCE_AGENT_AUDIT_ED25519_SEED` 给 `audit_binding` 块签 Ed25519,canonical subject 形如 `{session_id, agent_id, result.echo, actor}`,断言响应里 `audit_binding.binding_kind === "ed25519_v1"` 且 `audit_binding.key_id === "soland.reference.agent_echo.ed25519_v1"`;
 18. **alice** 在 yougen `/agents` 的 `agent-incoming-results` 看到一条 `agent-incoming-result-row`,`agent-audit-verify-badge` 文本严格等于 `audit valid` (绿色徽章);
 19. **alice** 在 `/agents` 的对应 protocol session detail 区确认 result artifact;保留 remote_agent attribution,点 `publish-modal-confirm`;
-20. 断言 source space 里出现一条新 Flow,其 `fields.workflow_type` 包含 `synthesis`,且 `relation` 指向 `ck:morph:<uuid>` artifact;Flow 创建事件的 `actor_id` 是 `alice.did`,但 `attribution` 字段保留 `remote_agent.did` (spec §5.4 关于 publish 的语义)。
+20. 断言 source space 里出现一条新 Strand,其 `fields.workflow_type` 包含 `synthesis`,且 `relation` 指向 `ck:morph:<uuid>` artifact;Strand 创建事件的 `actor_id` 是 `alice.did`,但 `attribution` 字段保留 `remote_agent.did` (spec §5.4 关于 publish 的语义)。
 
 ### Phase E — Audit chain verification (§5 + §9 + agent_binding SDK)
 
@@ -97,7 +97,7 @@
 - Phase A:`agents-panel` 渲染、`agent-endpoint-row` 出现、DID Document `service.serviceEndpoint` 与 mock URL 字节级相等、`POST /_cokret/self/agents/discover` 返回 `supported_protocols` 是 §11 adapter registry 子集
 - Phase B:`ck.capability.grant.create` 持久化、`allowed_endpoints` 精确单值、缺失 `capability_grant_ref` 的启动尝试返回 `policy_denied`
 - Phase C:session.start event 在 backfill 中可见;status 事件 3s 内推进 `negotiating → working`;`summary_and_artifacts` 节流模式下 status 事件数远少于实际 token 数
-- Phase D:result 事件携带 `result_objects` / `artifacts` / `external_transcript_digest` 三者至少之一;`audit_binding.binding_kind === "ed25519_v1"`;yougen 渲染 `audit valid` 徽章;publish 落地 Flow 保留 `attribution`
+- Phase D:result 事件携带 `result_objects` / `artifacts` / `external_transcript_digest` 三者至少之一;`audit_binding.binding_kind === "ed25519_v1"`;yougen 渲染 `audit valid` 徽章;publish 落地 Strand 保留 `attribution`
 - Phase E:事件顺序 start → status* → result,`prev_event_id` 链不断;SDK 与 soland 签发端一致;yougen 轮询拉到新 result
 
 ## Edge cases / sub-tests

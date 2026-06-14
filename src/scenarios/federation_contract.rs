@@ -202,7 +202,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "did:web:remote.example",
         1,
         json!({
-            "flow_id": realm_id.replacen("ck:realm:", "ck:flow:", 1),
+            "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
             "track_name": "discussion",
             "content": {"kind": "ck.content.text", "body": "from federation"}
         }),
@@ -371,7 +371,7 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         "did:web:alice.example",
         1,
         json!({
-            "flow_id": realm_id.replacen("ck:realm:", "ck:flow:", 1),
+            "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
             "track_name": "discussion",
             "content": {
                 "kind": "ck.content.text",

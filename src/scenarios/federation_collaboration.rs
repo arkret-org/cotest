@@ -22,7 +22,7 @@ const ALICE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000
 const BOB_JOIN_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000002";
 const BOB_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000003";
 
-pub async fn cross_server_collaboration_flow_works() -> Result<()> {
+pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
     let server_a = group.server(0);
     let server_b = group.server(1);
@@ -55,12 +55,12 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
     let realm_id = create_federated_realm(server_a, &alice).await?;
     // Federation ck.message.create Event payload carries the message
     // addressing/identity fields soland's federation projection consumes
-    // (event_id, actor_id, flow_id, track_name, content). The forbidden wire
+    // (event_id, actor_id, strand_id, track_name, content). The forbidden wire
     // field `sender` is replaced by `actor_id`; Realm/membership metadata
     // (discoverability, history_visibility, members, encryption_profile, …)
     // belongs on the Realm object and `ck.member.state`, not the message.
-    let flow_id = format!(
-        "ck:flow:{}",
+    let strand_id = format!(
+        "ck:strand:{}",
         realm_id.strip_prefix("ck:realm:").unwrap_or(&realm_id)
     );
 
@@ -71,7 +71,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         ALICE_DID,
         1,
         json!({
-            "flow_id": flow_id.clone(),
+            "strand_id": strand_id.clone(),
             "track_name": "discussion",
             "content": {
                 "kind": "ck.content.text",
@@ -146,7 +146,7 @@ pub async fn cross_server_collaboration_flow_works() -> Result<()> {
         BOB_DID,
         2,
         json!({
-            "flow_id": flow_id,
+            "strand_id": strand_id,
             "track_name": "discussion",
             "content": {
                 "kind": "ck.content.text",

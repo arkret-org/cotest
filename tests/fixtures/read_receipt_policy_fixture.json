@@ -1,7 +1,7 @@
 {
   "profile": "ck.profile.read_receipt_policy_vectors.v1",
   "version": "2026-05-19",
-  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ck.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.flow.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Realm it MUST be upgraded to an independent Flow/Circle scope (Flow.scope_circle_id pointing at a Circle, per CKP-0007) whose own ck.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ck.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (flow → realm → default).",
+  "comment": "Read receipt disclosure policy and per-scope client preference vectors. Spec: discovery/read-receipts.md §2.4-§2.5 and discovery/client-preferences.md §3.6. Disclosure policy is a soft (non-cryptographic) commitment carried by the component cell ck.component.realm.read_receipt_policy.v1 (cas-register, bottom=reject). Per spec 2026-05-08, track-level read-receipt overrides (cx.strand.track.read_receipt_policy) were removed; when a discussion timeline needs a read-receipt policy distinct from its parent Realm it MUST be upgraded to an independent Strand/Circle scope (Strand.scope_circle_id pointing at a Circle, per CKP-0007) whose own ck.realm.read_receipt_policy declares the override. User preferences live under the actor-private account-data key ck.read_receipt.preferences. The decision rule is: required > disabled > optional defers to (strand → realm → default).",
   "vectors": [
     {
       "name": "disclosure_required_locks_client_send",
@@ -61,9 +61,9 @@
     },
     {
       "name": "branch_overrides_tighten_only",
-      "comment": "A Flow/Circle scope (upgraded discussion timeline, Flow.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the Flow/Circle scope is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.flow.track.read_receipt_policy) — the Flow/Circle-scope surface is the only legitimate scope for a per-discussion override.",
+      "comment": "A Strand/Circle scope (upgraded discussion timeline, Strand.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the Strand/Circle scope is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.strand.track.read_receipt_policy) — the Strand/Circle-scope surface is the only legitimate scope for a per-discussion override.",
       "policy": {
-        "scope": "flow",
+        "scope": "strand",
         "parent": {
           "disclosure": "optional",
           "visibility": "members",
@@ -89,9 +89,9 @@
     },
     {
       "name": "branch_overrides_loosen_rejected_when_not_allowed",
-      "comment": "When the parent Realm declares scope_overrides_allowed=false, a Flow/Circle scope MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the Flow/Circle-scope ck.realm.read_receipt_policy is the only surface.",
+      "comment": "When the parent Realm declares scope_overrides_allowed=false, a Strand/Circle scope MUST NOT loosen the policy (Required→Optional, Private→Public, etc.). Composition keeps the parent value for the loosened field. Reducer SHOULD reject the loosening Move with bottom=reject. Track-level override is not available (removed in v1) — the Strand/Circle-scope ck.realm.read_receipt_policy is the only surface.",
       "policy": {
-        "scope": "flow",
+        "scope": "strand",
         "parent": {
           "disclosure": "required",
           "visibility": "private",
@@ -113,12 +113,12 @@
         "is_send": true,
         "is_locked": true,
         "sync_service_fanout": "sender_only",
-        "reducer_action": "reject_loosening_flow_scope_move"
+        "reducer_action": "reject_loosening_strand_scope_move"
       }
     },
     {
-      "name": "prefs_resolution_flow_overrides_realm",
-      "comment": "When policy is optional and the user has both parent-Realm-level and Flow/Circle-scope-level (Flow.scope_circle_id, CKP-0007) overrides, the Flow/Circle-scope override wins. Resolution order is flow → realm → default (track-level overrides are not in v1; see removed-event-kinds.json).",
+      "name": "prefs_resolution_strand_overrides_realm",
+      "comment": "When policy is optional and the user has both parent-Realm-level and Strand/Circle-scope-level (Strand.scope_circle_id, CKP-0007) overrides, the Strand/Circle-scope override wins. Resolution order is strand → realm → default (track-level overrides are not in v1; see removed-event-kinds.json).",
       "policy": {
         "scope": "realm",
         "disclosure": "optional",
@@ -130,13 +130,13 @@
         "realms": {
           "ck:realm:01JS0SP00000000000000RR000": { "send": false }
         },
-        "flows": {
-          "ck:flow:01JS1FL00000000000000RR000": { "send": true }
+        "strands": {
+          "ck:strand:01JS1FL00000000000000RR000": { "send": true }
         }
       },
       "scope_lookup": {
         "realm_id": "ck:realm:01JS0SP00000000000000RR000",
-        "flow_id": "ck:flow:01JS1FL00000000000000RR000"
+        "strand_id": "ck:strand:01JS1FL00000000000000RR000"
       },
       "expected": {
         "decision": "send",
@@ -146,7 +146,7 @@
     },
     {
       "name": "prefs_resolution_realm_overrides_default",
-      "comment": "Without a Flow/Circle-scope-level override, the parent-Realm-level override wins over the default.",
+      "comment": "Without a Strand/Circle-scope-level override, the parent-Realm-level override wins over the default.",
       "policy": {
         "scope": "realm",
         "disclosure": "optional",

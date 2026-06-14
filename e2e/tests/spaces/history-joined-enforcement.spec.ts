@@ -7,7 +7,7 @@ import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   singleDidAnchorer,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -255,7 +255,7 @@ async function createMessage(
   body: string,
   createdAtValue: string,
 ) {
-  const flowId = await resolveDefaultFlowId(request, token, realmId);
+  const strandId = await resolveDefaultStrandId(request, token, realmId);
   await submitSignedEventApi(
     request,
     token,
@@ -265,7 +265,7 @@ async function createMessage(
       kind: "ck.message.create",
       createdAt: createdAtValue,
       payload: {
-        flow_id: flowId,
+        strand_id: strandId,
         track_name: "discussion",
         content: {
           kind: "ck.content.text",

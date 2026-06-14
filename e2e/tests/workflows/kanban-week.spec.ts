@@ -44,7 +44,7 @@ test.describe("workflow: kanban week-in-review", () => {
       // Phase A — kanban opens against a fresh Realm. Navigate with the
       // explicit realm_id so writes route to this Realm; plain `/kanban`
       // falls back to the hardcoded demo Realm the test user is not a
-      // member of, and every ck.flow.* event would 403.
+      // member of, and every ck.strand.* event would 403.
       const realmId = await patPage.createRealm({
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
@@ -83,22 +83,22 @@ test.describe("workflow: kanban week-in-review", () => {
           timeout: 30_000,
         });
       }
-      const prFlowId = await today
+      const prStrandId = await today
         .getByTestId("kanban-card")
         .filter({ hasText: prTask })
         .first()
         .getByTestId("card-archive-button")
-        .getAttribute("data-flow-id");
-      const specFlowId = await today
+        .getAttribute("data-strand-id");
+      const specStrandId = await today
         .getByTestId("kanban-card")
         .filter({ hasText: specTask })
         .first()
         .getByTestId("card-archive-button")
-        .getAttribute("data-flow-id");
-      const prFlowIdValue = prFlowId ?? "";
-      const specFlowIdValue = specFlowId ?? "";
-      expect(prFlowIdValue).toMatch(/^ck:flow:/);
-      expect(specFlowIdValue).toMatch(/^ck:flow:/);
+        .getAttribute("data-strand-id");
+      const prStrandIdValue = prStrandId ?? "";
+      const specStrandIdValue = specStrandId ?? "";
+      expect(prStrandIdValue).toMatch(/^ck:strand:/);
+      expect(specStrandIdValue).toMatch(/^ck:strand:/);
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
       // Phase C — archive two finished tasks.
@@ -162,10 +162,10 @@ test.describe("workflow: kanban week-in-review", () => {
         .getAttribute("data-space-container-id");
       expect(todayListId ?? "").toMatch(/^ck:space:/);
       await expect
-        .poll(async () => flowState(request, realmId, patToken, prFlowIdValue))
+        .poll(async () => strandState(request, realmId, patToken, prStrandIdValue))
         .toBe("active");
       await expect
-        .poll(async () => flowState(request, realmId, patToken, specFlowIdValue))
+        .poll(async () => strandState(request, realmId, patToken, specStrandIdValue))
         .toBe("active");
 
       // list-archive-button is hover-revealed on the column header — hover
@@ -178,12 +178,12 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => flowState(request, realmId, patToken, prFlowIdValue), {
+        .poll(async () => strandState(request, realmId, patToken, prStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("archived");
       await expect
-        .poll(async () => flowState(request, realmId, patToken, specFlowIdValue), {
+        .poll(async () => strandState(request, realmId, patToken, specStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("archived");
@@ -198,12 +198,12 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => flowState(request, realmId, patToken, prFlowIdValue), {
+        .poll(async () => strandState(request, realmId, patToken, prStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("active");
       await expect
-        .poll(async () => flowState(request, realmId, patToken, specFlowIdValue), {
+        .poll(async () => strandState(request, realmId, patToken, specStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("active");
@@ -214,20 +214,20 @@ test.describe("workflow: kanban week-in-review", () => {
   });
 });
 
-async function flowState(
+async function strandState(
   request: APIRequestContext,
   realmId: string,
   token: string,
-  flowId: string,
+  strandId: string,
 ): Promise<string | undefined> {
   const resp = await request.get(
-    `${solandBaseUrl()}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}&include_terminal=true`,
+    `${solandBaseUrl()}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}&include_terminal=true`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   if (resp.status() !== 200) {
     return undefined;
   }
   const body = await resp.json();
-  const flows = Array.isArray(body.flows) ? body.flows : Array.isArray(body.items) ? body.items : [];
-  return flows.find((flow: { flow_id?: string }) => flow.flow_id === flowId)?.state;
+  const strands = Array.isArray(body.strands) ? body.strands : Array.isArray(body.items) ? body.items : [];
+  return strands.find((strand: { strand_id?: string }) => strand.strand_id === strandId)?.state;
 }

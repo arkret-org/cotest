@@ -102,15 +102,15 @@
       "input": {
         "query": {
           "realm_ids": ["ck:realm:..."],
-          "object_types": ["flow"],
+          "object_types": ["strand"],
           "filters": [{ "field": "fields.status", "op": "eq", "value": "todo" }],
           "order_by": [{ "field": "rank", "direction": "asc", "nulls": "last" }],
           "limit": 2
         },
         "seed_objects": [ { ... }, { ... }, { ... }, { ... } ]
       },
-      "expected_rows_page_1": ["ck:flow:a", "ck:flow:b"],
-      "expected_rows_page_2": ["ck:flow:c"],
+      "expected_rows_page_1": ["ck:strand:a", "ck:strand:b"],
+      "expected_rows_page_2": ["ck:strand:c"],
       "expected_has_more_page_1": true,
       "expected_has_more_page_2": false
     }

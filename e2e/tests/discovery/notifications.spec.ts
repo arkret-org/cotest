@@ -10,7 +10,7 @@ import {
   addRealmMemberApi,
   authHeaders,
   createRealmApi,
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   putAccountDataViaEventApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -277,13 +277,13 @@ test.describe("notifications", () => {
 
       const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
       const sidecarHash = mentionSidecarHash(realmId, bob.did);
-      const flowId = await resolveDefaultFlowId(request, aliceToken, realmId);
+      const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const encrypted = signedEventEnvelope({
         actorDid: alice.did,
         realmId: realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowId,
+          strand_id: strandId,
           track_name: "discussion",
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],

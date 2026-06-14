@@ -12,7 +12,7 @@
 //   - models/relation.md §3.2 (cardinality table, dedup rule), §4.4
 //     (cross-Realm structural constraint)
 //   - models/views.md §2.2 (kind is response family), §6 / §6.3 (Board
-//     projection derived from query → contains → flow)
+//     projection derived from query → contains → strand)
 //
 // Phase A is live (Space create + read-back of 4 spec-equivalent common
 // fields). Phases B–E are test.fixme — they sketch the API call and
@@ -139,11 +139,11 @@ test.describe("core object invariants", () => {
 
   // ── Phase B — Patch precondition CAS fail.
   // soland gap: there is no unified Move/patch endpoint exposing
-  // preconditions[].head_eq on the wire today; ck.flow.update precondition
+  // preconditions[].head_eq on the wire today; ck.strand.update precondition
   // checks exist in the reducer but no HTTP path drives them with a stale
   // expected_revision. Live this once soland adds:
-  //   POST /_cokret/self/events  with { kind: "ck.flow.update", preconditions: [...],
-  //                                effects: [...], payload: { flow_id, patch } }
+  //   POST /_cokret/self/events  with { kind: "ck.strand.update", preconditions: [...],
+  //                                effects: [...], payload: { strand_id, patch } }
   // and returns { error_code: "failed_precondition", reason: "..." } on
   // head_eq mismatch (spec models/event-and-patch.md §4.2.4 / §4.2.5).
   test.fixme(
@@ -158,43 +158,43 @@ test.describe("core object invariants", () => {
       const aliceToken = await issueDevSession(request, alice);
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
-      // 1. Create a Flow with fields.status = "open".
-      const flowRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      // 1. Create a Strand with fields.status = "open".
+      const strandRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "ck.flow.create",
+          kind: "ck.strand.create",
           payload: {
             object: {
-              kind: "ck.schema.flow.v1",
-              title: `core-invariants flow ${stamp}`,
+              kind: "ck.schema.strand.v1",
+              title: `core-invariants strand ${stamp}`,
               fields: { status: "open" },
             },
           },
         },
       });
-      expect(flowRes.status()).toBe(201);
-      const flowId = (await flowRes.json()).flow_id as string;
-      expect(flowId).toMatch(/^ck:flow:/);
+      expect(strandRes.status()).toBe(201);
+      const strandId = (await strandRes.json()).strand_id as string;
+      expect(strandId).toMatch(/^ck:strand:/);
 
       // 2. Submit an update with a STALE precondition (claims status == "closed"
       //    when it's actually "open"). Expect 4xx + failed_precondition.
       const staleMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "ck.flow.update",
+          kind: "ck.strand.update",
           preconditions: [
             {
-              cell: `ck:cell:ck.component.flow.fields.v1:${flowId}`,
+              cell: `ck:cell:ck.component.strand.fields.v1:${strandId}`,
               predicate: { op: "head_eq", value: { "fields.status": "closed" } },
             },
           ],
           effects: [
             {
-              cell: `ck:cell:ck.component.flow.fields.v1:${flowId}`,
+              cell: `ck:cell:ck.component.strand.fields.v1:${strandId}`,
               op: { kind: "set", value: { "fields.status": "done" } },
             },
           ],
-          payload: { flow_id: flowId, patch: { "fields.status": "done" } },
+          payload: { strand_id: strandId, patch: { "fields.status": "done" } },
         },
       });
       expect(staleMove.status()).toBeGreaterThanOrEqual(400);
@@ -204,11 +204,11 @@ test.describe("core object invariants", () => {
       // 3. Verify the cell head is UNCHANGED — failed precondition MUST NOT
       //    apply any effect (spec §2.2: preconditions + effects are atomic).
       const readBack = await request.get(
-        `${solandBaseUrl()}/_cokret/self/flows/${encodeURIComponent(flowId)}`,
+        `${solandBaseUrl()}/_cokret/self/strands/${encodeURIComponent(strandId)}`,
         { headers: aliceAuth },
       );
-      const flowBody = await readBack.json();
-      expect(flowBody.fields?.status).toBe("open");
+      const strandBody = await readBack.json();
+      expect(strandBody.fields?.status).toBe("open");
     },
   );
 
@@ -230,22 +230,22 @@ test.describe("core object invariants", () => {
       const aliceToken = await issueDevSession(request, alice);
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
-      // Create parent space + a child Flow as a live dependent.
+      // Create parent space + a child Strand as a live dependent.
       const parentRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
         headers: aliceAuth,
         data: { title: `core-invariants parent ${stamp}` },
       });
       const parentSpaceId = (await parentRes.json()).space_id as string;
 
-      const childFlowRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      const childStrandRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
-          kind: "ck.flow.create",
+          kind: "ck.strand.create",
           space_id: parentSpaceId,
           payload: { object: { title: `child ${stamp}` } },
         },
       });
-      expect(childFlowRes.status()).toBe(201);
+      expect(childStrandRes.status()).toBe(201);
 
       // Step 11 — archive parent; verify child is still active.
       const archiveRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
@@ -370,14 +370,14 @@ test.describe("core object invariants", () => {
           })
         ).json()
       ).space_id as string;
-      const otherFlow = (
+      const otherStrand = (
         await (
           await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
             headers: aliceAuth,
-            data: { kind: "ck.flow.create", space_id: otherSpace, payload: { object: {} } },
+            data: { kind: "ck.strand.create", space_id: otherSpace, payload: { object: {} } },
           })
         ).json()
-      ).flow_id as string;
+      ).strand_id as string;
       const crossRealm = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: aliceAuth,
         data: {
@@ -386,7 +386,7 @@ test.describe("core object invariants", () => {
           payload: {
             relation_kind: "contains",
             from_ref: spaceId,
-            to_ref: otherFlow,
+            to_ref: otherStrand,
           },
         },
       });
@@ -421,7 +421,7 @@ test.describe("core object invariants", () => {
       // Step 20-21 — request a board projection on a Space that has never
       // had ck.view.create called on it. Spec views.md §6: response MUST be
       // derived (kind=collection, renderer=board) from query → contains →
-      // flow, not 404.
+      // strand, not 404.
       const proj = await request.get(
         `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
         { headers: aliceAuth },

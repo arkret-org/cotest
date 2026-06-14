@@ -23,7 +23,7 @@ use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 ///
 /// STA-07-002: the legacy starid `/describe` liveness probe (asserting
 /// `supported_methods` advertises `did:webvh`) has been removed — that route no
-/// longer exists; canonical discovery flows exclusively through
+/// longer exists; canonical discovery strands exclusively through
 /// `/_cokret/root/identity/describe`.
 pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     let proc = spawn_required(&STARID_SPEC)

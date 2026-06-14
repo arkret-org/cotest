@@ -41,7 +41,7 @@ export type ContactState =
 
 export type DirectConversationSummary = {
   realm_id: string;
-  main_flow_id: string;
+  main_strand_id: string;
   binding_event_ref?: string;
   state: string;
 };
@@ -82,7 +82,7 @@ export type ContactTombstoneOutcome = {
 export type DirectConversationResolveOutcome = {
   state: string;
   realm_id?: string;
-  main_flow_id?: string;
+  main_strand_id?: string;
   binding_event_ref?: string;
   created?: boolean;
 };

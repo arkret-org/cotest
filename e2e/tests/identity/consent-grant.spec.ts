@@ -1,4 +1,4 @@
-// Consent grant flow
+// Consent grant strand
 // Contract: e2e/scenarios/identity/consent-grant.md
 // Spec: identity/consent-model.md §2-§4
 
@@ -95,7 +95,7 @@ test.describe("consent grant", () => {
     request,
   }, testInfo) => {
     // Live G2.T5 UI smoke: the settings page exists and its direct grant form
-    // is mounted; the live grant/revoke flow is covered below.
+    // is mounted; the live grant/revoke strand is covered below.
     const alice = uniqueUser("g2t5-consent-ui-alice");
     const bob = uniqueUser("g2t5-consent-ui-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);

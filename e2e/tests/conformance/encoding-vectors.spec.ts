@@ -533,7 +533,7 @@ test.describe("conformance encoding vectors", () => {
       kind: "ck.message.create",
       sender: ownerDid,
       payload: {
-        flow_id: "ck:flow:019640ed-8000-7000-8000-000000000000",
+        strand_id: "ck:strand:019640ed-8000-7000-8000-000000000000",
         content: { kind: "ck.content.text", body: "private message" },
       },
     };
@@ -581,7 +581,7 @@ test.describe("conformance encoding vectors", () => {
     expect(guestProjected.event_id).toBe(event.event_id);
     expect(guestProjected.redacted_because).toEqual(redaction.reason);
     const guestPayload = guestProjected.payload as Record<string, unknown>;
-    expect(guestPayload.flow_id).toBe(event.payload.flow_id);
+    expect(guestPayload.strand_id).toBe(event.payload.strand_id);
     expect("content" in guestPayload).toBe(false);
   });
 

@@ -13,7 +13,7 @@ export type OperationKind =
   | "circle"
   | "device"
   | "event"
-  | "flow"
+  | "strand"
   | "invite"
   | "mls_group"
   | "mls_keypackage"
@@ -297,14 +297,14 @@ export async function sendMessageApi(
   opts: { server?: SolandKey; encrypted?: boolean; createdAt?: string } = {},
 ) {
   const actorDid = await currentActorDidApi(request, token, opts);
-  const flowId = await resolveDefaultFlowId(request, token, realmId, { server: opts.server });
+  const strandId = await resolveDefaultStrandId(request, token, realmId, { server: opts.server });
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
     kind: "ck.message.create",
     createdAt: opts.createdAt,
     payload: {
-      flow_id: flowId,
+      strand_id: strandId,
       track_name: "discussion",
       content: {
         kind: "ck.content.text",
@@ -496,55 +496,55 @@ export async function submitSignedEventApi(
   return JSON.parse(text) as Record<string, unknown>;
 }
 
-// COT-06-004: discover a Realm's default discussion Flow via the projection face
+// COT-06-004: discover a Realm's default discussion Strand via the projection face
 // instead of deriving it from the Realm UUID. `ck:realm:<uuid>` and
-// `ck:flow:<uuid>` are independent id kinds (registry/id-kind-registry.json)
-// that do not derive from each other; the previous `flowIdFromRealmId` helper
+// `ck:strand:<uuid>` are independent id kinds (registry/id-kind-registry.json)
+// that do not derive from each other; the previous `strandIdFromRealmId` helper
 // hard-coded soland's internal minting rule. The spec-faithful source of truth
-// is the Realm projection's authoritative `default_flow_id` (nullable), with the
-// Flow projection's derived `is_default` marker as a fallback discovery path.
-export async function resolveDefaultFlowId(
+// is the Realm projection's authoritative `default_strand_id` (nullable), with the
+// Strand projection's derived `is_default` marker as a fallback discovery path.
+export async function resolveDefaultStrandId(
   request: APIRequestContext,
   token: string,
   realmId: string,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  // Primary: Realm projection carries the authoritative default_flow_id.
+  // Primary: Realm projection carries the authoritative default_strand_id.
   const realmResp = await request.get(
     `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
   if (realmResp.ok()) {
-    const realm = (await realmResp.json()) as { default_flow_id?: unknown };
-    if (typeof realm.default_flow_id === "string" && realm.default_flow_id) {
-      return realm.default_flow_id;
+    const realm = (await realmResp.json()) as { default_strand_id?: unknown };
+    if (typeof realm.default_strand_id === "string" && realm.default_strand_id) {
+      return realm.default_strand_id;
     }
   }
 
-  // Fallback: discover via the Flow projection's derived is_default marker.
+  // Fallback: discover via the Strand projection's derived is_default marker.
   const flowsResp = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/projection/flows?realm_id=${encodeURIComponent(realmId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}`,
     { headers: authHeaders(token) },
   );
   expect(
     flowsResp.ok(),
-    `resolveDefaultFlowId: flow projection for ${realmId} returned ${flowsResp.status()}`,
+    `resolveDefaultStrandId: strand projection for ${realmId} returned ${flowsResp.status()}`,
   ).toBeTruthy();
   const body = (await flowsResp.json()) as {
-    flows?: Array<{ flow_id?: string; is_default?: boolean }>;
-    items?: Array<{ flow_id?: string; is_default?: boolean }>;
+    strands?: Array<{ strand_id?: string; is_default?: boolean }>;
+    items?: Array<{ strand_id?: string; is_default?: boolean }>;
   };
-  const flows = Array.isArray(body.flows)
-    ? body.flows
+  const strands = Array.isArray(body.strands)
+    ? body.strands
     : Array.isArray(body.items)
       ? body.items
       : [];
-  const def = flows.find((flow) => flow.is_default === true);
+  const def = strands.find((strand) => strand.is_default === true);
   expect(
-    def?.flow_id,
-    `resolveDefaultFlowId: no default flow (is_default) found for realm ${realmId}`,
+    def?.strand_id,
+    `resolveDefaultStrandId: no default strand (is_default) found for realm ${realmId}`,
   ).toBeTruthy();
-  return def!.flow_id!;
+  return def!.strand_id!;
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {

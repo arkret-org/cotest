@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::harness::{CokretServer, expect_api_error, expect_json};
 
-pub async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
+pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let server = CokretServer::spawn("webrtc-signaling").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")

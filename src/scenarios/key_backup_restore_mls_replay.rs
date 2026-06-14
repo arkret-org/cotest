@@ -61,7 +61,7 @@
 //!       * derive the passphrase keys; verify `key_commitment`; decrypt the two domains.
 //!       * mint a SSK proof per §7.4 canonical fields and POST it back (recovery confirmation);
 //!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
-//!         ownership flow which is not yet wired.
+//!         ownership strand which is not yet wired.
 //! 6. device-B replays MLS history:
 //!       * `GET /_cokret/self/realms/{R}/timeline?since=...` pulls all `ck.mls.commit` events.
 //!       * with the recovered `mls_history_backup_key`, device-B derives the pre-loss epoch secret
@@ -233,7 +233,7 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
     //   // out-of-band purely so the revoke can fire from someone
     //   // OTHER than device-A:
     //   let device_pair = new_prefixed_uuid7("ck:device:");
-    //   let pair_token = ... pair via CT-9 flow ...;
+    //   let pair_token = ... pair via CT-9 strand ...;
     //   expect_json(
     //       server.http()
     //             .post(server.url("/_cokret/self/events"))

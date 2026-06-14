@@ -89,14 +89,14 @@
       }
     },
     {
-      "name": "rejects_flow_id",
+      "name": "rejects_strand_id",
       "expected_reason_code": "forbidden_field",
-      "expected_field_path": "flow_id",
+      "expected_field_path": "strand_id",
       "payload": {
         "notification": {
           "push_target_id": "ck:pseudonym:push:01HYZ8Z000000000000000",
           "wakeup_kind": "message",
-          "flow_id": "ck:flow:01JS0FL000000000000000000"
+          "strand_id": "ck:strand:01JS0FL000000000000000000"
         }
       }
     },

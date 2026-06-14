@@ -3,7 +3,7 @@
 // Spec: extensions/mimi-interop.md §1-§7
 //   §1 Provider Facade overview
 //   §2 Realm `federation_profile = "mimi_interop"` + endpoint exposure
-//   §3 Room binding: Cokret Flow ↔ MIMI room; event ↔ Message translation
+//   §3 Room binding: Cokret Strand ↔ MIMI room; event ↔ Message translation
 //   §4 Content mapping: standard MIMI content type ↔ `ck.morph` kind; unknown → quarantine
 //   §5 Policy mapping: join_rule / history_visibility ↔ MIMI room policy
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
@@ -223,14 +223,14 @@ async function createBoundMimiRoom(
     encryption_profile: "mls_rfc9420",
   });
   const roomId = `MIMI-${suffix}-${stamp}`;
-  const update = await request.put(`${solandBaseUrl()}/_cokret/open/mimi/flows/${roomId}/update`, {
+  const update = await request.put(`${solandBaseUrl()}/_cokret/open/mimi/strands/${roomId}/update`, {
     data: {
       room_binding: {
         profile: "ck.profile.mimi_interop.v1",
         mimi_room_uri: `mimi://soland.local/rooms/${roomId}`,
         binding_scope: {
           realm_id: realmId,
-          flow_id: null,
+          strand_id: null,
         },
         content_profile: "application/mimi-content",
       },
@@ -242,7 +242,7 @@ async function createBoundMimiRoom(
 }
 
 function mimiMessagesUrl(roomId: string): string {
-  return `${solandBaseUrl()}/_cokret/open/mimi/flows/${encodeURIComponent(roomId)}/messages`;
+  return `${solandBaseUrl()}/_cokret/open/mimi/strands/${encodeURIComponent(roomId)}/messages`;
 }
 
 function eventById(eventsBody: Record<string, unknown>, eventId: string): Record<string, unknown> {

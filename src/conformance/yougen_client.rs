@@ -12,7 +12,7 @@ const FIXTURE_PROFILE: &str = "ck.profile.yougen_client_blackbox_manifest.v1";
 const REQUIRED_TARGET_PROFILES: &[&str] =
     &["ck.profile.full_client.v1", "ck.profile.e2ee_client.v1"];
 
-const REQUIRED_FLOWS: &[&str] = &[
+const REQUIRED_STRANDS: &[&str] = &[
     "oidc_session_grant",
     "secure_store_handoff",
     "device_verification",
@@ -41,11 +41,11 @@ pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
         bail!("{FIXTURE} has no black-box cases");
     }
 
-    let mut covered_flows = BTreeSet::new();
+    let mut covered_strands = BTreeSet::new();
     let mut saw_explicit_unsupported = false;
     for case in cases {
         let name = required_str(case, "name")?;
-        let flow = required_str(case, "flow")?;
+        let strand = required_str(case, "strand")?;
         let profile = required_str(case, "profile")?;
         let expect = required_str(case, "expect")?;
         if !target_profiles.contains(profile) {
@@ -54,7 +54,7 @@ pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
 
         match expect {
             "pass" | "fail" => {
-                covered_flows.insert(flow.to_owned());
+                covered_strands.insert(strand.to_owned());
             }
             "unsupported" => {
                 saw_explicit_unsupported = true;
@@ -67,24 +67,24 @@ pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
             bail!("{name} runs in production mode but allows a silent fallback");
         }
 
-        validate_case_shape(name, flow, profile, expect, case)?;
+        validate_case_shape(name, strand, profile, expect, case)?;
         record_vector_event(
             "yougen_client_profile.case",
             case,
-            &json!({ "expect": expect, "flow": flow }),
+            &json!({ "expect": expect, "strand": strand }),
             &json!({ "status": "ok" }),
         );
     }
 
-    for flow in REQUIRED_FLOWS {
-        if !covered_flows.contains(*flow) {
-            bail!("{FIXTURE} missing required black-box flow {flow}");
+    for strand in REQUIRED_STRANDS {
+        if !covered_strands.contains(*strand) {
+            bail!("{FIXTURE} missing required black-box strand {strand}");
         }
     }
     if !saw_explicit_unsupported {
         bail!("{FIXTURE} must include at least one explicit unsupported row");
     }
-    let certification = validate_runnable_harness(&fixture, &covered_flows)?;
+    let certification = validate_runnable_harness(&fixture, &covered_strands)?;
     record_vector_event(
         "yougen_client_profile.certification",
         certification,
@@ -97,7 +97,7 @@ pub fn run_yougen_client_profile_manifest_suite() -> Result<()> {
 
 fn validate_runnable_harness<'a>(
     fixture: &'a Value,
-    covered_flows: &BTreeSet<String>,
+    covered_strands: &BTreeSet<String>,
 ) -> Result<&'a Value> {
     let harness = fixture
         .get("runnable_harness")
@@ -125,11 +125,11 @@ fn validate_runnable_harness<'a>(
         .get("triggered_paths")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("{FIXTURE} runnable_harness missing triggered_paths[]"))?;
-    let mut triggered_flows = BTreeSet::new();
+    let mut triggered_strands = BTreeSet::new();
     for path in triggered {
-        let name = required_str(path, "flow")?;
+        let name = required_str(path, "strand")?;
         if path.get("executed").and_then(Value::as_bool) != Some(true) {
-            bail!("runnable_harness flow {name} was not actually executed");
+            bail!("runnable_harness strand {name} was not actually executed");
         }
         let operations = string_set(path, "operations")?;
         match name {
@@ -159,13 +159,13 @@ fn validate_runnable_harness<'a>(
                     }
                 }
             }
-            other => bail!("runnable_harness contains unknown flow {other}"),
+            other => bail!("runnable_harness contains unknown strand {other}"),
         }
-        triggered_flows.insert(name.to_owned());
+        triggered_strands.insert(name.to_owned());
     }
-    for flow in REQUIRED_FLOWS {
-        if !triggered_flows.contains(*flow) || !covered_flows.contains(*flow) {
-            bail!("{FIXTURE} runnable_harness missing required executed flow {flow}");
+    for strand in REQUIRED_STRANDS {
+        if !triggered_strands.contains(*strand) || !covered_strands.contains(*strand) {
+            bail!("{FIXTURE} runnable_harness missing required executed strand {strand}");
         }
     }
 
@@ -176,12 +176,12 @@ fn validate_runnable_harness<'a>(
 
 fn validate_case_shape(
     name: &str,
-    flow: &str,
+    strand: &str,
     profile: &str,
     expect: &str,
     case: &Value,
 ) -> Result<()> {
-    match flow {
+    match strand {
         "oidc_session_grant" => {
             require_profile(profile, "ck.profile.full_client.v1", name)?;
             require_expect(expect, "pass", name)?;
@@ -272,7 +272,7 @@ fn validate_case_shape(
                 bail!("{name} unsupported optional platform feature must be not_claimed");
             }
         }
-        other => bail!("{name} uses unknown flow {other}"),
+        other => bail!("{name} uses unknown strand {other}"),
     }
     Ok(())
 }

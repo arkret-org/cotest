@@ -1,7 +1,7 @@
 // Incident response workflow — alert triage, stakeholder updates, resolution
 // Contract: e2e/scenarios/workflows/incident-response.md
 // Spec refs:
-//   - models/flow-and-message.md §8 (reply / edit / redact)
+//   - models/strand-and-message.md §8 (reply / edit / redact)
 //   - discovery/push-notifications.md §3-§4 (routing, priority, DnD override)
 //   - models/realm-and-space.md §4 (status board / FSM cells)
 //   - models/morph.md §2-§4 (postmortem document morph)
@@ -180,8 +180,8 @@ test.describe("workflow: incident response", () => {
               timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
             }),
           );
-          expect(String(payload.flow_id ?? "")).toMatch(/^ck:flow:/);
-          expect(String(payload.incident_id ?? "")).toMatch(/^ck:flow:/);
+          expect(String(payload.strand_id ?? "")).toMatch(/^ck:strand:/);
+          expect(String(payload.incident_id ?? "")).toMatch(/^ck:strand:/);
         }
       } finally {
         await page.close();

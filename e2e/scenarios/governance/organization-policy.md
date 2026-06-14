@@ -64,7 +64,7 @@
 
 - **E30.1 cross-org Realm**:Realm 同时关联到两个 organization → policy 怎么 join?spec 须查;一般 most_restrictive 优先
 - **E30.2 organization deactivate**:acme-org 被注销(罕见)→ Realms 的 policy 回到 server default
-- **E30.3 appeal flow**:mallory 被 deny,通过 `appeal.endpoint` 提交 appeal flow → moderator 评审
+- **E30.3 appeal strand**:mallory 被 deny,通过 `appeal.endpoint` 提交 appeal strand → moderator 评审
 
 ## Implementation notes
 

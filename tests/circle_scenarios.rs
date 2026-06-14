@@ -3,14 +3,14 @@
 //! the per-scenario `..._run()` functions; they do NOT require a live
 //! soland / coauth / floria stack. Cross-project joint tests live in
 //! `tests/full_stack_e2e.rs` (run under `--ignored`) and will pick up
-//! the Circle flows during P5.
+//! the Circle strands during P5.
 
 use cotest::scenarios::circle::child_scope_policy::child_scope_policy_run;
 use cotest::scenarios::circle::confidential_discussion_relation::confidential_discussion_relation_run;
 use cotest::scenarios::circle::create_circle::create_circle_run;
 use cotest::scenarios::circle::effective_scope_mismatch::effective_scope_mismatch_run;
 use cotest::scenarios::circle::error_code_paths::error_code_paths_run;
-use cotest::scenarios::circle::flow_scope_visibility::flow_scope_visibility_run;
+use cotest::scenarios::circle::strand_scope_visibility::strand_scope_visibility_run;
 use cotest::scenarios::circle::history_visibility_floor::history_visibility_floor_run;
 use cotest::scenarios::circle::member_state_machine::member_state_machine_run;
 use cotest::scenarios::circle::member_strict_subset::member_strict_subset_run;
@@ -30,10 +30,10 @@ async fn circle_member_strict_subset() {
 }
 
 #[tokio::test]
-async fn circle_flow_scope_visibility() {
-    flow_scope_visibility_run()
+async fn circle_strand_scope_visibility() {
+    strand_scope_visibility_run()
         .await
-        .expect("flow_scope_visibility scenario");
+        .expect("strand_scope_visibility scenario");
 }
 
 #[tokio::test]

@@ -7,7 +7,7 @@
 //!   - `cokret-spec/spec/v1/zh/discovery/profiles-presence.md` §2 — `ck.profile.update`
 //!     (display_name / bio / avatar_url) writes actor projection on the principal; the directory
 //!     MUST observe the new fields within the publish-to-search latency budget (target ≤ 30s for
-//!     the canonical "edit profile, then friend finds you" UX flow).
+//!     the canonical "edit profile, then friend finds you" UX strand).
 //!
 //! Scenario walk-through (when fully wired):
 //!   1. Boot soland (principal server) and teabay (directory) with teabay's discovery ingest

@@ -8,7 +8,7 @@
 
 ## Spec 锚点
 
-- `models/flow-and-message.md` §8 (reply / edit)
+- `models/strand-and-message.md` §8 (reply / edit)
 - `models/realm-and-space.md` §2 (Space)
 
 ## 拓扑

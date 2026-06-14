@@ -49,7 +49,7 @@ const publicJwk = publicKey.export({ format: "jwk" });
 
 // Stub MLS KeyPackage. Production audit-agents publish a real MLS KP
 // during onboarding; this mock returns an opaque blob so soland's invite
-// flow can carry "something" through and the test can assert presence.
+// strand can carry "something" through and the test can assert presence.
 const mlsKeyPackage = {
   kind: "mock-mls-key-package-v1",
   signature_scheme: "ed25519",

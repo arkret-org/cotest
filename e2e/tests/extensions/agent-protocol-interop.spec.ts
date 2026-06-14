@@ -46,7 +46,7 @@ test.describe("agent protocol interop", () => {
     //   1. yougen's `/agents` route mounts and renders `agents-panel`
     //      (real testid from yougen/src/views/agents.rs::AgentsPanel).
     //      Without this surface the spec's Phase A endpoint registry
-    //      flow has no UI anchor.
+    //      strand has no UI anchor.
     //   2. soland's `/_cokret/describe` responds with 200 + a
     //      JSON body (current shape — claimed_profiles will eventually
     //      include `ck.profile.agent_runtime.v1`, but today we don't
@@ -229,18 +229,18 @@ test.describe("agent protocol interop", () => {
     // @blocking-on: soland#extensions-agent-protocol-interop-gap
     // @user-promise: e2e/scenarios/extensions/agent-protocol-interop.md
     // @expected-live-by: 2026Q3
-    "Phase D — publish-to-source flow lands Flow + Morph with attribution",
+    "Phase D — publish-to-source strand lands Strand + Morph with attribution",
     async ({ browser, request }) => {
       // spec: extensions/agent-protocol-interop.md §5.4 (result_objects /
-      // artifacts / external_transcript_digest; v1 object types: flow /
+      // artifacts / external_transcript_digest; v1 object types: strand /
       // message / morph / blob), §6 step 8-9.
       //
       // Pseudo:
       //   // 1. mock-agent-runtime POST result back with body:
       //   //    {
       //   //      session_id, status: "completed",
-      //   //      result_objects: [{ object_type: "flow",
-      //   //                         object_ref: "ck:flow:<uuid>",
+      //   //      result_objects: [{ object_type: "strand",
+      //   //                         object_ref: "ck:strand:<uuid>",
       //   //                         track: "synthesis",
       //   //                         role: "primary_result" }],
       //   //      artifacts: [{ artifact_type: "text",
@@ -265,8 +265,8 @@ test.describe("agent protocol interop", () => {
       //   //    modal opens (testid publish-modal-backdrop) → choose
       //   //    publish-modal-signer-self-with-attribution → confirm.
       //
-      //   // 5. Source space gains a new Flow whose fields.workflow_type
-      //   //    includes "synthesis"; Flow's create event actor_id is
+      //   // 5. Source space gains a new Strand whose fields.workflow_type
+      //   //    includes "synthesis"; Strand's create event actor_id is
       //   //    alice.did but `attribution` includes remoteAgent.did
       //   //    (spec §5.4 publish semantics).
       //

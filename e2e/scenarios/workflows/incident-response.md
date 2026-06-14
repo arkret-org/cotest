@@ -12,7 +12,7 @@
 | backend | owner,诊断根因、发布 mitigation |
 | comms | 对外沟通,只发布脱敏状态更新 |
 
-## Main flow
+## Main strand
 
 1. oncall 创建 `SEV-2 checkout` Realm,seed backend + comms。
 2. oncall 发布初始 alert,并 reply ACK。

@@ -1,7 +1,7 @@
 // Async daily standup workflow — three engineers post + cross-unblock
 // Contract: e2e/scenarios/workflows/daily-standup.md
 // Spec refs:
-//   - models/flow-and-message.md §8 (reply / edit)
+//   - models/strand-and-message.md §8 (reply / edit)
 //
 // Realistic story: Three engineers each post their Yesterday/Today/Blockers
 // in a shared standup space. Lin replies to unblock Pat's PR review ask, and

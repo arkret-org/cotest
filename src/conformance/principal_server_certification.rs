@@ -23,7 +23,7 @@ const REQUIRED_OPERATIONS: &[&str] = &[
 const REQUIRED_EVENT_KINDS: &[&str] = &[
     "ck.space.create",
     "ck.member.state",
-    "ck.flow.create",
+    "ck.strand.create",
     "ck.message.create",
     "ck.capability.grant",
     "ck.capability.revoke",

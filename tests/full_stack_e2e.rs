@@ -1,6 +1,6 @@
 //! T8.1 — Full multi-service end-to-end conformance entrypoint.
 //!
-//! Drives the entire cross-project flow from starid DID mint through
+//! Drives the entire cross-project strand from starid DID mint through
 //! coauth handle_claim, teabay directory resolve_handle, soland
 //! member_add, yougen mock message send, floria blind-wakeup gateway,
 //! chime mock receive, rebind handover, and revocation.

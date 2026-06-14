@@ -8,7 +8,7 @@
 
 ## Spec 锚点
 
-- `models/flow-and-message.md` §8 (reply / edit / redact)
+- `models/strand-and-message.md` §8 (reply / edit / redact)
 - `models/realm-and-space.md` §4 (Space / Kanban)
 
 ## 拓扑
@@ -61,7 +61,7 @@
 
 - **E-support.1** Alex redact 一条 PII 泄露的 reply,tombstone 显示
 - **E-support.2** Sam 在 ticket Realm 加另一个工程师 — 升级链扩大(需要 inviteFromAdmin)
-- **E-support.3** Customer 申请加入 ticket Realm(knock flow)— 需要 knock-application
+- **E-support.3** Customer 申请加入 ticket Realm(knock strand)— 需要 knock-application
 
 ## 总耗时预估
 

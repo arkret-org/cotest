@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 
 use crate::harness::{CokretServer, expect_api_error, expect_json};
 
-pub async fn typing_and_push_rules_flow_work() -> Result<()> {
+pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = CokretServer::spawn("typing-push-rules").await?;
     let alice = server
         .demo_client("did:web:alice.example", "dev_alice")

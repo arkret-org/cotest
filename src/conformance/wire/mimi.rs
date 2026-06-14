@@ -157,7 +157,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     let mut covered_visibility_private = false;
     let mut covered_branch_tighten = false;
     let mut covered_branch_loosen_blocked = false;
-    let mut covered_flow_overrides_realm = false;
+    let mut covered_strand_overrides_realm = false;
     let mut covered_realm_overrides_default = false;
 
     for vector in vectors {
@@ -180,23 +180,23 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 let visibility = required_str(policy, "visibility")?;
                 (disclosure.to_owned(), visibility.to_owned())
             }
-            "flow" => {
+            "strand" => {
                 // Per spec 2026-05-08 (removed-event-kinds.json:
-                // cx.flow.track.read_receipt_policy), track-level read-receipt
+                // cx.strand.track.read_receipt_policy), track-level read-receipt
                 // overrides are not in v1. A discussion timeline that needs a
                 // distinct read-receipt policy MUST be upgraded to an
-                // independent Flow/Circle scope (Flow.scope_circle_id, CKP-0007)
+                // independent Strand/Circle scope (Strand.scope_circle_id, CKP-0007)
                 // whose own ck.realm.read_receipt_policy composes against the
                 // parent Realm policy via the same tighten-only rules.
                 let parent = policy
                     .get("parent")
-                    .ok_or_else(|| anyhow!("vector {name} flow missing parent"))?;
-                // `child_scope` (not `branch`, which is a forbidden Flow-track
-                // wire term) is the Flow/Circle scope read-receipt policy that
+                    .ok_or_else(|| anyhow!("vector {name} strand missing parent"))?;
+                // `child_scope` (not `branch`, which is a forbidden Strand-track
+                // wire term) is the Strand/Circle scope read-receipt policy that
                 // composes against the parent via tighten-only rules.
                 let child_scope = policy
                     .get("child_scope")
-                    .ok_or_else(|| anyhow!("vector {name} flow missing child_scope"))?;
+                    .ok_or_else(|| anyhow!("vector {name} strand missing child_scope"))?;
                 let parent_disclosure = required_str(parent, "disclosure")?;
                 let branch_disclosure = required_str(child_scope, "disclosure")?;
                 let parent_visibility = required_str(parent, "visibility")?;
@@ -292,7 +292,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             "branch_overrides_loosen_rejected_when_not_allowed" => {
                 covered_branch_loosen_blocked = true
             }
-            "prefs_resolution_flow_overrides_realm" => covered_flow_overrides_realm = true,
+            "prefs_resolution_strand_overrides_realm" => covered_strand_overrides_realm = true,
             "prefs_resolution_realm_overrides_default" => covered_realm_overrides_default = true,
             _ => {}
         }
@@ -315,11 +315,11 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
         && covered_visibility_private
         && covered_branch_tighten
         && covered_branch_loosen_blocked
-        && covered_flow_overrides_realm
+        && covered_strand_overrides_realm
         && covered_realm_overrides_default)
     {
         bail!(
-            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / branch-tighten / branch-loosen-blocked / flow-overrides-realm / realm-overrides-default"
+            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / branch-tighten / branch-loosen-blocked / strand-overrides-realm / realm-overrides-default"
         );
     }
 
@@ -362,12 +362,12 @@ fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Re
 }
 fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
     // Resolution order per spec discovery/client-preferences.md §3.8:
-    // flow -> realm -> default. Track-level overrides are not in v1.
+    // strand -> realm -> default. Track-level overrides are not in v1.
     let lookup = vector.get("scope_lookup");
     if let Some(lookup) = lookup
-        && let Some(flow_id) = lookup.get("flow_id").and_then(Value::as_str)
-        && let Some(flows) = prefs.get("flows").and_then(Value::as_object)
-        && let Some(entry) = flows.get(flow_id)
+        && let Some(strand_id) = lookup.get("strand_id").and_then(Value::as_str)
+        && let Some(strands) = prefs.get("strands").and_then(Value::as_object)
+        && let Some(entry) = strands.get(strand_id)
         && let Some(send) = entry.get("send").and_then(Value::as_bool)
     {
         return Ok(send);

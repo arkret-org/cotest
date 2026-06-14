@@ -16,12 +16,12 @@ async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn typing_and_push_rules_flow_work() -> Result<()> {
-    cotest::scenarios::schema_policy_realtime::typing_and_push_rules_flow_work().await
+async fn typing_and_push_rules_strand_work() -> Result<()> {
+    cotest::scenarios::schema_policy_realtime::typing_and_push_rules_strand_work().await
 }
 
 #[tokio::test]
 #[serial]
-async fn webrtc_session_signal_flow_and_guards_work() -> Result<()> {
-    cotest::scenarios::schema_policy_realtime::webrtc_session_signal_flow_and_guards_work().await
+async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
+    cotest::scenarios::schema_policy_realtime::webrtc_session_signal_strand_and_guards_work().await
 }

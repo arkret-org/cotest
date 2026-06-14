@@ -119,7 +119,7 @@ test.describe("multi-device pairing + revocation", () => {
     async () => {
       // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding
       // soland gap: ck.device.authorize cross_signing_binding payload; device list materialization.
-      // yougen gap: /settings/devices "Add device" + QR-scan flow.
+      // yougen gap: /settings/devices "Add device" + QR-scan strand.
     },
   );
 

@@ -22,7 +22,7 @@ use cokret_core::{ChildScopePolicy, CircleId, EncryptionProfile};
 /// Reducer-pure predicate for `Space.child_scope_policy` enforcement.
 ///
 /// `policy`              the Space's policy.
-/// `child_scope`         the child Flow / Space's `scope_circle_id`.
+/// `child_scope`         the child Strand / Space's `scope_circle_id`.
 /// `parent_space_scope`  the parent Space's `scope_circle_id` (only used
 ///                       by `require_same_scope`).
 /// `realm_encryption_profile`

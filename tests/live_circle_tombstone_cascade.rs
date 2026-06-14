@@ -7,10 +7,10 @@
 //!   1. Boot soland (+ coauth) via the existing CT-6 `FourServiceStack` bootstrap helper.
 //!   2. Create a Realm and a Circle inside that Realm.
 //!   3. Add two members to the Circle (strict subset of the Realm).
-//!   4. Create N child Flows whose `scope_circle_id` references the Circle.
+//!   4. Create N child Strands whose `scope_circle_id` references the Circle.
 //!   5. Issue `ck.circle.tombstone` against the Circle. Assert: a) `Circle.state == Tombstoned` in
 //!      the projection, b) any further write into the Circle is rejected with `failed_precondition`
-//!      / sub-reason `circle_not_active`, c) child Flow projections surface as unavailable through
+//!      / sub-reason `circle_not_active`, c) child Strand projections surface as unavailable through
 //!      the sync API (`history_visibility` clamped, deliverability flag cleared) per CKP-0007
 //!      cascade rules, d) Circle members see the Circle in their client-side list as `tombstoned`
 //!      (not silently disappeared).
@@ -41,7 +41,7 @@ use serial_test::serial;
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "CKP-0007 Circle tombstone cascade — live soland (+coauth) stack; default-ignored, opt in with --ignored once P5 stack is up or COTEST_LIVE_STACK=1"]
 #[serial]
-async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circles() -> Result<()>
+async fn circle_tombstone_cascades_to_strands_and_realm_tombstone_cascades_to_circles() -> Result<()>
 {
     // ── 0. SDK-level invariants always run (mirror `full_stack_e2e`) ────
     // Ensure the wire reason code the live leg pins against is registered
@@ -111,13 +111,13 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
         bail!("Circle::new MUST default to Active; got {:?}", circle.state);
     }
 
-    // ── 3. Drive the live wire: create Realm + Circle + Flows ───────────
+    // ── 3. Drive the live wire: create Realm + Circle + Strands ───────────
     //
     // The remaining wire steps require canonical signed event submission:
     //   - POST /_cokret/self/events with ck.realm.create
     //   - POST /_cokret/self/events with ck.circle.create
     //   - POST /_cokret/self/events with ck.circle.member.state -> active
-    //   - POST /_cokret/self/events with flow creation scoped to the circle
+    //   - POST /_cokret/self/events with strand creation scoped to the circle
     //   - POST /_cokret/self/events with ck.circle.tombstone
     //   - POST /_cokret/self/events with ck.realm.tombstone
     //
@@ -143,7 +143,7 @@ async fn circle_tombstone_cascades_to_flows_and_realm_tombstone_cascades_to_circ
          (see doc comment): \
          (a) circle state→tombstoned visible in projection within {settle_ms}ms, \
          (b) follow-up writes rejected with reason `{reason}`, \
-         (c) child Flow projections marked unavailable, \
+         (c) child Strand projections marked unavailable, \
          (d) member client list shows tombstoned entry, \
          (e) Realm tombstone cascades to every Circle whose realm_id matches.",
         settle_ms = Duration::from_secs(5).as_millis(),

@@ -263,7 +263,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       realmId: "ck:realm:01904100-0000-7000-8000-000000001000",
       kind: "ck.message.create",
       payload: {
-        flow_id: "ck:flow:01904100-0000-7000-8000-000000001000",
+        strand_id: "ck:strand:01904100-0000-7000-8000-000000001000",
         track_name: "discussion",
         content: { kind: "ck.content.text", body: "must not accept unknown critical extension" },
       },

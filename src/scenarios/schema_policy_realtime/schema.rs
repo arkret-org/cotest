@@ -14,7 +14,7 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .get(server.url("/_cokret/self/schemas?kind=flow&limit=20")),
+            .get(server.url("/_cokret/self/schemas?kind=strand&limit=20")),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )

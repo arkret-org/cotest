@@ -48,7 +48,7 @@ pub const EXPECTED_SELF_REVIEW_FORBIDDEN: &str = "appeal_self_review_forbidden";
 /// constants agree with the cotest pins and the canonical registry
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
 /// `ck:appeal:<uuidv7>` wire form round-trips through the SDK.
-pub async fn moderation_appeal_flow_end_to_end_run() -> Result<()> {
+pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
     if ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
         return Err(anyhow!(
             "SDK ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
@@ -90,7 +90,7 @@ mod tests {
 
     #[tokio::test]
     async fn moderation_appeal_wire_pins_match_sdk() {
-        moderation_appeal_flow_end_to_end_run()
+        moderation_appeal_strand_end_to_end_run()
             .await
             .expect("SDK appeal error codes + TypedAppealId must agree with cotest pins");
     }
@@ -112,7 +112,7 @@ mod tests {
 
     #[tokio::test]
     async fn t06_moderation_appeal_contract() {
-        moderation_appeal_flow_end_to_end_run()
+        moderation_appeal_strand_end_to_end_run()
             .await
             .expect("appeal error codes + TypedAppealId must stay registered");
         assert_eq!(DECISION_LIFT_KIND, "ck.moderation.decision.lift");

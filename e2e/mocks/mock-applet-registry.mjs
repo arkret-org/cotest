@@ -8,7 +8,7 @@
 //
 // The mock holds its own Ed25519 signing key + auto-generated DID. The
 // harness wires soland (and other consumers) to MOCK_APPLET_REGISTRY_DID so
-// applet package install and transaction flows can be exercised
+// applet package install and transaction strands can be exercised
 // end-to-end without standing up a real registry implementation.
 //
 // Endpoints:
@@ -18,7 +18,7 @@
 //     Registry public key (for verifying registry-signed envelopes).
 //   POST /sign-package
 //     Returns a sealed controller-signed ck.schema.applet_package.v1 for
-//     soland's canonical ck.self.applet.install.command.preview / ck.self.applet.command.install flow.
+//     soland's canonical ck.self.applet.install.command.preview / ck.self.applet.command.install strand.
 //   POST /external-event
 //     Forwards an external payload to soland's typed applet ingress route.
 //   GET  /inspect → full mock state.

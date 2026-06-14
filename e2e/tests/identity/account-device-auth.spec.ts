@@ -13,7 +13,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("account auth + device flow", () => {
+test.describe("account auth + device strand", () => {
   test("auth refresh endpoint surface probe", async ({ request }) => {
     const probe = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/refresh`, {
       data: { refresh_token: "probe-token" },

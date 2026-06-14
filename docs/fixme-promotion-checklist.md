@@ -12,7 +12,7 @@ push tags, or open remote CI-only follow-ups as evidence.
 | Single-spec pass | One command that ran only the promoted spec or an even narrower grep, recorded exactly enough to rerun locally. |
 | Regression artifact | One screenshot, HAR, trace, zip, or artifact directory from the passing run. |
 
-## Promotion Flow
+## Promotion Strand
 
 1. Confirm the existing fixme has `@blocking-on`, `@user-promise`, and
    `@expected-live-by` metadata.

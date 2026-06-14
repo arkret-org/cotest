@@ -2,7 +2,7 @@
 //!
 //! Reducers MUST reject events whose [`EffectiveScope::Circle.circle_id`]
 //! disagrees with the `scope_circle_id` declared inside the payload's
-//! object (Flow / Space / Morph). This scenario builds two hand-rolled
+//! object (Strand / Space / Morph). This scenario builds two hand-rolled
 //! wire envelopes that exercise that contract — one in which the binding
 //! is consistent (accept), one in which envelope and payload point at
 //! different Circles (reject — `circle_realm_mismatch` family).

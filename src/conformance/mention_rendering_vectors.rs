@@ -1,6 +1,6 @@
 //! §3.8 mention rendering conformance vectors (VECT-COT-2).
 //!
-//! Spec source: `models/flow-and-message.md §9.4` +
+//! Spec source: `models/strand-and-message.md §9.4` +
 //! `identity/identity-handles.md §3.8.1 / §3.8.2`.
 //!
 //! R3.2 mention node shape:

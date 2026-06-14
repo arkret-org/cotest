@@ -102,7 +102,7 @@ test.describe("private read marker", () => {
     expect(bobAfterBody.unread_count).toBe(0);
   });
 
-  // Main flow: full multi-device read-cursor lifecycle (Phases A-G in
+  // Main strand: full multi-device read-cursor lifecycle (Phases A-G in
   // scenarios/models/private-read-cursor.md).
   test.fixme(
     // @blocking-on: soland#models-private-read-cursor-gap
@@ -152,11 +152,11 @@ test.describe("private read marker", () => {
     // @blocking-on: soland#models-private-read-cursor-gap
     // @user-promise: e2e/scenarios/models/private-read-marker.md
     // @expected-live-by: 2026Q3
-    "E10.3 Circle-scoped private Flow read marker is isolated from Realm-default Flow marker (same realm_id, different read_scope)",
+    "E10.3 Circle-scoped private Strand read marker is isolated from Realm-default Strand marker (same realm_id, different read_scope)",
     async () => {
       // spec: models/private-objects.md §2 + models/circle.md §7.2
       // soland gap: per-read_scope account_data namespacing and Circle-scoped
-      // private Flow helpers are not yet live.
+      // private Strand helpers are not yet live.
     },
   );
 });

@@ -59,7 +59,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
    - title = `"models/private-read-cursor S ${stamp}"`
    - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
    - seed_members = `[bob.did]`
-3. 断言:`realm-lifecycle-flow` 含 `created ck:realm:...`,记录 `realmId`
+3. 断言:`realm-lifecycle-strand` 含 `created ck:realm:...`,记录 `realmId`
 4. bob 通过 `acceptInvite(realmId)` 加入 Realm
 
 ### Phase B — bob 发 M1, M2, M3
@@ -126,8 +126,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   per_realm_mls` 的 Realm;bob 发的 M4 在 server 侧 payload 是密文,但 server 仍能投递 to-device
   wake;notification 投影由 client 在解密后产生 — 测试断言 server `GET /_soland/self/notifications` 不
   暴露明文 body,只暴露 envelope 元数据(event_id、sender_did、ts、`encrypted: true`)
-- **E10.3 Circle-scoped private Flow 的 read marker 独立于 Realm-default Flow**:在 Realm `R`
-  内创建公开 Flow `F_public`,再创建 Circle `C_discussion` 与私密 Flow `F_private`
+- **E10.3 Circle-scoped private Strand 的 read marker 独立于 Realm-default Strand**:在 Realm `R`
+  内创建公开 Strand `F_public`,再创建 Circle `C_discussion` 与私密 Strand `F_private`
   (`F_private.scope_circle_id = C_discussion`),并用 `confidential_discussion_of` Relation 指回
   `F_public`;alice 在 `F_private` 的 `discussion` track 把 marker 推到 `M_private`,但
   `F_public` 的 marker 保持在 `M_public`;断言两个 marker 按
@@ -148,7 +148,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   `dev-login` 两次得到两个 session token(可能相同也可能不同),分别注入两个 browser context
 - **E2EE 子测试(E10.2)**:cotest 当前没有可靠的 "create encrypted Realm" 入口;先标 fixme,等
   encryption Realm scenario 提供 helper 再补
-- **Circle-scoped private Flow 子测试(E10.3)**:依赖 Circle-scoped private Flow helper、`read_scope`
+- **Circle-scoped private Strand 子测试(E10.3)**:依赖 Circle-scoped private Strand helper、`read_scope`
   级 account data 命名和 `confidential_discussion_of` Relation 查询路径,目前未实装,标 fixme
 
 ## 总耗时预估

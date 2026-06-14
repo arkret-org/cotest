@@ -20,7 +20,7 @@
     },
     "triggered_paths": [
       {
-        "flow": "oidc_session_grant",
+        "strand": "oidc_session_grant",
         "executed": true,
         "operations": [
           "oidc_callback",
@@ -28,14 +28,14 @@
         ]
       },
       {
-        "flow": "secure_store_handoff",
+        "strand": "secure_store_handoff",
         "executed": true,
         "operations": [
           "secure_store_handoff"
         ]
       },
       {
-        "flow": "device_verification",
+        "strand": "device_verification",
         "executed": true,
         "operations": [
           "device_verification_start",
@@ -43,7 +43,7 @@
         ]
       },
       {
-        "flow": "e2ee_fail_closed",
+        "strand": "e2ee_fail_closed",
         "executed": true,
         "operations": [
           "encrypted_event_open",
@@ -55,7 +55,7 @@
   "cases": [
     {
       "name": "oidc_callback_exchanges_coauth_session_grant",
-      "flow": "oidc_session_grant",
+      "strand": "oidc_session_grant",
       "profile": "ck.profile.full_client.v1",
       "expect": "pass",
       "environment": {
@@ -88,7 +88,7 @@
     },
     {
       "name": "secure_store_handoff_keeps_session_material_out_of_dom_storage",
-      "flow": "secure_store_handoff",
+      "strand": "secure_store_handoff",
       "profile": "ck.profile.full_client.v1",
       "expect": "pass",
       "environment": {
@@ -108,7 +108,7 @@
     },
     {
       "name": "device_verification_promotes_cross_signed_sas_device_to_trusted",
-      "flow": "device_verification",
+      "strand": "device_verification",
       "profile": "ck.profile.e2ee_client.v1",
       "expect": "pass",
       "environment": {
@@ -132,7 +132,7 @@
     },
     {
       "name": "e2ee_missing_room_key_blocks_plaintext_render_and_write",
-      "flow": "e2ee_fail_closed",
+      "strand": "e2ee_fail_closed",
       "profile": "ck.profile.e2ee_client.v1",
       "expect": "fail",
       "environment": {
@@ -157,7 +157,7 @@
     },
     {
       "name": "native_secure_enclave_absence_is_explicit_unsupported_not_fallback",
-      "flow": "platform_secure_enclave",
+      "strand": "platform_secure_enclave",
       "profile": "ck.profile.e2ee_client.v1",
       "expect": "unsupported",
       "environment": {

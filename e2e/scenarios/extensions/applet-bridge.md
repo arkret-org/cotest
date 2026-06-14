@@ -62,7 +62,7 @@
    - join_rule = `invite`
    - history_visibility = `joined`
    - seed_members = `[]`(bot 走 admin invite 通道,不走 seed)
-6. 断言:`realm-lifecycle-flow` 显示 `created ck:realm:...`,记录 `realmId`
+6. 断言:`realm-lifecycle-strand` 显示 `created ck:realm:...`,记录 `realmId`
 7. **alice** 在 `/realms/${realmId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_id`
    - 断言:`realm-admin-panel` 状态文本含 `invited ${bot_actor_id}`
 8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ realm_id: realmId }`

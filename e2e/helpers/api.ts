@@ -2,7 +2,7 @@ import { expect, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import {
   createRealmApi,
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
@@ -50,7 +50,7 @@ export type ReadMarker = {
 };
 
 // Thin wrapper over `createRealmApi` so tests share one canonical
-// realm-creation flow while preserving the public discoverability default.
+// realm-creation strand while preserving the public discoverability default.
 export async function createRealmViaApi(
   request: APIRequestContext,
   token: string,
@@ -163,9 +163,9 @@ export async function allowPlaintextMessagesViaApi(
 // with the caller-supplied `opts.actorDid` (asserted required). Multi-actor
 // specs depend on sending as a DID that is not the token's `/account/me`, so
 // delegating would change the signer and add a network round-trip. Since
-// `sendMessageApi`'s exported signature must not change, the flow is kept here
+// `sendMessageApi`'s exported signature must not change, the strand is kept here
 // and shares the same primitives (signedEventEnvelope/submitSignedEventApi/
-// resolveDefaultFlowId) to prevent canonical drift.
+// resolveDefaultStrandId) to prevent canonical drift.
 export async function sendPlaintextMessageViaApi(
   request: APIRequestContext,
   token: string,
@@ -174,13 +174,13 @@ export async function sendPlaintextMessageViaApi(
   opts: { actorDid?: string; server?: SolandKey } = {},
 ): Promise<ApiMessage> {
   expect(opts.actorDid, "sendPlaintextMessageViaApi requires opts.actorDid for canonical events").toBeTruthy();
-  const flowId = await resolveDefaultFlowId(request, token, realmId, { server: opts.server });
+  const strandId = await resolveDefaultStrandId(request, token, realmId, { server: opts.server });
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
     realmId,
     kind: "ck.message.create",
     payload: {
-      flow_id: flowId,
+      strand_id: strandId,
       track_name: "discussion",
       content: {
         kind: "ck.content.text",

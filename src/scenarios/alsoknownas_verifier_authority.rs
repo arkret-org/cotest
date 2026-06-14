@@ -43,7 +43,7 @@ pub async fn alsoknownas_verifier_authority_run() -> Result<()> {
             "binding_state=verified is NEVER authority for trust decisions"
         ));
     }
-    // TODO(P4-impl): exercise yougen's "Accept Invite" flow: stub a
+    // TODO(P4-impl): exercise yougen's "Accept Invite" strand: stub a
     // teabay response carrying `binding_state=verified` for the
     // invitee's alsoKnownAs; assert yougen still issues the first-party
     // DID Document fetch + verifies signature before binding the

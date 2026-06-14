@@ -2,7 +2,7 @@
 //!
 //! Cross-signing reset accepted at T0 ↦ any pre-existing
 //! `secret_storage` series MUST emit a successor envelope within 24h.
-//! If a recovery flow tries to consume a `secret_storage` envelope
+//! If a recovery strand tries to consume a `secret_storage` envelope
 //! older than 24h post-reset, soland MUST reject with
 //! `backup_post_reset_stale`.
 

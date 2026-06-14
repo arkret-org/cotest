@@ -417,7 +417,7 @@ impl TestServerGroup {
     /// cannot be located or required env vars are missing — scenarios use
     /// this to silently skip federation tests on CI runners that have no
     /// `soland.exe` built and no `SOLAND_BIN=...` set, while still running
-    /// the full multi-node flow on developer machines that do.
+    /// the full multi-node strand on developer machines that do.
     ///
     /// Falls back to the slow `cargo run` `multi` path if `SOLAND_BIN` is
     /// unset *and* the sibling binary is also unavailable — callers that

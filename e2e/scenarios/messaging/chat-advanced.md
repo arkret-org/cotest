@@ -8,8 +8,8 @@
 
 ## Spec 锚点
 
-- `models/flow-and-message.md` §4.3 — Discussion track profile
-- `models/flow-and-message.md` §8.2-§8.3 — Message schema + chat example
+- `models/strand-and-message.md` §4.3 — Discussion track profile
+- `models/strand-and-message.md` §8.2-§8.3 — Message schema + chat example
 - `models/content-types.md` §4.1 — Text with mentions
 - `models/content-types.md` §4.9 — Poll type
 - `discovery/profiles-presence.md` §3.2-§3.5 — Presence states / Typing format

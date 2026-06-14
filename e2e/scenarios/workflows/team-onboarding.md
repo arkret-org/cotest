@@ -9,7 +9,7 @@
 ## Spec 锚点
 
 - `models/realm-and-space.md` §2-§3 — Realm 生命周期、Join Policy、Space container
-- `models/flow-and-message.md` §8 — Message reply/edit
+- `models/strand-and-message.md` §8 — Message reply/edit
 - `models/realm-and-space.md` §4 — Space / Board / List
 
 ## 拓扑

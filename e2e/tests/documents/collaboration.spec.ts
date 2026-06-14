@@ -3,7 +3,7 @@
 // Spec refs:
 //   - models/morph.md §2 (Morph schema), §4 (facets)
 //   - models/content-types.md §2-§3 (content blocks)
-//   - models/flow-and-message.md §4.3 (discussion track for comments)
+//   - models/strand-and-message.md §4.3 (discussion track for comments)
 //   - discovery/profiles-presence.md §3 (cursor presence)
 //   - authz/event-auth-state-resolution.md §2-§4 (anchor finality)
 
@@ -13,7 +13,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
   createRealmApi,
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -31,7 +31,7 @@ test.describe("Document Morph collaboration", () => {
   test("Document Morph projection reports body versions, relation links, range comments, and orphan state", async ({
     request,
   }) => {
-    // spec: morph.md §2/§4 + flow-and-message.md §4.3 + relation.md §3.2.
+    // spec: morph.md §2/§4 + strand-and-message.md §4.3 + relation.md §3.2.
     const alice = uniqueUser("doc-projection-alice");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
@@ -89,7 +89,7 @@ test.describe("Document Morph collaboration", () => {
       { context: "link document morph relation" },
     );
 
-    const flowId = await resolveDefaultFlowId(request, token, realmId);
+    const strandId = await resolveDefaultStrandId(request, token, realmId);
     await submitSignedEventApi(
       request,
       token,
@@ -98,7 +98,7 @@ test.describe("Document Morph collaboration", () => {
         realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowId,
+          strand_id: strandId,
           thread_id: morphId,
           track_name: "discussion",
           content: {
@@ -171,7 +171,7 @@ test.describe("Document Morph collaboration", () => {
     browser,
     request,
   }, testInfo) => {
-    // spec: morph.md §2 + flow-and-message.md §4.3 + profiles-presence.md §3.
+    // spec: morph.md §2 + strand-and-message.md §4.3 + profiles-presence.md §3.
     const stamp = Date.now();
     const alice = uniqueUser("doc-ui-alice");
     const bob = uniqueUser("doc-ui-bob");

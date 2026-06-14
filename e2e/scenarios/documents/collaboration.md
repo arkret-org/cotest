@@ -11,7 +11,7 @@
 - `models/morph.md` §2 — Morph schema(`morph_type=document`)
 - `models/morph.md` §4 — Facets(`documentable`)
 - `models/content-types.md` §2-§3 — Content Block 结构
-- `models/flow-and-message.md` §4.3 — Discussion track(评论)
+- `models/strand-and-message.md` §4.3 — Discussion track(评论)
 - `models/relation.md` §3.2 — range comment / replies relation 语义
 - `discovery/profiles-presence.md` §3 — Presence UI shell
 - `authz/event-auth-state-resolution.md` §2-§4 — version boundary / anchor-oriented history

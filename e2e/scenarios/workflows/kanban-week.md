@@ -51,9 +51,9 @@
 ### Phase E — 整列 archive / restore cascade
 
 10. archive `Today` list
-11. 断言:`Today` list 进入 archived-lists,`Review PR backlog` 与 `Spec the Q4 roadmap doc` 的 Flow projection state 变为 `archived`
+11. 断言:`Today` list 进入 archived-lists,`Review PR backlog` 与 `Spec the Q4 roadmap doc` 的 Strand projection state 变为 `archived`
 12. restore `Today` list
-13. 断言:`Today` list 回到 board,两张卡 Flow projection state 回到 `active`,rank 字段未丢失
+13. 断言:`Today` list 回到 board,两张卡 Strand projection state 回到 `active`,rank 字段未丢失
 
 ## Observable assertions
 

@@ -148,7 +148,7 @@
     "resolve_response": {
       "state": "found",
       "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
-      "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+      "main_strand_id": "ck:strand:0196b39d-0000-7000-8000-000000000401",
       "binding_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000501",
       "created": false
     },
@@ -160,7 +160,7 @@
         "did:web:bob.example"
       ],
       "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
-      "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+      "main_strand_id": "ck:strand:0196b39d-0000-7000-8000-000000000401",
       "contact_refs": [
         "ck:event:0196b39d-0000-7000-8000-000000000502",
         "ck:event:0196b39d-0000-7000-8000-000000000503"
@@ -169,7 +169,7 @@
         "ck:event:0196b39d-0000-7000-8000-000000000504",
         "ck:event:0196b39d-0000-7000-8000-000000000505"
       ],
-      "main_flow_create_ref": "ck:event:0196b39d-0000-7000-8000-000000000506",
+      "main_strand_create_ref": "ck:event:0196b39d-0000-7000-8000-000000000506",
       "created_at": "2026-06-06T00:00:00Z",
       "binding_state": "active"
     },
@@ -192,16 +192,16 @@
       ],
       "direct_conversation": {
         "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
-        "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+        "main_strand_id": "ck:strand:0196b39d-0000-7000-8000-000000000401",
         "binding_event_ref": "ck:event:0196b39d-0000-7000-8000-000000000501",
         "state": "active"
       }
     },
-    "derived_flow_selection": {
+    "derived_strand_selection": {
       "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
-      "binding_main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
-      "default_flow_id_for_realm": "ck:flow:0196b39d-0000-7000-8000-000000000499",
-      "selected_main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401"
+      "binding_main_strand_id": "ck:strand:0196b39d-0000-7000-8000-000000000401",
+      "default_strand_id_for_realm": "ck:strand:0196b39d-0000-7000-8000-000000000499",
+      "selected_main_strand_id": "ck:strand:0196b39d-0000-7000-8000-000000000401"
     },
     "pending_contact_negative": {
       "name": "pending_incoming_contact_must_not_create_dm_realm",
@@ -242,7 +242,7 @@
         "body": {
           "status": "found",
           "realm_id": "ck:realm:0196b39d-0000-7000-8000-000000000301",
-          "main_flow_id": "ck:flow:0196b39d-0000-7000-8000-000000000401",
+          "main_strand_id": "ck:strand:0196b39d-0000-7000-8000-000000000401",
           "binding_ref": "ck:event:0196b39d-0000-7000-8000-000000000501"
         }
       }

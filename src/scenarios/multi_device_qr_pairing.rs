@@ -28,7 +28,7 @@
 //!    `CokretServer::register_client` helper.)
 //!
 //! 2. Generate a fresh `ck:device:<uuidv7>` for device-B and a dedicated Ed25519 keypair for it.
-//!    The QR payload itself is a yougen-side UI concern (`verify-device` flow); cotest synthesizes
+//!    The QR payload itself is a yougen-side UI concern (`verify-device` strand); cotest synthesizes
 //!    the equivalent API calls without driving the QR code itself — this matches the spec note that
 //!    "QR is the transport, not the trust primitive".
 //!
@@ -88,7 +88,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     // ── Step 1: boot soland + register alice with device-A ──────────────
     //
     // Use a 1-server group (vs. 3-server in CT-1) — multi-device pairing
-    // is a single-principal flow that does not require federation.
+    // is a single-principal strand that does not require federation.
     let _group = TestServerGroup::single("ct9-qr-pairing").await?;
     // let server = group.server(0);
     //

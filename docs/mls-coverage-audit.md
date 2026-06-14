@@ -1,6 +1,6 @@
 # MLS / E2EE 测试覆盖审计与根因记录
 
-> 起因:新建加密 Realm → 新建 Flow → 添加 Description 报 `content_encryption_floor_violation`。
+> 起因:新建加密 Realm → 新建 Strand → 添加 Description 报 `content_encryption_floor_violation`。
 > 本文记录:(1) MLS 覆盖矩阵与缺口,(2) 本轮补的回归用例,(3) 该 bug 的根因链与修复建议。
 > 日期:2026-06-01。
 
@@ -25,7 +25,7 @@
 | key backup 链/单调/前驱 | ✅ active | `tests/key_backup_three_class_scenarios.rs` |
 | cross-signing reset 时钟偏移/重放 | ✅ active(soland 单测) | `soland/tests/http_api/events.rs` |
 | e2ee relaxed window / metadata floor 收紧 | ✅ active | `scenarios/circle/metadata_encryption_floor.rs`、`e2ee_relaxed_window_negative.rs` |
-| **创建者本机加密写入 flow body(description)** | ✅ active **绿(实测真加密)** | `e2e/tests/kanban/end-to-end.spec.ts` E15.7 |
+| **创建者本机加密写入 strand body(description)** | ✅ active **绿(实测真加密)** | `e2e/tests/kanban/end-to-end.spec.ts` E15.7 |
 | **创建者本机加密 synthesis** | ✅ active **绿(实测真加密)** | kanban E15.8 |
 | **创建者本机加密 discussion comment** | ✅ active **绿(已修复,见 5.A)** | kanban E15.9 |
 | **realm encryption_profile create-locked** | ✅ active **绿** | mls-group E11.6 |
@@ -41,8 +41,8 @@
 ## 3. 本轮新增用例
 
 **P0 — 创建者本机加密三连(`e2e/tests/kanban/end-to-end.spec.ts`)**,共享 helper `recordFloorViolations` / `buildEncryptedBoardAndCard` / `setCardDetailEditorValue`,断言以**网络结果**为准(乐观 UI 会掩盖失败):
-- E15.7 description(`body` → `ck.flow.update`)
-- E15.8 synthesis(`synthesis` → `ck.flow.update`,独立加密+commit 代码路径)
+- E15.7 description(`body` → `ck.strand.update`)
+- E15.8 synthesis(`synthesis` → `ck.strand.update`,独立加密+commit 代码路径)
 - E15.9 discussion comment(`ck.message.create`,MLS encrypted-payload envelope)
 
 **P1 — create-locked(`e2e/tests/encryption/mls-group.spec.ts`,API 级)**:
@@ -60,7 +60,7 @@
 
 | 用例 | 结果 | 结论 |
 |---|---|---|
-| description 加密写入(含"提交体不得含明文"硬断言)| ✅ 真绿 | **原报告 bug 已解决**:flow body 在创建者本机真加密、服务端接受 |
+| description 加密写入(含"提交体不得含明文"硬断言)| ✅ 真绿 | **原报告 bug 已解决**:strand body 在创建者本机真加密、服务端接受 |
 | synthesis 加密写入 | ✅ 真绿 | 同上 |
 | realm encryption_profile create-locked | ✅ 绿 | 服务端提交时强制生效 |
 | circle encryption_profile create-locked | 🔴 → fixme | **确认 soland 提交时不强制(见 B)** |
@@ -80,8 +80,8 @@
 > status<400 + 评论解密渲染)。**以下为原始诊断记录:**
 
 尝试修复时发现是**两层**问题(2026-06-01 实跑确认):
-1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `ck.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `ck.flow.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
-2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。yougen 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban flow 内容"能加密"只因 flow patch 值不走该 envelope schema 校验;消息走,故被拒。**yougen 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `cokret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
+1. **默认 Send 泄漏明文**:卡片 Discussion 默认 Send(`chat.rs` `send-chat-button`)**无条件提交明文** `ck.message.create`,不判断 scope;服务端接受(content_encryption_floor 只管 `ck.strand.*`)。加密发送 `run_local_mls_encrypt`(chat.rs:181)还是 `#[cfg(not(target_arch="wasm32"))]`、wasm 上空桩。
+2. **更深:加密 envelope 不合规**(本轮新发现)。去掉 wasm 门 + 让默认 Send 走加密后,服务端改报 `ck.schema.encrypted_envelope.v1 requires field 'version'`。yougen 的消息 `encrypted_payload` 来自松散的 `core::EncryptedPayload`(`group.encrypt_payload`),**缺** `version` / `aad_visibility_event_id` / `aad.{realm_id,event_kind}` / `aad_digest`,且 `key_ref.algorithm` 应为 `"MLS"`。kanban strand 内容"能加密"只因 strand patch 值不走该 envelope schema 校验;消息走,故被拒。**yougen 全仓没有任何合规 envelope 构造**(`aad_visibility_event_id`/`aad_digest` 零出现);合规构造器在 SDK `cokret-rust-sdk/crates/sdk/src/mls.rs` 的 `MessageCrypto::encrypt_with_aad`。
 - **修**(sizable):把 yougen chat 消息加密改用 SDK 的 `MessageCrypto::encrypt_with_aad` 合规路径(构造 aad、aad_digest、version、整合 commit),跨 SDK+yougen、需多轮重建。`@blocking-on: yougen#chat-encrypted-message-envelope-nonconforming`。
 - 本轮已尝试"去 wasm 门 + 默认 Send 走加密"并实跑:明文泄漏被堵(不再泄漏),但暴露第 2 层后**已 `git checkout` 回退 chat.rs**,避免留下"加密频道发不出消息"的回归。
 
@@ -100,4 +100,4 @@
 - **metadata_encryption_floor 服务端是否真强制**(`reducer.rs` ~7102):子审计称"字段存了未强制",待核实。
 - **welcome 部分失败的 UI 上报**:当前 `WelcomeApplyOutcome.first_error` 只打日志,用户可能误以为已就绪。
 - **多设备**:QR 配对 / MLS Remove 级联 / 设备撤销后 account-secret 轮换持久化,多数仍 fixme/ignore,等 soland MLS 状态机。
-- **commit / flow 两阶段提交原子性**(推断,未逐行核实):MLS commit 事件与业务 `ck.flow.update` 分两次提交,网络中断可能导致 epoch 推进但业务补丁丢失。
+- **commit / strand 两阶段提交原子性**(推断,未逐行核实):MLS commit 事件与业务 `ck.strand.update` 分两次提交,网络中断可能导致 epoch 推进但业务补丁丢失。

@@ -22,7 +22,7 @@ test.describe("account onboarding", () => {
     request,
   }) => {
     // Baseline sanity: the dev-login shortcut still works. This is NOT the
-    // S7 contract — S7 demands the real WebAuthn / OIDC / email flow per
+    // S7 contract — S7 demands the real WebAuthn / OIDC / email strand per
     // spec. But the dev-login path verifies the soland register/dev-login
     // surface is up before we exercise real onboarding.
     const alice = uniqueUser("s7-baseline");
@@ -48,7 +48,7 @@ test.describe("account onboarding", () => {
     expect(bridgeResponse.status()).toBe(200);
     const bridge = await bridgeResponse.json();
     expect(bridge.todos).toEqual([]);
-    expect(bridge.oauth.supported_flows).toContain("authorization_code_pkce_browser");
+    expect(bridge.oauth.supported_strands).toContain("authorization_code_pkce_browser");
     expect(bridge.oauth.browser_bridge_session_path).toBe(
       "/_coauth/gate/account/auth/oidc/browser-bridge/session",
     );
@@ -215,7 +215,7 @@ test.describe("account onboarding", () => {
     "carol registers via email-only (3PID precursor); verification token consumed; DID issued",
     async () => {
       // spec: account-lifecycle.md §2.1 + sync/third-party-invites.md §3
-      // soland/coauth gap: email verification flow; harness gap: mock email service.
+      // soland/coauth gap: email verification strand; harness gap: mock email service.
     },
   );
 

@@ -23,8 +23,8 @@
       "requirements": [
         { "name": "Space lifecycle", "status": "implemented", "sources": ["collaboration_workflow", "space_permissions"], "tests": ["space_permissions_and_owner_mutations_are_enforced"] },
         { "name": "member state", "status": "implemented", "sources": ["space_permissions", "authz_policy_presence", "conformance_state_resolution"], "tests": ["space_permissions_and_owner_mutations_are_enforced"] },
-        { "name": "Flow", "status": "partial", "sources": ["interaction_models", "schema_policy_realtime"], "tests": ["interaction_models_are_projected_and_validated"] },
-        { "name": "Flow branch member", "status": "partial", "sources": ["interaction_models", "conformance_state_resolution"], "tests": ["state_resolution_fixture_suite_matches_reference_semantics"] },
+        { "name": "Strand", "status": "partial", "sources": ["interaction_models", "schema_policy_realtime"], "tests": ["interaction_models_are_projected_and_validated"] },
+        { "name": "Strand branch member", "status": "partial", "sources": ["interaction_models", "conformance_state_resolution"], "tests": ["state_resolution_fixture_suite_matches_reference_semantics"] },
         { "name": "Message", "status": "implemented", "sources": ["collaboration_workflow", "interaction_models", "protocol_payloads"], "tests": ["collaboration_workflow_supports_space_message_and_sync"] },
         { "name": "Reaction", "status": "implemented", "sources": ["interaction_models"], "tests": ["interaction_models_are_projected_and_validated"] },
         { "name": "Redaction", "status": "implemented", "sources": ["interaction_models", "conformance_redaction"], "tests": ["redaction_fixture_suite_matches_reference_semantics"] },
@@ -37,9 +37,9 @@
       "spec_ref": "E:\\Works\\cokret\\cokret-spec\\artifacts\\profiles\\conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
-        { "name": "Board Space / List Space / Flow(kind=\"card\")", "status": "partial", "sources": ["interaction_models", "schema_policy_realtime", "conformance_sync"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
+        { "name": "Board Space / List Space / Strand(kind=\"card\")", "status": "partial", "sources": ["interaction_models", "schema_policy_realtime", "conformance_sync"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
         { "name": "contains Relation position", "status": "implemented", "sources": ["interaction_models", "conformance_projection_position"], "tests": ["projection_position_discriminator_suite_matches_reference_semantics"] },
-        { "name": "flow move / reorder", "status": "implemented", "sources": ["conformance_state_resolution", "protocol_payloads"], "tests": ["state_resolution_fixture_suite_matches_reference_semantics"] },
+        { "name": "strand move / reorder", "status": "implemented", "sources": ["conformance_state_resolution", "protocol_payloads"], "tests": ["state_resolution_fixture_suite_matches_reference_semantics"] },
         { "name": "list rebalance", "status": "implemented", "sources": ["conformance_event_envelope", "conformance_state_resolution"], "tests": ["event_envelope_fixture_suite_matches_reference_semantics"] },
         { "name": "collection projection", "status": "implemented", "sources": ["interaction_models", "identity_directory", "conformance_sync"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
         { "name": "wait-for query", "status": "pending", "sources": [], "tests": [] }

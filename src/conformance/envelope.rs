@@ -57,7 +57,7 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
                 "01970e589d21-0001-a13f9c2e",
                 "2026-05-02T00:00:00Z",
                 json!({
-                    "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+                    "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
                     "body": "legacy alias"
                 }),
             );
@@ -224,7 +224,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00Z",
         json!({
-            "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "hello"
@@ -251,7 +251,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
-            "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "a"
@@ -264,7 +264,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01Z",
         json!({
-            "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "b"
@@ -286,7 +286,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00Z",
         json!({
-            "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "future"
@@ -312,7 +312,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02Z",
         json!({
-            "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "backdated"
@@ -336,7 +336,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03Z",
         json!({
-            "flow_id": "ck:flow:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ck:strand:019a7140-0000-7000-8000-000000000000",
             "content": {
                 "kind": "ck.content.text",
                 "body": "legacy field"
@@ -664,8 +664,8 @@ fn validate_event_envelope(
 fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
     match kind {
         "ck.message.create" => {
-            if content.get("flow_id").and_then(Value::as_str).is_none() {
-                return Some("message create content missing flow_id".to_owned());
+            if content.get("strand_id").and_then(Value::as_str).is_none() {
+                return Some("message create content missing strand_id".to_owned());
             }
             // Check for v1 message body/encryption fields at the payload level.
             let has_body = ["content", "encrypted_content", "blob_refs"]
@@ -686,11 +686,11 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
             }
             None
         }
-        "ck.flow.move" => {
-            missing_payload_fields(content, &["board_id", "flow_id", "to_list_id", "rank"])
+        "ck.strand.move" => {
+            missing_payload_fields(content, &["board_id", "strand_id", "to_list_id", "rank"])
         }
-        "ck.flow.reorder" => {
-            missing_payload_fields(content, &["board_id", "flow_id", "list_id", "rank"])
+        "ck.strand.reorder" => {
+            missing_payload_fields(content, &["board_id", "strand_id", "list_id", "rank"])
         }
         "ck.container.rebalance" => {
             missing_payload_fields(content, &["board_id", "list_id", "rank"])

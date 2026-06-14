@@ -10,7 +10,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     let value = load_fixture_value("sync-fixture.json")?;
     validate_profile(&value, "ck.profile.sync_vectors.v1")?;
     validate_collection_projection(&value)?;
-    validate_flow_discussion_timeline(&value)?;
+    validate_strand_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;
     validate_e2ee_pending(&value)?;
     Ok(())
@@ -41,8 +41,8 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
         let items = value_array(required_field(group, "items")?, "group.items")?;
         for item in items {
             let object = required_field(item, "object")?;
-            if !value_field_str(object, "id")?.starts_with("ck:flow:") {
-                bail!("sync artifact collection item object id was not a flow");
+            if !value_field_str(object, "id")?.starts_with("ck:strand:") {
+                bail!("sync artifact collection item object id was not a strand");
             }
             let position = required_field(item, "position")?;
             let model = value_field_str(position, "model")?;
@@ -57,23 +57,23 @@ fn validate_collection_projection(value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_flow_discussion_timeline(value: &Value) -> Result<()> {
-    let timeline = required_field(value, "flow_discussion_timeline")?;
-    if !value_field_str(timeline, "flow_id")?.starts_with("ck:flow:") {
-        bail!("sync artifact flow discussion timeline flow id was invalid");
+fn validate_strand_discussion_timeline(value: &Value) -> Result<()> {
+    let timeline = required_field(value, "strand_discussion_timeline")?;
+    if !value_field_str(timeline, "strand_id")?.starts_with("ck:strand:") {
+        bail!("sync artifact strand discussion timeline strand id was invalid");
     }
     if !value_field_str(timeline, "next_cursor")?.starts_with("ck:cursor:") {
-        bail!("sync artifact flow discussion timeline cursor was invalid");
+        bail!("sync artifact strand discussion timeline cursor was invalid");
     }
     for entry in value_array(
         required_field(timeline, "entries")?,
-        "flow_discussion_timeline.entries",
+        "strand_discussion_timeline.entries",
     )? {
         if !value_field_str(entry, "event_id")?.starts_with("ck:event:") {
-            bail!("sync artifact flow discussion timeline event id was invalid");
+            bail!("sync artifact strand discussion timeline event id was invalid");
         }
         if !value_field_str(entry, "message_id")?.starts_with("ck:message:") {
-            bail!("sync artifact flow discussion timeline message id was invalid");
+            bail!("sync artifact strand discussion timeline message id was invalid");
         }
     }
     Ok(())

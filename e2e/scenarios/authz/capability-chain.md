@@ -76,7 +76,7 @@
 - **E20.2 over-expire**:bob 试 delegate 给 carol 一个 expiry 比 bob 自己晚的 → 拒,reason `delegation_exceeds_grantor_expiry`
 - **E20.3 mallory 无 capability 写消息**:reducer 拒,reason `missing_capability`
 - **E20.4 expiry 自动失效**:bob 的 grant 到期后,无需 explicit revoke,后续消息自动被拒
-- **E20.5 resource selector**:capability 限定到具体 flow_id;bob 给 flow A 写消息 OK,给 flow B 写拒(spec resource-selector-grammar)
+- **E20.5 resource selector**:capability 限定到具体 strand_id;bob 给 strand A 写消息 OK,给 strand B 写拒(spec resource-selector-grammar)
 
 ## Implementation notes
 

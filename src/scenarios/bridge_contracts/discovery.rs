@@ -39,11 +39,11 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         })
     }));
     assert_eq!(
-        integration["examples"]["compose_flow"]["step_2"]["path"],
+        integration["examples"]["compose_strand"]["step_2"]["path"],
         "protected route"
     );
     assert_eq!(
-        integration["examples"]["compose_flow"]["step_3"]["path"],
+        integration["examples"]["compose_strand"]["step_3"]["path"],
         "/_soland/edge/push/outbound/bridge/fetch"
     );
 

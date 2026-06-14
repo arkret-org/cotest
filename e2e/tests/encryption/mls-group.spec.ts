@@ -655,7 +655,7 @@ test.describe("MLS group encryption", () => {
   // an MLS Welcome and has NOT restored its account secret must NOT silently
   // downgrade an encrypted private write to plaintext. The client should
   // surface a recoverable "MLS state not ready" affordance and refuse to
-  // submit; it must never POST a plaintext ck.flow.update that the server
+  // submit; it must never POST a plaintext ck.strand.update that the server
   // accepts (or bounces with content_encryption_floor_violation).
   //
   // Parked as fixme: deterministically reaching the "fresh device, no

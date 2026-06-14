@@ -16,7 +16,7 @@ test.describe("tsp bootstrap", () => {
     // @expected-live-by: 2026Q3
     "alice and bob_extern bootstrap TSP relationship; alice sends Cokret invite via TSP; bob_extern verifies + ACKs",
     async () => {
-      // Main flow covers tsp-bootstrap.md Phase A-E:
+      // Main strand covers tsp-bootstrap.md Phase A-E:
       //   A — both VIDs' DID Documents declare `ck.service.tsp` endpoint
       //       (spec §4); yougen feature-discovery shows TSP capability badge
       //       (spec §3: DID method adapter SHOULD expose TSP support).

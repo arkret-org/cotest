@@ -1,7 +1,7 @@
 // Chat advanced (reactions/replies/mentions/polls/typing/presence)
 // Contract: e2e/scenarios/messaging/chat-advanced.md
 // Spec refs:
-//   - models/flow-and-message.md §4.3, §8
+//   - models/strand-and-message.md §4.3, §8
 //   - models/content-types.md §4.1 (mentions), §4.9 (polls)
 //   - discovery/profiles-presence.md §3
 //   - discovery/push-notifications.md §4.3.1, §4.5
@@ -17,7 +17,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -131,14 +131,14 @@ test.describe("chat advanced", () => {
       { actorDid: fixture.alice.did },
     );
     const rootMessageRef = root.event_id.replace(/^ck:event:/, "ck:message:");
-    const flowId = await resolveDefaultFlowId(request, fixture.aliceToken, fixture.realmId);
+    const strandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
     const replyBody = `reply ${Date.now()}`;
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
       kind: "ck.message.create",
       payload: {
-        flow_id: flowId,
+        strand_id: strandId,
         track_name: "discussion",
         thread_id: "discussion",
         reply_to: rootMessageRef,
@@ -162,7 +162,7 @@ test.describe("chat advanced", () => {
 
   test("API mention payload persists mention routing metadata", async ({ request }) => {
     const fixture = await createChatApiFixture(request, "mention-api");
-    const flowId = await resolveDefaultFlowId(request, fixture.aliceToken, fixture.realmId);
+    const strandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
     const body = `@${fixture.bob.handle.replace(/^@/, "")} review ${Date.now()}`;
     await submitSignedEventApi(
       request,
@@ -172,7 +172,7 @@ test.describe("chat advanced", () => {
         realmId: fixture.realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowId,
+          strand_id: strandId,
           track_name: "discussion",
           content: {
             kind: "ck.content.text",
@@ -206,14 +206,14 @@ test.describe("chat advanced", () => {
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "sync-projection-api");
-    const flowId = await resolveDefaultFlowId(request, fixture.aliceToken, fixture.realmId);
+    const strandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
     const body = `@${fixture.bob.handle.replace(/^@/, "")} sync projection ${Date.now()}`;
     const root = signedEventEnvelope({
       actorDid: fixture.alice.did,
       realmId: fixture.realmId,
       kind: "ck.message.create",
       payload: {
-        flow_id: flowId,
+        strand_id: strandId,
         track_name: "discussion",
         thread_id: "discussion",
         content: {
@@ -235,7 +235,7 @@ test.describe("chat advanced", () => {
       realmId: fixture.realmId,
       kind: "ck.message.create",
       payload: {
-        flow_id: flowId,
+        strand_id: strandId,
         track_name: "discussion",
         thread_id: "discussion",
         reply_to: rootMessageRef,
@@ -348,7 +348,7 @@ test.describe("chat advanced", () => {
     try {
       await gotoChat(alicePage, fixture.realmId);
       await expect(alicePage.page.getByTestId("channel-item").first()).toContainText(
-        /Discussion|Default Flow/,
+        /Discussion|Default Strand/,
       );
     } finally {
       await alicePage.close();
@@ -686,13 +686,13 @@ test.describe("chat advanced", () => {
       );
       const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
       const sidecarHash = mentionSidecarHash(realmId, bob.did);
-      const flowId = await resolveDefaultFlowId(request, aliceToken, realmId);
+      const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         realmId: realmId,
         kind: "ck.message.create",
         payload: {
-          flow_id: flowId,
+          strand_id: strandId,
           track_name: "discussion",
           encrypted: true,
           mention_sidecar_hash: [sidecarHash],

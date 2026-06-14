@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/messaging/triad-collaboration.md
 // Spec refs:
 //   - models/realm-and-space.md §2-§3
-//   - models/flow-and-message.md §8, §8.4, §8.5
+//   - models/strand-and-message.md §8, §8.4, §8.5
 
 import { expect, test, type Page } from "@playwright/test";
 import {
@@ -14,7 +14,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import {
   canonicalTimestamp,
-  resolveDefaultFlowId,
+  resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
 } from "../../helpers/soland-api";
@@ -138,14 +138,14 @@ test.describe("single-server triad collaboration", () => {
       historyVisibility: "joined",
     });
     const baseMs = Date.now() + 1_000;
-    const defaultFlowId = await resolveDefaultFlowId(request, aliceToken, realmId);
+    const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const pre = signedEventEnvelope({
       actorDid: alice.did,
       realmId: realmId,
       kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs)),
       payload: {
-        flow_id: defaultFlowId,
+        strand_id: defaultStrandId,
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad pre ${stamp}` },
         encrypted: false,
@@ -177,7 +177,7 @@ test.describe("single-server triad collaboration", () => {
       kind: "ck.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
       payload: {
-        flow_id: defaultFlowId,
+        strand_id: defaultStrandId,
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad post ${stamp}` },
         encrypted: false,
