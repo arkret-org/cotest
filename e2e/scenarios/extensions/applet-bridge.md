@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 cokret 时的完整生命周期:applet registry 提交 controller-signed `ck.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ck.applet.registration`、颁发 `bot_actor_id` 与 capability grant → applet transaction 为外部用户生成 `ghost_actor_id` 并写 portal 消息 → Realm 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet install 后,后续 transaction 被拒。
+验证一个外部集成服务以 **applet** 形态接入 cokret 时的完整生命周期:applet registry 提交 controller-signed `ck.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划并通过 `self/applets/install` commit → 派生 `ck.applet.registration`、颁发 `bot_actor_id` 与 capability grant → typed applet ingress 为外部用户生成 `ghost_actor_id` 并写 portal 消息 → Realm 成员看到 ghost 消息且能沿 DID Document `accountability` 链回溯到 bot / applet registry → admin 撤销 applet install 后,后续 ingress 被拒。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
@@ -43,7 +43,7 @@
 ### Phase A — applet package install + bot 颁发
 
 1. **applet_service** (通过 mock-applet-registry) 构造 signed applet package:
-   - `applet_id = "applet:bridge:demo-${stamp}"`
+   - `applet_id = "ck:applet:<uuidv7>"`
    - `namespace = "bridge.demo"`
    - `display_name = "Demo Bridge Applet"`
    - `requested_scopes = ["ck.message.create", "ck.applet.ghost.provision"]`
@@ -51,7 +51,7 @@
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
 3. 测试以 alice 的 admin token 调 soland `POST /_cokret/self/applets/install/preview`,再用返回的 `plan_digest` 调 `POST /_cokret/self/applets/install`
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
-   - 记录 `applet_id`、`bot_actor_id`、`registration_epoch`
+   - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`
 4. **断言**:`bot_actor_id` 形如 `did:web:bot-bridge-demo-...`;projection events 中出现 `ck.applet.registration`
 
 ### Phase B — bot 加入 Realm
@@ -82,7 +82,7 @@
     }
     ```
 11. mock 内部:
-    - 调 soland `POST /_cokret/edge/applet/transactions`,携带 `applet_id`、`realm_id`、`external_user` 和 message payload
+    - 调 soland typed applet ingress `POST /_soland/self/applets/{applet_id}/ghosts`,path 携带 `applet_id`,body 携带 `realm_id`、`external_user` 和 message payload
     - soland 若该 `external_user.id` 没有对应 ghost,在 install record 下颁发 `ghost_actor_id`(DID Document 的 `accountability` 数组里包含 `bot_actor_id` + `applet_service.did`)
     - 返回 `{ ghost_actor_id, message_id }`
 12. 断言:返回的 `ghost_actor_id` 形如 `did:web:ghost-ext-user-x-...`
@@ -103,7 +103,7 @@
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
 17. **alice** 在 `/realms/${realmId}/admin/access` 或 `/settings/applets`(以 yougen 实际路由为准)对 `applet_id` 执行 revoke:
-    - 调 soland `POST /_cokret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope` 和 `registration_epoch`
+    - 调 soland `POST /_cokret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope`、`reason_code` 和 `revoke_mode`
     - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
     - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
@@ -128,14 +128,14 @@
 ## Edge cases / sub-tests
 
 - **E4.1 namespace 冲突**:Phase A 之后,mock 再生成一个不同的 `package_id` 但相同 `namespace = "bridge.demo"` 的 package;soland install preview/commit 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
-- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图通过 `POST /_cokret/edge/applet/transactions` 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
+- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图通过 typed bot message route 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
 - **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;相同 key 但不同 body 返回 `409 idempotency_key_conflict`
 
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建 Realm 或共用 Phase A,以避免 namespace 状态干扰。
 
 ## Implementation notes
 
-- soland 已提供 canonical applet runnable surface:`/_cokret/self/applets/install/preview`、`/_cokret/self/applets/install`、`/_cokret/self/applets/{applet_id}/revoke`、`/_cokret/edge/applet/transactions`,以及 `GET /_cokret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
+- soland 已提供 canonical applet runnable surface:`/_cokret/self/applets/install/preview`、`/_cokret/self/applets/install`、`/_cokret/self/applets/{applet_id}/revoke`、`/_cokret/self/applets/{applet_id}/ghosts/provision`、`/_cokret/edge/applet/transactions`,以及 `GET /_cokret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`

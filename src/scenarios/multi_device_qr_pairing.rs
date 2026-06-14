@@ -5,9 +5,9 @@
 //!     pairing handshake:
 //!       * new device generates local Ed25519 device key + displays QR containing public key +
 //!         challenge nonce.
-//!       * primary device scans QR, verifies pairing challenge, and issues a `ck.device.authorize`
-//!         event that binds the new device's `verify_key` to the principal via the SSK
-//!         (`cross_signing_binding`).
+//!       * primary device scans QR, verifies the to-device/SAS transcript, and issues a
+//!         `ck.device.authorize` event that binds the new device's `verify_key` to the principal
+//!         via the SSK (`cross_signing_binding`).
 //!   - §5.2 "Device Trust Chain" — every `ck.device.authorize` event MUST carry a
 //!     `cross_signing_binding` field signed by the SSK over the canonical `(principal_id,
 //!     device_id, device_public_key, ssk_generation)` tuple. Devices without a valid binding MUST
@@ -108,9 +108,10 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   // QR payload (yougen-side):
     //   //   { "device_id": device_b,
     //   //     "verify_key": base64url(device_b_verify_key),
-    //   //     "pairing_challenge_nonce": ... }
+    //   //     "pairing_code": <qr_pairing_code>,
+    //   //     "challenge_signature": <device_b_challenge_signature> }
     //   // cotest bypasses the visual QR roundtrip and calls the standard
-    //   // pairing/event APIs directly.
+    //   // account gate / to-device pairing APIs directly.
 
     // ── Step 3: cross-signing binding from device-A ─────────────────────
     //
@@ -226,7 +227,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   assert_eq!(revoke["accepted"][0]["kind"], "ck.device.revoke");
     //
     //   // 6b. device-A still works:
-    //   expect_status(alice.get("/_soland/self/account/me"), StatusCode::OK).await?;
+    //   expect_status(alice.get("/_cokret/self/account/viewer"), StatusCode::OK).await?;
     //
     //   // 6c. device-B's bearer is now 401:
     //   //   (need a separate bearer issued to device-B — today only
@@ -235,7 +236,7 @@ pub async fn multi_device_qr_pairing_run() -> Result<()> {
     //   let device_b_token = dev_login(&server, &alice.actor, &device_b).await?;
     //   expect_status(
     //       server.http()
-    //             .get(server.url("/_soland/self/account/me"))
+    //             .get(server.url("/_cokret/self/account/viewer"))
     //             .bearer_auth(&device_b_token),
     //       StatusCode::UNAUTHORIZED,
     //   ).await?;

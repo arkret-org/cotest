@@ -496,9 +496,6 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
         "keys_backups" | "keys_backups_did_recovery_filter" => json!({
             "backups": snapshot.body.get("backups").is_some_and(Value::is_array),
         }),
-        "devices_pairing_challenge" => json!({
-            "device_id": normalize_value(snapshot.body.get("device_id").cloned().unwrap_or(Value::Null)),
-        }),
         "directory_search_realms" => {
             // The harness creates a non-deterministic number of realms before
             // this case runs, and the per-item `name`/`description` text is

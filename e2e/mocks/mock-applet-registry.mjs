@@ -20,7 +20,7 @@
 //     Returns a sealed controller-signed ck.schema.applet_package.v1 for
 //     soland's canonical ck.self.applet.install.command.preview / ck.self.applet.command.install flow.
 //   POST /external-event
-//     Forwards an external payload to soland's `/_cokret/edge/applet/transactions`.
+//     Forwards an external payload to soland's typed applet ingress route.
 //   GET  /inspect → full mock state.
 //   DELETE /inspect → reset logs.
 //
@@ -317,7 +317,9 @@ const server = createServer(async (req, res) => {
     let upstream;
     try {
       upstream = await fetch(
-        `${String(solandBase).replace(/\/$/, "")}/_cokret/edge/applet/transactions`,
+        `${String(solandBase).replace(/\/$/, "")}/_soland/self/applets/${encodeURIComponent(
+          body.applet_id,
+        )}/ghosts`,
         {
           method: "POST",
           headers: {
@@ -328,7 +330,6 @@ const server = createServer(async (req, res) => {
               `external-${body.applet_id}-${body.external_user?.id ?? "bot"}-${Date.now()}`,
           },
           body: JSON.stringify({
-            applet_id: body.applet_id,
             realm_id: body.realm_id,
             external_user: body.external_user,
             payload: body.payload,

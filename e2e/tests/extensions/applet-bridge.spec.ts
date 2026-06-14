@@ -27,7 +27,6 @@ type SignedPackage = {
     namespaces?: {
       handles?: Array<{ pattern: string }>;
     };
-    registration_epoch: string;
     requested_scopes: string[];
   };
   package_digest: string;
@@ -40,7 +39,6 @@ type AppletRegistration = {
   portal_realm_id: string;
   namespace: string;
   status: string;
-  registration_epoch: string;
 };
 
 test.describe("applet bridge", () => {
@@ -127,7 +125,8 @@ test.describe("applet bridge", () => {
           headers: authHeaders(aliceToken),
           data: {
             effective_scope: { kind: "realm", realm_id: realmId },
-            registration_epoch: registration.registration_epoch,
+            reason_code: "revoke_test",
+            revoke_mode: "revoke_all",
           },
         },
       );
@@ -225,18 +224,20 @@ test.describe("applet bridge", () => {
         headers: authHeaders(aliceToken),
         data: {
           effective_scope: { kind: "realm", realm_id: realmId },
-          registration_epoch: registration.registration_epoch,
+          reason_code: "revoke_test",
+          revoke_mode: "revoke_all",
         },
       },
     );
     expect(revoke.status()).toBe(200);
 
     const botWrite = await request.post(
-      `${solandBaseUrl()}/_cokret/edge/applet/transactions`,
+      `${solandBaseUrl()}/_soland/self/applets/${encodeURIComponent(
+        registration.applet_id,
+      )}/bot/messages`,
       {
         headers: authHeaders(aliceToken),
         data: {
-          applet_id: registration.applet_id,
           realm_id: realmId,
           payload: { kind: "message", text: `bot after revoke ${stamp}` },
         },
@@ -394,7 +395,6 @@ function installRegistrationFromResponse(
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??
       signed.applet_package.applet_id,
     status: String(response.effective_status),
-    registration_epoch: String(response.registration_epoch),
   };
 }
 
