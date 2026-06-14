@@ -26,9 +26,11 @@ use anyhow::{Context, Result};
 use cokret_core::canonical::canonical_sha256;
 use cokret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::harness::{TestServerGroup, expect_json};
+use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 
 /// Spawns two `soland` instances (pre-built binary, located via SOLAND_BIN
 /// env or sibling checkout) and runs the round-26 federation real Move-
@@ -118,24 +120,23 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     let event_envelopes = events_a_list
         .iter()
         .filter_map(|entry| entry.get("event").cloned())
-        .collect::<Vec<_>>();
+        .map(|event| {
+            serde_json::from_value::<cokret_core::Event>(event)
+                .context("parse peer event envelope into SDK Event")
+        })
+        .collect::<Result<Vec<_>>>()?;
     if event_envelopes.is_empty() {
         return Err(anyhow::anyhow!(
             "server_a peer events query returned no event envelopes: {events_a}"
         ));
     }
-    let event_ids = event_envelopes
-        .iter()
-        .filter_map(|event| event.get("event_id").and_then(Value::as_str))
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>();
 
     // ── Step 4: push the same Events to server_b ─────────────────────────
-    let push_body = json!({
-        "service_binding_ref": peer_service_binding_ref(&realm_id, &event_ids)?,
-        "events": event_envelopes,
-        "idempotency_key": "cotest-two-node-peer-events",
-    });
+    let push_body = peer_events_submit_body(
+        &realm_id,
+        event_envelopes,
+        Some("cotest-two-node-peer-events"),
+    )?;
 
     // server_b must accept the push and respond 200/202/204 OR a 4xx if the
     // Realm is unknown there (peer not yet introduced) — both are acceptable
@@ -213,7 +214,7 @@ fn with_peer_post_headers(
     builder: reqwest::RequestBuilder,
     source: &crate::harness::CokretServer,
     destination: &crate::harness::CokretServer,
-    body: &Value,
+    body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
     Ok(builder
         .header("Source-Service-DID", source.service_did())
@@ -227,12 +228,6 @@ fn with_peer_post_headers(
             trust_domain_for(destination.service_did()),
         )
         .header("Request-Canonical-Digest", canonical_sha256(body)?))
-}
-
-fn peer_service_binding_ref(realm_id: &str, event_ids: &[String]) -> Result<Value> {
-    // Spec-aligned binding (federation.md §4.1 / §4.1.1): registry-derived
-    // reducer_profile_digest + harness-scoped realm policy snapshot hash.
-    crate::scenarios::_helpers::federation_binding::peer_service_binding_ref(realm_id, event_ids)
 }
 
 fn trust_domain_for(service_did: &str) -> String {

@@ -174,7 +174,8 @@ async fn push_sink(req: &mut Request, depot: &mut Depot, res: &mut Response) {
         .expect("push mock state injected")
         .notifications
         .clone();
-    if let Ok(body) = req.parse_json::<Value>().await {
+    if let Ok(body) = req.parse_json::<cokret_core::PushNotifyRequestBody>().await {
+        let body = serde_json::to_value(body).unwrap_or(Value::Null);
         notifications.lock().unwrap().push(body);
     }
     // Floria's custom pushkin expects a 200 with `{"rejected": []}` to mark

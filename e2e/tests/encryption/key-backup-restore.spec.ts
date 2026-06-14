@@ -154,9 +154,13 @@ test.describe("key backup restore live path", () => {
     const proofDelete = await request.delete(
       `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`,
       {
-        headers: {
-          ...authHeaders(aliceToken),
-          "x-cokret-key-backup-delete-proof": deleteProof(alice.did, backupId),
+        headers: authHeaders(aliceToken),
+        data: {
+          proof: {
+            kind: "ck.key_backup.delete.development.v1",
+            value: deleteProof(alice.did, backupId),
+          },
+          reason: "user_requested",
         },
       },
     );

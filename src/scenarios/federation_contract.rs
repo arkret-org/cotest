@@ -3,7 +3,9 @@ use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
 use reqwest::StatusCode;
+use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -17,7 +19,7 @@ fn with_signed_federation_request(
     target_url: &str,
     destination: &CokretServer,
     source_service_did: &str,
-    body: &Value,
+    body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
     let body_bytes = canonical_json_bytes(body)?;
     let content_digest =
@@ -117,49 +119,33 @@ fn signed_federation_event(
     actor_id: &str,
     actor_seq: u64,
     payload: Value,
-) -> Result<Value> {
-    let mut event = json!({
-        "event_id": event_id,
-        "kind": kind,
-        "schema_id": schema_id_for_event_kind(kind),
-        "actor_id": actor_id,
-        "actor_seq": actor_seq,
-        "realm_id": realm_id,
-        "device_id": "ck:device:01904100-0000-7000-8000-fedc00000011",
-        "audience": "did:web:soland.local",
-        "domain": "did:web:soland.local",
-        "prev_refs": [],
-        "auth_refs": [],
-        "payload": payload,
-        "proofs": [{
-            "type": "dev-proof",
-            "verification_method": format!("{actor_id}#01904100-0000-7000-8000-fedc00000011"),
-            "device_id": "ck:device:01904100-0000-7000-8000-fedc00000011",
-            "audience": "did:web:soland.local",
-            "domain": "did:web:soland.local"
-        }]
+) -> Result<Event> {
+    let mut event = Event::new(
+        kind,
+        RealmId::new(realm_id.to_owned())
+            .with_context(|| format!("invalid federation realm_id `{realm_id}`"))?,
+        Did::new(actor_id.to_owned())
+            .with_context(|| format!("invalid federation actor_id `{actor_id}`"))?,
+        actor_seq,
+        Hlc::new(format!("01970e589d21-{actor_seq:04x}-a13f9c2e"))
+            .context("invalid federation event HLC")?,
+        payload,
+    )?;
+    event.event_id = EventId::new(event_id.to_owned())
+        .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
+    let event_digest =
+        Hash::new(event.event_digest()?).context("invalid federation event digest")?;
+    event.proofs.push(Proof {
+        kind: proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: format!("{actor_id}#01904100-0000-7000-8000-fedc00000011"),
+        event_digest,
+        created_at: event.created_at,
+        domain: None,
+        audience: None,
+        jws: "dev-cotest-federation".to_owned(),
     });
-    event["canonical_digest"] = Value::String(event_canonical_digest(&event)?);
     Ok(event)
-}
-
-fn schema_id_for_event_kind(kind: &str) -> &'static str {
-    match kind {
-        "ck.message.redact" => "ck.schema.redaction.v1",
-        "ck.message.create" => "ck.schema.message.v1",
-        _ => "ck.schema.event.v1",
-    }
-}
-
-fn event_canonical_digest(event: &Value) -> Result<String> {
-    let mut canonical = event.clone();
-    if let Value::Object(object) = &mut canonical {
-        object.remove("proofs");
-        object.remove("unsigned");
-        object.remove("canonical_digest");
-        object.remove("canonical_hash");
-    }
-    Ok(canonical_sha256(&canonical)?)
 }
 
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
