@@ -107,8 +107,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
             .http()
             .delete(server.url(&format!("/_soland/self/spaces/{realm_id}")))
             .bearer_auth(&alice),
-        StatusCode::METHOD_NOT_ALLOWED,
-        "method_not_allowed",
+        StatusCode::NOT_FOUND,
+        "unrecognized_endpoint",
     )
     .await?;
 
@@ -152,7 +152,11 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         StatusCode::OK,
     )
     .await?;
-    assert!(anonymous_search["results"].as_array().unwrap().is_empty());
+    assert!(
+        anonymous_search["realms"].as_array().unwrap().is_empty(),
+        "invite-only realm leaked into anonymous search: {}",
+        serde_json::to_string_pretty(&anonymous_search)?
+    );
 
     expect_api_error(
         server

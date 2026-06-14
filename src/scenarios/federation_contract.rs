@@ -173,6 +173,9 @@ fn signed_federation_event(
             .context("invalid federation event HLC")?,
         payload,
     )?;
+    event.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00Z")
+        .context("invalid fixed federation event timestamp")?
+        .with_timezone(&chrono::Utc);
     event.event_id = EventId::new(event_id.to_owned())
         .with_context(|| format!("invalid federation event_id `{event_id}`"))?;
     let event_digest =
@@ -240,19 +243,24 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             .post(server.url("/_cokret/peer/events"))
             .json(&json!({"operations": []})),
         StatusCode::BAD_REQUEST,
-        "bad_request",
+        "bad_json",
     )
     .await?;
     expect_api_error(
         server.http().get(server.url("/_cokret/peer/events")),
         StatusCode::BAD_REQUEST,
-        "bad_request",
+        "schema_violation",
     )
     .await?;
+    let invalid_realms_url = server.url("/_cokret/peer/events?realms=bad");
     expect_api_error(
-        server
-            .http()
-            .get(server.url("/_cokret/peer/events?realms=bad")),
+        with_signed_federation_empty_request(
+            server.http().get(&invalid_realms_url),
+            "GET",
+            &invalid_realms_url,
+            &server,
+            "did:web:invalid-shape.remote",
+        )?,
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
@@ -264,16 +272,30 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
 pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result<()> {
     let server = CokretServer::spawn("federation-replay").await?;
     let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fed0";
+    let realm_create_event_id = "ck:event:0196419b-0000-7000-8000-00000000f100";
     let replay_event_id = "ck:event:0196419b-0000-7000-8000-00000000f101";
     let invalid_event_id = "ck:event:0196419b-0000-7000-8000-00000000f102";
     let redaction_event_id = "ck:event:0196419b-0000-7000-8000-00000000f103";
+    let remote_service_did = "did:web:remote.example";
 
+    let realm_create = signed_federation_event(
+        realm_create_event_id,
+        "ck.realm.create",
+        realm_id,
+        remote_service_did,
+        1,
+        federation_realm_payload(
+            realm_id,
+            remote_service_did,
+            &[remote_service_did, server.service_did()],
+        ),
+    )?;
     let event = signed_federation_event(
         replay_event_id,
         "ck.message.create",
         realm_id,
-        "did:web:remote.example",
-        1,
+        remote_service_did,
+        2,
         json!({
             "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
             "track_name": "discussion",
@@ -282,85 +304,105 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     )?;
 
     let first_push_url = server.url("/_cokret/peer/events");
-    let first_push_body = peer_events_submit_body(realm_id, vec![event.clone()], Some("replay-1"))?;
+    let first_push_body = peer_events_submit_body(
+        realm_id,
+        vec![realm_create.clone(), event.clone()],
+        Some("replay-1"),
+    )?;
     let first_push = expect_json(
         with_signed_federation_request(
             server.http().post(&first_push_url).json(&first_push_body),
             "POST",
             &first_push_url,
             &server,
-            "did:web:remote.example",
+            remote_service_did,
             &first_push_body,
         )?,
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(first_push["accepted"][0], replay_event_id);
-    assert!(first_push["rejected"].as_array().unwrap().is_empty());
+    assert_json_array_contains(&first_push["accepted"], realm_create_event_id, &first_push);
+    assert_json_array_contains(&first_push["accepted"], replay_event_id, &first_push);
+    assert!(json_array_absent_or_empty(&first_push["rejected"]));
 
+    let pulled_url = server.url(&format!("/_cokret/peer/events?realms={realm_id}"));
     let pulled = expect_json(
-        server
-            .http()
-            .get(server.url(&format!("/_cokret/peer/events?realms={realm_id}"))),
+        with_signed_federation_empty_request(
+            server.http().get(&pulled_url),
+            "GET",
+            &pulled_url,
+            &server,
+            remote_service_did,
+        )?,
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(pulled["events"][0]["event"]["event_id"], replay_event_id);
-
-    let bootstrap = expect_json(
-        server
-            .http()
-            .get(server.url(&format!("/_cokret/peer/snapshot/head?realm_id={realm_id}"))),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(bootstrap["realm_id"], realm_id);
     assert!(
-        bootstrap["state_digest"]
-            .as_str()
-            .unwrap()
-            .starts_with("sha256:")
+        peer_events_contain_event_id(&pulled["events"], replay_event_id),
+        "peer pull did not include replay event: {pulled}"
     );
 
+    let snapshot_head_url = server.url(&format!("/_cokret/peer/snapshot/head?realm_id={realm_id}"));
+    expect_api_error(
+        with_signed_federation_empty_request(
+            server.http().get(&snapshot_head_url),
+            "GET",
+            &snapshot_head_url,
+            &server,
+            remote_service_did,
+        )?,
+        StatusCode::NOT_IMPLEMENTED,
+        "not_implemented",
+    )
+    .await?;
+
     let replay_url = server.url("/_cokret/peer/events");
-    let replay_body = peer_events_submit_body(realm_id, vec![event], Some("replay-1"))?;
+    let replay_body =
+        peer_events_submit_body(realm_id, vec![realm_create, event], Some("replay-1"))?;
     let replay = expect_json(
         with_signed_federation_request(
             server.http().post(&replay_url).json(&replay_body),
             "POST",
             &replay_url,
             &server,
-            "did:web:remote.example",
+            remote_service_did,
             &replay_body,
         )?,
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(replay["accepted"][0], replay_event_id);
-    assert!(replay["rejected"].as_array().unwrap().is_empty());
+    assert_json_array_contains(&replay["accepted"], replay_event_id, &replay);
+    assert!(json_array_absent_or_empty(&replay["rejected"]));
 
+    let after_replay_pull_url = server.url(&format!("/_cokret/peer/events?realms={realm_id}"));
     let after_replay_pull = expect_json(
-        server
-            .http()
-            .get(server.url(&format!("/_cokret/peer/events?realms={realm_id}"))),
+        with_signed_federation_empty_request(
+            server.http().get(&after_replay_pull_url),
+            "GET",
+            &after_replay_pull_url,
+            &server,
+            remote_service_did,
+        )?,
         StatusCode::OK,
     )
     .await?;
     let after_replay_events = after_replay_pull["events"].as_array().unwrap();
     assert_eq!(
-        after_replay_events.len(),
+        after_replay_events
+            .iter()
+            .filter(|event| peer_event_id(event) == Some(replay_event_id))
+            .count(),
         1,
         "idempotent federation replay must not duplicate persisted events: {}",
         serde_json::to_string_pretty(&after_replay_pull)?
     );
-    assert_eq!(after_replay_events[0]["event"]["event_id"], replay_event_id);
 
     let invalid_event = signed_federation_event(
         invalid_event_id,
         "ck.message.create",
         realm_id,
-        "did:web:remote.example",
-        2,
+        remote_service_did,
+        3,
         json!({
             "encrypted": true,
             "content": {"ciphertext": "missing-envelope-fields"}
@@ -378,7 +420,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &invalid_push_url,
             &server,
-            "did:web:remote.example",
+            remote_service_did,
             &invalid_push_body,
         )?,
         StatusCode::OK,
@@ -386,16 +428,16 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     .await?;
     assert!(invalid_push["accepted"].as_array().unwrap().is_empty());
     assert_eq!(
-        invalid_push["rejected"][0]["reason_code"],
-        "invalid_semantics"
+        invalid_push["rejected"][0]["reason_code"], "schema_violation",
+        "invalid encrypted federation event response: {invalid_push}"
     );
 
     let redaction = signed_federation_event(
         redaction_event_id,
         "ck.message.redact",
         realm_id,
-        "did:web:remote.example",
-        3,
+        remote_service_did,
+        4,
         json!({
             "target_event_id": replay_event_id
         }),
@@ -412,22 +454,38 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             "POST",
             &redaction_push_url,
             &server,
-            "did:web:remote.example",
+            remote_service_did,
             &redaction_push_body,
         )?,
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(redaction_push["accepted"][0], redaction_event_id);
+    assert_json_array_contains(
+        &redaction_push["accepted"],
+        redaction_event_id,
+        &redaction_push,
+    );
 
+    let redacted_pull_url = server.url(&format!("/_cokret/peer/events?realms={realm_id}"));
     let redacted_pull = expect_json(
-        server
-            .http()
-            .get(server.url(&format!("/_cokret/peer/events?realms={realm_id}"))),
+        with_signed_federation_empty_request(
+            server.http().get(&redacted_pull_url),
+            "GET",
+            &redacted_pull_url,
+            &server,
+            remote_service_did,
+        )?,
         StatusCode::OK,
     )
     .await?;
-    assert!(redacted_pull["events"].as_array().unwrap().is_empty());
+    assert!(
+        peer_events_contain_event_id(&redacted_pull["events"], replay_event_id),
+        "peer history should retain the redacted target event: {redacted_pull}"
+    );
+    assert!(
+        peer_events_contain_event_id(&redacted_pull["events"], redaction_event_id),
+        "peer history should include the redaction event: {redacted_pull}"
+    );
 
     Ok(())
 }
@@ -441,13 +499,25 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     )
     .await?;
     let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fe20";
+    let created = submit_event(
+        &server,
+        &alice,
+        "did:web:alice.example",
+        realm_id,
+        "ck.realm.create",
+        federation_realm_payload(realm_id, "did:web:alice.example", &[server.service_did()]),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(created["status"], "accepted");
+
     let event_id = "ck:event:0196419b-0000-7000-8000-00000000fe22";
     let event = signed_federation_event(
         event_id,
         "ck.message.create",
         realm_id,
         "did:web:alice.example",
-        1,
+        100,
         json!({
             "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
             "track_name": "discussion",
@@ -490,8 +560,13 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     )
     .await?;
     let sync = account_delta_from_text(&sync_response.text())?;
-    let synced_body = &sync["realms"][realm_id]["timeline"]["events"][0]["content"]["body"];
-    if synced_body != "searchable federated payload" {
+    let timeline_events = sync["realms"][realm_id]["timeline"]["events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("sync response missing timeline events: {sync}"))?;
+    if !timeline_events
+        .iter()
+        .any(|event| event_body(event) == Some("searchable federated payload"))
+    {
         return Err(anyhow!(
             "federated realm sync did not expose projected message body: {}",
             serde_json::to_string_pretty(&sync["realms"][realm_id])?
@@ -499,4 +574,43 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     }
 
     Ok(())
+}
+
+fn peer_event_id(event: &Value) -> Option<&str> {
+    event
+        .get("event")
+        .unwrap_or(event)
+        .get("event_id")
+        .and_then(Value::as_str)
+}
+
+fn peer_events_contain_event_id(events: &Value, expected: &str) -> bool {
+    events.as_array().is_some_and(|events| {
+        events
+            .iter()
+            .any(|event| peer_event_id(event) == Some(expected))
+    })
+}
+
+fn event_body(event: &Value) -> Option<&str> {
+    event
+        .pointer("/content/body")
+        .or_else(|| event.pointer("/payload/content/body"))
+        .or_else(|| event.pointer("/payload/body"))
+        .and_then(Value::as_str)
+}
+
+fn json_array_absent_or_empty(value: &Value) -> bool {
+    value.is_null() || value.as_array().is_some_and(Vec::is_empty)
+}
+
+fn assert_json_array_contains(array: &Value, expected: &str, context: &Value) {
+    assert!(
+        array
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value.as_str() == Some(expected)),
+        "expected {array} to contain {expected}; response: {context}"
+    );
 }

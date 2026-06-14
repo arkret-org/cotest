@@ -23,11 +23,16 @@
 //! is locatable (and silently skips otherwise).
 
 use anyhow::{Context, Result};
-use cokret_core::canonical::{canonical_sha256, sha256_digest};
+use cokret::http_signature::{
+    ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
+};
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
 use cokret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use url::Url;
 
 use crate::harness::{TestServerGroup, expect_json};
 use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
@@ -104,7 +109,12 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
         realm_id
     );
     let events_a = expect_json(
-        with_peer_get_headers(server_a.http().get(&query_a_url), server_b, server_a)?,
+        with_peer_get_headers(
+            server_a.http().get(&query_a_url),
+            &query_a_url,
+            server_b,
+            server_a,
+        )?,
         StatusCode::OK,
     )
     .await
@@ -148,6 +158,7 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     );
     let push_response = with_peer_post_headers(
         server_b.http().post(&push_url).json(&push_body),
+        &push_url,
         server_a,
         server_b,
         &push_body,
@@ -163,13 +174,15 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     }
 
     // ── Step 5: confirm server_b's peer frontier endpoint is reachable ──
+    let frontier_b_url = format!(
+        "{}/_cokret/peer/events/frontier?realm_id={}",
+        server_b.base_url().as_str().trim_end_matches('/'),
+        realm_id
+    );
     let frontier_b = expect_json(
         with_peer_get_headers(
-            server_b.http().get(format!(
-                "{}/_cokret/peer/events/frontier?realm_id={}",
-                server_b.base_url().as_str().trim_end_matches('/'),
-                realm_id
-            )),
+            server_b.http().get(&frontier_b_url),
+            &frontier_b_url,
             server_a,
             server_b,
         )?,
@@ -193,41 +206,112 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
 
 fn with_peer_get_headers(
     builder: reqwest::RequestBuilder,
+    target_url: &str,
     source: &crate::harness::CokretServer,
     destination: &crate::harness::CokretServer,
 ) -> Result<reqwest::RequestBuilder> {
-    Ok(builder
-        .header("Source-Service-DID", source.service_did())
-        .header("Destination-Service-DID", destination.service_did())
-        .header(
-            "Source-Trust-Domain",
-            trust_domain_for(source.service_did()),
-        )
-        .header(
-            "Destination-Trust-Domain",
-            trust_domain_for(destination.service_did()),
-        )
-        .header("Request-Canonical-Digest", sha256_digest([])))
+    let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = sha256_digest([]);
+    with_peer_headers_for_digest(
+        builder,
+        "GET",
+        target_url,
+        source,
+        destination,
+        content_digest,
+        request_canonical_digest,
+    )
 }
 
 fn with_peer_post_headers(
     builder: reqwest::RequestBuilder,
+    target_url: &str,
     source: &crate::harness::CokretServer,
     destination: &crate::harness::CokretServer,
     body: &impl Serialize,
 ) -> Result<reqwest::RequestBuilder> {
+    let body_bytes = canonical_json_bytes(body)?;
+    let content_digest =
+        ContentDigest::compute(&body_bytes, ContentDigestAlgorithm::Sha256).wire_value;
+    let request_canonical_digest = canonical_sha256(body)?;
+    with_peer_headers_for_digest(
+        builder,
+        "POST",
+        target_url,
+        source,
+        destination,
+        content_digest,
+        request_canonical_digest,
+    )
+}
+
+fn with_peer_headers_for_digest(
+    builder: reqwest::RequestBuilder,
+    method: &str,
+    target_url: &str,
+    source: &crate::harness::CokretServer,
+    destination: &crate::harness::CokretServer,
+    content_digest: String,
+    request_canonical_digest: String,
+) -> Result<reqwest::RequestBuilder> {
+    let source_service_did = source.service_did();
+    let destination_service_did = destination.service_did();
+    let source_trust_domain = trust_domain_for(source_service_did);
+    let destination_trust_domain = trust_domain_for(destination_service_did);
+
+    let parsed_url = Url::parse(target_url)?;
+    let authority = parsed_url
+        .port()
+        .map(|port| format!("{}:{port}", parsed_url.host_str().unwrap_or("server")))
+        .unwrap_or_else(|| parsed_url.host_str().unwrap_or("server").to_owned());
+    let path_and_query = parsed_url
+        .query()
+        .map(|query| format!("{}?{query}", parsed_url.path()))
+        .unwrap_or_else(|| parsed_url.path().to_owned());
+    let target_uri = format!("{}://{}{}", parsed_url.scheme(), authority, path_and_query);
+
+    let created = chrono::Utc::now().timestamp();
+    let expires = created + 300;
+    let keyid = format!("{source_service_did}#federation-fanout-key");
+    let signature_params = format!(
+        "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
+         \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+         \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
+         expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
+    );
+    let signature_base = format!(
+        "\"@method\": {}\n\
+         \"@target-uri\": {target_uri}\n\
+         \"@authority\": {authority}\n\
+         \"content-digest\": {content_digest}\n\
+         \"source-service-did\": {source_service_did}\n\
+         \"destination-service-did\": {destination_service_did}\n\
+         \"source-trust-domain\": {source_trust_domain}\n\
+         \"destination-trust-domain\": {destination_trust_domain}\n\
+         \"request-canonical-digest\": {request_canonical_digest}\n\
+         \"@signature-params\": {signature_params}",
+        method.to_ascii_uppercase()
+    );
+    let signing_key = development_service_signing_key(source_service_did);
+    let signature = sign_message(signature_base.as_bytes(), &signing_key);
+
     Ok(builder
-        .header("Source-Service-DID", source.service_did())
-        .header("Destination-Service-DID", destination.service_did())
-        .header(
-            "Source-Trust-Domain",
-            trust_domain_for(source.service_did()),
-        )
-        .header(
-            "Destination-Trust-Domain",
-            trust_domain_for(destination.service_did()),
-        )
-        .header("Request-Canonical-Digest", canonical_sha256(body)?))
+        .header("Content-Digest", content_digest)
+        .header("Source-Service-DID", source_service_did)
+        .header("Destination-Service-DID", destination_service_did)
+        .header("Source-Trust-Domain", source_trust_domain)
+        .header("Destination-Trust-Domain", destination_trust_domain)
+        .header("Request-Canonical-Digest", request_canonical_digest)
+        .header("Signature-Input", format!("sig1={signature_params}"))
+        .header("Signature", format!("sig1=:{signature}:")))
+}
+
+fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
+    let mut hasher = Sha256::new();
+    hasher.update(b"soland:notary-ephemeral:");
+    hasher.update(service_did.as_bytes());
+    let seed: [u8; 32] = hasher.finalize().into();
+    signing_key_from_seed(&seed)
 }
 
 fn trust_domain_for(service_did: &str) -> String {
