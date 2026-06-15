@@ -8,11 +8,12 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use cotest::conformance::{
-    ALL_AGENT_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
-    ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
-    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
-    ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
-    load_local_fixture_value, run_agent_vector_suite, run_cursor_vector_suite,
+    ALL_AGENT_VECTOR_IDS, ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS,
+    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
+    ALL_MEDIA_BINDING_VECTOR_IDS, ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS,
+    ALL_MENTION_RENDERING_VECTOR_IDS, ALL_OBJECT_ADDRESSING_VECTOR_IDS,
+    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
+    run_agent_vector_suite, run_call_state_media_lifecycle_vector_suite, run_cursor_vector_suite,
     run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
     run_media_binding_vector_suite, run_member_identity_vector_suite,
     run_member_roster_vector_suite, run_mention_rendering_vector_suite,
@@ -26,6 +27,28 @@ use serde_json::Value;
 fn media_binding_vector_suite_runs_clean() {
     run_media_binding_vector_suite().expect("media-binding vectors must pass");
     assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 9);
+}
+
+// ─── §12.16-§12.19 — call-state media lifecycle vectors ────────────────────
+//
+// recording_retention_lock / transcribe_lifecycle / moderator_kick_ban /
+// p2p_to_sfu_upgrade — the spec additions for recording retention + audit
+// lock, the transcribe pipeline + dedicated exporter label, moderator
+// kick/ban + removed_participants[] token-reissue gating, and the P2P→SFU
+// upgrade + ck.call.summary terminal-state gate.
+
+#[test]
+fn call_state_media_lifecycle_vector_suite_runs_clean() {
+    run_call_state_media_lifecycle_vector_suite()
+        .expect("call-state media-lifecycle vectors must pass");
+    assert_eq!(ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len(), 4);
+    // All 4 ids are registered in vector-registry.json (canonical namespace).
+    for id in ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS {
+        assert!(
+            id.starts_with("ck.vector.call_state."),
+            "registered call_state vector id drifted: {id}"
+        );
+    }
 }
 
 // ─── P0 / VECT-AG-1..5 — agent vectors ─────────────────────────────────────

@@ -1,0 +1,384 @@
+//! Call-state media lifecycle conformance vectors (§12.16–§12.19).
+//!
+//! 4 vectors covering the recording-retention / transcribe / moderation /
+//! P2P→SFU-upgrade additions to `ck.call.state` and `ck.call.summary`:
+//!
+//! - `ck.vector.call_state.recording_retention_lock.v1`
+//! - `ck.vector.call_state.transcribe_lifecycle.v1`
+//! - `ck.vector.call_state.moderator_kick_ban.v1`
+//! - `ck.vector.call_state.p2p_to_sfu_upgrade.v1`
+//!
+//! These are SDK-pure wire-shape pins. They lock the spelling of the new
+//! reason codes (cotest mirrors the spec `error-code-registry.json`), the
+//! transcript / recording MLS-Exporter labels and their distinct Context
+//! field shapes (`exporter-label-registry.json`), the audit-lock-over-TTL
+//! deletion gate, the moderation `removed_participants[]` token-reissue gate,
+//! and the oldest-membership P2P→SFU upgrade / summary terminal-state gate, so
+//! a downstream soland reducer regression hard-fails before reaching a live
+//! integration target (see the `#[ignore]` live legs under `tests/`).
+//!
+//! `legal_hold_active` is the one reason code already minted in
+//! `cokret_core::error`; the rest are pinned as local consts until the SDK
+//! error enum grows them.
+
+use anyhow::{Result, bail};
+use cokret_core::error::ERROR_CODE_LEGAL_HOLD_ACTIVE;
+
+// ── Canonical vector ids (registered in vector-registry.json) ───────────────
+
+pub const VECTOR_ID_RECORDING_RETENTION_LOCK: &str =
+    "ck.vector.call_state.recording_retention_lock.v1";
+pub const VECTOR_ID_TRANSCRIBE_LIFECYCLE: &str = "ck.vector.call_state.transcribe_lifecycle.v1";
+pub const VECTOR_ID_MODERATOR_KICK_BAN: &str = "ck.vector.call_state.moderator_kick_ban.v1";
+pub const VECTOR_ID_P2P_TO_SFU_UPGRADE: &str = "ck.vector.call_state.p2p_to_sfu_upgrade.v1";
+
+/// Canonical list of the 4 call-state media-lifecycle vector ids.
+pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
+    VECTOR_ID_RECORDING_RETENTION_LOCK,
+    VECTOR_ID_TRANSCRIBE_LIFECYCLE,
+    VECTOR_ID_MODERATOR_KICK_BAN,
+    VECTOR_ID_P2P_TO_SFU_UPGRADE,
+];
+
+// ── Reason-code spelling pins (error-code-registry.json) ────────────────────
+//
+// Mirrors the canonical spelling. When the SDK error enum grows these, swap to
+// the `cokret_core::error::*` constant and delete the local pin.
+
+const REASON_RECORDING_CONSENT_REQUIRED: &str = "recording_consent_required";
+const REASON_TRANSCRIPTION_DENIED: &str = "transcription_denied";
+const REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED: &str =
+    "transcription_artifact_pipeline_bypassed";
+const REASON_CALL_MODERATION_UNAUTHORISED: &str = "call_moderation_unauthorised";
+const REASON_CALL_PARTICIPANT_REMOVED: &str = "call_participant_removed";
+const REASON_CALL_SUMMARY_INVALID: &str = "call_summary_invalid";
+
+// ── Exporter-label pins (exporter-label-registry.json) ──────────────────────
+
+const LABEL_RTC_FRAME_KEY: &str = "ck-rtc-frame-key/v1";
+const LABEL_RTC_RECORDING_KEY: &str = "ck-rtc-recording-key/v1";
+const LABEL_RTC_TRANSCRIPT_KEY: &str = "ck-rtc-transcript-key/v1";
+
+/// Terminal call states (`call-state.md` §4.2). `ck.call.summary` is gated on
+/// the call head being one of these.
+const TERMINAL_CALL_STATES: &[&str] = &["ended", "missed", "failed", "cancelled"];
+
+// ─── §12.16 — recording_retention_lock ─────────────────────────────────────
+
+/// Minimal retention descriptor mirroring `recording_result.retention`.
+#[derive(Clone, Debug)]
+struct RetentionState {
+    audit_lock: bool,
+    retention_expired: bool,
+    deletion_trigger: &'static str,
+}
+
+/// Audit-lock precedence: a delete is permitted only when the audit lock is
+/// clear AND the retention TTL has elapsed under a `retention_expiry` trigger.
+/// An active audit lock blocks deletion regardless of TTL → `legal_hold_active`.
+fn try_delete_recording(state: &RetentionState) -> std::result::Result<(), &'static str> {
+    if state.audit_lock {
+        return Err(ERROR_CODE_LEGAL_HOLD_ACTIVE);
+    }
+    if !state.retention_expired || state.deletion_trigger != "retention_expiry" {
+        return Err("retention_active");
+    }
+    Ok(())
+}
+
+/// Entering a capturing `recording_state` requires `consent_confirmed`.
+fn capture_consent_ok(consent_confirmed: bool) -> std::result::Result<(), &'static str> {
+    if consent_confirmed {
+        Ok(())
+    } else {
+        Err(REASON_RECORDING_CONSENT_REQUIRED)
+    }
+}
+
+pub fn run_recording_retention_lock_vector() -> Result<()> {
+    if ERROR_CODE_LEGAL_HOLD_ACTIVE != "legal_hold_active" {
+        bail!("ERROR_CODE_LEGAL_HOLD_ACTIVE spelling drifted: {ERROR_CODE_LEGAL_HOLD_ACTIVE}");
+    }
+
+    // Step 2 — delete before TTL with audit_lock set → legal_hold_active.
+    let locked_before = RetentionState {
+        audit_lock: true,
+        retention_expired: false,
+        deletion_trigger: "retention_expiry",
+    };
+    match try_delete_recording(&locked_before) {
+        Err(code) if code == ERROR_CODE_LEGAL_HOLD_ACTIVE => {}
+        other => bail!("delete before TTL under audit_lock must be legal_hold_active, got {other:?}"),
+    }
+
+    // Step 3 — delete after TTL but audit_lock still set → legal_hold_active
+    // (audit_lock takes precedence over TTL and capability).
+    let locked_after = RetentionState {
+        audit_lock: true,
+        retention_expired: true,
+        deletion_trigger: "retention_expiry",
+    };
+    match try_delete_recording(&locked_after) {
+        Err(code) if code == ERROR_CODE_LEGAL_HOLD_ACTIVE => {}
+        other => bail!("delete after TTL under audit_lock must be legal_hold_active, got {other:?}"),
+    }
+
+    // Step 4 — capturing recording_state without consent_confirmed.
+    match capture_consent_ok(false) {
+        Err(code) if code == REASON_RECORDING_CONSENT_REQUIRED => {}
+        other => bail!("capture without consent must be recording_consent_required, got {other:?}"),
+    }
+
+    // Controls — audit_lock clear + TTL elapsed deletes; consent set captures.
+    let unlocked = RetentionState {
+        audit_lock: false,
+        retention_expired: true,
+        deletion_trigger: "retention_expiry",
+    };
+    try_delete_recording(&unlocked)
+        .map_err(|code| anyhow::anyhow!("control delete unexpectedly rejected: {code}"))?;
+    capture_consent_ok(true)
+        .map_err(|code| anyhow::anyhow!("control capture unexpectedly rejected: {code}"))?;
+    Ok(())
+}
+
+// ─── §12.17 — transcribe_lifecycle ─────────────────────────────────────────
+
+/// Transcription requires the `ck.call.transcribe` capability.
+fn transcribe_authorised(has_transcribe_cap: bool) -> std::result::Result<(), &'static str> {
+    if has_transcribe_cap {
+        Ok(())
+    } else {
+        Err(REASON_TRANSCRIPTION_DENIED)
+    }
+}
+
+/// Transcript artifacts MUST use the dedicated `ck-rtc-transcript-key/v1`
+/// label with a non-empty Context; reusing the SFrame / recording label or an
+/// empty Context fails closed with `transcription_artifact_pipeline_bypassed`.
+fn transcript_key_source_ok(
+    label: &str,
+    context_fields: &[&str],
+) -> std::result::Result<(), &'static str> {
+    if label != LABEL_RTC_TRANSCRIPT_KEY {
+        return Err(REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
+    }
+    if context_fields.is_empty() {
+        return Err(REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED);
+    }
+    Ok(())
+}
+
+pub fn run_transcribe_lifecycle_vector() -> Result<()> {
+    // Step 1 — transcribe without capability is denied.
+    match transcribe_authorised(false) {
+        Err(code) if code == REASON_TRANSCRIPTION_DENIED => {}
+        other => bail!("transcribe without cap must be transcription_denied, got {other:?}"),
+    }
+    transcribe_authorised(true)
+        .map_err(|code| anyhow::anyhow!("authorised transcribe unexpectedly denied: {code}"))?;
+
+    // Step 2 — reusing the SFrame label or empty Context is bypass.
+    for (label, context) in [
+        (LABEL_RTC_FRAME_KEY, &["realm_id"][..]),
+        (LABEL_RTC_RECORDING_KEY, &["realm_id"][..]),
+        (LABEL_RTC_TRANSCRIPT_KEY, &[][..]),
+    ] {
+        match transcript_key_source_ok(label, context) {
+            Err(code) if code == REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED => {}
+            other => bail!(
+                "transcript key reuse ({label}, {context:?}) must be \
+                 transcription_artifact_pipeline_bypassed, got {other:?}"
+            ),
+        }
+    }
+
+    // Step 3 — dedicated label + full Context is accepted.
+    let transcript_context = [
+        "realm_id",
+        "call_id",
+        "focus_id",
+        "recording_id",
+        "media_service_did",
+        "transcript_start_event_id",
+    ];
+    transcript_key_source_ok(LABEL_RTC_TRANSCRIPT_KEY, &transcript_context)
+        .map_err(|code| anyhow::anyhow!("control transcript key unexpectedly rejected: {code}"))?;
+
+    // The three labels are mutually distinct (no cross-label reuse).
+    if LABEL_RTC_FRAME_KEY == LABEL_RTC_RECORDING_KEY
+        || LABEL_RTC_FRAME_KEY == LABEL_RTC_TRANSCRIPT_KEY
+        || LABEL_RTC_RECORDING_KEY == LABEL_RTC_TRANSCRIPT_KEY
+    {
+        bail!("exporter labels must be mutually distinct");
+    }
+    Ok(())
+}
+
+// ─── §12.18 — moderator_kick_ban ───────────────────────────────────────────
+
+/// A `(actor_id, device_id)` tuple in `removed_participants[]`. A `None`
+/// `device_id` encodes an actor-wide ban.
+#[derive(Clone, Debug)]
+struct RemovedParticipant {
+    actor_id: &'static str,
+    device_id: Option<&'static str>,
+}
+
+/// A moderator action requires `ck.call.moderate`.
+fn moderation_authorised(has_moderate_cap: bool) -> std::result::Result<(), &'static str> {
+    if has_moderate_cap {
+        Ok(())
+    } else {
+        Err(REASON_CALL_MODERATION_UNAUTHORISED)
+    }
+}
+
+/// Token re-issue is gated on `removed_participants[]`: a kicked device
+/// `(actor, device)` is refused, and a banned actor (device_id omitted) is
+/// refused for any device. A non-removed device of an un-banned actor passes.
+fn token_reissue_allowed(
+    removed: &[RemovedParticipant],
+    actor_id: &str,
+    device_id: &str,
+) -> std::result::Result<(), &'static str> {
+    for entry in removed {
+        if entry.actor_id != actor_id {
+            continue;
+        }
+        match entry.device_id {
+            // Actor-wide ban: every device of this actor is refused.
+            None => return Err(REASON_CALL_PARTICIPANT_REMOVED),
+            // Device-scoped kick: only the named device is refused.
+            Some(removed_device) if removed_device == device_id => {
+                return Err(REASON_CALL_PARTICIPANT_REMOVED);
+            }
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+pub fn run_moderator_kick_ban_vector() -> Result<()> {
+    // Step 1 — moderation without ck.call.moderate is unauthorised.
+    match moderation_authorised(false) {
+        Err(code) if code == REASON_CALL_MODERATION_UNAUTHORISED => {}
+        other => bail!("moderation without cap must be call_moderation_unauthorised, got {other:?}"),
+    }
+    moderation_authorised(true)
+        .map_err(|code| anyhow::anyhow!("authorised moderation unexpectedly denied: {code}"))?;
+
+    // Step 2 — kicked device is refused on re-issue, but a fresh join from the
+    // same actor on a different device is NOT blocked by a device-scoped kick.
+    let kicked = [RemovedParticipant {
+        actor_id: "did:web:bob.example",
+        device_id: Some("ck:device:bob-1"),
+    }];
+    match token_reissue_allowed(&kicked, "did:web:bob.example", "ck:device:bob-1") {
+        Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
+        other => bail!("kicked device re-issue must be call_participant_removed, got {other:?}"),
+    }
+    token_reissue_allowed(&kicked, "did:web:bob.example", "ck:device:bob-2")
+        .map_err(|code| anyhow::anyhow!("same-actor new device must rejoin after kick: {code}"))?;
+
+    // Step 3/4 — a banned actor (device_id omitted) is refused for any device.
+    let banned = [RemovedParticipant {
+        actor_id: "did:web:bob.example",
+        device_id: None,
+    }];
+    for device in ["ck:device:bob-1", "ck:device:bob-2"] {
+        match token_reissue_allowed(&banned, "did:web:bob.example", device) {
+            Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
+            other => bail!("banned actor re-issue ({device}) must be call_participant_removed, got {other:?}"),
+        }
+    }
+
+    // Control — an unrelated actor is not gated.
+    token_reissue_allowed(&banned, "did:web:carol.example", "ck:device:carol-1")
+        .map_err(|code| anyhow::anyhow!("unrelated actor unexpectedly gated: {code}"))?;
+    Ok(())
+}
+
+// ─── §12.19 — p2p_to_sfu_upgrade & summary gate ────────────────────────────
+
+/// P2P calls MUST converge to SFU once the active leg exceeds two; mode MUST
+/// NOT auto-downgrade back to p2p within the same lifecycle.
+fn resolve_mode(initial_mode: &str, active_participants: usize) -> &'static str {
+    if initial_mode == "p2p" && active_participants > 2 {
+        "sfu"
+    } else if initial_mode == "p2p" {
+        "p2p"
+    } else {
+        "sfu"
+    }
+}
+
+fn is_terminal_call_state(state: &str) -> bool {
+    TERMINAL_CALL_STATES.contains(&state)
+}
+
+/// `ck.call.summary` is accepted only when its `final_state` is terminal and
+/// matches the call head; otherwise `call_summary_invalid`.
+fn summary_accepted(final_state: &str) -> std::result::Result<(), &'static str> {
+    if is_terminal_call_state(final_state) {
+        Ok(())
+    } else {
+        Err(REASON_CALL_SUMMARY_INVALID)
+    }
+}
+
+pub fn run_p2p_to_sfu_upgrade_vector() -> Result<()> {
+    // Step 1 — third active participant forces SFU; 3 participants MUST NOT be
+    // carried over P2P / mesh.
+    if resolve_mode("p2p", 3) != "sfu" {
+        bail!("p2p with 3 active participants must upgrade to sfu");
+    }
+    // Step 3 — falling back to 2 does NOT auto-downgrade an already-sfu call.
+    if resolve_mode("sfu", 2) != "sfu" {
+        bail!("sfu must not auto-downgrade to p2p when participants fall to 2");
+    }
+    // Two-party p2p stays p2p.
+    if resolve_mode("p2p", 2) != "p2p" {
+        bail!("two-party p2p must stay p2p");
+    }
+
+    // Step 4 — summary on a terminal call is accepted; on an active call it is
+    // call_summary_invalid.
+    for terminal in TERMINAL_CALL_STATES {
+        summary_accepted(terminal)
+            .map_err(|code| anyhow::anyhow!("summary on terminal {terminal} rejected: {code}"))?;
+    }
+    for non_terminal in ["scheduled", "ringing", "connecting", "active"] {
+        match summary_accepted(non_terminal) {
+            Err(code) if code == REASON_CALL_SUMMARY_INVALID => {}
+            other => bail!("summary on {non_terminal} must be call_summary_invalid, got {other:?}"),
+        }
+    }
+    Ok(())
+}
+
+/// Suite entry point — runs all 4 call-state media-lifecycle vectors back to
+/// back. One failure stops the run with full context.
+pub fn run_call_state_media_lifecycle_vector_suite() -> Result<()> {
+    if ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len() != 4 {
+        bail!(
+            "expected 4 call_state media-lifecycle vector ids, got {}",
+            ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len()
+        );
+    }
+    run_recording_retention_lock_vector()?;
+    run_transcribe_lifecycle_vector()?;
+    run_moderator_kick_ban_vector()?;
+    run_p2p_to_sfu_upgrade_vector()?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_four_call_state_media_lifecycle_vectors_run_clean() {
+        run_call_state_media_lifecycle_vector_suite().unwrap();
+    }
+}

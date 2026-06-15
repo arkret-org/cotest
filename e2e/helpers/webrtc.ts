@@ -4,7 +4,12 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { solandBaseUrl } from "./env";
-import { createRealmApi } from "./soland-api";
+import {
+  createRealmApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  wireErrCode,
+} from "./soland-api";
 
 export let DEMO_REALM_ID = "ck:realm:0196419b-0000-7000-8000-000000000000";
 export const DEMO_ALICE_DID = "did:web:alice.example";
@@ -22,6 +27,7 @@ export const CALL_SIGNAL_TYPES = [
   "speaking",
   "focus_join",
   "focus_leave",
+  "moderation",
   "error",
   "device_change",
   "renegotiate",
@@ -151,3 +157,117 @@ export function deviceProof() {
     sig: "cotest-device-proof",
   };
 }
+
+// ── Media-service binding (CKP-0010) — token exchange helpers ────────────────
+//
+// These back the `ck.realm.media_service` foci configuration and the
+// `POST /_cokret/self/rtc/token` media token exchange. The foci selection
+// follows the spec oldest-membership-wins rule (media-service-binding.md §5);
+// the issued LiveKit token is a `livekit.<payload_b64>.<sig_b64>` envelope so
+// the harness can decode the LiveKit `video` grant claims without a live SFU.
+
+export const PARTICIPANT_BINDING_SCHEME = "ck.media.participant_binding.v1";
+export const MEDIA_TOKEN_TTL_MAX_SECS = 600;
+
+export interface MediaFocusConfig {
+  focus_id: string;
+  type: string;
+  issuer_kid: string;
+  connect_url: string;
+  ttl_seconds?: number;
+  e2ee_key_source?: string;
+}
+
+/**
+ * Project a `ck.realm.media_service` epoch onto the realm so the token issuer
+ * can resolve `service_id`, `issuer_kids`, and `foci[]`. The `service_id` is
+ * derived from each focus `issuer_kid` (`<service_id>#<key>`).
+ */
+export async function configureMediaService(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  ownerDid: string,
+  serviceDid: string,
+  foci: MediaFocusConfig[],
+): Promise<void> {
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: ownerDid,
+      realmId,
+      kind: "ck.realm.media_service",
+      payload: {
+        media_service: {
+          service_id: serviceDid,
+          foci,
+        },
+      },
+    }),
+    { context: `configure media_service for ${realmId}` },
+  );
+}
+
+export interface MediaTokenExchangeResult {
+  focus_id: string;
+  backend_type: string;
+  connect_url: string;
+  backend_token: string;
+  participant_identity: string;
+  participant_binding: Record<string, unknown>;
+  expires_at: string;
+  service_signature: string;
+}
+
+export async function exchangeMediaToken(
+  request: APIRequestContext,
+  token: string,
+  body: {
+    realm_id: string;
+    call_id: string;
+    actor_id: string;
+    device_id: string;
+    focus_id: string;
+    desired_media?: { audio?: boolean; video?: boolean; screen?: boolean };
+    capability_refs?: string[];
+  },
+): Promise<APIResponse> {
+  return await request.post(`${solandBaseUrl()}/_cokret/self/rtc/token`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+}
+
+/**
+ * Decode the `livekit.<payload_b64>.<sig_b64>` backend token and return its
+ * claim object. The payload is canonical-JSON base64url (no padding).
+ */
+export function decodeLiveKitToken(
+  backendToken: string,
+): Record<string, unknown> {
+  const segments = backendToken.split(".");
+  expect(segments.length, "livekit token has 3 segments").toBe(3);
+  expect(segments[0], "livekit token prefix").toBe("livekit");
+  const payloadJson = Buffer.from(segments[1], "base64url").toString("utf8");
+  return JSON.parse(payloadJson) as Record<string, unknown>;
+}
+
+// ── Recording control + moderation helpers ──────────────────────────────────
+
+export async function startCallRecording(
+  request: APIRequestContext,
+  token: string,
+  sessionId: string,
+  realmId: string,
+): Promise<APIResponse> {
+  return await request.post(
+    `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
+    {
+      headers: authHeaders(token),
+      data: { realm_id: realmId },
+    },
+  );
+}
+
+export { wireErrCode };
