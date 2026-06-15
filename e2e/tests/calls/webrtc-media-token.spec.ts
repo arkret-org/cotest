@@ -187,7 +187,7 @@ async function setupMediaCall(
   );
 
   const session = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
     {
       headers: authHeaders(aliceToken),
       data: { realm_id: realmId, participants: [], ttl_ms: 120_000 },

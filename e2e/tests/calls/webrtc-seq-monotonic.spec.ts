@@ -29,7 +29,7 @@ test.describe("ck.call.signal seq monotonicity", () => {
       });
 
       const rollback = await request.post(
-        `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+        `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
         {
           headers: authHeaders(token),
           data: {
@@ -60,7 +60,7 @@ test.describe("ck.call.signal seq monotonicity", () => {
       });
 
       const gap = await request.post(
-        `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+        `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
         {
           headers: authHeaders(token),
           data: {

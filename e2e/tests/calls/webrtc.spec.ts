@@ -61,7 +61,7 @@ test.describe("calls", () => {
       });
       await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
-      const session = await request.post(`${solandBaseUrl()}/_cokret/self/webrtc/sessions`, {
+      const session = await request.post(`${solandBaseUrl()}/_soland/self/webrtc/sessions`, {
         headers: authHeaders(aliceToken),
         data: {
           realm_id: realmId,
@@ -290,7 +290,7 @@ test.describe("calls", () => {
       });
 
       const denied = await request.post(
-        `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(session.session_id)}/recording/start`,
+        `${solandBaseUrl()}/_soland/self/calls/${encodeURIComponent(session.session_id)}/recording/start`,
         {
           headers: authHeaders(carolToken),
           data: { realm_id: realmId },
@@ -484,7 +484,7 @@ async function appendCallSignal(
   payload: Record<string, unknown>,
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
     {
       headers: authHeaders(token),
       data: {
@@ -531,7 +531,7 @@ async function createWebrtcSession(
     recording_policy: string;
   },
 ) {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/webrtc/sessions`, {
+  const response = await request.post(`${solandBaseUrl()}/_soland/self/webrtc/sessions`, {
     headers: authHeaders(token),
     data: { ...data, ttl_ms: 120_000 },
   });
@@ -568,7 +568,7 @@ async function refreshIceConfig(
   },
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/ice-config/refresh`,
+    `${solandBaseUrl()}/_soland/self/calls/${encodeURIComponent(sessionId)}/ice-config/refresh`,
     {
       headers: authHeaders(token),
       data,
@@ -585,7 +585,7 @@ async function startRecording(
   realmId: string,
 ) {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
+    `${solandBaseUrl()}/_soland/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
     {
       headers: authHeaders(token),
       data: { realm_id: realmId },
@@ -602,7 +602,7 @@ async function readCallSignals(
   since: number,
 ) {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals?since=${since}&limit=100`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals?since=${since}&limit=100`,
     { headers: authHeaders(token) },
   );
   expect(response.ok(), `read signals since ${since}`).toBeTruthy();

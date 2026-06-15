@@ -64,7 +64,7 @@ export async function createCallSession(
     ownerDid: DEMO_ALICE_DID,
   });
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
     {
       headers: authHeaders(token),
       data: {
@@ -87,7 +87,7 @@ export async function closeCallSession(
   sessionId: string,
 ) {
   const response = await request.delete(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}`,
     {
       headers: authHeaders(token),
     },
@@ -104,7 +104,7 @@ export async function postCallSignal(
   payload: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
     {
       headers: authHeaders(token),
       data: {
@@ -126,7 +126,7 @@ export async function getCallSignals(
   since = 0,
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals?since=${since}&limit=100`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals?since=${since}&limit=100`,
     { headers: authHeaders(token) },
   );
   expect(response.status(), `get signals since ${since}`).toBe(200);
@@ -288,7 +288,7 @@ export async function startCallRecording(
   realmId: string,
 ): Promise<APIResponse> {
   return await request.post(
-    `${solandBaseUrl()}/_cokret/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
+    `${solandBaseUrl()}/_soland/self/calls/${encodeURIComponent(sessionId)}/recording/start`,
     {
       headers: authHeaders(token),
       data: { realm_id: realmId },

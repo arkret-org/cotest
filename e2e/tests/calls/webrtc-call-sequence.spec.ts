@@ -172,7 +172,7 @@ async function createSession(
   participants: string[],
 ): Promise<string> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
     {
       headers: authHeaders(token),
       data: { realm_id: realmId, participants, ttl_ms: 120_000 },
@@ -191,7 +191,7 @@ async function appendSignal(
   payload: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(callId)}/signals`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals`,
     {
       headers: authHeaders(token),
       data: {
@@ -217,7 +217,7 @@ async function readSignals(
   callId: string,
 ): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(callId)}/signals?since=0&limit=100`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals?since=0&limit=100`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);

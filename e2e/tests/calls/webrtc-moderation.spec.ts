@@ -199,7 +199,7 @@ async function createSession(
   data: { participants: string[]; mode: string; recording_policy: string },
 ): Promise<string> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
     {
       headers: authHeaders(token),
       data: { realm_id: realmId, ttl_ms: 120_000, ...data },
@@ -223,7 +223,7 @@ async function appendModeration(
   data: Record<string, unknown>,
 ): Promise<AppendResult> {
   const response = await request.post(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(callId)}/signals`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals`,
     {
       headers: authHeaders(token),
       data: {
@@ -256,7 +256,7 @@ async function readSignals(
   callId: string,
 ): Promise<SignalEvent[]> {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/webrtc/sessions/${encodeURIComponent(callId)}/signals?since=0&limit=100`,
+    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals?since=0&limit=100`,
     { headers: authHeaders(token) },
   );
   expect(response.status()).toBe(200);

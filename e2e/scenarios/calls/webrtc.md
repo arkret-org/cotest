@@ -76,7 +76,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 26. carol 点 "Start recording"
 27. yougen 客户端:
     - 校验 carol 是否持 `call.record` capability(spec §5)
-    - 调 `POST /_cokret/self/calls/<callId>/recording/start`
+    - 调 `POST /_soland/self/calls/<callId>/recording/start`
 28. soland 校验 `recording_policy = "allow"` + carol 的 capability → 接受
 29. 后端把 recording metadata 写入 Call Morph:`recording_started_by: carol.did`,`recording_blob_ref: <blob_id>`
 30. 断言:alice/bob/carol UI 三方都显示"🔴 Recording in progress"(`recording-indicator` testid)
@@ -91,7 +91,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 ### Phase F — Mid-call ICE credential refresh
 
 35. 假设 TURN credential 5 分钟过期;长 call 触发 refresh
-36. yougen 调 `POST /_cokret/self/calls/<callId>/ice-config/refresh` → 拿新 credential
+36. yougen 调 `POST /_soland/self/calls/<callId>/ice-config/refresh` → 拿新 credential
 37. peer connection ICE restart
 38. 断言:call 不掉线,媒体 channel 持续
 
@@ -116,7 +116,7 @@ WebRTC 信令 + media 层的端到端:alice 主动 1:1 call bob → mute / scree
 
 ## Implementation notes
 
-- **soland 已落地(P3-070)**:`/_cokret/self/webrtc/sessions` 对参与者开放 signal append/read,并在 create/post/get 响应中派生 `ringing → connecting → active → ended` call_state;peer routing 由参与者读取同一 session 的信号覆盖。
+- **soland 已落地(P3-070)**:`/_soland/self/webrtc/sessions` 对参与者开放 signal append/read,并在 create/post/get 响应中派生 `ringing → connecting → active → ended` call_state;peer routing 由参与者读取同一 session 的信号覆盖。
 - **soland 已落地(P3-071)**:`/_cokret/self/rtc/ice-config` 与 refresh 端点签发 realm/call-scoped STUN/TURN 配置,TURN username 使用 pairwise pseudonym,mid-call refresh 轮换 credential;`mode=sfu` 与 `recording_policy=allow|none` 已持久化并强制录制策略。
 - **yougen 已落地(P3-070)**:`/call` 的本地 renderer FSM 暴露 `call-status-ringing`、`call-status-connecting`、`call-status-active`、`call-status-ended`,与 soland 状态词汇一致。
 - **yougen 已落地(P3-072)**:`/call` 的 1:1/group UI 创建真实 soland WebRTC session,发送 `invite`/`answer`/`mute_state`/`media_state`/`hangup` signal,并暴露本地 mic/screen/roster/session 状态;`mode=sfu` roster 与 recording indicator 由 soland recording endpoint 响应驱动。
