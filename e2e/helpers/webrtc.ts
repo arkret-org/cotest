@@ -209,15 +209,34 @@ export async function configureMediaService(
   );
 }
 
+export interface MediaParticipantBinding {
+  scheme: string;
+  sig: string;
+  issuer_kid: string;
+  realm_id: string;
+  call_id: string;
+  focus_id: string;
+  actor_id: string;
+  device_id: string;
+  participant_identity: string;
+  issued_at: string;
+  expires_at: string;
+}
+
+export interface MediaServiceSignature {
+  kid: string;
+  sig: string;
+}
+
 export interface MediaTokenExchangeResult {
   focus_id: string;
-  backend_type: string;
+  type: string;
   connect_url: string;
   backend_token: string;
   participant_identity: string;
-  participant_binding: Record<string, unknown>;
+  participant_binding: MediaParticipantBinding;
   expires_at: string;
-  service_signature: string;
+  service_signature: MediaServiceSignature;
 }
 
 export async function exchangeMediaToken(
@@ -247,8 +266,15 @@ export function decodeLiveKitToken(
   backendToken: string,
 ): Record<string, unknown> {
   const segments = backendToken.split(".");
-  expect(segments.length, "livekit token has 3 segments").toBe(3);
-  expect(segments[0], "livekit token prefix").toBe("livekit");
+  expect(segments.length, "livekit token is a standard 3-segment JWT").toBe(3);
+  // bindings/livekit.md §2: backend_token is a real LiveKit JWT
+  // (base64url(header).base64url(payload).base64url(HS256 sig)) — no legacy
+  // `livekit.` envelope prefix. Header MUST be {alg:HS256, typ:JWT}.
+  const header = JSON.parse(
+    Buffer.from(segments[0], "base64url").toString("utf8"),
+  ) as Record<string, unknown>;
+  expect(header.alg, "livekit JWT alg").toBe("HS256");
+  expect(header.typ, "livekit JWT typ").toBe("JWT");
   const payloadJson = Buffer.from(segments[1], "base64url").toString("utf8");
   return JSON.parse(payloadJson) as Record<string, unknown>;
 }

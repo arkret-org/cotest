@@ -58,14 +58,19 @@ test.describe("media token exchange", () => {
       expect(response.status(), await response.text()).toBe(200);
       const body = await response.json();
 
-      // Outcome shape (CallMediaTokenExchangeOutcome).
+      // Outcome shape (CallMediaTokenExchangeOutcome). The backend kind is
+      // surfaced on the wire as `type` (serde rename of `backend_type`).
       expect(body.focus_id).toBe(LIVEKIT_FOCUS.focus_id);
-      expect(body.backend_type).toBe("livekit");
+      expect(body.type).toBe("livekit");
       expect(body.connect_url).toBe(LIVEKIT_FOCUS.connect_url);
       expect(typeof body.backend_token).toBe("string");
-      expect(body.participant_identity).toMatch(/^ck:rtc_participant:/);
+      // participant_identity is a fresh `ck:rtc_participant:<uuidv7>` handle.
+      expect(body.participant_identity).toMatch(
+        /^ck:rtc_participant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
 
-      // participant_binding pins the spec scheme + the bound tuple.
+      // participant_binding pins the spec scheme + the bound tuple, and carries
+      // both `issued_at` and `expires_at` (media-service-binding.md §3).
       const binding = body.participant_binding as Record<string, unknown>;
       expect(binding.scheme).toBe(PARTICIPANT_BINDING_SCHEME);
       expect(binding.issuer_kid).toBe(ISSUER_KID);
@@ -75,18 +80,34 @@ test.describe("media token exchange", () => {
       expect(binding.actor_id).toBe(alice.did);
       expect(binding.device_id).toBe(alice.deviceId);
       expect(binding.participant_identity).toBe(body.participant_identity);
+      expect(typeof binding.issued_at).toBe("string");
       expect(typeof binding.expires_at).toBe("string");
+      expect(
+        new Date(binding.expires_at as string).getTime(),
+      ).toBeGreaterThan(new Date(binding.issued_at as string).getTime());
       expect(typeof binding.sig).toBe("string");
+      expect((binding.sig as string).length).toBeGreaterThan(0);
 
-      // service_signature is issuer-kid-prefixed.
-      expect(typeof body.service_signature).toBe("string");
-      expect(body.service_signature).toContain(ISSUER_KID);
+      // service_signature is a typed { kid, sig } object: kid is the realm
+      // media-service anchor (`did:...#...`), sig is the detached signature.
+      const serviceSignature = body.service_signature as Record<string, unknown>;
+      expect(serviceSignature.kid).toBe(ISSUER_KID);
+      expect(serviceSignature.kid).toMatch(/^did:[^#]+#.+$/);
+      expect(typeof serviceSignature.sig).toBe("string");
+      expect((serviceSignature.sig as string).length).toBeGreaterThan(0);
 
       // LiveKit JWT claim shape (bindings/livekit.md §2/§5).
       const claims = decodeLiveKitToken(body.backend_token as string);
+      // iss = LiveKit API Key; soland requires it to equal the realm focus
+      // issuer_kid, so it equals ISSUER_KID here.
       expect(claims.iss).toBe(ISSUER_KID);
       expect(claims.sub).toBe(body.participant_identity);
-      expect(typeof claims.exp).toBe("string");
+      // exp/iat are NumericDate (Unix epoch seconds); exp MUST be within 600s
+      // of iat (media-service-binding.md §3 TTL ceiling).
+      expect(typeof claims.exp).toBe("number");
+      expect(
+        (claims.exp as number) - (claims.iat as number),
+      ).toBeLessThanOrEqual(600);
       const video = claims.video as Record<string, unknown>;
       expect(video.room).toMatch(/^ck_call_/);
       // LiveKit room name MUST NOT leak the raw call id.

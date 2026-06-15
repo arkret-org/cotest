@@ -331,8 +331,21 @@ test.describe("calls", () => {
         device_id: alice.deviceId,
       });
       expect(refreshed.refreshed).toBe(true);
+      // ICE config carries the pseudonym bucket window (webrtc-signaling.md §4.1):
+      // bucket_seconds is fixed at 300 and issued_at_bucket = floor(issued_at/300)*300.
+      expect(issued.bucket_seconds).toBe(300);
+      expect(refreshed.bucket_seconds).toBe(300);
+      expect(iceBucketUnix(issued)).toBe(floorToBucketUnix(issued.issued_at, 300));
+      expect(iceBucketUnix(refreshed)).toBe(floorToBucketUnix(refreshed.issued_at, 300));
+      // §4.1/§4.2 — within the same pseudonym bucket the username AND the
+      // REST-style credential (= base64(HMAC-SHA256(secret, username))) are
+      // stable across refreshes; they rotate only when the bucket advances.
       expect(refreshed.turn_servers[0].username).toBe(issued.turn_servers[0].username);
-      expect(refreshed.turn_servers[0].credential).not.toBe(issued.turn_servers[0].credential);
+      if (iceBucketUnix(refreshed) === iceBucketUnix(issued)) {
+        expect(refreshed.turn_servers[0].credential).toBe(
+          issued.turn_servers[0].credential,
+        );
+      }
       expect(refreshed.refresh_lead_seconds).toBeGreaterThan(0);
 
       const afterRefresh = await readCallSignals(request, aliceToken, session.session_id, 0);
@@ -366,15 +379,38 @@ test.describe("calls", () => {
       });
       const aliceUsername = aliceIce.turn_servers[0].username as string;
       const bobUsername = bobIce.turn_servers[0].username as string;
-      expect(aliceUsername).toMatch(/^ck-turn-/);
-      expect(bobUsername).toMatch(/^ck-turn-/);
+      // REST-style (draft-uberti) TURN username = `<expiry-unix>:ck_pseudonym_call_<16hex>`
+      // (webrtc-signaling.md §4.1). The `<expiry-unix>` prefix is the credential's
+      // own expiry; the pseudonym segment must not leak the principal identity.
+      const turnUsernamePattern = /^(\d+):(ck_pseudonym_call_[0-9a-f]{16})$/;
+      const aliceMatch = aliceUsername.match(turnUsernamePattern);
+      const bobMatch = bobUsername.match(turnUsernamePattern);
+      expect(aliceMatch, aliceUsername).not.toBeNull();
+      expect(bobMatch, bobUsername).not.toBeNull();
+      // The unix prefix equals the TURN server's advertised expiry.
+      expect(Number(aliceMatch![1])).toBe(
+        Math.floor(
+          new Date(aliceIce.turn_servers[0].expires_at as string).getTime() / 1000,
+        ),
+      );
+      expect(Number(bobMatch![1])).toBe(
+        Math.floor(
+          new Date(bobIce.turn_servers[0].expires_at as string).getTime() / 1000,
+        ),
+      );
+      // credential = base64(HMAC-SHA256(turn_shared_secret, username)) — a
+      // standard (padded) base64 string over the full username.
+      expect(aliceIce.turn_servers[0].credential).toMatch(
+        /^[A-Za-z0-9+/]+=*$/,
+      );
+      expect(bobIce.turn_servers[0].credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
       expect(aliceUsername).not.toContain(alice.did);
       expect(aliceUsername).not.toContain("did:web");
       expect(aliceUsername).not.toContain(alice.name);
       expect(bobUsername).not.toContain(bob.did);
       expect(bobUsername).not.toContain("did:web");
       expect(bobUsername).not.toContain(bob.name);
-      expect(bobUsername).not.toBe(aliceUsername);
+      expect(bobMatch![2]).not.toBe(aliceMatch![2]);
     },
   );
 });
@@ -579,4 +615,16 @@ function deviceProof(actor: JointUser) {
     kid: `${actor.did}#${actor.deviceId}`,
     sig: "cotest-device-proof",
   };
+}
+
+// `issued_at_bucket` is serialized as an RFC3339 timestamp; collapse it to the
+// unix-second bucket boundary for comparison.
+function iceBucketUnix(ice: { issued_at_bucket: string }): number {
+  return Math.floor(new Date(ice.issued_at_bucket).getTime() / 1000);
+}
+
+// floor(issued_at / bucket_seconds) * bucket_seconds, expressed in unix seconds.
+function floorToBucketUnix(issuedAt: string, bucketSeconds: number): number {
+  const issuedUnix = Math.floor(new Date(issuedAt).getTime() / 1000);
+  return Math.floor(issuedUnix / bucketSeconds) * bucketSeconds;
 }
