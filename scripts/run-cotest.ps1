@@ -1047,9 +1047,9 @@ function ConvertTo-SecretPreview {
     param([Parameter(Mandatory = $true)][string]$Line)
 
     $preview = $Line
-    $preview = $preview -replace '(?i)(authorization["\s:=]+bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
+    $preview = $preview -replace '(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
     $preview = $preview -replace '(?i)("(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)"\s*:\s*")(?!\[redacted\])([^"]+)(")', '$1[redacted]$5'
-    $preview = $preview -replace '(?i)((access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=)(?!\[redacted\])([^&\s]+)', '$1[redacted]'
+    $preview = $preview -replace '(?i)((?:^|[?&\s])(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=)(?!\[redacted\]|%5[Bb]redacted%5[Dd])([^&\s]+)', '$1[redacted]'
     $preview = $preview -replace '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----[^\-]*-----END (RSA |EC |OPENSSH )?PRIVATE KEY-----', '[redacted-private-key]'
     if ($preview.Length -gt 220) {
         return $preview.Substring(0, 220) + "...[truncated]"
@@ -1061,9 +1061,9 @@ function Find-SecretLeaks {
     param([Parameter(Mandatory = $true)][string[]]$ScanRoots)
 
     $patterns = @(
-        [pscustomobject]@{ name = "authorization_header"; pattern = '(?i)(authorization["\s:=]+bearer\s+)(?!\[redacted\])\S+' },
+        [pscustomobject]@{ name = "authorization_header"; pattern = '(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!\[redacted\])\S+' },
         [pscustomobject]@{ name = "json_secret_field"; pattern = '(?i)"(authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)"\s*:\s*"(?!\[redacted\])[^"]+"' },
-        [pscustomobject]@{ name = "query_secret_field"; pattern = '(?i)(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=((?!\[redacted\])[^&\s]+)' },
+        [pscustomobject]@{ name = "query_secret_field"; pattern = '(?i)(?:^|[?&\s])(access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|private_key|seed)=(?!\[redacted\]|%5[Bb]redacted%5[Dd])[^&\s]+' },
         [pscustomobject]@{ name = "did_in_token_field"; pattern = '(?i)"(token|push_key|credential)"\s*:\s*"(did:[^"]+)"' },
         [pscustomobject]@{ name = "private_key_block"; pattern = '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' }
     )
