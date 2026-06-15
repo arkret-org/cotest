@@ -27,7 +27,7 @@ pub async fn framework_errors_and_invalid_json_use_cokret_envelopes() -> Result<
     expect_api_error(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
@@ -44,35 +44,33 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
-            .json(&json!({"did": "bad", "handle": "@bad", "device_id": "ck:device:01904100-0000-7000-8000-000000000bad"})),
+            .post(server.url("/_cokret/gate/account/register"))
+            .json(&json!({"principal_id": "bad", "device_id": "ck:device:01904100-0000-7000-8000-000000000bad"})),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "bad_request",
     )
     .await?;
 
     let registered = expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": "did:web:alice-auth.example",
-                "handle": "@alice-auth",
+                "principal_id": "did:web:alice-auth.example",
                 "display_name": "alice-auth",
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
             })),
-        StatusCode::CREATED,
+        StatusCode::OK,
     )
     .await?;
-    assert_eq!(registered["did"], "did:web:alice-auth.example");
+    assert_eq!(registered["principal_id"], "did:web:alice-auth.example");
 
     expect_api_error(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": "did:web:alice-auth.example",
-                "handle": "@alice-auth",
+                "principal_id": "did:web:alice-auth.example",
                 "display_name": "alice-auth",
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000a2"
             })),
@@ -98,15 +96,17 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let me = expect_json(
         server
             .http()
-            .get(server.url("/_soland/self/account/me"))
+            .get(server.url("/_cokret/self/account/viewer"))
             .bearer_auth(token),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(me["did"], "did:web:alice-auth.example");
+    assert_eq!(me["principal_id"], "did:web:alice-auth.example");
 
     expect_api_error(
-        server.http().get(server.url("/_soland/self/account/me")),
+        server
+            .http()
+            .get(server.url("/_cokret/self/account/viewer")),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -115,17 +115,17 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let logout = expect_json(
         server
             .http()
-            .post(server.url("/_soland/gate/auth/logout"))
+            .post(server.url("/_cokret/gate/account/session-grants/revoke"))
             .bearer_auth(token),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(logout["revoked"], true);
+    assert_eq!(logout["revoked_count"], 1);
 
     expect_status(
         server
             .http()
-            .get(server.url("/_soland/self/account/me"))
+            .get(server.url("/_cokret/self/account/viewer"))
             .bearer_auth(token),
         StatusCode::UNAUTHORIZED,
     )
@@ -139,17 +139,16 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let alice = expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": "did:web:alice-contact.example",
-                "handle": "@alice-contact",
+                "principal_id": "did:web:alice-contact.example",
                 "display_name": "Alice",
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"
             })),
-        StatusCode::CREATED,
+        StatusCode::OK,
     )
     .await?;
-    assert_eq!(alice["did"], "did:web:alice-contact.example");
+    assert_eq!(alice["principal_id"], "did:web:alice-contact.example");
 
     let alice = expect_json(
         server
@@ -168,22 +167,21 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let bob = expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": "did:web:bob-contact.example",
-                "handle": "@bob-contact",
+                "principal_id": "did:web:bob-contact.example",
                 "display_name": "Bob",
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000b0"
             })),
-        StatusCode::CREATED,
+        StatusCode::OK,
     )
     .await?;
-    assert_eq!(bob["did"], "did:web:bob-contact.example");
+    assert_eq!(bob["principal_id"], "did:web:bob-contact.example");
 
     expect_api_error(
         server
             .http()
-            .post(server.url("/_soland/self/contacts/request"))
+            .post(server.url("/_cokret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:alice-contact.example"})),
         StatusCode::BAD_REQUEST,
@@ -193,7 +191,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     expect_api_error(
         server
             .http()
-            .post(server.url("/_soland/self/contacts/request"))
+            .post(server.url("/_cokret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:missing-contact.example"})),
         StatusCode::NOT_FOUND,
@@ -204,7 +202,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let requested = expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/contacts/request"))
+            .post(server.url("/_cokret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:bob-contact.example"})),
         StatusCode::CREATED,
@@ -215,7 +213,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let duplicate = expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/contacts/request"))
+            .post(server.url("/_cokret/self/contacts/request"))
             .bearer_auth(alice_token)
             .json(&json!({"target": "did:web:bob-contact.example"})),
         StatusCode::OK,

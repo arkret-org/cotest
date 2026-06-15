@@ -103,7 +103,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
                         }
                     ]
                 },
-                "updated_at": Utc::now()
+                "updated_at": "2026-05-02T00:00:00Z"
             }),
         )
         .await?;
@@ -125,7 +125,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
                 "key": "ck.push_rules",
                 "owner": bob.actor.as_str(),
                 "tombstone": true,
-                "updated_at": Utc::now()
+                "updated_at": "2026-05-02T00:00:01Z"
             }),
         )
         .await?;

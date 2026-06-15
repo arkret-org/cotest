@@ -16,9 +16,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
 
     let group = TestServerGroup::single("key-backup-recovery-account-state").await?;
     let server = group.server(0);
-    let alice = server
-        .register_client(&principal_id, "@alice-recovery-state", DEVICE_A)
-        .await?;
+    let alice = server.demo_client(&principal_id, DEVICE_A).await?;
 
     let initial_policy = expect_json(
         alice.get("/_cokret/root/identity/recovery-policy"),

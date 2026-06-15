@@ -1,14 +1,12 @@
-//! Phase 3 — key-backup surfaces: PUT / list / describe / unlock.
+//! Phase 3 — key-backup surfaces: PUT / list / operations / unlock.
 //!
 //! Stores Alice's MLS-history backup, enumerates the collection, walks the
-//! key-backup descriptor, and exercises the unlock-proof gate.
+//! advertised key-backup operations, and exercises the unlock-proof gate.
 //!
 //! Surface split (G3 namespace audit):
 //! - `PUT/DELETE /_cokret/self/keys/backups/*`, `GET /_cokret/self/keys/backups`, and `POST
 //!   /_cokret/self/keys/backups/{id}/unlock` — protocol face.
-//! - `GET /_soland/self/keys/backups/describe` — the describe contract is a deployment/product
-//!   surface and is only mounted on the `/_soland` face
-//!   (`soland/src/routing/identity/key_backup.rs::legacy_router`).
+//! - `GET /_cokret/describe` — advertises the key-backup operation ids.
 //!
 //! Full-ciphertext reads are gated by spec `identity/key-management.md`
 //! §7.7.1: every `POST /_cokret/self/keys/backups/{id}/unlock` MUST carry a
@@ -50,7 +48,7 @@ fn device_signing_key() -> SigningKey {
 pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
     put_backup(server, token).await?;
     list_backups(server, token).await?;
-    describe_backup_surfaces(server, token).await?;
+    describe_backup_operations(server).await?;
     unlock_backup_requires_body_proof(server, token).await?;
     unlock_backup_reaches_trust_anchor(server, token).await?;
     Ok(())
@@ -158,27 +156,28 @@ async fn list_backups(server: &CokretServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn describe_backup_surfaces(server: &CokretServer, token: &str) -> Result<()> {
-    // The key-backups describe contract is mounted on the `/_soland`
-    // deployment face only; `/_cokret/self/keys/backups/describe` would be
-    // swallowed by the `{backup_id}` GET route and 404.
-    let key_backups_describe = expect_json(
-        server
-            .http()
-            .get(server.url("/_soland/self/keys/backups/describe"))
-            .bearer_auth(token),
+async fn describe_backup_operations(server: &CokretServer) -> Result<()> {
+    let description = expect_json(
+        server.http().get(server.url("/_cokret/describe")),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(
-        key_backups_describe["contract"],
-        "cokret.rest.key_backups_describe.v1"
-    );
-    assert_eq!(key_backups_describe["schema"], "ck.schema.key_backup.v1");
-    assert_eq!(
-        key_backups_describe["operations"][0],
-        "ck.self.keys.backups.resource.replace"
-    );
+    let operations = description["supported_operations"]
+        .as_array()
+        .expect("supported operation list");
+    for operation_id in [
+        "ck.self.keys.backups.resource.replace",
+        "ck.self.keys.backups.query.list",
+        "ck.self.keys.backups.command.unlock",
+        "ck.self.keys.backups.resource.delete",
+    ] {
+        assert!(
+            operations
+                .iter()
+                .any(|operation| operation.as_str() == Some(operation_id)),
+            "describe did not advertise {operation_id}: {description}"
+        );
+    }
     Ok(())
 }
 

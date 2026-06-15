@@ -5,7 +5,7 @@
 //! - [`schema`] — `/_cokret/self/schemas` registry lifecycle and visibility.
 //! - [`policy`] — `/_cokret/self/policies` document shape, decisions, and ownership.
 //! - [`typing`] — `/_cokret/self/typing` + `/_cokret/self/push_rules` realtime strand.
-//! - [`webrtc`] — `/_cokret/self/webrtc/*` session signaling strand and guards.
+//! - [`webrtc`] — `/_cokret/self/rtc/*` media surface and guards.
 //!
 //! No private helpers exist between scenarios in this family — the move is a
 //! pure mechanical extraction.

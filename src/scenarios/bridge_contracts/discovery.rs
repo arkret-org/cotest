@@ -29,13 +29,14 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
         surfaces.iter().any(|surface| {
-            surface["name"] == "authz_describe" && surface["path"] == "/_soland/self/authz/describe"
+            surface["name"] == "push_register_device"
+                && surface["path"] == "/_cokret/edge/push/register-device"
         })
     }));
     assert!(integration["surfaces"].as_array().is_some_and(|surfaces| {
         surfaces.iter().any(|surface| {
-            surface["name"] == "policies_describe"
-                && surface["path"] == "/_soland/self/policies/describe"
+            surface["name"] == "agent_runtime_attestation"
+                && surface["path"] == "/_cokret/gate/account/agent-key-pair"
         })
     }));
     assert_eq!(

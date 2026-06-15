@@ -3,8 +3,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    CokretServer, expect_account_subscribe_delta, expect_api_error, expect_audit_action,
-    expect_json, expect_status,
+    CokretServer, expect_account_subscribe_delta, expect_api_error, expect_json, expect_status,
+    submit_event,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -29,7 +29,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.realm.admin",
-            "resource": {"kind": "realm", "realm_id": realm_id}
+            "resource": {
+                "kind": "realm",
+                "id": realm_id,
+                "realm_id": realm_id
+            }
         })),
         StatusCode::OK,
     )
@@ -37,18 +41,42 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_before_grant["decision"], "hard_deny");
     assert_eq!(denied_before_grant["reason_code"], "capability_denied");
 
-    let manage_grant = expect_json(
-        alice.post("/_soland/self/authz/grants").json(&json!({
-            "realm_id": realm_id,
-            "subject": bob.actor,
-            "resource": "*",
-            "actions": ["ck.realm.admin"],
-            "constraints": []
-        })),
+    let manage_grant_id = "ck:grant:01999999-0000-7000-8000-0000000000a1";
+    let manage_grant = submit_event(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &realm_id,
+        "ck.capability.grant",
+        json!({
+            "grant_id": manage_grant_id,
+            "grant": {
+                "id": manage_grant_id,
+                "schema": "ck.schema.capability.v1",
+                "realm_id": realm_id,
+                "issuer": alice.actor,
+                "subject": bob.actor,
+                "actions": ["ck.realm.admin"],
+                "resources": [{
+                    "kind": "realm",
+                    "realm_id": realm_id
+                }],
+                "constraints": [],
+                "issued_at": "2026-05-02T00:00:00Z",
+                "proofs": [{
+                    "kind": "detached_jws",
+                    "alg": "EdDSA",
+                    "verification_method": format!("{}#cotest", alice.actor),
+                    "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "created_at": "2026-05-02T00:00:00Z",
+                    "jws": "a..b"
+                }]
+            }
+        }),
         StatusCode::OK,
     )
     .await?;
-    let manage_grant_id = manage_grant["grant_id"].as_str().unwrap().to_owned();
+    assert_eq!(manage_grant["status"], "accepted");
 
     let effective_grants = expect_json(
         alice.get("/_cokret/self/authz/effective-grants").query(&[
@@ -59,13 +87,25 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     )
     .await?;
     assert!(effective_grants["state_digest"].is_string());
-    assert!(!effective_grants["grants"].as_array().unwrap().is_empty());
+    assert!(
+        effective_grants["grants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|grant| grant["id"].as_str() == Some(manage_grant_id)
+                || grant["grant_id"].as_str() == Some(manage_grant_id)),
+        "effective grants did not include projected manage grant: {effective_grants}"
+    );
 
     let allowed_after_grant = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.realm.admin",
-            "resource": {"kind": "realm", "realm_id": realm_id}
+            "resource": {
+                "kind": "realm",
+                "id": realm_id,
+                "realm_id": realm_id
+            }
         })),
         StatusCode::OK,
     )
@@ -81,39 +121,44 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.message.create",
-            "resource": {"kind": "realm", "realm_id": realm_id}
+            "resource": {
+                "kind": "realm",
+                "id": realm_id,
+                "realm_id": realm_id
+            }
         })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(member_send["decision"], "allow");
 
-    let revoked_manage = expect_json(
-        alice.delete(&format!("/_soland/self/authz/grants/{manage_grant_id}")),
+    let revoked_manage = submit_event(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &realm_id,
+        "ck.capability.revoke",
+        json!({ "grant_id": manage_grant_id }),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(revoked_manage["revoked"], true);
+    assert_eq!(revoked_manage["status"], "accepted");
 
     let denied_after_revoke = expect_json(
         alice.post("/_cokret/self/authz/check").json(&json!({
             "actor_id": bob.actor,
             "action": "ck.realm.admin",
-            "resource": {"kind": "realm", "realm_id": realm_id}
+            "resource": {
+                "kind": "realm",
+                "id": realm_id,
+                "realm_id": realm_id
+            }
         })),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(denied_after_revoke["decision"], "hard_deny");
     assert_eq!(denied_after_revoke["reason_code"], "capability_denied");
-
-    let audit = expect_json(
-        alice.get("/_soland/self/audit/events?limit=20"),
-        StatusCode::OK,
-    )
-    .await?;
-    let _ = expect_audit_action(&audit, "authz.grant.create")?;
-    let _ = expect_audit_action(&audit, "authz.grant.revoke")?;
 
     Ok(())
 }

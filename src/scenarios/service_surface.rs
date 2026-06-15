@@ -39,6 +39,10 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
         "ck.self.authz.query.check",
         "ck.self.ephemeral.command.send",
         "ck.edge.push.command.register_device",
+        "ck.self.keys.backups.resource.replace",
+        "ck.self.keys.backups.query.list",
+        "ck.self.call.media.exchange.issue_token",
+        "ck.self.media.query.ice_config",
         "ck.self.policy.query.check",
         "ck.self.moderation.command.report",
     ] {
@@ -48,20 +52,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
                 .iter()
                 .any(|op| op == required),
             "missing supported operation {required}"
-        );
-    }
-    let local_extensions =
-        server_describe["limits"]["profile_status"]["local_extension_operations"]
-            .as_array()
-            .expect("local extension operation list");
-    for extension in [
-        "org.cokret.soland.index.query",
-        "org.cokret.soland.push.rules",
-        "org.cokret.soland.webrtc.create_session",
-    ] {
-        assert!(
-            local_extensions.iter().any(|op| op == extension),
-            "missing local extension operation {extension}"
         );
     }
 
@@ -87,19 +77,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     .await?;
     assert!(
         directory["resource_types"]
-            .as_array()
-            .is_some_and(|items| !items.is_empty())
-    );
-
-    let index = expect_json(
-        server
-            .http()
-            .get(server.url("/_soland/self/index/describe")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(
-        index["query_features"]
             .as_array()
             .is_some_and(|items| !items.is_empty())
     );

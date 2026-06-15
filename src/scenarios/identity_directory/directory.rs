@@ -271,13 +271,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
 
     let request = expect_json(
         alice
-            .post("/_soland/self/contacts/request")
+            .post("/_cokret/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/_soland/self/contacts/respond").json(&json!({
+        bob.post("/_cokret/self/contacts/respond").json(&json!({
             "request_id": request["request_event_ref"],
             "requester": alice.actor,
             "action": "accept"
@@ -304,7 +304,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     .await?;
     assert_eq!(
         alice_user_after_contact["users"][0]["handle"],
-        "bob-privacy:directory-privacy.cotest.local"
+        "bob-privacy-example:directory-privacy.cotest.local"
     );
 
     let anonymous_after_contact = expect_json(

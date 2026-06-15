@@ -4,7 +4,7 @@
 //! `identity/identity-handles.md §3.8.1 / §3.8.2`.
 //!
 //! R3.2 mention node shape:
-//!   `{subject_id (MUST), handle_at_time?, display_name_at_time?,
+//!   `{kind="mention", subject_id (MUST), handle_at_time?, display_name_at_time?,
 //!     mention_text_original?, resolved_at?}`.
 //! `subject_id` is the ONLY authoritative field for actor attribution; the
 //! handle / display strings are audit metadata.
@@ -95,6 +95,7 @@ fn empty_selection<'a>(
 
 pub fn run_new_shape_accepted_vector() -> Result<()> {
     let value = json!({
+        "kind": "mention",
         "subject_id": "did:web:alice.principal.example",
         "handle_at_time": "alice:acme.example",
         "display_name_at_time": "Alice Zhang",
@@ -109,10 +110,12 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
     if mention.handle_at_time.as_ref().map(Handle::canonical) != Some("alice:acme.example") {
         bail!("handle_at_time audit metadata drifted");
     }
-    // Minimal shape (subject_id only) MUST also accept; audit metadata omitted.
-    let minimal: Mention =
-        serde_json::from_value(json!({ "subject_id": "did:web:bob.principal.example" }))
-            .map_err(|e| anyhow!("minimal mention MUST parse: {e}"))?;
+    // Minimal shape (kind + subject_id) MUST also accept; audit metadata omitted.
+    let minimal: Mention = serde_json::from_value(json!({
+        "kind": "mention",
+        "subject_id": "did:web:bob.principal.example"
+    }))
+    .map_err(|e| anyhow!("minimal mention MUST parse: {e}"))?;
     let wire = serde_json::to_value(&minimal).map_err(|e| anyhow!("serialise: {e}"))?;
     if wire.get("handle_at_time").is_some() {
         bail!("unset handle_at_time MUST be omitted on the wire");

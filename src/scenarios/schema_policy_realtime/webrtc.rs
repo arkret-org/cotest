@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::harness::{CokretServer, expect_api_error, expect_json};
 
 pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
-    let server = CokretServer::spawn("webrtc-signaling").await?;
+    let server = CokretServer::spawn("rtc-media").await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
@@ -14,211 +14,116 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         .await?;
     let carol = server
         .register_client(
-            "did:web:carol-webrtc.example",
-            "@carol-webrtc",
+            "did:web:carol-rtc.example",
+            "@carol-rtc",
             "ck:device:01904100-0000-7000-8000-000000000ca0",
         )
         .await?;
-    let dave = server
-        .register_client(
-            "did:web:dave-webrtc.example",
-            "@dave-webrtc",
-            "ck:device:01904100-0000-7000-8000-000000000da0",
-        )
-        .await?;
 
-    let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
+    let realm_id = alice.create_realm("RTC Media Realm").await?;
+    let call_id = "ck:call:01964137-0000-7000-8000-000000000001";
 
     expect_api_error(
-        dave.post("/_cokret/self/webrtc/sessions").json(&json!({
+        carol.post("/_cokret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
-            "participants": []
+            "call_id": call_id,
+            "actor_id": carol.actor.as_str(),
+            "device_id": carol.device_id.as_str(),
+            "mode": "p2p"
         })),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
-    let session = expect_json(
-        alice.post("/_cokret/self/webrtc/sessions").json(&json!({
+    expect_api_error(
+        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
             "realm_id": realm_id,
-            "participants": [],
-            "ttl_ms": 90_000
+            "call_id": "not-a-call-id",
+            "actor_id": alice.actor.as_str(),
+            "device_id": alice.device_id.as_str(),
+            "mode": "p2p"
+        })),
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
+    )
+    .await?;
+
+    expect_api_error(
+        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+            "realm_id": realm_id,
+            "call_id": call_id,
+            "actor_id": carol.actor.as_str(),
+            "device_id": alice.device_id.as_str(),
+            "mode": "p2p"
+        })),
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
+    )
+    .await?;
+
+    let ice = expect_json(
+        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+            "realm_id": realm_id,
+            "call_id": call_id,
+            "actor_id": alice.actor.as_str(),
+            "device_id": alice.device_id.as_str(),
+            "mode": "p2p"
         })),
         StatusCode::OK,
     )
     .await?;
-    let session_id = session["session_id"].as_str().unwrap().to_owned();
-    assert!(session_id.starts_with("ck:call:"));
-    assert_eq!(session["participants"].as_array().unwrap().len(), 1);
-
-    expect_api_error(
-        carol.get(&format!(
-            "/_cokret/self/webrtc/sessions/{session_id}/signals"
-        )),
-        StatusCode::FORBIDDEN,
-        "capability_denied",
-    )
-    .await?;
-
-    let initial = expect_json(
-        alice.get(&format!(
-            "/_cokret/self/webrtc/sessions/{session_id}/signals"
-        )),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(initial["events"].as_array().unwrap().is_empty());
-
-    expect_api_error(
-        alice
-            .post(&format!(
-                "/_cokret/self/webrtc/sessions/{session_id}/signals"
-            ))
-            .json(&json!({
-                "message_type": "offer",
-                "payload": {"sdp": "v=0"},
-                "proofs": [{"actor": dave.actor, "sig": "not-alice"}]
-            })),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-
-    let signal_types = [
-        "offer",
-        "answer",
-        "ice",
-        "hangup",
-        "reject",
-        "mute_state",
-        "media_state",
-        "speaking",
-        "focus_join",
-        "focus_leave",
-        "error",
-        "device_change",
-        "renegotiate",
-    ];
-
-    let first = expect_json(
-        alice
-            .post(&format!(
-                "/_cokret/self/webrtc/sessions/{session_id}/signals"
-            ))
-            .json(&json!({
-                "message_type": signal_types[0],
-                "seq": 1,
-                "payload": {"signal_index": 1, "sdp": "v=0"},
-                "proofs": [{"actor": alice.actor, "sig": "signed-by-alice"}]
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(first["seq"], 1);
-    assert_eq!(first["next_cursor"], "1");
-
-    expect_api_error(
-        alice
-            .post(&format!(
-                "/_cokret/self/webrtc/sessions/{session_id}/signals"
-            ))
-            .json(&json!({
-                "message_type": "answer",
-                "seq": 1,
-                "payload": {"signal_index": "rollback"},
-                "proofs": [{"actor": alice.actor, "sig": "signed-by-alice"}]
-            })),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-
-    expect_api_error(
-        alice
-            .post(&format!(
-                "/_cokret/self/webrtc/sessions/{session_id}/signals"
-            ))
-            .json(&json!({
-                "message_type": "answer",
-                "seq": 99,
-                "payload": {"signal_index": "gap"},
-                "proofs": [{"actor": alice.actor, "sig": "signed-by-alice"}]
-            })),
-        StatusCode::BAD_REQUEST,
-        "invalid_param",
-    )
-    .await?;
-
-    for (idx, signal_type) in signal_types.iter().enumerate().skip(1) {
-        let appended = expect_json(
-            alice
-                .post(&format!(
-                    "/_cokret/self/webrtc/sessions/{session_id}/signals"
-                ))
-                .json(&json!({
-                    "message_type": signal_type,
-                    "seq": (idx + 1) as u64,
-                    "payload": {
-                        "signal_index": idx + 1,
-                        "device_proof_required": true
-                    },
-                    "proofs": [{"actor": alice.actor, "sig": "signed-by-alice"}]
-                })),
-            StatusCode::OK,
-        )
-        .await?;
-        assert_eq!(appended["seq"], (idx + 1) as u64);
-        assert_eq!(appended["next_cursor"], (idx + 1).to_string());
-    }
-
-    let offer_events = expect_json(
-        alice.get(&format!(
-            "/_cokret/self/webrtc/sessions/{session_id}/signals?since=0&limit=20"
-        )),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(offer_events["limited"], false);
+    assert_eq!(ice["realm_id"], realm_id);
+    assert_eq!(ice["call_id"], call_id);
+    assert_eq!(ice["actor_id"], alice.actor);
+    assert_eq!(ice["device_id"], alice.device_id);
+    assert_eq!(ice["ttl_seconds"], 300);
+    assert_eq!(ice["refresh_lead_seconds"], 75);
+    assert_eq!(ice["force_turn"], false);
+    assert!(ice["issued_at"].is_string());
+    assert!(ice["expires_at"].is_string());
+    assert!(ice["signature"].is_object());
+    assert_eq!(ice["signature"]["alg"], "EdDSA");
     assert_eq!(
-        offer_events["events"].as_array().unwrap().len(),
-        signal_types.len()
+        ice["signature"]["signature_input"],
+        "soland-media-ice-config-v1"
     );
-    assert_eq!(offer_events["events"][0]["type"], "offer");
-    assert_eq!(offer_events["events"][0]["sender"], alice.actor);
-    for (idx, signal_type) in signal_types.iter().enumerate() {
-        let event = &offer_events["events"][idx];
-        assert_eq!(event["seq"], (idx + 1) as u64);
-        assert_eq!(event["type"], *signal_type);
-        assert!(event["device_proof"].is_object());
-    }
+    assert!(
+        ice["signature"]["kid"]
+            .as_str()
+            .unwrap()
+            .ends_with("#media-ice")
+    );
 
-    let tail_events = expect_json(
-        alice.get(&format!(
-            "/_cokret/self/webrtc/sessions/{session_id}/signals?since=12"
-        )),
+    let ice_servers = ice["ice_servers"].as_array().unwrap();
+    assert_eq!(ice_servers.len(), 2);
+    assert_eq!(ice_servers[0]["urls"][0], "stun:stun.l.google.com:19302");
+    let turn_server = &ice_servers[1];
+    assert_eq!(
+        turn_server["urls"][0],
+        "turn:turn.soland.local:3478?transport=udp"
+    );
+    assert_eq!(turn_server["credential_type"], "password");
+    let turn_username = turn_server["username"].as_str().unwrap();
+    assert!(turn_username.starts_with("ck-turn-"));
+    assert_eq!(ice["pairwise_pseudonym"], turn_username);
+    assert!(!turn_username.contains("did:web"));
+    assert!(!turn_username.contains("alice"));
+
+    let turn_only = expect_json(
+        alice.post("/_cokret/self/rtc/ice-config").json(&json!({
+            "realm_id": realm_id,
+            "call_id": "ck:call:01964137-0000-7000-8000-000000000002",
+            "actor_id": alice.actor.as_str(),
+            "device_id": alice.device_id.as_str(),
+            "mode": "turn"
+        })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(tail_events["events"].as_array().unwrap().len(), 1);
-    assert_eq!(tail_events["events"][0]["type"], "renegotiate");
-    assert_eq!(tail_events["events"][0]["seq"], 13);
-
-    let closed = expect_json(
-        alice.delete(&format!("/_cokret/self/webrtc/sessions/{session_id}")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(closed["ok"], true);
-
-    expect_api_error(
-        alice.get(&format!(
-            "/_cokret/self/webrtc/sessions/{session_id}/signals"
-        )),
-        StatusCode::NOT_FOUND,
-        "not_found",
-    )
-    .await?;
+    assert_eq!(turn_only["force_turn"], true);
+    assert_eq!(turn_only["ice_servers"].as_array().unwrap().len(), 1);
+    assert_eq!(turn_only["turn_servers"].as_array().unwrap().len(), 1);
 
     Ok(())
 }

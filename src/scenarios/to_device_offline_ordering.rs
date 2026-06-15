@@ -7,7 +7,7 @@
 //!     send order across disconnect / reconnect; cursor-acked eviction ensures no replay or skip.
 //!
 //! Scenario walk-through:
-//!   1. Alice registers (dev_alice) and Bob registers (dev_bob_a).
+//!   1. Alice and Bob log in with verified dev devices.
 //!   2. Alice sends message 1 to dev_bob_a (POST /_cokret/self/device_messages with
 //!      `Idempotency-Key: msg-1`).
 //!   3. Bob's device polls (GET /_cokret/self/device_messages) — receives msg 1. We retain the
@@ -35,7 +35,7 @@ use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, dev_login, encrypted_envelope, expect_json, register_account};
+use crate::harness::{CokretServer, dev_login, encrypted_envelope, expect_json};
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
@@ -49,13 +49,8 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     )
     .await?;
     let bob_did = "did:web:bob-offline-ordering.example";
-    let bob_token = register_account(
-        &server,
-        bob_did,
-        "@bob-offline-ordering",
-        "ck:device:01904100-0000-7000-8000-0000000000ba",
-    )
-    .await?;
+    let bob_device = "ck:device:01904100-0000-7000-8000-0000000000ba";
+    let bob_token = dev_login(&server, bob_did, bob_device).await?;
     // Sanity: alice can also log in on a separate device id so the
     // sender's session is a separate row from the recipient's. (Not
     // strictly required by the scenario, but mirrors the implementor's
@@ -67,8 +62,6 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     )
     .await?;
 
-    let bob_device = "ck:device:01904100-0000-7000-8000-0000000000ba";
-
     // ── Step 2: alice sends msg 1 to bob's device.
     send_to_device(
         &server,
@@ -77,6 +70,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         bob_device,
         "ct10-msg-1",
         "ciphertext-msg-1",
+        true,
     )
     .await?;
 
@@ -103,6 +97,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         bob_device,
         "ct10-msg-2",
         "ciphertext-msg-2",
+        true,
     )
     .await?;
     send_to_device(
@@ -112,6 +107,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         bob_device,
         "ct10-msg-3",
         "ciphertext-msg-3",
+        true,
     )
     .await?;
 
@@ -159,6 +155,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         bob_device,
         "ct10-msg-2",
         "ciphertext-msg-2-redux", // intentionally different ciphertext
+        false,
     )
     .await?;
     let after_replay = poll_to_device(&server, &bob_token, None).await?;
@@ -182,6 +179,7 @@ async fn send_to_device(
     device_id: &str,
     idempotency_key: &str,
     ciphertext: &str,
+    expect_delivery: bool,
 ) -> Result<Value> {
     let body = json!({
         "messages": {
@@ -194,7 +192,7 @@ async fn send_to_device(
             }
         }
     });
-    expect_json(
+    let response = expect_json(
         server
             .http()
             .post(server.url("/_cokret/self/device_messages"))
@@ -203,7 +201,20 @@ async fn send_to_device(
             .json(&body),
         StatusCode::OK,
     )
-    .await
+    .await?;
+    if expect_delivery {
+        let delivered = response["delivered"][recipient]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if !delivered
+            .iter()
+            .any(|device| device.as_str() == Some(device_id))
+        {
+            bail!("send_to_device did not deliver to {recipient}/{device_id}: {response}");
+        }
+    }
+    Ok(response)
 }
 
 async fn ack_to_device(

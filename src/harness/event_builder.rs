@@ -21,13 +21,13 @@ pub async fn register_account(
     expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": did,
-                "handle": handle,
-                "display_name": handle.trim_start_matches('@')
+                "principal_id": did,
+                "display_name": handle.trim_start_matches('@'),
+                "device_id": device_id
             })),
-        StatusCode::CREATED,
+        StatusCode::OK,
     )
     .await?;
 

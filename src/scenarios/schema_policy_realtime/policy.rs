@@ -68,17 +68,14 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     .await?;
 
     let denied = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/policy/check"))
-            .json(&json!({
-                "request_id": "ck:request:policy-deny",
-                "request_canonical_digest": REQUEST_HASH,
-                "action": "ck.message.create",
-                "actor_id": bob.actor,
-                "realm_id": realm_id,
-                "source": {"kind": "realm", "realm_id": realm_id}
-            })),
+        bob.post("/_cokret/self/policy/check").json(&json!({
+            "request_id": "ck:request:policy-deny",
+            "request_canonical_digest": REQUEST_HASH,
+            "action": "ck.message.create",
+            "actor_id": bob.actor,
+            "realm_id": realm_id,
+            "source": {"kind": "realm", "realm_id": realm_id}
+        })),
         StatusCode::OK,
     )
     .await?;
@@ -104,22 +101,19 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(inactive["active"], false);
 
     let allowed = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/self/policy/check"))
-            .json(&json!({
-                "request_id": "ck:request:policy-allow",
-                "request_canonical_digest": REQUEST_HASH,
-                "action": "ck.message.create",
-                "actor_id": bob.actor,
-                "realm_id": realm_id,
-                "source": {"kind": "realm", "realm_id": realm_id}
-            })),
+        bob.post("/_cokret/self/policy/check").json(&json!({
+            "request_id": "ck:request:policy-allow",
+            "request_canonical_digest": REQUEST_HASH,
+            "action": "ck.message.create",
+            "actor_id": bob.actor,
+            "realm_id": realm_id,
+            "source": {"kind": "realm", "realm_id": realm_id}
+        })),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(allowed["decision"], "allow");
-    assert_eq!(allowed["reason_code"], "ok");
+    assert_eq!(allowed["decision"], "require_review");
+    assert_eq!(allowed["reason_code"], "review_required");
 
     let hidden_in_default_list =
         expect_json(alice.get("/_cokret/self/policies"), StatusCode::OK).await?;

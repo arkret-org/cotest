@@ -2,7 +2,7 @@
 //! `bridge_contracts.rs` during the round 28 Q1 refactor.
 //!
 //! Each submodule is single-responsibility:
-//! - [`discovery`] — `/_cokret/gate/auth/bridge/describe` +
+//! - [`discovery`] — `/_soland/gate/auth/bridge/describe` +
 //!   `/_soland/edge/push/outbound/bridge/describe` smoke check
 //!   (`principal_bridge_contracts_are_discoverable`).
 //! - [`session_grant`] — coauth-backed `/_cokret/gate/account/session-grants` strand

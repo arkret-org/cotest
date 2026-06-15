@@ -11,8 +11,8 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
-    expect_json, expect_text, register_account, submit_event,
+    CokretServer, TestServerGroup, add_member, dev_login, encrypted_envelope,
+    expect_account_subscribe_delta, expect_json, expect_text, register_account, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 
@@ -34,10 +34,9 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck:device:01904100-0000-7000-8000-0000000000a1",
     )
     .await?;
-    let bob = register_account(
+    let bob = dev_login(
         server_b,
         BOB_DID,
-        "@cotest-fed-bob-b",
         "ck:device:01904100-0000-7000-8000-0000000000bb",
     )
     .await?;

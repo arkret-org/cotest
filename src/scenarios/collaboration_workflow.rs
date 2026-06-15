@@ -30,10 +30,10 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     expect_status(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": BOB_DID,
-                "handle": BOB_HANDLE,
+                "principal_id": BOB_DID,
+                "display_name": BOB_HANDLE.trim_start_matches('@'),
                 "device_id": "ck:device:01904100-0000-7000-8000-0000000000b2"
             })),
         StatusCode::CONFLICT,
@@ -60,16 +60,16 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let me = expect_json(
         server
             .http()
-            .get(server.url("/_soland/self/account/me"))
+            .get(server.url("/_cokret/self/account/viewer"))
             .bearer_auth(&bob.token),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(me["did"], BOB_DID);
+    assert_eq!(me["principal_id"], BOB_DID);
 
     let requested = expect_json(
         alice
-            .post("/_soland/self/contacts/request")
+            .post("/_cokret/self/contacts/request")
             .json(&json!({"target": BOB_DID})),
         StatusCode::CREATED,
     )
@@ -77,7 +77,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert_eq!(requested["state"], "pending_outgoing");
 
     let accepted = expect_json(
-        bob.post("/_soland/self/contacts/respond").json(&json!({
+        bob.post("/_cokret/self/contacts/respond").json(&json!({
             "request_id": requested["request_event_ref"],
             "requester": ALICE_DID,
             "action": "accept"
@@ -262,17 +262,17 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let logout = expect_json(
         server
             .http()
-            .post(server.url("/_soland/gate/auth/logout"))
+            .post(server.url("/_cokret/gate/account/session-grants/revoke"))
             .bearer_auth(&bob.token),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(logout["revoked"], true);
+    assert_eq!(logout["revoked_count"], 1);
 
     expect_status(
         server
             .http()
-            .get(server.url("/_soland/self/account/me"))
+            .get(server.url("/_cokret/self/account/viewer"))
             .bearer_auth(&bob.token),
         StatusCode::UNAUTHORIZED,
     )

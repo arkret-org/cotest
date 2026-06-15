@@ -21,14 +21,13 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     expect_json(
         server
             .http()
-            .post(server.url("/_soland/self/account/register"))
+            .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({
-                "did": principal_id,
-                "handle": "@alice-session-grant",
+                "principal_id": principal_id,
                 "display_name": "Alice Session Grant",
                 "device_id": device_id
             })),
-        StatusCode::CREATED,
+        StatusCode::OK,
     )
     .await?;
 
@@ -61,12 +60,12 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     let authenticated = expect_json(
         server
             .http()
-            .get(server.url("/_soland/self/account/me"))
+            .get(server.url("/_cokret/self/account/viewer"))
             .bearer_auth(exchange["access_token"].as_str().unwrap()),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(authenticated["did"], principal_id);
+    assert_eq!(authenticated["principal_id"], principal_id);
 
     let push = expect_json(
         server

@@ -26,13 +26,13 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
 
     let request = expect_json(
         alice
-            .post("/_soland/self/contacts/request")
+            .post("/_cokret/self/contacts/request")
             .json(&json!({"target": bob.actor})),
         StatusCode::CREATED,
     )
     .await?;
     expect_json(
-        bob.post("/_soland/self/contacts/respond").json(&json!({
+        bob.post("/_cokret/self/contacts/respond").json(&json!({
             "request_id": request["request_event_ref"],
             "requester": alice.actor,
             "action": "accept"
@@ -41,7 +41,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
 
-    let contacts = expect_json(bob.get("/_soland/self/contacts"), StatusCode::OK).await?;
+    let contacts = expect_json(bob.get("/_cokret/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
     let invite_realm = alice
