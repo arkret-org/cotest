@@ -44,7 +44,7 @@ test.describe("account states", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const logout = await request.post(`${solandBaseUrl()}/_soland/gate/auth/logout`, {
+    const logout = await request.post(`${solandBaseUrl()}/_cokret/gate/account/logout`, {
       headers: authHeaders(token),
     });
     expect(logout.status()).toBe(200);
