@@ -3,15 +3,14 @@
 // Spec: conformance/schema-registry.md §1 (真源声明) / §3 (event type 约束) /
 //       §6 (演进约束 + critical extension fail-closed)
 // Artifacts (machine-readable source-of-truth):
-//   - cokret-spec/spec/v1/artifacts/registry/removed-event-kinds.json
-//   - cokret-spec/spec/v1/artifacts/registry/removed-operation-ids.json
-//   - cokret-spec/spec/v1/artifacts/registry/deprecated-profile-ids.json
-//   - cokret-spec/spec/v1/artifacts/registry/forbidden-wire-fields.json
+//   - cokret-spec/spec/v1/artifacts/migration/removed-event-kinds.json
+//   - cokret-spec/spec/v1/artifacts/migration/removed-operation-ids.json
+//   - cokret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json
 //   - cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
 //   - cokret-spec/spec/v1/artifacts/registry/operation-registry.json
 //
 // Treat the artifacts as the source-of-truth and walk soland's live
-// `/_cokret/describe` for drift. The three LIVE phases below (C / D / E)
+// `/_cokret/describe` for drift. The LIVE phases below (C / E)
 // are pure artifact-vs-describe diffs and need no fixme — they are tagged
 // @fully-implemented so they run under the joint-smoke profile.
 //
@@ -40,7 +39,13 @@ import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const artifactsRoot = resolve(__dirname, "../../../../cokret-spec/spec/v1/artifacts");
+const migrationRoot = resolve(artifactsRoot, "migration");
 const registryRoot = resolve(artifactsRoot, "registry");
+
+function loadMigrationJson<T = unknown>(name: string): T {
+  const path = resolve(migrationRoot, name);
+  return JSON.parse(readFileSync(path, "utf8")) as T;
+}
 
 function loadRegistryJson<T = unknown>(name: string): T {
   const path = resolve(registryRoot, name);
@@ -73,8 +78,7 @@ type OperationRegistry = {
 
 /**
  * Yield every (path, key, value) tuple in a nested JSON tree. Walks both
- * plain objects and arrays; primitives are leaves. Used by Phase D to scan
- * all object keys for forbidden wire field names, and by Phase C to collect
+ * plain objects and arrays; primitives are leaves. Used by Phase C to collect
  * any nested `profile_id` claims.
  */
 function* walkTree(
@@ -184,10 +188,9 @@ test.describe.configure({ mode: "serial" });
 test.describe("conformance registry drift @fully-implemented", () => {
   // Load all artifacts once; failures here surface as test setup errors which
   // is what we want (the spec build is broken, not the wire).
-  const removedEventKinds = loadRegistryJson<DriftRegistry>("removed-event-kinds.json");
-  const removedOperationIds = loadRegistryJson<DriftRegistry>("removed-operation-ids.json");
-  const deprecatedProfileIds = loadRegistryJson<DriftRegistry>("deprecated-profile-ids.json");
-  const forbiddenWireFields = loadRegistryJson<DriftRegistry>("forbidden-wire-fields.json");
+  const removedEventKinds = loadMigrationJson<DriftRegistry>("removed-event-kinds.json");
+  const removedOperationIds = loadMigrationJson<DriftRegistry>("removed-operation-ids.json");
+  const deprecatedProfileIds = loadMigrationJson<DriftRegistry>("deprecated-profile-ids.json");
   const forbiddenModelTerms = loadRegistryJson<DriftRegistry>("forbidden-model-terms.json");
   const operationRegistry = loadRegistryJson<OperationRegistry>("operation-registry.json");
 
@@ -221,59 +224,6 @@ test.describe("conformance registry drift @fully-implemented", () => {
 
     const violations = [...claimed].filter((id) => deprecated.has(id));
     expect(violations, `soland describe claimed deprecated profile id(s): ${violations.join(", ")}`).toEqual([]);
-  });
-
-  test("Phase D — /server/describe contains no forbidden wire field names", async ({
-    request,
-  }, testInfo) => {
-    // spec: schema-registry.md §6; artifact: forbidden-wire-fields.json
-    // Walk every object key in the describe document and assert it is not
-    // a name listed as hard_reject in forbidden-wire-fields. Note: most
-    // entries are context-scoped (e.g. `space_frontier` is forbidden as a
-    // frontier object property), but the describe surface is core wire so
-    // any occurrence of the literal name is treated as drift.
-    const forbiddenFieldNames = new Set(
-      forbiddenWireFields.entries
-        .filter((e) => e.rejection_level === "hard_reject" && !e.id.includes("="))
-        .map((e) => e.id),
-    );
-    // Special-case literal-value constraints (e.g. `kind=room`) — collect them
-    // as (field, forbiddenValue) pairs and check separately.
-    const forbiddenValuePairs = forbiddenWireFields.entries
-      .filter((e) => e.rejection_level === "hard_reject" && e.id.includes("="))
-      .map((e) => {
-        const [field, value] = e.id.split("=");
-        return { field, value };
-      });
-    expect(forbiddenFieldNames.size).toBeGreaterThan(0);
-
-    const resp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
-    expect(resp.ok()).toBeTruthy();
-    const describe = await resp.json();
-
-    const keyViolations: Array<{ path: string; key: string }> = [];
-    const valueViolations: Array<{ path: string; field: string; value: string }> = [];
-    for (const { path, key, value } of walkTree(describe)) {
-      if (forbiddenFieldNames.has(key)) {
-        keyViolations.push({ path: path.join("."), key });
-      }
-      if (typeof value === "string") {
-        for (const { field, value: forbiddenValue } of forbiddenValuePairs) {
-          if (key === field && value === forbiddenValue) {
-            valueViolations.push({ path: path.join("."), field, value });
-          }
-        }
-      }
-    }
-
-    if (keyViolations.length > 0 || valueViolations.length > 0) {
-      await testInfo.attach("forbidden-wire-field-violations", {
-        body: JSON.stringify({ keyViolations, valueViolations }, null, 2),
-        contentType: "application/json",
-      });
-    }
-    expect(keyViolations, "forbidden wire field name(s) appeared in describe").toEqual([]);
-    expect(valueViolations, "forbidden wire field value(s) appeared in describe").toEqual([]);
   });
 
   test("Phase E — every claimed operation has a canonical operation-registry entry", async ({

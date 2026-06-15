@@ -131,9 +131,8 @@ cokret-rust-sdk fixture maintenance.
 
 All `TODO(circle-rollout-Pxxx)` markers closed. Per
 `cokret-rust-sdk/CHANGELOG.md` lines 57–62, `TODO(circle-rollout-P1.3)`
-in `crates/sdk/src/authz/engine.rs` and `TODO(circle-rollout-P1.5)` in
-`crates/core/src/forbidden_wire_fields.rs` were both resolved in the
-follow-on round on top of `97d9dc8`.
+in `crates/sdk/src/authz/engine.rs` was resolved in the follow-on round
+on top of `97d9dc8`.
 
 #### soland (a6953b8)
 
