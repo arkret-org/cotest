@@ -8,12 +8,13 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use cotest::conformance::{
-    ALL_AGENT_VECTOR_IDS, ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, ALL_CURSOR_VECTOR_IDS,
-    ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS,
-    ALL_MEDIA_BINDING_VECTOR_IDS, ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS,
-    ALL_MENTION_RENDERING_VECTOR_IDS, ALL_OBJECT_ADDRESSING_VECTOR_IDS,
-    ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS, load_local_fixture_value,
-    run_agent_vector_suite, run_call_state_media_lifecycle_vector_suite, run_cursor_vector_suite,
+    ALL_AGENT_VECTOR_IDS, ALL_CALL_SIGNAL_VECTOR_IDS, ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS,
+    ALL_CURSOR_VECTOR_IDS, ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS,
+    ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS, ALL_MEDIA_BINDING_VECTOR_IDS,
+    ALL_MEMBER_IDENTITY_VECTOR_IDS, ALL_MEMBER_ROSTER_VECTOR_IDS, ALL_MENTION_RENDERING_VECTOR_IDS,
+    ALL_OBJECT_ADDRESSING_VECTOR_IDS, ALL_PRIMARY_HANDLE_VECTOR_IDS, ALL_SIDECAR_VECTOR_IDS,
+    load_local_fixture_value, run_agent_vector_suite, run_call_signal_vector_suite,
+    run_call_state_media_lifecycle_vector_suite, run_cursor_vector_suite,
     run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
     run_media_binding_vector_suite, run_member_identity_vector_suite,
     run_member_roster_vector_suite, run_mention_rendering_vector_suite,
@@ -27,6 +28,18 @@ use serde_json::Value;
 fn media_binding_vector_suite_runs_clean() {
     run_media_binding_vector_suite().expect("media-binding vectors must pass");
     assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 9);
+}
+
+// ─── webrtc-signaling.md §5.1 — ck.call.signal receiver vectors ────────────
+//
+// signal_type enum (rejects retired offer/ice/device_change) + seq
+// monotonicity (receiver-side rollback drop) + a REAL ed25519 detached-JWS
+// round-trip proving the cotest e2e helper's proof is genuinely verifiable.
+
+#[test]
+fn call_signal_receiver_vector_suite_runs_clean() {
+    run_call_signal_vector_suite().expect("call-signal receiver vectors must pass");
+    assert_eq!(ALL_CALL_SIGNAL_VECTOR_IDS.len(), 3);
 }
 
 // ─── §12.16-§12.19 — call-state media lifecycle vectors ────────────────────

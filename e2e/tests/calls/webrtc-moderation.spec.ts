@@ -1,17 +1,25 @@
-// Recording gating (recording_policy) + moderation (kick/ban) with
-// removed_participants[] provenance.
+// Call moderation (kick / ban / end_for_all) over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-moderation.md
 // Spec refs:
-//   - crypto-media/webrtc-signaling.md §3 (ck.call.record capability)
-//   - crypto-media/webrtc-signaling.md §3a / §13 (moderation: kick/ban/end_for_all)
-//   - crypto-media/call-state.md §5.2 (recording consent + retention)
-//   - conformance/conformance-vectors.md §12.16 / §12.18
+//   - crypto-media/webrtc-signaling.md §3a (moderation signal + removed_participants[])
+//   - crypto-media/webrtc-signaling.md §5.1 (ephemeral relay, ck.call.signal.send gate)
+//   - crypto-media/media-service-binding.md §3 (banned actor token re-issue gate)
+//
+// WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` +
+// `/_soland/self/calls/.../recording/start` stack is gone. Moderation now rides
+// `ck.call.signal{moderation}` on `POST /_cokret/self/ephemeral`, and the
+// kick/ban provenance lives in the durable `ck.call.state.removed_participants[]`
+// cell. The relay is content-agnostic and gates on `ck.call.signal.send` (§162);
+// the `ck.call.moderate` authorization for a moderation frame is a RECEIVER /
+// reducer check (§3a — "接收方与 reducer MUST 拒绝"), pinned as a real
+// conformance vector (`run_moderator_kick_ban_vector`, step 1 →
+// call_moderation_unauthorised). The HTTP-observable moderation consequence is
+// the durable ban gate: a banned actor's media-token re-exchange is refused
+// with `call_participant_removed`.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
-  authHeaders,
   createRealmApi,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -21,157 +29,242 @@ import {
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
-import { startCallRecording } from "../../helpers/webrtc";
+import {
+  CAP_CALL_JOIN,
+  CAP_CALL_SIGNAL_SEND,
+  buildCallSignalEnvelope,
+  configureMediaService,
+  exchangeMediaToken,
+  grantCallCapability,
+  newCallId,
+  postCallSignal,
+  postCallSignalRaw,
+  relayedCallSignals,
+  seedCallState,
+  type MediaFocusConfig,
+} from "../../helpers/webrtc";
+
+const SERVICE_DID = "did:web:media.example";
+const ISSUER_KID = `${SERVICE_DID}#media-token`;
+const LIVEKIT_FOCUS: MediaFocusConfig = {
+  focus_id: "ck:focus:livekit-lhr",
+  type: "livekit",
+  issuer_kid: ISSUER_KID,
+  connect_url: "wss://livekit.media.example",
+  ttl_seconds: 300,
+  e2ee_key_source: "mls-exporter",
+};
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("recording gating + moderation", () => {
-  test(
-    "recording_policy=allow lets a participant start recording (writes ck:blob recording_blob_ref)",
-    async ({ request }) => {
-      const { alice, aliceToken, bob, realmId } = await setupCallRealm(
-        request,
-        "mod-record-allow",
-      );
-      const callId = await createSession(request, aliceToken, realmId, {
-        participants: [bob.did],
-        mode: "sfu",
-        recording_policy: "allow",
-      });
+test.describe("call moderation (spec wire)", () => {
+  test("moderator kick relays ck.call.signal{moderation=kick} with the pinned (actor, device) target", async ({
+    request,
+  }) => {
+    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
+      request,
+      "mod-kick",
+    );
+    const callId = newCallId();
 
-      const response = await startCallRecording(
-        request,
-        aliceToken,
-        callId,
-        realmId,
-      );
-      expect(response.status(), await response.text()).toBe(200);
-      const body = await response.json();
-      expect(body.ok).toBe(true);
-      expect(body.recording_policy).toBe("allow");
-      expect(body.recording_started_by).toBe(alice.did);
-      expect(body.recording_blob_ref).toMatch(/^ck:blob:sha256:/);
-      expect(body.recording_state).toBeTruthy();
-    },
-  );
-
-  test(
-    "recording_policy=none rejects recording with failed_precondition recording_policy_violation",
-    async ({ request }) => {
-      const { aliceToken, bob, realmId } = await setupCallRealm(
-        request,
-        "mod-record-deny",
-      );
-      const callId = await createSession(request, aliceToken, realmId, {
-        participants: [bob.did],
-        mode: "sfu",
-        recording_policy: "none",
-      });
-
-      const denied = await startCallRecording(
-        request,
-        aliceToken,
-        callId,
-        realmId,
-      );
-      expect(denied.status()).toBe(412);
-      expect(wireErrCode(await denied.json())).toBe(
-        "recording_policy_violation",
-      );
-    },
-  );
-
-  test(
-    "moderator kick: ck.call.signal{moderation=kick} is accepted and projected into removed_participants[]",
-    async ({ request }) => {
-      const { alice, aliceToken, bob, bobToken, realmId } =
-        await setupCallRealm(request, "mod-kick");
-      const callId = await createSession(request, aliceToken, realmId, {
-        participants: [bob.did],
-        mode: "sfu",
-        recording_policy: "none",
-      });
-
-      // First-class `moderation` signal (webrtc-signaling.md §3a): the kick
-      // pins the removed (actor, device) tuple; soland projects it into
-      // ck.call.state.removed_participants[] so a later token re-issue can gate.
-      const kick = await appendModeration(request, aliceToken, callId, alice, {
+    const moderation = buildCallSignalEnvelope({
+      actorDid: alice.did,
+      deviceId: alice.deviceId,
+      realmId,
+      callId,
+      signalType: "moderation",
+      seq: 1,
+      data: {
         action: "kick",
         target_actor_id: bob.did,
         target_device_id: bob.deviceId,
         reason: "policy_violation",
-      });
-      expect(kick.seq).toBe(1);
-      // kick removes a leg but leaves the call lifecycle running.
-      expect(kick.call_state).not.toBe("ended");
+      },
+    });
+    await postCallSignal(request, aliceToken, moderation);
 
-      const events = await readSignals(request, bobToken, callId);
-      const moderationEvent = events.find(
-        (event) => event.type === "moderation",
-      );
-      expect(
-        moderationEvent,
-        "moderation frame is present in the signal log",
-      ).toBeTruthy();
-      const data = (moderationEvent!.payload as Record<string, unknown>)
-        .data as Record<string, unknown>;
-      expect(data.action).toBe("kick");
-      expect(data.target_actor_id).toBe(bob.did);
-      expect(data.target_device_id).toBe(bob.deviceId);
-    },
-  );
+    const received = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    const frame = received.find(
+      (e) =>
+        (e.payload as Record<string, unknown>).signal_type === "moderation",
+    );
+    expect(frame, "moderation frame relayed to target member").toBeTruthy();
+    const data = (frame!.payload as Record<string, unknown>).data as Record<
+      string,
+      unknown
+    >;
+    expect(data.action).toBe("kick");
+    expect(data.target_actor_id).toBe(bob.did);
+    expect(data.target_device_id).toBe(bob.deviceId);
+    // The moderation frame MUST carry a verifiable proof (§3a — signed by the
+    // moderator).
+    const proof = frame!.proof as Record<string, unknown>;
+    expect(proof.kind).toBe("detached_jws");
+    expect(proof.verification_method).toBe(`${alice.did}#device`);
+  });
 
-  test(
-    "moderator ban: ck.call.signal{moderation=ban} omits target_device_id (actor-wide scope)",
-    async ({ request }) => {
-      const { alice, aliceToken, bob, bobToken, realmId } =
-        await setupCallRealm(request, "mod-ban");
-      const callId = await createSession(request, aliceToken, realmId, {
-        participants: [bob.did],
-        mode: "sfu",
-        recording_policy: "none",
-      });
+  test("moderator ban: ck.call.signal{moderation=ban} omits target_device_id (actor-wide scope)", async ({
+    request,
+  }) => {
+    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
+      request,
+      "mod-ban",
+    );
+    const callId = newCallId();
 
-      const ban = await appendModeration(request, aliceToken, callId, alice, {
-        action: "ban",
-        target_actor_id: bob.did,
-      });
-      expect(ban.seq).toBe(1);
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "moderation",
+        seq: 1,
+        data: { action: "ban", target_actor_id: bob.did },
+      }),
+    );
 
-      const events = await readSignals(request, bobToken, callId);
-      const banEvent = events.find((event) => event.type === "moderation");
-      expect(banEvent, "moderation frame is present in the signal log").toBeTruthy();
-      const data = (banEvent!.payload as Record<string, unknown>).data as Record<
-        string,
-        unknown
-      >;
-      expect(data.action).toBe("ban");
-      expect(data.target_actor_id).toBe(bob.did);
-      // Actor-wide ban: no device id pins it to a single device.
-      expect(data.target_device_id).toBeUndefined();
-    },
-  );
+    const received = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    const frame = received.find(
+      (e) =>
+        (e.payload as Record<string, unknown>).signal_type === "moderation",
+    );
+    expect(frame).toBeTruthy();
+    const data = (frame!.payload as Record<string, unknown>).data as Record<
+      string,
+      unknown
+    >;
+    expect(data.action).toBe("ban");
+    expect(data.target_actor_id).toBe(bob.did);
+    expect(data.target_device_id).toBeUndefined();
+  });
 
-  test(
-    "moderator end_for_all: ck.call.signal{moderation=end_for_all} drives the call to ended",
-    async ({ request }) => {
-      const { alice, aliceToken, bob, realmId } = await setupCallRealm(
-        request,
-        "mod-end",
-      );
-      const callId = await createSession(request, aliceToken, realmId, {
-        participants: [bob.did],
-        mode: "sfu",
-        recording_policy: "none",
-      });
+  test("call_moderation_unauthorised: a member lacking ck.call.signal.send cannot relay a moderation frame", async ({
+    request,
+  }) => {
+    // The relay gates moderation (like every ck.call.signal) on
+    // ck.call.signal.send (§162). A non-owner member who was NOT granted it is
+    // refused at the relay — they can never get a moderation frame onto the
+    // wire. (The pure ck.call.moderate receiver-side authz that yields the
+    // `call_moderation_unauthorised` reason for a *relayed* frame is pinned by
+    // the Rust conformance vector `run_moderator_kick_ban_vector` step 1.)
+    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
+      request,
+      "mod-unauth",
+    );
+    const callId = newCallId();
 
-      const end = await appendModeration(request, aliceToken, callId, alice, {
-        action: "end_for_all",
-      });
-      expect(end.seq).toBe(1);
-      expect(end.call_state).toBe("ended");
-    },
-  );
+    // bob is a member but holds NO call capability.
+    const moderation = buildCallSignalEnvelope({
+      actorDid: bob.did,
+      deviceId: bob.deviceId,
+      realmId,
+      callId,
+      signalType: "moderation",
+      seq: 1,
+      data: {
+        action: "kick",
+        target_actor_id: alice.did,
+        target_device_id: alice.deviceId,
+      },
+    });
+    const denied = await postCallSignalRaw(request, bobToken, moderation);
+    expect(denied.status(), await denied.text()).toBe(403);
+    expect(wireErrCode(await denied.json())).toBe("capability_denied");
+
+    // Control: alice (owner) CAN relay a moderation frame — proving the gate is
+    // capability-scoped, not a blanket moderation block.
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "moderation",
+        seq: 1,
+        data: { action: "kick", target_actor_id: bob.did, target_device_id: bob.deviceId },
+      }),
+    );
+    const received = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) =>
+        (env.payload as Record<string, unknown>)?.call_id === callId &&
+        (env.payload as Record<string, unknown>)?.signal_type === "moderation",
+    );
+    expect(received.length).toBe(1);
+  });
+
+  test("durable ban gate: a banned actor's media-token re-exchange is refused call_participant_removed", async ({
+    request,
+  }) => {
+    // §3a / media-service-binding §3 — once a ban row lands in the durable
+    // ck.call.state.removed_participants[], the media token issuer MUST refuse
+    // that actor's re-exchange. This is the HTTP-observable moderation
+    // enforcement (the kick/ban signal itself is ephemeral).
+    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
+      request,
+      "mod-ban-gate",
+    );
+    await configureMediaService(
+      request,
+      aliceToken,
+      realmId,
+      alice.did,
+      SERVICE_DID,
+      [LIVEKIT_FOCUS],
+    );
+    // bob needs ck.call.join to exchange a token before the ban.
+    await grantCallCapability(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      bob.did,
+      CAP_CALL_JOIN,
+    );
+    const callId = newCallId();
+
+    // Pre-ban: bob can exchange a media token (no committed focus yet).
+    const preBan = await exchangeMediaToken(request, bobToken, {
+      realm_id: realmId,
+      call_id: callId,
+      actor_id: bob.did,
+      device_id: bob.deviceId,
+      focus_id: LIVEKIT_FOCUS.focus_id,
+    });
+    expect(preBan.status(), await preBan.text()).toBe(200);
+
+    // A moderator actor-wide-bans bob: the durable removed_participants[] row
+    // carries a `ban` with no device_id (§3a).
+    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+      state: "active",
+      removedParticipants: [{ actor_id: bob.did, action: "ban" }],
+    });
+
+    // Post-ban: bob's re-exchange is refused.
+    const postBan = await exchangeMediaToken(request, bobToken, {
+      realm_id: realmId,
+      call_id: callId,
+      actor_id: bob.did,
+      device_id: bob.deviceId,
+      focus_id: LIVEKIT_FOCUS.focus_id,
+    });
+    expect(postBan.status()).toBe(403);
+    expect(wireErrCode(await postBan.json())).toBe("call_participant_removed");
+  });
 });
 
 async function setupCallRealm(request: APIRequestContext, label: string) {
@@ -189,76 +282,11 @@ async function setupCallRealm(request: APIRequestContext, label: string) {
     public: true,
   });
   await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId };
-}
-
-async function createSession(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  data: { participants: string[]; mode: string; recording_policy: string },
-): Promise<string> {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
-    {
-      headers: authHeaders(token),
-      data: { realm_id: realmId, ttl_ms: 120_000, ...data },
-    },
-  );
-  expect(response.status(), await response.text()).toBe(200);
-  return (await response.json()).session_id as string;
-}
-
-interface AppendResult {
-  seq: number;
-  next_cursor: string;
-  call_state: string;
-}
-
-async function appendModeration(
-  request: APIRequestContext,
-  token: string,
-  callId: string,
-  actor: JointUser,
-  data: Record<string, unknown>,
-): Promise<AppendResult> {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals`,
-    {
-      headers: authHeaders(token),
-      data: {
-        // First-class `moderation` signal type (webrtc-signaling.md §3a);
-        // the action rides `payload.data.action`.
-        message_type: "moderation",
-        payload: { signal_type: "moderation", data },
-        proofs: [
-          {
-            actor: actor.did,
-            kid: `${actor.did}#${actor.deviceId}`,
-            sig: "cotest-device-proof",
-          },
-        ],
-      },
-    },
-  );
-  expect(response.status(), await response.text()).toBe(200);
-  return (await response.json()) as AppendResult;
-}
-
-interface SignalEvent {
-  type: string;
-  payload: Record<string, unknown>;
-}
-
-async function readSignals(
-  request: APIRequestContext,
-  token: string,
-  callId: string,
-): Promise<SignalEvent[]> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals?since=0&limit=100`,
-    { headers: authHeaders(token) },
-  );
-  expect(response.status()).toBe(200);
-  return (await response.json()).events as SignalEvent[];
+  return { alice, aliceToken, bob, bobToken, realmId } as {
+    alice: JointUser;
+    aliceToken: string;
+    bob: JointUser;
+    bobToken: string;
+    realmId: string;
+  };
 }

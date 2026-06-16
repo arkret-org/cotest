@@ -1,5 +1,6 @@
 mod agent_vectors;
 mod blind_payload;
+mod call_signal;
 mod call_state_media_lifecycle;
 mod capability;
 mod coauth_lifecycle;
@@ -56,6 +57,10 @@ pub use agent_vectors::{
 };
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
+};
+pub use call_signal::{
+    ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_proof_detached_jws_vector,
+    run_seq_monotonic_vector, run_signal_type_enum_vector,
 };
 pub use call_state_media_lifecycle::{
     ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, run_call_state_media_lifecycle_vector_suite,

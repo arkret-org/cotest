@@ -8,10 +8,8 @@
 //   - conformance/conformance-vectors.md §12.16-12.19
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
-  authHeaders,
   createRealmApi,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -22,11 +20,14 @@ import {
   type JointUser,
 } from "../../helpers/users";
 import {
+  CAP_CALL_JOIN,
   PARTICIPANT_BINDING_SCHEME,
   configureMediaService,
   decodeLiveKitToken,
   exchangeMediaToken,
   expectedLiveKitRoom,
+  grantCallCapability,
+  newCallId,
   type MediaFocusConfig,
 } from "../../helpers/webrtc";
 
@@ -148,25 +149,50 @@ test.describe("media token exchange", () => {
   );
 
   test(
-    "token exchange requires the actor to be a call participant (participant_identity_unrecognised)",
+    "token exchange requires ck.call.join: a realm member lacking it is refused, granting it admits them",
     async ({ request }) => {
-      const { aliceToken, callId } = await setupMediaCall(request);
-      const outsider = uniqueUser(`media-outsider-${Date.now()}`);
-      await ensureRegistered(request, outsider);
-      const outsiderToken = await issueDevSession(request, outsider);
-      await addRealmMemberApi(request, aliceToken, callRealm.id, outsider.did);
+      // WIRE NOTE (migration): the retired stack gated token exchange on a
+      // pre-existing signaling session + participant row. The canonical issuer
+      // (media-service-binding.md §6 / call-state.md §4.1) gates on realm
+      // membership + the `ck.call.join` capability + the durable ban set — NOT
+      // a prior participant row. So a member WITHOUT ck.call.join is refused
+      // (capability_denied), and granting it admits them.
+      const { alice, aliceToken, callId } = await setupMediaCall(request);
+      const member = uniqueUser(`media-member-${Date.now()}`);
+      await ensureRegistered(request, member);
+      const memberToken = await issueDevSession(request, member);
+      await addRealmMemberApi(request, aliceToken, callRealm.id, member.did);
 
-      const denied = await exchangeMediaToken(request, outsiderToken, {
+      // Member, but no ck.call.join → refused.
+      const denied = await exchangeMediaToken(request, memberToken, {
         realm_id: callRealm.id,
         call_id: callId,
-        actor_id: outsider.did,
-        device_id: outsider.deviceId,
+        actor_id: member.did,
+        device_id: member.deviceId,
         focus_id: LIVEKIT_FOCUS.focus_id,
       });
       expect(denied.status()).toBe(403);
-      expect(wireErrCode(await denied.json())).toBe(
-        "participant_identity_unrecognised",
+      expect(wireErrCode(await denied.json())).toBe("capability_denied");
+
+      // Grant ck.call.join → admitted (token issued). alice is the realm owner.
+      await grantCallCapability(
+        request,
+        aliceToken,
+        alice.did,
+        callRealm.id,
+        member.did,
+        CAP_CALL_JOIN,
       );
+      const admitted = await exchangeMediaToken(request, memberToken, {
+        realm_id: callRealm.id,
+        call_id: callId,
+        actor_id: member.did,
+        device_id: member.deviceId,
+        focus_id: LIVEKIT_FOCUS.focus_id,
+      });
+      expect(admitted.status(), await admitted.text()).toBe(200);
+      const body = await admitted.json();
+      expect(body.participant_binding.actor_id).toBe(member.did);
     },
   );
 });
@@ -194,14 +220,10 @@ async function setupMediaCall(
     [LIVEKIT_FOCUS],
   );
 
-  const session = await request.post(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
-    {
-      headers: authHeaders(aliceToken),
-      data: { realm_id: realmId, participants: [], ttl_ms: 120_000 },
-    },
-  );
-  expect(session.status(), await session.text()).toBe(200);
-  const callId = (await session.json()).session_id as string;
+  // Token exchange is decoupled from any prior signaling session
+  // (media-service-binding.md 落账时序): a brand-new call has no ck.call.state
+  // cell yet, and authorization is realm membership + ck.call.join. alice owns
+  // the realm (holds all caps), so no explicit grant is needed for her.
+  const callId = newCallId();
   return { alice, aliceToken, callId };
 }

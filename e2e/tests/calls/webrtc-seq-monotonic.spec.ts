@@ -1,89 +1,181 @@
-// WebRTC seq monotonicity guards.
+// WebRTC seq monotonicity over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-seq-monotonic.md
+// Spec refs:
+//   - crypto-media/webrtc-signaling.md §5.1 (seq monotonic per
+//     (realm_id, call_id, actor_id, device_id); receiver MUST reject rollback)
+//
+// WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
+// assigned + enforced `seq` server-side. The canonical
+// `POST /_cokret/self/ephemeral` relay is content-agnostic: it broadcasts the
+// verbatim signed envelope and the *receiver* enforces seq monotonicity (§5.1
+// assigns rollback rejection to the receiver, not the relay — see
+// `cokret_sdk::validate_signal_seq` / `CallSignalState`). So the relay delivers
+// every frame (including a rollback) verbatim with its `seq` intact, and the
+// receiver-side rollback rejection is pinned by the Rust conformance vector
+// `ck.vector.call_signal.seq_monotonic.v1` (src/conformance/call_signal.rs).
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
+import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 import {
-  authHeaders,
-  closeCallSession,
-  createCallSession,
-  demoAliceToken,
-  deviceProof,
-  expectCallSignalError,
-  getCallSignals,
+  buildCallSignalEnvelope,
+  newCallId,
   postCallSignal,
+  relayedCallSignals,
 } from "../../helpers/webrtc";
-import { solandBaseUrl } from "../../helpers/env";
 
-test.describe("ck.call.signal seq monotonicity", () => {
-  test("rollback from seq N to N-1 is rejected and preserves the frontier", async ({
+test.describe.configure({ mode: "serial" });
+
+test.describe("ck.call.signal seq monotonicity (spec wire)", () => {
+  test("relay preserves each frame's seq verbatim so the receiver can enforce monotonicity", async ({
     request,
   }) => {
-    const token = await demoAliceToken(request);
-    const sessionId = await createCallSession(request, token);
-    try {
-      await postCallSignal(request, token, sessionId, "offer", 1, {
-        sdp: "v=0",
-      });
-      await postCallSignal(request, token, sessionId, "answer", 2, {
-        sdp: "v=0",
-      });
+    const { alice, aliceToken, bobToken, realmId } = await setupSeqRealm(
+      request,
+      "seq-mono",
+    );
+    const callId = newCallId();
 
-      const rollback = await request.post(
-        `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
-        {
-          headers: authHeaders(token),
-          data: {
-            message_type: "ice",
-            seq: 1,
-            payload: { candidate: "rollback" },
-            proofs: [deviceProof()],
-          },
-        },
-      );
-      await expectCallSignalError(rollback, 400, "invalid_param");
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "invite",
+        seq: 1,
+        data: { sdp: "v=0" },
+      }),
+    );
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "candidate",
+        seq: 2,
+        data: { sdp: "v=0" },
+      }),
+    );
 
-      const events = await getCallSignals(request, token, sessionId);
-      expect(events.map((event) => event.seq)).toEqual([1, 2]);
-    } finally {
-      await closeCallSession(request, token, sessionId);
-    }
+    // A rollback frame (seq=1 after seq=2) is *relayed* verbatim — the receiver,
+    // not the relay, rejects it. Assert the relay accepted it AND that the
+    // verbatim seq=1 is what lands, so a receiver running validate_signal_seq
+    // observes the rollback and can drop it.
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "candidate",
+        seq: 1,
+        data: { candidate: "rollback" },
+      }),
+    );
+
+    const received = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    // All three frames are delivered verbatim; the receiver sees the seq
+    // sequence [1, 2, 1] and its monotonicity guard rejects the trailing 1.
+    const seqs = received.map(
+      (env) => (env.payload as Record<string, unknown>).seq as number,
+    );
+    expect(seqs).toEqual([1, 2, 1]);
+    expect(applyReceiverSeqGuard(seqs)).toEqual({
+      accepted: [1, 2],
+      rejected: [1],
+    });
   });
 
-  test("future seq gap is rejected and does not consume a cursor", async ({
+  test("monotonic ascending seq is fully accepted by the receiver guard", async ({
     request,
   }) => {
-    const token = await demoAliceToken(request);
-    const sessionId = await createCallSession(request, token);
-    try {
-      await postCallSignal(request, token, sessionId, "offer", 1, {
-        sdp: "v=0",
-      });
+    const { alice, aliceToken, bobToken, realmId } = await setupSeqRealm(
+      request,
+      "seq-asc",
+    );
+    const callId = newCallId();
 
-      const gap = await request.post(
-        `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(sessionId)}/signals`,
-        {
-          headers: authHeaders(token),
-          data: {
-            message_type: "answer",
-            seq: 99,
-            payload: { sdp: "gap" },
-            proofs: [deviceProof()],
-          },
-        },
-      );
-      await expectCallSignalError(gap, 400, "invalid_param");
-
-      const next = await postCallSignal(
+    for (let seq = 1; seq <= 4; seq += 1) {
+      await postCallSignal(
         request,
-        token,
-        sessionId,
-        "answer",
-        2,
-        { sdp: "v=0" },
+        aliceToken,
+        buildCallSignalEnvelope({
+          actorDid: alice.did,
+          deviceId: alice.deviceId,
+          realmId,
+          callId,
+          signalType: seq === 1 ? "invite" : "renegotiate",
+          seq,
+          data: { sdp: "v=0" },
+        }),
       );
-      expect(next.seq).toBe(2);
-    } finally {
-      await closeCallSession(request, token, sessionId);
     }
+
+    const received = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    const seqs = received.map(
+      (env) => (env.payload as Record<string, unknown>).seq as number,
+    );
+    expect(seqs).toEqual([1, 2, 3, 4]);
+    expect(applyReceiverSeqGuard(seqs)).toEqual({
+      accepted: [1, 2, 3, 4],
+      rejected: [],
+    });
   });
 });
+
+// Receiver-side seq monotonicity guard, mirroring
+// `cokret_sdk::validate_signal_seq`: `prev = None` accepts any `next`; a
+// `next <= prev` is a rollback the receiver MUST drop. This is the same rule
+// the Rust conformance vector pins; here it documents how a real receiver
+// processes the relayed (verbatim) stream.
+function applyReceiverSeqGuard(seqs: number[]): {
+  accepted: number[];
+  rejected: number[];
+} {
+  let prev: number | undefined;
+  const accepted: number[] = [];
+  const rejected: number[] = [];
+  for (const seq of seqs) {
+    if (prev === undefined || seq > prev) {
+      accepted.push(seq);
+      prev = seq;
+    } else {
+      rejected.push(seq);
+    }
+  }
+  return { accepted, rejected };
+}
+
+async function setupSeqRealm(request: APIRequestContext, label: string) {
+  const stamp = Date.now();
+  const alice = uniqueUser(`${label}-alice-${stamp}`);
+  const bob = uniqueUser(`${label}-bob-${stamp}`);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+  ]);
+  const aliceToken = await issueDevSession(request, alice);
+  const bobToken = await issueDevSession(request, bob);
+  const realmId = await createRealmApi(request, aliceToken, {
+    title: `${label} ${stamp}`,
+    public: true,
+  });
+  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  return { alice, aliceToken, bob, bobToken, realmId };
+}

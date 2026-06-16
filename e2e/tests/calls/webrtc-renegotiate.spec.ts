@@ -1,61 +1,152 @@
-// WebRTC renegotiation and device switch coverage.
+// WebRTC renegotiation + ICE restart over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-renegotiate.md
+// Spec refs:
+//   - crypto-media/webrtc-signaling.md §4.1 (ICE config endpoint + signature,
+//     domain label ck.media.ice_config.v1)
+//   - crypto-media/webrtc-signaling.md §6.1 (renegotiate{reason:ice_restart};
+//     a device switch rides a renegotiate frame, NOT the retired
+//     `device_change` signal type)
+//
+// Migrated off `/_soland/self/webrtc/sessions` + the non-spec `device_change`
+// signal type. The ICE config is fetched from `POST /_cokret/self/rtc/ice-config`
+// (no prior session needed); renegotiation rides `ck.call.signal{renegotiate}`.
 
-import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
+import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 import {
-  DEMO_ALICE_DEVICE_ID,
-  DEMO_ALICE_DID,
-  DEMO_REALM_ID,
-  authHeaders,
-  closeCallSession,
-  createCallSession,
-  demoAliceToken,
-  getCallSignals,
+  buildCallSignalEnvelope,
+  fetchIceConfig,
+  newCallId,
   postCallSignal,
+  relayedCallSignals,
 } from "../../helpers/webrtc";
 
-test.describe("ck.call.signal renegotiation", () => {
-  test("ICE config, device_change, and renegotiate stay in seq order", async ({
+test.describe.configure({ mode: "serial" });
+
+test.describe("ck.call.signal renegotiation + ICE restart", () => {
+  test("signed ICE config carries the ck.media.ice_config.v1 domain label", async ({
     request,
   }) => {
-    const token = await demoAliceToken(request);
-    const sessionId = await createCallSession(request, token);
-    try {
-      const ice = await request.post(
-        `${solandBaseUrl()}/_cokret/self/rtc/ice-config`,
-        {
-          headers: authHeaders(token),
-          data: {
-            realm_id: DEMO_REALM_ID,
-            call_id: sessionId,
-            actor_id: DEMO_ALICE_DID,
-            device_id: DEMO_ALICE_DEVICE_ID,
-          },
+    const { alice, aliceToken, realmId } = await setupRealm(
+      request,
+      "ice-config",
+    );
+    const callId = newCallId();
+
+    const ice = await fetchIceConfig(request, aliceToken, {
+      realm_id: realmId,
+      call_id: callId,
+      actor_id: alice.did,
+      device_id: alice.deviceId,
+      mode: "p2p",
+    });
+    expect(ice.status(), await ice.text()).toBe(200);
+    const body = await ice.json();
+
+    // §4.1 — the response echoes the request tuple (anti-cross-replay) and is
+    // signed by the media service with the distinct ICE-config domain label.
+    expect(body.realm_id).toBe(realmId);
+    expect(body.call_id).toBe(callId);
+    expect(body.actor_id).toBe(alice.did);
+    expect(body.device_id).toBe(alice.deviceId);
+    expect(Array.isArray(body.ice_servers)).toBe(true);
+    expect(body.ice_servers.length).toBeGreaterThan(0);
+    expect(typeof body.refresh_lead_seconds).toBe("number");
+    expect(typeof body.ttl_seconds).toBe("number");
+    // §4.1 — refresh_lead_seconds MUST be strictly less than ttl_seconds.
+    expect(body.refresh_lead_seconds).toBeLessThan(body.ttl_seconds);
+    expect(body.bucket_seconds).toBe(300);
+
+    const signature = body.signature as Record<string, unknown>;
+    expect(signature, "ICE config MUST be signed").toBeTruthy();
+    expect(signature.alg).toBe("EdDSA");
+    // The signing_input is prefixed by the spec domain label — distinct from
+    // ck.media.participant_binding.v1 (media-service-binding.md §3.1).
+    expect(signature.signature_input).toBe("ck.media.ice_config.v1");
+    expect(signature.signature_input).not.toBe(
+      "ck.media.participant_binding.v1",
+    );
+    expect(signature.payload_digest as string).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(typeof signature.sig).toBe("string");
+    expect((signature.sig as string).length).toBeGreaterThan(0);
+  });
+
+  test("ICE restart rides renegotiate{reason:ice_restart} in seq order (no device_change)", async ({
+    request,
+  }) => {
+    const { alice, aliceToken, bobToken, realmId } = await setupRealm(
+      request,
+      "ice-restart",
+    );
+    const callId = newCallId();
+
+    // Establish the call leg with an invite, then a renegotiate carrying the
+    // ICE restart. A device switch is expressed as a renegotiate frame; the
+    // retired `device_change` signal type is no longer in the spec enum.
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "invite",
+        seq: 1,
+        data: { mode: "p2p", offer: { type: "offer", sdp: "v=0\r\no=alice" } },
+      }),
+    );
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "renegotiate",
+        seq: 2,
+        data: {
+          reason: "ice_restart",
+          ice_restart: true,
+          offer: { type: "offer", sdp: "v=0\r\no=alice-restart" },
         },
-      );
-      expect(ice.status(), "signed ICE config").toBe(200);
-      const iceBody = await ice.json();
-      expect(iceBody.signature?.payload_digest).toMatch(/^sha256:/);
-      expect(Array.isArray(iceBody.ice_servers)).toBe(true);
+      }),
+    );
 
-      await postCallSignal(request, token, sessionId, "device_change", 1, {
-        old_device_id: DEMO_ALICE_DEVICE_ID,
-        new_device_id: DEMO_ALICE_DEVICE_ID,
-        reason: "camera-switch",
-      });
-      await postCallSignal(request, token, sessionId, "renegotiate", 2, {
-        ice_restart: true,
-        because: "device_change",
-      });
-
-      const tail = await getCallSignals(request, token, sessionId, 1);
-      expect(tail).toHaveLength(1);
-      expect(tail[0].seq).toBe(2);
-      expect(tail[0].type).toBe("renegotiate");
-      expect(tail[0].device_proof).toMatchObject({ actor: DEMO_ALICE_DID });
-    } finally {
-      await closeCallSession(request, token, sessionId);
-    }
+    const received = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    expect(received.map((e) => (e.payload as Record<string, unknown>).seq)).toEqual([
+      1, 2,
+    ]);
+    const last = received[1].payload as Record<string, unknown>;
+    expect(last.signal_type).toBe("renegotiate");
+    expect((last.data as Record<string, unknown>).reason).toBe("ice_restart");
+    // Proof intact on the relayed renegotiate frame.
+    const proof = received[1].proof as Record<string, unknown>;
+    expect(proof.kind).toBe("detached_jws");
+    expect(proof.verification_method).toBe(`${alice.did}#device`);
   });
 });
+
+async function setupRealm(request: APIRequestContext, label: string) {
+  const stamp = Date.now();
+  const alice = uniqueUser(`${label}-alice-${stamp}`);
+  const bob = uniqueUser(`${label}-bob-${stamp}`);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+  ]);
+  const aliceToken = await issueDevSession(request, alice);
+  const bobToken = await issueDevSession(request, bob);
+  const realmId = await createRealmApi(request, aliceToken, {
+    title: `${label} ${stamp}`,
+    public: true,
+  });
+  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  return { alice, aliceToken, bob, bobToken, realmId };
+}

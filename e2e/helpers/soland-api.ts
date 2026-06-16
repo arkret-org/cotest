@@ -1090,7 +1090,7 @@ function stripUndefined(value: unknown): unknown {
   return value;
 }
 
-function uuidV7(): string {
+export function uuidV7(): string {
   const time = Date.now().toString(16).padStart(12, "0").slice(-12);
   const random = randomBytes(9).toString("hex");
   const variant = (8 + (randomBytes(1)[0] & 0x03)).toString(16);

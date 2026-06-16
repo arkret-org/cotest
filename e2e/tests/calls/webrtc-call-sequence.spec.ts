@@ -1,16 +1,22 @@
-// 1:1 signaling sequence (invite/answer/candidate/hangup, monotonic seq) plus
-// multi-party focus_join migration.
+// 1:1 signaling sequence + multi-party focus_join over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-call-sequence.md
 // Spec refs:
 //   - crypto-media/webrtc-signaling.md §5-§6 (signaling envelope, 1:1 payloads)
-//   - crypto-media/call-state.md §4.2 (Call Morph transitions)
+//   - crypto-media/call-state.md §4.2 (durable ck.call.state lifecycle)
 //   - crypto-media/media-service-binding.md §5 (focus_join migration on upgrade)
+//
+// WIRE NOTE (migration): the retired `/_soland/self/webrtc/sessions` stack
+// derived `call_state` from the signal log. In the canonical model the
+// `POST /_cokret/self/ephemeral` relay is content-agnostic (it broadcasts the
+// verbatim signed envelope), and the call lifecycle lives in the durable
+// `ck.call.state` cell driven by `ck.call.state` events (call-state.md §4.2).
+// This spec therefore asserts (a) the signaling stream is relayed in seq order
+// with senders attributed, and (b) the durable lifecycle advances via
+// ck.call.state — the two planes the spec actually defines.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
-  authHeaders,
   createRealmApi,
 } from "../../helpers/soland-api";
 import {
@@ -19,132 +25,226 @@ import {
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
+import {
+  CAP_CALL_SIGNAL_SEND,
+  buildCallSignalEnvelope,
+  grantCallCapability,
+  newCallId,
+  postCallSignal,
+  relayedCallSignals,
+  seedCallState,
+} from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("1:1 + multi-party signaling sequence", () => {
-  test(
-    "invite -> answer -> candidate -> hangup keeps a strictly monotonic seq and drives Call Morph",
-    async ({ request }) => {
-      const { alice, aliceToken, bob, bobToken, realmId } =
-        await setupCallRealm(request, "seq-1to1");
-      const callId = await createSession(request, aliceToken, realmId, [
-        bob.did,
-      ]);
+test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
+  test("invite -> answer -> candidate -> hangup relays in monotonic seq order and durable ck.call.state advances", async ({
+    request,
+  }) => {
+    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
+      request,
+      "seq-1to1",
+    );
+    // bob is a non-owner member; grant him ck.call.signal.send so the relay
+    // accepts his `answer` (owner alice holds it by default).
+    await grantCallCapability(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      bob.did,
+      CAP_CALL_SIGNAL_SEND,
+    );
+    const callId = newCallId();
 
-      const invite = await appendSignal(
+    // Signaling plane — each frame relayed verbatim.
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "invite",
+        seq: 1,
+        data: { mode: "p2p", offer: { type: "offer", sdp: "v=0\r\no=alice" } },
+      }),
+    );
+    await postCallSignal(
+      request,
+      bobToken,
+      buildCallSignalEnvelope({
+        actorDid: bob.did,
+        deviceId: bob.deviceId,
+        realmId,
+        callId,
+        signalType: "answer",
+        seq: 1,
+        data: { answer: { type: "answer", sdp: "v=0\r\no=bob" } },
+      }),
+    );
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "candidate",
+        seq: 2,
+        data: {
+          candidates: [
+            { candidate: "candidate:1 1 UDP 2130706431 10.0.0.1 5000 typ host" },
+          ],
+        },
+      }),
+    );
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
+        callId,
+        signalType: "hangup",
+        seq: 3,
+        data: { reason: "user_hangup" },
+      }),
+    );
+
+    // bob's relayed view: per-sender seq is monotonic, senders attributed,
+    // signal types canonical.
+    const bobView = (
+      await relayedCallSignals(request, bobToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    const byType = (t: string) =>
+      bobView.filter(
+        (e) => (e.payload as Record<string, unknown>).signal_type === t,
+      );
+    expect(byType("invite").length).toBe(1);
+    expect(byType("answer").length).toBe(1);
+    expect(byType("candidate").length).toBe(1);
+    expect(byType("hangup").length).toBe(1);
+    // Sender attribution survives the relay.
+    expect(byType("invite")[0].actor_id).toBe(alice.did);
+    expect(byType("answer")[0].actor_id).toBe(bob.did);
+    // Alice's own frames are seq-monotonic per sender (1=invite, 2=candidate,
+    // 3=hangup); bob's answer is seq 1 in his own (actor,device) lane.
+    const aliceSeqs = bobView
+      .filter((e) => e.actor_id === alice.did)
+      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+    expect(aliceSeqs).toEqual([1, 2, 3]);
+
+    // Durable lifecycle plane — ck.call.state advances connecting -> active ->
+    // ended (call-state.md §4.2). The owner writes the durable cell; we drive
+    // it through the legal FSM transitions.
+    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+      state: "connecting",
+      participants: [{ actor_id: alice.did, device_id: alice.deviceId }],
+    });
+    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+      state: "active",
+    });
+    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+      state: "ended",
+    });
+  });
+
+  test("multi-party focus_join: three participants relay onto a shared focus in seq order", async ({
+    request,
+  }) => {
+    const { alice, aliceToken, bob, bobToken, realmId } = await setupCallRealm(
+      request,
+      "seq-focus",
+    );
+    const carol = uniqueUser(`seq-focus-carol-${Date.now()}`);
+    await ensureRegistered(request, carol);
+    const carolToken = await issueDevSession(request, carol);
+    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+    // Non-owner members need send capability.
+    for (const member of [bob.did, carol.did]) {
+      await grantCallCapability(
         request,
         aliceToken,
-        callId,
-        alice,
-        "invite",
-        { sdp: "v=0\r\no=alice", target: bob.did },
+        alice.did,
+        realmId,
+        member,
+        CAP_CALL_SIGNAL_SEND,
       );
-      expect(invite.seq).toBe(1);
-      expect(invite.call_state).toBe("connecting");
+    }
 
-      const answer = await appendSignal(request, bobToken, callId, bob, "answer", {
-        sdp: "v=0\r\no=bob",
-        target: alice.did,
-      });
-      expect(answer.seq).toBe(2);
-      expect(answer.call_state).toBe("active");
+    const callId = newCallId();
+    const focusId = "ck:focus:livekit-lhr";
 
-      const candidate = await appendSignal(
-        request,
-        aliceToken,
+    await postCallSignal(
+      request,
+      aliceToken,
+      buildCallSignalEnvelope({
+        actorDid: alice.did,
+        deviceId: alice.deviceId,
+        realmId,
         callId,
-        alice,
-        "candidate",
-        { candidate: "candidate:1 1 UDP 2130706431 10.0.0.1 5000 typ host" },
-      );
-      expect(candidate.seq).toBe(3);
-      // Ephemeral status signals do not regress the lifecycle.
-      expect(candidate.call_state).toBe("active");
-
-      const hangup = await appendSignal(
-        request,
-        aliceToken,
+        signalType: "focus_join",
+        seq: 1,
+        data: { focus_id: focusId, foci_preferred: [focusId] },
+      }),
+    );
+    await postCallSignal(
+      request,
+      bobToken,
+      buildCallSignalEnvelope({
+        actorDid: bob.did,
+        deviceId: bob.deviceId,
+        realmId,
         callId,
-        alice,
-        "hangup",
-        { reason: "user_hangup" },
-      );
-      expect(hangup.seq).toBe(4);
-      expect(hangup.call_state).toBe("ended");
-
-      // Full log read-back: seq is dense + monotonic, senders attributed.
-      const events = await readSignals(request, bobToken, callId);
-      expect(events.map((event) => event.seq)).toEqual([1, 2, 3, 4]);
-      expect(events.map((event) => event.type)).toEqual([
-        "invite",
-        "answer",
-        "candidate",
-        "hangup",
-      ]);
-      expect(events[0].sender).toBe(alice.did);
-      expect(events[1].sender).toBe(bob.did);
-    },
-  );
-
-  test(
-    "multi-party focus_join: three participants migrate onto a shared focus in seq order",
-    async ({ request }) => {
-      const { alice, aliceToken, bob, bobToken, realmId } =
-        await setupCallRealm(request, "seq-focus");
-      const carol = uniqueUser(`seq-focus-carol-${Date.now()}`);
-      await ensureRegistered(request, carol);
-      const carolToken = await issueDevSession(request, carol);
-      await addRealmMemberApi(request, aliceToken, realmId, carol.did);
-
-      const callId = await createSession(request, aliceToken, realmId, [
-        bob.did,
-        carol.did,
-      ]);
-      const focusId = "ck:focus:livekit-lhr";
-
-      const aliceJoin = await appendSignal(
-        request,
-        aliceToken,
+        signalType: "focus_join",
+        seq: 1,
+        data: { focus_id: focusId },
+      }),
+    );
+    await postCallSignal(
+      request,
+      carolToken,
+      buildCallSignalEnvelope({
+        actorDid: carol.did,
+        deviceId: carol.deviceId,
+        realmId,
         callId,
-        alice,
-        "focus_join",
-        { focus_id: focusId, foci_preferred: [focusId] },
-      );
-      expect(aliceJoin.seq).toBe(1);
+        signalType: "focus_join",
+        seq: 1,
+        data: { focus_id: focusId },
+      }),
+    );
 
-      const bobJoin = await appendSignal(
-        request,
-        bobToken,
-        callId,
-        bob,
-        "focus_join",
-        { focus_id: focusId },
-      );
-      expect(bobJoin.seq).toBe(2);
-
-      const carolJoin = await appendSignal(
-        request,
-        carolToken,
-        callId,
-        carol,
-        "focus_join",
-        { focus_id: focusId },
-      );
-      expect(carolJoin.seq).toBe(3);
-
-      const events = await readSignals(request, aliceToken, callId);
-      const joiners = events
-        .filter((event) => event.type === "focus_join")
-        .map((event) => event.sender);
-      expect(joiners).toEqual([alice.did, bob.did, carol.did]);
-      for (const event of events) {
-        expect((event.payload as Record<string, unknown>).focus_id).toBe(
-          focusId,
-        );
-      }
-    },
-  );
+    const aliceView = (
+      await relayedCallSignals(request, aliceToken, realmId)
+    ).filter(
+      (env) =>
+        (env.payload as Record<string, unknown>)?.call_id === callId &&
+        (env.payload as Record<string, unknown>)?.signal_type === "focus_join",
+    );
+    // Alice (sender) does not self-echo; she sees bob + carol joining the same
+    // focus.
+    const joiners = aliceView.map((e) => e.actor_id);
+    expect(joiners).toEqual(
+      expect.arrayContaining([bob.did, carol.did]),
+    );
+    expect(joiners).not.toContain(alice.did);
+    for (const env of aliceView) {
+      expect(
+        (env.payload as Record<string, unknown>).signal_type,
+      ).toBe("focus_join");
+      expect(
+        ((env.payload as Record<string, unknown>).data as Record<string, unknown>)
+          .focus_id,
+      ).toBe(focusId);
+    }
+  });
 });
 
 async function setupCallRealm(request: APIRequestContext, label: string) {
@@ -162,64 +262,11 @@ async function setupCallRealm(request: APIRequestContext, label: string) {
     public: true,
   });
   await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  return { alice, aliceToken, bob, bobToken, realmId };
-}
-
-async function createSession(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  participants: string[],
-): Promise<string> {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions`,
-    {
-      headers: authHeaders(token),
-      data: { realm_id: realmId, participants, ttl_ms: 120_000 },
-    },
-  );
-  expect(response.status(), await response.text()).toBe(200);
-  return (await response.json()).session_id as string;
-}
-
-async function appendSignal(
-  request: APIRequestContext,
-  token: string,
-  callId: string,
-  actor: JointUser,
-  messageType: string,
-  payload: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals`,
-    {
-      headers: authHeaders(token),
-      data: {
-        message_type: messageType,
-        payload,
-        proofs: [
-          {
-            actor: actor.did,
-            kid: `${actor.did}#${actor.deviceId}`,
-            sig: "cotest-device-proof",
-          },
-        ],
-      },
-    },
-  );
-  expect(response.status(), `append ${messageType}`).toBe(200);
-  return (await response.json()) as Record<string, unknown>;
-}
-
-async function readSignals(
-  request: APIRequestContext,
-  token: string,
-  callId: string,
-): Promise<Array<Record<string, unknown>>> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_soland/self/webrtc/sessions/${encodeURIComponent(callId)}/signals?since=0&limit=100`,
-    { headers: authHeaders(token) },
-  );
-  expect(response.status()).toBe(200);
-  return (await response.json()).events as Array<Record<string, unknown>>;
+  return { alice, aliceToken, bob, bobToken, realmId } as {
+    alice: JointUser;
+    aliceToken: string;
+    bob: JointUser;
+    bobToken: string;
+    realmId: string;
+  };
 }

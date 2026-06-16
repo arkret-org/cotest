@@ -22,6 +22,10 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use hkdf::Hkdf;
+use serde_json::json;
+use sha2::Sha256;
 use cokret_core::error::{
     ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED, ERROR_CODE_FOCUS_MISMATCH,
     ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT, ERROR_CODE_PARTICIPANT_BINDING_INVALID,
@@ -295,7 +299,179 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     if required.len() != 9 {
         bail!("participant_binding required tuple drifted (expected 9 fields)");
     }
+
+    // Real EdDSA verification (no longer a field-presence stub): reconstruct
+    // the §3 signing_input and verify `sig` against the issuer key.
+    run_participant_binding_eddsa_vector()
+}
+
+/// Canonical participant_binding signing_input
+/// (media-service-binding.md §3 / §3.1, byte-locked):
+///
+/// ```text
+/// signing_input = "ck.media.participant_binding.v1" || 0x00 ||
+///   canonical_json({ actor_id, call_id, device_id, expires_at,
+///                    focus_id, participant_identity, realm_id })
+/// ```
+///
+/// The label is the literal `scheme` value; the JCS object covers EXACTLY the
+/// 7 authoritative fields (the `scheme` / `issuer_kid` / `issued_at` metadata
+/// MUST NOT enter the input). Returns the bytes a verifier signs/checks.
+fn participant_binding_signing_input(
+    actor_id: &str,
+    call_id: &str,
+    device_id: &str,
+    expires_at: &str,
+    focus_id: &str,
+    participant_identity: &str,
+    realm_id: &str,
+) -> Result<Vec<u8>> {
+    let seven_tuple = json!({
+        "actor_id": actor_id,
+        "call_id": call_id,
+        "device_id": device_id,
+        "expires_at": expires_at,
+        "focus_id": focus_id,
+        "participant_identity": participant_identity,
+        "realm_id": realm_id,
+    });
+    let jcs = cokret_core::canonical::canonical_json_bytes(&seven_tuple)
+        .map_err(|err| anyhow!("participant_binding JCS encoding failed: {err}"))?;
+    let mut input = Vec::with_capacity(PARTICIPANT_BINDING_SCHEMA.len() + 1 + jcs.len());
+    input.extend_from_slice(PARTICIPANT_BINDING_SCHEMA.as_bytes());
+    input.push(0x00);
+    input.extend_from_slice(&jcs);
+    Ok(input)
+}
+
+/// VECT-MB-5b — REAL EdDSA golden vector for `participant_binding.sig` and the
+/// `service_signature.sig` (which reuses the SAME signing_input, §3.1).
+///
+/// Fixed issuer seed + fixed 7-tuple ⇒ a deterministic golden signature. The
+/// vector proves:
+///   1. a correctly signed binding verifies (the issuer key signs the §3
+///      signing_input, not the raw object);
+///   2. tampering with ANY one authoritative field breaks verification (the
+///      signature actually covers the field, it is not merely compared);
+///   3. the domain label is load-bearing — verifying the same `sig` under the
+///      ICE-config label (`ck.media.ice_config.v1`) MUST fail (cross-purpose
+///      signature confusion is rejected);
+///   4. `service_signature.sig` over the identical input verifies with the
+///      same issuer key.
+fn run_participant_binding_eddsa_vector() -> Result<()> {
+    // Fixed golden inputs.
+    const ISSUER_SEED: [u8; 32] = [
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+        0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0,
+        0xf0, 0x01,
+    ];
+    let actor_id = "did:web:alice.example.com";
+    let call_id = "ck:call:0196441c-0000-7000-8000-000000000000";
+    let device_id = "ck:device:01964137-0000-7000-8000-000000000000";
+    let expires_at = "2026-05-27T12:34:56Z";
+    let focus_id = "fra-1";
+    let participant_identity = "ck:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
+    let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
+
+    let signing_input = participant_binding_signing_input(
+        actor_id,
+        call_id,
+        device_id,
+        expires_at,
+        focus_id,
+        participant_identity,
+        realm_id,
+    )?;
+
+    let issuer = SigningKey::from_bytes(&ISSUER_SEED);
+    let verifying: VerifyingKey = issuer.verifying_key();
+    let sig = issuer.sign(&signing_input);
+
+    // Golden signature pin: the deterministic ed25519 signature over the fixed
+    // input MUST reproduce this byte string. A drift in canonical JSON, the
+    // label, the 0x00 separator, or the field set changes these bytes.
+    const EXPECTED_SIG_HEX: &str = "712fde8ef4096b79604248c4e8de80dad5a5cf9d89c0f2cb3f42942f61db98e757880d086fc678b1377f47c700bc9b06b4ee7b68c7db747aaf7ac20d2e7d6e04";
+    let actual_sig_hex = hex_lower(&sig.to_bytes());
+    if actual_sig_hex != EXPECTED_SIG_HEX {
+        bail!(
+            "participant_binding golden signature drifted:\n  expected {EXPECTED_SIG_HEX}\n  actual   {actual_sig_hex}\n(signing_input / label / JCS changed)"
+        );
+    }
+
+    // 1. The honest signature verifies.
+    verifying
+        .verify(&signing_input, &sig)
+        .map_err(|err| anyhow!("honest participant_binding sig must verify: {err}"))?;
+
+    // 2. Tampering each authoritative field breaks verification.
+    let tampers: [(&str, &str); 7] = [
+        (actor_id, "did:web:eve.example.com"),
+        (call_id, "ck:call:0196441c-0000-7000-8000-00000000dead"),
+        (device_id, "ck:device:01964137-0000-7000-8000-00000000dead"),
+        (expires_at, "2099-01-01T00:00:00Z"),
+        (focus_id, "fra-2"),
+        (participant_identity, "ck:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff"),
+        (realm_id, "ck:realm:0196419b-0000-7000-8000-00000000dead"),
+    ];
+    for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
+        let tampered = participant_binding_signing_input(
+            if idx == 0 { replacement } else { actor_id },
+            if idx == 1 { replacement } else { call_id },
+            if idx == 2 { replacement } else { device_id },
+            if idx == 3 { replacement } else { expires_at },
+            if idx == 4 { replacement } else { focus_id },
+            if idx == 5 { replacement } else { participant_identity },
+            if idx == 6 { replacement } else { realm_id },
+        )?;
+        if verifying.verify(&tampered, &sig).is_ok() {
+            bail!(
+                "tampered participant_binding field #{idx} verified against the original sig — \
+                 the signature does not actually cover that field ({ERROR_CODE_PARTICIPANT_BINDING_INVALID})"
+            );
+        }
+    }
+
+    // 3. Domain-label separation: the same sig under the ICE-config label MUST
+    //    NOT verify (cross-purpose confusion is rejected).
+    const ICE_CONFIG_LABEL: &str = "ck.media.ice_config.v1";
+    let mut cross_input = Vec::new();
+    cross_input.extend_from_slice(ICE_CONFIG_LABEL.as_bytes());
+    cross_input.push(0x00);
+    cross_input.extend_from_slice(
+        &cokret_core::canonical::canonical_json_bytes(&json!({
+            "actor_id": actor_id, "call_id": call_id, "device_id": device_id,
+            "expires_at": expires_at, "focus_id": focus_id,
+            "participant_identity": participant_identity, "realm_id": realm_id,
+        }))
+        .map_err(|err| anyhow!("cross-label JCS failed: {err}"))?,
+    );
+    if verifying.verify(&cross_input, &sig).is_ok() {
+        bail!(
+            "participant_binding sig verified under the ICE-config domain label — \
+             domain separation is broken"
+        );
+    }
+
+    // 4. service_signature reuses the identical signing_input (§3.1) and
+    //    verifies with the same issuer key.
+    let service_sig = issuer.sign(&signing_input);
+    verifying
+        .verify(&signing_input, &service_sig)
+        .map_err(|err| anyhow!("service_signature over identical input must verify: {err}"))?;
+    if hex_lower(&service_sig.to_bytes()) != EXPECTED_SIG_HEX {
+        bail!("service_signature over the same input must reproduce the golden sig (deterministic ed25519)");
+    }
+
     Ok(())
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(out, "{b:02x}");
+    }
+    out
 }
 
 // ─── VECT-MB-6 — unknown_type_fail_closed ──────────────────────────────────
@@ -348,7 +524,144 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
             bail!("e2ee key source `{bad}` leaked past fail-closed gate");
         }
     }
+
+    // Real SFrame frame-key derivation (no longer a `label.len()==19` literal):
+    // exercise the actual exporter-style KDF over the byte-correct label +
+    // canonical Context.
+    run_sframe_frame_key_derivation_vector()
+}
+
+/// VECT-MB-7b — REAL SFrame frame-key derivation
+/// (media-service-binding.md §8.1, byte-locked label + canonical Context).
+///
+/// The spec derives the 32-byte SFrame frame key as
+/// `MLS-Exporter(label="ck-rtc-frame-key/v1", Context, 32)` where
+/// `Context = canonical_json({realm_id, call_id, focus_id, epoch_id,
+/// participant_identity, device_id})`. A live MLS group / RFC 9420 exporter is
+/// NOT available under cotest's pure-vector slice, so this vector pins the two
+/// halves cotest CAN verify cryptographically:
+///   1. the Context is the byte-correct canonical JSON of the EXACT 6-tuple
+///      (an empty / epoch-only / missing-sender Context MUST fail closed);
+///   2. running a real RFC-5869 HKDF over a fixed exporter secret with the
+///      byte-correct `label || 0x00 || Context` info yields a deterministic
+///      32-byte key (golden vector) — proving the derivation is a genuine KDF
+///      over the right inputs, not a length check.
+///
+/// LIVE RESIDUAL: substituting cotest's fixed exporter secret for a real MLS
+/// group's exporter secret (RFC 9420 §8) requires a live MLS group; that is the
+/// activated-call residual deferred to the live round.
+fn run_sframe_frame_key_derivation_vector() -> Result<()> {
+    const FRAME_KEY_LABEL: &str = "ck-rtc-frame-key/v1";
+
+    // The canonical Context MUST be exactly this 6-tuple.
+    let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
+    let call_id = "ck:call:0196441c-0000-7000-8000-000000000000";
+    let focus_id = "fra-1";
+    let epoch_id = "ck:mls_epoch:7";
+    let participant_identity = "ck:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
+    let device_id = "ck:device:01964137-0000-7000-8000-000000000000";
+
+    let context = sframe_context(
+        realm_id,
+        call_id,
+        focus_id,
+        epoch_id,
+        participant_identity,
+        device_id,
+    )?;
+
+    // Context MUST bind all sender fields. An empty / epoch-only Context fails
+    // closed (e2ee_key_source_unauthorised). Model the gate: a Context missing
+    // any of the 6 fields is rejected.
+    let context_value: serde_json::Value = serde_json::from_slice(&context)
+        .map_err(|err| anyhow!("Context is not valid JSON: {err}"))?;
+    for field in [
+        "realm_id",
+        "call_id",
+        "focus_id",
+        "epoch_id",
+        "participant_identity",
+        "device_id",
+    ] {
+        if context_value.get(field).and_then(|v| v.as_str()).is_none() {
+            bail!(
+                "SFrame Context MUST bind `{field}`; an epoch-only / missing-sender Context \
+                 fails closed ({ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED})"
+            );
+        }
+    }
+
+    // Fixed exporter secret stands in for the MLS group's exporter secret. The
+    // info string is `label || 0x00 || Context` — the byte-correct domain-
+    // separated input.
+    const EXPORTER_SECRET: [u8; 32] = [0x42u8; 32];
+    let mut info = Vec::with_capacity(FRAME_KEY_LABEL.len() + 1 + context.len());
+    info.extend_from_slice(FRAME_KEY_LABEL.as_bytes());
+    info.push(0x00);
+    info.extend_from_slice(&context);
+
+    let hk = Hkdf::<Sha256>::new(None, &EXPORTER_SECRET);
+    let mut frame_key = [0u8; 32];
+    hk.expand(&info, &mut frame_key)
+        .map_err(|err| anyhow!("HKDF expand failed: {err}"))?;
+
+    // Golden key pin: the deterministic 32-byte output over the fixed secret +
+    // byte-correct label + canonical Context. A drift in label, separator, or
+    // Context JCS changes these bytes.
+    const EXPECTED_KEY_HEX: &str =
+        "d63b8770ce17964c8b6b68f4042547fa4ca8adc25aa1376c3065cf6003d4a690";
+    let actual_key_hex = hex_lower(&frame_key);
+    if actual_key_hex != EXPECTED_KEY_HEX {
+        bail!(
+            "SFrame frame-key golden vector drifted:\n  expected {EXPECTED_KEY_HEX}\n  actual   {actual_key_hex}\n(label / 0x00 / Context JCS changed)"
+        );
+    }
+
+    // A different Context (e.g. another device) MUST derive a different key —
+    // the key is sender-bound, not call-wide.
+    let other_context = sframe_context(
+        realm_id,
+        call_id,
+        focus_id,
+        epoch_id,
+        participant_identity,
+        "ck:device:01964137-0000-7000-8000-0000000000ff",
+    )?;
+    let mut other_info = Vec::new();
+    other_info.extend_from_slice(FRAME_KEY_LABEL.as_bytes());
+    other_info.push(0x00);
+    other_info.extend_from_slice(&other_context);
+    let mut other_key = [0u8; 32];
+    Hkdf::<Sha256>::new(None, &EXPORTER_SECRET)
+        .expand(&other_info, &mut other_key)
+        .map_err(|err| anyhow!("HKDF expand (other) failed: {err}"))?;
+    if other_key == frame_key {
+        bail!("a different sender device produced the same frame key — Context is not bound");
+    }
+
     Ok(())
+}
+
+/// Canonical SFrame `Context` bytes (media-service-binding.md §8.1): the JCS of
+/// exactly `{realm_id, call_id, focus_id, epoch_id, participant_identity,
+/// device_id}`.
+fn sframe_context(
+    realm_id: &str,
+    call_id: &str,
+    focus_id: &str,
+    epoch_id: &str,
+    participant_identity: &str,
+    device_id: &str,
+) -> Result<Vec<u8>> {
+    cokret_core::canonical::canonical_json_bytes(&json!({
+        "realm_id": realm_id,
+        "call_id": call_id,
+        "focus_id": focus_id,
+        "epoch_id": epoch_id,
+        "participant_identity": participant_identity,
+        "device_id": device_id,
+    }))
+    .map_err(|err| anyhow!("SFrame Context JCS encoding failed: {err}"))
 }
 
 // ─── VECT-MB-8 — participant_identity_unrecognised ─────────────────────────
