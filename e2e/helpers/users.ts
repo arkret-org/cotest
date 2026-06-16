@@ -12,6 +12,7 @@ import {
 import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
 import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
+import { dpopDeviceKeyFromSeedB64url, selfPathGrantHeaders } from "./session-grant-dpop";
 
 export type JointUser = {
   name: string;
@@ -28,12 +29,39 @@ export type UserSession = {
   consoleLines: string[];
   networkLines: string[];
   serverUrl: string;
+  /// The bearer presented on `/_cokret/self/*`. Under the ②(A+②) model this is
+  /// the `ck.session.grant` JWT; a request to a self-path also requires the DPoP
+  /// + holder-proof material in `grant` below.
   sessionToken: string;
+  /// Real grant + DPoP material for direct (non-browser) self-path API calls.
+  /// Present when the session was opened with an injected grant.
+  grant?: SessionGrantMaterial;
+};
+
+export type SessionGrantMaterial = {
+  grantJwt: string;
+  grantId: string;
+  audience: string;
+  /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
+  /// bound to (`cnf.jkt`).
+  dpopSeedB64url: string;
 };
 
 export type OpenUserOpts = {
   sessionToken?: string;
   server?: SolandKey;
+  /// Real `ck.session.grant` JWT to inject as yougen's bearer (②(A+②) model).
+  /// When set together with `dpopSeedB64url`, yougen's dev-only boot injection
+  /// rehydrates the grant + DPoP device key instead of relying on dev-login.
+  grantJwt?: string;
+  /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
+  /// bound to (its thumbprint == the grant's `cnf.jkt`).
+  dpopSeedB64url?: string;
+  /// coauth-assigned grant id (DB row id), required for yougen to mint the
+  /// session-grant introspection holder proof soland forwards to coauth.
+  grantId?: string;
+  /// Audience the grant is bound to (the soland service DID).
+  grantAudience?: string;
 };
 
 export type CreateRealmOpts = {
@@ -229,18 +257,40 @@ export class JointUserPage {
     return match![0];
   }
 
+  // Build the Authorization + DPoP + holder-proof headers for a direct
+  // (non-browser) `/_cokret/self/*` call. Under the ②(A+②) model the bearer is
+  // the ck.session.grant and soland requires a per-request DPoP proof plus the
+  // session-grant introspection holder proof; a grant presented bearer-only is
+  // rejected. When the session carries no grant material (legacy bearer), fall
+  // back to bearer-only so dev-bearer call sites keep working.
+  private selfPathHeaders(method: string, url: string): Record<string, string> {
+    const grant = this.session.grant;
+    if (grant) {
+      return selfPathGrantHeaders({
+        deviceKey: dpopDeviceKeyFromSeedB64url(grant.dpopSeedB64url),
+        grantId: grant.grantId,
+        grantJwt: grant.grantJwt,
+        audience: grant.audience,
+        method,
+        url,
+      });
+    }
+    const token = this.session.sessionToken;
+    if (!token) {
+      throw new Error("selfPathHeaders: no grant material or bearer captured on session");
+    }
+    return { authorization: `Bearer ${token}` };
+  }
+
   // Accept a pending invite for this user. Yougen's realm-admin invite list
   // is session-local, so a fresh-context invitee can't see seed-member invites
   // via the UI. The old REST mutation endpoint was removed; acceptance now
   // strands through the canonical event path as an invite -> join member state.
   async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
-    const token = this.session.sessionToken;
-    if (!token) {
-      throw new Error("acceptInvite: no session_token captured on session");
-    }
-    const listResp = await this.page.request.get(`${serverUrl}/_cokret/self/authz/invites`, {
-      headers: { authorization: `Bearer ${token}` },
+    const listUrl = `${serverUrl}/_cokret/self/authz/invites`;
+    const listResp = await this.page.request.get(listUrl, {
+      headers: this.selfPathHeaders("GET", listUrl),
     });
     if (!listResp.ok()) {
       throw new Error(
@@ -264,10 +314,6 @@ export class JointUserPage {
 
   async acceptInviteById(realmId: string, inviteId: string) {
     const serverUrl = this.session.serverUrl;
-    const token = this.session.sessionToken;
-    if (!token) {
-      throw new Error("acceptInviteById: no session_token captured on session");
-    }
     const envelope = signedEventEnvelope({
       actorDid: this.user.did,
       realmId,
@@ -280,8 +326,9 @@ export class JointUserPage {
         delivery_status: "unroutable",
       },
     });
-    const acceptResp = await this.page.request.post(`${serverUrl}/_cokret/self/events`, {
-      headers: { authorization: `Bearer ${token}` },
+    const eventsUrl = `${serverUrl}/_cokret/self/events`;
+    const acceptResp = await this.page.request.post(eventsUrl, {
+      headers: this.selfPathHeaders("POST", eventsUrl),
       data: envelope,
     });
     if (![200, 201].includes(acceptResp.status())) {
@@ -363,15 +410,20 @@ export async function ensureRegistered(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  const response = await request.post(`${solandBaseUrl(opts.server)}/_soland/self/account/register`, {
+  // Spec-canonical registration binding (`ck.gate.account.command.register`):
+  // `POST /_cokret/gate/account/register` with `AccountRegisterRequestBody
+  // {principal_id, display_name?, device_id?}`. The bare `handle` field is no
+  // longer accepted (the first handle arrives via a signed handle claim,
+  // identity-handles.md); the account gets a synthetic localpart derived from
+  // the DID. Success is 200 (200|409 here for idempotent setup).
+  const response = await request.post(`${solandBaseUrl(opts.server)}/_cokret/gate/account/register`, {
     data: {
-      did: user.did,
-      handle: user.handle,
+      principal_id: user.did,
       display_name: user.displayName,
       device_id: user.deviceId,
     },
   });
-  expect([201, 409]).toContain(response.status());
+  expect([200, 409]).toContain(response.status());
 }
 
 export async function issueDevSession(
@@ -411,15 +463,45 @@ export async function openUser(
       content: "omit",
     },
   });
+  const sessionInjection =
+    opts.grantJwt && opts.dpopSeedB64url
+      ? {
+          grant_jwt: opts.grantJwt,
+          dpop_seed_b64url: opts.dpopSeedB64url,
+          grant_id: opts.grantId ?? "",
+          audience: opts.grantAudience ?? "",
+        }
+      : undefined;
   await context.addInitScript(
-    (config) => {
-      window.localStorage.setItem("yougen.config.v1", JSON.stringify(config));
+    (init) => {
+      window.localStorage.setItem("yougen.config.v1", JSON.stringify(init.config));
+      // The harness injects sessions into localStorage; yougen's wasm build is
+      // IndexedDB-only for bearer/secrets by default (SubtleCrypto, non-
+      // extractable). Opt into the localStorage compatibility tier so the
+      // injected bearer/seed are accepted (test-only; production leaves this
+      // unset). See yougen secure_key_store WASM_ALLOW_LOCALSTORAGE_SECRETS_FLAG.
+      window.localStorage.setItem("yougen.security.allow_localstorage_secrets", "1");
+      // ②(A+②) real-grant injection: hand yougen's dev-only boot path the real
+      // ck.session.grant + the DPoP device seed it is bound to, so the wasm
+      // client rehydrates a genuine grant (coauth introspection passes, device
+      // enrollment runs) instead of a soland-only dev-login bearer. yougen reads
+      // this key only when allow_localstorage_secrets is on. See yougen
+      // app.rs inject_test_session_grant.
+      if (init.sessionInjection) {
+        window.localStorage.setItem(
+          "yougen.test.session_injection.v1",
+          JSON.stringify(init.sessionInjection),
+        );
+      }
     },
     {
-      server_url: serverUrl,
-      account_did: user.did,
-      device_id: user.deviceId,
-      session_token: sessionToken,
+      config: {
+        server_url: serverUrl,
+        account_did: user.did,
+        device_id: user.deviceId,
+        session_token: sessionToken,
+      },
+      sessionInjection,
     },
   );
   // Hide dioxus-cli's dev-mode rebuild toast (`#__dx-toast`). When dx serve's
@@ -507,7 +589,25 @@ export async function openUser(
         });
     }
   });
-  return { context, page, diagnosticsDir, consoleLines, networkLines, serverUrl, sessionToken };
+  const grant =
+    opts.grantJwt && opts.dpopSeedB64url
+      ? {
+          grantJwt: opts.grantJwt,
+          grantId: opts.grantId ?? "",
+          audience: opts.grantAudience ?? "",
+          dpopSeedB64url: opts.dpopSeedB64url,
+        }
+      : undefined;
+  return {
+    context,
+    page,
+    diagnosticsDir,
+    consoleLines,
+    networkLines,
+    serverUrl,
+    sessionToken,
+    grant,
+  };
 }
 
 export async function openUserPage(

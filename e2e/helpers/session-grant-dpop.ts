@@ -27,6 +27,8 @@
 
 import {
   createHash,
+  createPrivateKey,
+  createPublicKey,
   generateKeyPairSync,
   randomUUID,
   sign,
@@ -102,6 +104,19 @@ export function generateDpopDeviceKey(): DpopDeviceKey {
   };
 }
 
+/// Export an Ed25519 device key's private seed as base64url-no-pad of the 32
+/// raw seed bytes — the exact on-disk form yougen's `DpopDeviceKeyRecord`
+/// persists (`seed_b64`). The JWK `d` member is already base64url-no-pad of the
+/// 32-byte seed, so it is returned verbatim. Used by the joint fixture to inject
+/// the same key whose thumbprint the minted grant is bound to (`cnf.jkt`).
+export function dpopDeviceSeedB64url(key: DpopDeviceKey): string {
+  const jwk = key.privateKey.export({ format: "jwk" }) as { d?: string };
+  if (!jwk.d) {
+    throw new Error(`Ed25519 private JWK missing 'd' seed member: ${JSON.stringify(jwk)}`);
+  }
+  return jwk.d;
+}
+
 /// RFC 7638 JWK SHA-256 thumbprint for an Ed25519 OKP key. The canonical input
 /// serializes the required members `{crv, kty, x}` in lexicographic order with
 /// no whitespace, matching soland's `jwk_thumbprint_ed25519`.
@@ -153,6 +168,106 @@ export function mintDpopProof(args: {
 
 function b64urlJson(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
+
+/// `grant_jwt_hash` per coauth: `"sha256:<hex>"` of the grant JWT bytes
+/// (coauth: `session_grant.rs::session_grant_jwt_hash`).
+function grantJwtHash(grantJwt: string): string {
+  return `sha256:${createHash("sha256").update(grantJwt).digest("hex")}`;
+}
+
+/// The session-grant introspection holder proof soland forwards to coauth on a
+/// cache-miss `/_cokret/self/*` request. coauth verifies the JWS against the
+/// grant's `session_public_key` — which, for a debug-issued DPoP-bound grant,
+/// IS the DPoP device key — and checks `grant_id` / `grant_jwt_hash` /
+/// `audience` / `challenge` exactly (coauth:
+/// `session_grant.rs::verify_session_grant_introspection_proof`).
+///
+/// Returns the `{challenge, proofJwt}` pair carried in the
+/// `x-cokret-session-grant-challenge` / `x-cokret-session-grant-proof` headers.
+export function mintSessionGrantIntrospectionProof(args: {
+  deviceKey: DpopDeviceKey;
+  grantId: string;
+  grantJwt: string;
+  audience: string;
+}): { challenge: string; proofJwt: string } {
+  const challenge = `${Date.now()}-${args.grantId}`;
+  const now = Date.now();
+  const header = { typ: "JWT", alg: "EdDSA" };
+  const claims = {
+    type: "ck.session_grant.introspection_proof.v1",
+    grant_id: args.grantId,
+    grant_jwt_hash: grantJwtHash(args.grantJwt),
+    audience: args.audience,
+    challenge,
+    issued_at: new Date(now).toISOString(),
+    expires_at: new Date(now + 60_000).toISOString(),
+  };
+  const signingInput = `${b64urlJson(header)}.${b64urlJson(claims)}`;
+  const signature = sign(null, Buffer.from(signingInput, "utf8"), args.deviceKey.privateKey);
+  return { challenge, proofJwt: `${signingInput}.${b64urlNoPad(signature)}` };
+}
+
+/// Build the full header set for a real grant + DPoP request to a soland
+/// `/_cokret/self/*` (or `/root/`) endpoint: `Authorization: Bearer <grant>`, a
+/// request-bound `DPoP` proof, and the session-grant introspection holder proof
+/// headers. `deviceKey` MUST be the key the grant is bound to (`cnf.jkt`).
+export function selfPathGrantHeaders(args: {
+  deviceKey: DpopDeviceKey;
+  grantId: string;
+  grantJwt: string;
+  audience: string;
+  method: string;
+  url: string;
+}): Record<string, string> {
+  const dpop = mintDpopProof({
+    deviceKey: args.deviceKey,
+    method: args.method,
+    url: args.url,
+    grantJwt: args.grantJwt,
+  });
+  const holder = mintSessionGrantIntrospectionProof({
+    deviceKey: args.deviceKey,
+    grantId: args.grantId,
+    grantJwt: args.grantJwt,
+    audience: args.audience,
+  });
+  return {
+    authorization: `Bearer ${args.grantJwt}`,
+    dpop,
+    "x-cokret-session-grant-challenge": holder.challenge,
+    "x-cokret-session-grant-proof": holder.proofJwt,
+  };
+}
+
+/// Reconstruct a `DpopDeviceKey` from a base64url-no-pad 32-byte Ed25519 seed —
+/// the inverse of [`dpopDeviceSeedB64url`]. Used by session-bound helpers that
+/// persist only the seed (not the live `KeyObject`) and later need to mint a
+/// proof.
+export function dpopDeviceKeyFromSeedB64url(seedB64url: string): DpopDeviceKey {
+  const seed = Buffer.from(seedB64url, "base64url");
+  if (seed.length !== 32) {
+    throw new Error(`Ed25519 seed must be 32 bytes, got ${seed.length}`);
+  }
+  // Wrap the raw 32-byte seed in the fixed Ed25519 PKCS#8 DER prefix so Node can
+  // import it as a private KeyObject (RFC 8410 OneAsymmetricKey, OID 1.3.101.112).
+  const pkcs8 = Buffer.concat([
+    Buffer.from("302e020100300506032b657004220420", "hex"),
+    seed,
+  ]);
+  const privateKey = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
+  const publicKey = createPublicKey(privateKey);
+  const exported = publicKey.export({ format: "jwk" }) as { x?: string };
+  if (!exported.x) {
+    throw new Error("failed to derive Ed25519 public x from seed");
+  }
+  const publicJwk: Ed25519PublicJwk = { kty: "OKP", crv: "Ed25519", x: exported.x };
+  return {
+    privateKey,
+    publicKey,
+    publicJwk,
+    thumbprint: jwkThumbprintEd25519(publicJwk.x),
+  };
 }
 
 /// Request a DPoP-bound `ck.session.grant` from coauth's cotest debug seam.

@@ -72,6 +72,26 @@ export function coauthServiceDid(): string {
   return optionalEnv("COTEST_COAUTH_SERVICE_DID") ?? "did:web:coauth.joint-e2e.local";
 }
 
+// The OAuth `client_id` soland is configured to advertise in
+// `/_cokret/describe.auth_metadata.methods[].client_id` (soland config
+// `oidc_client_id`). The joint harness sets this to the coauth-seeded
+// "Yougen Dev" client ULID; tests assert describe surfaces it verbatim.
+export function coauthOidcClientId(): string | undefined {
+  return optionalEnv("COTEST_OIDC_CLIENT_ID");
+}
+
+// Pre-seeded password account usable to drive the *real* coauth browser
+// login + consent ceremony (oidc-login-flow.spec.ts). Unset on CI, so the
+// UI flow self-skips; set both to opt in locally against a stack whose coauth
+// already holds the account.
+export function realOidcLoginHandle(): string | undefined {
+  return optionalEnv("COTEST_OIDC_LOGIN_HANDLE");
+}
+
+export function realOidcLoginPassword(): string | undefined {
+  return optionalEnv("COTEST_OIDC_LOGIN_PASSWORD");
+}
+
 export function mockIdpBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_IDP_BASE_URL")?.replace(/\/$/, "");
 }

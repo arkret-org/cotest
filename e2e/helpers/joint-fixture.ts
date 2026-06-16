@@ -11,6 +11,7 @@ import {
 export type JointRealmFixture = {
   alice: JointUser;
   bob: JointUser;
+  /// Real `ck.session.grant` JWT (the bearer presented on `/_cokret/self/*`).
   aliceToken: string;
   bobToken: string;
   alicePage: JointUserPage;
@@ -31,6 +32,14 @@ export const test = base.extend<{ jointRealm: JointRealmFixture }>({
 
 export { expect } from "@playwright/test";
 
+// NOTE: this fixture authenticates via soland dev-login (a dev-mode bearer).
+// Migrating the joint browser fixture to a real ck.session.grant (so the full
+// coauth enrollment + recovery path is exercised) is a tracked follow-up: it
+// requires registering real coauth users (did:webvh) via coauth-register — the
+// coauth debug grant-mint seam rejects fabricated did:web actors. The grant
+// injection plumbing is already in place (openUserPage grantJwt/dpopSeedB64url
+// + yougen dev boot injection + run-joint-e2e COAUTH_ENABLE_TEST_ENDPOINTS); it
+// activates once this fixture passes real grant material.
 async function createJointTwoUserRealm(
   browser: Browser,
   request: APIRequestContext,
@@ -58,5 +67,13 @@ async function createJointTwoUserRealm(
     encryptionProfile: "none",
   });
 
-  return { alice, bob, aliceToken, bobToken, alicePage, bobPage, realmId };
+  return {
+    alice,
+    bob,
+    aliceToken,
+    bobToken,
+    alicePage,
+    bobPage,
+    realmId,
+  };
 }

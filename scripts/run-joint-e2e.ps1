@@ -49,6 +49,12 @@ param(
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
+    # OAuth `client_id` soland advertises in `/_cokret/describe.auth_metadata.methods[].client_id`
+    # (soland config `oidc_client_id`). MUST match a client registered at coauth; the joint
+    # coauth config (coauth/config.dev.yaml) seeds the "Yougen Dev" client under this ULID.
+    # Without it soland advertises no client_id and the browser OIDC bridge gets
+    # `could not find client` from coauth's /authorize. See cotest oidc-login-chain.spec.ts.
+    [string]$CoauthOAuthClientId = "01GFWR28C4KNE04WG3HKXB7C9R",
     [int]$StartupTimeoutSeconds = 240,
     [switch]$SkipNpmInstall,
     [switch]$SkipBrowserInstall,
@@ -1097,7 +1103,10 @@ try {
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
-        $CoauthCommand = "& {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
+        # so the joint harness can mint real DPoP-bound ck.session.grants instead
+        # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).
+        $CoauthCommand = "`$env:COAUTH_ENABLE_TEST_ENDPOINTS='1'; & {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
@@ -1167,14 +1176,16 @@ try {
             "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={2}; " +
             "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={3}; " +
             "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={4}; " +
-            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={5}; "
+            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={5}; " +
+            "`$env:SOLAND_OAUTH_CLIENT_ID={6}; "
         ) -f `
             (Quote-PsLiteral $coauthTrimmed),
             (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
             (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
             (Quote-PsLiteral "$coauthTrimmed/_cokret/gate/account/session-grants/introspect"),
             (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
-            (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer)
+            (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer),
+            (Quote-PsLiteral $CoauthOAuthClientId)
     }
 
     # CT-6: wire soland -> starid (DID resolver) + soland -> teabay
@@ -1392,9 +1403,14 @@ try {
     if ($CoauthBaseUrl) {
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
         $env:COTEST_COAUTH_SERVICE_DID = $CoauthServiceDid
+        # The OAuth client_id soland is configured to advertise (see
+        # $solandCoauthEnv / SOLAND_OAUTH_CLIENT_ID). Surfaced to e2e so
+        # oidc-login-chain.spec.ts can assert /_cokret/describe advertises it.
+        $env:COTEST_OIDC_CLIENT_ID = $CoauthOAuthClientId
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_DID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
     }
     if ($StaridBaseUrl) {
         $env:COTEST_STARID_BASE_URL = $StaridBaseUrl.TrimEnd("/")
