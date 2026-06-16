@@ -26,6 +26,7 @@ import {
   configureMediaService,
   decodeLiveKitToken,
   exchangeMediaToken,
+  expectedLiveKitRoom,
   type MediaFocusConfig,
 } from "../../helpers/webrtc";
 
@@ -109,9 +110,16 @@ test.describe("media token exchange", () => {
         (claims.exp as number) - (claims.iat as number),
       ).toBeLessThanOrEqual(600);
       const video = claims.video as Record<string, unknown>;
-      expect(video.room).toMatch(/^ck_call_/);
-      // LiveKit room name MUST NOT leak the raw call id.
+      const expectedRoom = expectedLiveKitRoom(
+        callRealm.id,
+        callId,
+        LIVEKIT_FOCUS.focus_id,
+      );
+      expect(video.room).toBe(expectedRoom);
+      // LiveKit room name MUST NOT leak raw protocol identifiers.
       expect(video.room).not.toContain(callId);
+      expect(video.room).not.toContain(callRealm.id);
+      expect(video.room).not.toContain(LIVEKIT_FOCUS.focus_id);
       expect(video.roomJoin).toBe(true);
       expect(video.canPublish).toBe(true);
       expect(video.canSubscribe).toBe(true);

@@ -3,6 +3,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { solandBaseUrl } from "./env";
 import {
   createRealmApi,
@@ -163,8 +164,8 @@ export function deviceProof() {
 // These back the `ck.realm.media_service` foci configuration and the
 // `POST /_cokret/self/rtc/token` media token exchange. The foci selection
 // follows the spec oldest-membership-wins rule (media-service-binding.md §5);
-// the issued LiveKit token is a `livekit.<payload_b64>.<sig_b64>` envelope so
-// the harness can decode the LiveKit `video` grant claims without a live SFU.
+// the issued LiveKit token is a standard 3-segment JWT so the harness can
+// decode the LiveKit `video` grant claims without a live SFU.
 
 export const PARTICIPANT_BINDING_SCHEME = "ck.media.participant_binding.v1";
 export const MEDIA_TOKEN_TTL_MAX_SECS = 600;
@@ -259,8 +260,22 @@ export async function exchangeMediaToken(
 }
 
 /**
- * Decode the `livekit.<payload_b64>.<sig_b64>` backend token and return its
- * claim object. The payload is canonical-JSON base64url (no padding).
+ * Derive the opaque backend room id specified by bindings/livekit.md.
+ */
+export function expectedLiveKitRoom(
+  realmId: string,
+  callId: string,
+  focusId: string,
+): string {
+  const digest = createHash("sha256")
+    .update(`${realmId}\0${callId}\0${focusId}`, "utf8")
+    .digest("hex");
+  return `ck_call_${digest.slice(0, 16)}`;
+}
+
+/**
+ * Decode the standard LiveKit JWT backend token and return its claim object.
+ * The payload is canonical-JSON base64url (no padding).
  */
 export function decodeLiveKitToken(
   backendToken: string,
