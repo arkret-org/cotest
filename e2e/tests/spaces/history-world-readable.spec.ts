@@ -8,7 +8,7 @@ import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { request as playwrightRequest } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { eventProof, singleDidAnchorer, wireErrCode } from "../../helpers/soland-api";
+import { eventProof, singleDidNotary, wireErrCode } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -175,9 +175,9 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       encryption_profile: "mls_rfc9420",
       security_class: "standard",
       federation_policy: "restricted",
-      anchor_profile: "single_did",
+      notary_profile: "single_did",
       digest_algorithm: "sha256",
-      anchorer: singleDidAnchorer(actorDid),
+      notary: singleDidNotary(actorDid),
       created_at: createdAt,
     },
   };

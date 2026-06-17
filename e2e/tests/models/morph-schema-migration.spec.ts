@@ -199,14 +199,14 @@ test.describe("morph schema migration @fully-implemented", () => {
     ).toBeDefined();
 
     // The profile commits the deployment to a) requiring ck.morph.schema_migrate
-    // event kind support, and b) gating it on the ck.morph.schema.migrate
+    // event kind support, and b) gating it on the ck.morph.schema_migrate
     // capability action. Both invariants are in additional_requirements +
     // required_event_kinds.
     expect(profileBlock!.required_event_kinds).toContain("ck.morph.schema_migrate");
 
     expect(profileBlock!.additional_requirements).toBeDefined();
     expect(profileBlock!.additional_requirements.capability_must).toMatch(
-      /cx\.morph\.schema\.migrate/,
+      /ck\.morph\.schema_migrate/,
     );
     expect(profileBlock!.additional_requirements.from_set_check_must).toMatch(
       /from_schema_refs/,

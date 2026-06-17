@@ -13,7 +13,18 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("handle management @fully-implemented", () => {
+// GAP-identity-handle-claim — demoted from @fully-implemented.
+// The self-service handle surface this suite exercises has been removed:
+//   - GET  /_soland/self/account/me            (account viewer moved to the
+//                                                spec /_cokret/self/account/viewer)
+//   - POST /_soland/self/account/handle         (claim/rename — removed)
+//   - POST /_soland/self/account/handle/transfer (transfer — removed)
+// The spec replacement is a *signed handle claim* (identity-handles.md §3.2.2),
+// surfaced via account viewer `primary_handle_claim`. soland's account_viewer
+// currently hardcodes `primary_handle_claim: None` (account.rs) and exposes no
+// bare `handle`, so there is no working backing path to assert against. Restore
+// to @fully-implemented once handle-claim issuance + viewer projection land.
+test.describe.fixme("handle management", () => {
   test("baseline: alice has the handle assigned at registration", async ({ request }) => {
     const alice = uniqueUser("s29-baseline");
     await ensureRegistered(request, alice);

@@ -55,7 +55,23 @@ function plusSeconds(deltaSec: number): string {
   return new Date(Date.now() + deltaSec * 1000).toISOString();
 }
 
-test.describe("capability chain @fully-implemented", () => {
+// GAP-authz-capability-rest-removed — demoted from @fully-implemented.
+// This suite drives a synchronous REST grant/revoke/audit API that has been
+// removed from soland:
+//   - POST   /_cokret/self/authz/grants            (grant create — removed)
+//   - DELETE /_cokret/self/authz/grants/{id}        (revoke + cascade — removed)
+//   - GET    /_soland/self/audit/events             (audit log — removed)
+// The spec replacement is event-minted capabilities: grants are a
+// `ck.capability.grant` event and revocations a `ck.capability.revoke` event
+// submitted to /_cokret/self/events, projected by the reducer
+// (soland reducer/apply_capability.rs); only authz/check + authz/effective-grants
+// remain as read endpoints. The event model has fundamentally different
+// semantics from this suite's assertions: no synchronous 412
+// capability_not_held / capability_over_expire at submit time, no
+// cascade_revoked response body, and no audit-events endpoint. Re-implementing
+// these against the event model + reducer-side validation is a rewrite, not an
+// endpoint swap. Restore to @fully-implemented once rebuilt on the event wire.
+test.describe.fixme("capability chain", () => {
   test("non-member writing to a space is rejected (missing_capability baseline)", async ({
     browser,
     request,

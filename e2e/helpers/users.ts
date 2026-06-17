@@ -144,13 +144,13 @@ export class JointUserPage {
   }
 
   // Navigate to a specific Realm admin section (Members / Access / etc.).
-  // yougen routes are `/realms/:id/admin/:section`; the Overview landing
-  // doesn't show member rows or other section-specific testids.
+  // yougen routes are `/realms/:id/settings/:section` (routes.rs); the Overview
+  // landing doesn't show member rows or other section-specific testids.
   // After the panel mounts, click the section tab to ensure active_section
   // matches the URL — yougen's initial render can momentarily fall back
   // to Overview while signals settle.
   async gotoRealmAdminSection(realmId: string, section: string) {
-    await this.page.goto(`/realms/${realmId}/admin/${section}`, {
+    await this.page.goto(`/realms/${realmId}/settings/${section}`, {
       waitUntil: "domcontentloaded",
     });
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });

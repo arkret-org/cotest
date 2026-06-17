@@ -84,7 +84,7 @@ export function wireErrCode(body: unknown): string | undefined {
   );
 }
 
-export function singleDidAnchorer(did: string): Record<string, unknown> {
+export function singleDidNotary(did: string): Record<string, unknown> {
   return {
     type: "single_did",
     did,
@@ -175,9 +175,9 @@ export async function createRealmApi(
             : {}),
           security_class: "standard",
           federation_policy: data.federation_policy ?? "restricted",
-          anchor_profile: "single_did",
+          notary_profile: "single_did",
           digest_algorithm: "sha256",
-          anchorer: singleDidAnchorer(ownerDid),
+          notary: singleDidNotary(ownerDid),
           created_at: createdAt,
         },
       },
@@ -310,7 +310,6 @@ export async function sendMessageApi(
         kind: "ck.content.text",
         body,
       },
-      encrypted: opts.encrypted ?? false,
     },
   });
   await submitSignedEventApi(request, token, envelope, {
@@ -397,17 +396,18 @@ export async function currentActorDidApi(
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_soland/self/account/me`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/account/viewer`,
     {
       headers: authHeaders(token),
     },
   );
-  const body = await expectJsonOk<{ did?: string }>(
+  const body = await expectJsonOk<{ principal_id?: string; did?: string }>(
     response,
     "read current actor",
   );
-  expect(body.did, "current actor DID").toBeTruthy();
-  return body.did!;
+  const actorDid = body.principal_id ?? body.did;
+  expect(actorDid, "current actor DID").toBeTruthy();
+  return actorDid!;
 }
 
 export function signedEventEnvelope(
@@ -540,11 +540,25 @@ export async function resolveDefaultStrandId(
       ? body.items
       : [];
   const def = strands.find((strand) => strand.is_default === true);
-  expect(
-    def?.strand_id,
-    `resolveDefaultStrandId: no default strand (is_default) found for realm ${realmId}`,
-  ).toBeTruthy();
-  return def!.strand_id!;
+  if (def?.strand_id) {
+    return def.strand_id;
+  }
+  // Final fallback: the yougen UI realm-create flow does not emit an explicit
+  // ck.realm.set_default_strand, so soland never marks a strand is_default for
+  // those realms. yougen itself addresses the default strand by a deterministic
+  // convention (default_strand_id_for_realm in yougen/src/local_state): the
+  // realm UUID suffix under the ck:strand: prefix. Derive the same id so events
+  // submitted here land on the strand yougen renders.
+  return deriveDefaultStrandId(realmId);
+}
+
+/// Mirror yougen's `default_strand_id_for_realm` convention: `ck:realm:<uuid>`
+/// maps to `ck:strand:<uuid>`.
+export function deriveDefaultStrandId(realmId: string): string {
+  const suffix = realmId.startsWith("ck:realm:")
+    ? realmId.slice("ck:realm:".length)
+    : realmId;
+  return `ck:strand:${suffix}`;
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {

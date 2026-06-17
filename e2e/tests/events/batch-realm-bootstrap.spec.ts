@@ -10,7 +10,7 @@ import {
   queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
-  singleDidAnchorer,
+  singleDidNotary,
   typedId,
 } from "../../helpers/soland-api";
 import {
@@ -19,7 +19,20 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
-test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
+// GAP-events-batch-strict-typed-event — demoted from @fully-implemented.
+// The batch form of POST /_cokret/self/events deserializes its `events[]` as
+// the SDK's strict `Event` (EventsSubmitBatchRequestBody.events: Vec<Event>,
+// event_sync.rs), where `Event` is `#[serde(try_from = EventWire)]` with
+// `deny_unknown_fields` + a required `hlc` and a spec-shaped `Proof`
+// (kind/alg/verification_method/event_digest/created_at/jws). Crucially the
+// non-dev-proof branch requires `event_digest == canonical envelope digest`
+// (validation.rs) with no payload-only fallback, and the typed `Proof` cannot
+// carry the dev-proof shorthand (no `type` field). cotest's fixture envelope is
+// Value-shaped for the lenient single-event path and uses the dev-proof /
+// payload-digest form, so it cannot satisfy the typed batch path without a
+// dedicated strict-Event builder that reproduces soland's envelope
+// canonicalization. Restore once such a builder exists.
+test.describe.fixme("events submit batch Realm bootstrap", () => {
   test("batch ck.realm.create returns JSON and owner can write immediately", async ({
     request,
   }) => {
@@ -54,9 +67,9 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
           plaintext_visible_services: plaintextVisibleServices,
           security_class: "standard",
           federation_policy: "restricted",
-          anchor_profile: "single_did",
+          notary_profile: "single_did",
           digest_algorithm: "sha256",
-          anchorer: singleDidAnchorer(alice.did),
+          notary: singleDidNotary(alice.did),
           created_at: createdAt,
         },
       },
