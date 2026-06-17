@@ -1,6 +1,15 @@
-use anyhow::{Result, anyhow, bail};
+use std::collections::BTreeMap;
+
+use anyhow::{Context as _, Result, anyhow, bail};
+use chrono::{DateTime, Utc};
+use cokret_core::{
+    BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
+    KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
+    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm,
+};
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::harness::{CokretServer, TestServerGroup, expect_json, expect_response};
 
@@ -22,7 +31,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         )
         .await?;
 
-    let mut missing_ciphertext = backup_body(&alice.actor, DEVICE_A, BACKUP_ID);
+    let mut missing_ciphertext = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
     missing_ciphertext
         .as_object_mut()
         .ok_or_else(|| anyhow!("backup body was not an object"))?
@@ -40,7 +49,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
         &alice.actor,
         DEVICE_A,
         "ck:backup:01975510-0000-7000-8000-0000000000ff",
-    );
+    )?;
     expect_backup_error(
         alice
             .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
@@ -50,7 +59,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    let wrong_actor = backup_body(&bob.actor, DEVICE_A, BACKUP_ID);
+    let wrong_actor = backup_body(&bob.actor, DEVICE_A, BACKUP_ID)?;
     expect_backup_error(
         alice
             .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
@@ -63,7 +72,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let accepted = expect_json(
         alice
             .put(&format!("/_cokret/self/keys/backups/{BACKUP_ID}"))
-            .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)),
+            .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?),
         StatusCode::OK,
     )
     .await?;
@@ -90,7 +99,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 
 async fn reject_wrong_device_on_put(server: &CokretServer, token: &str, actor: &str) -> Result<()> {
     let id = "ck:backup:01975510-0000-7000-8000-0000000000d4";
-    let body = backup_body(actor, DEVICE_B, id);
+    let body = backup_body(actor, DEVICE_B, id)?;
     expect_backup_error(
         server
             .http()
@@ -109,7 +118,7 @@ async fn reject_digest_mismatch_on_put(
     actor: &str,
 ) -> Result<()> {
     let id = "ck:backup:01975510-0000-7000-8000-0000000000d5";
-    let mut body = backup_body(actor, DEVICE_A, id);
+    let mut body = backup_body(actor, DEVICE_A, id)?;
     body["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
     body["ciphertext_digest"] = Value::String(
         "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
@@ -126,64 +135,107 @@ async fn reject_digest_mismatch_on_put(
     .await
 }
 
-fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Value {
-    json!({
-        "backup_id": backup_id,
-        "actor_id": actor,
-        "device_id": device_id,
-        "series_id": backup_id.replacen("ck:backup:", "ck:backup_series:", 1),
-        "series_seq": 0,
-        "backup_class": "mls_history",
-        "backup_version": "kb_1",
-        "created_at": "2026-05-18T00:00:00Z",
-        "encryption": {
-            "recipient_method": "secret_storage_key",
-            "recipient_key_ref": "mls_group_secrets_backup_key",
-            "aead": {"name": "xchacha20_poly1305", "aead_profile": "ck.aead.xchacha20_poly1305.v1", "nonce": "cotest-d3-nonce"}
+fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
+    let created_at = ts("2026-05-18T00:00:00Z")?;
+    let backup = KeyBackup {
+        backup_id: BackupId::new(backup_id.to_owned())?,
+        actor_id: Did::new(actor.to_owned())?,
+        device_id: Some(DeviceId::new(device_id.to_owned())?),
+        backup_class: BackupClass::MlsHistory,
+        mixed_secret_storage: false,
+        backup_version: "kb_1".to_owned(),
+        created_at,
+        updated_at: None,
+        expires_at: None,
+        encryption: KeyBackupEncryption {
+            recipient_method: KeyBackupRecipientMethod::SecretStorageKey,
+            recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
+            kdf: None,
+            aead: KeyBackupAead {
+                name: "xchacha20_poly1305".to_owned(),
+                aead_profile: Some("ck.aead.xchacha20_poly1305.v1".to_owned()),
+                nonce_salt: None,
+                nonce: Some("cotest-d3-nonce".to_owned()),
+                enc: None,
+                extra: BTreeMap::new(),
+            },
+            key_commitment: None,
+            extra: BTreeMap::new(),
         },
-        "contents": [
-            {
-                "item_type": "mls_group_state",
-                "mls_group_id": "group_d3",
-                "epoch": 0
-            }
-        ],
-        "ciphertext": "cotest-d3-ciphertext",
-        "ciphertext_digest": "sha256:2108421084217842908421084210842121084210842178429084210842108421",
-        "domain_separation": {
-            "hkdf_info": "cokret-key-backup/mls_history/test/v1",
-            "subdomain": "test",
-            "aead_aad": {
-                "schema": "ck.schema.key_backup.v1",
-                "actor_id": actor,
-                "device_id": device_id,
-                "backup_class": "mls_history",
-                "backup_version": "kb_1",
-                "created_at": "2026-05-18T00:00:00Z",
-                "item_types": ["mls_group_state"]
-            }
+        domain_separation: KeyBackupDomainSeparation {
+            hkdf_info: "cokret-key-backup/mls_history/test/v1".to_owned(),
+            subdomain: "test".to_owned(),
+            aead_aad: KeyBackupDomainSeparationAad {
+                schema: "ck.schema.key_backup.v1".to_owned(),
+                actor_id: Did::new(actor.to_owned())?,
+                device_id: device_id.to_owned(),
+                backup_class: BackupClass::MlsHistory,
+                backup_version: "kb_1".to_owned(),
+                created_at,
+                item_types: vec!["mls_group_state".to_owned()],
+                extra: BTreeMap::new(),
+            },
+            extra: BTreeMap::new(),
         },
-        "auth_data": {
-            "device_id": device_id,
-            "verification_method": format!("{actor}#device"),
-            "signature_algorithm": "Ed25519",
-            "signature": "c2lnbmF0dXJl",
-            "ssk_generation": 1,
-            "signed_fields": [
-                "backup_id",
-                "actor_id",
-                "backup_class",
-                "backup_version",
-                "series_id",
-                "series_seq",
-                "supersedes",
-                "encryption",
-                "domain_separation",
-                "contents",
-                "ciphertext_digest"
-            ]
-        }
-    })
+        contents: vec![KeyBackupContentItem {
+            item_type: "mls_group_state".to_owned(),
+            realm_id: None,
+            mls_group_id: Some("group_d3".to_owned()),
+            epoch: Some(0),
+            first_event_id: None,
+            last_event_id: None,
+            secret_id: None,
+            secret_version: None,
+            extra: BTreeMap::new(),
+        }],
+        ciphertext: "cotest-d3-ciphertext".to_owned(),
+        ciphertext_digest:
+            "sha256:2108421084217842908421084210842121084210842178429084210842108421".to_owned(),
+        plaintext_commitment: None,
+        auth_data: Some(KeyBackupAuthData {
+            device_id: DeviceId::new(device_id.to_owned())?,
+            verification_method: format!("{actor}#device"),
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: "c2lnbmF0dXJl".to_owned(),
+            ssk_generation: Some(1),
+            signed_fields: key_backup_signed_fields(),
+            extra: BTreeMap::new(),
+        }),
+        retention: None,
+        series_id: BackupSeriesId::new(backup_id.replacen("ck:backup:", "ck:backup_series:", 1))?,
+        series_seq: 0,
+        supersedes: None,
+        supersedes_digest: None,
+        frontier_ref: None,
+        recovery_policy_ref: None,
+        extra: BTreeMap::new(),
+    };
+    Ok(serde_json::to_value(backup)?)
+}
+
+fn key_backup_signed_fields() -> Vec<String> {
+    [
+        "backup_id",
+        "actor_id",
+        "backup_class",
+        "backup_version",
+        "series_id",
+        "series_seq",
+        "supersedes",
+        "encryption",
+        "domain_separation",
+        "contents",
+        "ciphertext_digest",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn ts(value: &str) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .with_context(|| format!("invalid timestamp {value}"))
+        .map(|dt| dt.with_timezone(&Utc))
 }
 
 async fn expect_backup_error(

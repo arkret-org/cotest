@@ -17,14 +17,13 @@
 
 use anyhow::{Result, anyhow, bail};
 use chrono::{SecondsFormat, TimeZone, Utc};
-use ed25519_dalek::{Signer, SigningKey};
-use serde_json::{Value, json};
-
 use cokret_core::{
     CALL_SIGNAL_TYPES, CallSignalSeqKey, CallSignalState, EphemeralEnvelope, Proof,
     validate_call_signal_envelope, validate_signal_seq,
 };
 use cokret_signatures::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use ed25519_dalek::{Signer, SigningKey};
+use serde_json::{Value, json};
 
 pub const VECTOR_ID_SIGNAL_TYPE_ENUM: &str = "ck.vector.call_signal.signal_type_enum.v1";
 pub const VECTOR_ID_SEQ_MONOTONIC: &str = "ck.vector.call_signal.seq_monotonic.v1";
@@ -43,7 +42,10 @@ pub const ALL_CALL_SIGNAL_VECTOR_IDS: &[&str] = &[
 /// stack used.
 pub fn run_signal_type_enum_vector() -> Result<()> {
     if CALL_SIGNAL_TYPES.len() != 14 {
-        bail!("CALL_SIGNAL_TYPES drifted: expected 14 values, got {}", CALL_SIGNAL_TYPES.len());
+        bail!(
+            "CALL_SIGNAL_TYPES drifted: expected 14 values, got {}",
+            CALL_SIGNAL_TYPES.len()
+        );
     }
     for expected in [
         "invite",
@@ -117,13 +119,19 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
             .map_err(|e| anyhow!("device id: {e}"))?,
     );
     let mut state = CallSignalState::new();
-    state.observe(&key, 1).map_err(|e| anyhow!("seq 1 must accept: {e}"))?;
-    state.observe(&key, 2).map_err(|e| anyhow!("seq 2 must accept: {e}"))?;
+    state
+        .observe(&key, 1)
+        .map_err(|e| anyhow!("seq 1 must accept: {e}"))?;
+    state
+        .observe(&key, 2)
+        .map_err(|e| anyhow!("seq 2 must accept: {e}"))?;
     if state.observe(&key, 1).is_ok() {
         bail!("rollback seq 1 after 2 must be dropped by the stateful receiver");
     }
     // After dropping the rollback the frontier is still 2; a fresh 3 advances.
-    state.observe(&key, 3).map_err(|e| anyhow!("seq 3 after dropped rollback must accept: {e}"))?;
+    state
+        .observe(&key, 3)
+        .map_err(|e| anyhow!("seq 3 after dropped rollback must accept: {e}"))?;
     Ok(())
 }
 
@@ -167,10 +175,9 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         .map_err(|err| anyhow!("envelope JCS failed: {err}"))?;
     let event_digest = cokret_core::canonical::sha256_digest(&canonical_bytes);
 
-    // 3. JWS transcript = protected `.` base64url(JCS(binding object)). The
-    //    binding object is the §5.1 {event_digest, actor_id,
-    //    verification_method, created_at} — byte-identical to the SDK's
-    //    `Proof::canonical_binding_bytes`.
+    // 3. JWS transcript = protected `.` base64url(JCS(binding object)). The binding object is the
+    //    §5.1 {event_digest, actor_id, verification_method, created_at} — byte-identical to the
+    //    SDK's `Proof::canonical_binding_bytes`.
     // SDK-canonical protected header is EXACTLY `{"alg":"EdDSA"}` — the
     // verifier deserialises it with deny-unknown-fields, so a `kid` (or any
     // extra member) breaks verification. The verification_method is carried in
@@ -203,8 +210,8 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
         "jws": jws,
     });
 
-    // 4. Verify via the SDK receiver path. `canonical_bytes` is the
-    //    envelope-without-proof (the verifier recomputes event_digest from it).
+    // 4. Verify via the SDK receiver path. `canonical_bytes` is the envelope-without-proof (the
+    //    verifier recomputes event_digest from it).
     let proof: Proof = serde_json::from_value(envelope["proof"].clone())
         .map_err(|err| anyhow!("proof deserialise failed: {err}"))?;
     let did = cokret_core::Did::new(actor_id.to_owned()).map_err(|e| anyhow!("did: {e}"))?;
@@ -228,7 +235,10 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
 
     // Negative: a wrong key MUST NOT verify.
     let wrong = PublicKeyMaterial::Ed25519Raw {
-        bytes: SigningKey::from_bytes(&[0x99u8; 32]).verifying_key().to_bytes().to_vec(),
+        bytes: SigningKey::from_bytes(&[0x99u8; 32])
+            .verifying_key()
+            .to_bytes()
+            .to_vec(),
     };
     if verify_eddsa_detached_jws_proof(&proof, &canonical_bytes, &did, &wrong).is_ok() {
         bail!("proof verified under the wrong public key — signature is not actually checked");
@@ -271,7 +281,10 @@ fn b64url(bytes: &[u8]) -> String {
 /// Suite entry point — runs all 3 call-signal receiver vectors back to back.
 pub fn run_call_signal_vector_suite() -> Result<()> {
     if ALL_CALL_SIGNAL_VECTOR_IDS.len() != 3 {
-        bail!("expected 3 call_signal vector ids, got {}", ALL_CALL_SIGNAL_VECTOR_IDS.len());
+        bail!(
+            "expected 3 call_signal vector ids, got {}",
+            ALL_CALL_SIGNAL_VECTOR_IDS.len()
+        );
     }
     run_signal_type_enum_vector()?;
     run_seq_monotonic_vector()?;

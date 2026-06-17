@@ -4,9 +4,8 @@
 //! Exercises the dev-mode server-authored fan-out (architecture option B) end
 //! to end through the public agent HTTP surface:
 //!   1. `ck.self.agent.command.provision` -> `pending_runtime_key` + pairing.
-//!   2. `ck.gate.account.command.pair_agent_key` -> durable
-//!      `ck.agent.key.authorize`, clears `effective_after_first_authorized_key`,
-//!      status -> `active`.
+//!   2. `ck.gate.account.command.pair_agent_key` -> durable `ck.agent.key.authorize`, clears
+//!      `effective_after_first_authorized_key`, status -> `active`.
 //!   3. pause / resume / deactivate -> durable lifecycle events flip status.
 //!
 //! `CokretServer::spawn` builds / locates the sibling `soland` binary and runs
@@ -42,12 +41,28 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         .json(&json!({"display_name": "Summary Assistant", "agent_slug": "summary"}))
         .send()
         .await?;
-    assert_eq!(prov.status(), StatusCode::CREATED, "provision must return 201");
+    assert_eq!(
+        prov.status(),
+        StatusCode::CREATED,
+        "provision must return 201"
+    );
     let prov: Value = prov.json().await?;
-    let agent_did = prov["agent_principal_id"].as_str().expect("agent_principal_id").to_owned();
-    assert!(prov["pairing_request_id"].as_str().is_some(), "pairing_request_id present");
-    assert!(prov["pairing_code"].as_str().is_some(), "pairing_code present");
-    assert_eq!(agent_status(&server, &token, &agent_did).await?, "pending_runtime_key");
+    let agent_did = prov["agent_principal_id"]
+        .as_str()
+        .expect("agent_principal_id")
+        .to_owned();
+    assert!(
+        prov["pairing_request_id"].as_str().is_some(),
+        "pairing_request_id present"
+    );
+    assert!(
+        prov["pairing_code"].as_str().is_some(),
+        "pairing_code present"
+    );
+    assert_eq!(
+        agent_status(&server, &token, &agent_did).await?,
+        "pending_runtime_key"
+    );
 
     // 2. pair the runtime key -> durable ck.agent.key.authorize -> active.
     let pair = server
@@ -71,20 +86,38 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         .await?;
     assert_eq!(pair.status(), StatusCode::OK, "pairing must return 200");
     let pair: Value = pair.json().await?;
-    assert!(pair["authorized_event_ref"].as_str().is_some(), "authorized_event_ref present");
+    assert!(
+        pair["authorized_event_ref"].as_str().is_some(),
+        "authorized_event_ref present"
+    );
     assert_eq!(agent_status(&server, &token, &agent_did).await?, "active");
 
     // 3. lifecycle transitions land durable events + flip projected status.
-    for (path, expect) in [("pause", "paused"), ("resume", "active"), ("deactivate", "deactivated")] {
+    for (path, expect) in [
+        ("pause", "paused"),
+        ("resume", "active"),
+        ("deactivate", "deactivated"),
+    ] {
         let res = server
             .http()
-            .post(server.url(&format!("/_cokret/self/agents/{}/{path}", urlencoding(&agent_did))))
+            .post(server.url(&format!(
+                "/_cokret/self/agents/{}/{path}",
+                urlencoding(&agent_did)
+            )))
             .bearer_auth(&token)
             .json(&json!({}))
             .send()
             .await?;
-        assert_eq!(res.status(), StatusCode::OK, "lifecycle {path} must return 200");
-        assert_eq!(agent_status(&server, &token, &agent_did).await?, expect, "status after {path}");
+        assert_eq!(
+            res.status(),
+            StatusCode::OK,
+            "lifecycle {path} must return 200"
+        );
+        assert_eq!(
+            agent_status(&server, &token, &agent_did).await?,
+            expect,
+            "status after {path}"
+        );
     }
 
     Ok(())
@@ -101,7 +134,11 @@ async fn agent_status(server: &CokretServer, token: &str, agent_did: &str) -> Re
         .await?;
     let status = list["agents"]
         .as_array()
-        .and_then(|agents| agents.iter().find(|a| a["agent_principal_id"].as_str() == Some(agent_did)))
+        .and_then(|agents| {
+            agents
+                .iter()
+                .find(|a| a["agent_principal_id"].as_str() == Some(agent_did))
+        })
         .and_then(|a| a["status"].as_str())
         .unwrap_or_default()
         .to_owned();

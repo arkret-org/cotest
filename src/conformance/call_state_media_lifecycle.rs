@@ -108,7 +108,9 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
     };
     match try_delete_recording(&locked_before) {
         Err(code) if code == ERROR_CODE_LEGAL_HOLD_ACTIVE => {}
-        other => bail!("delete before TTL under audit_lock must be legal_hold_active, got {other:?}"),
+        other => {
+            bail!("delete before TTL under audit_lock must be legal_hold_active, got {other:?}")
+        }
     }
 
     // Step 3 — delete after TTL but audit_lock still set → legal_hold_active
@@ -120,7 +122,9 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
     };
     match try_delete_recording(&locked_after) {
         Err(code) if code == ERROR_CODE_LEGAL_HOLD_ACTIVE => {}
-        other => bail!("delete after TTL under audit_lock must be legal_hold_active, got {other:?}"),
+        other => {
+            bail!("delete after TTL under audit_lock must be legal_hold_active, got {other:?}")
+        }
     }
 
     // Step 4 — capturing recording_state without consent_confirmed.
@@ -263,7 +267,9 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
     // Step 1 — moderation without ck.call.moderate is unauthorised.
     match moderation_authorised(false) {
         Err(code) if code == REASON_CALL_MODERATION_UNAUTHORISED => {}
-        other => bail!("moderation without cap must be call_moderation_unauthorised, got {other:?}"),
+        other => {
+            bail!("moderation without cap must be call_moderation_unauthorised, got {other:?}")
+        }
     }
     moderation_authorised(true)
         .map_err(|code| anyhow::anyhow!("authorised moderation unexpectedly denied: {code}"))?;
@@ -289,7 +295,9 @@ pub fn run_moderator_kick_ban_vector() -> Result<()> {
     for device in ["ck:device:bob-1", "ck:device:bob-2"] {
         match token_reissue_allowed(&banned, "did:web:bob.example", device) {
             Err(code) if code == REASON_CALL_PARTICIPANT_REMOVED => {}
-            other => bail!("banned actor re-issue ({device}) must be call_participant_removed, got {other:?}"),
+            other => bail!(
+                "banned actor re-issue ({device}) must be call_participant_removed, got {other:?}"
+            ),
         }
     }
 

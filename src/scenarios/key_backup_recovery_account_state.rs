@@ -1,8 +1,18 @@
-use anyhow::{Result, anyhow, bail};
+use std::collections::BTreeMap;
+
+use anyhow::{Context as _, Result, anyhow, bail};
+use chrono::{DateTime, Utc};
 use cokret_core::multibase::ed25519_pubkey_to_did_key_multibase;
+use cokret_core::{
+    BackupClass, BackupId, BackupSeriesId, DeviceId, Did, KeyBackup, KeyBackupAead,
+    KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
+    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupSignatureAlgorithm, PolicyId, RecoveryPolicy, RecoveryPolicyAuthData,
+    RecoveryPolicyRef, RecoveryProofKind, TypedTrustDomainId,
+};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::harness::{TestServerGroup, expect_json, expect_response};
 
@@ -39,7 +49,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
             .put(&format!(
                 "/_cokret/self/keys/backups/{DID_RECOVERY_BACKUP_ID}"
             ))
-            .json(&did_recovery_backup_body(&principal_id, POLICY_ID)),
+            .json(&did_recovery_backup_body(&principal_id, POLICY_ID)?),
         StatusCode::CONFLICT,
         "recovery_policy_mismatch",
     )
@@ -58,7 +68,7 @@ pub async fn key_backup_recovery_account_state_run() -> Result<()> {
             .json(&unsigned_recovery_policy(
                 &principal_id,
                 &verification_method,
-            )),
+            )?),
         StatusCode::UNAUTHORIZED,
         "proof_invalid",
     )
@@ -111,21 +121,31 @@ fn did_key_principal(signing: &SigningKey) -> (String, String) {
     (principal_id, verification_method)
 }
 
-fn unsigned_recovery_policy(principal_id: &str, verification_method: &str) -> Value {
-    json!({
-        "schema": "ck.schema.recovery_policy.v1",
-        "policy_id": POLICY_ID,
-        "principal_id": principal_id,
-        "version": 1,
-        "trust_domain": "ck:trust_domain:soland.local",
-        "allowed_proof_kinds": ["principal_signing"],
-        "supersedes": null,
-        "issued_at": "2026-05-30T00:00:00Z",
-        "expires_at": "2026-06-30T00:00:00Z",
-        "auth_data": {
-            "verification_method": verification_method,
-            "signature_algorithm": "EdDSA",
-            "signed_fields": [
+fn unsigned_recovery_policy(
+    principal_id: &str,
+    verification_method: &str,
+) -> Result<RecoveryPolicy> {
+    Ok(RecoveryPolicy {
+        schema: "ck.schema.recovery_policy.v1".to_owned(),
+        policy_id: PolicyId::new(POLICY_ID.to_owned())?,
+        principal_id: Did::new(principal_id.to_owned())?,
+        version: 1,
+        supersedes: None,
+        trust_domain: TypedTrustDomainId::new("ck:trust_domain:soland.local".to_owned())?,
+        allowed_proof_kinds: vec![RecoveryProofKind::PrincipalSigning],
+        threshold: None,
+        device_quorum: None,
+        trusted_recovery_services: None,
+        approval_requirement: None,
+        audit: None,
+        issued_at: ts("2026-05-30T00:00:00Z")?,
+        not_before: None,
+        expires_at: Some(ts("2026-06-30T00:00:00Z")?),
+        auth_data: RecoveryPolicyAuthData {
+            verification_method: verification_method.to_owned(),
+            signature_algorithm: "EdDSA".to_owned(),
+            signature: "c2lnbmF0dXJl".to_owned(),
+            signed_fields: [
                 "schema",
                 "policy_id",
                 "principal_id",
@@ -134,59 +154,80 @@ fn unsigned_recovery_policy(principal_id: &str, verification_method: &str) -> Va
                 "allowed_proof_kinds",
                 "supersedes",
                 "issued_at",
-                "expires_at"
-            ],
-            "signature": "c2lnbmF0dXJl"
-        }
+                "expires_at",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        },
+        extra: BTreeMap::new(),
     })
 }
 
-fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Value {
-    json!({
-        "backup_id": DID_RECOVERY_BACKUP_ID,
-        "actor_id": principal_id,
-        "device_id": DEVICE_A,
-        "series_id": "ck:backup_series:01975510-0000-7000-8000-0000000000a2",
-        "series_seq": 0,
-        "backup_class": "did_recovery",
-        "backup_version": "kb_1",
-        "created_at": "2026-05-30T00:00:00Z",
-        "recovery_policy_ref": { "policy_id": policy_id, "policy_version": 1 },
-        "encryption": {
-            "recipient_method": "recovery_public_key",
-            "recipient_key_ref": "did:key:z6MkrecoveryKey#z6MkrecoveryKey",
-            "aead": {
-                "name": "hpke_base_x25519_hkdf_sha256_chacha20poly1305",
-                "aead_profile": "ck.hpke.x25519_hkdf_sha256_chacha20_poly1305.v1",
-                "enc": "Y290ZXN0LWVuYw"
-            }
+fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBackup> {
+    let created_at = ts("2026-05-30T00:00:00Z")?;
+    Ok(KeyBackup {
+        backup_id: BackupId::new(DID_RECOVERY_BACKUP_ID.to_owned())?,
+        actor_id: Did::new(principal_id.to_owned())?,
+        device_id: Some(DeviceId::new(DEVICE_A.to_owned())?),
+        backup_class: BackupClass::DidRecovery,
+        mixed_secret_storage: false,
+        backup_version: "kb_1".to_owned(),
+        created_at,
+        updated_at: None,
+        expires_at: None,
+        encryption: KeyBackupEncryption {
+            recipient_method: KeyBackupRecipientMethod::RecoveryPublicKey,
+            recipient_key_ref: Some("did:key:z6MkrecoveryKey#z6MkrecoveryKey".to_owned()),
+            kdf: None,
+            aead: KeyBackupAead {
+                name: "hpke_base_x25519_hkdf_sha256_chacha20poly1305".to_owned(),
+                aead_profile: Some("ck.hpke.x25519_hkdf_sha256_chacha20_poly1305.v1".to_owned()),
+                nonce_salt: None,
+                nonce: None,
+                enc: Some("Y290ZXN0LWVuYw".to_owned()),
+                extra: BTreeMap::new(),
+            },
+            key_commitment: None,
+            extra: BTreeMap::new(),
         },
-        "domain_separation": {
-            "hkdf_info": "cokret-key-backup/did_recovery/recovery_policy/v1",
-            "subdomain": "recovery_policy",
-            "aead_aad": {
-                "schema": "ck.schema.key_backup.v1",
-                "actor_id": principal_id,
-                "device_id": DEVICE_A,
-                "backup_class": "did_recovery",
-                "backup_version": "kb_1",
-                "created_at": "2026-05-30T00:00:00Z",
-                "item_types": ["recovery_secret"]
-            }
+        domain_separation: KeyBackupDomainSeparation {
+            hkdf_info: "cokret-key-backup/did_recovery/recovery_policy/v1".to_owned(),
+            subdomain: "recovery_policy".to_owned(),
+            aead_aad: KeyBackupDomainSeparationAad {
+                schema: "ck.schema.key_backup.v1".to_owned(),
+                actor_id: Did::new(principal_id.to_owned())?,
+                device_id: DEVICE_A.to_owned(),
+                backup_class: BackupClass::DidRecovery,
+                backup_version: "kb_1".to_owned(),
+                created_at,
+                item_types: vec!["recovery_secret".to_owned()],
+                extra: BTreeMap::new(),
+            },
+            extra: BTreeMap::new(),
         },
-        "contents": [
-            {
-                "item_type": "recovery_secret"
-            }
-        ],
-        "ciphertext": "cotest-did-recovery-ciphertext",
-        "ciphertext_digest": "sha256:2108421084217842908421084210842121084210842178429084210842108421",
-        "auth_data": {
-            "device_id": DEVICE_A,
-            "verification_method": "did:key:z6Mkdevice#z6Mkdevice",
-            "signature_algorithm": "Ed25519",
-            "ssk_generation": 1,
-            "signed_fields": [
+        contents: vec![KeyBackupContentItem {
+            item_type: "recovery_secret".to_owned(),
+            realm_id: None,
+            mls_group_id: None,
+            epoch: None,
+            first_event_id: None,
+            last_event_id: None,
+            secret_id: None,
+            secret_version: None,
+            extra: BTreeMap::new(),
+        }],
+        ciphertext: "cotest-did-recovery-ciphertext".to_owned(),
+        ciphertext_digest:
+            "sha256:2108421084217842908421084210842121084210842178429084210842108421".to_owned(),
+        plaintext_commitment: None,
+        auth_data: Some(KeyBackupAuthData {
+            device_id: DeviceId::new(DEVICE_A.to_owned())?,
+            verification_method: "did:key:z6Mkdevice#z6Mkdevice".to_owned(),
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: "c2lnbmF0dXJl".to_owned(),
+            ssk_generation: Some(1),
+            signed_fields: [
                 "backup_id",
                 "actor_id",
                 "backup_class",
@@ -197,11 +238,33 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Value {
                 "domain_separation",
                 "contents",
                 "ciphertext_digest",
-                "recovery_policy_ref"
-            ],
-            "signature": "c2lnbmF0dXJl"
-        }
+                "recovery_policy_ref",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+            extra: BTreeMap::new(),
+        }),
+        retention: None,
+        series_id: BackupSeriesId::new(
+            "ck:backup_series:01975510-0000-7000-8000-0000000000a2".to_owned(),
+        )?,
+        series_seq: 0,
+        supersedes: None,
+        supersedes_digest: None,
+        frontier_ref: None,
+        recovery_policy_ref: Some(RecoveryPolicyRef {
+            policy_id: PolicyId::new(policy_id.to_owned())?,
+            policy_version: 1,
+        }),
+        extra: BTreeMap::new(),
     })
+}
+
+fn ts(value: &str) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .with_context(|| format!("invalid timestamp {value}"))
+        .map(|dt| dt.with_timezone(&Utc))
 }
 
 async fn expect_api_error_code(

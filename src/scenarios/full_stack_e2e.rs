@@ -47,9 +47,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use cokret_core::{
-    CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint, DeliveryMode,
-    Did, Handle, HandleHintBindingSource, MemberDeliveryBindingCandidate, RecipientServiceType,
-    sanitize_blind_payload, sanitize_blind_payload_strict,
+    Audience, CandidateError, CandidateIntent, CandidateValidationContext, DeliveryBindingHint,
+    DeliveryMode, Did, Handle, HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate,
+    PayloadProof, RecipientServiceType, sanitize_blind_payload, sanitize_blind_payload_strict,
 };
 use serde_json::{Value, json};
 
@@ -662,16 +662,11 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
         expires_at: future_expiry(ChronoDuration::minutes(5)),
         issued_at: Some(Utc::now()),
         source_refs: vec![SOURCE_REF_EVENT_ID.to_owned()],
-        proofs: vec![json!({
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": "did:web:principal.acme.example#key-1",
-            "payload_digest":
-                "sha256:00000000000000000000000000000000000000000000000000000000000000bb",
-            "created_at": "2026-05-19T00:00:00Z",
-            "audience": TARGET_REALM_ID,
-            "jws": "real.shaped.jws"
-        })],
+        proofs: vec![candidate_payload_proof(
+            "sha256:00000000000000000000000000000000000000000000000000000000000000bb",
+            TARGET_REALM_ID,
+            "real.shaped.jws",
+        )?],
         claim_digest: None,
         intent: CandidateIntent::MemberAdd,
     })
@@ -679,4 +674,18 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
 fn future_expiry(window: ChronoDuration) -> DateTime<Utc> {
     Utc::now() + window
+}
+
+fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Value> {
+    let proof = PayloadProof {
+        kind: "detached_jws".to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: "did:web:principal.acme.example#key-1".to_owned(),
+        payload_digest: Hash::new(digest.to_owned())?,
+        created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00Z")?.with_timezone(&Utc),
+        domain: None,
+        audience: Some(Audience::Single(audience.to_owned())),
+        jws: jws.to_owned(),
+    };
+    Ok(serde_json::to_value(proof)?)
 }

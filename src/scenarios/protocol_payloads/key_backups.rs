@@ -13,14 +13,24 @@
 //! body `{proof: ck.schema.key_backup_unlock_proof.v1}` bound to the envelope;
 //! a bearer token without that body proof MUST be refused.
 
-use anyhow::Result;
+use std::collections::BTreeMap;
+
+use anyhow::{Context as _, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use chrono::{DateTime, Utc};
 use cokret_core::canonical::canonical_json_bytes;
 use cokret_core::multibase::ed25519_pubkey_to_did_key_multibase;
+use cokret_core::{
+    BackupClass, BackupId, BackupSeriesId, DeviceId, Did, Hash, KeyBackup, KeyBackupAead,
+    KeyBackupAuthData, KeyBackupContentItem, KeyBackupDomainSeparation,
+    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupRetention, KeyBackupSignatureAlgorithm, KeyBackupUnlockProof,
+    KeyBackupUnlockProofAuthData, KeysBackupsUnlockRequestBody, RecoverySessionId,
+};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::harness::{CokretServer, expect_json};
 
@@ -73,73 +83,94 @@ async fn put_backup(server: &CokretServer, token: &str) -> Result<()> {
 /// `auth_data` device-signature block (device key signs the canonical
 /// envelope minus `auth_data.signature`; `ssk_generation` binds the
 /// cross-signing generation).
-fn signed_backup_envelope() -> Result<serde_json::Value> {
+fn signed_backup_envelope() -> Result<KeyBackup> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
-    let mut envelope = json!({
-        "backup_id": BACKUP_ID,
-        "actor_id": ACTOR_ID,
-        "device_id": ENVELOPE_DEVICE_ID,
-        "series_id": SERIES_ID,
-        "series_seq": 0,
-        "backup_class": "mls_history",
-        "backup_version": "kb_1",
-        "created_at": "2026-04-26T00:00:00Z",
-        "encryption": {
-            "recipient_method": "secret_storage_key",
-            "recipient_key_ref": "mls_group_secrets_backup_key",
-            "aead": {"name": "xchacha20_poly1305", "aead_profile": "ck.aead.xchacha20_poly1305.v1", "nonce": "nonce"}
+    let created_at = ts("2026-04-26T00:00:00Z")?;
+    let mut envelope = KeyBackup {
+        backup_id: backup_id(BACKUP_ID)?,
+        actor_id: did(ACTOR_ID)?,
+        device_id: Some(device_id(ENVELOPE_DEVICE_ID)?),
+        backup_class: BackupClass::MlsHistory,
+        mixed_secret_storage: false,
+        backup_version: "kb_1".to_owned(),
+        created_at,
+        updated_at: None,
+        expires_at: None,
+        encryption: KeyBackupEncryption {
+            recipient_method: KeyBackupRecipientMethod::SecretStorageKey,
+            recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
+            kdf: None,
+            aead: KeyBackupAead {
+                name: "xchacha20_poly1305".to_owned(),
+                aead_profile: Some("ck.aead.xchacha20_poly1305.v1".to_owned()),
+                nonce_salt: None,
+                nonce: Some("nonce".to_owned()),
+                enc: None,
+                extra: BTreeMap::new(),
+            },
+            key_commitment: None,
+            extra: BTreeMap::new(),
         },
-        "contents": [
-            {
-                "item_type": "mls_group_state",
-                "mls_group_id": "group_default",
-                "epoch": 0
-            }
-        ],
-        "retention": {
-            "delete_after": "2020-01-01T00:00:00Z",
-            "legal_hold": false
+        domain_separation: KeyBackupDomainSeparation {
+            hkdf_info: "cokret-key-backup/mls_history/test/v1".to_owned(),
+            subdomain: "test".to_owned(),
+            aead_aad: KeyBackupDomainSeparationAad {
+                schema: "ck.schema.key_backup.v1".to_owned(),
+                actor_id: did(ACTOR_ID)?,
+                device_id: ENVELOPE_DEVICE_ID.to_owned(),
+                backup_class: BackupClass::MlsHistory,
+                backup_version: "kb_1".to_owned(),
+                created_at,
+                item_types: vec!["mls_group_state".to_owned()],
+                extra: BTreeMap::new(),
+            },
+            extra: BTreeMap::new(),
         },
-        "ciphertext": "ciphertext",
-        "ciphertext_digest": CIPHERTEXT_DIGEST,
-        "domain_separation": {
-            "hkdf_info": "cokret-key-backup/mls_history/test/v1",
-            "subdomain": "test",
-            "aead_aad": {
-                "schema": "ck.schema.key_backup.v1",
-                "actor_id": ACTOR_ID,
-                "device_id": ENVELOPE_DEVICE_ID,
-                "backup_class": "mls_history",
-                "backup_version": "kb_1",
-                "created_at": "2026-04-26T00:00:00Z",
-                "item_types": ["mls_group_state"]
-            }
-        },
-        "auth_data": {
-            "device_id": ENVELOPE_DEVICE_ID,
-            "verification_method": verification_method,
-            "signature_algorithm": "Ed25519",
-            "ssk_generation": 1,
-            "signed_fields": [
-                "backup_id",
-                "actor_id",
-                "backup_class",
-                "backup_version",
-                "series_id",
-                "series_seq",
-                "supersedes",
-                "encryption",
-                "domain_separation",
-                "contents",
-                "ciphertext_digest"
-            ]
-        }
-    });
-    let canonical = canonical_json_bytes(&envelope)?;
+        contents: vec![KeyBackupContentItem {
+            item_type: "mls_group_state".to_owned(),
+            realm_id: None,
+            mls_group_id: Some("group_default".to_owned()),
+            epoch: Some(0),
+            first_event_id: None,
+            last_event_id: None,
+            secret_id: None,
+            secret_version: None,
+            extra: BTreeMap::new(),
+        }],
+        ciphertext: "ciphertext".to_owned(),
+        ciphertext_digest: CIPHERTEXT_DIGEST.to_owned(),
+        plaintext_commitment: None,
+        auth_data: Some(KeyBackupAuthData {
+            device_id: device_id(ENVELOPE_DEVICE_ID)?,
+            verification_method,
+            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
+            signature: String::new(),
+            ssk_generation: Some(1),
+            signed_fields: key_backup_signed_fields(),
+            extra: BTreeMap::new(),
+        }),
+        retention: Some(KeyBackupRetention {
+            delete_after: Some(ts("2020-01-01T00:00:00Z")?),
+            legal_hold: Some(false),
+            extra: BTreeMap::new(),
+        }),
+        series_id: backup_series_id(SERIES_ID)?,
+        series_seq: 0,
+        supersedes: None,
+        supersedes_digest: None,
+        frontier_ref: None,
+        recovery_policy_ref: None,
+        extra: BTreeMap::new(),
+    };
+    let mut unsigned = serde_json::to_value(&envelope)?;
+    remove_auth_signature(&mut unsigned)?;
+    let canonical = canonical_json_bytes(&unsigned)?;
     let signature = signing_key.sign(&canonical);
-    envelope["auth_data"]["signature"] = json!(URL_SAFE_NO_PAD.encode(signature.to_bytes()));
+    if let Some(auth_data) = &mut envelope.auth_data {
+        auth_data.signature = URL_SAFE_NO_PAD.encode(signature.to_bytes());
+    }
     Ok(envelope)
 }
 
@@ -203,7 +234,9 @@ async fn unlock_backup_reaches_trust_anchor(server: &CokretServer, token: &str) 
             .http()
             .post(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
-            .json(&json!({ "proof": unlock_proof()? })),
+            .json(&KeysBackupsUnlockRequestBody {
+                proof: unlock_proof()?,
+            }),
         StatusCode::UNAUTHORIZED,
     )
     .await?;
@@ -218,26 +251,32 @@ async fn unlock_backup_reaches_trust_anchor(server: &CokretServer, token: &str) 
 /// No durable recovery-session record exists for this synthetic session id,
 /// so soland's session-binding check is skipped (device-signed decrypt proof
 /// path); the shape, envelope binding, and signature are still verified.
-fn unlock_proof() -> Result<serde_json::Value> {
+fn unlock_proof() -> Result<KeyBackupUnlockProof> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
-    let mut proof = json!({
-        "schema": "ck.schema.key_backup_unlock_proof.v1",
-        "recovery_session_id": "ck:recovery_session:01964137-0000-7000-8000-0000000000aa",
-        "principal_id": ACTOR_ID,
-        "requesting_device_id": DEVICE_ID,
-        "backup_id": BACKUP_ID,
-        "backup_class": "mls_history",
-        "series_id": SERIES_ID,
-        "ciphertext_digest": CIPHERTEXT_DIGEST,
-        "proof_kind": "recovery_unlock",
-        "proof_digest": "sha256:84a51084210842108421084210842108421084210842108421084210842108aa",
-        "issued_at": "2026-04-26T00:00:00Z",
-        "auth_data": {
-            "verification_method": verification_method,
-            "signature_algorithm": "Ed25519",
-            "signed_fields": [
+    let mut proof = KeyBackupUnlockProof {
+        schema: "ck.schema.key_backup_unlock_proof.v1".to_owned(),
+        recovery_session_id: RecoverySessionId::new(
+            "ck:recovery_session:01964137-0000-7000-8000-0000000000aa",
+        )?,
+        principal_id: did(ACTOR_ID)?,
+        requesting_device_id: DEVICE_ID.to_owned(),
+        backup_id: backup_id(BACKUP_ID)?,
+        backup_class: BackupClass::MlsHistory,
+        series_id: backup_series_id(SERIES_ID)?,
+        ciphertext_digest: Hash::new(CIPHERTEXT_DIGEST)?,
+        proof_kind: "recovery_unlock".to_owned(),
+        proof_digest: Value::String(
+            "sha256:84a51084210842108421084210842108421084210842108421084210842108aa".to_owned(),
+        ),
+        challenge: None,
+        issued_at: ts("2026-04-26T00:00:00Z")?,
+        auth_data: KeyBackupUnlockProofAuthData {
+            verification_method: Value::String(verification_method),
+            signature_algorithm: "Ed25519".to_owned(),
+            signature: String::new(),
+            signed_fields: [
                 "schema",
                 "recovery_session_id",
                 "principal_id",
@@ -248,14 +287,70 @@ fn unlock_proof() -> Result<serde_json::Value> {
                 "ciphertext_digest",
                 "proof_kind",
                 "proof_digest",
-                "issued_at"
+                "issued_at",
             ]
-        }
-    });
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        },
+        extra: BTreeMap::new(),
+    };
     // soland verifies the signature over canonical JSON of the proof with
     // `auth_data.signature` removed — sign first, then attach.
-    let canonical = canonical_json_bytes(&proof)?;
+    let mut unsigned = serde_json::to_value(&proof)?;
+    remove_auth_signature(&mut unsigned)?;
+    let canonical = canonical_json_bytes(&unsigned)?;
     let signature = signing_key.sign(&canonical);
-    proof["auth_data"]["signature"] = json!(URL_SAFE_NO_PAD.encode(signature.to_bytes()));
+    proof.auth_data.signature = URL_SAFE_NO_PAD.encode(signature.to_bytes());
     Ok(proof)
+}
+
+fn key_backup_signed_fields() -> Vec<String> {
+    [
+        "backup_id",
+        "actor_id",
+        "backup_class",
+        "backup_version",
+        "series_id",
+        "series_seq",
+        "supersedes",
+        "encryption",
+        "domain_separation",
+        "contents",
+        "ciphertext_digest",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+fn remove_auth_signature(value: &mut Value) -> Result<()> {
+    let auth_data = value
+        .get_mut("auth_data")
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| anyhow!("typed value did not serialize auth_data as an object"))?;
+    auth_data.remove("signature");
+    Ok(())
+}
+
+fn ts(value: &str) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .with_context(|| format!("invalid timestamp {value}"))
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+fn did(value: &str) -> Result<Did> {
+    Ok(Did::new(value.to_owned())?)
+}
+
+fn device_id(value: &str) -> Result<DeviceId> {
+    Ok(DeviceId::new(value.to_owned())?)
+}
+
+fn backup_id(value: &str) -> Result<BackupId> {
+    Ok(BackupId::new(value.to_owned())?)
+}
+
+fn backup_series_id(value: &str) -> Result<BackupSeriesId> {
+    Ok(BackupSeriesId::new(value.to_owned())?)
 }

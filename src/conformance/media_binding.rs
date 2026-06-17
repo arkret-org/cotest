@@ -22,10 +22,6 @@
 //! server-side (R3.1 work — see scenarios under `tests/`).
 
 use anyhow::{Result, anyhow, bail};
-use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
-use hkdf::Hkdf;
-use serde_json::json;
-use sha2::Sha256;
 use cokret_core::error::{
     ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED, ERROR_CODE_FOCUS_MISMATCH,
     ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT, ERROR_CODE_PARTICIPANT_BINDING_INVALID,
@@ -36,6 +32,10 @@ use cokret_core::error::{
 use cokret_core::{
     MEDIA_TOKEN_TTL_MAX_SECS, OP_CALL_MEDIA_TOKEN_EXCHANGE, PARTICIPANT_BINDING_SCHEMA,
 };
+use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use hkdf::Hkdf;
+use serde_json::json;
+use sha2::Sha256;
 
 /// Vector id pins. Hard-fails any future rename of the canonical
 /// `ck.vector.media_binding.*.v1` registry entries.
@@ -349,15 +349,13 @@ fn participant_binding_signing_input(
 ///
 /// Fixed issuer seed + fixed 7-tuple ⇒ a deterministic golden signature. The
 /// vector proves:
-///   1. a correctly signed binding verifies (the issuer key signs the §3
-///      signing_input, not the raw object);
-///   2. tampering with ANY one authoritative field breaks verification (the
-///      signature actually covers the field, it is not merely compared);
-///   3. the domain label is load-bearing — verifying the same `sig` under the
-///      ICE-config label (`ck.media.ice_config.v1`) MUST fail (cross-purpose
-///      signature confusion is rejected);
-///   4. `service_signature.sig` over the identical input verifies with the
-///      same issuer key.
+///   1. a correctly signed binding verifies (the issuer key signs the §3 signing_input, not the raw
+///      object);
+///   2. tampering with ANY one authoritative field breaks verification (the signature actually
+///      covers the field, it is not merely compared);
+///   3. the domain label is load-bearing — verifying the same `sig` under the ICE-config label
+///      (`ck.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected);
+///   4. `service_signature.sig` over the identical input verifies with the same issuer key.
 fn run_participant_binding_eddsa_vector() -> Result<()> {
     // Fixed golden inputs.
     const ISSUER_SEED: [u8; 32] = [
@@ -410,7 +408,10 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
         (device_id, "ck:device:01964137-0000-7000-8000-00000000dead"),
         (expires_at, "2099-01-01T00:00:00Z"),
         (focus_id, "fra-2"),
-        (participant_identity, "ck:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff"),
+        (
+            participant_identity,
+            "ck:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
+        ),
         (realm_id, "ck:realm:0196419b-0000-7000-8000-00000000dead"),
     ];
     for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
@@ -420,7 +421,11 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
             if idx == 2 { replacement } else { device_id },
             if idx == 3 { replacement } else { expires_at },
             if idx == 4 { replacement } else { focus_id },
-            if idx == 5 { replacement } else { participant_identity },
+            if idx == 5 {
+                replacement
+            } else {
+                participant_identity
+            },
             if idx == 6 { replacement } else { realm_id },
         )?;
         if verifying.verify(&tampered, &sig).is_ok() {
@@ -431,8 +436,8 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
         }
     }
 
-    // 3. Domain-label separation: the same sig under the ICE-config label MUST
-    //    NOT verify (cross-purpose confusion is rejected).
+    // 3. Domain-label separation: the same sig under the ICE-config label MUST NOT verify
+    //    (cross-purpose confusion is rejected).
     const ICE_CONFIG_LABEL: &str = "ck.media.ice_config.v1";
     let mut cross_input = Vec::new();
     cross_input.extend_from_slice(ICE_CONFIG_LABEL.as_bytes());
@@ -452,14 +457,16 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
         );
     }
 
-    // 4. service_signature reuses the identical signing_input (§3.1) and
-    //    verifies with the same issuer key.
+    // 4. service_signature reuses the identical signing_input (§3.1) and verifies with the same
+    //    issuer key.
     let service_sig = issuer.sign(&signing_input);
     verifying
         .verify(&signing_input, &service_sig)
         .map_err(|err| anyhow!("service_signature over identical input must verify: {err}"))?;
     if hex_lower(&service_sig.to_bytes()) != EXPECTED_SIG_HEX {
-        bail!("service_signature over the same input must reproduce the golden sig (deterministic ed25519)");
+        bail!(
+            "service_signature over the same input must reproduce the golden sig (deterministic ed25519)"
+        );
     }
 
     Ok(())
@@ -540,12 +547,11 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// participant_identity, device_id})`. A live MLS group / RFC 9420 exporter is
 /// NOT available under cotest's pure-vector slice, so this vector pins the two
 /// halves cotest CAN verify cryptographically:
-///   1. the Context is the byte-correct canonical JSON of the EXACT 6-tuple
-///      (an empty / epoch-only / missing-sender Context MUST fail closed);
-///   2. running a real RFC-5869 HKDF over a fixed exporter secret with the
-///      byte-correct `label || 0x00 || Context` info yields a deterministic
-///      32-byte key (golden vector) — proving the derivation is a genuine KDF
-///      over the right inputs, not a length check.
+///   1. the Context is the byte-correct canonical JSON of the EXACT 6-tuple (an empty / epoch-only
+///      / missing-sender Context MUST fail closed);
+///   2. running a real RFC-5869 HKDF over a fixed exporter secret with the byte-correct `label ||
+///      0x00 || Context` info yields a deterministic 32-byte key (golden vector) — proving the
+///      derivation is a genuine KDF over the right inputs, not a length check.
 ///
 /// LIVE RESIDUAL: substituting cotest's fixed exporter secret for a real MLS
 /// group's exporter secret (RFC 9420 §8) requires a live MLS group; that is the

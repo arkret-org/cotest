@@ -17,8 +17,8 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use cokret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
-use cokret_core::Did;
-use cokret_core::models::{Handle, HandleBindingState, HandleClaim};
+use cokret_core::models::{Handle, HandleBindingState, HandleClaim, PayloadProof};
+use cokret_core::{Did, Hash};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
     "ck.cotest_vector.primary_handle_selection.empty_candidate_fallback.v1";
@@ -493,10 +493,18 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     let mut hinted = canonical.clone();
     hinted.verified_at = Some(at(2026, 5, 26));
     hinted.challenge = Some("nonce-xyz".to_owned());
-    hinted.proofs = vec![serde_json::json!({
-        "kind": "detached_jws",
-        "jws": "hint.only.shape"
-    })];
+    hinted.proofs = vec![PayloadProof {
+        kind: "detached_jws".to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: "did:web:coauth.acme.example#key-1".to_owned(),
+        payload_digest: Hash::new(
+            "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+        )?,
+        created_at: at(2026, 5, 26),
+        domain: None,
+        audience: None,
+        jws: "hint.only.shape".to_owned(),
+    }];
     let after = claim_digest(&hinted).map_err(|e| anyhow!("claim_digest hinted: {e}"))?;
     if base != after {
         bail!(

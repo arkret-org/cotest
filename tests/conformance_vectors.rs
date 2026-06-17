@@ -667,8 +667,9 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     use std::collections::BTreeSet;
 
     use cokret_core::{
-        CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle, HandleHintBindingSource,
-        MemberDeliveryBindingCandidate, RecipientServiceType,
+        Audience, CandidateIntent, DeliveryBindingHint, DeliveryMode, Did, Handle,
+        HandleHintBindingSource, Hash, MemberDeliveryBindingCandidate, PayloadProof,
+        RecipientServiceType,
     };
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
@@ -699,16 +700,21 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
         issued_at: Some(chrono::Utc::now()),
         source_refs: vec!["ck:event:01904100-0000-7000-8000-test8source01".to_owned()],
-        proofs: vec![serde_json::json!({
-            "kind": "detached_jws",
-            "alg": "EdDSA",
-            "verification_method": "did:web:principal.acme.example#key-1",
-            "payload_digest":
+        proofs: vec![serde_json::to_value(PayloadProof {
+            kind: "detached_jws".to_owned(),
+            alg: "EdDSA".to_owned(),
+            verification_method: "did:web:principal.acme.example#key-1".to_owned(),
+            payload_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",
-            "created_at": "2026-05-27T00:00:00Z",
-            "audience": "ck:realm:01904100-0000-7000-8000-test8audience",
-            "jws": "test8.real.shaped.jws"
-        })],
+            )?,
+            created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
+                .with_timezone(&chrono::Utc),
+            domain: None,
+            audience: Some(Audience::Single(
+                "ck:realm:01904100-0000-7000-8000-test8audience".to_owned(),
+            )),
+            jws: "test8.real.shaped.jws".to_owned(),
+        })?],
         claim_digest: None,
         intent: CandidateIntent::MemberAdd,
     };

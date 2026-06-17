@@ -203,4 +203,85 @@ test.describe("multi-device pairing + revocation", () => {
       // spec: device-lifecycle.md §7
     },
   );
+
+  // ── Pairing-approval UX (yougen surfaces; device-lifecycle.md §2.1/§7) ──
+  // §7 MUST: the receiving authorized device puts pairing_code + binding into
+  // an explicit user confirmation and never trusts a new device on arrival.
+  // yougen surfaces this two ways: a global approval prompt that pops on any
+  // authorized device, and the /settings/devices/pair "Approve a device" card.
+
+  test("device list renders an Element-style verification shield for the current device", async ({
+    browser,
+    request,
+  }) => {
+    // spec: device-lifecycle.md §6 (device list / verification state).
+    // yougen: settings/devices.rs device_verification_badge — verified→green
+    // shield, unverified→amber, revoked→red, else dim. The current device is
+    // always present (registered with its device_id), so exactly one row with
+    // a `device-verification-badge` must render.
+    const alice = uniqueUser(`s10-verif-badge-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const device = await openUserPage(browser, alice, { sessionToken: token });
+    try {
+      await device.gotoHome();
+      await device.page.goto("/settings/devices", { waitUntil: "domcontentloaded" });
+      await expect(device.page.getByTestId("device-list")).toBeVisible({ timeout: 120_000 });
+      const badge = device.page.getByTestId("device-verification-badge").first();
+      await expect(badge).toBeVisible({ timeout: 30_000 });
+      // The shield carries a normalized state token for assertions, and the
+      // current device for a freshly-enrolled dev account is one of the known
+      // spec states (verified/unverified) — never an empty/unknown blank.
+      const state = await badge.getAttribute("data-verification");
+      expect(["verified", "unverified", "revoked"]).toContain(state);
+    } finally {
+      await device.close();
+    }
+  });
+
+  test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap (live to-device delivery between two sessions)
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
+    "new device's same_principal_device_authorization request surfaces on an authorized device as the global approval prompt; comparing the code and Approve authorizes it",
+    async () => {
+      // spec: device-lifecycle.md §2.1 / §7 (user-in-the-loop, pairing_code compare).
+      // device-2: /settings/devices/pair → pair-device-start-button mints the
+      //   request and to-device delivers it to authorized siblings.
+      // device-1 (authorized): the global DevicePairApprovalPrompt pops:
+      //   - device-pair-approval-modal visible
+      //   - device-pair-approval-code matches the code device-2 shows
+      //   - device-pair-approval-approve → POST /_cokret/gate/account/device-pair
+      //   - device-2 then appears verified in device-1's device list.
+      // Gap: cross-session live to-device fan-out in the harness (devices share
+      // one actor; needs real device_messages delivery, not the paste path).
+    },
+  );
+
+  test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap (live to-device delivery between two sessions)
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
+    "rejecting the pairing request (global prompt device-pair-approval-reject) dismisses it locally and does NOT authorize the new device",
+    async () => {
+      // spec: device-lifecycle.md §7 (no trust without explicit approval).
+      // device-pair-approval-reject → request dropped from the to-device inbox
+      // (local_state.dismiss_pairing_to_device_message); the prompt does not
+      // re-pop, and device-2 is never added to the device list.
+    },
+  );
+
+  test.fixme(
+    // @blocking-on: soland#identity-multi-device-gap (live to-device delivery between two sessions)
+    // @user-promise: e2e/scenarios/identity/multi-device.md
+    // @expected-live-by: 2026Q3
+    "the /settings/devices/pair 'Approve a device' card lists a delivered to-device request and approves it (pending-pairing-requests-card → approve-pairing-request-button)",
+    async () => {
+      // spec: device-lifecycle.md §7.
+      // device-1 /settings/devices/pair: pending-pairing-requests-card shows the
+      //   delivered request with pending-pairing-code; approve-pairing-request-button
+      //   finalizes via /_cokret/gate/account/device-pair; reject-pairing-request-button
+      //   drops it. Refresh requests (pending-pairing-refresh-button) re-reads the inbox.
+    },
+  );
 });
