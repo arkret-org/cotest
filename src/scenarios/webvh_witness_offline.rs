@@ -87,19 +87,19 @@ pub async fn webvh_witness_offline_recovery_run() -> Result<()> {
     //   assert!(matches!(h3["state"].as_str(), Some("stale_history"|"untrusted")));
     //
     //   // High-risk write fails closed
-    //   let create = client.post(starid.url("/_cokret/root/webvh/dids"))
+    //   let create = client.post(starid.url("/_starid/webvh/dids"))
     //                      .json(&json!({...})).send().await?;
     //   assert!(create.status().as_u16() >= 500 || create.status() == 423);
     //
     //   // Step 8: emergency recovery
-    //   let rot = client.post(starid.url("/_cokret/root/webvh/dids/<scid>/rotate"))
+    //   let rot = client.post(starid.url("/_starid/webvh/dids/<scid>/rotate"))
     //                   .json(&json!({"kind":"emergency",
     //                                 "skip_prev_key_sig": true,
     //                                 "new_controller_keys": [...],
     //                                 "recovery_proof": {...}}))
     //                   .send().await?;
     //   assert!(rot.status().is_success());
-    //   let doc = client.get(starid.url("/_cokret/root/webvh/dids/<scid>"))
+    //   let doc = client.get(starid.url("/_starid/webvh/dids/<scid>"))
     //                   .send().await?.json::<Value>().await?;
     //   let latest = doc["history"].as_array().unwrap().last().unwrap();
     //   assert_eq!(latest["rotation_kind"], "emergency");
