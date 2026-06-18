@@ -8,6 +8,7 @@ use cotest::conformance::{
     validate_vector_registry_gate_report_with_mode,
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 #[test]
 fn active_vector_with_missing_artifact_evidence_fails() -> Result<()> {
@@ -25,6 +26,10 @@ fn active_vector_with_missing_artifact_evidence_fails() -> Result<()> {
                 }
             ]
         }),
+    )?;
+    write_fixture_digest_report(
+        &artifacts_root,
+        &["spec/v1/artifacts/fixtures/gate-fixture.json"],
     )?;
     write_json(
         &registry_path,
@@ -111,6 +116,10 @@ fn fixture_backed_active_vector_is_certification_gate() -> Result<()> {
             ]
         }),
     )?;
+    write_fixture_digest_report(
+        &artifacts_root,
+        &["spec/v1/artifacts/fixtures/gate-fixture.json"],
+    )?;
     write_json(
         &registry_path,
         &json!({
@@ -141,6 +150,62 @@ fn fixture_backed_active_vector_is_certification_gate() -> Result<()> {
         "fixture-backed evidence should surface expected_digest metadata"
     );
     validate_vector_registry_gate_report_with_mode(&report, VectorRegistryGateMode::Strict)?;
+    Ok(())
+}
+
+#[test]
+fn fixture_backed_active_vector_with_digest_drift_fails() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let artifacts_root = temp.path().join("spec").join("v1").join("artifacts");
+    let registry_path = artifacts_root.join("registry").join("vector-registry.json");
+
+    write_json(
+        &artifacts_root.join("fixtures").join("gate-fixture.json"),
+        &json!({
+            "vectors": [
+                {
+                    "vector_id": "ck.vector.fixture_backed.v1",
+                    "expected_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                }
+            ]
+        }),
+    )?;
+    write_json(
+        &artifacts_root.join("reports").join("fixture-digests.json"),
+        &json!({
+            "schema": "cokret.fixture-digests.v1",
+            "hash": "sha256",
+            "fixtures_root": "spec/v1/artifacts/fixtures",
+            "files": [{
+                "path": "spec/v1/artifacts/fixtures/gate-fixture.json",
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            }]
+        }),
+    )?;
+    write_json(
+        &registry_path,
+        &json!({
+            "vectors": [
+                {
+                    "vector_id": "ck.vector.fixture_backed.v1",
+                    "status": "active",
+                    "domain": "gate",
+                    "source_refs": ["spec/v1/artifacts/fixtures/gate-fixture.json"]
+                }
+            ]
+        }),
+    )?;
+
+    let report = build_vector_registry_gate_report_from_paths(&registry_path, &artifacts_root)?;
+    assert_eq!(
+        report.entries[0].gate_status,
+        VectorRegistryGateStatus::Failed
+    );
+    let error =
+        validate_vector_registry_gate_report_with_mode(&report, VectorRegistryGateMode::Lenient)
+            .expect_err("digest drift must fail even in lenient mode")
+            .to_string();
+    assert!(error.contains("fixture digest drift"));
     Ok(())
 }
 
@@ -236,4 +301,45 @@ fn write_json(path: &Path, value: &Value) -> Result<()> {
     }
     fs::write(path, serde_json::to_vec_pretty(value)?)?;
     Ok(())
+}
+
+fn write_fixture_digest_report(artifacts_root: &Path, fixture_refs: &[&str]) -> Result<()> {
+    let files = fixture_refs
+        .iter()
+        .map(|fixture_ref| {
+            let relative = fixture_ref
+                .strip_prefix("spec/v1/artifacts/")
+                .expect("fixture ref must be artifact-relative");
+            let path = relative
+                .split('/')
+                .fold(artifacts_root.to_owned(), |path, segment| {
+                    path.join(segment)
+                });
+            let bytes = fs::read(path)?;
+            Ok(json!({
+                "path": fixture_ref,
+                "sha256": sha256_hex(&bytes),
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    write_json(
+        &artifacts_root.join("reports").join("fixture-digests.json"),
+        &json!({
+            "schema": "cokret.fixture-digests.v1",
+            "hash": "sha256",
+            "fixtures_root": "spec/v1/artifacts/fixtures",
+            "files": files,
+        }),
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
+    let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
 }

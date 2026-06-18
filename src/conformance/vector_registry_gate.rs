@@ -1,13 +1,16 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use super::{looks_like_sha256_digest, spec_artifacts_root};
 
 const VECTOR_REGISTRY_REF: &str = "registry/vector-registry.json";
+const FIXTURE_DIGESTS_REF: &str = "reports/fixture-digests.json";
 const ARTIFACT_FIXTURE_PREFIX: &str = "spec/v1/artifacts/fixtures/";
 const ARTIFACT_REF_PREFIX: &str = "spec/v1/artifacts/";
 const STRICT_GATE_ENV: &str = "COTEST_VECTOR_REGISTRY_GATE_STRICT";
@@ -111,6 +114,23 @@ struct VectorRegistryRow {
     description: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct FixtureDigestReport {
+    files: Vec<FixtureDigestEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FixtureDigestEntry {
+    path: String,
+    sha256: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct FixtureDigestIndex {
+    missing_report: bool,
+    hashes: BTreeMap<String, String>,
+}
+
 pub fn build_vector_registry_gate_report() -> Result<VectorRegistryGateReport> {
     let artifacts_root = spec_artifacts_root();
     build_vector_registry_gate_report_from_paths(
@@ -175,10 +195,11 @@ pub fn build_vector_registry_gate_report_from_paths(
     artifacts_root: &Path,
 ) -> Result<VectorRegistryGateReport> {
     let registry = load_registry(registry_path)?;
+    let fixture_digests = load_fixture_digest_index(artifacts_root)?;
     let mut entries = Vec::with_capacity(registry.vectors.len());
 
     for row in registry.vectors {
-        entries.push(build_gate_entry(&row, artifacts_root)?);
+        entries.push(build_gate_entry(&row, artifacts_root, &fixture_digests)?);
     }
 
     Ok(VectorRegistryGateReport { entries })
@@ -198,6 +219,7 @@ fn load_registry(path: &Path) -> Result<VectorRegistry> {
 fn build_gate_entry(
     row: &VectorRegistryRow,
     artifacts_root: &Path,
+    fixture_digests: &FixtureDigestIndex,
 ) -> Result<VectorRegistryGateEntry> {
     let fixture_refs = row
         .source_refs
@@ -207,7 +229,7 @@ fn build_gate_entry(
         .collect::<Vec<_>>();
 
     match row.status.as_str() {
-        "active" => build_active_gate_entry(row, artifacts_root, fixture_refs),
+        "active" => build_active_gate_entry(row, artifacts_root, fixture_digests, fixture_refs),
         "reserved" => build_non_gating_entry(
             row,
             fixture_refs,
@@ -234,6 +256,7 @@ fn build_gate_entry(
 fn build_active_gate_entry(
     row: &VectorRegistryRow,
     artifacts_root: &Path,
+    fixture_digests: &FixtureDigestIndex,
     fixture_refs: Vec<String>,
 ) -> Result<VectorRegistryGateEntry> {
     if fixture_refs.is_empty() {
@@ -266,6 +289,10 @@ fn build_active_gate_entry(
                 path.display()
             )
         })?;
+        if let Err(reason) = validate_fixture_digest(fixture_digests, fixture_ref, &path)? {
+            missing_refs.push(reason);
+            continue;
+        }
         let value = serde_json::from_str::<Value>(&raw).map_err(|error| {
             anyhow!(
                 "failed to parse fixture source_ref {} at {}: {error}",
@@ -352,6 +379,92 @@ fn resolve_artifact_ref(artifacts_root: &Path, source_ref: &str) -> Result<PathB
         .fold(artifacts_root.to_owned(), |path, segment| {
             path.join(segment)
         }))
+}
+
+fn load_fixture_digest_index(artifacts_root: &Path) -> Result<FixtureDigestIndex> {
+    let path = artifacts_root.join(FIXTURE_DIGESTS_REF);
+    if !path.is_file() {
+        return Ok(FixtureDigestIndex {
+            missing_report: true,
+            hashes: BTreeMap::new(),
+        });
+    }
+
+    let raw = fs::read_to_string(&path).map_err(|error| {
+        anyhow!(
+            "failed to read fixture digest report {}: {error}",
+            path.display()
+        )
+    })?;
+    let report: FixtureDigestReport = serde_json::from_str(&raw).map_err(|error| {
+        anyhow!(
+            "failed to parse fixture digest report {}: {error}",
+            path.display()
+        )
+    })?;
+    let hashes = report
+        .files
+        .into_iter()
+        .map(|entry| (entry.path, entry.sha256))
+        .collect::<BTreeMap<_, _>>();
+    Ok(FixtureDigestIndex {
+        missing_report: false,
+        hashes,
+    })
+}
+
+fn validate_fixture_digest(
+    fixture_digests: &FixtureDigestIndex,
+    fixture_ref: &str,
+    path: &Path,
+) -> Result<std::result::Result<(), String>> {
+    if fixture_digests.missing_report {
+        return Ok(Err(format!(
+            "{fixture_ref} (fixture digest report {FIXTURE_DIGESTS_REF} not found)"
+        )));
+    }
+
+    let Some(expected) = fixture_digests.hashes.get(fixture_ref) else {
+        return Ok(Err(format!(
+            "{fixture_ref} (not listed in {FIXTURE_DIGESTS_REF})"
+        )));
+    };
+    if expected.len() != 64
+        || !expected
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase())
+    {
+        return Ok(Err(format!(
+            "{fixture_ref} ({FIXTURE_DIGESTS_REF} sha256 is malformed)"
+        )));
+    }
+
+    let bytes = fs::read(path).map_err(|error| {
+        anyhow!(
+            "failed to read fixture source_ref {} at {} for digest validation: {error}",
+            fixture_ref,
+            path.display()
+        )
+    })?;
+    let actual = sha256_hex(&bytes);
+    if actual != *expected {
+        return Ok(Err(format!(
+            "{fixture_ref} (fixture digest drift: expected {expected}, actual {actual})"
+        )));
+    }
+
+    Ok(Ok(()))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+
+    let digest = Sha256::digest(bytes);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
 }
 
 fn collect_vector_evidence(
