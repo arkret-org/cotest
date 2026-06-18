@@ -292,6 +292,25 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
         ) && entry.reason.is_some()),
         "real registry should record reserved or unsupported rows with a reason"
     );
+    for vector_id in [
+        "ck.vector.redaction.preserve_fields.v1",
+        "ck.vector.redaction.snapshot_pruning_stub.v1",
+    ] {
+        let entry = report
+            .entries
+            .iter()
+            .find(|entry| entry.vector_id == vector_id)
+            .unwrap_or_else(|| panic!("{vector_id} must be registered"));
+        assert_eq!(entry.gate_status, VectorRegistryGateStatus::FixtureBacked);
+        assert!(
+            entry
+                .fixture_refs
+                .iter()
+                .any(|fixture_ref| fixture_ref
+                    == "spec/v1/artifacts/fixtures/redaction-fixture.json"),
+            "{vector_id} must stay backed by redaction-fixture.json"
+        );
+    }
     Ok(())
 }
 
