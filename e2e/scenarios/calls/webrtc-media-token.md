@@ -9,7 +9,10 @@ live soland instance.
 2. Project a `ck.realm.media_service` epoch with a single LiveKit focus
    (`ck:focus:livekit-lhr`, `issuer_kid = did:web:media.example#media-token`,
    `e2ee_key_source = mls-exporter`).
-3. Create an ephemeral WebRTC session (`POST /_soland/self/webrtc/sessions`).
+3. Commit the first durable `ck.call.state` for the call, including the
+   selected `session_focus`, and exchange signaling through
+   `POST /_cokret/self/ephemeral` with `kind = "ck.call.signal"`; no
+   legacy soland-private WebRTC session surface is used.
 
 ## Steps & Expectations
 
