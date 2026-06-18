@@ -143,6 +143,10 @@ Browser-level user simulation is intentionally separate and lives under
 The joint E2E runner currently targets the first live-product slice:
 
 - start or attach `soland`
+- optionally start `soland` from a built Docker image with
+  `-SolandRuntime docker`; this is the preferred release-quality joint e2e
+  path because Playwright drives the packaged server shape instead of a local
+  `cargo run` child
 - start or attach `yougen` web
 - start or attach `coauth`; `scripts/run-cotest.ps1 -Profile joint` enables
   `-StartCoauth` by default so the local promoted profile always exercises the
@@ -222,7 +226,10 @@ Recommended local run:
 
 ```powershell
 .\scripts\run-cotest.ps1 -Profile joint
+.\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1 -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
+.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipYougen -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
 .\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
@@ -235,7 +242,8 @@ Playwright dependencies in `e2e/`.
 
 The runner performs a preflight before starting services: Node/npm/npx,
 Playwright config/package/browser registry, default cargo/dx startup tools,
-and Docker/coauth/PostgreSQL image availability when `-StartCoauth` is used.
+Docker daemon/image availability when `-SolandRuntime docker` is used, and
+Docker/coauth/PostgreSQL image availability when `-StartCoauth` is used.
 The preflight is written to `preflight.json` and `preflight.md`.
 
 `joint-smoke` currently runs the desktop smoke matrix. `joint-full` runs

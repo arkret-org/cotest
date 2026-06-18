@@ -61,7 +61,15 @@ function Invoke-JointSmokeGate {
         [bool]$StartCoauth = $true,
         [bool]$DualSoland = $false,
         [bool]$StartMocks = $false,
-        [string]$Grep
+        [string]$Grep,
+        [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
+        [string]$SolandImage = "cotest-soland:latest",
+        [bool]$BuildSolandImage = $false,
+        [string[]]$DockerCacheFrom = @(),
+        [string]$DockerCacheTo,
+        [bool]$DockerPull = $false,
+        [bool]$DockerNoCache = $false,
+        [bool]$SkipYougen = $false
     )
 
     $jointScript = Join-Path $RepoRoot "scripts\run-joint-e2e.ps1"
@@ -80,6 +88,28 @@ function Invoke-JointSmokeGate {
     }
     if ($StartMocks) {
         $args += "-StartMocks"
+    }
+    if ($SolandRuntime -eq "docker") {
+        $args += @("-SolandRuntime", "docker", "-SolandImage", $SolandImage)
+        if ($BuildSolandImage) {
+            $args += "-BuildSolandImage"
+        }
+        if ($DockerCacheFrom.Count -gt 0) {
+            $args += "-DockerCacheFrom"
+            $args += $DockerCacheFrom
+        }
+        if ($DockerCacheTo) {
+            $args += @("-DockerCacheTo", $DockerCacheTo)
+        }
+        if ($DockerPull) {
+            $args += "-DockerPull"
+        }
+        if ($DockerNoCache) {
+            $args += "-DockerNoCache"
+        }
+    }
+    if ($SkipYougen) {
+        $args += "-SkipYougen"
     }
     $args += @(
         "-RunProfile", $RunProfile,
@@ -1560,7 +1590,14 @@ if ($Profile -eq "joint") {
         -OutputName "joint" `
         -RunProfile "joint-smoke" `
         -PlaywrightProject "joint-yougen" `
-        -StartCoauth $true
+        -StartCoauth $true `
+        -SolandRuntime $Runtime `
+        -SolandImage $SutImage `
+        -BuildSolandImage ([bool]$BuildImage) `
+        -DockerCacheFrom $DockerCacheFrom `
+        -DockerCacheTo $DockerCacheTo `
+        -DockerPull ([bool]$DockerPull) `
+        -DockerNoCache ([bool]$DockerNoCache)
 
     $summary = [pscustomobject]@{
         generated_at           = (Get-Date).ToString("o")
@@ -1603,7 +1640,14 @@ if ($Profile -eq "dual-soland") {
         -StartCoauth $true `
         -DualSoland $true `
         -StartMocks $false `
-        -Grep "cross-server.federation"
+        -Grep "cross-server.federation" `
+        -SolandRuntime $Runtime `
+        -SolandImage $SutImage `
+        -BuildSolandImage ([bool]$BuildImage) `
+        -DockerCacheFrom $DockerCacheFrom `
+        -DockerCacheTo $DockerCacheTo `
+        -DockerPull ([bool]$DockerPull) `
+        -DockerNoCache ([bool]$DockerNoCache)
 
     $summary = [pscustomobject]@{
         generated_at           = (Get-Date).ToString("o")
@@ -1792,7 +1836,17 @@ $jointSmokeGate = [pscustomobject]@{
     summary_markdown = $null
 }
 if ($Profile -eq "release-gate" -and -not $SkipJointSmokeGate) {
-    $jointSmokeGate = Invoke-JointSmokeGate -RepoRoot $repoRoot -RunDir $runDir -RawLog $rawLog
+    $jointSmokeGate = Invoke-JointSmokeGate `
+        -RepoRoot $repoRoot `
+        -RunDir $runDir `
+        -RawLog $rawLog `
+        -SolandRuntime $Runtime `
+        -SolandImage $SutImage `
+        -BuildSolandImage $false `
+        -DockerCacheFrom $DockerCacheFrom `
+        -DockerCacheTo $DockerCacheTo `
+        -DockerPull ([bool]$DockerPull) `
+        -DockerNoCache ([bool]$DockerNoCache)
     if ($jointSmokeGate.status -eq "failed") {
         $exitCode = 1
     }

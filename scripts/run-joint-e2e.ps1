@@ -28,8 +28,18 @@ param(
     [string]$YougenBetaBaseUrl,
     [string]$CoauthBaseUrl,
     [string]$SolandCommand,
+    [ValidateSet("process", "docker")]
+    [string]$SolandRuntime = "process",
+    [string]$SolandImage = "cotest-soland:latest",
+    [int]$SolandContainerPort = 8008,
+    [switch]$BuildSolandImage,
+    [string[]]$DockerCacheFrom = @(),
+    [string]$DockerCacheTo,
+    [switch]$DockerPull,
+    [switch]$DockerNoCache,
     [string]$YougenCommand,
     [string]$YougenBetaCommand,
+    [switch]$SkipYougen,
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
     [switch]$StartCoauth,
@@ -183,6 +193,63 @@ function Invoke-NativeCapture {
     }
 }
 
+function Test-DockerImagePresent {
+    param([Parameter(Mandatory = $true)][string]$ImageTag)
+
+    $docker = Find-CommandPath @("docker.exe", "docker")
+    if (-not $docker) {
+        return $false
+    }
+    $null = Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $ImageTag)
+    return $LASTEXITCODE -eq 0
+}
+
+function Invoke-SolandImageBuild {
+    param(
+        [Parameter(Mandatory = $true)][string]$ImageTag,
+        [string[]]$CacheFrom = @(),
+        [string]$CacheTo,
+        [switch]$Pull,
+        [switch]$NoCache
+    )
+
+    $buildRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $buildWorkspaceRoot = (Resolve-Path (Join-Path $buildRepoRoot "..")).Path
+    $buildDockerfilePath = Join-Path $buildRepoRoot "docker\soland.Dockerfile"
+    foreach ($path in @(
+            (Join-Path $buildWorkspaceRoot "soland"),
+            (Join-Path $buildWorkspaceRoot "cokret-rust-sdk"),
+            $buildDockerfilePath
+        )) {
+        if (-not (Test-Path $path)) {
+            throw "Required path not found: $path"
+        }
+    }
+
+    $buildArgs = @("build", "--file", $buildDockerfilePath, "--tag", $ImageTag)
+    foreach ($cache in $CacheFrom) {
+        if ($cache) {
+            $buildArgs += @("--cache-from", $cache)
+        }
+    }
+    if ($CacheTo) {
+        $buildArgs += @("--cache-to", $CacheTo)
+    }
+    if ($Pull) {
+        $buildArgs += "--pull"
+    }
+    if ($NoCache) {
+        $buildArgs += "--no-cache"
+    }
+    $buildArgs += $buildWorkspaceRoot
+
+    Write-Host "Building $ImageTag from $buildDockerfilePath with context $buildWorkspaceRoot"
+    & docker @buildArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to build Docker image $ImageTag"
+    }
+}
+
 function Invoke-JointE2ePreflight {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -201,6 +268,9 @@ function Invoke-JointE2ePreflight {
         [string]$SolandBaseUrl,
         [string]$SolandCommand,
         [bool]$WillStartDefaultSoland = $false,
+        [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
+        [string]$SolandImage,
+        [bool]$WillStartDockerSoland = $false,
         [string]$YougenBaseUrl,
         [string]$YougenCommand,
         [bool]$WillStartDefaultYougen = $false,
@@ -276,12 +346,37 @@ function Invoke-JointE2ePreflight {
     }
 
     if ($WillStartDefaultSoland -or (-not $SolandBaseUrl -and -not $SolandCommand)) {
-        $cargo = Find-CommandPath @("cargo.exe", "cargo")
-        if ($cargo) {
-            $version = (& $cargo --version 2>&1) -join "`n"
-            Add-PreflightResult $results "cargo" "pass" "$cargo $version"
+        if ($SolandRuntime -eq "docker") {
+            Add-PreflightResult $results "soland runtime" "pass" "docker"
         } else {
-            Add-PreflightResult $results "cargo" "fail" "cargo is required to start the default soland command"
+            $cargo = Find-CommandPath @("cargo.exe", "cargo")
+            if ($cargo) {
+                $version = (& $cargo --version 2>&1) -join "`n"
+                Add-PreflightResult $results "cargo" "pass" "$cargo $version"
+            } else {
+                Add-PreflightResult $results "cargo" "fail" "cargo is required to start the default soland command"
+            }
+        }
+    }
+
+    if ($WillStartDockerSoland) {
+        $docker = Find-CommandPath @("docker.exe", "docker")
+        if ($docker) {
+            Add-PreflightResult $results "docker cli" "pass" $docker
+            $dockerInfo = (Invoke-NativeCapture -FilePath $docker -Arguments @("info")) -join "`n"
+            if ($LASTEXITCODE -eq 0) {
+                Add-PreflightResult $results "docker daemon" "pass" "daemon reachable"
+            } else {
+                Add-PreflightResult $results "docker daemon" "fail" $dockerInfo
+            }
+            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $SolandImage)) -join "`n"
+            if ($LASTEXITCODE -eq 0) {
+                Add-PreflightResult $results "soland image" "pass" $SolandImage
+            } else {
+                Add-PreflightResult $results "soland image" "fail" "$SolandImage not present after image build/check"
+            }
+        } else {
+            Add-PreflightResult $results "docker cli" "fail" "docker is required for -SolandRuntime docker"
         }
     }
 
@@ -455,6 +550,26 @@ function Get-FreeTcpPort {
 function Quote-PsLiteral {
     param([Parameter(Mandatory = $true)][string]$Value)
     return "'" + ($Value -replace "'", "''") + "'"
+}
+
+function Convert-ToContainerReachableUrl {
+    param([AllowNull()][string]$Url)
+
+    if (-not $Url) {
+        return $Url
+    }
+    try {
+        $uri = [System.Uri]$Url
+    } catch {
+        return $Url
+    }
+    if ($uri.Host -ne "127.0.0.1" -and $uri.Host -ne "localhost" -and $uri.Host -ne "::1") {
+        return $Url
+    }
+
+    $builder = [System.UriBuilder]::new($uri)
+    $builder.Host = "host.docker.internal"
+    return $builder.Uri.AbsoluteUri.TrimEnd("/")
 }
 
 function Get-PythonExecutable {
@@ -720,6 +835,7 @@ function Start-ManagedCommand {
         -PassThru
 
     [pscustomobject]@{
+        Kind = "process"
         Name = $Name
         Process = $process
         Stdout = $stdout
@@ -728,8 +844,70 @@ function Start-ManagedCommand {
     }
 }
 
+function Start-ManagedDockerSoland {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Image,
+        [Parameter(Mandatory = $true)][int]$HostPort,
+        [Parameter(Mandatory = $true)][int]$ContainerPort,
+        [Parameter(Mandatory = $true)][string]$ObjectsRoot,
+        [Parameter(Mandatory = $true)][string]$LogDirectory,
+        [Parameter(Mandatory = $true)]$Environment
+    )
+
+    $null = New-Item -ItemType Directory -Force -Path $ObjectsRoot
+    $null = New-Item -ItemType Directory -Force -Path $LogDirectory
+
+    $safeName = ($Name.ToLowerInvariant() -replace '[^a-z0-9_.-]', '-')
+    $containerName = "cotest-joint-$safeName-$PID-$([Guid]::NewGuid().ToString('n').Substring(0, 8))"
+    $stdout = Join-Path $LogDirectory "$Name.stdout.log"
+    $stderr = Join-Path $LogDirectory "$Name.stderr.log"
+    $commandLog = Join-Path $LogDirectory "$Name.command.txt"
+
+    $runArgs = @(
+        "run",
+        "-d",
+        "--name", $containerName,
+        "--label", "cotest.runner=joint-e2e",
+        "--add-host", "host.docker.internal:host-gateway",
+        "-p", ("127.0.0.1:{0}:{1}" -f $HostPort, $ContainerPort),
+        "-v", ("{0}:/tmp/soland-blobs" -f $ObjectsRoot),
+        "-v", ("{0}:/cotest-logs" -f $LogDirectory)
+    )
+    foreach ($key in $Environment.Keys) {
+        $value = [string]$Environment[$key]
+        $runArgs += @("-e", "$key=$value")
+    }
+    $runArgs += @($Image, "--bind", ("0.0.0.0:{0}" -f $ContainerPort))
+
+    ("docker " + ($runArgs -join " ")) | Set-Content -Path $commandLog -Encoding UTF8
+    $runOutput = Invoke-NativeCapture -FilePath "docker" -Arguments $runArgs
+    $runOutput | Set-Content -Path $stdout -Encoding UTF8
+    "" | Set-Content -Path $stderr -Encoding UTF8
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker run failed for $Name; see $stdout"
+    }
+
+    [pscustomobject]@{
+        Kind = "docker"
+        Name = $Name
+        ContainerName = $containerName
+        Stdout = $stdout
+        Stderr = $stderr
+        CommandLog = $commandLog
+    }
+}
+
 function Stop-ManagedCommand {
     param([Parameter(Mandatory = $true)]$Service)
+
+    if (($Service.PSObject.Properties.Name -contains "Kind") -and $Service.Kind -eq "docker") {
+        $logs = Invoke-NativeCapture -FilePath "docker" -Arguments @("logs", $Service.ContainerName)
+        $logs | Set-Content -Path $Service.Stdout -Encoding UTF8
+        "" | Set-Content -Path $Service.Stderr -Encoding UTF8
+        & docker rm -f $Service.ContainerName 2>$null | Out-Null
+        return
+    }
 
     if (-not $Service.Process.HasExited) {
         Stop-ProcessTree -ProcessId $Service.Process.Id
@@ -807,16 +985,23 @@ if ($DualSoland) {
     $solandBetaPort = Get-FreeTcpPort
     $solandBetaBaseUrl = "http://127.0.0.1:$solandBetaPort"
 }
-if (-not $YougenBaseUrl) {
-    $yougenPort = Get-FreeTcpPort
-    $YougenBaseUrl = "http://127.0.0.1:$yougenPort"
-} else {
-    $yougenPort = $null
+if ($SolandRuntime -eq "docker" -and $SolandCommand) {
+    throw "-SolandRuntime docker is incompatible with -SolandCommand; omit -SolandCommand so the harness can start the image."
+}
+if ($SkipYougen -and ($YougenCommand -or $YougenBetaCommand -or $PSBoundParameters.ContainsKey("YougenBaseUrl") -or $PSBoundParameters.ContainsKey("YougenBetaBaseUrl"))) {
+    throw "-SkipYougen cannot be combined with Yougen URLs or commands."
+}
+$yougenPort = $null
+if (-not $SkipYougen) {
+    if (-not $YougenBaseUrl) {
+        $yougenPort = Get-FreeTcpPort
+        $YougenBaseUrl = "http://127.0.0.1:$yougenPort"
+    }
 }
 $yougenBetaPort = $null
 $yougenBetaBaseUrl = $null
 $yougenBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("YougenBaseUrl")
-if ($DualSoland) {
+if ($DualSoland -and -not $SkipYougen) {
     if ($YougenBetaBaseUrl) {
         $yougenBetaBaseUrl = $YougenBetaBaseUrl
     } elseif ($YougenBetaCommand) {
@@ -965,6 +1150,9 @@ $exitCode = 1
 $startedAt = Get-Date
 $generatedSolandCommand = $false
 $generatedYougenCommand = $false
+$willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
+$willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($DualSoland -and $null -ne $solandBetaPort)))
+$startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
 $coauthConfigPath = $null
 $e2eRoot = Join-Path $repoRoot "e2e"
 $preflightJson = Join-Path $jointDir "preflight.json"
@@ -975,6 +1163,25 @@ $playwrightProjects = Resolve-PlaywrightProjects `
     -PlaywrightProjectWasExplicit ($PSBoundParameters.ContainsKey("PlaywrightProject"))
 
 try {
+    if ($willStartDockerSoland -and ($BuildSolandImage -or -not (Test-DockerImagePresent -ImageTag $SolandImage))) {
+        $imageBuildArgs = @{
+            ImageTag = $SolandImage
+        }
+        if ($DockerCacheFrom.Count -gt 0) {
+            $imageBuildArgs.CacheFrom = $DockerCacheFrom
+        }
+        if ($DockerCacheTo) {
+            $imageBuildArgs.CacheTo = $DockerCacheTo
+        }
+        if ($DockerPull) {
+            $imageBuildArgs.Pull = $true
+        }
+        if ($DockerNoCache) {
+            $imageBuildArgs.NoCache = $true
+        }
+        Invoke-SolandImageBuild @imageBuildArgs
+    }
+
     if (-not $SkipPreflight) {
         Invoke-JointE2ePreflight `
             -RepoRoot $repoRoot `
@@ -992,10 +1199,13 @@ try {
             -TeabayDatabaseUrl $TeabayDatabaseUrl `
             -SolandBaseUrl $SolandBaseUrl `
             -SolandCommand $SolandCommand `
-            -WillStartDefaultSoland (-not $SolandCommand -and $null -ne $solandPort) `
+            -WillStartDefaultSoland $willStartDefaultSoland `
+            -SolandRuntime $SolandRuntime `
+            -SolandImage $SolandImage `
+            -WillStartDockerSoland $willStartDockerSoland `
             -YougenBaseUrl $YougenBaseUrl `
             -YougenCommand $YougenCommand `
-            -WillStartDefaultYougen (-not $YougenCommand -and $null -ne $yougenPort) `
+            -WillStartDefaultYougen (-not $SkipYougen -and -not $YougenCommand -and $null -ne $yougenPort) `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
     }
@@ -1206,6 +1416,63 @@ try {
         ) -f (Quote-PsLiteral "$teabayTrimmed/_cokret/find/directory/announce")
     }
 
+    function Build-SolandDockerEnvironment {
+        param(
+            [Parameter(Mandatory = $true)][string]$BaseUrl,
+            [Parameter(Mandatory = $true)][string]$ServiceDid,
+            [Parameter(Mandatory = $true)][int]$MetricsPort,
+            [Parameter(Mandatory = $true)][string]$LogFileName,
+            [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
+            [string]$FederationPeers = ""
+        )
+
+        $rustLog = if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) {
+            $env:RUST_LOG
+        } else {
+            "info"
+        }
+        $map = [ordered]@{
+            RUST_LOG = $rustLog
+            DATABASE_URL = ""
+            SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
+            SOLAND_PUBLIC_BASE_URL = $BaseUrl
+            SOLAND_SERVICE_DID = $ServiceDid
+            SOLAND_DEVELOPMENT_MODE = "true"
+            SOLAND_CORS_ALLOW_ORIGIN = $CorsAllowOrigin
+            SOLAND_METRICS_BIND = "0.0.0.0:$MetricsPort"
+            SOLAND_OBJECT_STORAGE_BACKEND = "filesystem"
+            SOLAND_OBJECT_STORAGE_LOCAL_ROOT = "/tmp/soland-blobs"
+            SOLAND_LOG_FILE = "/cotest-logs/$LogFileName"
+        }
+        if ($CoauthBaseUrl) {
+            $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
+            $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
+            $map.SOLAND_AUTH_SERVER_URL = $coauthPublic
+            $map.SOLAND_OAUTH_INTROSPECTION_URL = "$coauthContainer/oauth/introspect"
+            $map.SOLAND_OAUTH_INTROSPECTION_BEARER = $CoauthOAuthIntrospectionBearer
+            $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_cokret/gate/account/session-grants/introspect"
+            $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
+            $map.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
+            $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
+        }
+        if ($StaridBaseUrl) {
+            $map.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:web,did:key,did:webvh"
+            $map.SOLAND_STARID_WEBVH_RESOLVER_URL = Convert-ToContainerReachableUrl $StaridBaseUrl
+        }
+        if ($TeabayBaseUrl) {
+            $teabayContainer = (Convert-ToContainerReachableUrl $TeabayBaseUrl).TrimEnd("/")
+            $map.SOLAND_DIRECTORY_ANNOUNCE_URL = "$teabayContainer/_cokret/find/directory/announce"
+        }
+        if ($FederationPeers) {
+            $parts = $FederationPeers -split "\|", 2
+            if ($parts.Count -eq 2) {
+                $map.SOLAND_FEDERATION_POLICY = "Mesh"
+                $map.SOLAND_FEDERATION_PEERS = "$(Convert-ToContainerReachableUrl $parts[0])|$($parts[1])"
+            }
+        }
+        return $map
+    }
+
     function Build-SolandCommand {
         param(
             [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -1281,7 +1548,8 @@ try {
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
     $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
-    if (-not $SolandCommand -and $solandPort) {
+    $solandCorsAllowOrigin = if ($YougenBaseUrl) { $YougenBaseUrl } else { "http://127.0.0.1" }
+    if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
         $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceDid" } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
@@ -1292,36 +1560,74 @@ try {
             -Port $solandPort `
             -MetricsPort $solandMetricsPort `
             -LogFile $solandTraceFile `
-            -CorsAllowOrigin $YougenBaseUrl `
+            -CorsAllowOrigin $solandCorsAllowOrigin `
             -FederationPeers $alphaPeer
     }
     if ($SolandCommand) {
         $solandWorkingDirectory = if ($generatedSolandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
         $managedServices.Add((Start-ManagedCommand -Name $solandName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir))
+    } elseif ($willStartDockerSoland) {
+        $alphaPeer = if ($DualSoland) { "$solandBetaBaseUrl|$SolandBetaServiceDid" } else { "" }
+        $solandMetricsPort = Get-FreeTcpPort
+        $solandDockerEnv = Build-SolandDockerEnvironment `
+            -BaseUrl $SolandBaseUrl `
+            -ServiceDid $SolandServiceDid `
+            -MetricsPort $solandMetricsPort `
+            -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
+            -CorsAllowOrigin $solandCorsAllowOrigin `
+            -FederationPeers $alphaPeer
+        $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
+        $managedServices.Add((Start-ManagedDockerSoland `
+                    -Name $solandName `
+                    -Image $SolandImage `
+                    -HostPort $solandPort `
+                    -ContainerPort $SolandContainerPort `
+                    -ObjectsRoot (Join-Path $jointDir "soland-objects") `
+                    -LogDirectory $serviceLogDir `
+                    -Environment $solandDockerEnv))
     }
     Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
 
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
         $solandBetaMetricsPort = Get-FreeTcpPort
-        $solandBetaCommand = Build-SolandCommand `
-            -BaseUrl $solandBetaBaseUrl `
-            -ServiceDid $SolandBetaServiceDid `
-            -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
-            -Port $solandBetaPort `
-            -MetricsPort $solandBetaMetricsPort `
-            -LogFile $solandBetaTraceFile `
-            -CorsAllowOrigin $yougenBetaBaseUrl `
-            -FederationPeers "$SolandBaseUrl|$SolandServiceDid"
-        $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
+        $solandBetaCorsAllowOrigin = if ($yougenBetaBaseUrl) { $yougenBetaBaseUrl } else { $solandCorsAllowOrigin }
+        if ($SolandRuntime -eq "docker") {
+            $solandBetaDockerEnv = Build-SolandDockerEnvironment `
+                -BaseUrl $solandBetaBaseUrl `
+                -ServiceDid $SolandBetaServiceDid `
+                -MetricsPort $solandBetaMetricsPort `
+                -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
+                -CorsAllowOrigin $solandBetaCorsAllowOrigin `
+                -FederationPeers "$SolandBaseUrl|$SolandServiceDid"
+            $managedServices.Add((Start-ManagedDockerSoland `
+                        -Name "soland-beta" `
+                        -Image $SolandImage `
+                        -HostPort $solandBetaPort `
+                        -ContainerPort $SolandContainerPort `
+                        -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
+                        -LogDirectory $serviceLogDir `
+                        -Environment $solandBetaDockerEnv))
+        } else {
+            $solandBetaCommand = Build-SolandCommand `
+                -BaseUrl $solandBetaBaseUrl `
+                -ServiceDid $SolandBetaServiceDid `
+                -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
+                -Port $solandBetaPort `
+                -MetricsPort $solandBetaMetricsPort `
+                -LogFile $solandBetaTraceFile `
+                -CorsAllowOrigin $solandBetaCorsAllowOrigin `
+                -FederationPeers "$SolandBaseUrl|$SolandServiceDid"
+            $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
+        }
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
     $yougenService = $null
     $yougenBetaService = $null
     $generatedYougenBetaCommand = $false
-    if (-not $YougenCommand -and $yougenPort) {
+    if (-not $SkipYougen -and -not $YougenCommand -and $yougenPort) {
         $YougenCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenPort --open false --hot-reload false --watch false --features experimental-agents"
         $generatedYougenCommand = $true
     }
@@ -1330,11 +1636,13 @@ try {
         $yougenService = Start-ManagedCommand -Name $yougenName -Command $YougenCommand -WorkingDirectory $YougenRoot -LogDirectory $serviceLogDir
         $managedServices.Add($yougenService)
     }
-    Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-    if ($generatedYougenCommand -and $yougenService) {
-        Wait-LogContains -Path $yougenService.Stdout -Pattern "Build completed successfully" -TimeoutSeconds $StartupTimeoutSeconds
+    if (-not $SkipYougen) {
+        Wait-HttpReady -Url $YougenBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedYougenCommand -and $yougenService) {
+            Wait-LogContains -Path $yougenService.Stdout -Pattern "Build completed successfully" -TimeoutSeconds $StartupTimeoutSeconds
+        }
     }
-    if ($DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
+    if (-not $SkipYougen -and $DualSoland -and $yougenBetaBaseUrl -and $yougenBetaBaseUrl -ne $YougenBaseUrl) {
         if (-not $YougenBetaCommand -and $yougenBetaPort) {
             $YougenBetaCommand = "dx serve --platform web --addr 127.0.0.1 --port $yougenBetaPort --open false --hot-reload false --watch false --features experimental-agents"
             $generatedYougenBetaCommand = $true
@@ -1384,14 +1692,26 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
-    $env:COTEST_YOUGEN_BASE_URL = $YougenBaseUrl
+    if ($YougenBaseUrl) {
+        $env:COTEST_YOUGEN_BASE_URL = $YougenBaseUrl
+    } else {
+        Remove-Item Env:COTEST_YOUGEN_BASE_URL -ErrorAction SilentlyContinue
+    }
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
         $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
-        $env:COTEST_YOUGEN_ALPHA_BASE_URL = $YougenBaseUrl
-        $env:COTEST_YOUGEN_BETA_BASE_URL = $yougenBetaBaseUrl
+        if ($YougenBaseUrl) {
+            $env:COTEST_YOUGEN_ALPHA_BASE_URL = $YougenBaseUrl
+        } else {
+            Remove-Item Env:COTEST_YOUGEN_ALPHA_BASE_URL -ErrorAction SilentlyContinue
+        }
+        if ($yougenBetaBaseUrl) {
+            $env:COTEST_YOUGEN_BETA_BASE_URL = $yougenBetaBaseUrl
+        } else {
+            Remove-Item Env:COTEST_YOUGEN_BETA_BASE_URL -ErrorAction SilentlyContinue
+        }
     } else {
         Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_DID -ErrorAction SilentlyContinue
@@ -1977,6 +2297,8 @@ $summary = [pscustomobject]@{
     finished_at = $finishedAt.ToString("o")
     duration_seconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
     exit_code = $exitCode
+    soland_runtime = $startedSolandRuntime
+    soland_image = if ($startedSolandRuntime -eq "docker") { $SolandImage } else { $null }
     soland_base_url = $SolandBaseUrl
     soland_service_did = $SolandServiceDid
     soland_beta_base_url = $solandBetaBaseUrl
@@ -2037,6 +2359,8 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - finished_at: $($summary.finished_at)
 - duration_seconds: $($summary.duration_seconds)
 - exit_code: $($summary.exit_code)
+- soland_runtime: $($summary.soland_runtime)
+- soland_image: $($summary.soland_image)
 - soland_base_url: $($summary.soland_base_url)
 - soland_service_did: $($summary.soland_service_did)
 - soland_beta_base_url: $($summary.soland_beta_base_url)
@@ -2090,6 +2414,10 @@ Write-Host "Joint E2E Summary"
 Write-Host "  status      : $($summary.status)"
 Write-Host "  profile     : $($summary.run_profile)"
 Write-Host "  projects    : $($summary.playwright_projects)"
+Write-Host "  soland rt   : $($summary.soland_runtime)"
+if ($summary.soland_image) {
+    Write-Host "  soland image: $($summary.soland_image)"
+}
 Write-Host "  soland      : $SolandBaseUrl"
 if ($DualSoland) {
     Write-Host "  soland-beta : $solandBetaBaseUrl"
@@ -2113,7 +2441,9 @@ if ($mockAuditAgentBaseUrl) {
 if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"
 }
-Write-Host "  yougen      : $YougenBaseUrl"
+if ($YougenBaseUrl) {
+    Write-Host "  yougen      : $YougenBaseUrl"
+}
 if ($DualSoland -and $yougenBetaBaseUrl) {
     Write-Host "  yougen-beta : $yougenBetaBaseUrl"
 }

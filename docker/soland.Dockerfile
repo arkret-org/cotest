@@ -6,7 +6,7 @@ COPY cokret-rust-sdk ./cokret-rust-sdk
 COPY soland ./soland
 
 WORKDIR /workspace/soland
-RUN cargo build --release
+RUN cargo build --release --locked
 
 FROM rust:1.96-bookworm
 

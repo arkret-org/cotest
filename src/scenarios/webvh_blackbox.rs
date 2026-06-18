@@ -19,7 +19,7 @@ use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 ///   1. /health              — liveness pings 200
 ///   2. /_cokret/root/identity/describe — exposes profile/contract metadata
 ///   3. /openapi.yaml        — published openapi document is reachable
-///   4. negative GET on POST-only `/_cokret/root/webvh/dids` returns 404 or 405
+///   4. negative GET on POST-only `/_starid/webvh/dids` returns 404 or 405
 ///
 /// STA-07-002: the legacy starid `/describe` liveness probe (asserting
 /// `supported_methods` advertises `did:webvh`) has been removed — that route no
@@ -70,15 +70,10 @@ pub async fn webvh_blackbox_conformance_vectors_run() -> Result<()> {
     }
 
     // ── Vector 4: GET on a POST-only route surfaces 405/404 ───────────────
-    let resp = client
-        .get(proc.url("/_cokret/root/webvh/dids"))
-        .send()
-        .await?;
+    let resp = client.get(proc.url("/_starid/webvh/dids")).send().await?;
     let status = resp.status().as_u16();
     if !(status == 405 || status == 404) {
-        bail!(
-            "GET /_cokret/root/webvh/dids expected 405 (method not allowed) or 404, got {status}"
-        );
+        bail!("GET /_starid/webvh/dids expected 405 (method not allowed) or 404, got {status}");
     }
 
     Ok(())

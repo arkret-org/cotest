@@ -229,7 +229,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
 
     let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
     let policy_document = expect_json(
-        alice.post("/_cokret/self/policies").json(&json!({
+        alice.post("/_soland/self/policies").json(&json!({
             "policy_id": "ck:policy:presence-policy-allow",
             "scope": policy_realm_id,
             "subject_ref": alice.actor,

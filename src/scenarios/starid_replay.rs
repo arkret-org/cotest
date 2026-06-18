@@ -14,7 +14,7 @@
 //! [`crate::store::validate_cas`] in the starid server) rejects the duplicate
 //! with `StoreError::Conflict`, which surfaces over HTTP as 409 + errcode
 //! `cas_conflict`. An attacker capturing the wire bytes of a legitimate
-//! `POST /_cokret/root/webvh/dids` request and re-playing them therefore cannot
+//! `POST /_starid/webvh/dids` request and re-playing them therefore cannot
 //! re-create the DID — which is exactly the replay-rejection guarantee this
 //! test pins.
 //!
@@ -56,7 +56,7 @@ pub async fn starid_rejects_replayed_inception_run() -> Result<()> {
 
     // First submission: must succeed.
     let first = client
-        .post(proc.url("/_cokret/root/webvh/dids"))
+        .post(proc.url("/_starid/webvh/dids"))
         .json(&body)
         .send()
         .await?;
@@ -75,7 +75,7 @@ pub async fn starid_rejects_replayed_inception_run() -> Result<()> {
 
     // Second submission: identical body, must be rejected with cas_conflict.
     let second = client
-        .post(proc.url("/_cokret/root/webvh/dids"))
+        .post(proc.url("/_starid/webvh/dids"))
         .json(&body)
         .send()
         .await?;
