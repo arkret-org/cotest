@@ -15,6 +15,7 @@
 //! first place it surfaces (instead of inscrutable cross-service signature
 //! failures in federation / replication tests).
 
+use cokret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use serde_json::{Value, json};
 
@@ -22,6 +23,7 @@ use serde_json::{Value, json};
 /// `sha256:<hex>` digest every service is expected to produce, and a
 /// short label for failure reporting.
 struct CanonicalVector {
+    vector_id: &'static str,
     label: &'static str,
     payload: Value,
     expected_digest: &'static str,
@@ -30,6 +32,7 @@ struct CanonicalVector {
 fn vectors() -> Vec<CanonicalVector> {
     vec![
         CanonicalVector {
+            vector_id: "ck.cotest_vector.canonical_hash.coauth_handle_claim.v1",
             label: "coauth handle_claim digest input",
             // Mirrors coauth's `HandleClaimDigestInput` shape from
             // `crates/backend/src/handlers/cokret.rs`. RFC 3339 UTC strings
@@ -67,6 +70,7 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:39f8e55b16f14d90dc38928b872d161b85a0f3ae1a6c123faf3107d51799f8b0",
         },
         CanonicalVector {
+            vector_id: "ck.cotest_vector.canonical_hash.soland_event_envelope.v1",
             label: "soland event envelope payload",
             // The shape soland hashes inside `validate_event_proofs` after
             // stripping `proofs` / `unsigned` from the on-wire envelope.
@@ -89,6 +93,7 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:08a01dcc754098f5c64e4ce9bdbf17cdc58e8d6b59f3cc4e139a88d9213d510a",
         },
         CanonicalVector {
+            vector_id: "ck.cotest_vector.canonical_hash.starid_webvh_update.v1",
             label: "starid did:webvh update entry (proofless)",
             // The shape starid feeds into `proof::canonical_bytes` after
             // stripping `proof[]` from a webvh log entry.
@@ -111,6 +116,18 @@ fn vectors() -> Vec<CanonicalVector> {
     ]
 }
 
+fn canonical_fixture_suite() -> CanonicalFixtureSuite {
+    let mut builder = CanonicalFixtureBuilder::new("ck.profile.cotest.canonical_hash.v1")
+        .version("2026-06-19")
+        .description("Canonical hash convergence vectors shared through the SDK fixture builder.");
+    for vector in vectors() {
+        builder
+            .push(vector.vector_id, &vector.payload)
+            .expect("build canonical fixture vector");
+    }
+    builder.finish()
+}
+
 /// Round-trip every vector through `cokret_core::canonical::canonical_sha256`
 /// to make sure the SDK hash itself is stable and matches what we encode
 /// in `expected_digest`. The other downstream services all reach the same
@@ -119,12 +136,16 @@ fn vectors() -> Vec<CanonicalVector> {
 #[test]
 fn sdk_canonical_sha256_matches_pinned_vectors() {
     let mut drifted = Vec::new();
-    for vector in vectors() {
-        let actual = canonical_sha256(&vector.payload).expect("canonical_sha256");
-        if actual != vector.expected_digest {
+    let suite = canonical_fixture_suite();
+    for (vector, generated) in vectors().into_iter().zip(suite.vectors.iter()) {
+        generated
+            .assert_matches_input()
+            .expect("fixture self-check");
+        let actual = canonical_sha256(&generated.input).expect("canonical_sha256");
+        if actual != vector.expected_digest || generated.expected_digest != vector.expected_digest {
             drifted.push(format!(
-                "{}\n  expected: {}\n  actual:   {}",
-                vector.label, vector.expected_digest, actual
+                "{}\n  expected: {}\n  builder:  {}\n  actual:   {}",
+                vector.label, vector.expected_digest, generated.expected_digest, actual
             ));
         }
     }
@@ -142,9 +163,8 @@ fn sdk_canonical_sha256_matches_pinned_vectors() {
 #[test]
 #[ignore = "diagnostic — run with --nocapture to print canonical digests"]
 fn dump_canonical_digests() {
-    for vector in vectors() {
-        let actual = canonical_sha256(&vector.payload).expect("canonical_sha256");
-        println!("{} => {}", vector.label, actual);
+    for vector in canonical_fixture_suite().vectors {
+        println!("{} => {}", vector.vector_id, vector.expected_digest);
     }
 }
 
@@ -155,15 +175,15 @@ fn dump_canonical_digests() {
 /// insertion order) for a hash input.
 #[test]
 fn canonical_bytes_are_stable_across_key_permutations() {
-    for vector in vectors() {
-        let value = vector.payload.clone();
+    for vector in canonical_fixture_suite().vectors {
+        let value = vector.input.clone();
         let scrambled = scramble_object_keys(value);
-        let original_bytes = canonical_json_bytes(&vector.payload).unwrap();
+        let original_bytes = canonical_json_bytes(&vector.input).unwrap();
         let scrambled_bytes = canonical_json_bytes(&scrambled).unwrap();
         assert_eq!(
             original_bytes, scrambled_bytes,
             "canonical bytes drifted for {} under key permutation",
-            vector.label
+            vector.vector_id
         );
     }
 }
@@ -181,20 +201,20 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 fn event_proof_builder_matches_low_level_canonical_helpers() {
     use cokret_signatures::EventProofBuilder;
     let builder = EventProofBuilder::new();
-    for vector in vectors() {
-        let low_level_bytes = canonical_json_bytes(&vector.payload).unwrap();
-        let builder_bytes = builder.canonical_bytes(&vector.payload).unwrap();
+    for vector in canonical_fixture_suite().vectors {
+        let low_level_bytes = canonical_json_bytes(&vector.input).unwrap();
+        let builder_bytes = builder.canonical_bytes(&vector.input).unwrap();
         assert_eq!(
             low_level_bytes, builder_bytes,
             "EventProofBuilder.canonical_bytes drifted from canonical_json_bytes for {}",
-            vector.label,
+            vector.vector_id,
         );
-        let builder_hash = builder.payload_digest(&vector.payload).unwrap();
+        let builder_hash = builder.payload_digest(&vector.input).unwrap();
         assert_eq!(
             builder_hash.as_str(),
             vector.expected_digest,
             "EventProofBuilder.payload_digest drifted from pinned vector for {}",
-            vector.label,
+            vector.vector_id,
         );
     }
 }
