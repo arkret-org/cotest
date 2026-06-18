@@ -34,6 +34,7 @@ mod security_negative;
 mod sidecar_vectors;
 mod state_resolution;
 mod sync;
+mod vector_registry_gate;
 mod wire;
 mod yougen_client;
 
@@ -182,6 +183,11 @@ pub use sidecar_vectors::{
 };
 pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
 pub use sync::run_sync_fixture_suite;
+pub use vector_registry_gate::{
+    VectorRegistryGateEntry, VectorRegistryGateReport, VectorRegistryGateStatus,
+    build_vector_registry_gate_report, build_vector_registry_gate_report_from_paths,
+    validate_vector_registry_gate, validate_vector_registry_gate_report,
+};
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
