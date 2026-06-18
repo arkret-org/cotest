@@ -18,6 +18,7 @@ mod member_roster_vectors;
 mod mention_rendering_vectors;
 pub mod mock_vector_base;
 mod object_addressing_vectors;
+mod operation_registry_gate;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
@@ -137,6 +138,12 @@ pub use object_addressing_vectors::{
     run_scope_confusion_replay_vector, run_scope_token_link_type_wins_vector,
     run_target_digest_ignores_hints_vector, run_target_digest_omits_absent_vector,
     run_target_digest_tracks_object_vector,
+};
+pub use operation_registry_gate::{
+    OperationRegistryGateEntry, OperationRegistryGatePaths, OperationRegistryGateReport,
+    OperationRegistryGateStatus, OperationSourceRoot, build_operation_registry_gate_report,
+    build_operation_registry_gate_report_from_paths, validate_operation_registry_gate,
+    validate_operation_registry_gate_report,
 };
 pub use primary_handle_vectors::{
     ALL_PRIMARY_HANDLE_VECTOR_IDS, run_as_of_replay_vs_realtime_vector,

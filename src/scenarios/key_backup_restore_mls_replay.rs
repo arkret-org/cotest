@@ -56,8 +56,9 @@
 //! 5. Onboard new device-B:
 //!       * generate a fresh `ck:device:<uuidv7>` and Ed25519 keypair.
 //!       * dev-login (or full recovery via SSK proof — see §7.4) to get a bearer.
-//!       * `GET /_cokret/self/keys/backups/{backup_id}` returns the full envelope (per soland
-//!         E2E-KEY-BACKUP-2; today this is implemented).
+//!       * `GET /_cokret/self/keys/backups` discovers metadata and `POST
+//!         /_cokret/self/keys/backups/{backup_id}/unlock` returns the full envelope after a
+//!         body-borne unlock proof (per soland E2E-KEY-BACKUP-2; today this is implemented).
 //!       * derive the passphrase keys; verify `key_commitment`; decrypt the two domains.
 //!       * mint a SSK proof per §7.4 canonical fields and POST it back (recovery confirmation);
 //!         today no soland endpoint binds this — the SSK proof is consumed only by the §7.4 attest-
@@ -76,8 +77,8 @@
 //!   * **`PUT /_cokret/self/keys/backups/{backup_id}`** — IMPLEMENTED today (see
 //!     `routing/identity/key_backup.rs::put_key_backup`). Validates `REQUIRED_KEY_BACKUP_FIELDS`
 //!     and stores opaque ciphertext. Steps 3 and 5b work today.
-//!   * **`GET /_cokret/self/keys/backups/{backup_id}`** — IMPLEMENTED (same module,
-//!     `get_key_backup`).
+//!   * **`POST /_cokret/self/keys/backups/{backup_id}/unlock`** — IMPLEMENTED (same module,
+//!     `unlock_key_backup`).
 //!   * **`DELETE /_cokret/self/keys/backups/{backup_id}` with SSK proof** — soland `_todos.md`
 //!     E2E-KEY-BACKUP-2 status is "needs SSK `payload=delete:backup_id:nonce` signature"; today
 //!     only session- token DELETE is enforced. Step 5e is partially blocked.
@@ -330,8 +331,9 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
          projects the commit-epoch chain server-side, but deriving historical \
          epoch secrets from the recovered `mls_history_backup_key` and \
          decrypting pre-loss ciphertext is client work this scaffold has not \
-         implemented. `PUT/GET /_cokret/self/keys/backups/{{id}}` ARE \
-         implemented today (key_backup.rs) so steps 3 + 5b work. cotest also \
+         implemented. `PUT /_cokret/self/keys/backups/{{id}}` and \
+         `POST /_cokret/self/keys/backups/{{id}}/unlock` ARE implemented \
+         today (key_backup.rs) so steps 3 + 5b work. cotest also \
          needs an `argon2` dep added for the §7.2 Argon2id KDF (pbkdf2 is \
          already a transitive dep but spec-compliant Argon2id MUST be the \
          default), and the restore credential is the 24-word Recovery Key \

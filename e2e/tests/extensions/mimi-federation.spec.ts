@@ -223,7 +223,7 @@ async function createBoundMimiRoom(
     encryption_profile: "mls_rfc9420",
   });
   const roomId = `MIMI-${suffix}-${stamp}`;
-  const update = await request.put(`${solandBaseUrl()}/_cokret/open/mimi/strands/${roomId}/update`, {
+  const update = await request.post(`${solandBaseUrl()}/_cokret/open/mimi/strands/${roomId}/update`, {
     data: {
       room_binding: {
         profile: "ck.profile.mimi_interop.v1",

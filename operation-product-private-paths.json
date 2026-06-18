@@ -1,0 +1,62 @@
+{
+  "schema": "cotest.operation-product-private-paths.v1",
+  "comment": "Explicit product-private classifications for discovered /_cokret/* paths that are not registered protocol operations. The operation registry gate fails any unregistered discovered path unless it is listed here with classification=product-private and a reason.",
+  "allowed": [
+    {
+      "source": "soland",
+      "method": "*",
+      "path": "/_cokret/_conformance/{**rest}",
+      "classification": "product-private",
+      "reason": "Test-only conformance harness namespace; mounted only when ck.profile.conformance_harness.v1 is active and not advertised as a protocol operation."
+    },
+    {
+      "source": "soland",
+      "method": "*",
+      "path": "/_cokret/self/blob/resumable",
+      "classification": "product-private",
+      "reason": "Local tus companion transport for ck.self.blob.upload.create; kept out of the operation registry until resumable-upload bindings are modeled as first-class operations."
+    },
+    {
+      "source": "soland",
+      "method": "*",
+      "path": "/_cokret/self/blob/resumable/{**rest}",
+      "classification": "product-private",
+      "reason": "Local tus companion transport for ck.self.blob.upload.create; upload resources and finalize are node-local staging affordances, not independent protocol operations."
+    },
+    {
+      "source": "sdk",
+      "method": "*",
+      "path": "/_cokret/gate/auth/{**rest}",
+      "classification": "product-private",
+      "reason": "Principal-auth bridge compatibility metadata for product deployments; clients must prefer registered ck.gate.account.* operations when calling the Cokret protocol surface."
+    },
+    {
+      "source": "sdk",
+      "method": "*",
+      "path": "/_cokret/self/blob/resumable",
+      "classification": "product-private",
+      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Cokret operation."
+    },
+    {
+      "source": "sdk",
+      "method": "*",
+      "path": "/_cokret/self/blob/resumable/{**rest}",
+      "classification": "product-private",
+      "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Cokret operation."
+    },
+    {
+      "source": "yougen",
+      "method": "*",
+      "path": "/_cokret/self/blob/resumable",
+      "classification": "product-private",
+      "reason": "Client-side support for soland's tus companion upload binding, not a registered Cokret operation."
+    },
+    {
+      "source": "yougen",
+      "method": "*",
+      "path": "/_cokret/self/blob/resumable/{**rest}",
+      "classification": "product-private",
+      "reason": "Client-side support for soland's tus companion upload binding, not a registered Cokret operation."
+    }
+  ]
+}

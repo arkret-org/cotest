@@ -27,7 +27,7 @@ const CARGO_TEST_TIMEOUT_MS = 240_000;
 test.describe.configure({ mode: "serial" });
 
 test.describe("key backup restore live path", () => {
-  test("Device-A uploads secret_storage backup; list is metadata-only and bearer-only ciphertext GET is refused", async ({
+  test("Device-A uploads secret_storage backup; list is metadata-only and bearer-only unlock is refused", async ({
     request,
   }) => {
     const { alice, aliceToken } = await registeredSession(request, "kb-restore-a");
@@ -55,12 +55,11 @@ test.describe("key backup restore live path", () => {
     expect(JSON.stringify(listBody)).not.toMatch(/hunter2|plaintext|self-signing-secret/i);
 
     // key-management.md §7.7.1/§7.8 — a bearer token alone MUST NOT release
-    // the full ciphertext; the read requires an
-    // `x-cokret-key-backup-unlock-proof` header bound to the envelope.
-    const get = await getBackup(request, aliceToken, backupId);
-    expect([401, 403]).toContain(get.status());
-    const refusal = await get.text();
-    expect(refusal).toContain("unlock");
+    // the full ciphertext; the proof travels in the typed
+    // `POST /_cokret/self/keys/backups/{id}/unlock` body.
+    const unlock = await unlockBackupWithoutProof(request, aliceToken, backupId);
+    expect([400, 401, 403, 422]).toContain(unlock.status());
+    const refusal = await unlock.text();
     expect(refusal).not.toContain(backup.ciphertext as string);
     expect(refusal).not.toMatch(/hunter2|plaintext|self-signing-secret/i);
   });
@@ -78,8 +77,8 @@ test.describe("key backup restore live path", () => {
     expect(bobList.status()).toBe(200);
     expect(JSON.stringify(await bobList.json())).not.toContain(backupId);
 
-    const bobGet = await getBackup(request, bobToken, backupId);
-    expect(bobGet.status()).toBe(404);
+    const bobLegacyGet = await legacyGetBackup(request, bobToken, backupId);
+    expect([404, 405]).toContain(bobLegacyGet.status());
     void bob;
   });
 
@@ -167,7 +166,10 @@ test.describe("key backup restore live path", () => {
     expect(proofDelete.status()).toBe(200);
     // spec `keys_backups_delete_outcome` 仅含 { deleted }(SDK KeysBackupsDeleteOutcome 形)。
     expect(await proofDelete.json()).toMatchObject({ deleted: true });
-    expect((await getBackup(request, aliceToken, backupId)).status()).toBe(404);
+    const list = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
+      headers: authHeaders(aliceToken),
+    });
+    expect(JSON.stringify(await list.json())).not.toContain(backupId);
   });
 
   test("yougen crypto and late-recovery banner helpers stay live", async () => {
@@ -201,7 +203,17 @@ async function putBackup(
   });
 }
 
-async function getBackup(request: APIRequestContext, token: string, backupId: string) {
+async function unlockBackupWithoutProof(request: APIRequestContext, token: string, backupId: string) {
+  return await request.post(
+    `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}/unlock`,
+    {
+      headers: authHeaders(token),
+      data: {},
+    },
+  );
+}
+
+async function legacyGetBackup(request: APIRequestContext, token: string, backupId: string) {
   return await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`, {
     headers: authHeaders(token),
   });

@@ -290,7 +290,7 @@ export async function setInviteReceivePolicyCokret(
   policy: InviteReceivePolicy,
   opts: { server?: SolandKey } = {},
 ): Promise<InviteReceivePolicy> {
-  const response = await request.post(
+  const response = await request.put(
     `${solandBaseUrl(opts.server)}/_cokret/self/invite-receive-policy`,
     { headers: authHeaders(token), data: policy },
   );
