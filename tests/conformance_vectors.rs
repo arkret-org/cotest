@@ -381,17 +381,18 @@ fn test_1_agent_fsm_active_paused_active_deactivated_terminal() {
 // ─── P0 / TEST-2 — Media token exchange happy path + 4 negative paths ──────
 
 #[test]
-#[ignore = "R3.1: soland/floria `POST /rtc/token` issuer not yet implemented"]
+#[ignore = "live cotest harness for media-token exchange is not wired yet"]
 fn test_2_media_token_exchange_happy_path_plus_negatives() {
     // Negative-path matrix pinned at the SDK constant layer by
-    // VECT-MB-3 / VECT-MB-4 / VECT-MB-5. Live integration:
+    // VECT-MB-3 / VECT-MB-4 / VECT-MB-5. Soland issuer behavior is covered by
+    // its http_api suite; this live cotest scenario still needs provisioning:
     //   - happy: 200 with backend_token + participant_binding, TTL ≤ 600s, issuer_kid anchored to
     //     current `ck.realm.media_service.service_id`.
     //   - neg-issuer: rogue issuer kid → 401 token_issuer_unauthorised.
     //   - neg-focus:  off-focus token request → 422 focus_mismatch.
     //   - neg-ttl:    server-issued TTL > 600s → 422 participant_binding_invalid.
     //   - neg-binding: malformed participant_binding scheme → 422 participant_binding_invalid.
-    unreachable!("integration target gated on soland / floria P2-impl");
+    unreachable!("integration target gated on live cotest media-service provisioning");
 }
 
 // ─── P0 / TEST-3 — `accountable_principals.strict_reject` profile toggle ───
