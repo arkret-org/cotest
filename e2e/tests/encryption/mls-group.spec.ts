@@ -25,6 +25,7 @@ import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
+  type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -74,6 +75,61 @@ async function createEncryptedRealm(
     { context: `create encrypted realm ${title}` },
   );
   return realmId;
+}
+
+async function sendEncryptedTimelineMessage(
+  userPage: JointUserPage,
+  realmId: string,
+  body: string,
+): Promise<string> {
+  await userPage.gotoTimelineRealm(realmId);
+
+  const encryptToggle = userPage.page.getByTestId("encrypt-local-button");
+  await expect(encryptToggle).toBeVisible({ timeout: 30_000 });
+  const toggleChecked = async () =>
+    encryptToggle.evaluate((element) => {
+      const input = element as HTMLInputElement;
+      return (
+        input.checked === true ||
+        element.getAttribute("aria-checked") === "true" ||
+        element.getAttribute("data-state") === "checked"
+      );
+    });
+  if (!(await toggleChecked())) {
+    await encryptToggle.click();
+  }
+  await expect.poll(toggleChecked, { timeout: 5_000 }).toBe(true);
+
+  const messageSubmit = userPage.page.waitForResponse(
+    (response) => {
+      const request = response.request();
+      const postData = request.postData() ?? "";
+      return (
+        request.method() === "POST" &&
+        response.url().includes("/_cokret/self/events") &&
+        postData.includes("ck.message.create")
+      );
+    },
+    { timeout: 60_000 },
+  );
+
+  await userPage.page.getByTestId("composer-input").fill(body);
+  await userPage.page.getByTestId("send-button").click();
+
+  const response = await messageSubmit;
+  const postData = response.request().postData() ?? "";
+  expect(
+    [200, 201],
+    `encrypted ck.message.create submit returned ${response.status()}: ${await response.text()}`,
+  ).toContain(response.status());
+  expect(postData).toContain("encrypted_content");
+  expect(postData).toContain("mls-rfc9420");
+  expect(postData).not.toContain(body);
+  await expect(userPage.page.getByTestId("write-status")).toContainText(
+    /encrypted message sent/,
+    { timeout: 30_000 },
+  );
+  return postData;
 }
 
 test.describe("MLS group encryption", () => {
@@ -441,12 +497,66 @@ test.describe("MLS group encryption", () => {
     expect(wireErrCode(await staleCommit.json())).toBe("mls_epoch_skew");
   });
 
-  test.fixme(// @blocking-on: soland#encryption-mls-group-gap
-  // @user-promise: e2e/scenarios/encryption/mls-group.md
-  // @expected-live-by: 2026Q3
-  "alice and bob exchange E2EE messages; client decrypts plaintext, raw event payload is ciphertext only (no plaintext leak)", async () => {
-    // spec: encryption-and-audit.md §2.3.1-§2.3.3 application data envelope
-    // soland gap: encrypted_payload routing without server-side decryption.
+  test("joined member decrypts E2EE timeline messages; raw event payload stays ciphertext only", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    // Regression for the join→decrypt boundary: accepting a Realm invite must
+    // leave the new member with usable MLS state for messages sent after join.
+    // Spec: encryption-and-audit.md §2.2-§2.4, §2.3.1-§2.3.3.
+    const stamp = Date.now();
+    const alice = uniqueUser("s11-decrypt-alice");
+    const bob = uniqueUser("s11-decrypt-bob");
+    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const [alicePage, bobPage] = await Promise.all([
+      openUserPage(browser, alice, { sessionToken: aliceToken }),
+      openUserPage(browser, bob, { sessionToken: bobToken }),
+    ]);
+
+    try {
+      const realmId = await alicePage.createRealm({
+        title: `S11 joined decrypt ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+        seedMembers: [bob.did],
+      });
+      await bobPage.acceptInvite(realmId);
+
+      // Route-context bootstrap is where Bob applies pending MLS Welcome state.
+      await bobPage.gotoTimelineRealm(realmId);
+
+      const plaintext = `joined member decrypts post-join ciphertext ${stamp}`;
+      const submittedWire = await sendEncryptedTimelineMessage(alicePage, realmId, plaintext);
+      expect(submittedWire).not.toContain(plaintext);
+
+      await expect(alicePage.timelineEvent(plaintext)).toBeVisible({ timeout: 30_000 });
+
+      await bobPage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(bobPage.page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
+      const bobMessage = bobPage.timelineEvent(plaintext);
+      await expect(bobMessage).toBeVisible({ timeout: 60_000 });
+      await expect(bobMessage.getByTestId("event-body")).toContainText(plaintext);
+
+      const rawEvents = await request.get(
+        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
+        { headers: authHeaders(bobToken) },
+      );
+      expect(rawEvents.status()).toBe(200);
+      const rawWire = JSON.stringify(await rawEvents.json());
+      expect(rawWire).toContain("encrypted_content");
+      expect(rawWire).toContain("mls-rfc9420");
+      expect(rawWire).not.toContain(plaintext);
+
+      await stepShot(bobPage.page, testInfo, "joined-member-decrypted-e2ee-message");
+    } finally {
+      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+    }
   });
 
   test.fixme(// @blocking-on: soland#encryption-mls-group-gap

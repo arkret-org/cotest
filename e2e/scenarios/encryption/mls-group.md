@@ -121,8 +121,8 @@
 
 ## Implementation notes
 
-- **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`ck.mls.genesis`、KeyPackage claim CAS、durable `ck.mls.welcome` pending queue + 一次性 drain、`ck.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、ban 后 yougen 显示 `epoch_update_required` 并禁用发送。
-- **剩余缺口**:完整 OpenMLS 客户端 secret 派生、E2EE 消息明文渲染 + 服务端 ciphertext-only invariant、carol pre-join history、并发 commit 的 `decryption_pending`、governance binding mismatch 的精确拒绝路径。
+- **当前 live 覆盖**:`encryption_profile=mls_rfc9420` 创建路径、非成员 raw events 拒绝、`ck.mls.genesis`、KeyPackage claim CAS、durable `ck.mls.welcome` pending queue + 一次性 drain、`ck.mls.commit` epoch `0 -> 1`、stale commit `mls_epoch_skew`、加入后的 Bob 解密 Alice post-join timeline 密文且 raw event 不含明文、ban 后 yougen 显示 `epoch_update_required` 并禁用发送。
+- **剩余缺口**:双向 E2EE 消息交换、carol pre-join history、并发 commit 的 `decryption_pending`、governance binding mismatch 的精确拒绝路径。
 - **测试侧难点**:断言"服务端只见 ciphertext"需要 soland 暴露一个 raw event endpoint;若没有,可以从 service log 抓 + grep
 
 ## 风险
