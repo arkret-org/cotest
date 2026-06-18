@@ -292,9 +292,19 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
         ) && entry.reason.is_some()),
         "real registry should record reserved or unsupported rows with a reason"
     );
-    for vector_id in [
-        "ck.vector.redaction.preserve_fields.v1",
-        "ck.vector.redaction.snapshot_pruning_stub.v1",
+    for (vector_id, expected_fixture_ref) in [
+        (
+            "ck.vector.capability.approval_constraint.v1",
+            "spec/v1/artifacts/fixtures/capability-fixture.json",
+        ),
+        (
+            "ck.vector.redaction.preserve_fields.v1",
+            "spec/v1/artifacts/fixtures/redaction-fixture.json",
+        ),
+        (
+            "ck.vector.redaction.snapshot_pruning_stub.v1",
+            "spec/v1/artifacts/fixtures/redaction-fixture.json",
+        ),
     ] {
         let entry = report
             .entries
@@ -306,9 +316,8 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
             entry
                 .fixture_refs
                 .iter()
-                .any(|fixture_ref| fixture_ref
-                    == "spec/v1/artifacts/fixtures/redaction-fixture.json"),
-            "{vector_id} must stay backed by redaction-fixture.json"
+                .any(|fixture_ref| fixture_ref == expected_fixture_ref),
+            "{vector_id} must stay backed by {expected_fixture_ref}"
         );
     }
     Ok(())
