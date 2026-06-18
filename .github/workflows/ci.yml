@@ -215,41 +215,25 @@ jobs:
           workspaces: |
             cotest
             soland
-      - name: Build live soland
-        run: cargo build --release --locked --manifest-path soland/Cargo.toml
+      - name: Build soland Docker image
+        working-directory: cotest
+        shell: pwsh
+        run: ./scripts/build-soland-image.ps1 -ImageTag cotest-soland:pr-${{ github.run_id }}
       - name: Install playwright
         working-directory: cotest/e2e
         run: |
           npm ci || npm install
           npx playwright install --with-deps ${{ matrix.project }}
-      - name: Run live Playwright smoke
-        working-directory: cotest/e2e
-        env:
-          COTEST_SOLAND_BASE_URL: http://127.0.0.1:8008
-          COTEST_JOINT_RUN_DIR: ${{ github.workspace }}/cotest/artifacts/pr-playwright
-          SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/soland-objects"
-          SOLAND_DEVELOPMENT_MODE=1 \
-          SOLAND_PUBLIC_BASE_URL="$COTEST_SOLAND_BASE_URL" \
-          SOLAND_SERVICE_DID="did:web:soland.pr-ci.local" \
-          SOLAND_METRICS_BIND="127.0.0.1:9008" \
-          SOLAND_OBJECT_STORAGE_BACKEND="filesystem" \
-          SOLAND_OBJECT_STORAGE_LOCAL_ROOT="$RUNNER_TEMP/soland-objects" \
-          "$SOLAND_BIN" --bind 127.0.0.1:8008 > "$RUNNER_TEMP/soland-playwright.log" 2>&1 &
-          soland_pid=$!
-          cleanup() {
-            set +e
-            kill "$soland_pid" 2>/dev/null
-            wait "$soland_pid" 2>/dev/null
-          }
-          trap cleanup EXIT
-          for _ in {1..40}; do
-            if curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null; then
-              break
-            fi
-            sleep 1
-          done
-          curl -fsS "$COTEST_SOLAND_BASE_URL/health" >/dev/null
-          npx playwright test --config playwright.config.ts --project=${{ matrix.project }} tests/sync/service-surface-contract.spec.ts --grep "soland /_cokret/describe"
+      - name: Run Docker-image Playwright smoke
+        working-directory: cotest
+        shell: pwsh
+        run: >
+          ./scripts/run-joint-e2e.ps1
+          -SolandRuntime docker
+          -SolandImage cotest-soland:pr-${{ github.run_id }}
+          -SkipYougen
+          -SkipNpmInstall
+          -SkipBrowserInstall
+          -RunProfile joint-smoke
+          -PlaywrightProject ${{ matrix.project }}
+          -Grep "soland /_cokret/describe"

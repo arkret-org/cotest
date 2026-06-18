@@ -76,6 +76,9 @@ Recommended entrypoints:
 .\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
 .\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
+.\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
+.\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipYougen `
+  -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_cokret/describe"
 ```
 
 - `process` mode is the fast local path and spawns the SUT with `cargo run`.
@@ -84,6 +87,9 @@ Recommended entrypoints:
   through base URLs or managed service commands.
 - `docker` mode is the Complement-style path and spawns the SUT with
   `docker run` while Rust tests stay host-side.
+- Joint Playwright e2e can also run soland from the built image with
+  `run-joint-e2e.ps1 -SolandRuntime docker`, including a `-SkipYougen` mode for
+  soland-only wire/API probes.
 - `.\scripts\build-soland-image.ps1` builds the default SUT image from
   `soland` plus the sibling `cokret-rust-sdk` checkout using the workspace
   root as Docker build context.

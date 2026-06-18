@@ -46,6 +46,12 @@ day Rust work.
   share a runtime boundary instead of pretending everything is localhost. This
   is the direct analogue of Complement standing up multiple homeserver
   containers inside one deployment network.
+- `joint e2e docker`:
+  `scripts/run-joint-e2e.ps1 -SolandRuntime docker` starts the Playwright
+  target soland from the same built SUT image while keeping Playwright and
+  optional side services host-side. This is the release-quality browser/API
+  path because the server under test is the packaged appliance, not a fresh
+  `cargo run` child.
 
 ### Runtime switch
 
@@ -56,6 +62,9 @@ The harness reads these environment variables:
 - `COTEST_SUT_IMAGE=<tag>` for docker mode
 - `COTEST_SUT_CONTAINER_PORT=<port>` if the image exposes a non-default
   internal port. Default is `8008`.
+- `scripts/run-joint-e2e.ps1 -SolandRuntime process|docker`
+- `scripts/run-joint-e2e.ps1 -SolandImage <tag>` for Playwright runs backed by
+  a soland image.
 
 ### Docker image contract
 
@@ -75,10 +84,10 @@ The image contract is intentionally simple:
 
 The current implementation source-builds `soland` inside Docker:
 
-- build stage: `rust:1.92-bookworm`
-- runtime stage: `rust:1.92-bookworm`
+- build stage: `rust:1.96-bookworm`
+- runtime stage: `rust:1.96-bookworm`
 - copied source trees: `soland` and `cokret-rust-sdk`
-- build command: `cargo build --release`
+- build command: `cargo build --release --locked`
 
 The image does not define an in-container `HEALTHCHECK`. Instead, the harness
 waits on `GET /health` from the host side, which keeps the SUT contract
@@ -180,6 +189,36 @@ If the image already exists:
 .\scripts\run-cotest.ps1 -Runtime docker -CargoTestFilter federation
 ```
 
+### Run joint Playwright against the Docker image
+
+For the PR-sized soland service-surface probe:
+
+```powershell
+.\scripts\run-joint-e2e.ps1 `
+  -SolandRuntime docker `
+  -BuildSolandImage `
+  -SkipYougen `
+  -RunProfile joint-smoke `
+  -PlaywrightProject chromium `
+  -Grep "soland /_cokret/describe"
+```
+
+For the full product topology, keep Yougen and coauth enabled:
+
+```powershell
+.\scripts\run-joint-e2e.ps1 `
+  -SolandRuntime docker `
+  -BuildSolandImage `
+  -StartCoauth `
+  -RunProfile joint-smoke
+```
+
+When soland runs in Docker and coauth/starid/teabay/mocks run on the host, the
+runner rewrites soland's outbound localhost URLs to `host.docker.internal`
+inside the container. Public URLs exposed to Playwright stay as
+`http://127.0.0.1:<port>` so browser behavior remains identical to process
+mode.
+
 ### Coverage gate
 
 ```powershell
@@ -202,6 +241,9 @@ limited to the selected profile's `required_coverage_profiles`, unless
   SUT process lifecycle.
 - In `docker` mode, each server is a detached `docker run --rm` container with
   its own mapped host port, temp blob root, and `SOLAND_*` runtime env.
+- In joint Playwright Docker mode, the runner keeps soland containers until
+  teardown so `docker logs` can be copied into the joint e2e artifact directory
+  even when startup or a test assertion fails.
 - Multi-server Docker scenarios create one unique bridge network per test group
   and remove it on drop, mirroring Complement's deployment scoping.
 - Both runtimes use the same host-side health polling and the same actor/test
@@ -271,6 +313,9 @@ The runner now also emits:
 - Use `process` mode while iterating on server code and test logic.
 - Use `docker` mode when you need a shareable, reproducible black-box run closer
   to how Complement validates homeserver images.
+- Use `run-joint-e2e.ps1 -SolandRuntime docker` for release-quality browser/API
+  verification, especially when checking that the built image still exposes the
+  expected `/_cokret/*` service surface.
 - Use `artifacts/latest/summary.md` as the first place to inspect a run instead
   of relying on terminal scrollback.
 - `process` mode is the authoritative path for validating the current local
