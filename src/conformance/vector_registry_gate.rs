@@ -10,10 +10,27 @@ use super::{looks_like_sha256_digest, spec_artifacts_root};
 const VECTOR_REGISTRY_REF: &str = "registry/vector-registry.json";
 const ARTIFACT_FIXTURE_PREFIX: &str = "spec/v1/artifacts/fixtures/";
 const ARTIFACT_REF_PREFIX: &str = "spec/v1/artifacts/";
+const STRICT_GATE_ENV: &str = "COTEST_VECTOR_REGISTRY_GATE_STRICT";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VectorRegistryGateMode {
+    Lenient,
+    Strict,
+}
+
+impl VectorRegistryGateMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Lenient => "lenient",
+            Self::Strict => "strict",
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VectorRegistryGateStatus {
-    Passed,
+    FixtureBacked,
+    ActiveDocOnly,
     Reserved,
     Unsupported,
     Failed,
@@ -41,17 +58,40 @@ impl VectorRegistryGateReport {
             .filter(|entry| entry.gate_status == VectorRegistryGateStatus::Failed)
     }
 
-    pub fn gated_entries(&self) -> impl Iterator<Item = &VectorRegistryGateEntry> {
+    pub fn validation_failed_entries(
+        &self,
+        mode: VectorRegistryGateMode,
+    ) -> impl Iterator<Item = &VectorRegistryGateEntry> {
+        self.entries.iter().filter(move |entry| {
+            entry.gate_status == VectorRegistryGateStatus::Failed
+                || (mode == VectorRegistryGateMode::Strict
+                    && entry.gate_status == VectorRegistryGateStatus::ActiveDocOnly)
+        })
+    }
+
+    pub fn fixture_backed_entries(&self) -> impl Iterator<Item = &VectorRegistryGateEntry> {
         self.entries
             .iter()
-            .filter(|entry| entry.gate_status == VectorRegistryGateStatus::Passed)
+            .filter(|entry| entry.gate_status == VectorRegistryGateStatus::FixtureBacked)
+    }
+
+    pub fn active_doc_only_entries(&self) -> impl Iterator<Item = &VectorRegistryGateEntry> {
+        self.entries
+            .iter()
+            .filter(|entry| entry.gate_status == VectorRegistryGateStatus::ActiveDocOnly)
+    }
+
+    pub fn gated_entries(&self) -> impl Iterator<Item = &VectorRegistryGateEntry> {
+        self.fixture_backed_entries()
     }
 
     pub fn non_gating_entries(&self) -> impl Iterator<Item = &VectorRegistryGateEntry> {
         self.entries.iter().filter(|entry| {
             matches!(
                 entry.gate_status,
-                VectorRegistryGateStatus::Reserved | VectorRegistryGateStatus::Unsupported
+                VectorRegistryGateStatus::ActiveDocOnly
+                    | VectorRegistryGateStatus::Reserved
+                    | VectorRegistryGateStatus::Unsupported
             )
         })
     }
@@ -86,7 +126,15 @@ pub fn validate_vector_registry_gate() -> Result<VectorRegistryGateReport> {
 }
 
 pub fn validate_vector_registry_gate_report(report: &VectorRegistryGateReport) -> Result<()> {
-    let failures = report.failed_entries().collect::<Vec<_>>();
+    let mode = vector_registry_gate_mode_from_env()?;
+    validate_vector_registry_gate_report_with_mode(report, mode)
+}
+
+pub fn validate_vector_registry_gate_report_with_mode(
+    report: &VectorRegistryGateReport,
+    mode: VectorRegistryGateMode,
+) -> Result<()> {
+    let failures = report.validation_failed_entries(mode).collect::<Vec<_>>();
     if failures.is_empty() {
         return Ok(());
     }
@@ -97,10 +145,29 @@ pub fn validate_vector_registry_gate_report(report: &VectorRegistryGateReport) -
         lines.push(format!("{}: {reason}", entry.vector_id));
     }
     bail!(
-        "vector registry gate found {} failing entries:\n{}",
+        "vector registry gate ({}) found {} failing entries:\n{}",
+        mode.as_str(),
         lines.len(),
         lines.join("\n")
     )
+}
+
+fn vector_registry_gate_mode_from_env() -> Result<VectorRegistryGateMode> {
+    let value = match std::env::var(STRICT_GATE_ENV) {
+        Ok(value) => value,
+        Err(std::env::VarError::NotPresent) => return Ok(VectorRegistryGateMode::Lenient),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            bail!("{STRICT_GATE_ENV} must be valid UTF-8")
+        }
+    };
+
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" | "0" | "false" | "no" | "off" | "lenient" => Ok(VectorRegistryGateMode::Lenient),
+        "1" | "true" | "yes" | "on" | "strict" => Ok(VectorRegistryGateMode::Strict),
+        other => bail!(
+            "{STRICT_GATE_ENV} must be one of 1/true/yes/on/strict or 0/false/no/off/lenient, got `{other}`"
+        ),
+    }
 }
 
 pub fn build_vector_registry_gate_report_from_paths(
@@ -173,11 +240,11 @@ fn build_active_gate_entry(
         return Ok(VectorRegistryGateEntry {
             vector_id: row.vector_id.clone(),
             registry_status: row.status.clone(),
-            gate_status: VectorRegistryGateStatus::Unsupported,
+            gate_status: VectorRegistryGateStatus::ActiveDocOnly,
             fixture_refs,
             evidence_refs: Vec::new(),
             reason: Some(
-                "active registry entry has no artifact fixture source_ref; artifact-driven certification is unsupported until a machine fixture is published"
+                "active doc-only registry entry has no artifact fixture source_ref; strict artifact-driven certification requires machine fixture evidence"
                     .to_owned(),
             ),
         });
@@ -236,7 +303,7 @@ fn build_active_gate_entry(
     Ok(VectorRegistryGateEntry {
         vector_id: row.vector_id.clone(),
         registry_status: row.status.clone(),
-        gate_status: VectorRegistryGateStatus::Passed,
+        gate_status: VectorRegistryGateStatus::FixtureBacked,
         fixture_refs,
         evidence_refs,
         reason: None,

@@ -184,9 +184,10 @@ pub use sidecar_vectors::{
 pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
 pub use sync::run_sync_fixture_suite;
 pub use vector_registry_gate::{
-    VectorRegistryGateEntry, VectorRegistryGateReport, VectorRegistryGateStatus,
-    build_vector_registry_gate_report, build_vector_registry_gate_report_from_paths,
-    validate_vector_registry_gate, validate_vector_registry_gate_report,
+    VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,
+    VectorRegistryGateStatus, build_vector_registry_gate_report,
+    build_vector_registry_gate_report_from_paths, validate_vector_registry_gate,
+    validate_vector_registry_gate_report, validate_vector_registry_gate_report_with_mode,
 };
 pub use wire::{
     run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
