@@ -13,6 +13,7 @@ mod encoding;
 mod envelope;
 mod federation;
 mod handle_claim_rejection_vectors;
+mod key_backup_hardening;
 mod keypackage_lifecycle;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
@@ -121,6 +122,10 @@ pub use federation::run_federation_fixture_suite;
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
+};
+pub use key_backup_hardening::{
+    ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, run_key_backup_hardening_fixture_suite,
+    run_key_backup_kdf_floor_rejected_vector, run_key_backup_unlock_proof_vector,
 };
 pub use keypackage_lifecycle::{
     ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS, run_keypackage_exhaustion_claim_limits_vector,

@@ -641,3 +641,11 @@ conformance_test!(
     "auth_session_proof_fixture",
     cotest::conformance::run_auth_session_proof_fixture_suite,
 );
+
+conformance_test!(
+    /// Key-backup hardening vectors promoted to spec artifacts. Asserts KDF
+    /// floors and unlock-proof binding before ciphertext release.
+    key_backup_hardening_fixture_suite_matches_reference_semantics,
+    "key_backup_hardening_fixture",
+    cotest::conformance::run_key_backup_hardening_fixture_suite,
+);
