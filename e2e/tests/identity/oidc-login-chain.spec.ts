@@ -29,6 +29,7 @@ import {
   solandBaseUrl,
   solandServiceDid,
 } from "../../helpers/env";
+import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 import {
   generateDpopDeviceKey,
@@ -116,7 +117,15 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     if (!coauth) {
       return undefined;
     }
-    const user = uniqueUser("oidc-chain-root");
+    const account = await registerCoauthPasswordAccount(request, coauth);
+    const seed = uniqueUser("oidc-chain-root");
+    const user = {
+      ...seed,
+      name: account.handle,
+      did: account.did,
+      handle: `@${account.handle}`,
+      displayName: account.displayName,
+    };
     await ensureRegistered(request, user);
     const deviceKey = generateDpopDeviceKey();
     const grant = await mintDpopBoundGrant(request, coauth, user.did, user.deviceId, deviceKey, {

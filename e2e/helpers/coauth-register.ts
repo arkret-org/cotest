@@ -26,6 +26,8 @@ export type CoauthPasswordAccount = {
   email: string;
   password: string;
   displayName: string;
+  did: string;
+  principalId?: string;
 };
 
 type RegStep = string | undefined;
@@ -36,6 +38,21 @@ async function postJson(
   data: Record<string, unknown>,
 ): Promise<{ status: number; body: any; raw: string }> {
   const resp = await request.post(url, { data });
+  const raw = await resp.text();
+  let body: any = null;
+  try {
+    body = raw ? JSON.parse(raw) : {};
+  } catch {
+    body = null;
+  }
+  return { status: resp.status(), body, raw };
+}
+
+async function getJson(
+  request: APIRequestContext,
+  url: string,
+): Promise<{ status: number; body: any; raw: string }> {
+  const resp = await request.get(url);
   const raw = await resp.text();
   let body: any = null;
   try {
@@ -127,5 +144,21 @@ export async function registerCoauthPasswordAccount(
     throw new Error(`coauth finish failed (${fin.status}): ${fin.raw}`);
   }
 
-  return { handle: slug, email, password, displayName };
+  const viewer = await getJson(request, `${coauthBase}/_coauth/self/viewer`);
+  if (viewer.status !== 200 || viewer.body?.viewer?.__typename !== "User") {
+    throw new Error(`coauth viewer after register failed (${viewer.status}): ${viewer.raw}`);
+  }
+  const did = viewer.body.viewer.did;
+  if (!did) {
+    throw new Error(`coauth viewer after register did not include viewer.did: ${viewer.raw}`);
+  }
+
+  return {
+    handle: slug,
+    email,
+    password,
+    displayName,
+    did,
+    principalId: viewer.body.viewer.principal?.principal_id,
+  };
 }

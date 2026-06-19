@@ -26,10 +26,13 @@ import { coauthBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/en
 import {
   ensureRegistered,
   issueDevSession,
+  openUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { wireErrCode } from "../../helpers/soland-api";
 import {
+  dpopDeviceSeedB64url,
   generateDpopDeviceKey,
   mintDpopBoundGrant,
   mintDpopProof,
@@ -41,6 +44,12 @@ import {
 // of the authenticated principal (ck.self.account.query.viewer), so a 200 here
 // proves the inbound credential authenticated end-to-end.
 const VIEWER_PATH = "/_cokret/self/account/viewer";
+
+function grantLikeJwtWithoutDpop(): string {
+  const header = Buffer.from(JSON.stringify({ alg: "EdDSA", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({ type: "ck.session.grant" })).toString("base64url");
+  return `${header}.${payload}.signature`;
+}
 
 function viewerUrl(): string {
   return `${solandBaseUrl()}${VIEWER_PATH}`;
@@ -62,6 +71,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
         coauth: string;
         actorDid: string;
         deviceId: string;
+        displayName: string;
         deviceKey: DpopDeviceKey;
         grant: DpopBoundGrant;
       }
@@ -71,7 +81,15 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     if (!coauth) {
       return undefined;
     }
-    const user = uniqueUser("dpop-self");
+    const account = await registerCoauthPasswordAccount(request, coauth);
+    const seed = uniqueUser("dpop-self");
+    const user = {
+      ...seed,
+      name: account.handle,
+      did: account.did,
+      handle: `@${account.handle}`,
+      displayName: account.displayName,
+    };
     await ensureRegistered(request, user);
     const deviceKey = generateDpopDeviceKey();
     const grant = await mintDpopBoundGrant(
@@ -92,6 +110,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       coauth,
       actorDid: user.did,
       deviceId: user.deviceId,
+      displayName: user.displayName,
       deviceKey,
       grant,
     };
@@ -129,6 +148,68 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     );
     expect(ctx!.actorDid).toBeTruthy();
     expect(JSON.parse(body).principal_id).toBe(ctx!.actorDid);
+  });
+
+  test("1b. yougen boots with a real grant and sends self-path DPoP headers", async ({
+    browser,
+    request,
+  }) => {
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+    const ctx = await setupGrant(request);
+    test.skip(
+      !ctx,
+      "coauth debug grant-mint seam unavailable (release build or COAUTH_ENABLE_TEST_ENDPOINTS unset)",
+    );
+    const { actorDid, deviceId, displayName, deviceKey, grant } = ctx!;
+    const user = {
+      name: actorDid.split(":").pop() ?? "dpop-yougen",
+      did: actorDid,
+      deviceId,
+      handle: "@dpop-yougen",
+      displayName,
+    };
+    const jointPage = await openUserPage(browser, user, {
+      grantJwt: grant.grantJwt,
+      dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
+      grantId: grant.grantId,
+      grantAudience: grant.audience,
+    });
+    const seenGrantSelfRequests: Array<{ url: string; headers: Record<string, string> }> = [];
+    jointPage.page.on("request", (browserRequest) => {
+      const url = browserRequest.url();
+      if (!url.includes("/_cokret/self/") && !url.includes("/_cokret/root/")) {
+        return;
+      }
+      const headers = browserRequest.headers();
+      if (headers.authorization === `Bearer ${grant.grantJwt}`) {
+        seenGrantSelfRequests.push({ url, headers });
+      }
+    });
+    try {
+      await jointPage.gotoHome();
+      await expect
+        .poll(
+          () =>
+            seenGrantSelfRequests.some(
+              ({ headers }) =>
+                Boolean(headers.dpop) &&
+                Boolean(headers["x-cokret-session-grant-challenge"]) &&
+                Boolean(headers["x-cokret-session-grant-proof"]),
+            ),
+          { timeout: 30_000 },
+        )
+        .toBeTruthy();
+      const missingProofs = seenGrantSelfRequests.filter(
+        ({ headers }) =>
+          !headers.dpop ||
+          !headers["x-cokret-session-grant-challenge"] ||
+          !headers["x-cokret-session-grant-proof"],
+      );
+      expect(missingProofs, `grant self/root requests missing DPoP or holder proof`).toEqual([]);
+    } finally {
+      await jointPage.close();
+    }
   });
 
   test("3a. DPoP signed by a non-matching key is rejected (401)", async ({
@@ -267,15 +348,8 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     // before any dev-bearer/OAuth compatibility lookup.
     // This holds whether or not we minted a real grant, so it runs everywhere:
     // a grant-shaped bearer with no DPoP must never authenticate the self-path.
-    const ctx = await setupGrant(request);
-    const bearer = ctx
-      ? ctx.grant.grantJwt
-      : // No debug seam: a syntactically grant-like but unknown bearer. The
-        // assertion (no DPoP ⇒ rejected) is identical; only the realism differs.
-        "ck.session.grant.unknown.no-dpop-presented";
-
     const response = await request.get(viewerUrl(), {
-      headers: { authorization: `Bearer ${bearer}` },
+      headers: { authorization: `Bearer ${grantLikeJwtWithoutDpop()}` },
     });
     expect([401, 403]).toContain(response.status());
   });
