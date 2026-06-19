@@ -579,6 +579,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Media AEAD nonce vectors promoted to spec artifacts. Asserts sender
+    /// nonce-prefix domain separation, counter replay rejection, and
+    /// deterministic rejection of random 96-bit nonce fallback.
+    media_aead_nonce_fixture_suite_matches_reference_semantics,
+    "media_aead_nonce_fixture",
+    cotest::conformance::run_media_aead_nonce_fixture_suite,
+);
+
+conformance_test!(
     /// Push rule core vectors promoted to spec artifacts. Asserts the shared
     /// SDK core used by soland / chime / yougen keeps watch-level delivery,
     /// blind-wakeup, and reason-code semantics aligned.

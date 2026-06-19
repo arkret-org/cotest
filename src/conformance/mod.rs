@@ -14,6 +14,7 @@ mod handle_claim_rejection_vectors;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod list_handles_for_subject_vectors;
+mod media_aead_nonce;
 mod media_binding;
 mod member_identity_vectors;
 mod member_roster_vectors;
@@ -111,6 +112,11 @@ pub use list_handles_for_subject_vectors::{
     run_happy_path_single_claim_vector, run_issuer_trust_filter_vector,
     run_list_handles_for_subject_vector_suite, run_primary_handle_field_aligned_with_3_2_1_vector,
     run_subject_mismatch_rejected_vector,
+};
+pub use media_aead_nonce::{
+    ALL_MEDIA_AEAD_NONCE_VECTOR_IDS, run_aead_nonce_counter_replay_vector,
+    run_aead_nonce_random_rejected_vector, run_aead_nonce_sender_domain_collision_vector,
+    run_media_aead_nonce_fixture_suite,
 };
 pub use media_binding::{
     ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
