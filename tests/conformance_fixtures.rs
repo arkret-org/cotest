@@ -173,6 +173,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// T-CONF-PROFILE-MUST — profile dependency graph + machine-readable
+    /// requirement blocks drive inheritance, dependency, fixture, cell, feature,
+    /// capability, and MUST-block conformance gates.
+    profile_requirement_gate_matches_spec_artifacts,
+    "profile_requirement_gate",
+    cotest::conformance::run_profile_requirement_gate_suite,
+);
+
+conformance_test!(
     /// C42.4 — Yougen full/e2ee client black-box manifest. Covers OIDC
     /// callback/session grant, host secure-store handoff, device
     /// verification, and E2EE fail-closed behavior.

@@ -88,6 +88,40 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     });
     expect_profile_rejected(&limited, "limited profile")?;
 
+    let missing_dependency = serde_json::json!({
+        "supported_profiles": ["ck.profile.push_gateway.v1"],
+        "supported_operations": [],
+    });
+    expect_profile_rejected(&missing_dependency, "missing profile dependency")?;
+
+    let mutually_exclusive = serde_json::json!({
+        "supported_profiles": [
+            "ck.profile.e2ee_relaxed.v1",
+            "ck.profile.e2ee_client.v1",
+            "ck.profile.mls_governance_binding.full.v1",
+        ],
+        "supported_operations": [],
+    });
+    expect_profile_rejected(&mutually_exclusive, "mutually exclusive profiles")?;
+
+    let missing_required_cells = serde_json::json!({
+        "supported_profiles": ["ck.profile.mls_governance_binding.full.v1"],
+        "supported_operations": [
+            "ck.self.keys.keypackages.command.claim",
+            "ck.self.keys.keypackages.command.consume",
+            "ck.self.events.query.scan",
+        ],
+        "supported_cells": [],
+    });
+    expect_profile_rejected(&missing_required_cells, "missing required cells")?;
+
+    let missing_required_fixture = serde_json::json!({
+        "supported_profiles": ["ck.profile.capability_vectors.v1"],
+        "supported_operations": ["ck.self.authz.query.check"],
+        "verified_fixtures": [],
+    });
+    expect_profile_rejected(&missing_required_fixture, "missing required fixture")?;
+
     Ok(())
 }
 

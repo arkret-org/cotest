@@ -160,7 +160,7 @@ pub use principal_server_certification::{
 };
 pub use privacy::run_privacy_security_fixture_suite;
 pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
-pub use profile_matrix::validate_server_profile_claims;
+pub use profile_matrix::{run_profile_requirement_gate_suite, validate_server_profile_claims};
 pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
