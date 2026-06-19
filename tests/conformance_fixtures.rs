@@ -568,3 +568,12 @@ conformance_test!(
     "blind_payload_sanitizer",
     cotest::conformance::run_blind_payload_sanitizer_suite,
 );
+
+conformance_test!(
+    /// Push rule core vectors promoted to spec artifacts. Asserts the shared
+    /// SDK core used by soland / chime / yougen keeps watch-level delivery,
+    /// blind-wakeup, and reason-code semantics aligned.
+    push_rule_core_fixture_suite_matches_reference_semantics,
+    "push_rule_core_fixture",
+    cotest::conformance::run_push_rule_core_fixture_suite,
+);

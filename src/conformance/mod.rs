@@ -26,6 +26,7 @@ mod privacy;
 mod private_chat_privacy;
 mod profile_matrix;
 mod profile_registry;
+mod push_rule_core;
 mod redaction;
 mod reducer_profile;
 mod scaffold_gate;
@@ -168,6 +169,7 @@ pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
 };
+pub use push_rule_core::run_push_rule_core_fixture_suite;
 pub use redaction::run_redaction_fixture_suite;
 pub use reducer_profile::{FEDERATION_MINIMAL_PROFILE_ID, reducer_profile_digest};
 pub use scaffold_gate::{
