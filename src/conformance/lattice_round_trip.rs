@@ -24,6 +24,7 @@
 //! spec's normative join semantics.
 
 use anyhow::{Result, anyhow, bail};
+use cokret_core::canonical::canonical_json_bytes;
 use cokret_core::lattice::ordered_log::IssuedOp;
 use cokret_core::lattice::{
     CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
@@ -31,10 +32,11 @@ use cokret_core::lattice::{
 use cokret_core::{CellRef, Did, LatticeOp, LatticeOpType, MoveId};
 use serde_json::{Value, json};
 
-const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 4] = [
+const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 5] = [
     "ck.vector.lattice.mv_register_join.v1",
     "ck.vector.lattice.counter_join.v1",
     "ck.vector.lattice.ordered_log_join.v1",
+    "ck.vector.lattice.ordered_log_gap.v1",
     "ck.vector.lattice.fsm_join.v1",
 ];
 
@@ -54,6 +56,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     fsm_illegal_transition_returns_bottom()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
     ordered_log_per_issuer_monotonic_append()?;
+    ordered_log_gap_reports_pending_until_backfill()?;
     // C10.C extensions (2026-05-09 aggressive batch): Notary cell
     // configurations, conflict repair head_in semantics, MLS covered_frontier.
     notary_cell_single_did_profile_resolves_to_value()?;
@@ -557,6 +560,151 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     {
         bail!("OrderedLog duplicate same issuer_seq must keep the first canonical entry");
     }
+    Ok(())
+}
+
+fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
+    let lattice = OrderedLog;
+    let cref = cell(
+        "ck.component.audit_log.v1",
+        "ck.realm.01js0sp0000000000000000000",
+    );
+    let gap_ops = vec![
+        issued_op(
+            "did:web:alice.example",
+            "a0",
+            op_append(json!({"entry_id": "entry-0000", "kind": "start"}), 0),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "a1",
+            op_append(json!({"entry_id": "entry-0001", "kind": "next"}), 1),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "a3",
+            op_append(json!({"entry_id": "entry-0003-b", "kind": "late-b"}), 3),
+        ),
+    ];
+
+    let gap_report = lattice.join_with_issuer_report(&gap_ops);
+    if gap_report.entries.len() != 2 {
+        bail!(
+            "OrderedLog gap must expose only contiguous prefix seq 0,1; got {:?}",
+            gap_report.entries
+        );
+    }
+    if gap_report.entries.iter().any(|entry| {
+        entry.get("issuer_seq").and_then(Value::as_u64) == Some(3)
+            || entry.to_string().contains("late-b")
+    }) {
+        bail!("OrderedLog pending gap entry leaked into materialized cell value");
+    }
+    if gap_report.pending_gaps.len() != 1 {
+        bail!(
+            "OrderedLog gap must report one pending_gap diagnostic, got {:?}",
+            gap_report.pending_gaps
+        );
+    }
+    let gap = &gap_report.pending_gaps[0];
+    if gap.issuer != "did:web:alice.example"
+        || gap.missing_seq != 2
+        || gap.pending_seq != 3
+        || gap.reason != "dependency_missing"
+    {
+        bail!("OrderedLog pending_gap diagnostic drifted: {gap:?}");
+    }
+    let CellState::Value(value) = lattice.join_with_issuers(&cref, &gap_ops) else {
+        bail!("OrderedLog gap must not Bottom");
+    };
+    if value.as_array().is_none_or(|entries| entries.len() != 2) {
+        bail!("OrderedLog join value must withhold pending gap entry: {value}");
+    }
+
+    let backfilled_a = vec![
+        issued_op(
+            "did:web:alice.example",
+            "a0",
+            op_append(json!({"entry_id": "entry-0000", "kind": "start"}), 0),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "a1",
+            op_append(json!({"entry_id": "entry-0001", "kind": "next"}), 1),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "a3",
+            op_append(json!({"entry_id": "entry-0003-b", "kind": "late-b"}), 3),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "a2",
+            op_append(json!({"entry_id": "entry-0002", "kind": "backfill"}), 2),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "a4",
+            op_append(json!({"entry_id": "entry-0003-a", "kind": "late-a"}), 3),
+        ),
+    ];
+    let backfilled_b = vec![
+        issued_op(
+            "did:web:alice.example",
+            "b0",
+            op_append(json!({"entry_id": "entry-0000", "kind": "start"}), 0),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "b1",
+            op_append(json!({"entry_id": "entry-0001", "kind": "next"}), 1),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "b2",
+            op_append(json!({"entry_id": "entry-0002", "kind": "backfill"}), 2),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "b4",
+            op_append(json!({"entry_id": "entry-0003-a", "kind": "late-a"}), 3),
+        ),
+        issued_op(
+            "did:web:alice.example",
+            "b3",
+            op_append(json!({"entry_id": "entry-0003-b", "kind": "late-b"}), 3),
+        ),
+    ];
+    let report_a = lattice.join_with_issuer_report(&backfilled_a);
+    let report_b = lattice.join_with_issuer_report(&backfilled_b);
+    if !report_a.pending_gaps.is_empty() || !report_b.pending_gaps.is_empty() {
+        bail!(
+            "OrderedLog backfill must clear pending gaps: {:?} / {:?}",
+            report_a.pending_gaps,
+            report_b.pending_gaps
+        );
+    }
+    if report_a.entries.len() != 4 || report_b.entries.len() != 4 {
+        bail!(
+            "OrderedLog backfill must materialize seq 0..3: {:?} / {:?}",
+            report_a.entries,
+            report_b.entries
+        );
+    }
+    if canonical_json_bytes(&report_a.entries)? != canonical_json_bytes(&report_b.entries)? {
+        bail!("OrderedLog backfill recompute depended on arrival order");
+    }
+    if report_a.entries[3]["value"]
+        .get("entry_id")
+        .and_then(Value::as_str)
+        != Some("entry-0003-a")
+    {
+        bail!(
+            "OrderedLog duplicate same issuer_seq must keep min entry_id, got {:?}",
+            report_a.entries[3]
+        );
+    }
+
     Ok(())
 }
 
