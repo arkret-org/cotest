@@ -34,7 +34,7 @@ use cokret_core::{
 };
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use hkdf::Hkdf;
-use serde_json::json;
+use serde_json::{Value, json};
 use sha2::Sha256;
 
 /// Vector id pins. Hard-fails any future rename of the canonical
@@ -70,6 +70,42 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED,
     VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB,
 ];
+
+const MEDIA_BINDING_FIXTURE_FILE: &str = "media-binding-fixture.json";
+const MEDIA_BINDING_PROFILE: &str = "ck.profile.media_service_binding.v1";
+
+fn validate_media_binding_fixture_metadata() -> Result<()> {
+    let fixture = super::load_fixture_value(MEDIA_BINDING_FIXTURE_FILE)?;
+    super::validate_profile(&fixture, MEDIA_BINDING_PROFILE)?;
+    let covers = fixture
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("media-binding fixture missing covers_vectors[]"))?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("media-binding fixture missing cases[]"))?;
+
+    for vector_id in ALL_MEDIA_BINDING_VECTOR_IDS {
+        if !covers
+            .iter()
+            .any(|entry| entry.as_str() == Some(*vector_id))
+        {
+            bail!("media-binding fixture missing covers_vectors entry {vector_id}");
+        }
+        if !cases.iter().any(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
+                && case
+                    .get("assertions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|assertions| !assertions.is_empty())
+        }) {
+            bail!("media-binding fixture missing asserted case {vector_id}");
+        }
+    }
+
+    Ok(())
+}
 
 /// Known media-backend type tags from `ck.realm.media_service.foci[].type`.
 /// Mirrors `cokret_sdk::media::MediaBackendType` enum (R3 SDK feature
@@ -727,6 +763,7 @@ pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
 /// Suite entry point — runs all 9 media-binding vectors back to back.
 /// One failure stops the run with full context.
 pub fn run_media_binding_vector_suite() -> Result<()> {
+    validate_media_binding_fixture_metadata()?;
     if ALL_MEDIA_BINDING_VECTOR_IDS.len() != 9 {
         bail!(
             "expected 9 media_binding vector ids, got {}",

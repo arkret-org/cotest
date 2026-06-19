@@ -57,6 +57,44 @@ pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_P2P_TO_SFU_UPGRADE,
 ];
 
+const CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE: &str = "call-state-media-lifecycle-fixture.json";
+const CALL_STATE_MEDIA_LIFECYCLE_PROFILE: &str = "ck.profile.media_service_binding.v1";
+
+fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
+    let fixture = super::load_fixture_value(CALL_STATE_MEDIA_LIFECYCLE_FIXTURE_FILE)?;
+    super::validate_profile(&fixture, CALL_STATE_MEDIA_LIFECYCLE_PROFILE)?;
+    let covers = fixture
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            anyhow::anyhow!("call-state media-lifecycle fixture missing covers_vectors[]")
+        })?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("call-state media-lifecycle fixture missing cases[]"))?;
+
+    for vector_id in ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS {
+        if !covers
+            .iter()
+            .any(|entry| entry.as_str() == Some(*vector_id))
+        {
+            bail!("call-state media-lifecycle fixture missing covers_vectors entry {vector_id}");
+        }
+        if !cases.iter().any(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
+                && case
+                    .get("assertions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|assertions| !assertions.is_empty())
+        }) {
+            bail!("call-state media-lifecycle fixture missing asserted case {vector_id}");
+        }
+    }
+
+    Ok(())
+}
+
 // ── Reason-code spelling pins (error-code-registry.json) ────────────────────
 //
 // Mirrors the canonical spelling. When the SDK error enum grows these, swap to
@@ -620,6 +658,7 @@ pub fn run_p2p_to_sfu_upgrade_vector() -> Result<()> {
 /// Suite entry point — runs all 5 call-state media-lifecycle vectors back to
 /// back. One failure stops the run with full context.
 pub fn run_call_state_media_lifecycle_vector_suite() -> Result<()> {
+    validate_call_state_media_lifecycle_fixture_metadata()?;
     if ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len() != 5 {
         bail!(
             "expected 5 call_state media-lifecycle vector ids, got {}",
