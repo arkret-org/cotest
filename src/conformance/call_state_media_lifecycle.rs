@@ -1,9 +1,11 @@
 //! Call-state media lifecycle conformance vectors (§12.16–§12.19).
 //!
-//! 4 vectors covering the recording-retention / transcribe / moderation /
+//! 5 vectors covering the recording-retention / recording-result artifact /
+//! transcribe / moderation /
 //! P2P→SFU-upgrade additions to `ck.call.state` and `ck.call.summary`:
 //!
 //! - `ck.vector.call_state.recording_retention_lock.v1`
+//! - `ck.vector.call_state.recording_result_artifact_shape.v1`
 //! - `ck.vector.call_state.transcribe_lifecycle.v1`
 //! - `ck.vector.call_state.moderator_kick_ban.v1`
 //! - `ck.vector.call_state.p2p_to_sfu_upgrade.v1`
@@ -22,19 +24,34 @@
 //! error enum grows them.
 
 use anyhow::{Result, bail};
-use cokret_core::error::ERROR_CODE_LEGAL_HOLD_ACTIVE;
+use chrono::{DateTime, Utc};
+use cokret_core::error::{
+    ERROR_CODE_LEGAL_HOLD_ACTIVE, ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+    ERROR_CODE_SCHEMA_VIOLATION,
+};
+use cokret_core::{
+    BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
+    CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
+    CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingRetention,
+    CallStatePayload, CallStatePayloadRecordingResult, Did, EventId, GrantId, Hash, PolicyId,
+    RealmId,
+};
+use serde_json::{Value, json};
 
 // ── Canonical vector ids (registered in vector-registry.json) ───────────────
 
 pub const VECTOR_ID_RECORDING_RETENTION_LOCK: &str =
     "ck.vector.call_state.recording_retention_lock.v1";
+pub const VECTOR_ID_RECORDING_RESULT_ARTIFACT_SHAPE: &str =
+    "ck.vector.call_state.recording_result_artifact_shape.v1";
 pub const VECTOR_ID_TRANSCRIBE_LIFECYCLE: &str = "ck.vector.call_state.transcribe_lifecycle.v1";
 pub const VECTOR_ID_MODERATOR_KICK_BAN: &str = "ck.vector.call_state.moderator_kick_ban.v1";
 pub const VECTOR_ID_P2P_TO_SFU_UPGRADE: &str = "ck.vector.call_state.p2p_to_sfu_upgrade.v1";
 
-/// Canonical list of the 4 call-state media-lifecycle vector ids.
+/// Canonical list of the 5 call-state media-lifecycle vector ids.
 pub const ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_RECORDING_RETENTION_LOCK,
+    VECTOR_ID_RECORDING_RESULT_ARTIFACT_SHAPE,
     VECTOR_ID_TRANSCRIBE_LIFECYCLE,
     VECTOR_ID_MODERATOR_KICK_BAN,
     VECTOR_ID_P2P_TO_SFU_UPGRADE,
@@ -143,6 +160,241 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
         .map_err(|code| anyhow::anyhow!("control delete unexpectedly rejected: {code}"))?;
     capture_consent_ok(true)
         .map_err(|code| anyhow::anyhow!("control capture unexpectedly rejected: {code}"))?;
+    Ok(())
+}
+
+// ─── §12.16.1 — recording_result_artifact_shape ────────────────────────────
+
+fn ts(value: &str) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(value)
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+fn realm_id() -> RealmId {
+    RealmId::new("ck:realm:019a7360-0000-7000-8000-000000000000").unwrap()
+}
+
+fn call_id() -> CallId {
+    CallId::new("ck:call:019a7360-0000-7000-8000-000000000001").unwrap()
+}
+
+fn start_event_id() -> EventId {
+    EventId::new("ck:event:019a7360-0000-7000-8000-000000000003").unwrap()
+}
+
+fn hash(ch: char) -> Hash {
+    Hash::new(format!("sha256:{}", ch.to_string().repeat(64))).unwrap()
+}
+
+fn valid_recording_artifact() -> CallRecordingArtifact {
+    CallRecordingArtifact {
+        schema: CallRecordingArtifact::SCHEMA.to_owned(),
+        realm_id: realm_id(),
+        call_id: call_id(),
+        recording_id: "rtc-recording-019a7360-0000-7000-8000-000000000002".to_owned(),
+        recording_start_event_id: start_event_id(),
+        artifact_kind: CallRecordingArtifactKind::Recording,
+        blob_ref: BlobRef::new("ck:blob:019a7360-0000-7000-8000-000000000004").unwrap(),
+        content_digest: hash('a'),
+        ciphertext_digest: hash('b'),
+        size_bytes: 1_048_576,
+        duration_ms: 42_000,
+        media_type: "video/mp4".to_owned(),
+        encryption: CallRecordingEncryption {
+            alg: CallRecordingEncryptionAlg::MlsExporterAeadXchacha20poly1305Stream,
+            exporter_label: LABEL_RTC_RECORDING_KEY.to_owned(),
+            context: CallRecordingEncryptionContext {
+                realm_id: realm_id(),
+                call_id: call_id(),
+                focus_id: "fra-1".to_owned(),
+                recording_id: "rtc-recording-019a7360-0000-7000-8000-000000000002".to_owned(),
+                media_service_did: Did::new("did:web:recorder.example").unwrap(),
+                recording_start_event_id: start_event_id(),
+            },
+            ciphertext_digest: hash('b'),
+        },
+        retention_policy_id: Some(
+            PolicyId::new("ck:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
+        ),
+        retention: CallRecordingRetention {
+            retention_expires_at: Some(ts("2026-06-20T00:00:00Z")),
+            deletion_trigger: Some(CallRecordingDeletionTrigger::RetentionExpiry),
+            audit_lock: Some(false),
+            consent_confirmed: Some(true),
+        },
+        produced_by: Did::new("did:web:recorder.example").unwrap(),
+        recording_initiator_capability_ref: GrantId::new(
+            "ck:grant:019a7360-0000-7000-8000-000000000006",
+        )
+        .unwrap(),
+        created_at: ts("2026-06-19T00:00:00Z"),
+        deletion_audit: Some(CallRecordingDeletionAudit {
+            trigger: CallRecordingDeletionTrigger::RetentionExpiry,
+            outcome: CallRecordingDeletionOutcome::Completed,
+            requested_by: None,
+            trigger_event_id: None,
+            requested_at: ts("2026-06-20T00:00:00Z"),
+            completed_at: Some(ts("2026-06-20T00:00:01Z")),
+            erasure_receipt_ref: Some("ck:receipt:019a7360-0000-7000-8000-000000000007".to_owned()),
+            legal_hold_ref: None,
+            failure_reason_code: None,
+        }),
+    }
+}
+
+fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStatePayload {
+    let artifact_ref = artifact.as_ref();
+    CallStatePayload {
+        call_id: call_id().to_string(),
+        state: "ended".to_owned(),
+        mode: None,
+        session_focus: None,
+        participants: None,
+        recording_state: Some("ready".to_owned()),
+        recording_result: Some(CallStatePayloadRecordingResult {
+            content_digest: artifact_ref.map(|artifact| artifact.content_digest.clone()),
+            duration_ms: artifact_ref.map(|artifact| artifact.duration_ms),
+            media_type: artifact_ref.map(|artifact| artifact.media_type.clone()),
+            retention_policy_id: artifact_ref
+                .and_then(|artifact| artifact.retention_policy_id.clone()),
+            retention: artifact_ref.map(|artifact| artifact.retention.clone()),
+            recording_start_event_id: artifact_ref
+                .map(|artifact| artifact.recording_start_event_id.clone()),
+            artifact,
+            failure_reason_code: None,
+            failure_message: None,
+        }),
+    }
+}
+
+fn value_has_backend_direct_ref(value: &Value) -> bool {
+    match value {
+        Value::String(value) => {
+            let lower = value.to_ascii_lowercase();
+            lower.contains("http://")
+                || lower.contains("https://")
+                || lower.contains("s3://")
+                || lower.contains("gs://")
+                || lower.contains("s3.amazonaws.com")
+                || lower.contains("storage.googleapis.com")
+                || lower.contains("livekit")
+        }
+        Value::Array(values) => values.iter().any(value_has_backend_direct_ref),
+        Value::Object(object) => object.iter().any(|(key, value)| {
+            matches!(
+                key.as_str(),
+                "url" | "download_url" | "recording_url" | "destination" | "external_url"
+            ) || value_has_backend_direct_ref(value)
+        }),
+        _ => false,
+    }
+}
+
+fn evaluate_recording_result_artifact_shape(
+    value: Value,
+    deletion_completed: bool,
+) -> std::result::Result<(), &'static str> {
+    if value_has_backend_direct_ref(&value) {
+        return Err(ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED);
+    }
+    let payload: CallStatePayload =
+        serde_json::from_value(value).map_err(|_| ERROR_CODE_SCHEMA_VIOLATION)?;
+    payload.validate_recording_result_artifact()?;
+    let artifact = payload
+        .recording_result
+        .as_ref()
+        .and_then(|result| result.artifact.as_ref())
+        .ok_or(ERROR_CODE_SCHEMA_VIOLATION)?;
+    if deletion_completed {
+        let audit = artifact
+            .deletion_audit
+            .as_ref()
+            .ok_or(ERROR_CODE_SCHEMA_VIOLATION)?;
+        if audit.outcome != CallRecordingDeletionOutcome::Completed
+            || audit
+                .erasure_receipt_ref
+                .as_deref()
+                .is_none_or(str::is_empty)
+        {
+            return Err(ERROR_CODE_SCHEMA_VIOLATION);
+        }
+    }
+    Ok(())
+}
+
+pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
+    if CallRecordingArtifact::SCHEMA != "ck.schema.call_recording_artifact.v1" {
+        bail!(
+            "CallRecordingArtifact schema spelling drifted: {}",
+            CallRecordingArtifact::SCHEMA
+        );
+    }
+    if ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
+        bail!(
+            "ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
+        );
+    }
+
+    match evaluate_recording_result_artifact_shape(
+        serde_json::to_value(ready_call_state_payload(None)).unwrap(),
+        false,
+    ) {
+        Err(code) if code == ERROR_CODE_SCHEMA_VIOLATION => {}
+        other => bail!("ready recording without artifact must be schema_violation, got {other:?}"),
+    }
+
+    let mut direct_result =
+        serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap();
+    direct_result["recording_result"]["recording_url"] =
+        json!("https://s3.amazonaws.com/bucket/recording.mp4");
+    match evaluate_recording_result_artifact_shape(direct_result, false) {
+        Err(code) if code == ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
+        other => bail!("backend direct result URL must be pipeline bypass, got {other:?}"),
+    }
+
+    let mut direct_artifact =
+        serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap();
+    direct_artifact["recording_result"]["artifact"]["destination"] =
+        json!("livekit://egress/recording-1");
+    match evaluate_recording_result_artifact_shape(direct_artifact, false) {
+        Err(code) if code == ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
+        other => {
+            bail!("backend direct artifact destination must be pipeline bypass, got {other:?}")
+        }
+    }
+
+    let mut missing_audit = valid_recording_artifact();
+    missing_audit.deletion_audit = None;
+    match evaluate_recording_result_artifact_shape(
+        serde_json::to_value(ready_call_state_payload(Some(missing_audit))).unwrap(),
+        true,
+    ) {
+        Err(code) if code == ERROR_CODE_SCHEMA_VIOLATION => {}
+        other => bail!("completed deletion without deletion_audit must fail closed, got {other:?}"),
+    }
+
+    let mut missing_receipt = valid_recording_artifact();
+    missing_receipt
+        .deletion_audit
+        .as_mut()
+        .unwrap()
+        .erasure_receipt_ref = None;
+    match evaluate_recording_result_artifact_shape(
+        serde_json::to_value(ready_call_state_payload(Some(missing_receipt))).unwrap(),
+        true,
+    ) {
+        Err(code) if code == ERROR_CODE_SCHEMA_VIOLATION => {}
+        other => {
+            bail!("completed deletion without erasure_receipt_ref must fail closed, got {other:?}")
+        }
+    }
+
+    evaluate_recording_result_artifact_shape(
+        serde_json::to_value(ready_call_state_payload(Some(valid_recording_artifact()))).unwrap(),
+        true,
+    )
+    .map_err(|code| anyhow::anyhow!("valid recording artifact unexpectedly rejected: {code}"))?;
     Ok(())
 }
 
@@ -365,16 +617,17 @@ pub fn run_p2p_to_sfu_upgrade_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 4 call-state media-lifecycle vectors back to
+/// Suite entry point — runs all 5 call-state media-lifecycle vectors back to
 /// back. One failure stops the run with full context.
 pub fn run_call_state_media_lifecycle_vector_suite() -> Result<()> {
-    if ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len() != 4 {
+    if ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len() != 5 {
         bail!(
-            "expected 4 call_state media-lifecycle vector ids, got {}",
+            "expected 5 call_state media-lifecycle vector ids, got {}",
             ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len()
         );
     }
     run_recording_retention_lock_vector()?;
+    run_recording_result_artifact_shape_vector()?;
     run_transcribe_lifecycle_vector()?;
     run_moderator_kick_ban_vector()?;
     run_p2p_to_sfu_upgrade_vector()?;
@@ -386,7 +639,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_four_call_state_media_lifecycle_vectors_run_clean() {
+    fn all_five_call_state_media_lifecycle_vectors_run_clean() {
         run_call_state_media_lifecycle_vector_suite().unwrap();
     }
 }

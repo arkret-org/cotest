@@ -44,9 +44,10 @@ fn call_signal_receiver_vector_suite_runs_clean() {
 
 // ─── §12.16-§12.19 — call-state media lifecycle vectors ────────────────────
 //
-// recording_retention_lock / transcribe_lifecycle / moderator_kick_ban /
-// p2p_to_sfu_upgrade — the spec additions for recording retention + audit
-// lock, the transcribe pipeline + dedicated exporter label, moderator
+// recording_retention_lock / recording_result_artifact_shape /
+// transcribe_lifecycle / moderator_kick_ban / p2p_to_sfu_upgrade — the spec
+// additions for recording retention + audit lock, ready recording artifact
+// binding, the transcribe pipeline + dedicated exporter label, moderator
 // kick/ban + removed_participants[] token-reissue gating, and the P2P→SFU
 // upgrade + ck.call.summary terminal-state gate.
 
@@ -54,8 +55,8 @@ fn call_signal_receiver_vector_suite_runs_clean() {
 fn call_state_media_lifecycle_vector_suite_runs_clean() {
     run_call_state_media_lifecycle_vector_suite()
         .expect("call-state media-lifecycle vectors must pass");
-    assert_eq!(ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len(), 4);
-    // All 4 ids are registered in vector-registry.json (canonical namespace).
+    assert_eq!(ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS.len(), 5);
+    // All 5 ids are registered in vector-registry.json (canonical namespace).
     for id in ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS {
         assert!(
             id.starts_with("ck.vector.call_state."),
