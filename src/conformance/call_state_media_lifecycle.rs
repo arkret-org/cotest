@@ -27,14 +27,15 @@ use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use cokret_core::error::{
     ERROR_CODE_LEGAL_HOLD_ACTIVE, ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
-    ERROR_CODE_SCHEMA_VIOLATION,
+    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED,
+    ERROR_CODE_TRANSCRIPTION_DENIED,
 };
 use cokret_core::{
     BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
     CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingRetention,
-    CallStatePayload, CallStatePayloadRecordingResult, Did, EventId, GrantId, Hash, PolicyId,
-    RealmId,
+    CallStatePayload, CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, Did,
+    EventId, GrantId, Hash, PolicyId, RealmId,
 };
 use serde_json::{Value, json};
 
@@ -97,13 +98,13 @@ fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
 
 // ── Reason-code spelling pins (error-code-registry.json) ────────────────────
 //
-// Mirrors the canonical spelling. When the SDK error enum grows these, swap to
-// the `cokret_core::error::*` constant and delete the local pin.
+// Mirrors the canonical spelling. Remaining local pins cover codes not yet
+// surfaced as SDK constants.
 
 const REASON_RECORDING_CONSENT_REQUIRED: &str = "recording_consent_required";
-const REASON_TRANSCRIPTION_DENIED: &str = "transcription_denied";
+const REASON_TRANSCRIPTION_DENIED: &str = ERROR_CODE_TRANSCRIPTION_DENIED;
 const REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED: &str =
-    "transcription_artifact_pipeline_bypassed";
+    ERROR_CODE_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED;
 const REASON_CALL_MODERATION_UNAUTHORISED: &str = "call_moderation_unauthorised";
 const REASON_CALL_PARTICIPANT_REMOVED: &str = "call_participant_removed";
 const REASON_CALL_SUMMARY_INVALID: &str = "call_summary_invalid";
@@ -303,6 +304,8 @@ fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStat
             failure_reason_code: None,
             failure_message: None,
         }),
+        transcript_state: None,
+        transcript_result: None,
     }
 }
 
@@ -498,6 +501,47 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
     ];
     transcript_key_source_ok(LABEL_RTC_TRANSCRIPT_KEY, &transcript_context)
         .map_err(|code| anyhow::anyhow!("control transcript key unexpectedly rejected: {code}"))?;
+
+    let ready = CallStatePayload {
+        call_id: call_id().to_string(),
+        state: "ended".to_owned(),
+        mode: None,
+        session_focus: None,
+        participants: None,
+        recording_state: None,
+        recording_result: None,
+        transcript_state: Some("ready".to_owned()),
+        transcript_result: Some(CallStatePayloadTranscriptResult {
+            content_digest: Some(hash('c')),
+            media_type: Some("text/vtt".to_owned()),
+            language: Some("en-US".to_owned()),
+            retention_policy_id: Some(
+                PolicyId::new("ck:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
+            ),
+            retention: Some(CallRecordingRetention {
+                retention_expires_at: Some(ts("2026-06-20T00:00:00Z")),
+                deletion_trigger: Some(CallRecordingDeletionTrigger::RetentionExpiry),
+                audit_lock: Some(false),
+                consent_confirmed: Some(true),
+            }),
+            transcript_start_event_id: Some(start_event_id()),
+        }),
+    };
+    ready
+        .validate_transcript_result_storage()
+        .map_err(|code| anyhow::anyhow!("typed transcript result unexpectedly rejected: {code}"))?;
+
+    let bypass = json!({
+        "call_id": call_id().to_string(),
+        "state": "ended",
+        "transcript_state": "ready",
+        "transcript_result": {
+            "transcript_artifact_url": "https://backend.example/transcript.vtt"
+        }
+    });
+    if serde_json::from_value::<CallStatePayload>(bypass).is_ok() {
+        bail!("transcript_result must reject backend-hosted artifact URLs");
+    }
 
     // The three labels are mutually distinct (no cross-label reuse).
     if LABEL_RTC_FRAME_KEY == LABEL_RTC_RECORDING_KEY
