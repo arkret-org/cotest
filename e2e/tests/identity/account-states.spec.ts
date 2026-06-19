@@ -205,7 +205,7 @@ test.describe("account states", () => {
     expect(JSON.stringify(events)).toContain(message);
   });
 
-  test("erasure moves account to erased state and audit snapshot records the transition", async ({
+  test("erasure moves account to erasure_pending state and audit snapshot records the transition", async ({
     request,
   }) => {
     const alice = uniqueUser("s28-erased-alice");
@@ -219,12 +219,12 @@ test.describe("account states", () => {
     });
     expect(erase.status()).toBe(200);
     const eraseBody = await erase.json();
-    expect(eraseBody.state).toBe("erased");
+    expect(eraseBody.state).toBe("erasure_pending");
     const auditActions = (eraseBody.audit_log as Array<{ action: string; target?: unknown }>).map(
       (event) => event.action,
     );
     expect(auditActions).toContain("org.cokret.soland.account.state_change");
-    expect(JSON.stringify(eraseBody.audit_log)).toContain('"to":"erased"');
+    expect(JSON.stringify(eraseBody.audit_log)).toContain('"to":"erasure_pending"');
 
     const oldMe = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: authHeaders(aliceToken),

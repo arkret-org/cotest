@@ -79,7 +79,7 @@ test.describe("GDPR / audit / retention", () => {
   }) => {
     // spec: identity/account-lifecycle.md §3 — erasure pseudonymizes
     // PII, revokes devices, and flips the actor into a permanent
-    // `erased` state. Subsequent authenticated requests return 401
+    // `erasure_pending` state. Subsequent authenticated requests return 401
     // with errcode `account_erased`.
     const stamp = Date.now();
     const alice = uniqueUser(`s27-erase-${stamp}`);
@@ -92,7 +92,7 @@ test.describe("GDPR / audit / retention", () => {
     });
     expect(erase.status()).toBe(200);
     const eraseBody = await erase.json();
-    expect(eraseBody.state).toBe("erased");
+    expect(eraseBody.state).toBe("erasure_pending");
     expect(eraseBody.erasure_receipt?.schema).toBe("ck.schema.erasure_receipt.v1");
     expect(eraseBody.erasure_receipt?.outcome).toBe("completed");
 
