@@ -6,10 +6,15 @@
 //! use `effects + seal_basis`, may carry preconditions, and only become sealed
 //! after valid seal coverage.
 
+use std::collections::BTreeSet;
+
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Map, Value, json};
 
-use super::{load_fixture_value, required_str, validate_profile};
+use super::{
+    canonical_json, load_artifact_json, load_fixture_value, looks_like_sha256_digest, required_str,
+    sha256_prefixed, validate_profile,
+};
 use crate::transcripts::record_vector_event;
 
 pub fn run_state_resolution_fixture_suite() -> Result<()> {
@@ -35,6 +40,14 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_data_bottom = false;
     let mut seen_delta_plane_guard = false;
     let mut seen_compaction = false;
+    let mut seen_seal_canonical = false;
+    let mut seen_cas_mixed_basis = false;
+    let mut seen_auth_epoch = false;
+    let mut seen_compaction_interval = false;
+    let mut seen_inclusion_list = false;
+    let mut seen_notary_fault = false;
+    let mut seen_threshold_forensics = false;
+    let mut seen_rename_family = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -295,6 +308,139 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "seal_canonical_no_self_reference" => {
+                validate_seal_canonical_no_self_reference(vector, name)?;
+                seen_seal_canonical = true;
+                record_vector_event(
+                    "state_resolution.cba.seal_canonical_no_self_reference",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "valid_result": "accept",
+                        "reject_reasons": ["digest_mismatch", "schema_violation"],
+                    }),
+                    &json!({
+                        "valid_result": pointer_str(vector, "/expected/valid_result"),
+                        "attack_count": required_array(vector, "/attacks", name)?.len(),
+                    }),
+                );
+            }
+            "cas_mixed_basis" => {
+                validate_cas_mixed_basis(vector, name)?;
+                seen_cas_mixed_basis = true;
+                record_vector_event(
+                    "state_resolution.cba.cas_mixed_basis",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "blind_write": "failed_precondition",
+                        "valid_basis": "accept_after_valid_seal",
+                    }),
+                    &json!({
+                        "pre_state": pointer_str(vector, "/pre_state/settled_value"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "auth_context_epoch_pinning_reject" => {
+                validate_auth_context_epoch_pinning_reject(vector, name)?;
+                seen_auth_epoch = true;
+                record_vector_event(
+                    "state_resolution.cba.auth_context_epoch_pinning_reject",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "outside_window": "reject_or_hide",
+                        "inside_window_grade": "stale",
+                        "epoch_mismatch": "failed_precondition",
+                    }),
+                    &json!({
+                        "window_ms": pointer_u64(vector, "/revocation_freshness_window_ms"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "seal_compaction_interval_enforced" => {
+                validate_seal_compaction_interval_enforced(vector, name)?;
+                seen_compaction_interval = true;
+                record_vector_event(
+                    "state_resolution.cba.seal_compaction_interval_enforced",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "valid_compaction": "accept",
+                        "coverage_mismatch": "reject",
+                        "overdue": "governance_health_alarm",
+                    }),
+                    &json!({
+                        "max_interval_ms": pointer_u64(vector, "/realm/seal_compaction_max_interval_ms"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "inclusion_list_obligation" => {
+                validate_inclusion_list_obligation(vector, name)?;
+                seen_inclusion_list = true;
+                record_vector_event(
+                    "state_resolution.cba.inclusion_list_obligation",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "discharged": ["include", "signed_reject", "pre_state_failure_proof"],
+                        "omitted": "inclusion_list_violation",
+                        "same_slot_conflict": "equivocation",
+                    }),
+                    &json!({
+                        "single_did_profile_expected": pointer_str(vector, "/single_did_profile_expected"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "notary_fault_equivocation_quarantine" => {
+                validate_notary_fault_equivocation_quarantine(vector, name)?;
+                seen_notary_fault = true;
+                record_vector_event(
+                    "state_resolution.cba.notary_fault_equivocation_quarantine",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "fault_move_result": "accept",
+                        "later_seal_from_signer": "reject",
+                        "branch_grade": "forked",
+                    }),
+                    &json!({
+                        "fault_move_result": pointer_str(vector, "/expected/fault_move_result"),
+                        "later_seal_from_signer": pointer_str(vector, "/expected/later_seal_from_signer"),
+                        "branch_grade": pointer_str(vector, "/expected/affected_branch_query_grade"),
+                    }),
+                );
+            }
+            "threshold_forensic_attribution" => {
+                validate_threshold_forensic_attribution(vector, name)?;
+                seen_threshold_forensics = true;
+                record_vector_event(
+                    "state_resolution.cba.threshold_forensic_attribution",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "n5_k3_quorum_intersection": "accept",
+                        "mismatched_arithmetic": "reject",
+                        "missing_field": "schema_violation",
+                    }),
+                    &json!({
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "rename_family_reject" => {
+                validate_rename_family_reject(vector, name)?;
+                seen_rename_family = true;
+                record_vector_event(
+                    "state_resolution.cba.rename_family_reject",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "parser_tier": "current_parser",
+                        "rejection_level": "hard_reject",
+                    }),
+                    &json!({
+                        "parser_tier": pointer_str(vector, "/parser_tier"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
             _ => bail!("unknown cba lattice vector: {name}"),
         }
     }
@@ -305,16 +451,667 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_same_batch
         && seen_data_bottom
         && seen_delta_plane_guard
-        && seen_compaction)
+        && seen_compaction
+        && seen_seal_canonical
+        && seen_cas_mixed_basis
+        && seen_auth_epoch
+        && seen_compaction_interval
+        && seen_inclusion_list
+        && seen_notary_fault
+        && seen_threshold_forensics
+        && seen_rename_family)
     {
         bail!(
-            "cba lattice fixture must cover all 7 normative vectors \
+            "cba lattice fixture must cover all 15 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
-              delta_plane_guard / compaction)"
+              delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
+              auth_epoch / compaction_interval / inclusion_list / notary_fault / \
+              threshold_forensics / rename_family)"
         );
     }
 
     Ok(())
+}
+
+fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) -> Result<()> {
+    let body_value = vector
+        .pointer("/seal_body")
+        .ok_or_else(|| anyhow!("vector {vector_name} missing object at /seal_body"))?;
+    let body = required_object(vector, "/seal_body", vector_name)?;
+    for forbidden in ["id", "notary_signature"] {
+        if body.contains_key(forbidden) {
+            bail!("vector {vector_name} seal_body must exclude {forbidden}");
+        }
+    }
+    for field in [
+        "realm_id",
+        "predecessor_refs",
+        "delta",
+        "control_event_set_root",
+        "state_root",
+        "sealed_at",
+        "hlc",
+    ] {
+        require_field(body, field, vector_name)?;
+    }
+    require_non_empty_array(vector, "/seal_body/predecessor_refs", vector_name)?;
+    for digest in string_vec_at(vector, "/seal_body/delta", vector_name)? {
+        require_sha256_digest(digest, "/seal_body/delta", vector_name)?;
+    }
+
+    let canonical = canonical_json(body_value)?;
+    let digest = sha256_prefixed(canonical.as_bytes());
+    let expected_id = required_pointer_str(vector, "/expected/id", vector_name)?;
+    let computed_id = format!("ck:seal:{digest}");
+    if expected_id != computed_id.as_str() {
+        bail!("vector {vector_name} expected id must be {computed_id}, got {expected_id}");
+    }
+    let payload_digest = required_pointer_str(
+        vector,
+        "/expected/notary_signature_payload_digest",
+        vector_name,
+    )?;
+    if payload_digest != digest.as_str() {
+        bail!(
+            "vector {vector_name} signature payload digest must be {digest}, got {payload_digest}"
+        );
+    }
+    require_str_eq(vector, "/expected/valid_result", "accept", vector_name)?;
+
+    let attacks = required_array(vector, "/attacks", vector_name)?;
+    let mut seen = BTreeSet::new();
+    for attack in attacks {
+        let attack_name = required_pointer_str(attack, "/name", vector_name)?;
+        seen.insert(attack_name.to_owned());
+        match attack_name {
+            "id_in_canonical_bytes" => {
+                require_str_eq(attack, "/inject_field", "id", vector_name)?;
+                require_str_eq(attack, "/expected_result", "reject", vector_name)?;
+                require_str_eq(attack, "/reason", "digest_mismatch", vector_name)?;
+            }
+            "signature_in_canonical_bytes" => {
+                require_str_eq(attack, "/inject_field", "notary_signature", vector_name)?;
+                require_str_eq(attack, "/expected_result", "reject", vector_name)?;
+                require_str_eq(attack, "/reason", "digest_mismatch", vector_name)?;
+            }
+            "wire_key_reorder" => {
+                require_str_eq(
+                    attack,
+                    "/expected_result",
+                    "accept_after_canonical_reencode",
+                    vector_name,
+                )?;
+            }
+            "extra_proof_injection" => {
+                require_str_eq(attack, "/inject_field", "extra_proof", vector_name)?;
+                require_str_eq(attack, "/expected_result", "reject", vector_name)?;
+                require_str_eq(attack, "/reason", "schema_violation", vector_name)?;
+            }
+            "non_digest_delta_value" => {
+                let values = string_vec_at(attack, "/delta", vector_name)?;
+                if values.iter().all(|value| looks_like_sha256_digest(value)) {
+                    bail!("vector {vector_name} non_digest_delta_value must carry a bad digest");
+                }
+                require_str_eq(attack, "/expected_result", "reject", vector_name)?;
+                require_str_eq(attack, "/reason", "schema_violation", vector_name)?;
+            }
+            _ => bail!("vector {vector_name} unknown canonical attack {attack_name}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "id_in_canonical_bytes",
+            "signature_in_canonical_bytes",
+            "wire_key_reorder",
+            "extra_proof_injection",
+            "non_digest_delta_value",
+        ],
+    )
+}
+
+fn validate_cas_mixed_basis(vector: &Value, vector_name: &str) -> Result<()> {
+    let cell = required_pointer_str(vector, "/cell", vector_name)?;
+    require_str_eq(vector, "/cell_lattice/lattice", "cas_register", vector_name)?;
+    require_str_eq(vector, "/cell_lattice/bottom", "reject", vector_name)?;
+    if !vector
+        .pointer("/cell_lattice/initial_value")
+        .is_some_and(Value::is_null)
+    {
+        bail!("vector {vector_name} cas_register initial_value must be null");
+    }
+    require_str_eq(vector, "/pre_state/settled_value", "v1", vector_name)?;
+
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "blind_write_without_basis" => {
+                require_str_eq(case, "/event/plane", "data", vector_name)?;
+                require_str_eq(case, "/event/effects/0/cell", cell, vector_name)?;
+                if !case.pointer("/event/basis").is_some_and(Value::is_null) {
+                    bail!("vector {vector_name} blind write must carry a null basis");
+                }
+                require_str_eq(case, "/event/effects/0/op/kind", "set", vector_name)?;
+                require_str_eq(case, "/event/effects/0/op/value", "v2", vector_name)?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+                require_str_eq(case, "/expected/cell_value", "v1", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/atomic_rejects_all_effects",
+                    true,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/defensive_join_result",
+                    "bottom",
+                    vector_name,
+                )?;
+            }
+            "control_move_with_head_eq_basis" => {
+                require_str_eq(case, "/control_move/plane", "control", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/control_move/preconditions/0/cell",
+                    cell,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/control_move/preconditions/0/predicate/op",
+                    "head_eq",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/control_move/preconditions/0/predicate/value",
+                    "v1",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/control_move/effects/0/cell", cell, vector_name)?;
+                require_str_eq(case, "/control_move/effects/0/op/kind", "set", vector_name)?;
+                require_str_eq(case, "/control_move/effects/0/op/value", "v2", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "accept_after_valid_seal",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/cell_value", "v2", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/replay_order_independent",
+                    true,
+                    vector_name,
+                )?;
+            }
+            _ => bail!("vector {vector_name} unknown cas mixed basis case {case_name}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "blind_write_without_basis",
+            "control_move_with_head_eq_basis",
+        ],
+    )
+}
+
+fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str) -> Result<()> {
+    let window = required_u64(vector, "/revocation_freshness_window_ms", vector_name)?;
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "revoked_key_old_seal_ref_outside_window" => {
+                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
+                if distance <= window {
+                    bail!("vector {vector_name} outside-window case must exceed freshness window");
+                }
+                require_str_eq(case, "/expected/result", "reject_or_hide", vector_name)?;
+                require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
+            }
+            "revoked_key_within_freshness_window" => {
+                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
+                if distance > window {
+                    bail!("vector {vector_name} within-window case exceeds freshness window");
+                }
+                require_str_eq(case, "/expected/result", "accept_temporarily", vector_name)?;
+                require_str_eq(case, "/expected/query_grade", "stale", vector_name)?;
+            }
+            "epoch_not_valid_at_seal_ref" => {
+                require_bool_eq(
+                    case,
+                    "/current_did_document_contains_key",
+                    true,
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/must_not_use_current_did_document_fallback",
+                    true,
+                    vector_name,
+                )?;
+            }
+            _ => bail!("vector {vector_name} unknown auth epoch case {case_name}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "revoked_key_old_seal_ref_outside_window",
+            "revoked_key_within_freshness_window",
+            "epoch_not_valid_at_seal_ref",
+        ],
+    )
+}
+
+fn validate_seal_compaction_interval_enforced(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(vector, "/realm/notary_type", "open_set", vector_name)?;
+    let interval = required_u64(
+        vector,
+        "/realm/seal_compaction_max_interval_ms",
+        vector_name,
+    )?;
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "compaction_within_interval" => {
+                let expected_covered = union_digest_sets(
+                    string_set_at(case, "/predecessor_covered_event_digests", vector_name)?,
+                    string_set_at(case, "/delta", vector_name)?,
+                );
+                let covered = string_set_at(case, "/covered_event_digests", vector_name)?;
+                if covered != expected_covered {
+                    bail!(
+                        "vector {vector_name} valid compaction coverage is not recursive closure"
+                    );
+                }
+                if required_u64(case, "/elapsed_since_previous_compaction_ms", vector_name)?
+                    > interval
+                {
+                    bail!("vector {vector_name} valid compaction case exceeds interval");
+                }
+                require_str_eq(case, "/expected/seal_result", "accept", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/bootstrap_from_compaction",
+                    true,
+                    vector_name,
+                )?;
+            }
+            "covered_set_mismatch" => {
+                let expected_covered = union_digest_sets(
+                    string_set_at(case, "/predecessor_covered_event_digests", vector_name)?,
+                    string_set_at(case, "/delta", vector_name)?,
+                );
+                let covered = string_set_at(case, "/covered_event_digests", vector_name)?;
+                if covered == expected_covered {
+                    bail!("vector {vector_name} mismatch case accidentally matches closure");
+                }
+                require_str_eq(case, "/expected/seal_result", "reject", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "covered_set_mismatch",
+                    vector_name,
+                )?;
+            }
+            "live_chain_exceeds_interval_without_compaction" => {
+                if required_u64(case, "/elapsed_since_previous_compaction_ms", vector_name)?
+                    <= interval
+                {
+                    bail!("vector {vector_name} overdue case must exceed compaction interval");
+                }
+                require_bool_eq(case, "/expected/governance_health_alarm", true, vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/existing_seals_remain_valid",
+                    true,
+                    vector_name,
+                )?;
+                require_bool_eq(
+                    case,
+                    "/expected/bootstrap_degraded_to_chain_walk",
+                    true,
+                    vector_name,
+                )?;
+            }
+            _ => bail!("vector {vector_name} unknown compaction interval case {case_name}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "compaction_within_interval",
+            "covered_set_mismatch",
+            "live_chain_exceeds_interval_without_compaction",
+        ],
+    )
+}
+
+fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(vector, "/notary_profile/type", "threshold", vector_name)?;
+    let proposer = required_pointer_str(vector, "/notary_profile/proposer_id", vector_name)?;
+    let signer = required_pointer_str(vector, "/notary_profile/signer_id", vector_name)?;
+    if proposer == signer {
+        bail!("vector {vector_name} inclusion list signer must be non-proposer");
+    }
+    require_str_eq(vector, "/inclusion_list/signer_id", signer, vector_name)?;
+    if required_u64(vector, "/inclusion_list/expiry_seal_count", vector_name)? == 0 {
+        bail!("vector {vector_name} inclusion list expiry must be positive");
+    }
+    let event_digests = string_set_at(vector, "/inclusion_list/event_digests", vector_name)?;
+    if event_digests.is_empty() {
+        bail!("vector {vector_name} inclusion list must carry event digests");
+    }
+    require_str_eq(
+        vector,
+        "/inclusion_list/signature/kind",
+        "detached_jws",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/inclusion_list/signature/alg",
+        "EdDSA",
+        vector_name,
+    )?;
+    let payload_digest = required_pointer_str(
+        vector,
+        "/inclusion_list/signature/payload_digest",
+        vector_name,
+    )?;
+    require_sha256_digest(
+        payload_digest,
+        "/inclusion_list/signature/payload_digest",
+        vector_name,
+    )?;
+
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "next_seal_includes_digest" => {
+                require_str_eq(case, "/seal_action", "include", vector_name)?;
+                require_str_eq(case, "/expected/seal_result", "accept", vector_name)?;
+            }
+            "next_seal_signed_rejects_digest" => {
+                require_str_eq(case, "/seal_action", "signed_reject", vector_name)?;
+                require_str_eq(case, "/expected/seal_result", "accept", vector_name)?;
+            }
+            "next_seal_proves_pre_state_failure" => {
+                require_str_eq(case, "/seal_action", "pre_state_failure_proof", vector_name)?;
+                require_str_eq(case, "/expected/seal_result", "accept", vector_name)?;
+            }
+            "next_seal_omits_obligation" => {
+                require_str_eq(case, "/seal_action", "omit", vector_name)?;
+                require_str_eq(case, "/expected/seal_result", "reject", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "inclusion_list_violation",
+                    vector_name,
+                )?;
+            }
+            "same_signer_seq_different_contents" => {
+                let conflicting = string_set_at(case, "/conflicting_event_digests", vector_name)?;
+                if conflicting == event_digests {
+                    bail!("vector {vector_name} inclusion-list conflict must change contents");
+                }
+                require_str_eq(
+                    case,
+                    "/expected/fault_evidence",
+                    "equivocation",
+                    vector_name,
+                )?;
+            }
+            _ => bail!("vector {vector_name} unknown inclusion-list case {case_name}"),
+        }
+    }
+    require_str_eq(
+        vector,
+        "/single_did_profile_expected",
+        "unavailable",
+        vector_name,
+    )?;
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "next_seal_includes_digest",
+            "next_seal_signed_rejects_digest",
+            "next_seal_proves_pre_state_failure",
+            "next_seal_omits_obligation",
+            "same_signer_seq_different_contents",
+        ],
+    )
+}
+
+fn validate_notary_fault_equivocation_quarantine(vector: &Value, vector_name: &str) -> Result<()> {
+    let signer = required_pointer_str(vector, "/fault_pair/signer_id", vector_name)?;
+    let notary_seq = required_u64(vector, "/fault_pair/notary_seq", vector_name)?;
+    let seal_a_id = required_pointer_str(vector, "/fault_pair/seal_a/id", vector_name)?;
+    let seal_b_id = required_pointer_str(vector, "/fault_pair/seal_b/id", vector_name)?;
+    if !seal_a_id.starts_with("ck:seal:sha256:") || !seal_b_id.starts_with("ck:seal:sha256:") {
+        bail!("vector {vector_name} fault seals must use ck:seal:sha256 typed ids");
+    }
+    let seal_a_digest = required_pointer_str(
+        vector,
+        "/fault_pair/seal_a/canonical_body_digest",
+        vector_name,
+    )?;
+    let seal_b_digest = required_pointer_str(
+        vector,
+        "/fault_pair/seal_b/canonical_body_digest",
+        vector_name,
+    )?;
+    require_sha256_digest(
+        seal_a_digest,
+        "/fault_pair/seal_a/canonical_body_digest",
+        vector_name,
+    )?;
+    require_sha256_digest(
+        seal_b_digest,
+        "/fault_pair/seal_b/canonical_body_digest",
+        vector_name,
+    )?;
+    if seal_a_digest == seal_b_digest {
+        bail!("vector {vector_name} equivocation seals must have different canonical bodies");
+    }
+
+    require_str_eq(
+        vector,
+        "/fault_move/event_kind",
+        "ck.notary.fault.equivocation",
+        vector_name,
+    )?;
+    let capability_refs =
+        required_array(vector, "/fault_move/submitter_capability_refs", vector_name)?;
+    if !capability_refs.is_empty() {
+        bail!("vector {vector_name} public fault move must not require submitter capability refs");
+    }
+    require_str_eq(vector, "/fault_move/payload/signer_id", signer, vector_name)?;
+    require_str_eq(vector, "/fault_move/payload/seal_a", seal_a_id, vector_name)?;
+    require_str_eq(vector, "/fault_move/payload/seal_b", seal_b_id, vector_name)?;
+    require_str_eq(vector, "/expected/fault_move_result", "accept", vector_name)?;
+    require_bool_eq(
+        vector,
+        "/expected/authorized_by_signature_evidence",
+        true,
+        vector_name,
+    )?;
+    require_bool_eq(
+        vector,
+        "/expected/requires_submitter_capability",
+        false,
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/expected/fault_cell",
+        "ck.component.notary_fault.v1",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/expected/later_seal_from_signer",
+        "reject",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/expected/affected_branch_query_grade",
+        "forked",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/expected/remaining_signer_policy",
+        "continue_if_quorum_else_notary_paused",
+        vector_name,
+    )?;
+
+    let invalid_signer =
+        required_pointer_str(vector, "/invalid_parallel_leaf_case/signer_id", vector_name)?;
+    let invalid_seq = required_u64(
+        vector,
+        "/invalid_parallel_leaf_case/notary_seq",
+        vector_name,
+    )?;
+    if invalid_signer == signer && invalid_seq == notary_seq {
+        bail!("vector {vector_name} invalid parallel leaf case must not reuse the fault slot");
+    }
+    require_str_eq(
+        vector,
+        "/invalid_parallel_leaf_case/expected/result",
+        "failed_precondition",
+        vector_name,
+    )
+}
+
+fn validate_threshold_forensic_attribution(vector: &Value, vector_name: &str) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        require_str_eq(case, "/notary/type", "threshold", vector_name)?;
+        let member_count = required_array(case, "/notary/members", vector_name)?.len() as u64;
+        let threshold = required_u64(case, "/notary/threshold", vector_name)?;
+        if threshold == 0 || threshold > member_count {
+            bail!("vector {vector_name} threshold must be within member set");
+        }
+        let attribution = case
+            .pointer("/notary/forensic_attribution")
+            .and_then(Value::as_str);
+        let derived_result = match attribution {
+            None => "schema_violation",
+            Some("quorum_intersection") if 2 * threshold > member_count => "accept",
+            Some("waived") if 2 * threshold <= member_count => "accept",
+            Some("quorum_intersection" | "waived") => "reject",
+            Some(other) => {
+                bail!("vector {vector_name} invalid forensic_attribution value {other}");
+            }
+        };
+        let expected = required_pointer_str(case, "/expected/result", vector_name)?;
+        if expected != derived_result {
+            bail!(
+                "vector {vector_name} case {case_name} expected {expected}, \
+                 arithmetic derives {derived_result}"
+            );
+        }
+        if derived_result == "reject" {
+            require_str_eq(
+                case,
+                "/expected/reason",
+                "forensic_attribution_mismatch",
+                vector_name,
+            )?;
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "n5_k3_quorum_intersection",
+            "n5_k3_waived_reject",
+            "n4_k2_quorum_intersection_reject",
+            "threshold_missing_forensic_attribution",
+        ],
+    )
+}
+
+fn validate_rename_family_reject(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(vector, "/parser_tier", "current_parser", vector_name)?;
+    require_bool_eq(vector, "/migration_tool_only", true, vector_name)?;
+    let renames = load_artifact_json("migration/renames.json")?;
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let legacy = required_pointer_str(case, "/legacy_identifier", vector_name)?;
+        let kind_class = required_pointer_str(case, "/kind_class", vector_name)?;
+        let expected_error = required_pointer_str(case, "/expected_error", vector_name)?;
+        if !matches!(
+            expected_error,
+            "unknown_field" | "unknown_kind" | "schema_violation"
+        ) {
+            bail!("vector {vector_name} invalid parser error {expected_error}");
+        }
+        if !migration_entry_is_cba_hard_reject(&renames, legacy, kind_class) {
+            bail!(
+                "vector {vector_name} legacy identifier {legacy} is not a cba hard-reject rename"
+            );
+        }
+        seen.insert(legacy.to_owned());
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "anchor_ref",
+            "anchor_basis",
+            "governance_ref",
+            "anchorer_signature",
+            "signer_seq",
+            "anchored_at",
+            "ck:anchor:",
+            "anchor_profile",
+            "anchorer",
+            "covered_seals",
+            "pending_anchor",
+            "rejected_anchor",
+        ],
+    )
+}
+
+fn migration_entry_is_cba_hard_reject(renames: &Value, legacy: &str, kind_class: &str) -> bool {
+    renames
+        .pointer("/entries")
+        .and_then(Value::as_array)
+        .is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                entry.get("id").and_then(Value::as_str) == Some(legacy)
+                    && entry.get("kind_class").and_then(Value::as_str) == Some(kind_class)
+                    && entry.get("migration_group").and_then(Value::as_str)
+                        == Some("cba_notary_seal_rename")
+                    && entry.get("rejection_level").and_then(Value::as_str) == Some("hard_reject")
+            })
+        })
+}
+
+fn union_digest_sets(mut left: BTreeSet<String>, right: BTreeSet<String>) -> BTreeSet<String> {
+    left.extend(right);
+    left
 }
 
 fn required_object<'a>(
@@ -391,11 +1188,72 @@ fn require_field<'a>(
         .ok_or_else(|| anyhow!("vector {vector_name} object missing field {field}"))
 }
 
+fn required_pointer_str<'a>(value: &'a Value, pointer: &str, vector_name: &str) -> Result<&'a str> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing string at {pointer}"))
+}
+
+fn required_u64(value: &Value, pointer: &str, vector_name: &str) -> Result<u64> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing unsigned integer at {pointer}"))
+}
+
+fn string_vec_at<'a>(value: &'a Value, pointer: &str, vector_name: &str) -> Result<Vec<&'a str>> {
+    required_array(value, pointer, vector_name)?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .ok_or_else(|| anyhow!("vector {vector_name} entries at {pointer} must be strings"))
+        })
+        .collect()
+}
+
+fn string_set_at(value: &Value, pointer: &str, vector_name: &str) -> Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    for item in string_vec_at(value, pointer, vector_name)? {
+        require_sha256_digest(item, pointer, vector_name)?;
+        if !out.insert(item.to_owned()) {
+            bail!("vector {vector_name} duplicate digest {item} at {pointer}");
+        }
+    }
+    Ok(out)
+}
+
+fn require_sha256_digest(value: &str, pointer: &str, vector_name: &str) -> Result<()> {
+    if !looks_like_sha256_digest(value) {
+        bail!("vector {vector_name} value at {pointer} must be sha256:<64 lowercase hex>");
+    }
+    Ok(())
+}
+
+fn require_seen(vector_name: &str, seen: &BTreeSet<String>, required: &[&str]) -> Result<()> {
+    let missing = required
+        .iter()
+        .filter(|name| !seen.contains::<str>(*name))
+        .copied()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        bail!(
+            "vector {vector_name} missing required cases: {}",
+            missing.join(", ")
+        );
+    }
+    Ok(())
+}
+
 fn pointer_str(value: &Value, pointer: &str) -> Option<String> {
     value
         .pointer(pointer)
         .and_then(Value::as_str)
         .map(str::to_owned)
+}
+
+fn pointer_u64(value: &Value, pointer: &str) -> Option<u64> {
+    value.pointer(pointer).and_then(Value::as_u64)
 }
 
 fn pointer_bool(value: &Value, pointer: &str) -> Option<bool> {

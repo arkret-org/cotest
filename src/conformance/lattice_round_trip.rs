@@ -23,23 +23,34 @@
 //! and `move_id` only). Failures here imply SDK lattice drift from the
 //! spec's normative join semantics.
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
+use cokret_core::lattice::ordered_log::IssuedOp;
 use cokret_core::lattice::{
     CasRegister, CellState, Counter, Fsm, Lattice, MvRegister, OrSet, OrderedLog, SealedOp,
 };
-use cokret_core::{CellRef, LatticeOp, LatticeOpType, MoveId};
-use serde_json::json;
+use cokret_core::{CellRef, Did, LatticeOp, LatticeOpType, MoveId};
+use serde_json::{Value, json};
+
+const LATTICE_ROUND_TRIP_VECTOR_IDS: [&str; 4] = [
+    "ck.vector.lattice.mv_register_join.v1",
+    "ck.vector.lattice.counter_join.v1",
+    "ck.vector.lattice.ordered_log_join.v1",
+    "ck.vector.lattice.fsm_join.v1",
+];
 
 /// Public entry point matching the cotest fixture-suite naming convention.
 /// Returns `Ok(())` when every lattice's normative join behavior matches
 /// the spec; `Err` otherwise with the failing scenario name.
 pub fn run_lattice_round_trip_suite() -> Result<()> {
+    validate_lattice_fixture_metadata()?;
     or_set_basic_add_remove_commute()?;
     or_set_idempotent_re_add_after_remove()?;
     cas_register_concurrent_set_returns_bottom_conflict()?;
     cas_register_single_set_returns_value()?;
     counter_pn_sums_increments_and_decrements()?;
     fsm_legal_transition_advances_state()?;
+    fsm_duplicate_transition_is_idempotent()?;
+    fsm_same_from_different_to_returns_bottom()?;
     fsm_illegal_transition_returns_bottom()?;
     mv_register_concurrent_set_surfaces_multiple_values()?;
     ordered_log_per_issuer_monotonic_append()?;
@@ -58,6 +69,39 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
 }
 
 // ──────────────────────────── helpers ────────────────────────────────
+
+fn validate_lattice_fixture_metadata() -> Result<()> {
+    let fixture = super::load_fixture_value("cba-lattice-fixture.json")?;
+    super::validate_profile(&fixture, "ck.profile.cba_lattice_vectors.v1")?;
+    let metadata = fixture
+        .get("lattice_round_trip")
+        .ok_or_else(|| anyhow!("cba-lattice fixture missing lattice_round_trip metadata"))?;
+    let covers = metadata
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("lattice_round_trip metadata missing covers_vectors[]"))?;
+    let cases = metadata
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("lattice_round_trip metadata missing cases[]"))?;
+
+    for vector_id in LATTICE_ROUND_TRIP_VECTOR_IDS {
+        if !covers.iter().any(|entry| entry.as_str() == Some(vector_id)) {
+            bail!("lattice_round_trip metadata missing covers_vectors entry {vector_id}");
+        }
+        if !cases.iter().any(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(vector_id)
+                && case
+                    .get("assertions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|assertions| !assertions.is_empty())
+        }) {
+            bail!("lattice_round_trip metadata missing asserted case {vector_id}");
+        }
+    }
+
+    Ok(())
+}
 
 fn cell(family: &str, subject: &str) -> CellRef {
     CellRef::new(format!("ck:cell:{family}:{subject}"))
@@ -134,6 +178,13 @@ fn op_append(value: serde_json::Value, issuer_seq: u64) -> LatticeOp {
         value: Some(value),
         issuer_seq: Some(issuer_seq),
         ..base_op()
+    }
+}
+
+fn issued_op(issuer: &str, suffix: &str, op: LatticeOp) -> IssuedOp {
+    IssuedOp {
+        issuer: Did::new(issuer.to_owned()).expect("test fixture issuer should be a valid did"),
+        op: SealedOp::new(move_id(suffix), op),
     }
 }
 
@@ -310,10 +361,11 @@ fn membership_fsm() -> Fsm {
     // banned. Any pair not declared here is an illegal transition and the
     // join MUST Bottom.
     Fsm::new(vec![
-        (json!("invited"), json!("joined")),
-        (json!("invited"), json!("left")),
-        (json!("joined"), json!("left")),
-        (json!("joined"), json!("banned")),
+        (json!("invited"), json!("join")),
+        (json!("invited"), json!("decline")),
+        (json!("join"), json!("leave")),
+        (json!("join"), json!("ban")),
+        (json!("leave"), json!("join")),
     ])
     .with_initial(json!("invited"))
 }
@@ -324,13 +376,57 @@ fn fsm_legal_transition_advances_state() -> Result<()> {
     // Single legal transition: invited → joined.
     let ops = vec![SealedOp::new(
         move_id("22"),
-        op_transition(json!("invited"), json!("joined")),
+        op_transition(json!("invited"), json!("join")),
     )];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
         bail!("Fsm legal transition must not Bottom; got {resolved:?}");
     }
     Ok(())
+}
+
+fn fsm_duplicate_transition_is_idempotent() -> Result<()> {
+    let lattice = membership_fsm();
+    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
+    let ops = vec![
+        SealedOp::new(
+            move_id("23"),
+            op_transition(json!("invited"), json!("join")),
+        ),
+        SealedOp::new(
+            move_id("24"),
+            op_transition(json!("invited"), json!("join")),
+        ),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    if resolved != CellState::Value(json!("join")) {
+        bail!("Fsm duplicate identical transition must converge to join, got {resolved:?}");
+    }
+    Ok(())
+}
+
+fn fsm_same_from_different_to_returns_bottom() -> Result<()> {
+    let lattice = membership_fsm();
+    let cref = cell("ck.component.member.state.v1", "did.web.alice.example");
+    let ops = vec![
+        SealedOp::new(
+            move_id("25"),
+            op_transition(json!("invited"), json!("join")),
+        ),
+        SealedOp::new(
+            move_id("26"),
+            op_transition(json!("invited"), json!("decline")),
+        ),
+    ];
+    let resolved = lattice.join(&cref, &ops);
+    match resolved {
+        CellState::Bottom(bottom) if matches!(bottom.kind, cokret_core::BottomKind::Conflict) => {
+            Ok(())
+        }
+        other => {
+            bail!("Fsm same-from different-to siblings must return conflict Bottom, got {other:?}")
+        }
+    }
 }
 
 fn fsm_illegal_transition_returns_bottom() -> Result<()> {
@@ -342,11 +438,11 @@ fn fsm_illegal_transition_returns_bottom() -> Result<()> {
     let ops = vec![
         SealedOp::new(
             move_id("33"),
-            op_transition(json!("invited"), json!("joined")),
+            op_transition(json!("invited"), json!("join")),
         ),
         SealedOp::new(
             move_id("44"),
-            op_transition(json!("joined"), json!("invited")),
+            op_transition(json!("join"), json!("invited")),
         ),
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -412,24 +508,54 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
         "ck.realm.01js0sp0000000000000000000",
     );
     // Two issuers, both with monotonic issuer_seq. Join must produce a
-    // deterministic linearization that includes all entries.
+    // deterministic linearization that includes all distinct (issuer, seq)
+    // entries and drops duplicate same-issuer seq deterministically.
     let ops = vec![
-        SealedOp::new(
-            move_id("77"),
+        issued_op(
+            "did:web:bob.example",
+            "77",
             op_append(json!({"actor": "alice", "msg": "hi"}), 1),
         ),
-        SealedOp::new(
-            move_id("88"),
+        issued_op(
+            "did:web:alice.example",
+            "88",
             op_append(json!({"actor": "bob", "msg": "hello"}), 1),
         ),
-        SealedOp::new(
-            move_id("99"),
+        issued_op(
+            "did:web:alice.example",
+            "99",
             op_append(json!({"actor": "alice", "msg": "ack"}), 2),
         ),
+        issued_op(
+            "did:web:alice.example",
+            "9a",
+            op_append(json!({"actor": "alice", "msg": "duplicate"}), 1),
+        ),
     ];
-    let resolved = lattice.join(&cref, &ops);
-    if resolved.is_bottom() {
-        bail!("OrderedLog with monotonic per-issuer seq must not Bottom; got {resolved:?}");
+    let resolved = lattice.join_with_issuers(&cref, &ops);
+    let CellState::Value(value) = resolved else {
+        bail!("OrderedLog with monotonic per-issuer seq must not Bottom");
+    };
+    let entries = value
+        .as_array()
+        .ok_or_else(|| anyhow!("OrderedLog output must be an array"))?;
+    if entries.len() != 3 {
+        bail!("OrderedLog must dedupe same issuer_seq and keep 3 entries, got {entries:?}");
+    }
+    if entries[0].get("issuer").and_then(Value::as_str) != Some("did:web:alice.example")
+        || entries[0].get("issuer_seq").and_then(Value::as_u64) != Some(1)
+        || entries[1].get("issuer").and_then(Value::as_str) != Some("did:web:alice.example")
+        || entries[1].get("issuer_seq").and_then(Value::as_u64) != Some(2)
+        || entries[2].get("issuer").and_then(Value::as_str) != Some("did:web:bob.example")
+        || entries[2].get("issuer_seq").and_then(Value::as_u64) != Some(1)
+    {
+        bail!("OrderedLog entries are not sorted by issuer then seq: {entries:?}");
+    }
+    if serde_json::to_string(&entries[0])
+        .unwrap_or_default()
+        .contains("duplicate")
+    {
+        bail!("OrderedLog duplicate same issuer_seq must keep the first canonical entry");
     }
     Ok(())
 }
