@@ -262,9 +262,9 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
   test("2. a session grant presented WITHOUT a DPoP header is rejected (401)", async ({
     request,
   }) => {
-    // §3.3 / D6: soland branches on the presence of the `DPoP` header. A grant
-    // presented as a bare Bearer (no DPoP) is NOT a recognized session — it
-    // falls through to the dev-bearer/OAuth lookup, misses, and is rejected.
+    // §3.3 / D6: a grant presented as a bare Bearer (no DPoP) is NOT a
+    // recognized session. soland classifies grant-shaped JWTs and rejects them
+    // before any dev-bearer/OAuth compatibility lookup.
     // This holds whether or not we minted a real grant, so it runs everywhere:
     // a grant-shaped bearer with no DPoP must never authenticate the self-path.
     const ctx = await setupGrant(request);
