@@ -110,9 +110,9 @@ pub use media_binding::{
     ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
     run_focus_selection_oldest_membership_vector, run_media_binding_vector_suite,
     run_participant_binding_required_vector, run_participant_identity_unrecognised_vector,
-    run_recording_artifact_via_cokret_blob_vector, run_session_focus_no_split_brain_vector,
-    run_token_exchange_minimal_vector, run_token_issuer_unauthorised_vector,
-    run_unknown_type_fail_closed_vector,
+    run_recording_artifact_via_cokret_blob_vector, run_recording_exporter_label_vector,
+    run_session_focus_no_split_brain_vector, run_token_exchange_minimal_vector,
+    run_token_issuer_unauthorised_vector, run_unknown_type_fail_closed_vector,
 };
 pub use member_identity_vectors::{
     ALL_MEMBER_IDENTITY_VECTOR_IDS, REASON_MEMBER_IDENTITY_HANDLE_FIELD_FORBIDDEN,

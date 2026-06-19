@@ -22,12 +22,12 @@ use cotest::conformance::{
 };
 use serde_json::Value;
 
-// ─── P0 / VECT-MB-1..9 — media binding vectors ─────────────────────────────
+// ─── P0 / VECT-MB-1..10 — media binding vectors ─────────────────────────────
 
 #[test]
 fn media_binding_vector_suite_runs_clean() {
     run_media_binding_vector_suite().expect("media-binding vectors must pass");
-    assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 9);
+    assert_eq!(ALL_MEDIA_BINDING_VECTOR_IDS.len(), 10);
 }
 
 // ─── webrtc-signaling.md §5.1 — ck.call.signal receiver vectors ────────────

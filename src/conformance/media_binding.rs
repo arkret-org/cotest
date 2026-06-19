@@ -1,6 +1,6 @@
 //! CKP-0010 media-binding conformance vectors.
 //!
-//! 9 vectors covering [§0.11 of `_before_todos.md`]:
+//! 10 vectors covering [§0.11 of `_before_todos.md`]:
 //!
 //! - `ck.vector.media_binding.focus_selection_oldest_membership.v1`
 //! - `ck.vector.media_binding.session_focus_no_split_brain.v1`
@@ -11,6 +11,7 @@
 //! - `ck.vector.media_binding.e2ee_key_source.v1`
 //! - `ck.vector.media_binding.participant_identity_unrecognised.v1`
 //! - `ck.vector.media_binding.recording_artifact_via_cokret_blob.v1`
+//! - `ck.vector.media_binding.recording_exporter_label.v1`
 //!
 //! These are SDK-pure wire-shape pins. They lock the spelling of the
 //! 10 new error codes (cotest mirrors `cokret_core`'s registry), the
@@ -56,8 +57,10 @@ pub const VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED: &str =
     "ck.vector.media_binding.participant_identity_unrecognised.v1";
 pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB: &str =
     "ck.vector.media_binding.recording_artifact_via_cokret_blob.v1";
+pub const VECTOR_ID_RECORDING_EXPORTER_LABEL: &str =
+    "ck.vector.media_binding.recording_exporter_label.v1";
 
-/// Canonical list of all 9 vector ids. Used by the registry / discovery
+/// Canonical list of all 10 vector ids. Used by the registry / discovery
 /// gate to spot missing entries.
 pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_FOCUS_SELECTION_OLDEST_MEMBERSHIP,
@@ -69,6 +72,7 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_E2EE_KEY_SOURCE,
     VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED,
     VECTOR_ID_RECORDING_ARTIFACT_VIA_COKRET_BLOB,
+    VECTOR_ID_RECORDING_EXPORTER_LABEL,
 ];
 
 const MEDIA_BINDING_FIXTURE_FILE: &str = "media-binding-fixture.json";
@@ -122,6 +126,10 @@ const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
 fn known_backend_type(label: &str) -> bool {
     KNOWN_MEDIA_BACKEND_TYPES.contains(&label)
 }
+
+const LABEL_RTC_FRAME_KEY: &str = "ck-rtc-frame-key/v1";
+const LABEL_RTC_RECORDING_KEY: &str = "ck-rtc-recording-key/v1";
+const LABEL_RTC_TRANSCRIPT_KEY: &str = "ck-rtc-transcript-key/v1";
 
 // ─── VECT-MB-1 — focus_selection_oldest_membership ─────────────────────────
 
@@ -550,12 +558,11 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
     // accepted as the SFrame frame key source. Backend-cloud key
     // escrow (any wire form that funnels keys through the focus
     // service) is rejected.
-    const MLS_EXPORTER_LABEL: &str = "ck-rtc-frame-key/v1";
     const MLS_EXPORTER_LENGTH: usize = 19;
-    if MLS_EXPORTER_LABEL.len() != MLS_EXPORTER_LENGTH {
+    if LABEL_RTC_FRAME_KEY.len() != MLS_EXPORTER_LENGTH {
         bail!(
             "MLS-Exporter label length drifted: expected {MLS_EXPORTER_LENGTH}, got {}",
-            MLS_EXPORTER_LABEL.len()
+            LABEL_RTC_FRAME_KEY.len()
         );
     }
     let accept = |source: &str| matches!(source, "mls-exporter");
@@ -593,8 +600,6 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// group's exporter secret (RFC 9420 §8) requires a live MLS group; that is the
 /// activated-call residual deferred to the live round.
 fn run_sframe_frame_key_derivation_vector() -> Result<()> {
-    const FRAME_KEY_LABEL: &str = "ck-rtc-frame-key/v1";
-
     // The canonical Context MUST be exactly this 6-tuple.
     let realm_id = "ck:realm:0196419b-0000-7000-8000-000000000000";
     let call_id = "ck:call:0196441c-0000-7000-8000-000000000000";
@@ -637,8 +642,8 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // info string is `label || 0x00 || Context` — the byte-correct domain-
     // separated input.
     const EXPORTER_SECRET: [u8; 32] = [0x42u8; 32];
-    let mut info = Vec::with_capacity(FRAME_KEY_LABEL.len() + 1 + context.len());
-    info.extend_from_slice(FRAME_KEY_LABEL.as_bytes());
+    let mut info = Vec::with_capacity(LABEL_RTC_FRAME_KEY.len() + 1 + context.len());
+    info.extend_from_slice(LABEL_RTC_FRAME_KEY.as_bytes());
     info.push(0x00);
     info.extend_from_slice(&context);
 
@@ -670,7 +675,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         "ck:device:01964137-0000-7000-8000-0000000000ff",
     )?;
     let mut other_info = Vec::new();
-    other_info.extend_from_slice(FRAME_KEY_LABEL.as_bytes());
+    other_info.extend_from_slice(LABEL_RTC_FRAME_KEY.as_bytes());
     other_info.push(0x00);
     other_info.extend_from_slice(&other_context);
     let mut other_key = [0u8; 32];
@@ -760,13 +765,145 @@ pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
     Ok(())
 }
 
-/// Suite entry point — runs all 9 media-binding vectors back to back.
+// VECT-MB-10: recording_exporter_label.
+
+fn recording_context(
+    realm_id: &str,
+    call_id: &str,
+    focus_id: &str,
+    recording_id: &str,
+    media_service_did: &str,
+    recording_start_event_id: &str,
+) -> Result<Vec<u8>> {
+    cokret_core::canonical::canonical_json_bytes(&json!({
+        "realm_id": realm_id,
+        "call_id": call_id,
+        "focus_id": focus_id,
+        "recording_id": recording_id,
+        "media_service_did": media_service_did,
+        "recording_start_event_id": recording_start_event_id,
+    }))
+    .map_err(|err| anyhow!("recording exporter Context JCS encoding failed: {err}"))
+}
+
+fn recording_exporter_key_source_ok(
+    label: &str,
+    context: &[u8],
+) -> std::result::Result<(), &'static str> {
+    if label != LABEL_RTC_RECORDING_KEY || context.is_empty() {
+        return Err(ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED);
+    }
+    Ok(())
+}
+
+pub fn run_recording_exporter_label_vector() -> Result<()> {
+    if LABEL_RTC_RECORDING_KEY != "ck-rtc-recording-key/v1" {
+        bail!("recording exporter label drifted: {LABEL_RTC_RECORDING_KEY}");
+    }
+
+    let context = recording_context(
+        "ck:realm:0196419b-0000-7000-8000-000000000000",
+        "ck:call:0196441c-0000-7000-8000-000000000000",
+        "fra-1",
+        "rtc-recording-019a7360-0000-7000-8000-000000000002",
+        "did:web:recorder.example",
+        "ck:event:019a7360-0000-7000-8000-000000000003",
+    )?;
+
+    for (label, candidate_context) in [
+        (LABEL_RTC_FRAME_KEY, context.as_slice()),
+        (LABEL_RTC_TRANSCRIPT_KEY, context.as_slice()),
+        (LABEL_RTC_RECORDING_KEY, &[][..]),
+    ] {
+        match recording_exporter_key_source_ok(label, candidate_context) {
+            Err(code) if code == ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED => {}
+            other => bail!(
+                "recording exporter source ({label}, {} bytes) must be rejected, got {other:?}",
+                candidate_context.len()
+            ),
+        }
+    }
+
+    recording_exporter_key_source_ok(LABEL_RTC_RECORDING_KEY, &context)
+        .map_err(|code| anyhow!("valid recording exporter source rejected: {code}"))?;
+
+    let context_value: serde_json::Value =
+        serde_json::from_slice(&context).map_err(|err| anyhow!("Context JSON failed: {err}"))?;
+    let fields = context_value
+        .as_object()
+        .ok_or_else(|| anyhow!("recording Context must be a JSON object"))?;
+    let required_fields = [
+        "realm_id",
+        "call_id",
+        "focus_id",
+        "recording_id",
+        "media_service_did",
+        "recording_start_event_id",
+    ];
+    if fields.len() != required_fields.len() {
+        bail!(
+            "recording exporter Context field count drifted: expected {}, got {}",
+            required_fields.len(),
+            fields.len()
+        );
+    }
+    for field in required_fields {
+        if fields.get(field).and_then(|value| value.as_str()).is_none() {
+            bail!("recording exporter Context missing {field}");
+        }
+    }
+
+    const EXPORTER_SECRET: [u8; 32] = [0x42u8; 32];
+    let mut info = Vec::with_capacity(LABEL_RTC_RECORDING_KEY.len() + 1 + context.len());
+    info.extend_from_slice(LABEL_RTC_RECORDING_KEY.as_bytes());
+    info.push(0x00);
+    info.extend_from_slice(&context);
+
+    let hk = Hkdf::<Sha256>::new(None, &EXPORTER_SECRET);
+    let mut recording_key = [0u8; 32];
+    hk.expand(&info, &mut recording_key)
+        .map_err(|err| anyhow!("HKDF expand failed: {err}"))?;
+
+    const EXPECTED_KEY_HEX: &str =
+        "aaaba1e9c74a9da22712da8ba39a42dc572686ad5b6b21b8ceda5aefb1d20d37";
+    let actual_key_hex = hex_lower(&recording_key);
+    if actual_key_hex != EXPECTED_KEY_HEX {
+        bail!(
+            "recording exporter golden vector drifted:\n  expected {EXPECTED_KEY_HEX}\n  actual   {actual_key_hex}\n(label / 0x00 / Context JCS changed)"
+        );
+    }
+
+    let other_context = recording_context(
+        "ck:realm:0196419b-0000-7000-8000-000000000000",
+        "ck:call:0196441c-0000-7000-8000-000000000000",
+        "fra-1",
+        "rtc-recording-019a7360-0000-7000-8000-000000000002",
+        "did:web:recorder.example",
+        "ck:event:019a7360-0000-7000-8000-000000000004",
+    )?;
+    let mut other_info =
+        Vec::with_capacity(LABEL_RTC_RECORDING_KEY.len() + 1 + other_context.len());
+    other_info.extend_from_slice(LABEL_RTC_RECORDING_KEY.as_bytes());
+    other_info.push(0x00);
+    other_info.extend_from_slice(&other_context);
+    let mut other_key = [0u8; 32];
+    Hkdf::<Sha256>::new(None, &EXPORTER_SECRET)
+        .expand(&other_info, &mut other_key)
+        .map_err(|err| anyhow!("HKDF expand (other) failed: {err}"))?;
+    if other_key == recording_key {
+        bail!("recording_start_event_id did not change the recording exporter key");
+    }
+
+    Ok(())
+}
+
+/// Suite entry point — runs all 10 media-binding vectors back to back.
 /// One failure stops the run with full context.
 pub fn run_media_binding_vector_suite() -> Result<()> {
     validate_media_binding_fixture_metadata()?;
-    if ALL_MEDIA_BINDING_VECTOR_IDS.len() != 9 {
+    if ALL_MEDIA_BINDING_VECTOR_IDS.len() != 10 {
         bail!(
-            "expected 9 media_binding vector ids, got {}",
+            "expected 10 media_binding vector ids, got {}",
             ALL_MEDIA_BINDING_VECTOR_IDS.len()
         );
     }
@@ -779,6 +916,7 @@ pub fn run_media_binding_vector_suite() -> Result<()> {
     run_e2ee_key_source_vector()?;
     run_participant_identity_unrecognised_vector()?;
     run_recording_artifact_via_cokret_blob_vector()?;
+    run_recording_exporter_label_vector()?;
     Ok(())
 }
 
@@ -787,7 +925,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn all_nine_media_binding_vectors_run_clean() {
+    fn all_ten_media_binding_vectors_run_clean() {
         run_media_binding_vector_suite().unwrap();
     }
 }
