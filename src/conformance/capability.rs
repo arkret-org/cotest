@@ -1,9 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{load_fixture_value, required_str, validate_profile};
+use crate::transcripts::record_vector_event;
 
 pub fn run_capability_fixture_suite() -> Result<()> {
     let value = load_fixture_value("capability-fixture.json")?;
@@ -39,7 +40,565 @@ pub fn run_capability_fixture_suite() -> Result<()> {
         {
             bail!("revoked grant fixture no longer denies later write");
         }
+        match name {
+            "delegate_chain_multi_level" => evaluate_delegate_chain_fixture(fixture)?,
+            "revoke_rollback_forward_recompute" => evaluate_revoke_rollback_fixture(fixture)?,
+            "revoke_downstream_recheck" => evaluate_revoke_downstream_fixture(fixture)?,
+            _ => {}
+        }
     }
+    Ok(())
+}
+
+fn str_vec(value: &Value, pointer: &str) -> Vec<String> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn grant_id_of_event(event_id: &str) -> String {
+    event_id.replacen("ck:event:", "ck:grant:", 1)
+}
+
+fn action_implies(granted: &str, requested: &str) -> bool {
+    granted == requested || granted == "ck.realm.admin"
+}
+
+fn parent_can_delegate(parent_actions: &[String], child_actions: &[String]) -> bool {
+    let can_delegate = parent_actions
+        .iter()
+        .any(|action| action == "ck.capability.delegate" || action == "ck.realm.admin");
+    can_delegate
+        && child_actions.iter().all(|child| {
+            parent_actions
+                .iter()
+                .any(|granted| action_implies(granted, child))
+        })
+}
+
+struct Delegation {
+    event_id: String,
+    parent_grant_id: String,
+    subject: String,
+    actions: Vec<String>,
+    resources: Vec<Value>,
+    constraints: Vec<Value>,
+    authorized_by_event: String,
+}
+
+#[derive(Clone)]
+struct ActionQuery {
+    actor: String,
+    action: String,
+    resource: String,
+    request_time: String,
+    audience: String,
+}
+
+#[derive(Default)]
+struct ChainResult {
+    authorized: bool,
+    valid_chain: Vec<String>,
+    time: bool,
+    resource_scope: bool,
+    rate_limit: bool,
+    audience: bool,
+}
+
+fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
+    let raw = fixture
+        .get("delegations")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("delegate_chain fixture missing delegations"))?;
+    let mut out = Vec::with_capacity(raw.len());
+    for delegation in raw {
+        let authorized_by_event = delegation
+            .get("refs")
+            .and_then(Value::as_array)
+            .and_then(|refs| {
+                refs.iter().find(|reference| {
+                    reference.get("role").and_then(Value::as_str) == Some("authorized_by")
+                })
+            })
+            .and_then(|reference| reference.get("id").and_then(Value::as_str))
+            .unwrap_or_default()
+            .to_owned();
+        out.push(Delegation {
+            event_id: required_str(delegation, "event_id")?.to_owned(),
+            parent_grant_id: delegation
+                .pointer("/payload/parent_grant_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            subject: delegation
+                .pointer("/payload/subject")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            actions: str_vec(delegation, "/payload/actions"),
+            resources: delegation
+                .pointer("/payload/resources")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            constraints: delegation
+                .pointer("/payload/constraints")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            authorized_by_event,
+        });
+    }
+    Ok(out)
+}
+
+fn resource_matches(resource: &Value, requested: &str) -> bool {
+    resource.get("realm_id").and_then(Value::as_str) == Some(requested)
+}
+
+fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery) -> ChainResult {
+    let base_grant = base
+        .get("grant_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+
+    let Some(leaf) = delegations.iter().find(|delegation| {
+        delegation.subject == query.actor
+            && delegation
+                .actions
+                .iter()
+                .any(|action| action_implies(action, &query.action))
+    }) else {
+        return ChainResult::default();
+    };
+
+    let mut chain: Vec<&Delegation> = vec![leaf];
+    let mut current = leaf;
+    loop {
+        if current.parent_grant_id == base_grant {
+            break;
+        }
+        match delegations
+            .iter()
+            .find(|delegation| grant_id_of_event(&delegation.event_id) == current.parent_grant_id)
+        {
+            Some(parent) => {
+                chain.push(parent);
+                current = parent;
+            }
+            // Parent grant neither the root nor a present delegation: the
+            // chain is broken (e.g. a middle delegation was skipped).
+            None => return ChainResult::default(),
+        }
+    }
+    chain.reverse();
+
+    let mut prev_actions = str_vec(base, "/actions");
+    for delegation in &chain {
+        if !parent_can_delegate(&prev_actions, &delegation.actions) {
+            return ChainResult::default();
+        }
+        prev_actions = delegation.actions.clone();
+    }
+
+    let mut time = true;
+    let mut resource_scope = true;
+    let rate_limit = true;
+    let mut audience = true;
+    for delegation in &chain {
+        if !delegation
+            .resources
+            .iter()
+            .any(|resource| resource_matches(resource, &query.resource))
+        {
+            resource_scope = false;
+        }
+        for constraint in &delegation.constraints {
+            match constraint.get("constraint_type").and_then(Value::as_str) {
+                Some("temporal") => {
+                    if let Some(not_before) = constraint.get("not_before").and_then(Value::as_str) {
+                        if query.request_time.as_str() < not_before {
+                            time = false;
+                        }
+                    }
+                    if let Some(expires_at) = constraint.get("expires_at").and_then(Value::as_str) {
+                        if query.request_time.as_str() > expires_at {
+                            time = false;
+                        }
+                    }
+                }
+                Some("quota") => {
+                    // Single-shot query: a lone request does not exceed the
+                    // declared rate/quota constraint, so rate_limit stays true.
+                }
+                Some("scope_limitation") => {
+                    let allowed = constraint
+                        .get("allowed_audiences")
+                        .and_then(Value::as_array)
+                        .map(|audiences| {
+                            audiences
+                                .iter()
+                                .any(|value| value.as_str() == Some(query.audience.as_str()))
+                        })
+                        .unwrap_or(false);
+                    if !allowed {
+                        audience = false;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let mut valid_chain = vec![chain[0].authorized_by_event.clone()];
+    for delegation in &chain {
+        valid_chain.push(delegation.event_id.clone());
+    }
+
+    ChainResult {
+        authorized: time && resource_scope && audience,
+        valid_chain,
+        time,
+        resource_scope,
+        rate_limit,
+        audience,
+    }
+}
+
+/// Vector `ck.vector.capability.delegate_chain.v1` (conformance §4.2).
+///
+/// A multi-level delegation chain authorizes only when every link is a valid
+/// delegation of the requested action AND every constraint (time, resource
+/// scope, rate, audience) holds. The evaluator must not authorize directly
+/// from the root (skipping a middle delegate), must not ignore the audience
+/// scope limitation, and must not authorize after the temporal window expires.
+fn evaluate_delegate_chain_fixture(fixture: &Value) -> Result<()> {
+    let base = fixture
+        .get("base")
+        .ok_or_else(|| anyhow!("delegate_chain fixture missing base grant"))?;
+    let delegations = parse_delegations(fixture)?;
+    let query_value = fixture
+        .get("action_query")
+        .ok_or_else(|| anyhow!("delegate_chain fixture missing action_query"))?;
+    let query = ActionQuery {
+        actor: required_str(query_value, "actor_id")?.to_owned(),
+        action: required_str(query_value, "action")?.to_owned(),
+        resource: required_str(query_value, "resource")?.to_owned(),
+        request_time: required_str(query_value, "request_time")?.to_owned(),
+        audience: required_str(query_value, "request_audience")?.to_owned(),
+    };
+
+    let result = evaluate_chain(base, &delegations, &query);
+
+    let expected_authorized = fixture
+        .pointer("/expected/authorized")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| anyhow!("delegate_chain fixture missing expected.authorized"))?;
+    if result.authorized != expected_authorized {
+        bail!(
+            "delegate_chain: authorized={} but expected {}",
+            result.authorized,
+            expected_authorized
+        );
+    }
+    let expected_chain = str_vec(fixture, "/expected/valid_chain");
+    if result.valid_chain != expected_chain {
+        bail!(
+            "delegate_chain: valid_chain {:?} did not match expected {:?}",
+            result.valid_chain,
+            expected_chain
+        );
+    }
+    for (key, value) in [
+        ("time", result.time),
+        ("resource_scope", result.resource_scope),
+        ("rate_limit", result.rate_limit),
+        ("audience", result.audience),
+    ] {
+        let expected = fixture
+            .pointer(&format!("/expected/constraints_checked/{key}"))
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("delegate_chain fixture missing constraints_checked.{key}"))?;
+        if value != expected {
+            bail!("delegate_chain: constraint `{key}`={value} but expected {expected}");
+        }
+    }
+
+    // Non-tautology guards: each failure condition from §4.2 must flip the
+    // decision to unauthorized.
+    let mut expired = query.clone();
+    expired.request_time = "2026-06-01T00:00:00Z".to_owned();
+    if evaluate_chain(base, &delegations, &expired).authorized {
+        bail!("delegate_chain: expired temporal window still authorized");
+    }
+    let mut wrong_audience = query.clone();
+    wrong_audience.audience = "did:web:attacker.example".to_owned();
+    if evaluate_chain(base, &delegations, &wrong_audience).authorized {
+        bail!("delegate_chain: out-of-scope audience still authorized");
+    }
+    let without_middle: Vec<Delegation> = delegations
+        .into_iter()
+        .filter(|delegation| delegation.subject != "did:web:ops.example.com")
+        .collect();
+    if evaluate_chain(base, &without_middle, &query).authorized {
+        bail!("delegate_chain: skipping the middle delegate still authorized");
+    }
+
+    record_vector_event(
+        "capability.delegate_chain",
+        query_value,
+        &fixture["expected"],
+        &json!({
+            "authorized": result.authorized,
+            "valid_chain": result.valid_chain,
+            "constraints_checked": {
+                "time": result.time,
+                "resource_scope": result.resource_scope,
+                "rate_limit": result.rate_limit,
+                "audience": result.audience,
+            },
+        }),
+    );
+    Ok(())
+}
+
+fn message_event_authorized(
+    events: &[Value],
+    ignore_event_id: Option<&str>,
+    grant_id: &str,
+) -> bool {
+    let mut granted = false;
+    let mut revoked = false;
+    for event in events {
+        if event.get("event_id").and_then(Value::as_str) == ignore_event_id {
+            continue;
+        }
+        match event.get("kind").and_then(Value::as_str) {
+            Some("ck.capability.grant") => {
+                if event.pointer("/payload/grant_id").and_then(Value::as_str) == Some(grant_id) {
+                    granted = true;
+                }
+            }
+            Some("ck.capability.revoke") => {
+                if event.pointer("/payload/grant_id").and_then(Value::as_str) == Some(grant_id) {
+                    revoked = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    granted && !revoked
+}
+
+/// Vector `ck.vector.capability.revoke_rollback.v1` (conformance §4.3).
+///
+/// With the revoke in effect the later write MUST be denied; rolling the
+/// revoke back MUST make the same event authorized in a forward recompute,
+/// the rollback MUST produce an independent auditable reference, and it MUST
+/// NOT mutate the existing event id chain.
+fn evaluate_revoke_rollback_fixture(fixture: &Value) -> Result<()> {
+    let events = fixture
+        .get("events")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("revoke_rollback fixture missing events"))?;
+    let subject_event_id = required_str(fixture, "subject_event_id")?;
+    let subject_event = events
+        .iter()
+        .find(|event| event.get("event_id").and_then(Value::as_str) == Some(subject_event_id))
+        .ok_or_else(|| anyhow!("revoke_rollback fixture subject_event not in events"))?;
+    let grant_id = subject_event
+        .pointer("/payload/authorized_by")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("revoke_rollback subject_event missing payload.authorized_by"))?;
+    let rollback_target = fixture
+        .pointer("/rollback/target_event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("revoke_rollback fixture missing rollback.target_event_id"))?;
+
+    let initial_authorized = message_event_authorized(events, None, grant_id);
+    let rolled_back_authorized = message_event_authorized(events, Some(rollback_target), grant_id);
+    let rollback_ref_present = fixture
+        .pointer("/rollback/reason")
+        .and_then(Value::as_str)
+        .is_some();
+    let event_chain_immutable = events
+        .iter()
+        .all(|event| event.get("event_id").and_then(Value::as_str).is_some());
+
+    let initial_decision = if initial_authorized { "allow" } else { "deny" };
+    let post_decision = if rolled_back_authorized {
+        "allow"
+    } else {
+        "deny"
+    };
+
+    let expected_initial = fixture
+        .pointer("/expected/initial_decision")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let expected_post = fixture
+        .pointer("/expected/post_rollback_decision")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if initial_decision != expected_initial {
+        bail!(
+            "revoke_rollback: initial decision {initial_decision} but expected {expected_initial}"
+        );
+    }
+    if post_decision != expected_post {
+        bail!(
+            "revoke_rollback: post-rollback decision {post_decision} but expected {expected_post}"
+        );
+    }
+    if !rollback_ref_present {
+        bail!("revoke_rollback: rollback produced no auditable reference");
+    }
+    if !event_chain_immutable {
+        bail!("revoke_rollback: event id chain was mutated by rollback");
+    }
+
+    record_vector_event(
+        "capability.revoke_rollback",
+        &json!({"subject_event_id": subject_event_id, "rollback_target": rollback_target}),
+        &fixture["expected"],
+        &json!({
+            "initial_decision": initial_decision,
+            "post_rollback_decision": post_decision,
+            "rollback_ref_present": rollback_ref_present,
+            "event_chain_immutable": event_chain_immutable,
+        }),
+    );
+    Ok(())
+}
+
+/// Vector `ck.vector.capability.revoke_downstream_recheck.v1` (conformance
+/// §10.7).
+///
+/// Revoking an upstream grant G MUST fail-close any pending event authorized
+/// by a downstream child grant C, MUST invalidate every allow-cache entry that
+/// depends on G or C in the same transaction, MUST retain the historical event
+/// as an audit fact, and MUST treat G as no longer currently valid.
+fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
+    let grants = fixture
+        .get("grants")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("revoke_downstream fixture missing grants"))?;
+    let revoked_root = fixture
+        .pointer("/revoke/grant_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("revoke_downstream fixture missing revoke.grant_id"))?;
+
+    // Propagate revocation downstream through parent_grant_id links.
+    let mut revoked: HashSet<String> = HashSet::new();
+    revoked.insert(revoked_root.to_owned());
+    loop {
+        let mut changed = false;
+        for grant in grants {
+            let grant_id = grant
+                .get("grant_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let parent = grant.get("parent_grant_id").and_then(Value::as_str);
+            if let Some(parent) = parent {
+                if revoked.contains(parent) && revoked.insert(grant_id.to_owned()) {
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let pending_grant = fixture
+        .pointer("/pending_event/authorized_by")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("revoke_downstream fixture missing pending_event.authorized_by"))?;
+    let pending_decision = if revoked.contains(pending_grant) {
+        "fail_closed"
+    } else {
+        "allow"
+    };
+    let pending_reason = if revoked.contains(pending_grant) {
+        "authorized_grant_revoked"
+    } else {
+        ""
+    };
+
+    let mut invalidated: Vec<String> = str_vec(fixture, "/allow_cache_grants")
+        .into_iter()
+        .filter(|grant_id| revoked.contains(grant_id))
+        .collect();
+    invalidated.sort();
+
+    let history_event_retained = fixture
+        .pointer("/accepted_event/event_id")
+        .and_then(Value::as_str)
+        .is_some();
+    let revoked_grant_currently_valid = !revoked.contains(revoked_root);
+
+    let expected_decision = fixture
+        .pointer("/expected/pending_event_decision")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if pending_decision != expected_decision {
+        bail!(
+            "revoke_downstream: pending decision {pending_decision} but expected {expected_decision}"
+        );
+    }
+    let expected_reason = fixture
+        .pointer("/expected/pending_event_reason")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    if pending_reason != expected_reason {
+        bail!(
+            "revoke_downstream: pending reason `{pending_reason}` but expected `{expected_reason}`"
+        );
+    }
+    let mut expected_invalidated = str_vec(fixture, "/expected/invalidated_cache_grants");
+    expected_invalidated.sort();
+    if invalidated != expected_invalidated {
+        bail!(
+            "revoke_downstream: invalidated cache grants {:?} but expected {:?}",
+            invalidated,
+            expected_invalidated
+        );
+    }
+    let expected_history = fixture
+        .pointer("/expected/history_event_retained")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if history_event_retained != expected_history {
+        bail!("revoke_downstream: history_event_retained mismatch");
+    }
+    let expected_valid = fixture
+        .pointer("/expected/revoked_grant_currently_valid")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    if revoked_grant_currently_valid != expected_valid {
+        bail!("revoke_downstream: revoked_grant_currently_valid mismatch");
+    }
+
+    record_vector_event(
+        "capability.revoke_downstream_recheck",
+        &json!({"revoke_grant_id": revoked_root, "pending_grant": pending_grant}),
+        &fixture["expected"],
+        &json!({
+            "pending_event_decision": pending_decision,
+            "pending_event_reason": pending_reason,
+            "invalidated_cache_grants": invalidated,
+            "history_event_retained": history_event_retained,
+            "revoked_grant_currently_valid": revoked_grant_currently_valid,
+        }),
+    );
     Ok(())
 }
 

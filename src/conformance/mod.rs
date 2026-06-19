@@ -19,6 +19,7 @@ mod mention_rendering_vectors;
 pub mod mock_vector_base;
 mod object_addressing_vectors;
 mod operation_registry_gate;
+mod policy_server;
 mod primary_handle_vectors;
 mod principal_server_certification;
 mod privacy;
@@ -146,6 +147,7 @@ pub use operation_registry_gate::{
     build_operation_registry_gate_report_from_paths, validate_operation_registry_gate,
     validate_operation_registry_gate_report,
 };
+pub use policy_server::run_policy_server_fixture_suite;
 pub use primary_handle_vectors::{
     ALL_PRIMARY_HANDLE_VECTOR_IDS, run_as_of_replay_vs_realtime_vector,
     run_audience_match_wins_vector, run_claim_digest_stable_under_hint_vector,
