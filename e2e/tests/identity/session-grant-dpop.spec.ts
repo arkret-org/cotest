@@ -242,31 +242,19 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     });
     expect([200, 204], `logout: ${await logout.text()}`).toContain(logout.status());
 
-    // After logout the grant introspects inactive at coauth, so the self
-    // request fails — but soland caches introspection for ≤120s (§3.3 D2), so
-    // a freshly-cached active result can linger. Assert eventual failure by
-    // polling past the cache TTL bound.
-    const deadline = Date.now() + 130_000;
-    let lastStatus = 0;
-    while (Date.now() < deadline) {
-      const r = await request.get(url, {
-        headers: {
-          authorization: `Bearer ${grant.grantJwt}`,
-          dpop: mintDpopProof({ deviceKey, method: "GET", url, grantJwt: grant.grantJwt }),
-        },
-      });
-      lastStatus = r.status();
-      if (lastStatus === 401 || lastStatus === 403) {
-        break;
-      }
-      // Wait a beat before re-polling; the cache entry expires within 120s.
-      await new Promise((resolve) => setTimeout(resolve, 10_000));
-    }
+    // After logout, sensitive account reads bypass soland's grant-introspection
+    // cache and re-check coauth immediately, so revocation is visible without
+    // waiting for the <=120s low-sensitivity cache TTL.
+    const after = await request.get(url, {
+      headers: {
+        authorization: `Bearer ${grant.grantJwt}`,
+        dpop: mintDpopProof({ deviceKey, method: "GET", url, grantJwt: grant.grantJwt }),
+      },
+    });
     expect(
       [401, 403],
-      `post-logout self request never became unauthenticated (last status ${lastStatus}); ` +
-        `if this is flaky on a long introspection cache, see the §3.3 D2 note above`,
-    ).toContain(lastStatus);
+      `post-logout sensitive self request still authenticated: ${after.status()} ${await after.text()}`,
+    ).toContain(after.status());
   });
 
   // ── Cases that need neither coauth nor the debug seam ────────────────────
