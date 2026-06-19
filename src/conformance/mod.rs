@@ -41,6 +41,7 @@ mod schema_validation;
 mod schema_validation_fixture;
 mod security_closure;
 mod security_negative;
+mod service_closure_hardening;
 mod sidecar_vectors;
 mod state_reducer_hardening;
 mod state_resolution;
@@ -238,6 +239,14 @@ pub use security_closure::{
     run_security_closure_vectors_suite, validate_security_closure_fixture,
 };
 pub use security_negative::run_security_negative_profile_suite;
+pub use service_closure_hardening::{
+    ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS, run_cursor_revoke_high_assurance_vector,
+    run_device_recovery_lifecycle_vector, run_device_revocation_seal_binding_vector,
+    run_ephemeral_capability_ttl_vector, run_invite_consumed_token_resubject_rejected_vector,
+    run_projection_pagination_shape_vector, run_push_wakeup_policy_vector,
+    run_range_completeness_witness_disagreement_vector,
+    run_service_closure_hardening_fixture_suite,
+};
 pub use sidecar_vectors::{
     ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
