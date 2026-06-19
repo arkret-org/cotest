@@ -605,3 +605,12 @@ conformance_test!(
     "call_state_core_fixture",
     cotest::conformance::run_call_state_core_fixture_suite,
 );
+
+conformance_test!(
+    /// Visibility policy vectors promoted to spec artifacts. Asserts
+    /// encryption-floor ratchets, Circle directory projection privacy, and
+    /// joined-history pre-join denial remain aligned with the spec.
+    visibility_policy_fixture_suite_matches_reference_semantics,
+    "visibility_policy_fixture",
+    cotest::conformance::run_visibility_policy_fixture_suite,
+);
