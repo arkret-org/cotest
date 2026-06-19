@@ -13,6 +13,7 @@ mod encoding;
 mod envelope;
 mod federation;
 mod handle_claim_rejection_vectors;
+mod history_crypto_closure;
 mod key_backup_hardening;
 mod keypackage_lifecycle;
 mod lattice_mixed_kinds;
@@ -124,6 +125,15 @@ pub use federation::run_federation_fixture_suite;
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
+};
+pub use history_crypto_closure::{
+    ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS, run_disappearing_on_last_read_offline_window_vector,
+    run_disappearing_read_trigger_anonymous_aggregate_vector,
+    run_disappearing_read_trigger_idempotent_replay_vector,
+    run_e2ee_late_key_recovery_t0_deterministic_visibility_vector,
+    run_history_crypto_closure_fixture_suite,
+    run_history_sharing_e2ee_prejoin_key_share_policy_vector,
+    run_preview_token_scoped_stripped_state_vector,
 };
 pub use key_backup_hardening::{
     ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, run_key_backup_hardening_fixture_suite,

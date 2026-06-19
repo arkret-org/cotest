@@ -163,6 +163,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    history_crypto_closure_fixture_suite_matches_reference_semantics,
+    "history_crypto_closure_fixture",
+    cotest::conformance::run_history_crypto_closure_fixture_suite,
+);
+
+conformance_test!(
     /// Realm private pin + direct conversation privacy contracts. Cotest-local
     /// fixture pins ck.contacts.realm.<realm_id> subject matching, prevents
     /// RealmRemark leakage into directory/bridge/push payloads, and locks the
