@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,7 @@ struct Fixture {
 #[derive(Debug, Deserialize)]
 struct ParityCase {
     id: String,
+    operation_id: String,
     method: String,
     path: String,
     #[serde(default)]
@@ -32,6 +33,46 @@ struct ParityCase {
     body: Option<Value>,
     #[serde(default)]
     body_template: Option<String>,
+    #[serde(default)]
+    live_skip_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OperationRegistryArtifact {
+    operations: Vec<RegistryOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RegistryOperation {
+    operation_id: String,
+    http: String,
+    success_shape_kind: Option<String>,
+    request_schema_ref: Option<String>,
+    response_schema_ref: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OperationSchemaIndexArtifact {
+    operations: Vec<SchemaIndexOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SchemaIndexOperation {
+    operation_id: String,
+    success_shape_kind: Option<String>,
+    request: Option<SchemaShape>,
+    response: Option<SchemaShape>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SchemaShape {
+    schema_kind: Option<String>,
+    #[serde(default)]
+    required: Vec<String>,
+    #[serde(default)]
+    properties: Vec<String>,
+    #[serde(default)]
+    closed: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -99,9 +140,17 @@ async fn yougen_mock_contract_matches_live_soland_baseline() -> Result<()> {
     let contract_path = locate_yougen_contract(&root)?
         .ok_or_else(|| anyhow!("yougen mock contract missing next to {}", root.display()))?;
     assert_mock_contract_format(&contract_path, &fixture, &ctx)?;
+    assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)?;
 
     let mut results = Vec::new();
     for case in &fixture.cases {
+        if let Some(reason) = &case.live_skip_reason {
+            if reason.trim().is_empty() {
+                bail!("fixture case `{}` has an empty live_skip_reason", case.id);
+            }
+            continue;
+        }
+
         let rendered_path = render_str(&case.path, &ctx);
         let rendered_body = render_body(case, &ctx);
         let mock = normalize_snapshot(
@@ -162,6 +211,27 @@ fn yougen_mock_contract_format_smoke() -> Result<()> {
     assert_mock_contract_format(&contract_path, &fixture, &ctx)
 }
 
+#[test]
+fn yougen_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let Some(contract_path) = locate_yougen_contract(&root)? else {
+        if std::env::var_os("COTEST_REQUIRE_YOUGEN_CONTRACT").is_some() {
+            bail!("COTEST_REQUIRE_YOUGEN_CONTRACT is set but sibling yougen contract is missing");
+        }
+        eprintln!("skipping yougen mock artifact gate: sibling yougen checkout not found");
+        return Ok(());
+    };
+    let fixture = load_fixture(&root)?;
+    let ctx = TemplateContext {
+        alice_did: "did:web:alice-mock-parity.example".to_owned(),
+        alice_token: "cotest-artifact-gate-token".to_owned(),
+        service_did: "did:web:soland.mock-parity-gate.local".to_owned(),
+        realm_id: "ck:realm:01999999-0000-7000-8000-000000000451".to_owned(),
+        space_id: "ck:space:01999999-0000-7000-8000-000000000451".to_owned(),
+    };
+    assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)
+}
+
 fn locate_yougen_contract(root: &Path) -> Result<Option<PathBuf>> {
     let path = root
         .parent()
@@ -170,6 +240,17 @@ fn locate_yougen_contract(root: &Path) -> Result<Option<PathBuf>> {
         .join("tests")
         .join("e2e")
         .join("mockCokretContract.ts");
+    Ok(path.is_file().then_some(path))
+}
+
+fn locate_yougen_mock_api(root: &Path) -> Result<Option<PathBuf>> {
+    let path = root
+        .parent()
+        .ok_or_else(|| anyhow!("cotest root has no parent: {}", root.display()))?
+        .join("yougen")
+        .join("tests")
+        .join("e2e")
+        .join("mockCokretApi.ts");
     Ok(path.is_file().then_some(path))
 }
 
@@ -194,6 +275,124 @@ fn assert_mock_contract_format(
     Ok(())
 }
 
+fn assert_mock_contract_artifact_gate(
+    root: &Path,
+    contract_path: &Path,
+    fixture: &Fixture,
+    ctx: &TemplateContext,
+) -> Result<()> {
+    let artifacts_root = spec_artifacts_root(root);
+    let registry = load_operation_registry(&artifacts_root)?;
+    let schema_index = load_operation_schema_index(&artifacts_root)?;
+
+    let contract_source = fs::read_to_string(contract_path)
+        .with_context(|| format!("read {}", contract_path.display()))?;
+    assert_contract_branches_have_fixture_cases(&contract_source, fixture, ctx)?;
+    assert_supported_operation_literals_registered(
+        "mockCokretContract.ts",
+        &contract_source,
+        &registry,
+    )?;
+    if let Some(api_path) = locate_yougen_mock_api(root)? {
+        let api_source = fs::read_to_string(&api_path)
+            .with_context(|| format!("read {}", api_path.display()))?;
+        assert_supported_operation_literals_registered("mockCokretApi.ts", &api_source, &registry)?;
+    }
+
+    for case in &fixture.cases {
+        let operation = registry.get(&case.operation_id).ok_or_else(|| {
+            anyhow!(
+                "fixture case `{}` references unregistered operation_id {}",
+                case.id,
+                case.operation_id
+            )
+        })?;
+        let (registered_method, registered_path) = parse_http_binding(&operation.http)
+            .with_context(|| format!("parse registry http binding for {}", case.operation_id))?;
+        let rendered_path = render_str(&case.path, ctx);
+        let (path_only, _) = split_path_query(&rendered_path);
+        if registered_method != case.method.to_ascii_uppercase() || registered_path != path_only {
+            bail!(
+                "fixture case `{}` drifted from operation registry: case {} {}, registry {} {} ({})",
+                case.id,
+                case.method.to_ascii_uppercase(),
+                path_only,
+                registered_method,
+                registered_path,
+                case.operation_id
+            );
+        }
+
+        let schema = schema_index.get(&case.operation_id);
+        if operation.request_schema_ref.is_some() || operation.response_schema_ref.is_some() {
+            let schema = schema.ok_or_else(|| {
+                anyhow!(
+                    "schema index missing fixture operation {} ({})",
+                    case.operation_id,
+                    case.id
+                )
+            })?;
+            if let (Some(registry_kind), Some(index_kind)) =
+                (&operation.success_shape_kind, &schema.success_shape_kind)
+                && registry_kind != index_kind
+            {
+                bail!(
+                    "success_shape_kind drift for {}: registry {}, schema index {}",
+                    case.operation_id,
+                    registry_kind,
+                    index_kind
+                );
+            }
+            if operation.request_schema_ref.is_some() {
+                let body = render_body(case, ctx);
+                let request_shape = schema.request.as_ref().ok_or_else(|| {
+                    anyhow!(
+                        "schema index missing request shape for fixture case `{}` ({})",
+                        case.id,
+                        case.operation_id
+                    )
+                })?;
+                assert_json_shape_required_fields(case, "request", request_shape, body.as_ref())?;
+            }
+            if operation.response_schema_ref.is_some() {
+                let body = render_body(case, ctx);
+                let snapshot = call_mock_contract(contract_path, case, &rendered_path, body)
+                    .with_context(|| {
+                        format!("mock response for artifact gate case `{}`", case.id)
+                    })?;
+                if !(200..300).contains(&snapshot.status) {
+                    bail!(
+                        "fixture case `{}` returned non-success mock status {}",
+                        case.id,
+                        snapshot.status
+                    );
+                }
+                let response_shape = schema.response.as_ref().ok_or_else(|| {
+                    anyhow!(
+                        "schema index missing response shape for fixture case `{}` ({})",
+                        case.id,
+                        case.operation_id
+                    )
+                })?;
+                assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
+                assert_json_shape_required_fields(
+                    case,
+                    "response",
+                    response_shape,
+                    Some(&snapshot.body),
+                )?;
+            }
+        } else {
+            let body = render_body(case, ctx);
+            let snapshot = call_mock_contract(contract_path, case, &rendered_path, body)
+                .with_context(|| format!("mock response for artifact gate case `{}`", case.id))?;
+            assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn load_fixture(root: &Path) -> Result<Fixture> {
     let path = root.join("tests/fixtures/yougen_mock_parity.json");
     let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
@@ -210,6 +409,285 @@ fn load_allowlist(root: &Path) -> Result<BTreeMap<String, String>> {
         .into_iter()
         .map(|entry| (entry.id, entry.reason))
         .collect())
+}
+
+fn spec_artifacts_root(root: &Path) -> PathBuf {
+    if let Some(root) = std::env::var_os("COTEST_SPEC_ARTIFACTS_ROOT") {
+        return PathBuf::from(root);
+    }
+    if let Some(root) = std::env::var_os("COTEST_SPEC_ROOT") {
+        let root = PathBuf::from(root);
+        let candidates = [root.clone(), root.join("spec").join("v1").join("artifacts")];
+        if let Some(candidate) = candidates
+            .into_iter()
+            .find(|candidate| candidate.join("registry").is_dir())
+        {
+            return candidate;
+        }
+    }
+    root.join("..")
+        .join("cokret-spec")
+        .join("spec")
+        .join("v1")
+        .join("artifacts")
+}
+
+fn load_operation_registry(root: &Path) -> Result<BTreeMap<String, RegistryOperation>> {
+    let path = root.join("registry").join("operation-registry.json");
+    let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let artifact: OperationRegistryArtifact =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    Ok(artifact
+        .operations
+        .into_iter()
+        .map(|operation| (operation.operation_id.clone(), operation))
+        .collect())
+}
+
+fn load_operation_schema_index(root: &Path) -> Result<BTreeMap<String, SchemaIndexOperation>> {
+    let path = root.join("reports").join("operation-schema-index.json");
+    let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let artifact: OperationSchemaIndexArtifact =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    Ok(artifact
+        .operations
+        .into_iter()
+        .map(|operation| (operation.operation_id.clone(), operation))
+        .collect())
+}
+
+fn parse_http_binding(http: &str) -> Result<(String, String)> {
+    let mut parts = http.split_whitespace();
+    let method = parts
+        .next()
+        .ok_or_else(|| anyhow!("http binding missing method"))?
+        .to_ascii_uppercase();
+    let path = parts
+        .next()
+        .ok_or_else(|| anyhow!("http binding missing path"))?
+        .to_owned();
+    if parts.next().is_some() {
+        bail!("http binding has extra fields: {http}");
+    }
+    Ok((method, path))
+}
+
+fn assert_contract_branches_have_fixture_cases(
+    contract_source: &str,
+    fixture: &Fixture,
+    ctx: &TemplateContext,
+) -> Result<()> {
+    let branches = extract_contract_branches(contract_source);
+    let fixture_branches = fixture
+        .cases
+        .iter()
+        .map(|case| {
+            let rendered_path = render_str(&case.path, ctx);
+            let (path, _) = split_path_query(&rendered_path);
+            (case.method.to_ascii_uppercase(), path.to_owned())
+        })
+        .collect::<BTreeSet<_>>();
+    let missing = branches
+        .difference(&fixture_branches)
+        .map(|(method, path)| format!("{method} {path}"))
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        bail!(
+            "yougen mock contract branches missing fixture cases: {}",
+            missing.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn extract_contract_branches(source: &str) -> BTreeSet<(String, String)> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let method = extract_after(line, "method === \"", "\"")?;
+            let path = extract_after(line, "path === \"", "\"")?;
+            Some((method.to_ascii_uppercase(), path.to_owned()))
+        })
+        .collect()
+}
+
+fn assert_supported_operation_literals_registered(
+    source_name: &str,
+    source: &str,
+    registry: &BTreeMap<String, RegistryOperation>,
+) -> Result<()> {
+    let mut rogue = Vec::new();
+    for (line, operation_id) in extract_supported_operation_literals(source) {
+        if !registry.contains_key(&operation_id) {
+            rogue.push(format!("{source_name}:{line}: {operation_id}"));
+        }
+    }
+    if !rogue.is_empty() {
+        bail!(
+            "mock supported_operations references unregistered operation_id(s): {}",
+            rogue.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn assert_supported_operations_registered(
+    case_id: &str,
+    body: &Value,
+    registry: &BTreeMap<String, RegistryOperation>,
+) -> Result<()> {
+    let Some(operations) = body.get("supported_operations").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    let rogue = operations
+        .iter()
+        .filter_map(Value::as_str)
+        .filter(|operation_id| !registry.contains_key(*operation_id))
+        .collect::<Vec<_>>();
+    if !rogue.is_empty() {
+        bail!(
+            "mock case `{case_id}` returned unregistered supported_operations: {}",
+            rogue.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn extract_supported_operation_literals(source: &str) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut in_supported_operations = false;
+    let mut bracket_depth = 0i32;
+    for (line_index, line) in source.lines().enumerate() {
+        if !in_supported_operations && line.contains("supported_operations") && line.contains('[') {
+            in_supported_operations = true;
+            bracket_depth = 0;
+        }
+        if in_supported_operations {
+            for literal in extract_string_literals(line) {
+                if literal.starts_with("ck.") {
+                    out.push((line_index + 1, literal));
+                }
+            }
+            bracket_depth += line.chars().filter(|ch| *ch == '[').count() as i32;
+            bracket_depth -= line.chars().filter(|ch| *ch == ']').count() as i32;
+            if bracket_depth <= 0 {
+                in_supported_operations = false;
+            }
+        }
+    }
+    out
+}
+
+fn extract_string_literals(line: &str) -> Vec<String> {
+    let bytes = line.as_bytes();
+    let mut literals = Vec::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let quote = bytes[i];
+        if !matches!(quote, b'"' | b'\'' | b'`') {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let mut literal = String::new();
+        while i < bytes.len() {
+            let byte = bytes[i];
+            if byte == b'\\' && i + 1 < bytes.len() {
+                let next = bytes[i + 1] as char;
+                match next {
+                    '/' | '"' | '\'' | '`' | '\\' => literal.push(next),
+                    'n' => literal.push('\n'),
+                    'r' => literal.push('\r'),
+                    't' => literal.push('\t'),
+                    _ => {
+                        literal.push('\\');
+                        literal.push(next);
+                    }
+                }
+                i += 2;
+                continue;
+            }
+            if byte == quote {
+                break;
+            }
+            literal.push(byte as char);
+            i += 1;
+        }
+        if i < bytes.len() && bytes[i] == quote {
+            literals.push(literal);
+            i += 1;
+        }
+    }
+    literals
+}
+
+fn assert_json_shape_required_fields(
+    case: &ParityCase,
+    direction: &str,
+    shape: &SchemaShape,
+    value: Option<&Value>,
+) -> Result<()> {
+    if shape.schema_kind.as_deref() != Some("object") {
+        return Ok(());
+    }
+    let value = value.ok_or_else(|| {
+        anyhow!(
+            "fixture case `{}` missing {direction} body for {}",
+            case.id,
+            case.operation_id
+        )
+    })?;
+    let object = value.as_object().ok_or_else(|| {
+        anyhow!(
+            "fixture case `{}` {direction} for {} must be a JSON object",
+            case.id,
+            case.operation_id
+        )
+    })?;
+    let missing = shape
+        .required
+        .iter()
+        .filter(|field| !object.contains_key(field.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        bail!(
+            "fixture case `{}` {} for {} missing required schema field(s): {}",
+            case.id,
+            direction,
+            case.operation_id,
+            missing.join(", ")
+        );
+    }
+    if shape.closed {
+        let properties = shape
+            .properties
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        let extra = object
+            .keys()
+            .filter(|key| !properties.contains(key.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        if !extra.is_empty() {
+            bail!(
+                "fixture case `{}` {} for {} has field(s) outside schema index: {}",
+                case.id,
+                direction,
+                case.operation_id,
+                extra.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
+
+fn extract_after<'a>(line: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
+    let start = line.find(prefix)? + prefix.len();
+    let rest = &line[start..];
+    let end = rest.find(suffix)?;
+    Some(&rest[..end])
 }
 
 fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
@@ -248,7 +726,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                 "payload": {
                     "actor_id": ctx.alice_did,
                     "realm_id": ctx.realm_id,
-                    "scope_id": ctx.space_id,
+                    "scope_id": ctx.realm_id,
                     "typing": true,
                     "ttl_ms": 30000
                 }
