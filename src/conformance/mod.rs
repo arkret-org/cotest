@@ -12,6 +12,7 @@ mod encoding;
 mod envelope;
 mod federation;
 mod handle_claim_rejection_vectors;
+mod keypackage_lifecycle;
 mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod list_handles_for_subject_vectors;
@@ -113,6 +114,13 @@ pub use federation::run_federation_fixture_suite;
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
+};
+pub use keypackage_lifecycle::{
+    ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS, run_keypackage_exhaustion_claim_limits_vector,
+    run_keypackage_last_resort_affinity_and_optionality_vector,
+    run_keypackage_last_resort_claim_and_reuse_vector,
+    run_keypackage_last_resort_forced_rotation_vector, run_keypackage_lifecycle_fixture_suite,
+    run_mls_welcome_keypackage_hash_vector,
 };
 pub use lattice_mixed_kinds::run_lattice_mixed_kinds_suite;
 pub use lattice_round_trip::run_lattice_round_trip_suite;

@@ -623,3 +623,12 @@ conformance_test!(
     "agent_participation_fixture",
     cotest::conformance::run_agent_participation_fixture_suite,
 );
+
+conformance_test!(
+    /// KeyPackage lifecycle vectors promoted to spec artifacts. Asserts
+    /// claim limits, last-resort reuse/rotation/Realm affinity, and MLS
+    /// Welcome KeyPackage digest binding.
+    keypackage_lifecycle_fixture_suite_matches_reference_semantics,
+    "keypackage_lifecycle_fixture",
+    cotest::conformance::run_keypackage_lifecycle_fixture_suite,
+);
