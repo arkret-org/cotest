@@ -121,6 +121,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    state_reducer_hardening_fixture_suite_matches_reference_semantics,
+    "state_reducer_hardening_fixture",
+    cotest::conformance::run_state_reducer_hardening_fixture_suite,
+);
+
+conformance_test!(
     /// C10.C — exercises the SDK's `cokret-lattice` crate against the normative
     /// scenarios from `cba-lattice-fixture.json` by reifying
     /// the symbolic ops as real `LatticeOp` + `SealedOp` values and asserting

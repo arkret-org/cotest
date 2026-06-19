@@ -42,6 +42,7 @@ mod schema_validation_fixture;
 mod security_closure;
 mod security_negative;
 mod sidecar_vectors;
+mod state_reducer_hardening;
 mod state_resolution;
 mod sync;
 mod vector_registry_gate;
@@ -241,6 +242,10 @@ pub use sidecar_vectors::{
     ALL_SIDECAR_VECTOR_IDS, run_sidecar_eligibility_states_vector,
     run_sidecar_ensure_idempotent_vector, run_sidecar_existence_privacy_vector,
     run_sidecar_multi_agent_publish_vector, run_sidecar_vector_suite,
+};
+pub use state_reducer_hardening::{
+    ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, run_state_reducer_hardening_fixture_suite,
+    run_state_root_incremental_vector, run_strand_tracks_update_atomic_vector,
 };
 pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
 pub use sync::run_sync_fixture_suite;
