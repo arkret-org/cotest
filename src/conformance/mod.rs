@@ -1,3 +1,4 @@
+mod agent_participation;
 mod agent_vectors;
 mod blind_payload;
 mod blob_stream_aead;
@@ -58,6 +59,14 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
+pub use agent_participation::{
+    ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,
+    run_agent_participation_ceiling_tighten_vector,
+    run_agent_participation_effective_intersection_vector, run_agent_participation_fixture_suite,
+    run_agent_participation_selection_within_ceiling_vector,
+    run_agent_participation_session_overlay_vector,
+    run_agent_participation_third_party_mention_gate_vector,
+};
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
     run_agent_pairing_expiry_vector, run_agent_provision_vector,

@@ -614,3 +614,12 @@ conformance_test!(
     "visibility_policy_fixture",
     cotest::conformance::run_visibility_policy_fixture_suite,
 );
+
+conformance_test!(
+    /// Agent participation vectors promoted to spec artifacts. Asserts
+    /// selector mention authority, ceiling monotonicity, effective
+    /// intersection, session overlay shape, and third-party mention gating.
+    agent_participation_fixture_suite_matches_reference_semantics,
+    "agent_participation_fixture",
+    cotest::conformance::run_agent_participation_fixture_suite,
+);
