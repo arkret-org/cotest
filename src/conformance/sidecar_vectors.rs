@@ -10,7 +10,7 @@
 //! and the multi-agent fan-out reducer path land in soland P2-impl;
 //! this suite hard-fails on registry drift today.
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
     ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_SIDECAR_CREATE_DENIED,
 };
@@ -19,6 +19,7 @@ use cokret_core::{
     CAP_ACTION_AGENT_SIDECAR_THREAD_PUBLISH, CAP_ACTION_AGENT_SIDECAR_THREAD_WRITE,
     OP_AGENT_SIDECAR_THREAD_ENSURE, PROFILE_AGENT_SIDECAR_THREAD,
 };
+use serde_json::Value;
 
 pub const VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT: &str = "ck.vector.sidecar.ensure_idempotent.v1";
 pub const VECTOR_ID_SIDECAR_ELIGIBILITY_STATES: &str = "ck.vector.sidecar.eligibility_states.v1";
@@ -31,6 +32,42 @@ pub const ALL_SIDECAR_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY,
     VECTOR_ID_SIDECAR_MULTI_AGENT_PUBLISH,
 ];
+
+const SIDECAR_VECTORS_FIXTURE_FILE: &str = "agent-sidecar-fixture.json";
+const SIDECAR_VECTORS_PROFILE: &str = "ck.profile.agent_sidecar_thread.v1";
+
+fn validate_sidecar_vectors_fixture_metadata() -> Result<()> {
+    let fixture = super::load_fixture_value(SIDECAR_VECTORS_FIXTURE_FILE)?;
+    super::validate_profile(&fixture, SIDECAR_VECTORS_PROFILE)?;
+    let covers = fixture
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("sidecar fixture missing covers_vectors[]"))?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("sidecar fixture missing cases[]"))?;
+
+    for vector_id in ALL_SIDECAR_VECTOR_IDS {
+        if !covers
+            .iter()
+            .any(|entry| entry.as_str() == Some(*vector_id))
+        {
+            bail!("sidecar fixture missing covers_vectors entry {vector_id}");
+        }
+        if !cases.iter().any(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
+                && case
+                    .get("assertions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|assertions| !assertions.is_empty())
+        }) {
+            bail!("sidecar fixture missing asserted case {vector_id}");
+        }
+    }
+
+    Ok(())
+}
 
 // ─── VECT-SC-1 — ensure_idempotent ─────────────────────────────────────────
 
@@ -114,6 +151,7 @@ pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
 
 /// Suite entry point — runs all 4 sidecar vectors.
 pub fn run_sidecar_vector_suite() -> Result<()> {
+    validate_sidecar_vectors_fixture_metadata()?;
     if ALL_SIDECAR_VECTOR_IDS.len() != 4 {
         bail!(
             "expected 4 sidecar vector ids, got {}",

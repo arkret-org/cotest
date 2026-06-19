@@ -24,6 +24,7 @@ use cokret_core::{
     OP_AGENT_PAUSE, OP_AGENT_PROVISION, OP_AGENT_RESUME, OP_AGENT_ROTATE_KEY,
     OP_AGENT_SIDECAR_THREAD_ENSURE,
 };
+use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ck.vector.agent.provision.v1";
 pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ck.vector.agent.pairing_expiry.v1";
@@ -38,6 +39,42 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_ACT_ON_BEHALF,
     VECTOR_ID_AGENT_SESSION_GRANT_REPLAY,
 ];
+
+const AGENT_VECTORS_FIXTURE_FILE: &str = "agent-vectors-fixture.json";
+const AGENT_VECTORS_PROFILE: &str = "ck.profile.personal_agent_provisioning.v1";
+
+fn validate_agent_vectors_fixture_metadata() -> Result<()> {
+    let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
+    super::validate_profile(&fixture, AGENT_VECTORS_PROFILE)?;
+    let covers = fixture
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("agent vectors fixture missing covers_vectors[]"))?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("agent vectors fixture missing cases[]"))?;
+
+    for vector_id in ALL_AGENT_VECTOR_IDS {
+        if !covers
+            .iter()
+            .any(|entry| entry.as_str() == Some(*vector_id))
+        {
+            bail!("agent vectors fixture missing covers_vectors entry {vector_id}");
+        }
+        if !cases.iter().any(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
+                && case
+                    .get("assertions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|assertions| !assertions.is_empty())
+        }) {
+            bail!("agent vectors fixture missing asserted case {vector_id}");
+        }
+    }
+
+    Ok(())
+}
 
 // ─── VECT-AG-1 — provision ─────────────────────────────────────────────────
 
@@ -226,6 +263,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
 
 /// Suite entry point — runs all 5 agent vectors.
 pub fn run_agent_vector_suite() -> Result<()> {
+    validate_agent_vectors_fixture_metadata()?;
     if ALL_AGENT_VECTOR_IDS.len() != 5 {
         bail!(
             "expected 5 agent vector ids, got {}",
