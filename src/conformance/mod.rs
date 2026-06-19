@@ -1,5 +1,6 @@
 mod agent_participation;
 mod agent_vectors;
+mod auth_session_proof;
 mod blind_payload;
 mod blob_stream_aead;
 mod call_signal;
@@ -72,6 +73,12 @@ pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
     run_agent_pairing_expiry_vector, run_agent_provision_vector,
     run_agent_session_grant_replay_vector, run_agent_vector_suite,
+};
+pub use auth_session_proof::{
+    ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
+    run_auth_session_proof_fixture_suite, run_auth_soft_logout_did_proof_vector,
+    run_identity_did_proof_replay_window_vector,
+    run_session_bearer_replay_rejected_high_security_vector, run_session_pop_presentation_vector,
 };
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,

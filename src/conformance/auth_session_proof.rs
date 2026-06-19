@@ -1,0 +1,949 @@
+//! Auth, DID-proof, and sender-constrained session proof conformance vectors.
+
+use anyhow::{Result, anyhow, bail};
+use chrono::{DateTime, Duration, Utc};
+use cokret_core::error::{
+    ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_PROOF_INVALID, ERROR_CODE_UNAUTHENTICATED,
+};
+use cokret_core::{
+    DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
+    canonical,
+};
+use cokret_signatures::http_signature::{
+    Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
+    SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,
+    verify_signed_http_message,
+};
+use serde_json::{Value, json};
+
+use super::schema_validation_fixture::SchemaEnv;
+
+pub const VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING: &str =
+    "ck.vector.auth.session_grant_audience_binding.v1";
+pub const VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF: &str = "ck.vector.auth.soft_logout_did_proof.v1";
+pub const VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW: &str =
+    "ck.vector.identity.did_proof_replay_window.v1";
+pub const VECTOR_ID_SESSION_POP_PRESENTATION: &str = "ck.vector.session.pop_presentation.v1";
+pub const VECTOR_ID_SESSION_BEARER_REPLAY_REJECTED_HIGH_SECURITY: &str =
+    "ck.vector.session.bearer_replay_rejected_high_security.v1";
+
+pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
+    VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING,
+    VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF,
+    VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW,
+    VECTOR_ID_SESSION_POP_PRESENTATION,
+    VECTOR_ID_SESSION_BEARER_REPLAY_REJECTED_HIGH_SECURITY,
+];
+
+const AUTH_SESSION_PROOF_FIXTURE_FILE: &str = "auth-session-proof-fixture.json";
+const AUTH_SESSION_PROOF_PROFILE: &str = "ck.profile.auth_server.v1";
+const SESSION_GRANT_REQUEST_SCHEMA: &str =
+    "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantRequestBody";
+const SESSION_GRANT_OUTCOME_SCHEMA: &str =
+    "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantOutcome";
+const ERROR_CODE_AUDIENCE_MISMATCH: &str = "audience_mismatch";
+const ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED: &str = "did_proof_replay_window_exceeded";
+const MAX_HTTP_SIGNATURE_WINDOW_SECONDS: i64 = 300;
+const HTTP_SIGNATURE_SKEW_SECONDS: i64 = 30;
+
+fn auth_session_proof_fixture() -> Result<Value> {
+    let fixture = super::load_fixture_value(AUTH_SESSION_PROOF_FIXTURE_FILE)?;
+    super::validate_profile(&fixture, AUTH_SESSION_PROOF_PROFILE)?;
+    validate_auth_session_proof_fixture_metadata(&fixture)?;
+    Ok(fixture)
+}
+
+fn validate_auth_session_proof_fixture_metadata(fixture: &Value) -> Result<()> {
+    if fixture.get("suite").and_then(Value::as_str) != Some("auth_session_proof") {
+        bail!("auth session proof fixture suite drifted");
+    }
+
+    let covers = fixture
+        .get("covers_vectors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("auth session proof fixture missing covers_vectors[]"))?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("auth session proof fixture missing cases[]"))?;
+
+    for vector_id in ALL_AUTH_SESSION_PROOF_VECTOR_IDS {
+        if !covers
+            .iter()
+            .any(|entry| entry.as_str() == Some(*vector_id))
+        {
+            bail!("auth session proof fixture missing covers_vectors entry {vector_id}");
+        }
+        if !cases.iter().any(|case| {
+            case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
+                && case
+                    .get("assertions")
+                    .and_then(Value::as_array)
+                    .is_some_and(|assertions| !assertions.is_empty())
+        }) {
+            bail!("auth session proof fixture missing asserted case {vector_id}");
+        }
+    }
+
+    Ok(())
+}
+
+fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+    fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .and_then(|cases| {
+            cases
+                .iter()
+                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
+        })
+        .ok_or_else(|| anyhow!("auth session proof fixture missing case {vector_id}"))
+}
+
+fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("case missing string field {field}"))
+}
+
+fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value
+        .pointer(&format!("/expected/{field}"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("case missing expected.{field}"))
+}
+
+fn expected_u64(value: &Value, field: &str) -> Result<u64> {
+    value
+        .pointer(&format!("/expected/{field}"))
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("case missing u64 expected.{field}"))
+}
+
+fn required_u64(value: &Value, field: &str) -> Result<u64> {
+    value
+        .get(field)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("case missing u64 field {field}"))
+}
+
+fn required_i64(value: &Value, field: &str) -> Result<i64> {
+    value
+        .get(field)
+        .and_then(Value::as_i64)
+        .ok_or_else(|| anyhow!("case missing i64 field {field}"))
+}
+
+fn required_string_array(value: &Value, field: &str) -> Result<Vec<String>> {
+    value
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("case missing array field {field}"))?
+        .iter()
+        .map(|entry| {
+            entry
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow!("{field} entries must be strings"))
+        })
+        .collect()
+}
+
+fn parse_time(value: &str) -> Result<DateTime<Utc>> {
+    Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
+}
+
+fn did(value: &str) -> Result<Did> {
+    Did::new(value.to_owned()).map_err(Into::into)
+}
+
+fn device(value: &str) -> Result<DeviceId> {
+    DeviceId::new(value.to_owned()).map_err(Into::into)
+}
+
+fn digest_value(value: &Value) -> Result<Hash> {
+    Hash::new(canonical::canonical_sha256(value)?).map_err(Into::into)
+}
+
+fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
+    let env = SchemaEnv::load()?;
+    let validator = env.compile(schema_ref)?;
+    if !validator.is_valid(value) {
+        let errors = validator
+            .iter_errors(value)
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("value failed schema {schema_ref}: {errors}");
+    }
+    Ok(())
+}
+
+fn session_grant_binding_payload(vector: &Value, audience: &str) -> Result<Value> {
+    Ok(json!({
+        "principal_id": required_str(vector, "principal_id")?,
+        "device_id": required_str(vector, "device_id")?,
+        "requested_scope": required_string_array(vector, "requested_scope")?,
+        "audience": audience
+    }))
+}
+
+fn session_grant_request_value(
+    vector: &Value,
+    audience: &str,
+    expires_at: DateTime<Utc>,
+    request_canonical_digest: &Hash,
+) -> Result<Value> {
+    Ok(json!({
+        "principal_id": required_str(vector, "principal_id")?,
+        "device_id": required_str(vector, "device_id")?,
+        "requested_scope": required_string_array(vector, "requested_scope")?,
+        "proof": {
+            "proof_kind": "did_bound_signature",
+            "challenge": required_str(vector, "challenge")?,
+            "request_canonical_digest": request_canonical_digest.as_str(),
+            "audience": audience,
+            "expires_at": expires_at.to_rfc3339(),
+            "signature": "detached-proof-placeholder"
+        }
+    }))
+}
+
+fn parse_session_grant_request(value: Value) -> Result<SessionGrantRequestBody> {
+    schema_valid(SESSION_GRANT_REQUEST_SCHEMA, &value)?;
+    serde_json::from_value(value).map_err(Into::into)
+}
+
+fn issue_session_grant(
+    request: &SessionGrantRequestBody,
+    expected_digest: &Hash,
+    target_audience: &str,
+    server_max_ttl: Duration,
+    now: DateTime<Utc>,
+) -> std::result::Result<SessionGrantOutcome, &'static str> {
+    if request.proof.proof_kind != SessionGrantProofKind::DidBoundSignature {
+        return Err(ERROR_CODE_PROOF_INVALID);
+    }
+    if request.proof.audience != target_audience {
+        return Err(ERROR_CODE_AUDIENCE_MISMATCH);
+    }
+    if &request.proof.request_canonical_digest != expected_digest {
+        return Err(ERROR_CODE_PROOF_INVALID);
+    }
+
+    let requested_expires_at = request.proof.expires_at.unwrap_or(now + server_max_ttl);
+    let expires_at = requested_expires_at.min(now + server_max_ttl);
+    Ok(SessionGrantOutcome {
+        principal_id: request
+            .principal_id
+            .clone()
+            .expect("fixture uses a human DID-bound grant"),
+        device_id: request.device_id.clone(),
+        session_grant: "ck.session.grant.test".to_owned(),
+        expires_at,
+        granted_scope: request.requested_scope.clone(),
+        scope_details: Value::Null,
+    })
+}
+
+fn development_mode_verified_profiles(attempted: &[String]) -> Vec<String> {
+    attempted
+        .iter()
+        .filter(|profile| profile.as_str() != AUTH_SESSION_PROOF_PROFILE)
+        .cloned()
+        .collect()
+}
+
+#[derive(Clone)]
+struct MiniDidProofChallenge {
+    challenge: String,
+    audience: String,
+    origin: String,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    used: bool,
+}
+
+#[derive(Clone)]
+struct MiniDidProof {
+    principal_id: String,
+    device_id: Option<String>,
+    audience: String,
+    origin: String,
+    challenge: String,
+    request_canonical_digest: Hash,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    covered_fields: Vec<String>,
+    signature_valid: bool,
+}
+
+fn did_proof_request_digest(value: &Value) -> Result<Hash> {
+    digest_value(value)
+}
+
+fn require_covered_fields(proof: &MiniDidProof, required: &[String]) -> bool {
+    required
+        .iter()
+        .all(|required| proof.covered_fields.iter().any(|field| field == required))
+}
+
+fn validate_did_proof(
+    challenge: &mut MiniDidProofChallenge,
+    proof: &MiniDidProof,
+    expected_principal_id: &str,
+    expected_device_id: Option<&str>,
+    expected_request_digest: &Hash,
+    required_fields: &[String],
+    now: DateTime<Utc>,
+    max_window: Duration,
+    skew: Duration,
+) -> std::result::Result<(), &'static str> {
+    if !proof.signature_valid
+        || proof.principal_id != expected_principal_id
+        || expected_device_id.is_some() && proof.device_id.as_deref() != expected_device_id
+        || !require_covered_fields(proof, required_fields)
+        || &proof.request_canonical_digest != expected_request_digest
+        || proof.challenge != challenge.challenge
+    {
+        return Err(ERROR_CODE_PROOF_INVALID);
+    }
+    if challenge.used {
+        return Err(ERROR_CODE_PROOF_INVALID);
+    }
+    if proof.audience != challenge.audience || proof.origin != challenge.origin {
+        return Err(ERROR_CODE_AUDIENCE_MISMATCH);
+    }
+    if proof.issued_at != challenge.issued_at || proof.expires_at != challenge.expires_at {
+        return Err(ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
+    }
+    if proof.expires_at - proof.issued_at > max_window
+        || proof.issued_at > now + skew
+        || now > proof.expires_at
+        || now - proof.issued_at > max_window + skew
+    {
+        return Err(ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
+    }
+    challenge.used = true;
+    Ok(())
+}
+
+fn proof_from_case(
+    vector: &Value,
+    request_digest: &Hash,
+    issued_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    covered_fields: Vec<String>,
+) -> Result<MiniDidProof> {
+    Ok(MiniDidProof {
+        principal_id: required_str(vector, "principal_id")?.to_owned(),
+        device_id: Some(required_str(vector, "device_id")?.to_owned()),
+        audience: required_str(vector, "audience")?.to_owned(),
+        origin: required_str(vector, "origin")?.to_owned(),
+        challenge: required_str(vector, "challenge")?.to_owned(),
+        request_canonical_digest: request_digest.clone(),
+        issued_at,
+        expires_at,
+        covered_fields,
+        signature_valid: true,
+    })
+}
+
+#[derive(Clone)]
+struct SignedRequest {
+    method: String,
+    target_uri: String,
+    authority: String,
+    path: String,
+    headers: Vec<(String, String)>,
+    body: Vec<u8>,
+}
+
+fn signing_key(seed: u8) -> Ed25519SigningKey {
+    cokret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
+}
+
+fn sign_self_request(
+    signing_key: &Ed25519SigningKey,
+    key_id: &str,
+    method: &str,
+    target_uri: &str,
+    authority: &str,
+    path: &str,
+    body: &[u8],
+    idempotency_key: Option<&str>,
+    created: i64,
+    expires: i64,
+) -> Result<SignedRequest> {
+    let mut covered = vec![
+        Component::Method,
+        Component::TargetUri,
+        Component::Authority,
+    ];
+    let mut names = vec!["\"@method\"", "\"@target-uri\"", "\"@authority\""];
+    let mut headers: Vec<(String, String)> = Vec::new();
+    let mut signed_headers: Vec<(String, String)> = Vec::new();
+    let digest = if body.is_empty() {
+        None
+    } else {
+        let digest = ContentDigest::compute(body, ContentDigestAlgorithm::Sha256);
+        covered.push(Component::Header("content-digest".to_owned()));
+        names.push("\"content-digest\"");
+        headers.push(("content-digest".to_owned(), digest.wire_value.clone()));
+        Some(digest.wire_value)
+    };
+    if let Some(idempotency_key) = idempotency_key {
+        covered.push(Component::Header("idempotency-key".to_owned()));
+        names.push("\"idempotency-key\"");
+        headers.push(("idempotency-key".to_owned(), idempotency_key.to_owned()));
+        signed_headers.push(("idempotency-key".to_owned(), idempotency_key.to_owned()));
+    }
+
+    let params_value = format!(
+        "({});created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
+        names.join(" ")
+    );
+    let signature_input = SignatureInput {
+        label: "sig1".to_owned(),
+        covered_components: covered,
+        created,
+        expires,
+        key_id: key_id.to_owned(),
+        algorithm: "ed25519".to_owned(),
+        params_value: params_value.clone(),
+    };
+    let parts = SignedRequestParts {
+        method: method.to_owned(),
+        target_uri: target_uri.to_owned(),
+        authority: authority.to_owned(),
+        path: path.to_owned(),
+        headers: signed_headers,
+        body_digest: digest,
+    };
+    let canonical = canonical_message(&parts, &signature_input)?;
+    let signature = sign_message(&canonical, signing_key);
+    headers.push(("signature-input".to_owned(), format!("sig1={params_value}")));
+    headers.push(("signature".to_owned(), format!("sig1=:{signature}:")));
+    Ok(SignedRequest {
+        method: method.to_owned(),
+        target_uri: target_uri.to_owned(),
+        authority: authority.to_owned(),
+        path: path.to_owned(),
+        headers,
+        body: body.to_vec(),
+    })
+}
+
+fn verify_self_pop(
+    request: &SignedRequest,
+    public_key: &cokret_signatures::http_signature::Ed25519PublicKey,
+    expected_key_id: &str,
+    now: i64,
+) -> std::result::Result<(), &'static str> {
+    let policy = if request.body.is_empty() {
+        SignatureVerificationPolicy::new(vec![
+            Component::Method,
+            Component::TargetUri,
+            Component::Authority,
+        ])
+        .require_content_digest(false)
+    } else {
+        SignatureVerificationPolicy::service_ingest().require_content_digest(true)
+    }
+    .max_clock_skew_seconds(HTTP_SIGNATURE_SKEW_SECONDS);
+
+    let verified = verify_signed_http_message(
+        &request.method,
+        &request.target_uri,
+        &request.authority,
+        &request.path,
+        request
+            .headers
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str())),
+        &request.body,
+        public_key,
+        &policy,
+        now,
+    )
+    .map_err(|_| ERROR_CODE_UNAUTHENTICATED)?;
+    if verified.signature_input.key_id != expected_key_id {
+        return Err(ERROR_CODE_UNAUTHENTICATED);
+    }
+    if verified.signature_input.expires - verified.signature_input.created
+        > MAX_HTTP_SIGNATURE_WINDOW_SECONDS
+    {
+        return Err(ERROR_CODE_UNAUTHENTICATED);
+    }
+    Ok(())
+}
+
+fn bearer_admission(
+    profile: &str,
+    action: &str,
+    has_pop: bool,
+) -> std::result::Result<(), &'static str> {
+    let requires_pop = profile == "ck.profile.high_security_organization.v1"
+        && matches!(action, "regular_write" | "sensitive_read");
+    if requires_pop && !has_pop {
+        return Err(ERROR_CODE_UNAUTHENTICATED);
+    }
+    Ok(())
+}
+
+pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
+    let fixture = auth_session_proof_fixture()?;
+    let vector = case(&fixture, VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING)?;
+    let now = parse_time("2026-06-19T00:00:00Z")?;
+    let target_audience = required_str(vector, "target_audience")?;
+    let binding = session_grant_binding_payload(vector, target_audience)?;
+    let expected_digest = digest_value(&binding)?;
+    let server_max_ttl = Duration::seconds(required_u64(vector, "server_max_ttl_seconds")? as i64);
+    let requested_ttl = Duration::seconds(required_u64(vector, "requested_ttl_seconds")? as i64);
+
+    did(required_str(vector, "principal_id")?)?;
+    device(required_str(vector, "device_id")?)?;
+
+    let mismatched_digest = digest_value(&session_grant_binding_payload(
+        vector,
+        required_str(vector, "mismatched_audience")?,
+    )?)?;
+    let mismatched_request = parse_session_grant_request(session_grant_request_value(
+        vector,
+        required_str(vector, "mismatched_audience")?,
+        now + server_max_ttl,
+        &mismatched_digest,
+    )?)?;
+    if issue_session_grant(
+        &mismatched_request,
+        &expected_digest,
+        target_audience,
+        server_max_ttl,
+        now,
+    )
+    .err()
+        != Some(expected_str(vector, "audience_mismatch_reason")?)
+    {
+        bail!("audience-mismatched session grant proof was not rejected");
+    }
+
+    let invalid_binding_request = parse_session_grant_request(session_grant_request_value(
+        vector,
+        target_audience,
+        now + server_max_ttl,
+        &mismatched_digest,
+    )?)?;
+    if issue_session_grant(
+        &invalid_binding_request,
+        &expected_digest,
+        target_audience,
+        server_max_ttl,
+        now,
+    )
+    .err()
+        != Some(expected_str(vector, "invalid_binding_reason")?)
+    {
+        bail!("session grant request digest mismatch was not rejected");
+    }
+
+    let long_ttl_request = parse_session_grant_request(session_grant_request_value(
+        vector,
+        target_audience,
+        now + requested_ttl,
+        &expected_digest,
+    )?)?;
+    let outcome = issue_session_grant(
+        &long_ttl_request,
+        &expected_digest,
+        target_audience,
+        server_max_ttl,
+        now,
+    )
+    .map_err(|reason| anyhow!("valid session grant unexpectedly rejected: {reason}"))?;
+    let outcome_value = serde_json::to_value(&outcome)?;
+    schema_valid(SESSION_GRANT_OUTCOME_SCHEMA, &outcome_value)?;
+    if expected_str(vector, "ttl_behavior")? != "clamp_to_server_max"
+        || outcome.expires_at != now + server_max_ttl
+    {
+        bail!("session grant TTL was not clamped to the server hard maximum");
+    }
+
+    let attempted = required_string_array(vector, "attempted_verified_profiles")?;
+    if !development_mode_verified_profiles(&attempted).is_empty() {
+        bail!("development mode advertised a verified auth server profile");
+    }
+    Ok(())
+}
+
+pub fn run_auth_soft_logout_did_proof_vector() -> Result<()> {
+    let fixture = auth_session_proof_fixture()?;
+    let vector = case(&fixture, VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF)?;
+    let mut session_state = "soft_logged_out";
+    let refresh_token_valid = true;
+    if refresh_token_valid && session_state == "soft_logged_out" {
+        let reason = ERROR_CODE_DID_PROOF_REQUIRED;
+        if reason != expected_str(vector, "refresh_only_reason")? {
+            bail!("soft logout refresh-only reason drifted");
+        }
+    }
+
+    let now = parse_time("2026-06-19T00:00:00Z")?;
+    let expires_at =
+        now + Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64);
+    let request_digest = did_proof_request_digest(
+        vector
+            .get("request")
+            .ok_or_else(|| anyhow!("soft logout vector missing request"))?,
+    )?;
+    let mut challenge = MiniDidProofChallenge {
+        challenge: required_str(vector, "challenge")?.to_owned(),
+        audience: required_str(vector, "audience")?.to_owned(),
+        origin: required_str(vector, "origin")?.to_owned(),
+        issued_at: now,
+        expires_at,
+        used: false,
+    };
+    let required_fields = required_string_array(vector, "proof_required_fields")?;
+    let proof = proof_from_case(
+        vector,
+        &request_digest,
+        now,
+        expires_at,
+        required_fields.clone(),
+    )?;
+    validate_did_proof(
+        &mut challenge,
+        &proof,
+        required_str(vector, "principal_id")?,
+        Some(required_str(vector, "device_id")?),
+        &request_digest,
+        &required_fields,
+        now,
+        Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64),
+        Duration::seconds(300),
+    )
+    .map_err(|reason| anyhow!("soft logout proof rejected: {reason}"))?;
+    session_state = "active";
+    if session_state != expected_str(vector, "proof_restores_state")? {
+        bail!("soft logout proof did not restore the session to active");
+    }
+    Ok(())
+}
+
+pub fn run_identity_did_proof_replay_window_vector() -> Result<()> {
+    let fixture = auth_session_proof_fixture()?;
+    let vector = case(&fixture, VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW)?;
+    let issued_at = parse_time(required_str(vector, "issued_at")?)?;
+    let expires_at = parse_time(required_str(vector, "expires_at")?)?;
+    let max_window = Duration::seconds(required_u64(vector, "max_replay_window_seconds")? as i64);
+    let skew = Duration::seconds(required_u64(vector, "skew_seconds")? as i64);
+    let request_digest = digest_value(&json!({
+        "purpose": required_str(vector, "purpose")?,
+        "principal_id": required_str(vector, "principal_id")?,
+        "device_id": required_str(vector, "device_id")?,
+        "audience": required_str(vector, "audience")?,
+        "origin": required_str(vector, "origin")?,
+        "challenge": required_str(vector, "challenge")?
+    }))?;
+    let covered_fields = vec![
+        "principal_id".to_owned(),
+        "device_id".to_owned(),
+        "audience".to_owned(),
+        "origin".to_owned(),
+        "challenge".to_owned(),
+        "request_canonical_digest".to_owned(),
+        "issued_at".to_owned(),
+        "expires_at".to_owned(),
+    ];
+    let mut challenge = MiniDidProofChallenge {
+        challenge: required_str(vector, "challenge")?.to_owned(),
+        audience: required_str(vector, "audience")?.to_owned(),
+        origin: required_str(vector, "origin")?.to_owned(),
+        issued_at,
+        expires_at,
+        used: false,
+    };
+    let proof = proof_from_case(
+        vector,
+        &request_digest,
+        issued_at,
+        expires_at,
+        covered_fields.clone(),
+    )?;
+    validate_did_proof(
+        &mut challenge,
+        &proof,
+        required_str(vector, "principal_id")?,
+        Some(required_str(vector, "device_id")?),
+        &request_digest,
+        &covered_fields,
+        issued_at,
+        max_window,
+        skew,
+    )
+    .map_err(|reason| anyhow!("first DID proof use rejected: {reason}"))?;
+    if expected_str(vector, "first_use")? != "accepted" {
+        bail!("DID proof first-use expectation drifted");
+    }
+    if validate_did_proof(
+        &mut challenge,
+        &proof,
+        required_str(vector, "principal_id")?,
+        Some(required_str(vector, "device_id")?),
+        &request_digest,
+        &covered_fields,
+        issued_at,
+        max_window,
+        skew,
+    )
+    .err()
+        != Some(expected_str(vector, "second_use_reason")?)
+    {
+        bail!("DID proof replay did not fail closed");
+    }
+
+    let mut audience_challenge = MiniDidProofChallenge {
+        challenge: required_str(vector, "challenge")?.to_owned(),
+        audience: required_str(vector, "audience")?.to_owned(),
+        origin: required_str(vector, "origin")?.to_owned(),
+        issued_at,
+        expires_at,
+        used: false,
+    };
+    let mut cross_audience = proof.clone();
+    cross_audience.audience = required_str(vector, "other_audience")?.to_owned();
+    cross_audience.origin = required_str(vector, "other_origin")?.to_owned();
+    if validate_did_proof(
+        &mut audience_challenge,
+        &cross_audience,
+        required_str(vector, "principal_id")?,
+        Some(required_str(vector, "device_id")?),
+        &request_digest,
+        &covered_fields,
+        issued_at,
+        max_window,
+        skew,
+    )
+    .err()
+        != Some(expected_str(vector, "audience_origin_reason")?)
+    {
+        bail!("DID proof audience/origin replay did not fail closed");
+    }
+
+    let mut wide_challenge = MiniDidProofChallenge {
+        challenge: required_str(vector, "challenge")?.to_owned(),
+        audience: required_str(vector, "audience")?.to_owned(),
+        origin: required_str(vector, "origin")?.to_owned(),
+        issued_at,
+        expires_at: parse_time(required_str(vector, "wide_expires_at")?)?,
+        used: false,
+    };
+    let wide_proof = proof_from_case(
+        vector,
+        &request_digest,
+        issued_at,
+        parse_time(required_str(vector, "wide_expires_at")?)?,
+        covered_fields.clone(),
+    )?;
+    if validate_did_proof(
+        &mut wide_challenge,
+        &wide_proof,
+        required_str(vector, "principal_id")?,
+        Some(required_str(vector, "device_id")?),
+        &request_digest,
+        &covered_fields,
+        issued_at,
+        max_window,
+        skew,
+    )
+    .err()
+        != Some(expected_str(vector, "window_reason")?)
+    {
+        bail!("wide DID proof replay window was not rejected");
+    }
+
+    let future_issued_at = parse_time(required_str(vector, "future_issued_at")?)?;
+    let mut future_challenge = MiniDidProofChallenge {
+        challenge: required_str(vector, "challenge")?.to_owned(),
+        audience: required_str(vector, "audience")?.to_owned(),
+        origin: required_str(vector, "origin")?.to_owned(),
+        issued_at: future_issued_at,
+        expires_at: future_issued_at + max_window,
+        used: false,
+    };
+    let future_proof = proof_from_case(
+        vector,
+        &request_digest,
+        future_issued_at,
+        future_issued_at + max_window,
+        covered_fields.clone(),
+    )?;
+    if validate_did_proof(
+        &mut future_challenge,
+        &future_proof,
+        required_str(vector, "principal_id")?,
+        Some(required_str(vector, "device_id")?),
+        &request_digest,
+        &covered_fields,
+        issued_at,
+        max_window,
+        skew,
+    )
+    .err()
+        != Some(expected_str(vector, "future_reason")?)
+    {
+        bail!("future-issued DID proof was not rejected");
+    }
+    Ok(())
+}
+
+pub fn run_session_pop_presentation_vector() -> Result<()> {
+    let fixture = auth_session_proof_fixture()?;
+    let vector = case(&fixture, VECTOR_ID_SESSION_POP_PRESENTATION)?;
+    let key = signing_key(7);
+    let body = required_str(vector, "body")?.as_bytes();
+    let created = required_i64(vector, "created")?;
+    let expires = required_i64(vector, "expires")?;
+    if expires - created != 120 {
+        bail!("PoP fixture control window drifted");
+    }
+    let request = sign_self_request(
+        &key,
+        required_str(vector, "key_id")?,
+        required_str(vector, "method")?,
+        required_str(vector, "target_uri")?,
+        required_str(vector, "authority")?,
+        required_str(vector, "path")?,
+        body,
+        Some(required_str(vector, "idempotency_key")?),
+        created,
+        expires,
+    )?;
+    verify_self_pop(
+        &request,
+        &key.verifying_key(),
+        required_str(vector, "key_id")?,
+        created,
+    )
+    .map_err(|reason| anyhow!("valid PoP presentation rejected: {reason}"))?;
+    if expected_str(vector, "valid_write")? != "accepted" {
+        bail!("valid PoP expectation drifted");
+    }
+
+    let mut tampered_transcript = request.clone();
+    tampered_transcript.target_uri =
+        "https://soland.example.com/_cokret/self/events/tampered".to_owned();
+    if verify_self_pop(
+        &tampered_transcript,
+        &key.verifying_key(),
+        required_str(vector, "key_id")?,
+        created,
+    )
+    .err()
+        != Some(expected_str(vector, "tampered_transcript_reason")?)
+    {
+        bail!("PoP transcript mismatch was not rejected");
+    }
+
+    let mut tampered_body = request;
+    tampered_body.body = b"{\"hello\":\"tampered\"}".to_vec();
+    if verify_self_pop(
+        &tampered_body,
+        &key.verifying_key(),
+        required_str(vector, "key_id")?,
+        created,
+    )
+    .err()
+        != Some(expected_str(vector, "tampered_digest_reason")?)
+    {
+        bail!("PoP body digest mismatch was not rejected");
+    }
+    Ok(())
+}
+
+pub fn run_session_bearer_replay_rejected_high_security_vector() -> Result<()> {
+    let fixture = auth_session_proof_fixture()?;
+    let vector = case(
+        &fixture,
+        VECTOR_ID_SESSION_BEARER_REPLAY_REJECTED_HIGH_SECURITY,
+    )?;
+    if bearer_admission(
+        required_str(vector, "high_security_profile")?,
+        required_str(vector, "sensitive_action")?,
+        false,
+    )
+    .err()
+        != Some(expected_str(vector, "high_security_bearer_reason")?)
+    {
+        bail!("high-security profile accepted plain bearer");
+    }
+    bearer_admission(
+        required_str(vector, "default_profile")?,
+        required_str(vector, "compat_action")?,
+        false,
+    )
+    .map_err(|reason| anyhow!("default compatibility bearer rejected: {reason}"))?;
+    if expected_str(vector, "default_bearer")? != "accepted" {
+        bail!("default bearer compatibility expectation drifted");
+    }
+
+    let key = signing_key(8);
+    let body = br#"{"hello":"world"}"#;
+    let created = required_i64(vector, "created")?;
+    let expires = required_i64(vector, "expires")?;
+    if expires - created <= required_u64(vector, "max_window_seconds")? as i64 {
+        bail!("over-window PoP control is not outside the replay window");
+    }
+    let request = sign_self_request(
+        &key,
+        "did:web:alice.example#session-key-1",
+        "POST",
+        "https://soland.example.com/_cokret/self/events",
+        "soland.example.com",
+        "/_cokret/self/events",
+        body,
+        None,
+        created,
+        expires,
+    )?;
+    if verify_self_pop(
+        &request,
+        &key.verifying_key(),
+        "did:web:alice.example#session-key-1",
+        created,
+    )
+    .err()
+        != Some(expected_str(vector, "over_window_pop_reason")?)
+    {
+        bail!("over-window PoP was not rejected");
+    }
+    Ok(())
+}
+
+pub fn run_auth_session_proof_fixture_suite() -> Result<()> {
+    validate_auth_session_proof_fixture_metadata(&auth_session_proof_fixture()?)?;
+    if ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len() != 5 {
+        bail!(
+            "expected 5 auth session proof vector ids, got {}",
+            ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len()
+        );
+    }
+
+    run_auth_session_grant_audience_binding_vector()?;
+    run_auth_soft_logout_did_proof_vector()?;
+    run_identity_did_proof_replay_window_vector()?;
+    run_session_pop_presentation_vector()?;
+    run_session_bearer_replay_rejected_high_security_vector()?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_session_proof_vectors_run_clean() {
+        run_auth_session_proof_fixture_suite().unwrap();
+    }
+}
