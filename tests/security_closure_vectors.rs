@@ -3,7 +3,7 @@
 //! Two layers:
 //!
 //! 1. The **wire-shape gate** (always-runs): loads `security-closure-vectors.json` and confirms
-//!    every one of the 12 `ck.vector.*` ids the round-4 spec promotes is present and exposes the
+//!    every one of the 13 `ck.vector.*` ids the round-4 spec promotes is present and exposes the
 //!    typed `runner{}` contract introduced by spec commit `892c5d7 test: add security closure
 //!    runner contract`.
 //!
@@ -11,7 +11,7 @@
 //!    validates that the canonical runner contract round-trips through cotest's typed comparison
 //!    layer without requiring a live downstream SUT.
 //!
-//! All 12 per-vector tests reach `assert_vector_present` first, then run the
+//! All 13 per-vector tests reach `assert_vector_present` first, then run the
 //! local contract comparison, so cotest gates against fixture drift and
 //! comparison drift in the ordinary test profile.
 
@@ -27,10 +27,10 @@ use cotest::scenarios::security_closure_vectors::{
     VECTOR_CONSENT_CACHE_INVALIDATION, VECTOR_CONSENT_SCOPE_CASCADE,
     VECTOR_E2EE_RELAXED_WINDOW_EXCEEDS_CEILING, VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
     VECTOR_IDENTITY_LINK_EAGER_INVALIDATION, VECTOR_IDENTITY_LINK_POLICY_TIGHTENING_INVALIDATION,
-    VECTOR_INVITE_FAILURE_INDISTINGUISHABLE, VECTOR_INVITE_OOB_CODE_ENTROPY,
-    VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR, VECTOR_LATTICE_LWW_OPEN_SET,
-    VECTOR_SYNC_SOFT_FAIL_RECONCILE, VECTOR_WEBRTC_MEDIA_PLAINTEXT_DOWNGRADE,
-    assert_vector_present, assert_vector_runner_contract,
+    VECTOR_INVITE_CLAIM_REDUCER_STATE_MACHINE, VECTOR_INVITE_FAILURE_INDISTINGUISHABLE,
+    VECTOR_INVITE_OOB_CODE_ENTROPY, VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR,
+    VECTOR_LATTICE_LWW_OPEN_SET, VECTOR_SYNC_SOFT_FAIL_RECONCILE,
+    VECTOR_WEBRTC_MEDIA_PLAINTEXT_DOWNGRADE, assert_vector_present, assert_vector_runner_contract,
 };
 
 #[test]
@@ -108,6 +108,50 @@ fn vector_invite_failure_indistinguishable() {
         .expect("fixture wire shape must parse");
     assert_vector_runner_contract(VECTOR_INVITE_FAILURE_INDISTINGUISHABLE)
         .expect("fixture runner contract must round-trip");
+}
+
+#[test]
+fn vector_invite_claim_reducer_state_machine() {
+    assert_vector_present(VECTOR_INVITE_CLAIM_REDUCER_STATE_MACHINE)
+        .expect("fixture wire shape must parse");
+    assert_vector_runner_contract(VECTOR_INVITE_CLAIM_REDUCER_STATE_MACHINE)
+        .expect("fixture runner contract must round-trip");
+}
+
+#[test]
+fn invite_claim_reducer_vector_covers_proof_negative_steps() {
+    let fixture = SecurityClosureFixture::load().expect("fixture loads");
+    let vector = fixture
+        .vector(VECTOR_INVITE_CLAIM_REDUCER_STATE_MACHINE)
+        .expect("invite claim reducer vector present");
+    for required_step in [
+        "binding_proof_signature_replay_across_token_rejected",
+        "subject_proof_old_did_key_rejected",
+        "subject_proof_transcript_replay_rejected",
+    ] {
+        let step = vector
+            .steps
+            .iter()
+            .find(|step| step.name == required_step)
+            .unwrap_or_else(|| panic!("missing invite claim proof negative step {required_step}"));
+        assert_eq!(
+            step.expected.outcome, "rejected",
+            "invite claim proof negative step {required_step} must reject",
+        );
+        assert_eq!(
+            step.expected.reason_code.as_deref(),
+            Some("proof_invalid"),
+            "invite claim proof negative step {required_step} must carry proof_invalid",
+        );
+        assert_eq!(
+            step.runner
+                .expected_external_response
+                .get("outcome")
+                .and_then(|value| value.as_str()),
+            Some("not_found"),
+            "invite claim proof negative step {required_step} must stay externally non-enumerable",
+        );
+    }
 }
 
 #[test]

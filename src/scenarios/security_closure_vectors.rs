@@ -95,6 +95,8 @@ pub const VECTOR_LATE_KEY_RECOVERY_REMOVED_ACTOR: &str =
 pub const VECTOR_INVITE_OOB_CODE_ENTROPY: &str = "ck.vector.invite.oob_code_entropy.v1";
 pub const VECTOR_INVITE_FAILURE_INDISTINGUISHABLE: &str =
     "ck.vector.invite.failure_indistinguishable.v1";
+pub const VECTOR_INVITE_CLAIM_REDUCER_STATE_MACHINE: &str =
+    "ck.vector.invite.claim_reducer_state_machine.v1";
 pub const VECTOR_CONSENT_SCOPE_CASCADE: &str = "ck.vector.consent.scope_cascade.v1";
 pub const VECTOR_CONSENT_CACHE_INVALIDATION: &str = "ck.vector.consent.cache_invalidation.v1";
 pub const VECTOR_SYNC_SOFT_FAIL_RECONCILE: &str = "ck.vector.sync.soft_fail_reconcile.v1";

@@ -1,7 +1,7 @@
 //! Round 4 / A2 — security-closure-vectors runner contract.
 //!
 //! Loads `cokret-spec/spec/v1/artifacts/fixtures/security-closure-vectors.json`
-//! (12 vector ids, runner contract introduced by spec commit
+//! (13 vector ids, runner contract introduced by spec commit
 //! `892c5d7 test: add security closure runner contract`) and verifies the
 //! wire-level shape every conformant implementer is expected to expose:
 //!
@@ -40,7 +40,7 @@ pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-vectors.jso
 /// Canonical conformance profile for the security closure fixture suite.
 pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 
-/// The 12 vector ids the round-4 spec promotes from prose to fixture. The
+/// The 13 vector ids the round-4 spec promotes from prose to fixture. The
 /// list is pinned here so any drift on either side is loud.
 pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     "ck.vector.federation.idempotency_after_key_revoke.v1",
@@ -50,6 +50,7 @@ pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     "ck.vector.late_key_recovery.removed_actor.v1",
     "ck.vector.invite.oob_code_entropy.v1",
     "ck.vector.invite.failure_indistinguishable.v1",
+    "ck.vector.invite.claim_reducer_state_machine.v1",
     "ck.vector.consent.scope_cascade.v1",
     "ck.vector.consent.cache_invalidation.v1",
     "ck.vector.sync.soft_fail_reconcile.v1",
