@@ -577,3 +577,13 @@ conformance_test!(
     "push_rule_core_fixture",
     cotest::conformance::run_push_rule_core_fixture_suite,
 );
+
+conformance_test!(
+    /// Call-state core vectors promoted to spec artifacts. Asserts
+    /// participant-binding admission maps semantic failures to
+    /// participant_binding_invalid and the call lifecycle FSM keeps initial,
+    /// transition, terminal, replay, and sibling-bottom behavior aligned.
+    call_state_core_fixture_suite_matches_reference_semantics,
+    "call_state_core_fixture",
+    cotest::conformance::run_call_state_core_fixture_suite,
+);
