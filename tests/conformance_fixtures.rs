@@ -570,6 +570,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Blob streaming AEAD vectors promoted to spec artifacts. Asserts
+    /// segmented encryption/decryption, truncation, sequence/replay rejection,
+    /// and schema-level scheme closure stay aligned with the blob profile.
+    blob_stream_aead_fixture_suite_matches_reference_semantics,
+    "blob_stream_aead_fixture",
+    cotest::conformance::run_blob_stream_aead_fixture_suite,
+);
+
+conformance_test!(
     /// Push rule core vectors promoted to spec artifacts. Asserts the shared
     /// SDK core used by soland / chime / yougen keeps watch-level delivery,
     /// blind-wakeup, and reason-code semantics aligned.

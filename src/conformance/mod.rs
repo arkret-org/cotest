@@ -1,5 +1,6 @@
 mod agent_vectors;
 mod blind_payload;
+mod blob_stream_aead;
 mod call_signal;
 mod call_state_core;
 mod call_state_media_lifecycle;
@@ -62,6 +63,11 @@ pub use agent_vectors::{
 };
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,
+};
+pub use blob_stream_aead::{
+    ALL_BLOB_STREAM_AEAD_VECTOR_IDS, run_blob_stream_aead_fixture_suite,
+    run_stream_aead_reorder_rejected_vector, run_stream_aead_roundtrip_vector,
+    run_stream_aead_scheme_closure_vector, run_stream_aead_truncation_rejected_vector,
 };
 pub use call_signal::{
     ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_proof_detached_jws_vector,
