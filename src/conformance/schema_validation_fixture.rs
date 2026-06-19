@@ -134,14 +134,14 @@ pub fn run_cases(cases: &[SchemaValidationCase]) -> Result<()> {
 /// validator is the cheap path here (≤34 schemas, no network IO), so we
 /// rebuild the registry inline per `compile()` call. The resulting
 /// `Validator` is owned and outlives the borrowed registry.
-struct SchemaEnv {
+pub(crate) struct SchemaEnv {
     resources: Vec<(String, Value)>,
     schemas_by_file: HashMap<String, Value>,
     openapi: Option<Value>,
 }
 
 impl SchemaEnv {
-    fn load() -> Result<Self> {
+    pub(crate) fn load() -> Result<Self> {
         let artifacts_root = spec_artifacts_root();
         let schemas_dir = artifacts_root.join(SCHEMA_DIR);
         let mut resources: Vec<(String, Value)> = Vec::new();
@@ -188,7 +188,7 @@ impl SchemaEnv {
         })
     }
 
-    fn compile(&self, schema_ref: &str) -> Result<jsonschema::Validator> {
+    pub(crate) fn compile(&self, schema_ref: &str) -> Result<jsonschema::Validator> {
         let (schema_value, base_uri) = self.resolve_schema_ref(schema_ref)?;
         let mut builder = Registry::new();
         for (id, value) in &self.resources {

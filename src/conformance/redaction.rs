@@ -3,8 +3,11 @@ use std::collections::HashMap;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
+use super::schema_validation_fixture::SchemaEnv;
 use super::{RedactionFixture, load_fixture};
 use crate::transcripts::record_vector_event;
+
+const DIGEST64: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 pub fn run_redaction_fixture_suite() -> Result<()> {
     let fixture = load_fixture::<RedactionFixture>("redaction-fixture.json")?;
@@ -150,8 +153,310 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "space_target_ref_schema" => {
+                assert_space_target_ref_schema()?;
+                record_vector_event(
+                    "redaction.space_target_ref_schema",
+                    &json!({
+                        "target_ref": "ck:space:019640b6-8000-7000-8000-000000000000",
+                        "reason": "privacy_cleanup",
+                    }),
+                    &json!({
+                        "schema_accepts_ck_space_target_ref": true,
+                        "rejects_malformed_space_target_ref": true,
+                    }),
+                    &json!({
+                        "schema_accepts_ck_space_target_ref": true,
+                        "rejects_malformed_space_target_ref": true,
+                    }),
+                );
+            }
+            "policy_scope" => {
+                let outcome = assert_policy_scope_projection()?;
+                record_vector_event(
+                    "redaction.policy_scope",
+                    &outcome.input,
+                    &outcome.expected,
+                    &outcome.actual,
+                );
+            }
+            "hard_erasure_receipt" => {
+                assert_hard_erasure_receipt()?;
+                record_vector_event(
+                    "redaction.hard_erasure_receipt",
+                    &json!({"input": "hard_erasure_with_verification_stub"}),
+                    &json!({
+                        "receipt_conforms_schema": true,
+                        "stub_conforms_schema": true,
+                        "rejects_standalone_content_fingerprint": true,
+                        "legal_hold_requires_evidence": true,
+                    }),
+                    &json!({
+                        "receipt_conforms_schema": true,
+                        "stub_conforms_schema": true,
+                        "rejects_standalone_content_fingerprint": true,
+                        "legal_hold_requires_evidence": true,
+                    }),
+                );
+            }
             _ => bail!("unknown redaction fixture case {}", case.name),
         }
+    }
+
+    Ok(())
+}
+
+/// Vector `ck.vector.redaction.space_target_ref_schema.v1` (conformance §3.2.1).
+///
+/// The redaction object-lifecycle payload schema MUST accept a `ck:space:*`
+/// `target_ref` and MUST reject a malformed space ref, so a Space cleanup is
+/// never downgraded to an implementation-private extension by a schema gap.
+fn assert_space_target_ref_schema() -> Result<()> {
+    let env = SchemaEnv::load()?;
+    let schema_ref = "schemas/event-payload.schema.json#/$defs/object_lifecycle_payload";
+    let validator = env.compile(schema_ref)?;
+
+    let accepted = json!({
+        "target_ref": "ck:space:019640b6-8000-7000-8000-000000000000",
+        "reason": "privacy_cleanup",
+    });
+    if !validator.is_valid(&accepted) {
+        let detail = validator
+            .iter_errors(&accepted)
+            .next()
+            .map(|error| format!("{error}"))
+            .unwrap_or_else(|| "<no error reported>".to_string());
+        bail!(
+            "space_target_ref_schema: object_lifecycle_payload rejected a ck:space target_ref: {detail}"
+        );
+    }
+
+    let malformed = json!({
+        "target_ref": "ck:space:not-a-uuid",
+        "reason": "privacy_cleanup",
+    });
+    if validator.is_valid(&malformed) {
+        bail!(
+            "space_target_ref_schema: object_lifecycle_payload accepted a malformed ck:space target_ref"
+        );
+    }
+
+    Ok(())
+}
+
+struct PolicyScopeOutcome {
+    input: Value,
+    expected: Value,
+    actual: Value,
+}
+
+/// Vector `ck.vector.redaction.policy_scope.v1` (conformance §3.3).
+///
+/// After message -> policy quarantine -> redaction, the projection MUST strip
+/// the redacted content while retaining audit evidence, MUST keep the timeline
+/// position (no physical delete), and MUST retain the quarantine decision and
+/// its `event_id` fingerprint mapping (quarantine is a display constraint, not
+/// a delete).
+fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
+    let message_id = "ck:event:0196417d-8400-7000-8000-000000000000";
+    let policy_id = "ck:event:0196417d-8980-7000-8000-000000000000";
+    let redaction_id = "ck:event:0196417d-8f00-7000-8000-000000000000";
+
+    let timeline = json!([
+        {
+            "event_id": message_id,
+            "kind": "ck.message.create",
+            "content": {"kind": "ck.content.text", "body": "bad link: spam.example/phish"},
+        },
+        {
+            "event_id": policy_id,
+            "kind": "ck.policy.action",
+            "actor_id": "did:web:policy-bot.example.com",
+            "payload": {"target_id": message_id, "policy_scope": "public", "decision": "quarantine"},
+        },
+        {
+            "event_id": redaction_id,
+            "kind": "ck.redaction",
+            "actor_id": "did:web:policy-admin.example",
+            "payload": {"redacts": message_id, "reason_code": "policy_recall"},
+        },
+    ]);
+
+    let projected = project_policy_scope_timeline(&timeline)?;
+    let entries = projected
+        .as_array()
+        .ok_or_else(|| anyhow!("policy_scope projection must be an array"))?;
+
+    if entries.len() != 3 {
+        bail!(
+            "policy_scope: timeline entry removed after redaction (len={})",
+            entries.len()
+        );
+    }
+    let message = &entries[0];
+    if message["event_id"] != json!(message_id) {
+        bail!("policy_scope: redacted event lost its timeline position");
+    }
+    if message.get("content").is_some() {
+        bail!("policy_scope: redacted content is still visible in the projection");
+    }
+    if message["redacts"] != json!(message_id) {
+        bail!("policy_scope: stripped audit evidence (redacts reference) missing");
+    }
+
+    let policy = &entries[1];
+    if policy["payload"]["decision"] != json!("quarantine") {
+        bail!("policy_scope: quarantine decision was lost or downgraded to delete");
+    }
+    if policy["payload"]["target_id"] != json!(message_id) {
+        bail!("policy_scope: quarantine event_id fingerprint mapping was lost");
+    }
+
+    Ok(PolicyScopeOutcome {
+        input: timeline,
+        expected: json!({
+            "timeline_len": 3,
+            "redacted_content_present": false,
+            "redacts": message_id,
+            "quarantine_decision": "quarantine",
+            "quarantine_target_id": message_id,
+        }),
+        actual: json!({
+            "timeline_len": entries.len(),
+            "redacted_content_present": message.get("content").is_some(),
+            "redacts": message["redacts"].clone(),
+            "quarantine_decision": policy["payload"]["decision"].clone(),
+            "quarantine_target_id": policy["payload"]["target_id"].clone(),
+        }),
+    })
+}
+
+fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
+    let entries = timeline
+        .as_array()
+        .ok_or_else(|| anyhow!("policy_scope timeline must be an array"))?;
+
+    let mut redactions: HashMap<String, String> = HashMap::new();
+    for entry in entries {
+        if entry["kind"] == json!("ck.redaction") {
+            let target = entry["payload"]["redacts"]
+                .as_str()
+                .ok_or_else(|| anyhow!("redaction event missing payload.redacts"))?;
+            let redaction_event_id = entry["event_id"]
+                .as_str()
+                .ok_or_else(|| anyhow!("redaction event missing event_id"))?;
+            redactions.insert(target.to_owned(), redaction_event_id.to_owned());
+        }
+    }
+
+    let mut projected = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let event_id = entry["event_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("timeline event missing event_id"))?;
+        match redactions.get(event_id) {
+            Some(redaction_event_id) if entry["kind"] != json!("ck.redaction") => {
+                projected.push(json!({
+                    "event_id": event_id,
+                    "kind": entry["kind"].clone(),
+                    "redacts": event_id,
+                    "redacted_because": redaction_event_id,
+                }));
+            }
+            _ => projected.push(entry.clone()),
+        }
+    }
+
+    Ok(Value::Array(projected))
+}
+
+/// Vector `ck.vector.redaction.hard_erasure_receipt.v1` (conformance §3.4).
+///
+/// Hard erasure retains a verification stub and a signed receipt that MUST
+/// conform to `ck.schema.erasure_receipt.v1`; the stub MUST NOT retain a
+/// standalone content hash of the erased plaintext (additionalProperties:false
+/// enforces this), and a `blocked_by_legal_hold` outcome MUST carry the legal
+/// hold evidence rather than being silently downgraded to a completed erasure.
+fn assert_hard_erasure_receipt() -> Result<()> {
+    let env = SchemaEnv::load()?;
+    let receipt_validator = env.compile("schemas/erasure-receipt.schema.json")?;
+    let stub_validator =
+        env.compile("schemas/erasure-receipt.schema.json#/$defs/verification_stub")?;
+
+    let original_event_id = "ck:event:01970e58-0004-7000-8000-000000000004";
+    let redaction_event_id = "ck:event:01970e58-0004-7000-8000-000000000001";
+    let receipt_id = "ck:receipt:01970e58-0004-7000-8000-000000000010";
+    let digest = format!("sha256:{DIGEST64}");
+
+    let stub = json!({
+        "stub_schema": "ck.schema.erasure_verification_stub.v1",
+        "subject": {"kind": "event", "ref": original_event_id},
+        "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
+        "receipt_id": receipt_id,
+        "completed_at": "2026-04-29T00:00:00Z",
+        "event_digest": digest,
+        "redaction_authorization_ref": redaction_event_id,
+    });
+    if !stub_validator.is_valid(&stub) {
+        let detail = stub_validator
+            .iter_errors(&stub)
+            .next()
+            .map(|error| format!("{error}"))
+            .unwrap_or_else(|| "<no error reported>".to_string());
+        bail!("hard_erasure_receipt: verification stub rejected by schema: {detail}");
+    }
+
+    let mut leaky_stub = stub.clone();
+    leaky_stub["content_hash"] = json!(digest);
+    if stub_validator.is_valid(&leaky_stub) {
+        bail!(
+            "hard_erasure_receipt: verification stub with a standalone content_hash was accepted (must reject plaintext fingerprints)"
+        );
+    }
+
+    let receipt = json!({
+        "schema": "ck.schema.erasure_receipt.v1",
+        "receipt_id": receipt_id,
+        "issuer": "did:web:erasure.example.com",
+        "subject": {"kind": "event", "ref": original_event_id},
+        "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
+        "outcome": "completed",
+        "erased_classes": ["canonical_payload_bytes", "derived_plaintext"],
+        "retained_stub_digest": digest,
+        "retained_stub": stub,
+        "completed_at": "2026-04-29T00:00:00Z",
+        "proofs": [{
+            "verification_method": "did:web:erasure.example.com#erasure-key-1",
+            "payload_digest": digest,
+            "signature": "z3erasurereceiptsignatureplaceholder",
+        }],
+    });
+    if !receipt_validator.is_valid(&receipt) {
+        let detail = receipt_validator
+            .iter_errors(&receipt)
+            .next()
+            .map(|error| format!("{error}"))
+            .unwrap_or_else(|| "<no error reported>".to_string());
+        bail!("hard_erasure_receipt: completed receipt rejected by schema: {detail}");
+    }
+
+    let mut blocked = receipt.clone();
+    blocked["outcome"] = json!("blocked_by_legal_hold");
+    if receipt_validator.is_valid(&blocked) {
+        bail!(
+            "hard_erasure_receipt: blocked_by_legal_hold receipt without legal_hold_ref was accepted (legal hold must be evidenced)"
+        );
+    }
+    blocked["legal_hold_ref"] = json!("ck:policy:0196417d-8400-7000-8000-000000000000");
+    if !receipt_validator.is_valid(&blocked) {
+        let detail = receipt_validator
+            .iter_errors(&blocked)
+            .next()
+            .map(|error| format!("{error}"))
+            .unwrap_or_else(|| "<no error reported>".to_string());
+        bail!(
+            "hard_erasure_receipt: blocked_by_legal_hold receipt with legal_hold_ref rejected: {detail}"
+        );
     }
 
     Ok(())
