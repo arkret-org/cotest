@@ -12,6 +12,7 @@ mod cursor_vectors;
 mod encoding;
 mod envelope;
 mod federation;
+mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
 mod history_crypto_closure;
 mod key_backup_hardening;
@@ -122,6 +123,15 @@ pub use encoding::{
 };
 pub use envelope::{run_deprecated_event_alias_suite, run_event_envelope_fixture_suite};
 pub use federation::run_federation_fixture_suite;
+pub use final_conformance_closure::{
+    ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS,
+    run_applet_transaction_source_signature_anchor_vector, run_calendar_rsvp_occurrence_key_vector,
+    run_federation_timing_bucket_vector, run_final_conformance_closure_fixture_suite,
+    run_mls_governance_epoch_binding_vector, run_moderation_appeal_atomicity_vector,
+    run_moderation_franking_roundtrip_vector,
+    run_relation_reference_projection_indistinguishable_vector,
+    run_sync_range_completeness_client_query_vector,
+};
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,

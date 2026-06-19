@@ -277,13 +277,15 @@ fn unsupported_vector_with_reason_is_not_a_certification_gate() -> Result<()> {
 #[test]
 fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
     let report = validate_vector_registry_gate()?;
+    validate_vector_registry_gate_report_with_mode(&report, VectorRegistryGateMode::Strict)?;
     assert!(
         report.fixture_backed_entries().count() > 0,
         "real registry must expose at least one artifact-backed vector"
     );
-    assert!(
-        report.active_doc_only_entries().count() > 0,
-        "real registry currently has active doc-only vectors; strict mode must fail until they gain fixtures or become reserved/unsupported"
+    assert_eq!(
+        report.active_doc_only_entries().count(),
+        0,
+        "real registry must not retain active doc-only vectors"
     );
     assert!(
         report.non_gating_entries().any(|entry| matches!(

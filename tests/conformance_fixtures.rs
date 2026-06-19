@@ -169,6 +169,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    final_conformance_closure_fixture_suite_matches_reference_semantics,
+    "final_conformance_closure_fixture",
+    cotest::conformance::run_final_conformance_closure_fixture_suite,
+);
+
+conformance_test!(
     /// Realm private pin + direct conversation privacy contracts. Cotest-local
     /// fixture pins ck.contacts.realm.<realm_id> subject matching, prevents
     /// RealmRemark leakage into directory/bridge/push payloads, and locks the
