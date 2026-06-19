@@ -16,6 +16,7 @@ mod discovery;
 mod e2ee;
 mod federation;
 mod history;
+mod interop;
 mod key_backup;
 mod lattice;
 mod mimi;
@@ -47,6 +48,7 @@ pub use history::{
     run_history_visibility_fixture_suite, run_history_visibility_projection_matrix_check,
     run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,
 };
+pub use interop::run_interop_downgrade_fixture_suite;
 pub use key_backup::{
     run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,
     run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,

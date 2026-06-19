@@ -1,0 +1,190 @@
+{
+  "suite": "interop_downgrade_fixture",
+  "profile": "ck.profile.mimi_interop_vectors.v1",
+  "version": 1,
+  "source_refs": [
+    "cokret-spec/spec/v1/zh/extensions/mimi-interop.md#10-identifiers-and-consent",
+    "cokret-spec/spec/v1/zh/extensions/mimi-interop.md#12-conformance",
+    "cokret-spec/spec/v1/zh/extensions/agent-protocol-interop.md",
+    "cokret-spec/spec/v1/zh/sync/sovereign-deployment.md#3-2-sovereign-baseline"
+  ],
+  "vectors": [
+    {
+      "name": "mimi_user_identifier_requires_holder_proof",
+      "scenario": "did_isolation",
+      "protocol": "mimi",
+      "execution": {
+        "ignored": false,
+        "fixme": false
+      },
+      "input": {
+        "operation_id": "ck.open.mimi.command.submit_message",
+        "external_user_identifier": "mimi://remote.example/users/alice",
+        "claimed_principal_did": "did:web:alice.example",
+        "target_side_consent_proof_refs": [],
+        "holder_claim_ref": null
+      },
+      "expected": {
+        "outcome": "pairwise_or_pending_invite",
+        "identity_projection": "pairwise_or_pending_invite",
+        "projected_actor_id": "did:ck:pairwise:mimi-remote-example-alice",
+        "must_not_impersonate": "did:web:alice.example",
+        "reason_code": "mimi_identifier_requires_holder_consent_or_claim"
+      }
+    },
+    {
+      "name": "mimi_consent_does_not_grant_realm_write",
+      "scenario": "consent_gate",
+      "protocol": "mimi",
+      "execution": {
+        "ignored": false,
+        "fixme": false
+      },
+      "input": {
+        "operation_id": "ck.open.mimi.command.request_consent",
+        "consent_id": "ck:consent:0196419b-0000-7000-8000-00000000d001",
+        "consent_state": {
+          "holder_did": "did:web:alice.example",
+          "peer_did": "did:web:bob.example",
+          "scope": "direct_message",
+          "active": true
+        },
+        "membership_active": false,
+        "capability_refs": []
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "membership_or_capability_required",
+        "allowed_followup": "request_membership_or_capability",
+        "actions_granted": [
+          "contact_intent"
+        ],
+        "forbidden_actions": [
+          "realm.write",
+          "realm.join",
+          "message.submit"
+        ]
+      }
+    },
+    {
+      "name": "mimi_identifier_query_has_no_reachability_proof",
+      "scenario": "reachability_proof_forbidden",
+      "protocol": "mimi",
+      "execution": {
+        "ignored": false,
+        "fixme": false
+      },
+      "input": {
+        "operation_id": "ck.open.mimi.query.identifiers",
+        "privacy_profile": "psi_blinded_batch",
+        "connection_identifier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "response": {
+        "matches": [
+          {
+            "index": 0,
+            "matched": true,
+            "invite_handoff_stub": {
+              "kind": "minimal_consent_handoff",
+              "expires_at": "2026-06-19T10:00:00Z"
+            }
+          }
+        ],
+        "padding_bucket": "b32"
+      },
+      "expected": {
+        "outcome": "accept",
+        "forbidden_fields": [
+          "reachability_proof",
+          "time_bound_reachability_proof",
+          "contact_request_handoff_token",
+          "raw_connection_identifier",
+          "connection_identifier"
+        ],
+        "forbidden_literals": [
+          "mimi://remote.example/users/alice"
+        ]
+      }
+    },
+    {
+      "name": "external_marker_is_not_authorization",
+      "scenario": "external_marker_inert",
+      "protocol": "a2a",
+      "also_applies_to": [
+        "mimi",
+        "acp"
+      ],
+      "execution": {
+        "ignored": false,
+        "fixme": false
+      },
+      "input": {
+        "operation_id": "ck.agent.interop_session.start",
+        "external_marker": {
+          "kind": "external_interop",
+          "protocol": "a2a",
+          "remote_task_id": "task-remote-7"
+        },
+        "cokret_capability_refs": [],
+        "realm_policy_ref": null
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "cokret_capability_required",
+        "marker_authorizes": false,
+        "session_started": false,
+        "authorized_by": []
+      }
+    },
+    {
+      "name": "a2a_handoff_default_closed",
+      "scenario": "external_agent_handoff_default_closed",
+      "protocol": "a2a",
+      "execution": {
+        "ignored": false,
+        "fixme": false
+      },
+      "input": {
+        "operation_id": "ck.agent.interop_session.start",
+        "transport": "a2a",
+        "realm_policy": {
+          "external_agent_handoff": false,
+          "allowed_protocols": []
+        },
+        "capability_refs": [
+          "ck:capability:0196419b-0000-7000-8000-00000000c001"
+        ]
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "external_agent_handoff_disabled",
+        "session_started": false
+      }
+    },
+    {
+      "name": "acp_handoff_default_closed",
+      "scenario": "external_agent_handoff_default_closed",
+      "protocol": "acp",
+      "execution": {
+        "ignored": false,
+        "fixme": false
+      },
+      "input": {
+        "operation_id": "ck.agent.interop_session.start",
+        "transport": "acp",
+        "realm_policy": {
+          "external_agent_handoff": false,
+          "allowed_protocols": []
+        },
+        "capability_refs": [
+          "ck:capability:0196419b-0000-7000-8000-00000000c002"
+        ]
+      },
+      "expected": {
+        "outcome": "reject",
+        "reason_code": "external_agent_handoff_disabled",
+        "session_started": false
+      }
+    }
+  ]
+}
