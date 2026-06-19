@@ -40,6 +40,16 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     .await?;
     assert_eq!(denied_before_grant["decision"], "hard_deny");
     assert_eq!(denied_before_grant["reason_code"], "capability_denied");
+    assert!(
+        denied_before_grant["obligations"]
+            .as_array()
+            .expect("authz obligations")
+            .is_empty()
+    );
+    assert!(
+        denied_before_grant.get("signature").is_none(),
+        "authz/check is diagnostic and must not mint signed policy decisions"
+    );
 
     let manage_grant_id = "ck:grant:01999999-0000-7000-8000-0000000000a1";
     let manage_grant = submit_event(
@@ -111,6 +121,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     )
     .await?;
     assert_eq!(allowed_after_grant["decision"], "allow");
+    assert!(
+        allowed_after_grant["obligations"]
+            .as_array()
+            .expect("authz obligations")
+            .is_empty()
+    );
     assert_eq!(
         allowed_after_grant["matched_grants"][0]["grant_id"],
         manage_grant_id
@@ -260,6 +276,14 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
     assert_eq!(allow_policy["decision"], "allow");
     assert_eq!(allow_policy["reason_code"], "policy_allowed");
+    assert!(
+        allow_policy["signature"].is_object(),
+        "policy/check must return a signed decision envelope"
+    );
+    assert!(
+        allow_policy["bound_to"]["auth_state_digest"].is_string(),
+        "policy/check must bind the auth state digest"
+    );
 
     let review_policy = expect_json(
         alice
@@ -277,6 +301,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     .await?;
     assert_eq!(review_policy["decision"], "require_review");
     assert_eq!(review_policy["reason_code"], "review_required");
+    assert!(review_policy["signature"].is_object());
 
     expect_api_error(
         alice

@@ -98,6 +98,18 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert_eq!(denied["decision"], "hard_deny");
     assert_eq!(denied["reason_code"], "policy_denied");
     assert_eq!(denied["obligations"].as_array().unwrap().len(), 1);
+    assert!(
+        denied["signature"].is_object(),
+        "policy/check must sign decisions that carry obligations"
+    );
+    assert!(
+        denied["bound_to"]["policy_frontier_digest"].is_string(),
+        "policy/check must bind the policy frontier"
+    );
+    assert!(
+        denied["bound_to"]["membership_frontier_digest"].is_string(),
+        "policy/check must bind the membership frontier"
+    );
 
     let inactive = expect_json(
         alice.post("/_soland/self/policies").json(&json!({
