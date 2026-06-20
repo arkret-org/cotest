@@ -151,7 +151,7 @@
         { "name": "Welcome / Commit / Proposal preservation", "status": "partial", "sources": ["protocol_payloads", "conformance_privacy_security"], "tests": ["privacy_security_fixture_suite_matches_reference_semantics"] },
         { "name": "unable-to-decrypt state", "status": "partial", "sources": ["conformance_sync", "conformance_privacy_security"], "tests": ["sync_fixture_suite_matches_reference_semantics"] },
         { "name": "revoked device no new key", "status": "pending", "sources": [], "tests": [] },
-        { "name": "local search boundary", "status": "pending", "sources": [], "tests": [] }
+        { "name": "local search boundary", "status": "implemented", "sources": ["conformance_privacy_security"], "tests": ["privacy_security_fixture_suite_matches_reference_semantics"] }
       ]
     }
   ]

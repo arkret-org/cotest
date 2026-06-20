@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
@@ -395,6 +397,9 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "search_surface_separation_no_plaintext_leakage" => {
+                validate_search_surface_separation(&case)?;
+            }
             "pairwise_did_resolve_proof" => {
                 let no_proof = resolve_private_did(None);
                 let with_proof = resolve_private_did(Some("holder-proof"));
@@ -439,6 +444,186 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn validate_search_surface_separation(case: &super::NamedCase) -> Result<()> {
+    let input = case
+        .input
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing input", case.name))?;
+    let expected = case
+        .expected
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+    if expected
+        .get("must_not_confuse_surfaces")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        bail!(
+            "privacy fixture {} must require surface separation",
+            case.name
+        );
+    }
+
+    let required_surfaces = string_set(
+        expected
+            .get("required_surfaces")
+            .ok_or_else(|| anyhow!("privacy fixture {} missing required_surfaces", case.name))?,
+    )?;
+    let forbidden_fields = string_set(
+        expected
+            .get("forbidden_fields")
+            .ok_or_else(|| anyhow!("privacy fixture {} missing forbidden_fields", case.name))?,
+    )?;
+    let forbidden_literals = string_set(
+        expected
+            .get("forbidden_literals")
+            .ok_or_else(|| anyhow!("privacy fixture {} missing forbidden_literals", case.name))?,
+    )?;
+    let surfaces = input
+        .get("surfaces")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("privacy fixture {} missing surfaces", case.name))?;
+    let mut seen = BTreeSet::new();
+    for surface_case in surfaces {
+        let surface = required_value_str(surface_case, "surface")?;
+        if !seen.insert(surface.to_owned()) {
+            bail!("privacy fixture {} repeats surface {surface}", case.name);
+        }
+        let profile = required_value_str(surface_case, "profile")?;
+        let payload = surface_case
+            .get("payload")
+            .ok_or_else(|| anyhow!("surface {surface} missing payload"))?;
+        validate_no_forbidden_payload(surface, payload, &forbidden_fields, &forbidden_literals)?;
+        validate_search_surface_contract(surface, profile, surface_case, payload)?;
+    }
+
+    if seen != required_surfaces {
+        bail!(
+            "privacy fixture {} surfaces {:?} do not match required {:?}",
+            case.name,
+            seen,
+            required_surfaces
+        );
+    }
+
+    record_vector_event(
+        "privacy.search_surface_separation_no_plaintext_leakage",
+        &json!({
+            "surface_count": surfaces.len(),
+            "required_surfaces": required_surfaces,
+        }),
+        &json!({
+            "surfaces_separated": true,
+            "plaintext_leaked": false,
+        }),
+        &json!({
+            "surfaces": seen,
+            "forbidden_fields": forbidden_fields,
+            "forbidden_literals": forbidden_literals,
+        }),
+    );
+    Ok(())
+}
+
+fn validate_search_surface_contract(
+    surface: &str,
+    profile: &str,
+    surface_case: &Value,
+    payload: &Value,
+) -> Result<()> {
+    match surface {
+        "directory_search" => {
+            if profile != "ck.profile.directory_service.v1" {
+                bail!("directory_search must use directory_service profile");
+            }
+            if required_value_str(surface_case, "operation_id")?
+                != "ck.find.directory.query.search_realms"
+            {
+                bail!("directory_search operation_id drifted");
+            }
+            for forbidden in ["query_tokens", "candidate_digest", "payload_digest"] {
+                if contains_key_recursive(payload, forbidden) {
+                    bail!("directory_search leaked {forbidden}");
+                }
+            }
+        }
+        "privacy_preserving_search" => {
+            if profile != "ck.profile.search.blind_index.v1" {
+                bail!("privacy_preserving_search must use blind_index profile");
+            }
+            if payload.get("title").is_some()
+                || payload.get("summary").is_some()
+                || payload.get("room_id").is_some()
+            {
+                bail!("privacy_preserving_search mixed directory or bridge fields");
+            }
+            let scope = payload
+                .get("effective_scope")
+                .ok_or_else(|| anyhow!("privacy_preserving_search missing effective_scope"))?;
+            if scope.get("kind").and_then(Value::as_str) != Some("realm") {
+                bail!("privacy_preserving_search effective_scope must be realm-scoped");
+            }
+            let tokens = payload
+                .get("query_tokens")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("privacy_preserving_search missing query_tokens"))?;
+            if tokens.is_empty() {
+                bail!("privacy_preserving_search query_tokens must not be empty");
+            }
+            for token in tokens {
+                let token = token
+                    .as_str()
+                    .ok_or_else(|| anyhow!("privacy_preserving_search token must be string"))?;
+                if !is_sha256_digest(token) {
+                    bail!("privacy_preserving_search token is not a sha256 digest");
+                }
+            }
+            let candidate_digest = required_value_str(payload, "candidate_digest")?;
+            if !is_sha256_digest(candidate_digest) {
+                bail!("privacy_preserving_search candidate_digest is invalid");
+            }
+        }
+        "bridge_interop" => {
+            if profile != "ck.profile.mimi_interop.v1" {
+                bail!("bridge_interop must use mimi_interop profile");
+            }
+            if required_value_str(surface_case, "operation_id")? != "ck.open.mimi.command.notify" {
+                bail!("bridge_interop operation_id drifted");
+            }
+            for forbidden in ["query_tokens", "candidate_digest", "title", "summary"] {
+                if contains_key_recursive(payload, forbidden) {
+                    bail!("bridge_interop mixed search or directory field {forbidden}");
+                }
+            }
+            let payload_digest = required_value_str(payload, "payload_digest")?;
+            if !is_sha256_digest(payload_digest) {
+                bail!("bridge_interop payload_digest is invalid");
+            }
+        }
+        other => bail!("unknown search surface {other}"),
+    }
+    Ok(())
+}
+
+fn validate_no_forbidden_payload(
+    surface: &str,
+    payload: &Value,
+    forbidden_fields: &BTreeSet<String>,
+    forbidden_literals: &BTreeSet<String>,
+) -> Result<()> {
+    for field in forbidden_fields {
+        if contains_key_recursive(payload, field) {
+            bail!("surface {surface} leaked forbidden field {field}");
+        }
+    }
+    for literal in forbidden_literals {
+        if contains_literal_recursive(payload, literal) {
+            bail!("surface {surface} leaked forbidden literal {literal}");
+        }
+    }
     Ok(())
 }
 
@@ -488,4 +673,49 @@ fn is_sha256_digest(digest: &str) -> bool {
     digest
         .strip_prefix("sha256:")
         .is_some_and(|hex| hex.len() == 64 && hex.chars().all(|ch| ch.is_ascii_hexdigit()))
+}
+
+fn required_value_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("missing string field {field}"))
+}
+
+fn string_set(value: &Value) -> Result<BTreeSet<String>> {
+    Ok(value
+        .as_array()
+        .ok_or_else(|| anyhow!("expected string array"))?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| anyhow!("expected string array item"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?)
+}
+
+fn contains_key_recursive(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::Object(map) => map
+            .iter()
+            .any(|(key, value)| key == needle || contains_key_recursive(value, needle)),
+        Value::Array(items) => items
+            .iter()
+            .any(|item| contains_key_recursive(item, needle)),
+        _ => false,
+    }
+}
+
+fn contains_literal_recursive(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::Object(map) => map
+            .iter()
+            .any(|(key, value)| key.contains(needle) || contains_literal_recursive(value, needle)),
+        Value::Array(items) => items
+            .iter()
+            .any(|item| contains_literal_recursive(item, needle)),
+        Value::String(raw) => raw.contains(needle),
+        _ => false,
+    }
 }
