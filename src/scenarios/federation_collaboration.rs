@@ -1,9 +1,12 @@
 use anyhow::{Context, Result};
+use cokret::auth::principal_control_realm_id;
 use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
+use cokret::identity::binding::multicodec_ed25519_public_key;
 use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
 use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -11,35 +14,38 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::harness::{
-    CokretServer, TestServerGroup, add_member, dev_login, encrypted_envelope,
-    expect_account_subscribe_delta, expect_json, expect_text, register_account, submit_event,
+    CokretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
+    expect_json, expect_text, register_account, submit_event,
 };
 use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
 
 const ALICE_DID: &str = "did:web:federation-collaboration-0.cotest.local";
 const BOB_DID: &str = "did:web:federation-collaboration-1.cotest.local";
+const ALICE_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000a1";
+const BOB_DEVICE_ID: &str = "ck:device:01904100-0000-7000-8000-0000000000bb";
 const REALM_CREATE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc011ab000";
 const ALICE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000001";
 const BOB_JOIN_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000002";
 const BOB_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000003";
+const ALICE_DELIVERY_BINDING_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000004";
+const E2EE_REALM_ID: &str = "ck:realm:01904100-0000-7000-8000-fedc011ab0e2";
+const E2EE_REALM_CREATE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e01";
+const E2EE_BOB_JOIN_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e02";
+const E2EE_MLS_GENESIS_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e03";
+const E2EE_MLS_WELCOME_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e04";
+const E2EE_MLS_COMMIT_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e05";
+const E2EE_MESSAGE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000e06";
+const E2EE_MLS_GROUP_ID: &str = "peer_dm_mls_group";
+const E2EE_MESSAGE_CIPHERTEXT: &str = "opaque_cross_server_e2ee_message";
+const E2EE_MESSAGE_PLAINTEXT: &str = "cross-server e2ee plaintext must stay client-side";
+const BOB_DEVICE_KEY_SEED: [u8; 32] = [187u8; 32];
 
 pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
     let server_a = group.server(0);
     let server_b = group.server(1);
-    let alice = register_account(
-        server_a,
-        ALICE_DID,
-        "@cotest-fed-alice",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
-    let bob = dev_login(
-        server_b,
-        BOB_DID,
-        "ck:device:01904100-0000-7000-8000-0000000000bb",
-    )
-    .await?;
+    let alice = register_account(server_a, ALICE_DID, "@cotest-fed-alice", ALICE_DEVICE_ID).await?;
+    let bob = register_account(server_b, BOB_DID, "@cotest-fed-bob", BOB_DEVICE_ID).await?;
 
     let describe_a = expect_json(
         server_a.http().get(server_a.url("/_cokret/describe")),
@@ -89,12 +95,20 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         1,
         federated_realm_payload(&realm_id, &visible_services),
     )?;
+    let alice_delivery_binding = signed_federation_event(
+        ALICE_DELIVERY_BINDING_EVENT_ID,
+        "ck.member.state",
+        &realm_id,
+        ALICE_DID,
+        2,
+        member_delivery_binding_payload(&realm_id, ALICE_DID, server_a.service_did()),
+    )?;
     let alice_message = signed_federation_event(
         ALICE_MESSAGE_EVENT_ID,
         "ck.message.create",
         &realm_id,
         ALICE_DID,
-        2,
+        3,
         json!({
             "strand_id": strand_id.clone(),
             "track_name": "discussion",
@@ -109,7 +123,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck.member.state",
         &realm_id,
         ALICE_DID,
-        3,
+        4,
         json!({
             "realm_id": realm_id,
             "actor_id": BOB_DID,
@@ -119,7 +133,12 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     )?;
     let a_to_b_body = peer_events_submit_body(
         &realm_id,
-        vec![realm_create, alice_message, bob_join],
+        vec![
+            realm_create,
+            alice_delivery_binding,
+            alice_message,
+            bob_join,
+        ],
         Some("a-to-b-01"),
     )?;
     let a_to_b_url = server_b.url("/_cokret/peer/events");
@@ -138,6 +157,11 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     assert_json_array_contains(
         &pushed_to_b["accepted"],
         REALM_CREATE_EVENT_ID,
+        &pushed_to_b,
+    );
+    assert_json_array_contains(
+        &pushed_to_b["accepted"],
+        ALICE_DELIVERY_BINDING_EVENT_ID,
         &pushed_to_b,
     );
     assert_json_array_contains(
@@ -228,23 +252,161 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "alice sync did not include bob federation reply: {alice_sync}"
     );
 
+    let e2ee_realm_create = signed_federation_event(
+        E2EE_REALM_CREATE_EVENT_ID,
+        "ck.realm.create",
+        E2EE_REALM_ID,
+        ALICE_DID,
+        5,
+        federated_e2ee_realm_payload(E2EE_REALM_ID),
+    )?;
+    let e2ee_bob_join = signed_federation_event(
+        E2EE_BOB_JOIN_EVENT_ID,
+        "ck.member.state",
+        E2EE_REALM_ID,
+        ALICE_DID,
+        6,
+        member_delivery_binding_payload(E2EE_REALM_ID, BOB_DID, server_b.service_did()),
+    )?;
+    let e2ee_genesis = signed_federation_event(
+        E2EE_MLS_GENESIS_EVENT_ID,
+        "ck.mls.genesis",
+        E2EE_REALM_ID,
+        ALICE_DID,
+        7,
+        mls_genesis_payload(E2EE_REALM_ID),
+    )?;
+    let e2ee_welcome = signed_federation_event(
+        E2EE_MLS_WELCOME_EVENT_ID,
+        "ck.mls.welcome",
+        E2EE_REALM_ID,
+        ALICE_DID,
+        8,
+        mls_welcome_payload(E2EE_REALM_ID),
+    )?;
+    let e2ee_commit = signed_federation_event(
+        E2EE_MLS_COMMIT_EVENT_ID,
+        "ck.mls.commit",
+        E2EE_REALM_ID,
+        ALICE_DID,
+        9,
+        mls_commit_payload(E2EE_REALM_ID),
+    )?;
+    let e2ee_message = signed_federation_event(
+        E2EE_MESSAGE_EVENT_ID,
+        "ck.message.create",
+        E2EE_REALM_ID,
+        ALICE_DID,
+        10,
+        encrypted_message_payload(E2EE_REALM_ID),
+    )?;
+    let e2ee_body = peer_events_submit_body(
+        E2EE_REALM_ID,
+        vec![
+            e2ee_realm_create,
+            e2ee_bob_join,
+            e2ee_genesis,
+            e2ee_welcome,
+            e2ee_commit,
+            e2ee_message,
+        ],
+        Some("a-to-b-e2ee-01"),
+    )?;
+    let pushed_e2ee = expect_json(
+        with_federation_trust_headers(
+            server_b
+                .http()
+                .post(server_b.url("/_cokret/peer/events"))
+                .json(&e2ee_body),
+            "POST",
+            &server_b.url("/_cokret/peer/events"),
+            server_a,
+            server_b,
+            &e2ee_body,
+        )?,
+        StatusCode::OK,
+    )
+    .await?;
+    for accepted_id in [
+        E2EE_REALM_CREATE_EVENT_ID,
+        E2EE_BOB_JOIN_EVENT_ID,
+        E2EE_MLS_GENESIS_EVENT_ID,
+        E2EE_MLS_WELCOME_EVENT_ID,
+        E2EE_MLS_COMMIT_EVENT_ID,
+        E2EE_MESSAGE_EVENT_ID,
+    ] {
+        assert_json_array_contains(&pushed_e2ee["accepted"], accepted_id, &pushed_e2ee);
+    }
+
+    let pending_welcomes = expect_json(
+        server_b
+            .http()
+            .get(server_b.url("/_soland/self/keys/keypackages/welcomes/pending"))
+            .bearer_auth(&bob),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(pending_welcomes["welcomes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        pending_welcomes["welcomes"][0]["welcome_id"],
+        "ck:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2"
+    );
+    assert_eq!(
+        pending_welcomes["welcomes"][0]["mls_group_ref"],
+        E2EE_MLS_GROUP_ID
+    );
+
+    let bob_e2ee_sync = expect_account_subscribe_delta(
+        server_b
+            .http()
+            .get(server_b.url("/_cokret/self/account/subscribe?catchup=true"))
+            .bearer_auth(&bob),
+        StatusCode::OK,
+    )
+    .await?;
+    let e2ee_event = sync_timeline_events(&bob_e2ee_sync, E2EE_REALM_ID)?
+        .iter()
+        .find(|event| event.get("event_id").and_then(Value::as_str) == Some(E2EE_MESSAGE_EVENT_ID))
+        .with_context(|| format!("bob sync missing federated E2EE message: {bob_e2ee_sync}"))?;
+    assert_eq!(
+        event_encrypted_ciphertext(e2ee_event),
+        Some(E2EE_MESSAGE_CIPHERTEXT)
+    );
+    assert!(
+        !serde_json::to_string(&bob_e2ee_sync)?.contains(E2EE_MESSAGE_PLAINTEXT),
+        "Bob sync leaked plaintext E2EE body: {bob_e2ee_sync}"
+    );
+
+    let bob_device_key = SigningKey::from_bytes(&BOB_DEVICE_KEY_SEED);
+    let bob_device_public_key = multicodec_ed25519_public_key(&bob_device_key.verifying_key());
+    authorize_device_public_key(
+        server_b,
+        &bob,
+        BOB_DID,
+        BOB_DEVICE_ID,
+        &bob_device_public_key,
+    )
+    .await?;
+    let bob_one_time_keys = json!({
+        "signed_curve25519:bob-otk1": {
+            "algorithm": "signed_curve25519",
+            "key_id": "bob-otk1",
+            "key": "bob-one-time"
+        }
+    });
+    let bob_fallback_keys = json!({});
     let key_upload = expect_json(
         server_b
             .http()
             .post(server_b.url("/_cokret/self/keys/upload"))
             .bearer_auth(&bob)
-            .json(&json!({
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000bb",
-                "one_time_keys": {
-                    "signed_curve25519:bob-otk1": {
-                        "algorithm": "signed_curve25519",
-                        "key_id": "bob-otk1",
-                        "key": "bob-one-time"
-                    }
-                },
-                "fallback_keys": {},
-                "device_signature": {"alg": "EdDSA", "signature": "bob-device-signature"}
-            })),
+            .json(&signed_keys_upload_body(
+                BOB_DID,
+                BOB_DEVICE_ID,
+                &bob_device_key,
+                bob_one_time_keys,
+                bob_fallback_keys,
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -314,7 +476,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .post(server_b.url("/_cokret/edge/push/register-device"))
             .bearer_auth(&bob)
             .json(&json!({
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000bb",
+                "device_id": BOB_DEVICE_ID,
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
@@ -395,6 +557,252 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
     })
 }
 
+fn member_delivery_binding_payload(realm_id: &str, member_did: &str, service_did: &str) -> Value {
+    json!({
+        "realm_id": realm_id,
+        "actor_id": member_did,
+        "membership": "join",
+        "delivery_status": "routable",
+        "delivery_binding": {
+            "recipient_service_did": service_did,
+            "recipient_service_type": "principal_server",
+            "binding_scope": "realm",
+            "binding_source": "explicit",
+            "delivery_modes": ["events", "sync", "to_device", "push", "key_packages"],
+            "resolved_at": "2026-05-02T00:00:00Z",
+            "service_acceptance_ref": "ck:event:01904100-0000-7000-8000-fedc00000005"
+        }
+    })
+}
+
+fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
+    json!({
+        "object": {
+            "id": realm_id,
+            "schema": "ck.schema.realm.v1",
+            "title": "Federated E2EE DM Realm",
+            "summary": "cross personal server E2EE DM replication",
+            "trust_domain": "ck:trust_domain:federation-collaboration.e2ee.cotest.local",
+            "created_by": ALICE_DID,
+            "schema_refs": ["ck.schema.realm.v1"],
+            "default_discoverability": "invite_only",
+            "default_join_rule": "invite",
+            "history_visibility": "shared",
+            "encryption_profile": "mls_rfc9420",
+            "security_class": "standard",
+            "federation_policy": "open",
+            "notary_profile": "single_did",
+            "digest_algorithm": "sha256",
+            "notary": {
+                "type": "single_did",
+                "did": ALICE_DID,
+                "recovery_members": ["did:web:recovery-anchorer.cotest.local"],
+                "controller_organization": "did:web:federation-collaboration.cotest.local",
+                "recovery_controller_organizations": ["did:web:recovery-org.cotest.local"]
+            },
+            "created_at": "2026-05-02T00:00:00Z"
+        }
+    })
+}
+
+fn mls_governance_binding(realm_id: &str, previous_epoch: u64, next_epoch: u64) -> Value {
+    json!({
+        "binding_version": 1,
+        "encoding_profile": "cbor-deterministic-rfc8949-v1",
+        "realm_id": realm_id,
+        "effective_scope": {
+            "kind": "realm",
+            "realm_id": realm_id
+        },
+        "mls_group_id": E2EE_MLS_GROUP_ID,
+        "previous_epoch": previous_epoch,
+        "next_epoch": next_epoch,
+        "membership_frontier": [E2EE_BOB_JOIN_EVENT_ID],
+        "policy_root": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "binding_profile": "ck.profile.mls_governance_binding.full.v1",
+        "reducer_profile": "ck.reducer.v1"
+    })
+}
+
+fn mls_genesis_payload(realm_id: &str) -> Value {
+    json!({
+        "mls_group_id": E2EE_MLS_GROUP_ID,
+        "effective_scope": {
+            "kind": "realm",
+            "realm_id": realm_id
+        },
+        "epoch": 0,
+        "creator_principal_id": ALICE_DID,
+        "creator_device_id": ALICE_DEVICE_ID,
+        "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+        "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "governance_binding": mls_governance_binding(realm_id, 0, 0),
+        "created_at": "2026-05-25T00:00:01Z"
+    })
+}
+
+fn mls_welcome_payload(realm_id: &str) -> Value {
+    let keypackage_ref = "sha256:5555555555555555555555555555555555555555555555555555555555555555";
+    let welcome_bytes = "opaque-cross-server-mls-welcome";
+    json!({
+        "mls_group_id": E2EE_MLS_GROUP_ID,
+        "epoch": 1,
+        "recipient_principal_id": BOB_DID,
+        "recipient_device_id": BOB_DEVICE_ID,
+        "keypackage_ref": keypackage_ref,
+        "keypackage_digest": keypackage_ref,
+        "claim_id": "claim-cross-ps-01",
+        "claim_ref": {
+            "claim_id": "claim-cross-ps-01",
+            "keypackage_ref": keypackage_ref,
+            "keypackage_digest": keypackage_ref,
+            "capabilities_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+            "ssk_generation": 1
+        },
+        "claim_envelope": {
+            "keypackage_ref": keypackage_ref,
+            "keypackage_digest": keypackage_ref,
+            "intended_realm_id": realm_id,
+            "claim_id": "claim-cross-ps-01",
+            "requester_did": ALICE_DID,
+            "ssk_generation": 1,
+            "nonce": "claim_cross_ps_01_nonce_128_bit_material",
+            "welcome_digest": sha256_digest(welcome_bytes.as_bytes()),
+            "created_at": "2026-05-25T00:00:02Z",
+            "signature": {
+                "kid": format!("{ALICE_DID}#self-signing"),
+                "alg": "EdDSA",
+                "sig": "claim_cross_ps_01_signature"
+            }
+        },
+        "welcome_ref": "ck:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2",
+        "ciphertext": welcome_bytes,
+        "expires_at": "2026-05-25T01:00:00Z",
+        "commit_ref": E2EE_MLS_COMMIT_EVENT_ID,
+        "governance_binding": mls_governance_binding(realm_id, 0, 0)
+    })
+}
+
+fn mls_commit_payload(realm_id: &str) -> Value {
+    json!({
+        "mls_group_id": E2EE_MLS_GROUP_ID,
+        "base_epoch": 0,
+        "base_epoch_ref": E2EE_MLS_GENESIS_EVENT_ID,
+        "proposal_refs": [],
+        "next_epoch": 1,
+        "commit_digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "governance_binding": mls_governance_binding(realm_id, 0, 1)
+    })
+}
+
+fn encrypted_message_payload(realm_id: &str) -> Value {
+    let strand_id = format!(
+        "ck:strand:{}",
+        realm_id.strip_prefix("ck:realm:").unwrap_or(realm_id)
+    );
+    json!({
+        "strand_id": strand_id,
+        "track_name": "discussion",
+        "encrypted_content": {
+            "scheme": "mls-rfc9420",
+            "version": "1.0",
+            "group_id": E2EE_MLS_GROUP_ID,
+            "epoch": 1,
+            "content_type": "application/vnd.cokret.message+json",
+            "ciphertext": E2EE_MESSAGE_CIPHERTEXT,
+            "aad_visibility_event_id": "hidden",
+            "aad": {
+                "realm_id": realm_id,
+                "event_kind": "ck.message.create"
+            },
+            "key_ref": {
+                "algorithm": "MLS",
+                "group_state_ref": E2EE_MLS_COMMIT_EVENT_ID
+            },
+            "aad_digest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+            "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+    })
+}
+
+async fn authorize_device_public_key(
+    server: &CokretServer,
+    token: &str,
+    actor: &str,
+    device_id: &str,
+    device_public_key: &str,
+) -> Result<()> {
+    let principal =
+        Did::new(actor.to_owned()).with_context(|| format!("invalid principal DID `{actor}`"))?;
+    let principal_realm = principal_control_realm_id(&principal);
+    let accepted = submit_event(
+        server,
+        token,
+        actor,
+        &principal_realm,
+        "ck.device.authorize",
+        json!({
+            "principal_id": actor,
+            "device_id": device_id,
+            "device_public_key": device_public_key,
+            "authorized_by": actor,
+            "not_before": "2026-05-02T00:00:00Z",
+            "device_signature": "bootstrap-device-signature-placeholder",
+            "bootstrap_binding": {
+                "kind": "inception_self_authorized",
+                "did_method_evidence_ref": format!("{actor}#inception")
+            },
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        accepted["status"], "accepted",
+        "device authorize response: {accepted}"
+    );
+    Ok(())
+}
+
+fn signed_keys_upload_body(
+    actor: &str,
+    device_id: &str,
+    signing_key: &SigningKey,
+    one_time_keys: Value,
+    fallback_keys: Value,
+) -> Result<Value> {
+    let signing_input = keys_upload_signing_input(device_id, &one_time_keys, &fallback_keys)?;
+    let jws = cokret::jws::sign_jws_ed25519(&signing_input, signing_key)
+        .map_err(anyhow::Error::msg)
+        .context("sign keys/upload body")?;
+    Ok(json!({
+        "device_id": device_id,
+        "one_time_keys": one_time_keys,
+        "fallback_keys": fallback_keys,
+        "device_signature": {
+            "alg": "EdDSA",
+            "kid": format!("{actor}#device"),
+            "jws": jws,
+        }
+    }))
+}
+
+fn keys_upload_signing_input(
+    device_id: &str,
+    one_time_keys: &Value,
+    fallback_keys: &Value,
+) -> Result<Vec<u8>> {
+    let body = json!({
+        "device_id": device_id,
+        "one_time_keys": one_time_keys,
+        "fallback_keys": fallback_keys,
+    });
+    let canonical = canonical_json_bytes(&body)?;
+    let mut input = b"ck-keys-upload-v1\n".to_vec();
+    input.extend_from_slice(&canonical);
+    Ok(input)
+}
+
 fn signed_federation_event(
     event_id: &str,
     kind: &str,
@@ -464,17 +872,52 @@ fn with_federation_trust_headers_empty(
     source: &CokretServer,
     destination: &CokretServer,
 ) -> Result<reqwest::RequestBuilder> {
-    let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
-    let request_canonical_digest = sha256_digest([]);
-    with_federation_trust_headers_for_digest(
-        builder,
-        method,
-        target_url,
-        source,
-        destination,
-        content_digest,
-        request_canonical_digest,
-    )
+    let source_service_did = source.service_did();
+    let destination_service_did = destination.service_did();
+    let source_trust_domain = trust_domain_for(source_service_did);
+    let destination_trust_domain = trust_domain_for(destination_service_did);
+
+    let parsed_url = Url::parse(target_url)?;
+    let authority = parsed_url
+        .port()
+        .map(|port| format!("{}:{port}", parsed_url.host_str().unwrap_or("server")))
+        .unwrap_or_else(|| parsed_url.host_str().unwrap_or("server").to_owned());
+    let path_and_query = parsed_url
+        .query()
+        .map(|query| format!("{}?{query}", parsed_url.path()))
+        .unwrap_or_else(|| parsed_url.path().to_owned());
+    let target_uri = format!("{}://{}{}", parsed_url.scheme(), authority, path_and_query);
+
+    let created = chrono::Utc::now().timestamp();
+    let expires = created + 300;
+    let keyid = format!("{source_service_did}#federation-fanout-key");
+    let signature_params = format!(
+        "(\"@method\" \"@target-uri\" \"@authority\" \"source-service-did\" \
+         \"destination-service-did\" \"source-trust-domain\" \
+         \"destination-trust-domain\");created={created};\
+         expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
+    );
+    let signature_base = format!(
+        "\"@method\": {}\n\
+         \"@target-uri\": {target_uri}\n\
+         \"@authority\": {authority}\n\
+         \"source-service-did\": {source_service_did}\n\
+         \"destination-service-did\": {destination_service_did}\n\
+         \"source-trust-domain\": {source_trust_domain}\n\
+         \"destination-trust-domain\": {destination_trust_domain}\n\
+         \"@signature-params\": {signature_params}",
+        method.to_ascii_uppercase()
+    );
+    let signing_key = development_service_signing_key(source_service_did);
+    let signature = sign_message(signature_base.as_bytes(), &signing_key);
+
+    Ok(builder
+        .header("Source-Service-DID", source_service_did)
+        .header("Destination-Service-DID", destination_service_did)
+        .header("Source-Trust-Domain", source_trust_domain)
+        .header("Destination-Trust-Domain", destination_trust_domain)
+        .header("Signature-Input", format!("sig1={signature_params}"))
+        .header("Signature", format!("sig1=:{signature}:")))
 }
 
 fn with_federation_trust_headers_for_digest(
@@ -571,6 +1014,15 @@ fn event_body(event: &Value) -> Option<&str> {
         .pointer("/content/body")
         .or_else(|| event.pointer("/payload/content/body"))
         .or_else(|| event.pointer("/payload/body"))
+        .and_then(Value::as_str)
+}
+
+fn event_encrypted_ciphertext(event: &Value) -> Option<&str> {
+    event
+        .pointer("/encrypted_content/ciphertext")
+        .or_else(|| event.pointer("/payload/encrypted_content/ciphertext"))
+        .or_else(|| event.pointer("/content/ciphertext"))
+        .or_else(|| event.pointer("/content/encrypted_content/ciphertext"))
         .and_then(Value::as_str)
 }
 
