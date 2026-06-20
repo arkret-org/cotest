@@ -53,6 +53,9 @@ cokret-http-client = {workspace = true}
 cokret-signatures = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
 hkdf = {workspace = true}
+hpke-rs = {workspace = true}
+hpke-rs-crypto = {workspace = true}
+hpke-rs-rust-crypto = {workspace = true}
 jsonschema = {workspace = true,default-features = false,features = ["resolve-file"]}
 pbkdf2 = {workspace = true,default-features = false,features = ["hmac"]}
 reqwest = {workspace = true,features = ["json"]}
@@ -89,6 +92,9 @@ cokret-http-client = {path = "../cokret-rust-sdk/crates/http-client"}
 cokret-signatures = {path = "../cokret-rust-sdk/crates/signatures"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"
+hpke-rs = "0.6"
+hpke-rs-crypto = "0.6"
+hpke-rs-rust-crypto = "0.6"
 jsonschema = {version = "0.46.5",default-features = false}
 pbkdf2 = {version = "0.13.0",default-features = false}
 proptest = {version = "1",default-features = false}
