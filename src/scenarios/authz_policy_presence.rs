@@ -1,10 +1,10 @@
 use anyhow::Result;
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, expect_account_subscribe_delta, expect_api_error, expect_json, expect_status,
-    submit_event,
+    CokretServer, TestActorClient, expect_account_subscribe_delta, expect_api_error, expect_json,
+    expect_status, submit_event,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -133,20 +133,74 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     alice.add_member(&realm_id, &bob).await?;
-    let member_send = expect_json(
-        alice.post("/_cokret/self/authz/check").json(&json!({
-            "actor_id": bob.actor,
-            "action": "ck.message.create",
-            "resource": {
+    let id_suffix = realm_id.trim_start_matches("ck:realm:");
+    let strand_id = format!("ck:strand:{id_suffix}");
+    let relation_id = format!("ck:relation:{id_suffix}");
+    let morph_id = format!("ck:morph:{id_suffix}");
+    let negative_checks = [
+        (
+            "ck.message.create",
+            json!({
+                "kind": "strand",
+                "id": strand_id,
+                "realm_id": realm_id,
+                "strand_id": strand_id
+            }),
+            "no_strand_track_message_grant",
+        ),
+        (
+            "ck.pin.add",
+            json!({
+                "kind": "strand",
+                "id": strand_id,
+                "realm_id": realm_id,
+                "strand_id": strand_id
+            }),
+            "capability_denied",
+        ),
+        (
+            "ck.rsvp.set",
+            json!({
+                "kind": "strand",
+                "id": strand_id,
+                "realm_id": realm_id,
+                "strand_id": strand_id
+            }),
+            "capability_denied",
+        ),
+        (
+            "ck.policy.manage",
+            json!({
                 "kind": "realm",
                 "id": realm_id,
                 "realm_id": realm_id
-            }
-        })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(member_send["decision"], "allow");
+            }),
+            "capability_denied",
+        ),
+        (
+            "ck.relation.create",
+            json!({
+                "kind": "relation",
+                "id": relation_id,
+                "realm_id": realm_id,
+                "cell": format!("ck:cell:ck.component.relation.v1:{relation_id}")
+            }),
+            "capability_denied",
+        ),
+        (
+            "ck.morph.create",
+            json!({
+                "kind": "morph",
+                "id": morph_id,
+                "realm_id": realm_id,
+                "cell": format!("ck:cell:ck.component.morph.v1:{morph_id}")
+            }),
+            "capability_denied",
+        ),
+    ];
+    for (action, resource, reason_code) in negative_checks {
+        expect_authz_check_hard_deny(&alice, &bob.actor, action, resource, reason_code).await?;
+    }
 
     let revoked_manage = submit_event(
         &server,
@@ -176,6 +230,34 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(denied_after_revoke["decision"], "hard_deny");
     assert_eq!(denied_after_revoke["reason_code"], "capability_denied");
 
+    Ok(())
+}
+
+async fn expect_authz_check_hard_deny(
+    client: &TestActorClient,
+    actor_id: &str,
+    action: &str,
+    resource: Value,
+    reason_code: &str,
+) -> Result<()> {
+    let denied = expect_json(
+        client.post("/_cokret/self/authz/check").json(&json!({
+            "actor_id": actor_id,
+            "action": action,
+            "resource": resource
+        })),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(denied["decision"], "hard_deny", "{action}: {denied}");
+    assert_eq!(denied["reason_code"], reason_code, "{action}: {denied}");
+    assert!(
+        denied["matched_grants"]
+            .as_array()
+            .expect("matched grants array")
+            .is_empty(),
+        "{action}: member baseline must not synthesize a matched grant"
+    );
     Ok(())
 }
 
