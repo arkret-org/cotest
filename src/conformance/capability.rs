@@ -40,8 +40,14 @@ pub fn run_capability_fixture_suite() -> Result<()> {
         {
             bail!("revoked grant fixture no longer denies later write");
         }
+        if fixture.get("grants").is_some() && fixture.get("request").is_some() {
+            evaluate_direct_grant_request_fixture(fixture)?;
+        }
         match name {
             "delegate_chain_multi_level" => evaluate_delegate_chain_fixture(fixture)?,
+            "membership_without_capability_denies_core_writes" => {
+                evaluate_membership_without_capability_fixture(fixture)?;
+            }
             "revoke_rollback_forward_recompute" => evaluate_revoke_rollback_fixture(fixture)?,
             "revoke_downstream_recheck" => evaluate_revoke_downstream_fixture(fixture)?,
             _ => {}
@@ -162,6 +168,205 @@ fn parse_delegations(fixture: &Value) -> Result<Vec<Delegation>> {
 
 fn resource_matches(resource: &Value, requested: &str) -> bool {
     resource.get("realm_id").and_then(Value::as_str) == Some(requested)
+}
+
+fn request_resource_matches(grant_resource: &Value, request_resource: &Value) -> bool {
+    if let (Some(grant), Some(request)) = (grant_resource.as_str(), request_resource.as_str()) {
+        return grant == request;
+    }
+
+    let Some(grant) = grant_resource.as_object() else {
+        return false;
+    };
+    let Some(request) = request_resource.as_object() else {
+        return false;
+    };
+
+    if let Some(grant_realm) = grant.get("realm_id").and_then(Value::as_str)
+        && request.get("realm_id").and_then(Value::as_str) != Some(grant_realm)
+    {
+        return false;
+    }
+    if grant.get("kind").and_then(Value::as_str) == Some("realm") {
+        return true;
+    }
+    if let Some(grant_kind) = grant.get("kind").and_then(Value::as_str)
+        && request.get("kind").and_then(Value::as_str) != Some(grant_kind)
+    {
+        return false;
+    }
+    if let Some(grant_strand) = grant.get("strand_id").and_then(Value::as_str)
+        && request.get("strand_id").and_then(Value::as_str) != Some(grant_strand)
+    {
+        return false;
+    }
+    if let Some(grant_cell) = grant.get("cell").and_then(Value::as_str)
+        && request.get("cell").and_then(Value::as_str) != Some(grant_cell)
+    {
+        return false;
+    }
+    true
+}
+
+fn grant_matches_request(grant: &Value, request: &Value) -> bool {
+    let Some(actor) = request.get("actor_id").and_then(Value::as_str) else {
+        return false;
+    };
+    if grant.get("subject").and_then(Value::as_str) != Some(actor) {
+        return false;
+    }
+    let Some(action) = request.get("action").and_then(Value::as_str) else {
+        return false;
+    };
+    if !grant
+        .get("actions")
+        .and_then(Value::as_array)
+        .is_some_and(|actions| {
+            actions
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|granted| action_implies(granted, action))
+        })
+    {
+        return false;
+    }
+    let Some(request_resource) = request.get("resource") else {
+        return false;
+    };
+    grant
+        .get("resources")
+        .and_then(Value::as_array)
+        .is_some_and(|resources| {
+            resources
+                .iter()
+                .any(|resource| request_resource_matches(resource, request_resource))
+        })
+}
+
+fn evaluate_grant_request(grants: &[Value], request: &Value) -> (String, Vec<String>) {
+    let matched_grants: Vec<String> = grants
+        .iter()
+        .filter(|grant| grant_matches_request(grant, request))
+        .filter_map(|grant| grant.get("id").and_then(Value::as_str).map(str::to_owned))
+        .collect();
+    let decision = if matched_grants.is_empty() {
+        "deny"
+    } else {
+        "allow"
+    };
+    (decision.to_owned(), matched_grants)
+}
+
+fn deny_reason_for_request(request: &Value) -> &'static str {
+    match request.get("action").and_then(Value::as_str) {
+        Some("ck.message.create") => "no_strand_track_message_grant",
+        _ => "capability_denied",
+    }
+}
+
+fn evaluate_direct_grant_request_fixture(fixture: &Value) -> Result<()> {
+    let name = required_str(fixture, "name")?;
+    let grants = fixture
+        .get("grants")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("capability fixture {name} missing grants[]"))?;
+    let request = fixture
+        .get("request")
+        .ok_or_else(|| anyhow!("capability fixture {name} missing request"))?;
+    let (decision, matched_grants) = evaluate_grant_request(grants, request);
+
+    let expected_decision = fixture
+        .pointer("/expected/decision")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("capability fixture {name} missing expected.decision"))?;
+    if decision != expected_decision {
+        bail!("capability fixture {name}: decision {decision} but expected {expected_decision}");
+    }
+    let expected_matched = str_vec(fixture, "/expected/matched_grants");
+    if !expected_matched.is_empty() && matched_grants != expected_matched {
+        bail!(
+            "capability fixture {name}: matched grants {:?} but expected {:?}",
+            matched_grants,
+            expected_matched
+        );
+    }
+    if decision == "deny" {
+        if let Some(expected_reason) = fixture
+            .pointer("/expected/reason_code")
+            .and_then(Value::as_str)
+        {
+            let reason = deny_reason_for_request(request);
+            if reason != expected_reason {
+                bail!(
+                    "capability fixture {name}: deny reason {reason} but expected {expected_reason}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_membership_without_capability_fixture(fixture: &Value) -> Result<()> {
+    let name = required_str(fixture, "name")?;
+    let memberships = fixture
+        .get("memberships")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("capability fixture {name} missing memberships[]"))?;
+    let grants = fixture
+        .get("grants")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("capability fixture {name} missing grants[]"))?;
+    let requests = fixture
+        .get("requests")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("capability fixture {name} missing requests[]"))?;
+
+    for request in requests {
+        let actor = required_str(request, "actor_id")?;
+        let member_joined = memberships.iter().any(|membership| {
+            membership.get("actor_id").and_then(Value::as_str) == Some(actor)
+                && membership.get("membership").and_then(Value::as_str) == Some("join")
+        });
+        if !member_joined {
+            bail!("capability fixture {name}: request actor {actor} is not a joined member");
+        }
+        let (decision, matched_grants) = evaluate_grant_request(grants, request);
+        if !matched_grants.is_empty() {
+            bail!(
+                "capability fixture {name}: membership baseline request unexpectedly matched grants {:?}",
+                matched_grants
+            );
+        }
+        let expected_decision = request
+            .pointer("/expected/decision")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!("capability fixture {name} request missing expected.decision")
+            })?;
+        if decision != expected_decision {
+            bail!(
+                "capability fixture {name}: decision {decision} but expected {expected_decision}"
+            );
+        }
+        let expected_reason = request
+            .pointer("/expected/reason_code")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!("capability fixture {name} request missing expected.reason_code")
+            })?;
+        let reason = deny_reason_for_request(request);
+        if reason != expected_reason {
+            bail!("capability fixture {name}: reason {reason} but expected {expected_reason}");
+        }
+    }
+
+    record_vector_event(
+        "capability.membership_is_not_baseline",
+        &json!({"requests": requests.len()}),
+        &json!({"decision": "deny"}),
+        &json!({"membership_baseline": false}),
+    );
+    Ok(())
 }
 
 fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery) -> ChainResult {
