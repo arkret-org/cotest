@@ -1387,7 +1387,7 @@ try {
     if ($CoauthBaseUrl) {
         $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
         $solandCoauthEnv = (
-            "`$env:SOLAND_AUTH_SERVER_URL={0}; " +
+            "`$env:SOLAND_ACCOUNT_AUTHORITY_URL={0}; " +
             "`$env:SOLAND_OAUTH_INTROSPECTION_URL={1}; " +
             "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={2}; " +
             "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={3}; " +
@@ -1455,7 +1455,7 @@ try {
         if ($CoauthBaseUrl) {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
-            $map.SOLAND_AUTH_SERVER_URL = $coauthPublic
+            $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
             $map.SOLAND_OAUTH_INTROSPECTION_URL = "$coauthContainer/oauth/introspect"
             $map.SOLAND_OAUTH_INTROSPECTION_BEARER = $CoauthOAuthIntrospectionBearer
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_cokret/gate/account/session-grants/introspect"
