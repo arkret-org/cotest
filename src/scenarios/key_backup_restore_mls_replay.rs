@@ -92,10 +92,9 @@
 //!   * **SSK proof endpoint per §7.4** — soland does not yet expose a recovery-attestation surface
 //!     (E2E-KEY-BACKUP-2 still open). The `recovery_attestation` field flagged in E2E-KEY-BACKUP-3
 //!     is scoped to threshold recovery, not single-passphrase restore.
-//!   * **Argon2id + XChaCha20 client crypto** — cotest's `Cargo.toml` already pulls
-//!     `chacha20poly1305`, `pbkdf2`, `hkdf`, `sha2`, but NOT `argon2`. Adding argon2 is a one-line
-//!     dep bump (kept out of this PR to avoid lockfile churn; the scaffold uses pbkdf2 as a
-//!     placeholder so the build stays clean).
+//!   * **Argon2id + XChaCha20 client crypto** — cotest now pulls `argon2` and `chacha20poly1305`,
+//!     and its conformance harness uses the spec-compliant Argon2id default KDF instead of the
+//!     legacy scaffold.
 //!
 //! Track: `_claude_todos.md` row CT-11 + soland `_todos.md`
 //! E2E-KEY-BACKUP-1/2/3 (E2E-KEY-BACKUP-1 closed, -2 + -3 open).
@@ -334,9 +333,9 @@ pub async fn key_backup_restore_mls_replay_run() -> Result<()> {
          implemented. `PUT /_cokret/self/keys/backups/{{id}}` and \
          `POST /_cokret/self/keys/backups/{{id}}/unlock` ARE implemented \
          today (key_backup.rs) so steps 3 + 5b work. cotest also \
-         needs an `argon2` dep added for the §7.2 Argon2id KDF (pbkdf2 is \
-         already a transitive dep but spec-compliant Argon2id MUST be the \
-         default), and the restore credential is the 24-word Recovery Key \
+         uses the cotest Argon2id + XChaCha20 conformance harness for §7.2; \
+         the remaining missing piece is live client replay crypto, and the \
+         restore credential is the 24-word Recovery Key \
          per key-management.md §7.7. See module docs + soland/_todos.md \
          E2E-KEY-BACKUP-2/3 + spec key-management.md §7.2 / §7.3."
     )

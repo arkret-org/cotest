@@ -471,7 +471,7 @@ conformance_test!(
 
 conformance_test!(
     /// Round-26 D4 — fixture-decoupled key-backup AEAD round-trip primitive
-    /// check (PBKDF2-HMAC-SHA512 ? ChaCha20-Poly1305). Asserts the exact crypto
+    /// check (Argon2id + XChaCha20-Poly1305). Asserts the exact crypto
     /// primitive set the spec mandates is callable + correct.
     key_backup_aead_round_trip_round_26,
     "key_backup_aead_round_trip_round_26",

@@ -1065,27 +1065,77 @@ function nextActorSeq(): number {
   return seq;
 }
 
-// Canonical-JSON — single source of truth for the whole e2e suite. Mirrors
-// soland's wire canonicalizer (object keys sorted by Unicode code point, no
-// whitespace, arrays preserve order, `undefined` members dropped). Other
-// helpers/specs import these instead of hand-copying the algorithm.
+// Canonical JSON gate for e2e signing/hash fixtures. This intentionally rejects
+// values outside the Cokret canonical profile instead of silently producing a
+// digest for non-canonical JavaScript data.
 export function sha256CanonicalJson(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
 export function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
+  return canonicalJsonValue(value, "$");
+}
+
+function canonicalJsonValue(value: unknown, path: string): string {
+  if (value === null) {
+    return "null";
   }
+  switch (typeof value) {
+    case "string":
+      assertCanonicalString(value, path);
+      return JSON.stringify(value);
+    case "number":
+      assertCanonicalNumber(value, path);
+      return JSON.stringify(value);
+    case "boolean":
+      return value ? "true" : "false";
+    case "object":
+      break;
+    default:
+      throw new TypeError(`non-canonical JSON value at ${path}: ${typeof value}`);
+  }
+
   if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
+    return `[${value
+      .map((item, index) => canonicalJsonValue(item, `${path}[${index}]`))
+      .join(",")}]`;
   }
+
+  const proto = Object.getPrototypeOf(value);
+  if (proto !== Object.prototype && proto !== null) {
+    throw new TypeError(`non-canonical JSON object at ${path}`);
+  }
+
   const record = value as Record<string, unknown>;
   return `{${Object.keys(record)
-    .filter((key) => record[key] !== undefined)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .sort(compareJsonKeys)
+    .map((key) => {
+      assertCanonicalString(key, `${path}.${key}`);
+      if (record[key] === undefined) {
+        throw new TypeError(`non-canonical undefined member at ${path}.${key}`);
+      }
+      return `${JSON.stringify(key)}:${canonicalJsonValue(record[key], `${path}.${key}`)}`;
+    })
     .join(",")}}`;
+}
+
+function compareJsonKeys(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function assertCanonicalString(value: string, path: string): void {
+  if (value.includes("\uFEFF")) {
+    throw new TypeError(`non-canonical BOM in string at ${path}`);
+  }
+  if (value.normalize("NFC") !== value) {
+    throw new TypeError(`non-canonical non-NFC string at ${path}`);
+  }
+}
+
+function assertCanonicalNumber(value: number, path: string): void {
+  if (!Number.isSafeInteger(value) || Object.is(value, -0)) {
+    throw new TypeError(`non-canonical number at ${path}: ${value}`);
+  }
 }
 
 function stripUndefined(value: unknown): unknown {

@@ -305,16 +305,19 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
                 .with_file("crates/server/src/wire.rs")
                 .with_file("crates/server/src/did_resolver_chain.rs"),
             OperationSourceRoot::new("sdk", workspace_root.join("cokret-rust-sdk"))
-                .with_file("crates/server/src/registry.rs")
-                .with_file("crates/core/src/http/paths.rs")
-                .with_file("crates/core/src/principal.rs")
-                .with_file("crates/core/src/push.rs")
-                .with_file("crates/core/src/service.rs")
-                .with_file("crates/http-client/src/endpoints_account.rs")
-                .with_file("crates/http-client/src/endpoints_data.rs")
-                .with_file("crates/http-client/src/endpoints_events.rs")
-                .with_file("crates/http-client/src/endpoints_identity.rs")
-                .with_file("crates/http-client/src/endpoints_misc.rs"),
+                .with_dir("crates/core/src")
+                .with_dir("crates/http-client/src")
+                .with_dir("crates/sdk/src")
+                .with_dir("crates/server/src"),
+            OperationSourceRoot::new("coauth", workspace_root.join("coauth"))
+                .with_dir("crates/backend/src")
+                .with_dir("crates/frontend/src/api"),
+            OperationSourceRoot::new("starid", workspace_root.join("starid"))
+                .with_dir("crates/server/src")
+                .with_dir("crates/admin/src/api"),
+            OperationSourceRoot::new("teabay", workspace_root.join("teabay"))
+                .with_dir("crates/server/src")
+                .with_dir("crates/admin/src"),
             OperationSourceRoot::new("yougen", workspace_root.join("yougen"))
                 .with_dir("src/api")
                 .with_file("tests/e2e/mockCokretApi.ts")

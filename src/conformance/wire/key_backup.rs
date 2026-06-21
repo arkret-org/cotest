@@ -8,19 +8,20 @@ use serde_json::{Value, json};
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// D4 Round 26 — key backup encryption: PBKDF2 + ChaCha20-Poly1305 round-trip.
+const ARGON2ID_MEMORY_KIB: u32 = 65_536;
+const ARGON2ID_ITERATIONS: u32 = 3;
+const ARGON2ID_PARALLELISM: u32 = 1;
+
+/// D4 Round 26 — key backup encryption: Argon2id + XChaCha20-Poly1305 round-trip.
 ///
 /// Spec: `crypto-media/encryption-and-audit.md` + `key-backup.schema.json`.
-/// Validator runs a real PBKDF2 derivation with the fixture's salt + an
-/// at-least-600k iteration check, then ChaCha20-Poly1305 round-trips a small
+/// Validator runs a real Argon2id derivation with the fixture's salt + spec
+/// floor checks, then XChaCha20-Poly1305 round-trips a small
 /// payload to confirm encrypt/decrypt with the correct key succeeds and
 /// decrypt with a wrong key fails (auth-tag rejection).
 pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     use chacha20poly1305::aead::Aead;
-    use chacha20poly1305::aead::generic_array::GenericArray;
-    use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
-    use pbkdf2::pbkdf2_hmac;
-    use sha2::Sha512 as KdfSha512;
+    use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
     let fixture = load_local_fixture("key_backup_encryption_fixture.json")?;
     validate_profile(&fixture, "ck.profile.key_backup_encryption_vectors.v1")?;
@@ -35,33 +36,31 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
         );
     }
 
-    // Drive a real PBKDF2 + ChaCha20-Poly1305 round-trip to validate the
-    // primitive set the spec mandates is callable from this harness. Use a
-    // reduced iteration count for unit-test speed (the spec floor is checked
-    // against the fixture iterations field separately).
+    // Drive a real Argon2id + XChaCha20-Poly1305 round-trip to validate the
+    // primitive set the spec mandates is callable from this harness.
     let salt_b64 = "AAECAwQFBgcICQoLDA0ODw";
     let salt = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(salt_b64)
         .map_err(|e| anyhow!("decode salt: {e}"))?;
-    let mut master_key = [0u8; 32];
-    pbkdf2_hmac::<KdfSha512>(b"correct-passphrase", &salt, 1, &mut master_key);
-    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&master_key));
-    let nonce_bytes = [0u8; 12];
-    let nonce = GenericArray::from_slice(&nonce_bytes);
+    let master_key = derive_argon2id_key(b"correct-passphrase", &salt)?;
+    let cipher = XChaCha20Poly1305::new_from_slice(&master_key)
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 key init: {e}"))?;
+    let nonce_bytes = [0u8; 24];
+    let nonce = XNonce::from_slice(&nonce_bytes);
     let plaintext = b"session_keys_blob";
     let ciphertext = cipher
         .encrypt(nonce, plaintext.as_ref())
-        .map_err(|e| anyhow!("ChaCha20-Poly1305 encrypt: {e}"))?;
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 encrypt: {e}"))?;
     let decrypted = cipher
         .decrypt(nonce, ciphertext.as_ref())
-        .map_err(|e| anyhow!("ChaCha20-Poly1305 decrypt: {e}"))?;
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 decrypt: {e}"))?;
     if decrypted != plaintext {
-        bail!("ChaCha20-Poly1305 round-trip mismatch");
+        bail!("XChaCha20-Poly1305 round-trip mismatch");
     }
     // Wrong-key decrypt must fail (forward-only AEAD).
-    let mut wrong = [0u8; 32];
-    pbkdf2_hmac::<KdfSha512>(b"wrong-passphrase", &salt, 1, &mut wrong);
-    let wrong_cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&wrong));
+    let wrong = derive_argon2id_key(b"wrong-passphrase", &salt)?;
+    let wrong_cipher = XChaCha20Poly1305::new_from_slice(&wrong)
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 wrong-key init: {e}"))?;
     if wrong_cipher.decrypt(nonce, ciphertext.as_ref()).is_ok() {
         bail!("wrong-key decrypt succeeded — AEAD broken");
     }
@@ -73,12 +72,12 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     let new_salt = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(new_salt_b64)
         .map_err(|e| anyhow!("decode new salt: {e}"))?;
-    let mut master_key_v2 = [0u8; 32];
-    pbkdf2_hmac::<KdfSha512>(b"correct-passphrase", &new_salt, 1, &mut master_key_v2);
+    let master_key_v2 = derive_argon2id_key(b"correct-passphrase", &new_salt)?;
     if master_key == master_key_v2 {
         bail!("rotation salt change must produce different master key");
     }
-    let cipher_v2 = ChaCha20Poly1305::new(GenericArray::from_slice(&master_key_v2));
+    let cipher_v2 = XChaCha20Poly1305::new_from_slice(&master_key_v2)
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 rotation key init: {e}"))?;
     if cipher_v2.decrypt(nonce, ciphertext.as_ref()).is_ok() {
         bail!("post-rotation cipher decrypted pre-rotation ciphertext — rotation invariant broken");
     }
@@ -95,13 +94,10 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
         }
         match name {
             "client_side_passphrase_derives_master_key" => {
-                let iters = v
-                    .get("kdf_iterations")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("vector {name} missing kdf_iterations"))?;
-                if iters < 600_000 {
-                    bail!("vector {name} kdf_iterations {iters} below spec floor 600000");
-                }
+                let kdf = v
+                    .get("kdf")
+                    .ok_or_else(|| anyhow!("vector {name} missing kdf"))?;
+                validate_argon2id_kdf_floor(name, kdf)?;
                 let key_len = v
                     .get("master_key_length_bytes")
                     .and_then(Value::as_u64)
@@ -129,6 +125,10 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                 saw_opaque = true;
             }
             "restore_path_redrives_key_and_decrypts" => {
+                let kdf = v
+                    .get("kdf")
+                    .ok_or_else(|| anyhow!("vector {name} missing kdf"))?;
+                validate_argon2id_kdf_floor(name, kdf)?;
                 let succeeded = v
                     .pointer("/expected/decryption_succeeded")
                     .and_then(Value::as_bool)
@@ -145,6 +145,10 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
                 saw_restore = true;
             }
             "rotation_mints_new_version_and_reencrypts" => {
+                let new_kdf = v
+                    .get("new_kdf")
+                    .ok_or_else(|| anyhow!("vector {name} missing new_kdf"))?;
+                validate_argon2id_kdf_floor(name, new_kdf)?;
                 let old = required_str(v, "old_version_id")?;
                 let new = required_str(v, "new_version_id")?;
                 if old == new {
@@ -182,13 +186,12 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
         let reason =
             expected_reason(v).ok_or_else(|| anyhow!("negative {name} missing reason_code"))?;
         match reason {
-            "kdf_iteration_count_too_low" => {
-                let iters = v
-                    .get("kdf_iterations")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| anyhow!("negative {name} missing kdf_iterations"))?;
-                if iters >= 600_000 {
-                    bail!("negative {name} declares low_iter but kdf_iterations {iters} >= 600000");
+            "kdf_argon2id_params_too_weak" => {
+                let kdf = v
+                    .get("kdf")
+                    .ok_or_else(|| anyhow!("negative {name} missing kdf"))?;
+                if argon2id_kdf_meets_floor(kdf)? {
+                    bail!("negative {name} declares weak Argon2id params but meets the floor");
                 }
                 saw_low_iter = true;
             }
@@ -212,23 +215,20 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     Ok(())
 }
 /// Round-26 standalone — exercise the spec's mandated AEAD primitive
-/// (ChaCha20-Poly1305 + PBKDF2-HMAC-SHA512) end-to-end. Decoupled from the
+/// (XChaCha20-Poly1305 + Argon2id) end-to-end. Decoupled from the
 /// fixture so an environment without the fixture file still exercises the
 /// crypto round-trip used by D4 key backup encryption.
 pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
     use chacha20poly1305::aead::Aead;
-    use chacha20poly1305::aead::generic_array::GenericArray;
-    use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
-    use pbkdf2::pbkdf2_hmac;
-    use sha2::Sha512 as KdfSha512;
+    use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 
     let salt = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode("AAECAwQFBgcICQoLDA0ODw")
         .map_err(|e| anyhow!("decode salt: {e}"))?;
-    let mut key = [0u8; 32];
-    pbkdf2_hmac::<KdfSha512>(b"correct-passphrase", &salt, 1, &mut key);
-    let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&key));
-    let nonce = GenericArray::from_slice(&[0u8; 12]);
+    let key = derive_argon2id_key(b"correct-passphrase", &salt)?;
+    let cipher = XChaCha20Poly1305::new_from_slice(&key)
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 key init: {e}"))?;
+    let nonce = XNonce::from_slice(&[0u8; 24]);
     let plaintext = b"key_backup_aead_round_trip_round_26";
     let ct = cipher
         .encrypt(nonce, plaintext.as_ref())
@@ -239,13 +239,65 @@ pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
     if pt != plaintext {
         bail!("AEAD round-trip mismatch");
     }
-    let mut wrong = [0u8; 32];
-    pbkdf2_hmac::<KdfSha512>(b"wrong-passphrase", &salt, 1, &mut wrong);
-    let wrong_cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&wrong));
+    let wrong = derive_argon2id_key(b"wrong-passphrase", &salt)?;
+    let wrong_cipher = XChaCha20Poly1305::new_from_slice(&wrong)
+        .map_err(|e| anyhow!("XChaCha20-Poly1305 wrong-key init: {e}"))?;
     if wrong_cipher.decrypt(nonce, ct.as_ref()).is_ok() {
         bail!("wrong-key decrypt succeeded — AEAD invariant broken");
     }
     Ok(())
+}
+
+fn derive_argon2id_key(passphrase: &[u8], salt: &[u8]) -> Result<[u8; 32]> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+
+    let params = Params::new(
+        ARGON2ID_MEMORY_KIB,
+        ARGON2ID_ITERATIONS,
+        ARGON2ID_PARALLELISM,
+        Some(32),
+    )
+    .map_err(|e| anyhow!("Argon2id params: {e}"))?;
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut key = [0u8; 32];
+    argon2
+        .hash_password_into(passphrase, salt, &mut key)
+        .map_err(|e| anyhow!("Argon2id derive: {e}"))?;
+    Ok(key)
+}
+
+fn validate_argon2id_kdf_floor(label: &str, kdf: &Value) -> Result<()> {
+    let name = required_str(kdf, "name")?;
+    if name != "argon2id" {
+        bail!("{label} kdf.name must be argon2id, got {name}");
+    }
+    if !argon2id_kdf_meets_floor(kdf)? {
+        bail!(
+            "{label} Argon2id params must be at least memory_kib={}, iterations={}, parallelism={}",
+            ARGON2ID_MEMORY_KIB,
+            ARGON2ID_ITERATIONS,
+            ARGON2ID_PARALLELISM
+        );
+    }
+    Ok(())
+}
+
+fn argon2id_kdf_meets_floor(kdf: &Value) -> Result<bool> {
+    let memory = kdf
+        .get("memory_kib")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("Argon2id kdf missing memory_kib"))?;
+    let iterations = kdf
+        .get("iterations")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("Argon2id kdf missing iterations"))?;
+    let parallelism = kdf
+        .get("parallelism")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("Argon2id kdf missing parallelism"))?;
+    Ok(memory >= u64::from(ARGON2ID_MEMORY_KIB)
+        && iterations >= u64::from(ARGON2ID_ITERATIONS)
+        && parallelism >= u64::from(ARGON2ID_PARALLELISM))
 }
 /// F-1 Round 26 — recovery bridge full-chain state-machine legality.
 ///
