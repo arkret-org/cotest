@@ -25,8 +25,8 @@ test.describe("discovery", () => {
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
     try {
       // Pre-contact: directory search for bob from alice returns empty.
@@ -235,7 +235,7 @@ test.describe("discovery", () => {
     expect(typeof demo!.actor_count).toBe("number");
 
     // UI smoke — the Organizations tab renders the result row.
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
     try {
       await alicePage.gotoDirectory();
       await alicePage.page.getByTestId("tab-organizations").click();

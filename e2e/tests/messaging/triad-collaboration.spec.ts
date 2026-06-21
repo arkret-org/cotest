@@ -220,9 +220,9 @@ test.describe("single-server triad collaboration", () => {
     const bobToken = await issueDevSession(request, bob);
     const carolToken = await issueDevSession(request, carol);
 
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     const m1 = `M1 alice hello ${stamp}`;
     const m2 = `M2 bob reply ${stamp}`;
@@ -341,7 +341,7 @@ test.describe("single-server triad collaboration", () => {
       await ensureRegistered(request, alice);
       await ensureRegistered(request, bob);
       const aliceToken = await issueDevSession(request, alice);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
       try {
         const realmId = await alicePage.createRealm({

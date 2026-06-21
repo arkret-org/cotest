@@ -100,7 +100,7 @@ test.describe("consent grant", () => {
     const bob = uniqueUser("g2t5-consent-ui-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       await gotoConsentSettings(alicePage);
@@ -137,7 +137,7 @@ test.describe("consent grant", () => {
     const bob = uniqueUser("consent-request-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       await gotoConsentSettings(alicePage);
@@ -176,7 +176,7 @@ test.describe("consent grant", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
     try {
       const status = await requestContact(bobPage, alice.did, "message");
@@ -318,7 +318,7 @@ test.describe("consent grant", () => {
       issueDevSession(request, bob),
     ]);
     await requestContactApi(request, bobToken, alice.did, "message");
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       await gotoConsentSettings(alicePage);
@@ -373,8 +373,8 @@ test.describe("consent grant", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
       try {
         await alicePage.gotoHome();
@@ -436,8 +436,8 @@ test.describe("consent grant", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
       try {
         await requestContact(bobPage, alice.did, "invite");
@@ -478,8 +478,8 @@ test.describe("consent grant", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
     try {
       await requestContact(bobPage, alice.did, "message");
@@ -532,8 +532,8 @@ test.describe("consent grant", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
       try {
         await requestContact(bobPage, alice.did, "invite");
@@ -583,9 +583,9 @@ test.describe("consent grant", () => {
         issueDevSession(request, bobPairwise),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const pairwisePage = await openUserPage(browser, bobPairwise, { sessionToken: pairwiseToken });
-      const rootPage = await openUserPage(browser, bob, { sessionToken: rootToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const pairwisePage = await openUserPage(browser, bobPairwise, { sessionCredential: pairwiseToken });
+      const rootPage = await openUserPage(browser, bob, { sessionCredential: rootToken });
 
       try {
         await requestContact(pairwisePage, alice.did, "message");

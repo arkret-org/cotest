@@ -103,7 +103,7 @@ test.describe("kanban end-to-end", () => {
     const alice = uniqueUser("kanban-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     const cardA = `Card A ${stamp}`;
     const cardB = `Card B ${stamp}`;
@@ -237,7 +237,7 @@ test.describe("kanban end-to-end", () => {
     const alice = uniqueUser("kanban-column-drag-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     const first = `First-${stamp}`;
     const second = `Second-${stamp}`;
@@ -299,7 +299,7 @@ test.describe("kanban end-to-end", () => {
     const alice = uniqueUser("kanban-order-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     const first = `First-${stamp}`;
     const second = `Second-${stamp}`;
@@ -403,7 +403,7 @@ test.describe("kanban end-to-end", () => {
     const alice = uniqueUser("kanban-enc-desc-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     const cardTitle = `Encrypted Card ${stamp}`;
     const description = `Encrypted description body ${stamp}`;
@@ -549,7 +549,7 @@ test.describe("kanban end-to-end", () => {
     const alice = uniqueUser("kanban-enc-synth-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     const cardTitle = `Synthesis Card ${stamp}`;
     const synthesis = `Encrypted synthesis note ${stamp}`;
@@ -637,7 +637,7 @@ test.describe("kanban end-to-end", () => {
     const alice = uniqueUser("kanban-enc-disc-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     const cardTitle = `Discussion Card ${stamp}`;
     const comment = `Encrypted discussion comment ${stamp}`;

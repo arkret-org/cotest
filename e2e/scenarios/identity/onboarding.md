@@ -52,7 +52,7 @@
    - 写入 `ck.device.authorize` 把第一台设备授权
    - 发布 `ck.cross_signing.publish.v1` (PSK / SSK / USK)
    - coauth 颁发首个 `ck.session.grant` (短期)
-5. yougen 收到 `{ did, session_token, principal_control_realm_id }`,写入 localStorage
+5. yougen 收到 `{ did, session_credential, principal_control_realm_id }`,写入 localStorage
 
 ### Phase B — alice 验证 onboarding 落地
 
@@ -60,7 +60,7 @@
    - DID 形如 `did:webvh:<scid>:...`
    - 当前设备列表只有这一台(显示 `ck:device:...` + cross-signing fingerprint)
    - Principal control Realm ID 已记录(可能不在 UI,但 yougen 客户端状态有)
-7. 测试用 alice 的 session_token 调 `GET /_soland/self/account/me`,断言返回 `did`、`handle`、device 信息一致
+7. 测试用 alice 的 session_credential 调 `GET /_soland/self/account/me`,断言返回 `did`、`handle`、device 信息一致
 
 ### Phase C — alice 的 DID Document 可被外部解析
 

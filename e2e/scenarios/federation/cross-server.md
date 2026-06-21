@@ -54,7 +54,7 @@
 
 - α 和 β 两个 soland 都启动并 ready
 - coauth 启动并 ready
-- alice 在 α 上注册;bob 在 β 上注册;两端都通过同一 coauth 拿到 access token
+- alice 在 α 上注册;bob 在 β 上注册;两端都通过同一 coauth 拿到 session credential
 - DID Document(或等效的服务发现源)能让 α 通过 bob 的 DID 解析出 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Principal Server (`sync/federation.md` §6.2 Actor Event Source 发现)
 - α 和 β 互信对方的 service DID (HTTP Message Signature 校验能过)
 

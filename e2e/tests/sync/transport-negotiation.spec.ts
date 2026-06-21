@@ -146,11 +146,11 @@ test.describe("transport negotiation", () => {
       const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
       const alicePage = await openUserPage(browser, alice, {
-        sessionToken: aliceToken,
+        sessionCredential: aliceToken,
         server: "alpha",
       });
       const bobPage = await openUserPage(browser, bob, {
-        sessionToken: bobToken,
+        sessionCredential: bobToken,
         server: "beta",
       });
 

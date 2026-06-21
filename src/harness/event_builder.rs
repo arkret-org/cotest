@@ -48,10 +48,10 @@ pub async fn dev_login(server: &CokretServer, actor: &str, device_id: &str) -> R
         StatusCode::OK,
     )
     .await?;
-    login["access_token"]
+    login["session_credential"]
         .as_str()
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("login response did not include access_token: {login}"))
+        .ok_or_else(|| anyhow!("login response did not include session_credential: {login}"))
 }
 
 pub async fn create_realm(

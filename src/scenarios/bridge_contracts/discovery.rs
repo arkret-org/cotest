@@ -57,15 +57,19 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     .await?;
     assert_eq!(auth_bridge["contract"], "cokret.rest.principal_bridge.v1");
     assert_eq!(
-        auth_bridge["auth"]["session_grant_exchange_path"],
+        auth_bridge["auth"]["session_grant_issuance_path"],
         "/_cokret/gate/account/session-grants"
+    );
+    assert_eq!(
+        auth_bridge["auth"]["session_grant_presentation"],
+        "Authorization: Bearer <ck.session.grant> with a DPoP proof on /_cokret/self/*"
     );
     assert_eq!(
         auth_bridge["push"]["register_device_path"],
         "/_cokret/edge/push/register-device"
     );
     assert_eq!(
-        auth_bridge["examples"]["session_grant_exchange_request"]["principal_id"],
+        auth_bridge["examples"]["session_grant_issue_request"]["principal_id"],
         "did:web:alice.example"
     );
     assert_eq!(

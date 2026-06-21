@@ -33,8 +33,8 @@ test.describe("workflow: team onboarding", () => {
       issueDevSession(request, mei),
       issueDevSession(request, yuki),
     ]);
-    const meiPage = await openUserPage(browser, mei, { sessionToken: meiToken });
-    const yukiPage = await openUserPage(browser, yuki, { sessionToken: yukiToken });
+    const meiPage = await openUserPage(browser, mei, { sessionCredential: meiToken });
+    const yukiPage = await openUserPage(browser, yuki, { sessionCredential: yukiToken });
 
     const welcome = `Hi Yuki, welcome aboard! Ping me if anything blocks you. ${stamp}`;
     const welcomeEdited = `${welcome} (Onboarding hub: https://corp.example/onboarding)`;

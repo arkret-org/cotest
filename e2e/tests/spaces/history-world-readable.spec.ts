@@ -34,7 +34,7 @@ test.describe("world_readable history @fully-implemented", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const outsiderToken = await issueDevSession(request, outsider);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -73,7 +73,7 @@ test.describe("world_readable history @fully-implemented", () => {
     const alice = uniqueUser("worldread-anon-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -112,7 +112,7 @@ test.describe("world_readable history @fully-implemented", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const outsiderToken = await issueDevSession(request, outsider);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({

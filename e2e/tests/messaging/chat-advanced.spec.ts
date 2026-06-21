@@ -343,7 +343,7 @@ test.describe("chat advanced", () => {
   }) => {
     const fixture = await createChatApiFixture(request, "chat-route");
     const alicePage = await openUserPage(browser, fixture.alice, {
-      sessionToken: fixture.aliceToken,
+      sessionCredential: fixture.aliceToken,
     });
     try {
       await gotoChat(alicePage, fixture.realmId);
@@ -381,9 +381,9 @@ test.describe("chat advanced", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     const m1 = `S14 ship it ${stamp}`;
     const m2 = `S14 yes ship ${stamp}`;
@@ -455,9 +455,9 @@ test.describe("chat advanced", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     const mention = `@${bob.handle.replace(/^@/, "")} can you review the incident note? ${stamp}`;
 
@@ -519,9 +519,9 @@ test.describe("chat advanced", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     const question = `Which rollout window should we use? ${stamp}`;
     const optionA = `Now ${stamp}`;
@@ -589,8 +589,8 @@ test.describe("chat advanced", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
       try {
         const realmId = await alicePage.createRealm({
@@ -631,8 +631,8 @@ test.describe("chat advanced", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
       try {
         const realmId = await alicePage.createRealm({

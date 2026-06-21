@@ -3,15 +3,14 @@
 // Contract: cotask/tasks/_auth_todos.md "## ② 最终路线" (D1–D6) and
 // cokret-spec/spec/v1/zh/sync/api-conventions.md §3.3.
 //
-// Under ②, soland mints no local bearer and there is no grant→bearer exchange.
-// A client reaches `/_cokret/self/*` by presenting
+// Under ②, soland does not mint a second local credential. A client reaches
+// `/_cokret/self/*` by presenting
 //   Authorization: Bearer <ck.session.grant>
 //   DPoP: <RFC 9449 proof bound to htm/htu/ath(=hash(grant))>
 // and soland verifies the DPoP against the grant's `cnf.jkt` (obtained via
 // session-grant introspection at coauth), plus audience / scope / principal /
-// device / expiry. Three inbound credential types coexist on soland and are
-// distinguished by the presence of the `DPoP` header (D6): dev-login bearer,
-// coauth OAuth access token, and grant+DPoP.
+// device / expiry. The `DPoP` header distinguishes current session-grant
+// presentation from development and deployment compatibility credentials.
 //
 // Minting approach: a real DPoP-bound grant is obtained from coauth's cotest
 // debug seam (POST /_coauth/gate/account/test/debug/issue-dpop-grant), which

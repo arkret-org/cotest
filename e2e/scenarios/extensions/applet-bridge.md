@@ -34,7 +34,7 @@
 
 - alice 通过 `POST /_soland/self/account/register` 注册过(`ensureRegistered`)
 - alice 持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
-- alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_token
+- alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_credential
 - `process.env.COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 存在;mock-applet-registry 已经 ready(健康检查 `GET /healthz` 返回 200)
 - mock-applet-registry 内置 `applet_service` 的签名密钥;测试只需要调它的 HTTP API,不直接持有密钥
 

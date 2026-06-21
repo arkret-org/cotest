@@ -247,7 +247,7 @@ Authorization: Bearer [redacted]                            # post-redaction pla
                                                             # rewrite it to `[redacted]`
 "token_kind":"oauth_bearer"                                 # field name does not match
 "token_count":42                                            # value is not a quoted string
-"refresh_token_url":"https://..."                           # field name does not match
+"token_refresh_url":"https://..."                           # field name does not match
                                                             # the closed allowlist
 "public_key":"MFkwEwYHKoZIzj0..."                           # `public_key` is not in the
                                                             # secret-field allowlist

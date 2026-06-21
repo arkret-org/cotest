@@ -210,7 +210,7 @@ test.describe("organization policy inheritance", () => {
       expect(apiRow.realms).toEqual(expect.arrayContaining([realmId]));
       expect(apiRow.realm_count).toBeGreaterThanOrEqual(1);
 
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
       try {
         await alicePage.gotoDirectory();
         await alicePage.page.getByTestId("tab-organizations").click();

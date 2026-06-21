@@ -8,7 +8,7 @@
 //! Scenario walk-through (when fully wired):
 //!   1. Boot soland + coauth + sodmin (admin UI) in the same docker network. Register alice on
 //!      coauth with device dev_A; alice logs in via soland's dev-login on dev_A and obtains an
-//!      access token.
+//!      session credential.
 //!   2. Smoke: GET /_soland/self/account/me on soland with alice's token → 200. GET coauth
 //!      `/api/admin/v1/accounts/{alice}/devices` lists dev_A with `is_revoked=false`.
 //!   3. Open sodmin (Dioxus admin UI) in playwright; sign in as admin; navigate to alice's account

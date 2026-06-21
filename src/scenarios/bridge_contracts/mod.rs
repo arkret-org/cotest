@@ -5,8 +5,8 @@
 //! - [`discovery`] — `/_soland/gate/auth/bridge/describe` +
 //!   `/_soland/edge/push/outbound/bridge/describe` smoke check
 //!   (`principal_bridge_contracts_are_discoverable`).
-//! - [`session_grant`] — coauth-backed `/_cokret/gate/account/session-grants` strand
-//!   (`session_grant_exchange_uses_configured_coauth_introspection`).
+//! - [`session_grant`] — coauth-backed session-grant presentation support
+//!   (`session_grant_presentation_uses_configured_coauth_introspection`).
 //! - [`starid`] — optional `did:webvh` resolver profile discoverability
 //!   (`starid_optional_resolver_profile_is_discoverable`).
 //!
@@ -18,5 +18,5 @@ pub mod session_grant;
 pub mod starid;
 
 pub use discovery::principal_bridge_contracts_are_discoverable;
-pub use session_grant::session_grant_exchange_uses_configured_coauth_introspection;
+pub use session_grant::session_grant_presentation_uses_configured_coauth_introspection;
 pub use starid::starid_optional_resolver_profile_is_discoverable;

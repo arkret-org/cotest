@@ -29,7 +29,7 @@
 1. alice 在 device-1 `/onboarding`,选 "Sign in with OIDC"
 2. 重定向 mock IdP → 自动返回 ID token
 3. coauth OIDC bridge 校验 → 创建/绑定 DID → 颁 `ck.session.grant`(TTL 30 分钟)
-4. yougen 拿 `{ did, session_token, refresh_token, control_realm_id }`
+4. yougen 拿 `{ did, session_credential, control_realm_id }`
 5. 断言:`/_soland/self/account/me` 返回 alice.did
 
 ### Phase B — Device 2 via 设备授权链
@@ -43,7 +43,7 @@
 
 ### Phase C — Session refresh
 
-12. 测试 harness 把 device-1 session_token 标过期(后端用 `Authorization: Bearer <expired>` → 401)
+12. 测试 harness 把 device-1 session_credential 标过期(后端用 `Authorization: Bearer <expired>` → 401)
 13. yougen 客户端捕捉 401 → 自动 `POST /_cokret/gate/account/session-grants/refresh` 用旧 grant + DPoP holder proof
 14. coauth 校验 holder proof → 颁新 session grant
 15. 断言:device-1 重新可用,不需要 re-OIDC
@@ -51,9 +51,9 @@
 ### Phase D — Soft logout
 
 16. alice 在 device-1 点 "Log out"
-17. session_token 立刻 revoke;refresh_token 保留(soft logout, spec §3)
+17. session_credential 立刻 revoke;holder key 是否保留由 soft/hard logout 策略决定
 18. 断言:device-1 调 `/_soland/self/account/me` 返 401
-19. alice 再 OIDC 一次或用 refresh_token 重新 login → 拿新 session
+19. alice 再 OIDC 一次或用有效 grant holder proof 重新取得 session grant
 20. 断言:account state 仍是 `active`(soft logout 不变状态机)
 
 ## Edge cases

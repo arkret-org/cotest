@@ -1087,7 +1087,7 @@ fn is_dynamic_key(key: &str) -> bool {
             | "challenge_id"
             | "server_signature"
             | "token"
-            | "session_token"
+            | "session_credential"
     )
 }
 

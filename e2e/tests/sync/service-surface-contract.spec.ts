@@ -168,15 +168,17 @@ test.describe("describes coauth surface @fully-implemented", () => {
       "ck.profile.principal_server.v1",
     );
 
-    // auth_metadata should expose at least one of oauth_issuer / supported_auth_methods.
+    // auth_metadata routes account flows through Account Authority; methods only
+    // describe login proof providers.
     expect(body.auth_metadata, "auth_metadata present").toBeTruthy();
-    const hasOauthIssuer = typeof body.auth_metadata?.oauth_issuer === "string";
-    const hasAuthMethods =
-      Array.isArray(body.auth_metadata?.supported_auth_methods) &&
-      body.auth_metadata.supported_auth_methods.length > 0;
-    expect(hasOauthIssuer || hasAuthMethods, "auth metadata advertises issuer or methods").toBe(
+    expect(
+      body.auth_metadata?.account_authority?.gate_account_base,
+      "auth metadata advertises account authority",
+    ).toMatch(/^https?:\/\//);
+    expect(Array.isArray(body.auth_metadata?.methods), "auth metadata advertises methods[]").toBe(
       true,
     );
+    expect(body.auth_metadata.methods.length, "auth metadata methods[] is non-empty").toBeGreaterThan(0);
 
     // §3.0 dev-mode invariant also applies to coauth.
     if (body.development_mode === true) {

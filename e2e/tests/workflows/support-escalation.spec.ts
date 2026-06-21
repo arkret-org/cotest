@@ -33,8 +33,8 @@ test.describe("workflow: support escalation", () => {
       issueDevSession(request, alex),
       issueDevSession(request, sam),
     ]);
-    const alexPage = await openUserPage(browser, alex, { sessionToken: alexToken });
-    const samPage = await openUserPage(browser, sam, { sessionToken: samToken });
+    const alexPage = await openUserPage(browser, alex, { sessionCredential: alexToken });
+    const samPage = await openUserPage(browser, sam, { sessionCredential: samToken });
 
     const summary = `Ticket #1042 — customer X's checkout fails with 500 on /api/charge. ${stamp}`;
     const summaryEdited = `${summary} (ROOT CAUSE: payment gateway pool exhausted, see Sam's reply below)`;

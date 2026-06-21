@@ -132,7 +132,7 @@ test.describe("policy server check", () => {
       ]);
       const aliceToken = await issueDevSession(request, alice);
       const bobToken = await issueDevSession(request, bob);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
       // bob's token is provisioned so the harness can later observe bob-side
       // effects of the deny (e.g. the invite never landing in bob's inbox).
       void bobToken;
@@ -243,7 +243,7 @@ test.describe("policy server check", () => {
         ensureRegistered(request, bob),
       ]);
       const aliceToken = await issueDevSession(request, alice);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
       try {
         await request.post(`${mockPolicyServerBaseUrl()}/scenarios`, {
@@ -294,7 +294,7 @@ test.describe("policy server check", () => {
         ensureRegistered(request, bob),
       ]);
       const aliceToken = await issueDevSession(request, alice);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
       try {
         const realmId = await alicePage.createRealm({
@@ -358,7 +358,7 @@ test.describe("policy server check", () => {
         ensureRegistered(request, bob),
       ]);
       const aliceToken = await issueDevSession(request, alice);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
       try {
         await request.post(`${mockPolicyServerBaseUrl()}/scenarios`, {

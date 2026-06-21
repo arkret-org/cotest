@@ -67,8 +67,8 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
     const subscribeFailures: string[] = [];
 
     for (const observedPage of [alicePage.page, bobPage.page]) {

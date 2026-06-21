@@ -29,7 +29,7 @@ test.describe("key backup + restore", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     const alicePage = await openUserPage(browser, alice, {
-      sessionToken: aliceToken,
+      sessionCredential: aliceToken,
     });
 
     try {
@@ -77,7 +77,7 @@ test.describe("key backup + restore", () => {
     await ensureRegistered(request, alice);
     const deviceAToken = await issueDevSession(request, alice);
     const deviceA = await openUserPage(browser, alice, {
-      sessionToken: deviceAToken,
+      sessionCredential: deviceAToken,
     });
     const sessionsToClose: JointUserPage[] = [deviceA];
     const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
@@ -122,7 +122,7 @@ test.describe("key backup + restore", () => {
       const deviceBUser = sameActorFreshDevice(alice, "device-b");
       const deviceBToken = await issueDevSession(request, deviceBUser);
       const deviceB = await openUserPage(browser, deviceBUser, {
-        sessionToken: deviceBToken,
+        sessionCredential: deviceBToken,
       });
       sessionsToClose.push(deviceB);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
@@ -172,7 +172,7 @@ test.describe("key backup + restore", () => {
     await ensureRegistered(request, alice);
     const deviceAToken = await issueDevSession(request, alice);
     const deviceA = await openUserPage(browser, alice, {
-      sessionToken: deviceAToken,
+      sessionCredential: deviceAToken,
     });
     const sessionsToClose: JointUserPage[] = [deviceA];
     const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
@@ -231,7 +231,7 @@ test.describe("key backup + restore", () => {
       const deviceBUser = sameActorFreshDevice(alice, "device-b");
       const deviceBToken = await issueDevSession(request, deviceBUser);
       const deviceB = await openUserPage(browser, deviceBUser, {
-        sessionToken: deviceBToken,
+        sessionCredential: deviceBToken,
       });
       sessionsToClose.push(deviceB);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);

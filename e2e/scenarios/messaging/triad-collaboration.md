@@ -19,7 +19,7 @@
 
 - 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
-- 共享同一个 coauth;所有 actor 的 access token 都来自这个 coauth
+- 共享同一个 coauth;所有 actor 的 session credential 都来自这个 coauth
 
 (都是 cotest 现有 harness 直接提供的,不需要改 scripts/run-joint-e2e.ps1。)
 
@@ -35,7 +35,7 @@
 
 - 三个 DID 都通过 `POST /_soland/self/account/register` 注册过 (与现有 `ensureRegistered` 行为一致)
 - 三个 actor 都持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
-- 三个 actor 的 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
+- 三个 actor 的 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 
 ## Steps
 

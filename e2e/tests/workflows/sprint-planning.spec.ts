@@ -40,9 +40,9 @@ test.describe("workflow: sprint planning", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const meiPage = await openUserPage(browser, mei, { sessionToken: meiToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const meiPage = await openUserPage(browser, mei, { sessionCredential: meiToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     const kickoff = `Sprint 24 kickoff — Story A (auth), Story B (payments), Story C (analytics). Reply with your pick. ${stamp}`;
     const bobClaim = `I'll take Story A. ${stamp}`;
@@ -136,9 +136,9 @@ test.describe("workflow: sprint planning", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const meiPage = await openUserPage(browser, mei, { sessionToken: meiToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const meiPage = await openUserPage(browser, mei, { sessionCredential: meiToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     const backlog = `Backlog-${stamp}`;
     const todo = `Todo-${stamp}`;

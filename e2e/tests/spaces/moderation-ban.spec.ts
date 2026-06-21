@@ -294,7 +294,7 @@ test.describe("moderation and ban", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
     try {
       await alicePage.gotoRealmAdminSection(realmId, "members");
       const malloryRow = alicePage.page.locator(

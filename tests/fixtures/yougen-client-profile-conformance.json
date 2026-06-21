@@ -24,7 +24,7 @@
         "executed": true,
         "operations": [
           "oidc_callback",
-          "session_grant_exchange"
+          "issue_session_grant"
         ]
       },
       {
@@ -63,7 +63,7 @@
       },
       "black_box_operations": [
         "oidc_callback",
-        "session_grant_exchange"
+        "issue_session_grant"
       ],
       "request_trace": [
         {

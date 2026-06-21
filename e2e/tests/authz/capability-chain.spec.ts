@@ -85,7 +85,7 @@ test.describe.fixme("capability chain", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const malloryToken = await issueDevSession(request, mallory);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -116,7 +116,7 @@ test.describe.fixme("capability chain", () => {
     const bob = uniqueUser("cap-grant-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -171,7 +171,7 @@ test.describe.fixme("capability chain", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -232,7 +232,7 @@ test.describe.fixme("capability chain", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -314,7 +314,7 @@ test.describe.fixme("capability chain", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -367,7 +367,7 @@ test.describe.fixme("capability chain", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -420,7 +420,7 @@ test.describe.fixme("capability chain", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await alicePage.createRealm({

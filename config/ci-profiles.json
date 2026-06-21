@@ -51,7 +51,7 @@
         "multi_service_bridge_contract_matrix_scaffold",
         "teabay_directory_service_profile_is_discoverable",
         "starid_optional_resolver_profile_is_discoverable",
-        "session_grant_exchange_uses_configured_coauth_introspection",
+        "session_grant_presentation_uses_configured_coauth_introspection",
         "live_describe_profile_claim_gate_from_env"
       ],
       "excluded_quarantine_labels": [],
@@ -92,7 +92,7 @@
         "federation_replay_snapshot_and_redaction_contracts_work",
         "teabay_directory_service_profile_is_discoverable",
         "starid_optional_resolver_profile_is_discoverable",
-        "session_grant_exchange_uses_configured_coauth_introspection",
+        "session_grant_presentation_uses_configured_coauth_introspection",
         "yougen_mock_contract_matches_live_soland_baseline"
       ],
       "excluded_quarantine_labels": [],
