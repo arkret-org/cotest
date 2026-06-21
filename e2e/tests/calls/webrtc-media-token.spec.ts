@@ -133,7 +133,7 @@ test.describe("media token exchange", () => {
   );
 
   test(
-    "off-focus token request fails closed with focus_mismatch (oldest-membership election)",
+    "unknown focus token request fails closed with focus_mismatch",
     async ({ request }) => {
       const { alice, aliceToken, callId } = await setupMediaCall(request);
       const denied = await exchangeMediaToken(request, aliceToken, {
@@ -143,7 +143,7 @@ test.describe("media token exchange", () => {
         device_id: alice.deviceId,
         focus_id: "ck:focus:unknown-focus",
       });
-      expect(denied.status()).toBe(400);
+      expect(denied.status()).toBe(409);
       expect(wireErrCode(await denied.json())).toBe("focus_mismatch");
     },
   );

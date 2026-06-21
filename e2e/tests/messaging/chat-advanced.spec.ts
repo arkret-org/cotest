@@ -88,7 +88,6 @@ test.describe("chat advanced", () => {
         kind: "ck.reaction.add",
         payload: {
           target_ref: messageRef,
-          actor: fixture.bob.did,
           key: "+1",
         },
       }),
@@ -103,7 +102,6 @@ test.describe("chat advanced", () => {
         kind: "ck.reaction.remove",
         payload: {
           target_ref: messageRef,
-          actor: fixture.bob.did,
           key: "+1",
         },
       }),
@@ -116,7 +114,6 @@ test.describe("chat advanced", () => {
     );
     expect(events.find((event) => event.event_kind === "ck.reaction.add")?.payload).toMatchObject({
       target_ref: messageRef,
-      actor: fixture.bob.did,
       key: "+1",
     });
   });
@@ -140,10 +137,8 @@ test.describe("chat advanced", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        thread_id: "discussion",
         reply_to: rootMessageRef,
         content: { kind: "ck.content.text", body: replyBody },
-        encrypted: false,
       },
     });
     await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
@@ -156,7 +151,7 @@ test.describe("chat advanced", () => {
     ]);
     expect(messageEvents.at(-1)?.payload).toMatchObject({
       reply_to: rootMessageRef,
-      thread_id: "discussion",
+      track_name: "discussion",
     });
   });
 
@@ -182,7 +177,6 @@ test.describe("chat advanced", () => {
           mention_routing_hint: {
             mentioned: [fixture.bob.did],
           },
-          encrypted: false,
         },
       }),
       { context: "mention message" },
@@ -215,7 +209,6 @@ test.describe("chat advanced", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        thread_id: "discussion",
         content: {
           kind: "ck.content.text",
           body,
@@ -224,7 +217,6 @@ test.describe("chat advanced", () => {
         mention_routing_hint: {
           mentioned: [fixture.bob.did],
         },
-        encrypted: false,
       },
     });
     await submitSignedEventApi(request, fixture.aliceToken, root, { context: "root mention" });
@@ -234,14 +226,12 @@ test.describe("chat advanced", () => {
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
       kind: "ck.message.create",
-      payload: {
-        strand_id: strandId,
-        track_name: "discussion",
-        thread_id: "discussion",
-        reply_to: rootMessageRef,
-        content: { kind: "ck.content.text", body: `reply ${Date.now()}` },
-        encrypted: false,
-      },
+        payload: {
+          strand_id: strandId,
+          track_name: "discussion",
+          reply_to: rootMessageRef,
+          content: { kind: "ck.content.text", body: `reply ${Date.now()}` },
+        },
     });
     await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
 
@@ -252,7 +242,7 @@ test.describe("chat advanced", () => {
         actorDid: fixture.alice.did,
         realmId: fixture.realmId,
         kind: "ck.reaction.add",
-        payload: { target_ref: rootMessageRef, actor: fixture.alice.did, key: "+1" },
+        payload: { target_ref: rootMessageRef, key: "+1" },
       }),
       { context: "alice add reaction" },
     );
@@ -263,7 +253,7 @@ test.describe("chat advanced", () => {
         actorDid: fixture.bob.did,
         realmId: fixture.realmId,
         kind: "ck.reaction.add",
-        payload: { target_ref: rootMessageRef, actor: fixture.bob.did, key: "+1" },
+        payload: { target_ref: rootMessageRef, key: "+1" },
       }),
       { context: "bob add reaction" },
     );
@@ -274,7 +264,7 @@ test.describe("chat advanced", () => {
         actorDid: fixture.bob.did,
         realmId: fixture.realmId,
         kind: "ck.reaction.remove",
-        payload: { target_ref: rootMessageRef, actor: fixture.bob.did, key: "+1" },
+        payload: { target_ref: rootMessageRef, key: "+1" },
       }),
       { context: "bob remove reaction" },
     );
@@ -694,7 +684,6 @@ test.describe("chat advanced", () => {
         payload: {
           strand_id: strandId,
           track_name: "discussion",
-          encrypted: true,
           mention_sidecar_hash: [sidecarHash],
           encrypted_content: encryptedEnvelope("ck.message.v1", "opaque-e2ee-mention", realmId),
         },
@@ -722,7 +711,7 @@ function mentionSidecarHash(realmId: string, did: string): string {
 }
 
 function encryptedEnvelope(
-  contentType: string,
+  _contentType: string,
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
@@ -733,9 +722,8 @@ function encryptedEnvelope(
     epoch: 1,
     content_type: "application/vnd.cokret.message+json",
     ciphertext,
-    authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",
-    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "ck.message.create" },
+    aad: { realm_id: realmId, event_kind: "ck.message.create" },
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

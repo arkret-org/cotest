@@ -321,8 +321,8 @@ test.describe("cross-server federation", () => {
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: bob.did,
-        member: bob.did,
         membership: "invite",
         realm_title: `S2 pushed invite ${stamp}`,
         discoverability: "public",

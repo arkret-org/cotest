@@ -52,7 +52,6 @@ test.describe("Document Morph collaboration", () => {
         realmId,
         kind: "ck.morph.create",
         payload: {
-          morph_id: morphId,
           object: {
             id: morphId,
             schema: "ck.schema.morph.v1",
@@ -79,11 +78,17 @@ test.describe("Document Morph collaboration", () => {
         realmId,
         kind: "ck.relation.create",
         payload: {
-          relation_id: relationId,
-          kind: "references",
-          from_ref: morphId,
-          to_ref: realmId,
-          fields: { role: "postmortem_for" },
+          relation: {
+            id: relationId,
+            schema: "ck.schema.relation.v1",
+            realm_id: realmId,
+            relation_kind: "references",
+            from_ref: morphId,
+            to_ref: realmId,
+            fields: { role: "postmortem_for" },
+            created_by: alice.did,
+            created_at: nowIso(),
+          },
         },
       }),
       { context: "link document morph relation" },
@@ -99,7 +104,6 @@ test.describe("Document Morph collaboration", () => {
         kind: "ck.message.create",
         payload: {
           strand_id: strandId,
-          thread_id: morphId,
           track_name: "discussion",
           content: {
             kind: "ck.content.text",
@@ -124,7 +128,6 @@ test.describe("Document Morph collaboration", () => {
         realmId,
         kind: "ck.morph.update",
         payload: {
-          morph_id: morphId,
           target_ref: morphId,
           patch: {
             fields: {

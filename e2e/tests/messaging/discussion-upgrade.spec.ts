@@ -30,7 +30,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("discussion upgrade to Circle-scoped private Strand", () => {
-  test("API inline discussion track preserves strand_id and thread_id", async ({
+  test("API inline discussion track preserves strand_id and track_name", async ({
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "inline-track");
@@ -46,9 +46,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         payload: {
           strand_id: defaultStrandId,
           track_name: "discussion",
-          thread_id: "discussion",
           content: { kind: "ck.content.text", body },
-          encrypted: false,
         },
       }),
       { context: "inline discussion message" },
@@ -65,7 +63,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     expect(eventPayload(message)).toMatchObject({
       strand_id: defaultStrandId,
       track_name: "discussion",
-      thread_id: "discussion",
     });
   });
 
@@ -617,8 +614,8 @@ async function joinRealmMemberViaApi(
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: memberDid,
-        member: memberDid,
         membership: "join",
         delivery_status: "unroutable",
       },
@@ -701,9 +698,7 @@ async function createDiscussionMessageViaApi(
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      thread_id: "discussion",
       content: { kind: "ck.content.text", body: `${body} ${Date.now()}` },
-      encrypted: false,
     },
   });
   await submitSignedEventApi(request, token, envelope, {

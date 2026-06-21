@@ -115,37 +115,45 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       }),
     );
 
-    // bob's relayed view: per-sender seq is monotonic, senders attributed,
-    // signal types canonical.
+    // Recipient relayed views: senders do not self-echo; per-sender seq is
+    // monotonic, senders attributed, signal types canonical.
     const bobView = (
       await relayedCallSignals(request, bobToken, realmId)
     ).filter(
       (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
     );
-    const byType = (t: string) =>
-      bobView.filter(
+    const aliceView = (
+      await relayedCallSignals(request, aliceToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    const byType = (view: Array<Record<string, unknown>>, t: string) =>
+      view.filter(
         (e) => (e.payload as Record<string, unknown>).signal_type === t,
       );
-    expect(byType("invite").length).toBe(1);
-    expect(byType("answer").length).toBe(1);
-    expect(byType("candidate").length).toBe(1);
-    expect(byType("hangup").length).toBe(1);
+    expect(byType(bobView, "invite").length).toBe(1);
+    expect(byType(aliceView, "answer").length).toBe(1);
+    expect(byType(bobView, "candidate").length).toBe(1);
+    expect(byType(bobView, "hangup").length).toBe(1);
     // Sender attribution survives the relay.
-    expect(byType("invite")[0].actor_id).toBe(alice.did);
-    expect(byType("answer")[0].actor_id).toBe(bob.did);
+    expect(byType(bobView, "invite")[0].actor_id).toBe(alice.did);
+    expect(byType(aliceView, "answer")[0].actor_id).toBe(bob.did);
     // Alice's own frames are seq-monotonic per sender (1=invite, 2=candidate,
     // 3=hangup); bob's answer is seq 1 in his own (actor,device) lane.
     const aliceSeqs = bobView
       .filter((e) => e.actor_id === alice.did)
       .map((e) => (e.payload as Record<string, unknown>).seq as number);
     expect(aliceSeqs).toEqual([1, 2, 3]);
+    const bobSeqs = aliceView
+      .filter((e) => e.actor_id === bob.did)
+      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+    expect(bobSeqs).toEqual([1]);
 
     // Durable lifecycle plane — ck.call.state advances connecting -> active ->
     // ended (call-state.md §4.2). The owner writes the durable cell; we drive
     // it through the legal FSM transitions.
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {
       state: "connecting",
-      participants: [{ actor_id: alice.did, device_id: alice.deviceId }],
     });
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {
       state: "active",

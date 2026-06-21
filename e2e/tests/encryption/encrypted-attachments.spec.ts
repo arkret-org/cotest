@@ -88,10 +88,17 @@ test.describe("encrypted attachments", () => {
     const ciphertext = Buffer.from(`ciphertext-only-${Date.now()}`, "utf8");
     const ciphertextDigest = sha256Digest(ciphertext);
     const envelope = {
-      algorithm: "mls-rfc9420+xchacha20poly1305",
+      encrypted: true,
+      scheme: "ck.blob.whole_file_aead.v1",
+      alg: "mls_exporter_aead_xchacha20poly1305",
       nonce: "test-nonce",
-      key_ref: { group_id: "ck:mls:group:s12", epoch: 1 },
+      key_ref: {
+        algorithm: "MLS",
+        group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      },
+      epoch: 1,
       ciphertext_digest: ciphertextDigest,
+      size_bytes: ciphertext.length,
       media_type: "application/octet-stream",
     };
 

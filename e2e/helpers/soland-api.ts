@@ -13,6 +13,7 @@ export type OperationKind =
   | "circle"
   | "device"
   | "event"
+  | "grant"
   | "strand"
   | "invite"
   | "mls_group"
@@ -200,8 +201,8 @@ export async function createRealmApi(
         realmId,
         kind: "ck.member.state",
         payload: {
+          realm_id: realmId,
           actor_id: invitee,
-          member: invitee,
           membership: "invite",
         },
       }),
@@ -259,6 +260,7 @@ export async function acceptInviteApi(
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: actorDid,
         membership: "join",
         reason: "invite_accept",
@@ -763,10 +765,10 @@ function schemaIdForEventKind(kind: string): string {
     return "ck.schema.message.v1";
   }
   if (kind === "ck.message.redact") {
-    return "ck.schema.redaction.v1";
+    return "ck.schema.message.v1";
   }
   if (kind === "ck.member.state") {
-    return "ck.schema.member_state.v1";
+    return "ck.schema.event_payload.v1";
   }
   if (kind.startsWith("ck.space.")) {
     return "ck.schema.space.v1";

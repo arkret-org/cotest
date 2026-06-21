@@ -89,7 +89,6 @@ test.describe("moderation appeal", () => {
         realmId,
         reviewer.did,
         appellant.did,
-        decision.decision_id,
       );
       const realmAfterBan = await request.get(
         `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
@@ -329,7 +328,6 @@ async function banMemberViaApi(
   realmId: string,
   actorDid: string,
   memberDid: string,
-  decisionRef: string,
 ) {
   await submitSignedEventApi(
     request,
@@ -339,11 +337,10 @@ async function banMemberViaApi(
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: memberDid,
-        member: memberDid,
         membership: "ban",
         reason: "moderation_decision",
-        decision_ref: decisionRef,
       },
     }),
     { context: `ban ${memberDid} from ${realmId}` },

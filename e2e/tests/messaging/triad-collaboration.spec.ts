@@ -43,6 +43,17 @@ async function waitForInviteCardReady(page: Page) {
   await expect(page.getByTestId("invite-member")).toBeVisible({ timeout: 30_000 });
 }
 
+function eventKind(event: Record<string, unknown>): string {
+  return String(event.kind ?? event.event_kind ?? "");
+}
+
+function eventPayload(event: Record<string, unknown> | undefined): Record<string, unknown> {
+  const payload = event?.payload;
+  return payload && typeof payload === "object"
+    ? (payload as Record<string, unknown>)
+    : {};
+}
+
 test.describe("single-server triad collaboration", () => {
   test("API create → revise → redact updates projection visibility", async ({
     request,
@@ -77,7 +88,6 @@ test.describe("single-server triad collaboration", () => {
         realmId: realmId,
         kind: "ck.message.revise",
         payload: {
-          target_event_id: created.event_id,
           target_ref: messageRef,
           content: { kind: "ck.content.text", body: revisedBody },
         },
@@ -86,11 +96,11 @@ test.describe("single-server triad collaboration", () => {
     );
 
     const beforeRedact = await listRealmEventsViaApi(request, bobToken, realmId);
-    expect(beforeRedact.map((event) => event.event_kind)).toEqual(
+    expect(beforeRedact.map(eventKind)).toEqual(
       expect.arrayContaining(["ck.message.create", "ck.message.revise"]),
     );
-    expect(beforeRedact.find((event) => event.event_kind === "ck.message.revise")?.payload)
-      .toMatchObject({ target_event_id: created.event_id, target_ref: messageRef });
+    expect(eventPayload(beforeRedact.find((event) => eventKind(event) === "ck.message.revise")))
+      .toMatchObject({ target_ref: messageRef });
 
     await submitSignedEventApi(
       request,
@@ -109,11 +119,12 @@ test.describe("single-server triad collaboration", () => {
     );
 
     const events = await listRealmEventsViaApi(request, bobToken, realmId);
-    expect(events.map((event) => event.event_kind)).toContain("ck.message.revise");
-    expect(events.map((event) => event.event_kind)).not.toContain("ck.message.create");
-    expect(events.map((event) => event.event_kind)).not.toContain("ck.message.redact");
-    expect(events.find((event) => event.event_kind === "ck.message.revise")?.payload)
-      .toMatchObject({ target_event_id: created.event_id, target_ref: messageRef });
+    const eventKinds = events.map(eventKind);
+    expect(eventKinds).toContain("ck.message.revise");
+    expect(eventKinds).not.toContain("ck.message.create");
+    expect(eventKinds).not.toContain("ck.message.redact");
+    expect(eventPayload(events.find((event) => eventKind(event) === "ck.message.revise")))
+      .toMatchObject({ target_ref: messageRef });
   });
 
   test("API late-join triad member sees only post-join messages in joined history", async ({
@@ -148,7 +159,6 @@ test.describe("single-server triad collaboration", () => {
         strand_id: defaultStrandId,
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad pre ${stamp}` },
-        encrypted: false,
       },
     });
     await submitSignedEventApi(request, aliceToken, pre, {
@@ -163,8 +173,8 @@ test.describe("single-server triad collaboration", () => {
         kind: "ck.member.state",
         createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
         payload: {
+          realm_id: realmId,
           actor_id: carol.did,
-          member: carol.did,
           membership: "join",
           delivery_status: "unroutable",
         },
@@ -180,7 +190,6 @@ test.describe("single-server triad collaboration", () => {
         strand_id: defaultStrandId,
         track_name: "discussion",
         content: { kind: "ck.content.text", body: `triad post ${stamp}` },
-        encrypted: false,
       },
     });
     await submitSignedEventApi(request, aliceToken, post, {
@@ -413,8 +422,8 @@ test.describe("single-server triad collaboration", () => {
           realmId: realmId,
           kind: "ck.member.state",
           payload: {
+            realm_id: realmId,
             actor_id: carol.did,
-            member: carol.did,
             membership: "join",
             delivery_status: "unroutable",
           },

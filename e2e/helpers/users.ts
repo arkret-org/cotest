@@ -29,6 +29,7 @@ export type UserSession = {
   consoleLines: string[];
   networkLines: string[];
   serverUrl: string;
+  keepDeviceAuthorizationModal: boolean;
   /// The bearer presented on `/_cokret/self/*`. Under the ②(A+②) model this is
   /// the `ck.session.grant` JWT; a request to a self-path also requires the DPoP
   /// + holder-proof material in `grant` below.
@@ -50,6 +51,7 @@ export type SessionGrantMaterial = {
 export type OpenUserOpts = {
   sessionToken?: string;
   server?: SolandKey;
+  keepDeviceAuthorizationModal?: boolean;
   /// Real `ck.session.grant` JWT to inject as yougen's bearer (②(A+②) model).
   /// When set together with `dpopSeedB64url`, yougen's dev-only boot injection
   /// rehydrates the grant + DPoP device key instead of relying on dev-login.
@@ -109,11 +111,13 @@ export class JointUserPage {
   async gotoHome() {
     await this.page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoLogin() {
     await this.page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("login-panel")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoSetup() {
@@ -121,26 +125,31 @@ export class JointUserPage {
     // /setup/realms section. yougen/src/routes.rs §SetupSection.
     await this.page.goto("/setup/realms", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoOnboarding() {
     await this.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("account-strand")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoDirectory() {
     await this.page.goto("/directory", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("directory-panel")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoSettings() {
     await this.page.goto("/settings", { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("settings-panel")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoRealmAdmin(realmId: string) {
     await this.page.goto(`/realms/${realmId}/admin`, { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
   }
 
   // Navigate to a specific Realm admin section (Members / Access / etc.).
@@ -154,6 +163,7 @@ export class JointUserPage {
       waitUntil: "domcontentloaded",
     });
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
     const sectionLabel: Record<string, string> = {
       members: "Members",
       access: "Access",
@@ -175,6 +185,13 @@ export class JointUserPage {
   async gotoTimelineRealm(realmId: string) {
     await this.page.goto(`/timeline/${realmId}`, { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
+  }
+
+  private async dismissDeviceAuthorizationPrompt() {
+    if (!this.session.keepDeviceAuthorizationModal) {
+      await dismissDeviceAuthorizationPrompt(this.page);
+    }
   }
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
@@ -319,6 +336,7 @@ export class JointUserPage {
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: this.user.did,
         membership: "join",
         reason: "invite_accept",
@@ -509,7 +527,7 @@ export async function openUser(
   // events, even though the app underneath is interactive. We never want to
   // observe it during e2e — kill it permanently via CSS injected on every
   // navigation.
-  await context.addInitScript(() => {
+  await context.addInitScript((init) => {
     const inject = () => {
       if (!document.head) return;
       const id = "__cotest_hide_dx_toast";
@@ -518,6 +536,10 @@ export async function openUser(
       style.id = id;
       style.textContent =
         "#__dx-toast,#__dx-toast-container{display:none!important;visibility:hidden!important;pointer-events:none!important}";
+      if (init.hideDeviceAuthorizationPrompt) {
+        style.textContent +=
+          "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-reopen']{display:none!important;visibility:hidden!important;pointer-events:none!important}";
+      }
       document.head.appendChild(style);
     };
     if (document.readyState === "loading") {
@@ -525,7 +547,7 @@ export async function openUser(
     } else {
       inject();
     }
-  });
+  }, { hideDeviceAuthorizationPrompt: opts.keepDeviceAuthorizationModal !== true });
   const page = await context.newPage();
   const consoleLines: string[] = [];
   const networkLines: string[] = [];
@@ -605,6 +627,7 @@ export async function openUser(
     consoleLines,
     networkLines,
     serverUrl,
+    keepDeviceAuthorizationModal: opts.keepDeviceAuthorizationModal === true,
     sessionToken,
     grant,
   };
@@ -615,7 +638,11 @@ export async function openUserPage(
   user: JointUser,
   opts: OpenUserOpts = {},
 ): Promise<JointUserPage> {
-  return new JointUserPage(user, await openUser(browser, user, opts));
+  const userPage = new JointUserPage(user, await openUser(browser, user, opts));
+  if (!opts.keepDeviceAuthorizationModal) {
+    await dismissDeviceAuthorizationPrompt(userPage.page);
+  }
+  return userPage;
 }
 
 export async function closeUser(session: UserSession) {
@@ -634,4 +661,11 @@ function sanitize(value: string): string {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function dismissDeviceAuthorizationPrompt(page: Page) {
+  const dismiss = page.getByTestId("device-authorization-dismiss").last();
+  if (await dismiss.isVisible({ timeout: 100 }).catch(() => false)) {
+    await dismiss.click();
+  }
 }

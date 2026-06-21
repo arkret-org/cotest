@@ -8,11 +8,15 @@ import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { request as playwrightRequest } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import { eventProof, singleDidNotary, wireErrCode } from "../../helpers/soland-api";
+import {
+  createRealmApi,
+  eventProof,
+  singleDidNotary,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
-  openUserPage,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -20,7 +24,6 @@ test.describe.configure({ mode: "serial" });
 
 test.describe("world_readable history @fully-implemented", () => {
   test("alice creates Realm with history_visibility=world_readable; outsider (registered, non-member) reads timeline via API", async ({
-    browser,
     request,
   }) => {
     // spec: realm-and-space.md §3.4 — non-members can read events when
@@ -34,35 +37,28 @@ test.describe("world_readable history @fully-implemented", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const outsiderToken = await issueDevSession(request, outsider);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `worldread ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "world_readable",
+      encryption_profile: "none",
+      ownerDid: alice.did,
+    });
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `worldread ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-        historyVisibility: "world_readable",
-        encryptionProfile: "none",
-      });
-
-      // outsider is registered but NOT a member; with world_readable the
-      // events query MUST succeed for them.
-      const events = await request.get(
-        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
-        { headers: { authorization: `Bearer ${outsiderToken}` } },
-      );
-      expect(events.status()).toBe(200);
-      const body = await events.json();
-      // Response shape is the spec's `ck.self.events.query.scan` envelope; we only
-      // need the request to be accepted, not its body content.
-      expect(body).toBeDefined();
-    } finally {
-      await alicePage.close();
-    }
+    // outsider is registered but NOT a member; with world_readable the
+    // events query MUST succeed for them.
+    const events = await request.get(
+      `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
+      { headers: { authorization: `Bearer ${outsiderToken}` } },
+    );
+    expect(events.status()).toBe(200);
+    const body = await events.json();
+    // Response shape is the spec's `ck.self.events.query.scan` envelope; we only
+    // need the request to be accepted, not its body content.
+    expect(body).toBeDefined();
   });
 
   test("anonymous (no session token) GET /_cokret/self/events succeeds when history_visibility=world_readable", async ({
-    browser,
     request,
   }) => {
     // spec: realm-and-space.md §3.7 — world_readable also opens the read
@@ -73,34 +69,27 @@ test.describe("world_readable history @fully-implemented", () => {
     const alice = uniqueUser("worldread-anon-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `worldread anon ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "world_readable",
+      encryption_profile: "none",
+      ownerDid: alice.did,
+    });
 
+    // Use a clean request context with no auth header to be sure.
+    const anonRequest = await playwrightRequest.newContext({});
     try {
-      const realmId = await alicePage.createRealm({
-        title: `worldread anon ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-        historyVisibility: "world_readable",
-        encryptionProfile: "none",
-      });
-
-      // Use a clean request context with no auth header to be sure.
-      const anonRequest = await playwrightRequest.newContext({});
-      try {
-        const anonResp = await anonRequest.get(
-          `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
-        );
-        expect(anonResp.status()).toBe(200);
-      } finally {
-        await anonRequest.dispose();
-      }
+      const anonResp = await anonRequest.get(
+        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}`,
+      );
+      expect(anonResp.status()).toBe(200);
     } finally {
-      await alicePage.close();
+      await anonRequest.dispose();
     }
   });
 
   test("outsider's WRITE on world_readable Realm is rejected (read-only public access)", async ({
-    browser,
     request,
   }) => {
     const stamp = Date.now();
@@ -112,30 +101,24 @@ test.describe("world_readable history @fully-implemented", () => {
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const outsiderToken = await issueDevSession(request, outsider);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S1.3 World ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "world_readable",
+      encryption_profile: "none",
+      ownerDid: alice.did,
+    });
 
-    try {
-      const realmId = await alicePage.createRealm({
-        title: `S1.3 World ${stamp}`,
-        discoverability: "listed",
-        joinRule: "invite",
-        historyVisibility: "world_readable",
-        encryptionProfile: "none",
-      });
-
-      // outsider attempts to write a message via API — must be denied even with
-      // world_readable history (capability is not granted to non-members).
-      const write = await request.post(
-        `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/messages`,
-        {
-          headers: { authorization: `Bearer ${outsiderToken}` },
-          data: { content: { text: "S1.3 outsider tries to write" } },
-        },
-      );
-      expect([401, 403, 404, 405]).toContain(write.status());
-    } finally {
-      await alicePage.close();
-    }
+    // outsider attempts to write a message via API — must be denied even with
+    // world_readable history (capability is not granted to non-members).
+    const write = await request.post(
+      `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/messages`,
+      {
+        headers: { authorization: `Bearer ${outsiderToken}` },
+        data: { content: { text: "S1.3 outsider tries to write" } },
+      },
+    );
+    expect([401, 403, 404, 405]).toContain(write.status());
   });
 
   test("E1.3.1 trying to set encryption_profile=mls_rfc9420 AND history_visibility=world_readable is rejected with incompatible_history_with_encryption", async ({

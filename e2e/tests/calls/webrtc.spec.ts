@@ -134,12 +134,22 @@ test.describe("calls — canonical wire", () => {
     ).filter(
       (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
     );
-    const types = bobView.map(
+    const aliceView = (
+      await relayedCallSignals(request, aliceToken, realmId)
+    ).filter(
+      (env) => (env.payload as Record<string, unknown>)?.call_id === callId,
+    );
+    const bobTypes = bobView.map(
       (e) => (e.payload as Record<string, unknown>).signal_type,
     );
-    expect(types).toEqual(expect.arrayContaining(["invite", "answer", "hangup"]));
+    const aliceTypes = aliceView.map(
+      (e) => (e.payload as Record<string, unknown>).signal_type,
+    );
+    expect(bobTypes).toEqual(expect.arrayContaining(["invite", "hangup"]));
+    expect(bobTypes).not.toContain("answer");
+    expect(aliceTypes).toEqual(expect.arrayContaining(["answer"]));
     // Every relayed frame carries a verifiable detached-JWS proof (§5.1).
-    for (const env of bobView) {
+    for (const env of [...bobView, ...aliceView]) {
       const proof = env.proof as Record<string, unknown>;
       expect(proof.kind).toBe("detached_jws");
       expect(proof.alg).toBe("EdDSA");
@@ -150,6 +160,10 @@ test.describe("calls — canonical wire", () => {
       .filter((e) => e.actor_id === alice.did)
       .map((e) => (e.payload as Record<string, unknown>).seq as number);
     expect(aliceSeqs).toEqual([1, 2]);
+    const bobSeqs = aliceView
+      .filter((e) => e.actor_id === bob.did)
+      .map((e) => (e.payload as Record<string, unknown>).seq as number);
+    expect(bobSeqs).toEqual([1]);
   });
 
   test("§4.2 mid-call TURN refresh is a re-call of the ICE config endpoint; pseudonym is bucket-stable", async ({

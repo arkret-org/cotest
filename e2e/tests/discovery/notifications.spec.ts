@@ -285,7 +285,6 @@ test.describe("notifications", () => {
         payload: {
           strand_id: strandId,
           track_name: "discussion",
-          encrypted: true,
           mention_sidecar_hash: [sidecarHash],
           encrypted_content: encryptedEnvelope(
             "ck.message.v1",
@@ -384,7 +383,7 @@ function mentionSidecarHash(realmId: string, did: string): string {
 }
 
 function encryptedEnvelope(
-  contentType: string,
+  _contentType: string,
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
@@ -395,9 +394,8 @@ function encryptedEnvelope(
     epoch: 1,
     content_type: "application/vnd.cokret.message+json",
     ciphertext,
-    authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",
-    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "ck.message.create" },
+    aad: { realm_id: realmId, event_kind: "ck.message.create" },
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

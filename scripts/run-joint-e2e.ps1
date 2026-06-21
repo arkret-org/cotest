@@ -1449,6 +1449,8 @@ try {
             SOLAND_OBJECT_STORAGE_BACKEND = "filesystem"
             SOLAND_OBJECT_STORAGE_LOCAL_ROOT = "/tmp/soland-blobs"
             SOLAND_LOG_FILE = "/cotest-logs/$LogFileName"
+            SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
+            SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
         }
         if ($CoauthBaseUrl) {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
@@ -1525,6 +1527,8 @@ try {
             "`$env:SOLAND_OBJECT_STORAGE_BACKEND='filesystem'; " +
             "`$env:SOLAND_OBJECT_STORAGE_LOCAL_ROOT={4}; " +
             "`$env:SOLAND_LOG_FILE={5}; " +
+            "`$env:SOLAND_LIVEKIT_API_KEY='did:web:media.example#media-token'; " +
+            "`$env:SOLAND_LIVEKIT_API_SECRET='joint-e2e-livekit-secret'; " +
             "{6}" +
             "{7}" +
             "{8}" +
@@ -2158,8 +2162,9 @@ if (Test-Path $junitPath) {
                 # with no text content) as $false in a boolean test, so we use
                 # $null -ne <element> to detect presence instead.
                 $failureNode = $case.SelectSingleNode("failure")
+                $errorNode = $case.SelectSingleNode("error")
                 $skippedNode = $case.SelectSingleNode("skipped")
-                $hasFailure = ($null -ne $failureNode)
+                $hasFailure = ($null -ne $failureNode -or $null -ne $errorNode)
                 $hasSkipped = ($null -ne $skippedNode)
                 $status = "passed"
                 if ($hasFailure) {

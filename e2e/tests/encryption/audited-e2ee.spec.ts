@@ -200,7 +200,6 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      encrypted: true,
       encrypted_content: encryptedEnvelope("ck.message.v1", ciphertext, realmId, ciphertextDigest),
     },
   });
@@ -255,9 +254,8 @@ function encryptedEnvelope(
     epoch: 1,
     content_type: "application/vnd.cokret.message+json",
     ciphertext,
-    authentication_tag: "opaque-tag",
     aad_visibility_event_id: "hidden",
-    aad: { suite: "test", content_type: contentType, realm_id: realmId, event_kind: "ck.message.create" },
+    aad: { realm_id: realmId, event_kind: "ck.message.create" },
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

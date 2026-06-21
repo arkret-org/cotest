@@ -81,8 +81,8 @@ test.describe("organization policy inheritance", () => {
           realmId,
           kind: "ck.member.state",
           payload: {
+            realm_id: realmId,
             actor_id: mallory.did,
-            member: mallory.did,
             membership: "join",
             delivery_status: "unroutable",
           },

@@ -199,8 +199,8 @@ async function banMember(request: APIRequestContext, fixture: OfflineFixture) {
       realmId: fixture.realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: fixture.realmId,
         actor_id: fixture.bob.did,
-        member: fixture.bob.did,
         membership: "ban",
         reason: "offline_queue_discard_test",
       },

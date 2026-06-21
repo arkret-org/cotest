@@ -102,6 +102,7 @@ export async function acceptInviteViaApi(
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: actorDid,
         membership: "join",
         reason: "invite_accept",
@@ -133,8 +134,8 @@ export async function createSharedRealmViaApi(
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: member.did,
-        member: member.did,
         membership: "join",
         delivery_status: "unroutable",
       },
@@ -186,7 +187,6 @@ export async function sendPlaintextMessageViaApi(
         kind: "ck.content.text",
         body,
       },
-      encrypted: false,
     },
   });
   await submitSignedEventApi(request, token, envelope, {

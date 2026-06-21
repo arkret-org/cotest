@@ -47,9 +47,8 @@ test.describe("federation security hardening", () => {
       realmId,
       kind: "ck.message.create",
       payload: {
-        event_id: typedId("event"),
-        sender: "did:web:alice.alpha.example",
-        thread_id: "ck:thread:federation-security",
+        strand_id: typedId("strand"),
+        track_name: "discussion",
         content: { kind: "ck.content.text", body: "denylisted inbound" },
       },
     });

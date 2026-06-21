@@ -130,8 +130,8 @@ test.describe("moderation and ban", () => {
         realmId: realmId,
         kind: "ck.member.state",
         payload: {
+          realm_id: realmId,
           actor_id: mallory.did,
-          member: mallory.did,
           membership: "ban",
           reason: "non_moderator_attempt",
         },
@@ -150,11 +150,10 @@ test.describe("moderation and ban", () => {
       realmId,
       kind: "ck.member.state",
       payload: {
+        realm_id: realmId,
         actor_id: mallory.did,
-        member: mallory.did,
         membership: "ban",
         reason: "moderation_report_upheld",
-        report_ref: reportBody.report_id,
       },
     });
     const banPush = await pushFederationEvents(request, [banEvent], {
@@ -248,12 +247,12 @@ test.describe("moderation and ban", () => {
     const firstBan = makeFederationEvent({
       realmId,
       kind: "ck.member.state",
-      payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
+      payload: { realm_id: realmId, actor_id: mallory.did, membership: "ban" },
     });
     const secondBan = makeFederationEvent({
       realmId,
       kind: "ck.member.state",
-      payload: { actor_id: mallory.did, member: mallory.did, membership: "ban" },
+      payload: { realm_id: realmId, actor_id: mallory.did, membership: "ban" },
     });
 
     const first = await pushFederationEvents(request, [firstBan], {

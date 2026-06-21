@@ -417,10 +417,10 @@ test.describe("conformance encoding vectors", () => {
   test("§1.4 sync cursor stable across re-reduce + opaque to clients", async ({
     request,
   }) => {
-    const vector = vectorById("ck.vector.encoding.cursor_opaque.v1");
+    const vector = vectorById("ck.vector.encoding.cursor_opaque.core.v1");
     expect(
       vector,
-      "encoding-fixture vector cursor_opaque.v1 missing",
+      "encoding-fixture vector cursor_opaque.core.v1 missing",
     ).toBeTruthy();
     const v = vector!;
 

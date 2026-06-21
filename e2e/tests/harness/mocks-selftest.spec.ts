@@ -242,10 +242,22 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const baseUrl = mockPolicyServerBaseUrl();
     test.skip(!baseUrl, "mock-policy-server not started for this run");
 
-    // Reset rules to a known baseline.
-    await request.delete(`${baseUrl}/scenarios`);
+    // Reset rules to a known fail-closed baseline.
+    const resetResp = await request.delete(`${baseUrl}/scenarios`);
+    expect(resetResp.status()).toBe(200);
+    expect((await resetResp.json()).default).toBe("deny");
 
-    // Default allow when no rules match.
+    const defaultDenyResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
+      data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
+    });
+    expect(defaultDenyResp.status()).toBe(200);
+    expect((await defaultDenyResp.json()).decision).toBe("deny");
+
+    await request.post(`${baseUrl}/scenarios`, {
+      data: { default: "allow" },
+    });
+
+    // Explicit permissive baseline when no rules match.
     const allowResp = await request.post(`${baseUrl}/_cokret/self/policy/check`, {
       data: { action: "ck.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
     });
@@ -285,7 +297,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(jwks.keys?.[0]?.kid).toBe("mock-policy-server-key-1");
 
     const inspect = await (await request.get(`${baseUrl}/inspect`)).json();
-    expect(inspect.kinds.checks.length).toBeGreaterThanOrEqual(2);
+    expect(inspect.kinds.checks.length).toBeGreaterThanOrEqual(3);
   });
 
   test("mock-push-gateway: register, notify, DnD suppression, blind-wake validation", async ({

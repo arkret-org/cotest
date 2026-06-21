@@ -97,6 +97,7 @@ test.describe("policy server check", () => {
     expect(fetched.policy_server_url).toBe(policyServerUrl);
 
     const denied = await request.post(`${solandBaseUrl()}/_cokret/self/authz/check`, {
+      headers: authHeaders(aliceToken),
       data: {
         actor_id: bob.did,
         action: "ck.message.create",
@@ -107,11 +108,14 @@ test.describe("policy server check", () => {
         },
       },
     });
-    const decision = await expectJsonOk<{ allowed: boolean; reason_code?: string }>(
+    const decision = await expectJsonOk<{
+      decision: string;
+      reason_code?: string;
+    }>(
       denied,
       "authz check without grant",
     );
-    expect(decision.allowed).toBe(false);
+    expect(decision.decision).toBe("hard_deny");
     expect(decision.reason_code).toBeTruthy();
   });
 
