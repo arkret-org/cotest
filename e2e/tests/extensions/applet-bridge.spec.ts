@@ -302,7 +302,7 @@ test.describe("applet bridge", () => {
   });
 });
 
-// COT-03-001 — inbound transaction-push per-delivery source signature negatives.
+// COT-03-003 — inbound transaction-push per-delivery source signature negatives.
 // Spec: extensions/applet-integration.md §7.3.1 (双向对称 normative). The inbound
 // direction app/bridge → cokret edge (`POST /_cokret/edge/applet/transactions`)
 // MUST verify an RFC 9421 HTTP Message Signature per delivery BEFORE processing any

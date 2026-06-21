@@ -153,7 +153,7 @@ async function submitMessageEvent(
       body,
     },
   };
-  const envelope = {
+  const envelopeWithoutProofs = {
     event_id: eventId,
     kind: "ck.message.create",
     realm_id: realmId,
@@ -168,7 +168,10 @@ async function submitMessageEvent(
       critical_extensions: [],
     },
     payload,
-    proofs: [eventProof({ actorDid, payload })],
+  };
+  const envelope = {
+    ...envelopeWithoutProofs,
+    proofs: [eventProof({ actorDid, event: envelopeWithoutProofs })],
   };
 
   const response = await request.post(`${serverUrl}/_cokret/self/events`, {

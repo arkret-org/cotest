@@ -4,7 +4,7 @@
 //   - governance/content-moderation.md §2.5.0 (three-layer gate)
 //   - §2.5 Moderation MUST anchored
 //   - §3 Report
-//   - §5.1 Redact requires ck.space.moderate
+//   - §5.1 Redact requires ck.moderation.decision
 //   - §5.2 Ban via ck.member.state{membership="ban"}
 
 import { expect, test } from "@playwright/test";
@@ -16,6 +16,7 @@ import {
   makeFederationEvent,
   pushFederationEvents,
   queryRealmEventsApi,
+  resolveDefaultStrandId,
   sendMessageApi,
   signedEventEnvelope,
 } from "../../helpers/soland-api";
@@ -170,11 +171,24 @@ test.describe("moderation and ban", () => {
     const realmAfterBanBody = await realmAfterBan.json();
     expect(realmAfterBanBody.members ?? []).not.toContain(mallory.did);
 
-    const bannedWrite = await request.post(`${solandBaseUrl()}/_cokret/self/messages/send`, {
+    const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
+    const bannedWrite = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
       headers: authHeaders(malloryToken),
-      data: { realm_id: realmId, content: { body: postBan } },
+      data: signedEventEnvelope({
+        actorDid: mallory.did,
+        realmId,
+        kind: "ck.message.create",
+        payload: {
+          strand_id: defaultStrandId,
+          track_name: "discussion",
+          content: {
+            kind: "ck.content.text",
+            body: postBan,
+          },
+        },
+      }),
     });
-    expect([401, 403, 404]).toContain(bannedWrite.status());
+    expect([401, 403, 404, 412]).toContain(bannedWrite.status());
 
     const redactEvent = makeFederationEvent({
       realmId,

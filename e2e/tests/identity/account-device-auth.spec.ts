@@ -14,9 +14,9 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("account auth + device strand", () => {
-  test("auth refresh endpoint surface probe", async ({ request }) => {
-    const probe = await request.post(`${solandBaseUrl()}/_cokret/gate/auth/refresh`, {
-      data: { refresh_token: "probe-token" },
+  test("session-grant refresh endpoint surface probe", async ({ request }) => {
+    const probe = await request.post(`${solandBaseUrl()}/_cokret/gate/account/session-grants/refresh`, {
+      data: { grant_jwt: "probe-grant", audience: "cotest" },
     });
     // 4xx for bad token / not implemented; 5xx is a bug.
     expect(probe.status()).toBeLessThan(500);
@@ -54,7 +54,7 @@ test.describe("account auth + device strand", () => {
     // @blocking-on: soland#identity-account-device-auth-gap
     // @user-promise: e2e/scenarios/identity/account-device-auth.md
     // @expected-live-by: 2026Q3
-    "expired access token triggers /_cokret/gate/auth/refresh; new session_grant issued without re-OIDC",
+    "expired access token triggers /_cokret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC",
     async () => {
       // spec: key-management.md §6 refresh path.
     },

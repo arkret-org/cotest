@@ -7,8 +7,8 @@ feature-depth = 1
 
 [advisories]
 ignore = [
-    # Tracked release exception inherited through OpenMLS's wasm timer path.
-    "RUSTSEC-2024-0384",
+    # Tracked release exception inherited through hpke-rs-libcrux.
+    "RUSTSEC-2026-0124",
 ]
 
 [licenses]

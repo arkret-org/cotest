@@ -8,9 +8,12 @@ COPY soland ./soland
 WORKDIR /workspace/soland
 RUN cargo build --release --locked
 
-FROM rust:1.96-bookworm
+FROM debian:bookworm-slim
 
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /workspace/soland/target/release/soland /usr/local/bin/soland
 
 ENV SOLAND_BIND=0.0.0.0:8008

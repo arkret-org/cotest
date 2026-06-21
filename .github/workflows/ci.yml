@@ -11,6 +11,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  SIBLING_REF: circle-rollout
 
 jobs:
   rust:
@@ -32,7 +33,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -86,7 +87,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
@@ -105,7 +106,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -117,11 +118,15 @@ jobs:
         run: cargo install cargo-audit --locked
       - name: Run cargo audit
         working-directory: cotest
-        # Both ignored advisories are tracked release exceptions with no
-        # upstream upgrade path: `instant` is wasm-only via OpenMLS's timer
-        # dependency, and `libcrux-chacha20poly1305` is only present through
-        # hpke-rs's optional libcrux backend while the SDK uses RustCrypto HPKE.
-        run: cargo audit --deny warnings --ignore RUSTSEC-2024-0384 --ignore RUSTSEC-2026-0124
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t ignores < <(grep -oE 'RUSTSEC-[0-9]{4}-[0-9]{4}' deny.toml | sort -u)
+          args=()
+          for advisory in "${ignores[@]}"; do
+            args+=(--ignore "$advisory")
+          done
+          cargo audit --deny warnings "${args[@]}"
 
   fuzz:
     name: fuzz (envelope / snapshot / anchor, 60s each)
@@ -138,7 +143,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -180,28 +185,28 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/cokret-rust-sdk
           path: cokret-rust-sdk
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/cokret-spec
           path: cokret-spec
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/yougen
           path: yougen
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/soland
           path: soland
-          ref: main
+          ref: ${{ env.SIBLING_REF }}
           token: ${{ secrets.CI_REPO_TOKEN }}
 
       - uses: actions/setup-node@v4

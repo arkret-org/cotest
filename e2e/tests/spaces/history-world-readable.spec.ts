@@ -181,7 +181,7 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       created_at: createdAt,
     },
   };
-  return {
+  const event = {
     event_id: `ck:event:${uuidV7()}`,
     kind: "ck.realm.create",
     realm_id: realmId,
@@ -196,7 +196,10 @@ function encryptedWorldReadableRealmCreateEvent(actorDid: string): Record<string
       critical_extensions: [],
     },
     payload,
-    proofs: [eventProof({ actorDid, payload })],
+  };
+  return {
+    ...event,
+    proofs: [eventProof({ actorDid, event })],
   };
 }
 

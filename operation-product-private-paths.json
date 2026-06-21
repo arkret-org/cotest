@@ -26,13 +26,6 @@
     {
       "source": "sdk",
       "method": "*",
-      "path": "/_cokret/gate/auth/{**rest}",
-      "classification": "product-private",
-      "reason": "Principal-auth bridge compatibility metadata for product deployments; clients must prefer registered ck.gate.account.* operations when calling the Cokret protocol surface."
-    },
-    {
-      "source": "sdk",
-      "method": "*",
       "path": "/_cokret/self/blob/resumable",
       "classification": "product-private",
       "reason": "SDK discovery/client support for soland's tus companion upload binding, not a registered Cokret operation."

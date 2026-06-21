@@ -28,10 +28,11 @@ import {
 // non-dev-proof branch requires `event_digest == canonical envelope digest`
 // (validation.rs) with no payload-only fallback, and the typed `Proof` cannot
 // carry the dev-proof shorthand (no `type` field). cotest's fixture envelope is
-// Value-shaped for the lenient single-event path and uses the dev-proof /
-// payload-digest form, so it cannot satisfy the typed batch path without a
-// dedicated strict-Event builder that reproduces soland's envelope
-// canonicalization. Restore once such a builder exists.
+// Value-shaped for the lenient single-event path, so it cannot satisfy the
+// typed batch path without a dedicated strict-Event builder that reproduces
+// soland's envelope canonicalization and includes the typed Event-only fields
+// such as `hlc`.
+// Restore once such a builder exists.
 test.describe.fixme("events submit batch Realm bootstrap", () => {
   test("batch ck.realm.create returns JSON and owner can write immediately", async ({
     request,

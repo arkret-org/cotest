@@ -157,6 +157,16 @@ test.describe("conformance encoding vectors", () => {
     expect(body.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
   });
 
+  test("§1.1 TS canonical JSON helper rejects non-NFC strings and non-integer numbers", async () => {
+    expect(canonicalJson({ text: "\u00E9" })).toBe('{"text":"é"}');
+    expect(() => canonicalJson({ text: "e\u0301" })).toThrow(/non-NFC/);
+    expect(() => canonicalJson({ n: 1.5 })).toThrow(/non-canonical number/);
+    expect(() => canonicalJson({ n: Number.MAX_SAFE_INTEGER + 1 })).toThrow(
+      /non-canonical number/,
+    );
+    expect(() => canonicalJson({ n: -0 })).toThrow(/non-canonical number/);
+  });
+
   test("§1.1 canonical JSON reject (noncanonical numbers) returns 4xx", async ({
     request,
   }) => {
@@ -636,8 +646,4 @@ test.describe("conformance encoding vectors", () => {
     });
   });
 
-  // Keep `canonicalJson` referenced — the helper is exported for potential
-  // future fixme→live conversions (e.g. when a new envelope vector needs us
-  // to build canonical bytes locally for an assertion).
-  void canonicalJson;
 });

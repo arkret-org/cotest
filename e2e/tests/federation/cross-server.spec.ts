@@ -138,6 +138,26 @@ async function waitForEventBody(
     .toBeTruthy();
 }
 
+function unsignedPeerGetHeaders(
+  sourceDid: string,
+  destinationDid: string,
+): Record<string, string> {
+  return {
+    "source-service-did": sourceDid,
+    "destination-service-did": destinationDid,
+    "source-trust-domain": trustDomainFromServiceDid(sourceDid),
+    "destination-trust-domain": trustDomainFromServiceDid(destinationDid),
+  };
+}
+
+function trustDomainFromServiceDid(serviceDid: string): string {
+  const scope = serviceDid
+    .replace(/^did:(web|key|webvh):/, "")
+    .toLowerCase()
+    .replace(/:/g, ".");
+  return `ck:trust_domain:${scope || "local"}`;
+}
+
 test.describe("cross-server federation", () => {
   test("both soland instances expose peer events submit and query endpoints", async ({
     request,
@@ -161,6 +181,23 @@ test.describe("cross-server federation", () => {
       `${solandBaseUrl("beta")}/_cokret/peer/events?realms=ck:realm:probe`,
     );
     expect(pullProbe.status()).not.toBe(404);
+  });
+
+  test("unsigned peer GET pull is rejected", async ({ request }) => {
+    const response = await request.get(
+      `${solandBaseUrl("beta")}/_cokret/peer/events?limit=1`,
+      {
+        headers: unsignedPeerGetHeaders(
+          solandServiceDid("alpha"),
+          solandServiceDid("beta"),
+        ),
+      },
+    );
+    expect(
+      response.ok(),
+      `unsigned peer GET unexpectedly returned ${response.status()}: ${await response.text()}`,
+    ).toBeFalsy();
+    expect(response.status()).toBeLessThan(500);
   });
 
   test("alice on α and bob on β are independently registered + dev-logged-in against their own server", async ({

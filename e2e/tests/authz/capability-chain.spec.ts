@@ -334,12 +334,12 @@ test.describe.fixme("capability chain", () => {
       expect(parentResp.status()).toBe(200);
       const parent = await parentResp.json();
 
-      // bob tries to delegate `ck.space.moderate` to carol — bob doesn't hold it.
+      // bob tries to delegate moderation authority to carol, but bob doesn't hold it.
       const childResp = await createGrant(request, bobToken, {
         realm_id: realmId,
         subject: carol.did,
         resource: "*",
-        actions: ["ck.space.moderate"],
+        actions: ["ck.moderation.decision"],
         expires_at: plusSeconds(1800),
         delegated_from: parent.grant_id,
       });

@@ -8,13 +8,12 @@
 // transcript is a JWT-shaped Ed25519 signature so consumers can verify
 // it against /jwks without any shared secret.
 //
-// Lookup precedence for a check {action, actor_id, target} (rule-table
-// positions remain action:actor:target internally):
-//   1. exact `${action}:${actor}:${target}`
-//   2. `${action}:${actor}:*`
-//   3. `${action}:*:${target}`
-//   4. `${action}:*:*`
-//   5. `*:*:*`
+// Lookup precedence for a check {action, actor_id, target}:
+//   1. exact [action, actor, target]
+//   2. [action, actor, "*"]
+//   3. [action, "*", target]
+//   4. [action, "*", "*"]
+//   5. ["*", "*", "*"]
 //   6. defaultDecision (initially "deny" — fail-closed)
 //
 // Endpoints:
@@ -53,8 +52,8 @@ const serviceDid =
 const { privateKey, publicKey, jwks } = createEd25519KeyPair("mock-policy-server-key-1");
 const publicJwk = publicKey.export({ format: "jwk" });
 
-// In-memory rule table. Keys are `${action}:${actor}:${target}` with `*`
-// allowed in any position. Values are {decision, reason, obligations}.
+// In-memory rule table. Keys are JSON arrays so DID and typed-id colons cannot
+// corrupt GET /scenarios reconstruction. `*` is allowed in any position.
 //
 // Default decision is fail-closed (`deny`): an authorization scenario that
 // forgets to configure an explicit allow rule via `POST /scenarios` gets a
@@ -69,7 +68,7 @@ const checksLog = new InspectLog("checks");
 const scenariosLog = new InspectLog("scenarios");
 
 function ruleKey(action, actor, target) {
-  return `${action ?? "*"}:${actor ?? "*"}:${target ?? "*"}`;
+  return JSON.stringify([action ?? "*", actor ?? "*", target ?? "*"]);
 }
 
 function lookupRule({ action, actor, target }) {
@@ -215,6 +214,9 @@ const server = createServer(async (req, res) => {
       }
       const key = ruleKey(rule.action, rule.actor, rule.target);
       decisionRules.set(key, {
+        action: rule.action ?? "*",
+        actor: rule.actor ?? "*",
+        target: rule.target ?? "*",
         decision: rule.decision,
         reason: rule.reason ?? null,
         obligations: Array.isArray(rule.obligations) ? rule.obligations : [],
@@ -248,12 +250,11 @@ const server = createServer(async (req, res) => {
 
   if (url.pathname === "/scenarios" && req.method === "GET") {
     const rules = [];
-    for (const [key, value] of decisionRules.entries()) {
-      const [action, actor, target] = key.split(":");
+    for (const value of decisionRules.values()) {
       rules.push({
-        action,
-        actor,
-        target,
+        action: value.action,
+        actor: value.actor,
+        target: value.target,
         decision: value.decision,
         reason: value.reason,
         obligations: value.obligations,

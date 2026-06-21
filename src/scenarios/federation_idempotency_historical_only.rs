@@ -1,9 +1,8 @@
 //! C3 — multi-server federation idempotency + historical_only
 //! scenario.
 //!
-//! Spec: `cokret-spec` `2a4d39b..a77b995` — commit `f9bd7eb`
-//! (`harden protocol review closures`) plus commit `7fae9ba` (which
-//! introduces the `historical_only` (200 diagnostic) error code).
+//! Spec: sibling `cokret-spec` checkout, federation idempotency and
+//! `historical_only` diagnostic semantics.
 //!
 //! Scenario shape (cross-project wire-shape, in-memory; no live
 //! services):

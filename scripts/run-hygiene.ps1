@@ -69,6 +69,21 @@ function Invoke-HygieneCommand {
     }
 }
 
+function Get-RustsecIgnoresFromDenyToml {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return @()
+    }
+    $set = [System.Collections.Generic.SortedSet[string]]::new()
+    foreach ($line in Select-String -Path $Path -Pattern 'RUSTSEC-\d{4}-\d{4}' -AllMatches) {
+        foreach ($match in $line.Matches) {
+            [void]$set.Add($match.Value)
+        }
+    }
+    return @($set)
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptDir
 if (-not $OutputRoot) {
@@ -92,7 +107,11 @@ if (-not $SkipTypos) {
     $results.Add((Invoke-HygieneCommand -Label "typos" -FilePath $typosPath -Arguments @() -RunDir $runDir -RawLog $rawLog))
 }
 if (-not $SkipCargoAudit) {
-    $results.Add((Invoke-HygieneCommand -Label "cargo-audit" -FilePath $cargoPath -Arguments @("audit") -RunDir $runDir -RawLog $rawLog))
+    $auditArgs = @("audit", "--deny", "warnings")
+    foreach ($advisory in Get-RustsecIgnoresFromDenyToml -Path (Join-Path $repoRoot "deny.toml")) {
+        $auditArgs += @("--ignore", $advisory)
+    }
+    $results.Add((Invoke-HygieneCommand -Label "cargo-audit" -FilePath $cargoPath -Arguments $auditArgs -RunDir $runDir -RawLog $rawLog))
 }
 if ($results.Count -eq 0) {
     throw "No hygiene checks were selected"

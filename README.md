@@ -1,6 +1,7 @@
 # cotest
 
-> **Spec target**: [cokret-spec @ a77b995](../cokret-spec) (R4 sync; see "Round R4" below)
+> **Spec target**: the sibling [cokret-spec](../cokret-spec) checkout used by
+> the current run; cotest does not pin a stale README hash.
 
 `cotest` is an out-of-repository black-box Cokret server test harness modeled
 after Complement. It starts real server processes or real server containers,
@@ -32,9 +33,9 @@ The current default server under test is the sibling
 The harness constructs fixtures with current v1 wire names only:
 `ck.realm.*` for boundary events and `ck.space.*` for container events.
 
-## Round R4 (protocol review closures)
+## Protocol Review Closures
 
-Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds:
+The current harness tracks the sibling `cokret-spec` checkout and includes:
 
 - **12 new security-closure vectors** (`ck.vector.*` from
   `security-closure-vectors.json`) driven through a runner contract
@@ -57,8 +58,9 @@ Spec round 4 (`cokret-spec` range `2a4d39b..a77b995`, 8 commits) adds:
   and the `third_party_invite` / `space_state_transition_payload` /
   `space_object_tombstone_payload` payloads).
 
-See [`CHANGELOG.md`](CHANGELOG.md) `[Unreleased]` and
-[`../_todos.md`](../_todos.md) for the canonical wire-breaking list.
+See [docs/test-strategy.md](./docs/test-strategy.md) and
+[docs/complement-map.md](./docs/complement-map.md) for the harness plan and
+Complement mapping.
 
 ## Quick Start
 
@@ -153,8 +155,6 @@ for the full startup model, Docker image contract, and result artifacts.
   bindings, and fixtures.
 - `src/scenarios/*.rs`: executable protocol and business-domain scenarios.
 - `tests/*.rs`: thin integration wrappers around scenario modules.
-- `../_todos.md`: Complement-derived plan and the current single-server /
-  multi-server coverage matrix.
 - `config/coverage-profiles.json`: machine-readable profile-to-suite coverage
   mapping used by the runner.
 - `docs/test-strategy.md`: harness model and suite grouping.

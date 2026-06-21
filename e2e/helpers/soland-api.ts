@@ -415,10 +415,9 @@ export function signedEventEnvelope(
 ): Record<string, unknown> {
   const createdAt = args.createdAt ?? canonicalTimestamp();
   const payload = stripUndefined(args.payload) as Record<string, unknown>;
-  return {
+  const event = stripUndefined({
     event_id: args.eventId ?? typedId("event"),
     kind: args.kind,
-    schema_id: args.schemaId ?? "ck.schema.event.v1",
     realm_id: args.realmId,
     actor_id: args.actorDid,
     actor_seq: args.actorSeq ?? nextActorSeq(),
@@ -427,15 +426,18 @@ export function signedEventEnvelope(
     refs: args.refs ?? [],
     ...(args.anchorRef ? { anchor_ref: args.anchorRef } : {}),
     requirements: {
-      schema: ["ck.schema.event.v1"],
+      schema: [args.schemaId ?? schemaIdForEventKind(args.kind)],
       features: [],
       critical_extensions: [],
     },
     payload,
+  }) as Record<string, unknown>;
+  return {
+    ...event,
     proofs: [
       eventProof({
         actorDid: args.actorDid,
-        payload,
+        event,
         verificationMethod: args.proofVerificationMethod,
       }),
     ],
@@ -444,19 +446,20 @@ export function signedEventEnvelope(
 
 export function eventProof(args: {
   actorDid: string;
-  payload: Record<string, unknown>;
+  event: Record<string, unknown>;
   verificationMethod?: string;
 }): Record<string, unknown> {
   const mode = eventProofMode();
   const verificationMethod =
     args.verificationMethod ?? `${args.actorDid}#device`;
-  const payloadDigest = `sha256:${sha256CanonicalJson(args.payload)}`;
+  const eventDigest = `sha256:${sha256CanonicalJson(args.event)}`;
+  const createdAt = canonicalTimestamp();
 
   if (mode === "dev-proof") {
     return {
       type: "dev-proof",
       verification_method: verificationMethod,
-      payload_digest: payloadDigest,
+      event_digest: eventDigest,
     };
   }
 
@@ -464,13 +467,14 @@ export function eventProof(args: {
     kind: "detached_jws",
     alg: "EdDSA",
     verification_method: verificationMethod,
-    payload_digest: payloadDigest,
-    created_at: canonicalTimestamp(),
+    event_digest: eventDigest,
+    created_at: createdAt,
     signing_profile: "cotest.detached_jws.fixture.v1",
     jws: detachedJwsFixture({
       actorDid: args.actorDid,
       verificationMethod,
-      payloadDigest,
+      eventDigest,
+      createdAt,
     }),
   };
 }
@@ -719,10 +723,10 @@ export async function queryPeerEventsApi(
   if (opts.after) {
     params.set("after", opts.after);
   }
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/peer/events?${params.toString()}`,
-    { headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server)) },
-  );
+  const targetUri = `${solandBaseUrl(opts.server)}/_cokret/peer/events?${params.toString()}`;
+  const response = await request.get(targetUri, {
+    headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server), targetUri),
+  });
   return await expectJsonOk<{
     events: Array<Record<string, unknown>>;
     next_cursor?: string;
@@ -736,10 +740,10 @@ export async function peerEventFrontierApi(
   realmId: string,
   opts: { server?: SolandKey; sourceDid?: string } = {},
 ) {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server)) },
-  );
+  const targetUri = `${solandBaseUrl(opts.server)}/_cokret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`;
+  const response = await request.get(targetUri, {
+    headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server), targetUri),
+  });
   return await expectJsonOk<{
     realm_id: string;
     heads: string[];
@@ -926,13 +930,39 @@ function peerEventsSubmitBody(
 function peerGetHeaders(
   sourceDid = "did:web:cotest-peer.example",
   destinationDid: string,
+  targetUri: string,
 ): Record<string, string> {
+  const sourceTrustDomain = trustDomainFromServiceDid(sourceDid);
+  const destinationTrustDomain = trustDomainFromServiceDid(destinationDid);
+  const created = Math.floor(Date.now() / 1000);
+  const expires = created + 300;
+  const keyid = `${sourceDid}#federation-fanout-key`;
+  const signatureParams =
+    `("@method" "@target-uri" "@authority" "source-service-did" ` +
+    `"destination-service-did" "source-trust-domain" "destination-trust-domain");` +
+    `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
+  const signatureBase = [
+    `"@method": GET`,
+    `"@target-uri": ${targetUri}`,
+    `"@authority": ${new URL(targetUri).host}`,
+    `"source-service-did": ${sourceDid}`,
+    `"destination-service-did": ${destinationDid}`,
+    `"source-trust-domain": ${sourceTrustDomain}`,
+    `"destination-trust-domain": ${destinationTrustDomain}`,
+    `"@signature-params": ${signatureParams}`,
+  ].join("\n");
+  const signature = sign(
+    null,
+    Buffer.from(signatureBase, "utf8"),
+    developmentServicePrivateKey(sourceDid),
+  );
   return {
-    "request-canonical-digest": `sha256:${"0".repeat(64)}`,
     "source-service-did": sourceDid,
     "destination-service-did": destinationDid,
-    "source-trust-domain": trustDomainFromServiceDid(sourceDid),
-    "destination-trust-domain": trustDomainFromServiceDid(destinationDid),
+    "source-trust-domain": sourceTrustDomain,
+    "destination-trust-domain": destinationTrustDomain,
+    "signature-input": `sig1=${signatureParams}`,
+    signature: `sig1=:${signature.toString("base64")}:`,
   };
 }
 
@@ -1002,7 +1032,8 @@ function eventProofMode(): EventProofMode {
 function detachedJwsFixture(args: {
   actorDid: string;
   verificationMethod: string;
-  payloadDigest: string;
+  eventDigest: string;
+  createdAt: string;
 }): string {
   const protectedHeader = base64urlJson({
     alg: "EdDSA",
@@ -1010,8 +1041,9 @@ function detachedJwsFixture(args: {
     typ: "ck-event-proof+jws",
   });
   const payload = base64urlJson({
-    proof_kind: "event_payload",
-    payload_digest: args.payloadDigest,
+    actor_id: args.actorDid,
+    created_at: args.createdAt,
+    event_digest: args.eventDigest,
     verification_method: args.verificationMethod,
   });
   const signature = sign(

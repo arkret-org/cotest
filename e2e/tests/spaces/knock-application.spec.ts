@@ -88,7 +88,7 @@ test.describe("knock + application + cooldown", () => {
     // @blocking-on: soland#spaces-knock-application-gap
     // @user-promise: e2e/scenarios/spaces/knock-application.md
     // @expected-live-by: 2026Q3
-    "E6.A bob submits structured member.application after knocking; alice (with ck.space.join.review) sees the answers and accepts",
+    "E6.A bob submits structured member.application after knocking; alice (with ck.realm.join.review) sees the answers and accepts",
     async () => {
       // spec: models/realm-and-space.md §3.6.2-§3.6.3
       // soland gap: member.application{,.review} event kinds not registered;
@@ -144,7 +144,7 @@ test.describe("knock + application + cooldown", () => {
     // @blocking-on: soland#spaces-knock-application-gap
     // @user-promise: e2e/scenarios/spaces/knock-application.md
     // @expected-live-by: 2026Q3
-    "E6.F reviewer loses ck.space.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted",
+    "E6.F reviewer loses ck.realm.join.review between review accept and invite create; invite create MUST be rejected even though review already accepted",
     async () => {
       // spec: §3.6.5 #3 — reducer re-checks reviewer capability when invite is written.
       // soland gap: capability re-check on invite write not enforced.

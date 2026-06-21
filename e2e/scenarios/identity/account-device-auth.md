@@ -44,8 +44,8 @@
 ### Phase C — Session refresh
 
 12. 测试 harness 把 device-1 session_token 标过期(后端用 `Authorization: Bearer <expired>` → 401)
-13. yougen 客户端捕捉 401 → 自动 `POST /_cokret/gate/auth/refresh` 用 refresh_token
-14. coauth 校验 refresh_token → 颁新 session grant
+13. yougen 客户端捕捉 401 → 自动 `POST /_cokret/gate/account/session-grants/refresh` 用旧 grant + DPoP holder proof
+14. coauth 校验 holder proof → 颁新 session grant
 15. 断言:device-1 重新可用,不需要 re-OIDC
 
 ### Phase D — Soft logout
@@ -59,13 +59,13 @@
 ## Edge cases
 
 - **E4.1 mock IdP 拒签**:IdP 返回 invalid ID token → coauth 拒,UI 显示 "Sign-in failed"
-- **E4.2 expired refresh_token**:refresh_token 也过期 → 强制重新 OIDC
+- **E4.2 expired grant**:grant 已过期或 DPoP holder proof 失效 → 强制重新 OIDC
 - **E4.3 revoked grant**:alice 在另一设备 revoke 当前 grant → device-1 后续请求被拒
 - **E4.4 hardware revocation**:device-1 hardware token 被 revoke(spec §5.2)→ 所有 grants 失效
 
 ## Implementation notes
 
-- **coauth 缺口**:OIDC bridge 实现度未知;`/_cokret/gate/auth/refresh` 路由可能未实现;session_grant 短 TTL 机制需要验证
+- **coauth 缺口**:OIDC bridge 实现度未知;`/_cokret/gate/account/session-grants/refresh` 路由可能未实现;session_grant 短 TTL 机制需要验证
 - **harness 缺口**:mock IdP 必须新增(本会话 harness 改动)
 - **yougen 缺口**:OIDC 重定向流;自动 401 refresh interceptor
 
