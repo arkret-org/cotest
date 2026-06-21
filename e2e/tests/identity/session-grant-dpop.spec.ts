@@ -176,8 +176,12 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       grantAudience: grant.audience,
     });
     const seenGrantSelfRequests: Array<{ url: string; headers: Record<string, string> }> = [];
+    const refreshRequests: string[] = [];
     jointPage.page.on("request", (browserRequest) => {
       const url = browserRequest.url();
+      if (url.includes("/session-grants/refresh")) {
+        refreshRequests.push(url);
+      }
       if (!url.includes("/_cokret/self/") && !url.includes("/_cokret/root/")) {
         return;
       }
@@ -188,6 +192,8 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     });
     try {
       await jointPage.gotoHome();
+      await expect(jointPage.page.getByTestId("client-shell")).toBeVisible({ timeout: 60_000 });
+      await expect(jointPage.page.getByTestId("login-panel")).toHaveCount(0);
       await expect
         .poll(
           () =>
@@ -207,6 +213,24 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
           !headers["x-cokret-session-grant-proof"],
       );
       expect(missingProofs, `grant self/root requests missing DPoP or holder proof`).toEqual([]);
+      expect(refreshRequests, "fresh boot must not rotate the injected grant").toEqual([]);
+
+      await jointPage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(jointPage.page.getByTestId("client-shell")).toBeVisible({ timeout: 60_000 });
+      await expect(jointPage.page.getByTestId("login-panel")).toHaveCount(0);
+      await expect
+        .poll(
+          () =>
+            seenGrantSelfRequests.some(
+              ({ headers }) =>
+                Boolean(headers.dpop) &&
+                Boolean(headers["x-cokret-session-grant-challenge"]) &&
+                Boolean(headers["x-cokret-session-grant-proof"]),
+            ),
+          { timeout: 30_000 },
+        )
+        .toBeTruthy();
+      expect(refreshRequests, "reload with a fresh grant must not rotate it").toEqual([]);
     } finally {
       await jointPage.close();
     }
