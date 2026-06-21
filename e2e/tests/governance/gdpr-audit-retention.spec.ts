@@ -309,7 +309,7 @@ test.describe("GDPR / audit / retention", () => {
       );
 
       let betaInvite:
-        | { invite_id: string; realm_id: string; invitee?: string }
+        | { id: string; realm_id: string; invitee?: string }
         | undefined;
       await expect
         .poll(
@@ -332,7 +332,7 @@ test.describe("GDPR / audit / retention", () => {
         bobToken,
         bob.did,
         betaInvite!.realm_id,
-        betaInvite!.invite_id,
+        betaInvite!.id,
         { server: "beta" },
       );
 

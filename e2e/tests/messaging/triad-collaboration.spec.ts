@@ -4,7 +4,7 @@
 //   - models/realm-and-space.md §2-§3
 //   - models/strand-and-message.md §8, §8.4, §8.5
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   createRealmViaApi,
   createSharedRealmViaApi,
@@ -14,6 +14,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import {
   canonicalTimestamp,
+  listInvitesApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -26,22 +27,6 @@ import {
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
-
-// Helper kept inline (per G2.T1 scope: do not extend helpers/users.ts).
-// Waits for yougen's RealmAdmin Members section to mount the invite card.
-// gotoRealmAdminSection already clicks the Members tab if hydration falls
-// back to Overview; this extra poll defeats the rare case where the tab
-// click lands before active_section signal settles. Bounded at 30s — the
-// RealmAdminPanel mounts well under that on a healthy dev server; if it
-// hasn't rendered in 30s the panel itself is broken, not racing.
-async function waitForInviteCardReady(page: Page) {
-  await page.waitForFunction(
-    () => document.querySelector('[data-testid="invite-member"]') !== null,
-    null,
-    { timeout: 30_000 },
-  );
-  await expect(page.getByTestId("invite-member")).toBeVisible({ timeout: 30_000 });
-}
 
 function eventKind(event: Record<string, unknown>): string {
   return String(event.kind ?? event.event_kind ?? "");
@@ -337,7 +322,7 @@ test.describe("single-server triad collaboration", () => {
     // E1.1 — invite creation is idempotent on
     // (realm_id, invitee) pairs in `pending` state (soland/src/routing/spaces/
     // space.rs:627-644): the second create returns the existing invite_id
-    // unchanged. yougen's invite-member button drives the same endpoint via
+    // unchanged. yougen's invite modal drives the same endpoint via
     // submit_event_envelope, so re-issuing the same invite produces only one
     // invite-row in realm-admin.
     test("E1.1 idempotent invite — re-issuing the same invite does not duplicate", async ({
@@ -350,6 +335,7 @@ test.describe("single-server triad collaboration", () => {
       await ensureRegistered(request, alice);
       await ensureRegistered(request, bob);
       const aliceToken = await issueDevSession(request, alice);
+      const bobToken = await issueDevSession(request, bob);
       const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
       try {
@@ -360,24 +346,26 @@ test.describe("single-server triad collaboration", () => {
         });
 
         // First invite. inviteFromAdmin internally calls gotoRealmAdminSection
-        // (Members) and asserts the invite-member card before clicking — that
+        // (Members) and opens the invite modal before submitting — that
         // already defeats the RealmAdminPanel hydration race that historically
         // caused fresh-nav fails (see scenarios/spaces/admin-section-route.md).
-        // We add an explicit waitForInviteCardReady belt-and-suspenders only
+        // We add an explicit waitForInviteActionReady belt-and-suspenders only
         // on the second issue, where the helper's gotoRealmAdmin re-mounts.
         await alicePage.inviteFromAdmin(realmId, bob.did);
 
         // Re-issue same invite — soland MUST treat as idempotent (same
         // invite_id returned for any pending (space, invitee) pair).
-        await waitForInviteCardReady(alicePage.page);
         await alicePage.inviteFromAdmin(realmId, bob.did);
 
-        // Only one invite row for bob should be visible. Allow up to 30s
-        // for the projection to settle — yougen polls /spaces/<id>/admin
-        // and the row count toggles to 1 once the second submit returns the
-        // pre-existing invite_id (no INSERT happens server-side).
-        const rows = alicePage.page.getByTestId("invite-row").filter({ hasText: bob.did });
-        await expect(rows).toHaveCount(1, { timeout: 30_000 });
+        // Bob's canonical invite projection should contain one pending invite.
+        await expect.poll(async () => {
+          const visible = await listInvitesApi(request, bobToken);
+          return visible.filter((invite) =>
+            invite.realm_id === realmId &&
+            invite.invitee === bob.did &&
+            (invite.state ?? invite.status ?? "pending") === "pending"
+          ).length;
+        }, { timeout: 30_000 }).toBe(1);
       } finally {
         await alicePage.close();
       }

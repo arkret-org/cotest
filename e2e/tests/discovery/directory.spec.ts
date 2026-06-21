@@ -42,20 +42,23 @@ test.describe("discovery", () => {
       const aliceContact = alicePage.page.getByTestId("directory-contact-tools");
       await aliceContact.getByTestId("contact-target-did-input").fill(bob.did);
       await aliceContact.getByTestId("request-contact-button").click();
-      await expect(aliceContact).toContainText(/pending/, { timeout: 30_000 });
+      await expect(aliceContact).toContainText(/pending/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "contact-pending");
 
       // bob accepts via directory contact tools.
       await bobPage.gotoDirectory();
       const bobContact = bobPage.page.getByTestId("directory-contact-tools");
+      await bobContact.getByTestId("list-contacts-button").click();
+      await expect(bobContact).toContainText(alice.did, { timeout: 30_000 });
+      await expect(bobContact).toContainText(/pending/i, { timeout: 30_000 });
       await bobContact.getByTestId("contact-requester-did-input").fill(alice.did);
       await bobContact.getByTestId("accept-contact-button").click();
-      await expect(bobContact).toContainText(/accepted/, { timeout: 30_000 });
+      await expect(bobContact).toContainText(/accepted/i, { timeout: 30_000 });
 
       // bob lists; alice should appear with count 1.
       await bobContact.getByTestId("list-contacts-button").click();
       await expect(bobContact).toContainText(alice.did);
-      await expect(bobContact).toContainText(/contacts 1/);
+      await expect(bobContact).toContainText(/contacts 1/i);
 
       // Post-contact: alice's directory search now sees bob.
       await alicePage.gotoDirectory();

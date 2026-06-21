@@ -50,7 +50,7 @@
 3. alice 打开 `/document/new`,填写 title/body/link,点击 `save-document-button`。
 4. harness 从 soland Morph projection 解析新 `morph_id`。
 5. bob 打开 `/document/:morph_id`,断言正文 hydrate 成 alice 初始内容。
-6. bob 看到 `document-cursor-self` 和 `document-presence-list` presence UI shell。
+6. 默认构建中 bob 看到 `document-collaboration-deferred`；启用 `experimental-document-collaboration` 时 bob 看到 `document-cursor-self` 和 `document-presence-list` presence UI shell。
 7. bob 用 comment composer 提交 `6..40` range comment,harness 轮询 soland projection 确认 comment 已同步。
 8. alice 把正文缩短后保存,重新打开 `/document/:morph_id`。
 9. 断言:

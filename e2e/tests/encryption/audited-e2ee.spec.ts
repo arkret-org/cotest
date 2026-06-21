@@ -9,6 +9,7 @@ import { mockAuditAgentBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
   authHeaders,
+  canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -79,7 +80,7 @@ test.describe("audited E2EE", () => {
       expect(JSON.stringify(inspect)).toContain(String(report.report_id));
       expect(JSON.stringify(inspect)).toContain(setup.realmId);
 
-      const invite = await (await request.get(`${setup.agentBaseUrl}/_soland/admin/audit-agent/inbox`)).json();
+      const invite = await (await request.get(`${setup.agentBaseUrl}/_cokret/self/audit-agent/inbox`)).json();
       expect(JSON.stringify(invite)).toContain(String(report.report_id));
     },
   );
@@ -154,7 +155,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   const agentBaseUrl = mockAuditAgentBaseUrl();
   test.skip(!agentBaseUrl, "mock-audit-agent not started for audited E2EE");
   await request.delete(`${agentBaseUrl}/inspect`);
-  const identity = await (await request.get(`${agentBaseUrl}/_soland/admin/audit-agent/identity`)).json();
+  const identity = await (await request.get(`${agentBaseUrl}/_cokret/self/audit-agent/identity`)).json();
   const agentDid = String(identity.did);
 
   const alice = uniqueUser(`${label}-alice`);
@@ -190,9 +191,11 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   await addRealmMemberApi(request, aliceToken, realmId, reporter.did);
 
   const plaintext = `audited plaintext must not leak ${Date.now()}`;
-  const ciphertext = `opaque-ciphertext-${label}-${Date.now()}`;
-  const ciphertextDigest = sha256Digest(ciphertext);
+  const ciphertext = Buffer.from(`opaque-ciphertext-${label}-${Date.now()}`, "utf8").toString(
+    "base64url",
+  );
   const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
+  const encryptedContent = encryptedEnvelope("ck.message.v1", ciphertext, realmId);
   const message = signedEventEnvelope({
     actorDid: bob.did,
     realmId: realmId,
@@ -200,7 +203,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      encrypted_content: encryptedEnvelope("ck.message.v1", ciphertext, realmId, ciphertextDigest),
+      encrypted_content: encryptedContent,
     },
   });
   await submitSignedEventApi(request, bobToken, message, {
@@ -215,7 +218,7 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     reporterDid: reporter.did,
     realmId,
     message,
-    ciphertextDigest,
+    ciphertextDigest: String(encryptedContent.payload_digest),
     plaintext,
   };
 }
@@ -245,29 +248,37 @@ function encryptedEnvelope(
   contentType: string,
   ciphertext: string,
   realmId: string,
-  ciphertextDigest: string,
 ): Record<string, unknown> {
-  return {
+  void contentType;
+  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
     content_type: "application/vnd.cokret.message+json",
-    ciphertext,
     aad_visibility_event_id: "hidden",
-    aad: { realm_id: realmId, event_kind: "ck.message.create" },
+    aad,
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     },
-    aad_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    payload_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    digests: {
-      ciphertext: ciphertextDigest,
-    },
+  };
+  return {
+    ...payloadMetadata,
+    ciphertext,
+    aad_digest: sha256Digest(canonicalJson(aad)),
+    payload_digest: encryptedPayloadDigest(payloadMetadata, ciphertext),
   };
 }
 
 function sha256Digest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function encryptedPayloadDigest(metadata: Record<string, unknown>, ciphertext: string): string {
+  const hash = createHash("sha256");
+  hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
+  hash.update(Buffer.from(ciphertext, "base64url"));
+  return `sha256:${hash.digest("hex")}`;
 }

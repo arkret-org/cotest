@@ -118,11 +118,16 @@ test.describe("encrypted attachments", () => {
     expect(upload.ok(), uploadText).toBeTruthy();
     const body = JSON.parse(uploadText);
     expect(body.media_type).toBe("application/octet-stream");
-    expect(body.size).toBe(ciphertext.length);
-    expect(body.upload_receipt.encrypted).toBe(true);
-    expect(body.upload_receipt.encrypted_attachment.ciphertext_digest).toBe(ciphertextDigest);
+    expect(body.size_bytes).toBe(ciphertext.length);
+    expect(body.content_digest).toBe(ciphertextDigest);
+    expect(body.upload_receipt.blob_ref).toBe(body.blob_ref);
+    expect(body.upload_receipt.content_digest).toBe(ciphertextDigest);
+    expect(body.upload_receipt.size_bytes).toBe(ciphertext.length);
+    expect(body.upload_receipt.issuer_service_did).toMatch(/^did:/);
+    expect(body.upload_receipt.signature).toBeTruthy();
     expect(JSON.stringify(body.upload_receipt)).not.toContain("cat.png");
     expect(JSON.stringify(body.upload_receipt)).not.toContain("image/png");
+    expect(JSON.stringify(body.upload_receipt)).not.toContain("ciphertext_digest");
 
     const bobDownload = await request.get(
       `${solandBaseUrl()}/_cokret/self/blob/get?blob_ref=${encodeURIComponent(body.blob_ref)}&purpose=message_attachment`,

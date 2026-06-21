@@ -278,21 +278,24 @@ export async function listInvitesApi(
   opts: { server?: SolandKey } = {},
 ): Promise<
   Array<{
-    invite_id: string;
+    id: string;
     realm_id: string;
     invitee?: string;
     state?: string;
     status?: string;
   }>
 > {
+  const actorDid = await currentActorDidApi(request, token, opts);
+  const url = new URL("/_cokret/self/authz/invites", solandBaseUrl(opts.server));
+  url.searchParams.set("subject", actorDid);
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/authz/invites`,
+    url.toString(),
     {
       headers: authHeaders(token),
     },
   );
   const body = await expectJsonOk<{
-    invites?: Array<{ invite_id: string; realm_id: string; invitee?: string }>;
+    invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
   }>(response, "list invites");
   return body.invites ?? [];
 }
@@ -1032,7 +1035,7 @@ function peerGetHeaders(
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),
-    developmentServicePrivateKey(sourceDid),
+    developmentServiceHttpPrivateKey(sourceDid),
   );
   return {
     "source-service-did": sourceDid,
@@ -1077,7 +1080,7 @@ function signedFederationPushHeaders(
   const signature = sign(
     null,
     Buffer.from(signatureBase, "utf8"),
-    developmentServicePrivateKey(sourceDid),
+    developmentServiceHttpPrivateKey(sourceDid),
   );
   return {
     "content-type": "application/json",
@@ -1145,6 +1148,20 @@ function base64urlJson(value: unknown): string {
 function developmentServicePrivateKey(serviceDid: string) {
   const seed = createHash("sha256")
     .update("soland:anchorer-ephemeral:")
+    .update(serviceDid)
+    .digest();
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  return createPrivateKey({
+    key: Buffer.concat([pkcs8Prefix, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+}
+
+// FIXTURE ONLY: mirrors soland development_mode service HTTP signing keys.
+function developmentServiceHttpPrivateKey(serviceDid: string) {
+  const seed = createHash("sha256")
+    .update("soland:notary-ephemeral:")
     .update(serviceDid)
     .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");

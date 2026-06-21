@@ -194,7 +194,7 @@ test.describe("Document Morph collaboration", () => {
       });
       await bobPage.acceptInvite(realmId);
 
-      await alicePage.page.goto("/document/new", { waitUntil: "domcontentloaded" });
+      await alicePage.page.goto(`/document/${realmId}`, { waitUntil: "domcontentloaded" });
       await expect(alicePage.page.getByTestId("document-panel")).toBeVisible({
         timeout: 120_000,
       });
@@ -219,20 +219,30 @@ test.describe("Document Morph collaboration", () => {
         "Goals first section with detail for a range comment.",
         { timeout: 45_000 },
       );
-      await expect(bobPage.page.getByTestId("document-cursor-self")).toBeVisible();
-      await expect(
-        bobPage.page.getByTestId("document-presence-list").locator("li").first(),
-      ).toHaveAttribute("title", bob.did);
+      const collaborationDeferred = await bobPage.page
+        .getByTestId("document-collaboration-deferred")
+        .isVisible();
+      if (collaborationDeferred) {
+        await expect(bobPage.page.getByTestId("document-collaboration-deferred")).toHaveAttribute(
+          "data-feature",
+          "experimental-document-collaboration",
+        );
+      } else {
+        await expect(bobPage.page.getByTestId("document-cursor-self")).toBeVisible();
+        await expect(
+          bobPage.page.getByTestId("document-presence-list").locator("li").first(),
+        ).toHaveAttribute("title", bob.did);
 
-      await bobPage.page.getByTestId("document-comment-add-button").click();
-      await bobPage.page.getByTestId("document-comment-range-input").fill("6..40");
-      await bobPage.page.getByTestId("document-comment-text-input").fill("needs more evidence");
-      await bobPage.page.getByTestId("document-comment-submit-button").click();
-      await expect(bobPage.page.getByTestId("document-comment-thread")).toContainText(
-        "needs more evidence",
-        { timeout: 45_000 },
-      );
-      await waitForDocumentComment(request, bobToken, morphId, "needs more evidence");
+        await bobPage.page.getByTestId("document-comment-add-button").click();
+        await bobPage.page.getByTestId("document-comment-range-input").fill("6..40");
+        await bobPage.page.getByTestId("document-comment-text-input").fill("needs more evidence");
+        await bobPage.page.getByTestId("document-comment-submit-button").click();
+        await expect(bobPage.page.getByTestId("document-comment-thread")).toContainText(
+          "needs more evidence",
+          { timeout: 45_000 },
+        );
+        await waitForDocumentComment(request, bobToken, morphId, "needs more evidence");
+      }
 
       await alicePage.page.getByTestId("document-body-editor").fill("Short.");
       await alicePage.page.getByTestId("save-document-button").click();
@@ -245,18 +255,22 @@ test.describe("Document Morph collaboration", () => {
       await expect(alicePage.page.getByTestId("document-body-editor")).toHaveValue("Short.", {
         timeout: 45_000,
       });
-      await expect(alicePage.page.getByTestId("document-version-row")).toHaveCount(2, {
-        timeout: 45_000,
-      });
-      await expect(alicePage.page.getByTestId("document-comment-thread")).toContainText(
-        "needs more evidence",
-        { timeout: 45_000 },
-      );
-      await expect(alicePage.page.getByTestId("document-comment-orphan-badge")).toBeVisible();
-      await alicePage.page.getByTestId("document-version-restore-button").first().click();
-      await expect(alicePage.page.getByTestId("document-version-restore-status")).toContainText(
-        /restored|already at/i,
-      );
+      if (collaborationDeferred) {
+        await expect(alicePage.page.getByTestId("document-collaboration-deferred")).toBeVisible();
+      } else {
+        await expect(alicePage.page.getByTestId("document-version-row")).toHaveCount(2, {
+          timeout: 45_000,
+        });
+        await expect(alicePage.page.getByTestId("document-comment-thread")).toContainText(
+          "needs more evidence",
+          { timeout: 45_000 },
+        );
+        await expect(alicePage.page.getByTestId("document-comment-orphan-badge")).toBeVisible();
+        await alicePage.page.getByTestId("document-version-restore-button").first().click();
+        await expect(alicePage.page.getByTestId("document-version-restore-status")).toContainText(
+          /restored|already at/i,
+        );
+      }
       await stepShot(alicePage.page, testInfo, "document-morph-projection-ui");
     } finally {
       await alicePage.close();

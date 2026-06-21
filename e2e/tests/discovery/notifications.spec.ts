@@ -9,6 +9,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   addRealmMemberApi,
   authHeaders,
+  canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
   putAccountDataViaEventApi,
@@ -383,27 +384,40 @@ function mentionSidecarHash(realmId: string, did: string): string {
 }
 
 function encryptedEnvelope(
-  _contentType: string,
+  contentType: string,
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  return {
+  void contentType;
+  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const payloadMetadata = {
     scheme: "mls-rfc9420",
     version: "1.0",
     group_id: "mls_test",
     epoch: 1,
     content_type: "application/vnd.cokret.message+json",
-    ciphertext,
     aad_visibility_event_id: "hidden",
-    aad: { realm_id: realmId, event_kind: "ck.message.create" },
+    aad,
     key_ref: {
       algorithm: "MLS",
       group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     },
-    aad_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    payload_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    digests: {
-      ciphertext: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    },
   };
+  return {
+    ...payloadMetadata,
+    ciphertext,
+    aad_digest: sha256Digest(canonicalJson(aad)),
+    payload_digest: encryptedPayloadDigest(payloadMetadata, ciphertext),
+  };
+}
+
+function sha256Digest(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function encryptedPayloadDigest(metadata: Record<string, unknown>, ciphertext: string): string {
+  const hash = createHash("sha256");
+  hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
+  hash.update(Buffer.from(ciphertext, "base64url"));
+  return `sha256:${hash.digest("hex")}`;
 }

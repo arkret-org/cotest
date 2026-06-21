@@ -206,12 +206,12 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const baseUrl = mockAuditAgentBaseUrl();
     test.skip(!baseUrl, "mock-audit-agent not started for this run");
 
-    const identity = await (await request.get(`${baseUrl}/_soland/admin/audit-agent/identity`)).json();
+    const identity = await (await request.get(`${baseUrl}/_cokret/self/audit-agent/identity`)).json();
     expect(typeof identity.did).toBe("string");
     expect(identity.key_package?.kind).toBe("mock-mls-key-package-v1");
 
     const realmId = `ck:realm:selftest:${Date.now()}`;
-    const invite = await request.post(`${baseUrl}/_soland/admin/audit-agent/invite`, {
+    const invite = await request.post(`${baseUrl}/_cokret/self/audit-agent/invite`, {
       data: { realm_id: realmId, invite: { event_id: "evt-selftest" } },
     });
     expect(invite.status()).toBe(200);
@@ -222,7 +222,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(typeof inviteBody.emitted.binding_proof).toBe("string");
 
     const accessed = await (
-      await request.get(`${baseUrl}/_soland/admin/audit-agent/accessed`)
+      await request.get(`${baseUrl}/_cokret/self/audit-agent/accessed`)
     ).json();
     expect(
       (accessed.events as Array<{ realm_id: string }>).some((e) => e.realm_id === realmId),

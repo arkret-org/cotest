@@ -43,8 +43,9 @@ type EncodingVector = {
   rejected_input_classes?: string[];
   rejection_reason_codes?: string[];
   expected_ascending?: string[];
-  cleartext_metadata?: unknown;
+  payload_metadata?: unknown;
   expected_metadata_canonical_bytes_utf8?: string;
+  ciphertext_base64url?: string;
   ciphertext_bytes_utf8?: string;
   input_cursor?: string;
   decoded_payload_canonical_bytes_utf8?: string;
@@ -490,29 +491,32 @@ test.describe("conformance encoding vectors", () => {
     ).toBeTruthy();
     const v = vector!;
 
-    // Drive /envelope with the cleartext_metadata block and assert the
-    // canonical bytes match the fixture's metadata canonical bytes. Note:
-    // the fixture's `expected_digest` is sha256(canonical_metadata ||
-    // ciphertext_bytes), which is a different rule than the /envelope handler
-    // implements today (handler digests just canonical_metadata). So we
-    // assert canonical_bytes against the fixture but digest only against the
-    // canonical-bytes hash shape — see the wire-shape mismatch note in the
-    // task report.
+    // Drive /envelope with the payload_metadata block and ciphertext bytes.
+    // Per conformance-vectors §1.5, digest input is
+    // canonical_json(payload_metadata) || base64url_decode(ciphertext).
     const resp = await request.post(
       `${conformanceBaseUrl()}/envelope`,
       {
-        data: { vector_id: v.vector_id, envelope: v.cleartext_metadata },
+        data: {
+          vector_id: v.vector_id,
+          envelope: v.payload_metadata,
+          ciphertext_base64url: v.ciphertext_base64url,
+        },
       },
     );
     expect(resp.status()).toBe(200);
     const body = await resp.json();
     expect(body.canonical_bytes).toBe(v.expected_metadata_canonical_bytes_utf8);
-    expect(body.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(body.digest).toBe(v.expected_digest);
     // Determinism: re-post the same envelope should yield identical digest.
     const resp2 = await request.post(
       `${conformanceBaseUrl()}/envelope`,
       {
-        data: { vector_id: v.vector_id, envelope: v.cleartext_metadata },
+        data: {
+          vector_id: v.vector_id,
+          envelope: v.payload_metadata,
+          ciphertext_base64url: v.ciphertext_base64url,
+        },
       },
     );
     const body2 = await resp2.json();

@@ -247,6 +247,12 @@ test.describe("call moderation (spec wire)", () => {
     });
     expect(preBan.status(), await preBan.text()).toBe(200);
 
+    // Open the durable call state with a legal initial state before recording
+    // the actor-wide ban. call-state.md §4.2 forbids a first state of `active`.
+    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+      state: "ringing",
+    });
+
     // A moderator actor-wide-bans bob: the durable removed_participants[] row
     // carries a `ban` with no device_id (§3a).
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {
@@ -254,16 +260,26 @@ test.describe("call moderation (spec wire)", () => {
       removedParticipants: [{ actor_id: bob.did, action: "ban" }],
     });
 
-    // Post-ban: bob's re-exchange is refused.
-    const postBan = await exchangeMediaToken(request, bobToken, {
-      realm_id: realmId,
-      call_id: callId,
-      actor_id: bob.did,
-      device_id: bob.deviceId,
-      focus_id: LIVEKIT_FOCUS.focus_id,
-    });
-    expect(postBan.status()).toBe(403);
-    expect(wireErrCode(await postBan.json())).toBe("call_participant_removed");
+    // Post-ban: once the reducer projection has made the durable ban row
+    // visible to the token issuer, bob's re-exchange is refused.
+    let postBanBody: unknown;
+    await expect
+      .poll(
+        async () => {
+          const response = await exchangeMediaToken(request, bobToken, {
+            realm_id: realmId,
+            call_id: callId,
+            actor_id: bob.did,
+            device_id: bob.deviceId,
+            focus_id: LIVEKIT_FOCUS.focus_id,
+          });
+          postBanBody = await response.json();
+          return response.status();
+        },
+        { timeout: 5_000, intervals: [100, 250, 500, 1_000] },
+      )
+      .toBe(403);
+    expect(wireErrCode(postBanBody)).toBe("call_participant_removed");
   });
 });
 

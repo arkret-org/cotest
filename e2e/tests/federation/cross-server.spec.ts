@@ -67,7 +67,7 @@ async function waitForInvite(
 ) {
   let found:
     | {
-        invite_id: string;
+        id: string;
         realm_id: string;
         invitee?: string;
         state?: string;
@@ -377,7 +377,7 @@ test.describe("cross-server federation", () => {
       bobToken,
       bob.did,
       invite!.realm_id,
-      invite!.invite_id,
+      invite!.id,
       { server: "beta" },
     );
 
@@ -430,7 +430,7 @@ test.describe("cross-server federation", () => {
         bobToken,
         bob.did,
         betaInvite.realm_id,
-        betaInvite.invite_id,
+        betaInvite.id,
         { server: "beta" },
       );
       await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
@@ -481,7 +481,7 @@ test.describe("cross-server federation", () => {
       bobToken,
       bob.did,
       betaInvite.realm_id,
-      betaInvite.invite_id,
+      betaInvite.id,
       {
         server: "beta",
       },
@@ -543,7 +543,7 @@ test.describe("cross-server federation", () => {
       bobToken,
       bob.did,
       betaInvite.realm_id,
-      betaInvite.invite_id,
+      betaInvite.id,
       {
         server: "beta",
       },

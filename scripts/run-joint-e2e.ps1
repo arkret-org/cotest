@@ -1247,11 +1247,11 @@ try {
     if ($StartMockAuditAgent) {
         $auditEnv = "`$env:MOCK_AUDIT_AGENT_PORT='$mockAuditAgentPort'"
         if ($MockAuditAgentDid) {
-            $auditEnv = "$auditEnv; `$env:MOCK_audit_agent_principal_id=" + (Quote-PsLiteral $MockAuditAgentDid)
+            $auditEnv = "$auditEnv; `$env:MOCK_AUDIT_AGENT_DID=" + (Quote-PsLiteral $MockAuditAgentDid)
         }
         $mockAuditAgentCmd = "$auditEnv; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-audit-agent.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-audit-agent" -Command $mockAuditAgentCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/_soland/admin/audit-agent/identity" -TimeoutSeconds 30
+        Wait-HttpReady -Url "$mockAuditAgentBaseUrl/_cokret/self/audit-agent/identity" -TimeoutSeconds 30
     }
     if ($StartMockPolicyServer) {
         $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
@@ -1780,13 +1780,13 @@ try {
     if ($mockAuditAgentBaseUrl) {
         $env:COTEST_MOCK_AUDIT_AGENT_BASE_URL = $mockAuditAgentBaseUrl
         if ($MockAuditAgentDid) {
-            $env:COTEST_MOCK_audit_agent_principal_id = $MockAuditAgentDid
+            $env:COTEST_MOCK_AUDIT_AGENT_DID = $MockAuditAgentDid
         } else {
-            Remove-Item Env:COTEST_MOCK_audit_agent_principal_id -ErrorAction SilentlyContinue
+            Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
         }
     } else {
         Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_audit_agent_principal_id -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_AUDIT_AGENT_DID -ErrorAction SilentlyContinue
     }
     if ($mockPolicyServerBaseUrl) {
         $env:COTEST_MOCK_POLICY_SERVER_BASE_URL = $mockPolicyServerBaseUrl

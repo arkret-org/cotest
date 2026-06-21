@@ -40,7 +40,6 @@ export type ReadMarker = {
     kind: string;
     ref?: string;
     track_name?: string;
-    track_scope?: "all";
   };
   position: {
     event_id: string;
@@ -82,12 +81,15 @@ export async function acceptInviteViaApi(
   opts: { server?: SolandKey } = {},
 ) {
   const base = solandBaseUrl(opts.server);
-  const list = await request.get(`${base}/_cokret/self/authz/invites`, {
+  const listUrl = new URL("/_cokret/self/authz/invites", base);
+  listUrl.searchParams.set("subject", actorDid);
+  listUrl.searchParams.set("realm_id", realmId);
+  const list = await request.get(listUrl.toString(), {
     headers: authHeaders(token),
   });
   expect(list.status()).toBe(200);
   const body = (await list.json()) as {
-    invites?: Array<{ invite_id: string; realm_id: string; invitee?: string }>;
+    invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
   };
   const invite = (body.invites ?? []).find(
     (candidate) => candidate.realm_id === realmId && candidate.invitee === actorDid,
@@ -106,11 +108,11 @@ export async function acceptInviteViaApi(
         actor_id: actorDid,
         membership: "join",
         reason: "invite_accept",
-        invite_ref: invite!.invite_id,
+        invite_ref: invite!.id,
         delivery_status: "unroutable",
       },
     }),
-    { server: opts.server, context: `accept invite ${invite!.invite_id}` },
+    { server: opts.server, context: `accept invite ${invite!.id}` },
   );
 }
 

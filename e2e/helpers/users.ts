@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   expect,
   type APIRequestContext,
+  type APIResponse,
   type Browser,
   type BrowserContext,
   type Locator,
@@ -91,6 +92,37 @@ function buildInviteLocatorUrl(serverUrl: string, subjectDid: string): string {
   return `${base}/_cokret/open/invite-locators/resolve#token=${locatorToken}`;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryAfterMs(response: APIResponse, fallbackMs: number): number {
+  const raw = response.headers()["retry-after"];
+  if (!raw) {
+    return fallbackMs;
+  }
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(Math.max(Math.ceil(seconds * 1000), 250), 65_000);
+  }
+  const dateMs = Date.parse(raw);
+  if (Number.isFinite(dateMs)) {
+    return Math.min(Math.max(dateMs - Date.now(), 250), 65_000);
+  }
+  return fallbackMs;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringField(record: Record<string, unknown>, field: string): string | undefined {
+  const value = record[field];
+  return typeof value === "string" ? value : undefined;
+}
+
 export class JointUserPage {
   readonly user: JointUser;
   readonly session: UserSession;
@@ -147,18 +179,23 @@ export class JointUserPage {
   }
 
   async gotoRealmAdmin(realmId: string) {
-    await this.page.goto(`/realms/${realmId}/admin`, { waitUntil: "domcontentloaded" });
+    await this.page.goto(`/realms/${realmId}/settings`, { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   // Navigate to a specific Realm admin section (Members / Access / etc.).
-  // yougen routes are `/realms/:id/settings/:section` (routes.rs); the Overview
-  // landing doesn't show member rows or other section-specific testids.
-  // After the panel mounts, click the section tab to ensure active_section
-  // matches the URL — yougen's initial render can momentarily fall back
-  // to Overview while signals settle.
+  // Members is its own route; other admin sections live under settings.
   async gotoRealmAdminSection(realmId: string, section: string) {
+    if (section === "members") {
+      await this.page.goto(`/realms/${realmId}/members`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(this.page.getByTestId("realm-members-panel")).toBeVisible({ timeout: 120_000 });
+      await this.dismissDeviceAuthorizationPrompt();
+      return;
+    }
+
     await this.page.goto(`/realms/${realmId}/settings/${section}`, {
       waitUntil: "domcontentloaded",
     });
@@ -253,25 +290,24 @@ export class JointUserPage {
     return match![1];
   }
 
-  // Drive the Realm admin invite-member form to invite `targetDid` into realmId.
-  // The invite-member card lives under the Members section in yougen, not the
-  // Overview landing.
+  // Drive the Realm admin invite modal to invite `targetDid` into realmId.
   async inviteFromAdmin(realmId: string, targetDid: string): Promise<string> {
     await this.gotoRealmAdminSection(realmId, "members");
-    const invite = this.page.getByTestId("invite-member");
+    const members = this.page.getByTestId("realm-members-panel");
+    await expect(members).toBeVisible({ timeout: 120_000 });
+    await members.getByTestId("open-invite-modal-button").click();
+    const invite = this.page.getByTestId("invite-member-modal");
     await expect(invite).toBeVisible({ timeout: 30_000 });
     await invite
       .getByTestId("invite-target-input")
       .fill(buildInviteLocatorUrl(this.serverUrl, targetDid));
     await invite.getByTestId("send-invite-button").click();
-    await expect(this.page.getByTestId("realm-admin-panel")).toContainText(
+    const status = members.getByTestId("realm-members-status");
+    await expect(status).toContainText(
       new RegExp(`invited ${escapeRegex(targetDid)}`),
       { timeout: 30_000 },
     );
-    const text = await this.page.getByTestId("realm-admin-panel").innerText();
-    const match = text.match(/ck:invite:[a-zA-Z0-9:-]+/);
-    expect(match, `invite id after inviting ${targetDid}: ${text}`).not.toBeNull();
-    return match![0];
+    return await status.innerText();
   }
 
   // Build the Authorization + DPoP + holder-proof headers for a direct
@@ -303,7 +339,10 @@ export class JointUserPage {
   // strands through the canonical event path as an invite -> join member state.
   async acceptInvite(realmId: string) {
     const serverUrl = this.session.serverUrl;
-    const listUrl = `${serverUrl}/_cokret/self/authz/invites`;
+    const list = new URL("/_cokret/self/authz/invites", serverUrl);
+    list.searchParams.set("subject", this.user.did);
+    list.searchParams.set("realm_id", realmId);
+    const listUrl = list.toString();
     const listResp = await this.page.request.get(listUrl, {
       headers: this.selfPathHeaders("GET", listUrl),
     });
@@ -312,19 +351,31 @@ export class JointUserPage {
         `acceptInvite: list /authz/invites returned ${listResp.status()} for ${this.user.did}`,
       );
     }
-    const body = (await listResp.json()) as {
-      invites?: Array<{ invite_id: string; realm_id: string; invitee?: string }>;
-    };
-    const invite = (body.invites ?? []).find(
-      (i) => i.realm_id === realmId && i.invitee === this.user.did,
+    const body = objectRecord(await listResp.json()) ?? {};
+    const invites = Array.isArray(body.invites)
+      ? body.invites
+          .map(objectRecord)
+          .filter((invite): invite is Record<string, unknown> => invite !== undefined)
+      : [];
+    const invite = invites.find(
+      (i) =>
+        stringField(i, "realm_id") === realmId &&
+        stringField(i, "invitee") === this.user.did,
     );
     if (!invite) {
       throw new Error(
         `acceptInvite: no pending invite for ${this.user.did} in realm ${realmId} ` +
-          `(visible invites: ${JSON.stringify(body.invites ?? [])})`,
+          `(visible invites: ${JSON.stringify(invites)})`,
       );
     }
-    await this.acceptInviteById(realmId, invite.invite_id);
+    const inviteId = stringField(invite, "id");
+    if (!inviteId) {
+      throw new Error(
+        `acceptInvite: invite for ${this.user.did} in realm ${realmId} has no canonical id ` +
+          `(invite: ${JSON.stringify(invite)})`,
+      );
+    }
+    await this.acceptInviteById(realmId, inviteId);
   }
 
   async acceptInviteById(realmId: string, inviteId: string) {
@@ -432,14 +483,26 @@ export async function ensureRegistered(
   // longer accepted (the first handle arrives via a signed handle claim,
   // identity-handles.md); the account gets a synthetic localpart derived from
   // the DID. Success is 200 (200|409 here for idempotent setup).
-  const response = await request.post(`${solandBaseUrl(opts.server)}/_cokret/gate/account/register`, {
-    data: {
-      principal_id: user.did,
-      display_name: user.displayName,
-      device_id: user.deviceId,
-    },
-  });
-  expect([200, 409]).toContain(response.status());
+  const url = `${solandBaseUrl(opts.server)}/_cokret/gate/account/register`;
+  const data = {
+    principal_id: user.did,
+    display_name: user.displayName,
+    device_id: user.deviceId,
+  };
+  const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
+  for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
+    const response = await request.post(url, { data });
+    if ([200, 409].includes(response.status())) {
+      return;
+    }
+    const text = await response.text();
+    if (response.status() !== 429 || attempt === backoffMs.length - 1) {
+      throw new Error(
+        `ensureRegistered: ${url} returned ${response.status()} for ${user.did}: ${text}`,
+      );
+    }
+    await sleep(retryAfterMs(response, backoffMs[attempt]));
+  }
 }
 
 export async function issueDevSession(
@@ -536,7 +599,7 @@ export async function openUser(
         "#__dx-toast,#__dx-toast-container{display:none!important;visibility:hidden!important;pointer-events:none!important}";
       if (init.hideDeviceAuthorizationPrompt) {
         style.textContent +=
-          "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-reopen']{display:none!important;visibility:hidden!important;pointer-events:none!important}";
+          "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-reopen'],[class*='dx-dialog-backdrop']:has([data-testid='device-authorization-modal']){display:none!important;visibility:hidden!important;pointer-events:none!important}";
       }
       document.head.appendChild(style);
     };

@@ -22,6 +22,7 @@ import {
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
+  currentActorDidApi,
   expectJsonOk,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
@@ -441,8 +442,7 @@ export async function deliverInviteExplicitAddress(
 
 // List the authenticated actor's pending invites with the canonical wire
 // shape. The authz endpoint serializes the SDK `Invite` whose id field is
-// `id` (NOT `invite_id`); the shared soland-api.ts `listInvitesApi` mistypes
-// it, so contact-graph coverage reads invites through here.
+// `id` (NOT `invite_id`).
 export type AuthzInvite = {
   id: string;
   realm_id: string;
@@ -455,8 +455,11 @@ export async function listAuthzInvitesCokret(
   token: string,
   opts: { server?: SolandKey } = {},
 ): Promise<AuthzInvite[]> {
+  const actorDid = await currentActorDidApi(request, token, opts);
+  const url = new URL("/_cokret/self/authz/invites", solandBaseUrl(opts.server));
+  url.searchParams.set("subject", actorDid);
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/authz/invites`,
+    url.toString(),
     { headers: authHeaders(token) },
   );
   const body = await expectJsonOk<{ invites?: AuthzInvite[] }>(

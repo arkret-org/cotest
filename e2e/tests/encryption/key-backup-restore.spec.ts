@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { authHeaders } from "../../helpers/api";
+import { authHeaders, canonicalTimestamp, uuidV7 } from "../../helpers/soland-api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
@@ -224,22 +224,35 @@ function makeBackupBody(
   backupId: string,
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
+  const createdAt = canonicalTimestamp();
   const ciphertext = `backup-ciphertext-${randomUUID()}`;
+  const contents = [
+    {
+      item_type: "self_signing_key",
+      secret_id: "ssk",
+    },
+    {
+      item_type: "mls_group_secrets_backup_key",
+      secret_id: "mls-history",
+    },
+  ];
   const base = {
     backup_id: backupId,
     actor_id: actor.did,
+    device_id: actor.deviceId,
     backup_class: "secret_storage",
     backup_version: "kb_1",
     // §7.6 series chain — every envelope is a genesis of its own series here.
-    series_id: `ck:backup_series:${randomUUID()}`,
+    series_id: `ck:backup_series:${uuidV7()}`,
     series_seq: 0,
-    created_at: new Date().toISOString(),
+    supersedes: null,
+    created_at: createdAt,
     encryption: {
       recipient_method: "passphrase_kdf",
       kdf: {
         name: "argon2id",
+        salt: "bW9jay1zYWx0LTE2Ynl0ZXM",
         params: {
-          salt: "bW9jay1zYWx0LTE2Ynl0ZXM",
           memory_kib: 65_536,
           iterations: 3,
           parallelism: 4,
@@ -253,21 +266,22 @@ function makeBackupBody(
         nonce: "bW9jay14Y2hhY2hhLW5vbmNlLTEyMzQ1Ng",
         nonce_salt: "bW9jay1ub25jZS1zYWx0LTE2Ynl0ZXM",
       },
+      key_commitment: sha256Ref(`commitment:${backupId}`),
     },
-    // §7.2 wrong-credential fail-fast commitment (top-level field).
-    key_commitment: sha256Ref(`commitment:${backupId}`),
-    contents: [
-      {
-        item_type: "self_signing_key",
-        secret_id: "ssk",
-        encoding: "encrypted_inline",
+    domain_separation: {
+      hkdf_info: "cokret-key-backup/secret_storage/aead/v1",
+      subdomain: "aead",
+      aead_aad: {
+        schema: "ck.schema.key_backup.v1",
+        actor_id: actor.did,
+        device_id: actor.deviceId,
+        backup_class: "secret_storage",
+        backup_version: "kb_1",
+        created_at: createdAt,
+        item_types: contents.map((item) => item.item_type),
       },
-      {
-        item_type: "mls_group_secrets_backup_key",
-        secret_id: "mls-history",
-        encoding: "encrypted_inline",
-      },
-    ],
+    },
+    contents,
     ciphertext,
     ciphertext_digest: sha256Ref(ciphertext),
     // §7.4.1 cross-signing anchored device signature block. soland validates
@@ -289,7 +303,9 @@ function makeBackupBody(
         "backup_version",
         "series_id",
         "series_seq",
+        "supersedes",
         "encryption",
+        "domain_separation",
         "contents",
         "ciphertext_digest",
       ],
@@ -316,7 +332,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function backupIdFor(label: string): string {
-  return `ck:backup:${label}-${randomUUID()}`;
+  void label;
+  return `ck:backup:${uuidV7()}`;
 }
 
 function sha256Ref(value: string): string {

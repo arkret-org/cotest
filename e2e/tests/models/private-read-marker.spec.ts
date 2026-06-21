@@ -6,8 +6,13 @@
 //   - discovery/push-notifications.md §2-§4 (notification is client-side projection of marker)
 //   - crypto-media/device-lifecycle.md §7  (to-device queue carries the marker fan-out)
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
+import {
+  listRealmEventsViaApi,
+  sendPlaintextMessageViaApi,
+} from "../../helpers/api";
+import { createRealmApi } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -17,89 +22,118 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("private read marker", () => {
-  // Non-fixme baseline: on a single device, writing the marker via
-  // mark-all-read and reading it back via GET /notifications already works
-  // today. Pin that contract so we notice regressions even before the
-  // cross-device propagation gap is closed.
-  test("single-device baseline: mark-all-read writes last_read_at and zeroes unread on the same device", async ({
+  // Non-fixme baseline: on a single device, writing the actor-private read
+  // cursor through the canonical self surface and reading it back already
+  // works today. Pin that contract before the full cross-device propagation
+  // strand is promoted below.
+  test("single-device baseline: POST /read-cursors writes a marker visible to the same actor", async ({
     request,
   }) => {
-    const stamp = Date.now();
-    const alice = uniqueUser(`s11-prm-baseline-${stamp}`);
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
+    const { alice, aliceToken, realmId, position } = await readCursorFixture(
+      request,
+      "s11-prm-baseline",
+    );
     const auth = { authorization: `Bearer ${aliceToken}` };
 
-    const before = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
-      headers: auth,
-    });
+    const before = await request.get(
+      `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: auth },
+    );
     expect(before.status()).toBe(200);
     const beforeBody = await before.json();
-    expect(beforeBody.last_read_at == null).toBe(true);
+    expect(beforeBody.markers).toEqual([]);
 
-    const mark = await request.post(
-      `${solandBaseUrl()}/_soland/self/notifications/mark-all-read`,
-      { headers: auth, data: {} },
-    );
+    const mark = await request.post(`${solandBaseUrl()}/_cokret/self/read-cursors`, {
+      headers: auth,
+      data: {
+        realm_id: realmId,
+        read_scope: { kind: "realm" },
+        position,
+      },
+    });
     expect(mark.status()).toBe(200);
     const markBody = await mark.json();
-    expect(typeof markBody.marked_at).toBe("string");
-    expect(markBody.actor).toBe(alice.did);
+    expect(markBody.realm_id).toBe(realmId);
+    expect(markBody.actor_id).toBe(alice.did);
+    expect(markBody.position).toEqual(position);
+    expect(typeof markBody.updated_at).toBe("string");
+    expect(markBody.updated_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/,
+    );
 
-    const after = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
-      headers: auth,
-    });
+    const after = await request.get(
+      `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: auth },
+    );
     expect(after.status()).toBe(200);
     const afterBody = await after.json();
-    expect(afterBody.last_read_at).toBe(markBody.marked_at);
-    expect(afterBody.unread_count).toBe(0);
+    expect(afterBody.markers).toContainEqual(
+      expect.objectContaining({
+        realm_id: realmId,
+        actor_id: alice.did,
+        read_scope: { kind: "realm" },
+        position,
+      }),
+    );
   });
 
-  test("notification read marker is actor-private: alice mark-all-read does not mutate bob state", async ({
+  test("read cursor is actor-private: alice's marker does not mutate bob state", async ({
     request,
   }) => {
     // Live G2.T7 no-leak smoke on the implemented marker surface. The
-    // canonical ck.read_cursor.advance write path and cross-device to-device fanout
-    // remain fixme below.
+    // cross-device to-device fanout remains fixme below.
     const stamp = Date.now();
-    const alice = uniqueUser(`s11-prm-alice-${stamp}`);
+    const {
+      alice,
+      aliceToken,
+      realmId,
+      position,
+    } = await readCursorFixture(request, `s11-prm-alice-${stamp}`);
     const bob = uniqueUser(`s11-prm-bob-${stamp}`);
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    await ensureRegistered(request, bob);
+    const bobToken = await issueDevSession(request, bob);
     const aliceAuth = { authorization: `Bearer ${aliceToken}` };
     const bobAuth = { authorization: `Bearer ${bobToken}` };
 
-    const bobBefore = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
-      headers: bobAuth,
-    });
-    expect(bobBefore.status()).toBe(200);
-    expect((await bobBefore.json()).last_read_at == null).toBe(true);
-
-    const markAlice = await request.post(
-      `${solandBaseUrl()}/_soland/self/notifications/mark-all-read`,
-      { headers: aliceAuth, data: {} },
+    const bobBefore = await request.get(
+      `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: bobAuth },
     );
+    expect(bobBefore.status()).toBe(200);
+    expect((await bobBefore.json()).markers).toEqual([]);
+
+    const markAlice = await request.post(`${solandBaseUrl()}/_cokret/self/read-cursors`, {
+      headers: aliceAuth,
+      data: {
+        realm_id: realmId,
+        read_scope: { kind: "realm" },
+        position,
+      },
+    });
     expect(markAlice.status()).toBe(200);
     const markAliceBody = await markAlice.json();
-    expect(markAliceBody.actor).toBe(alice.did);
+    expect(markAliceBody.actor_id).toBe(alice.did);
 
-    const aliceAfter = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
-      headers: aliceAuth,
-    });
+    const aliceAfter = await request.get(
+      `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: aliceAuth },
+    );
     expect(aliceAfter.status()).toBe(200);
     const aliceAfterBody = await aliceAfter.json();
-    expect(aliceAfterBody.last_read_at).toBe(markAliceBody.marked_at);
+    expect(aliceAfterBody.markers).toContainEqual(
+      expect.objectContaining({
+        actor_id: alice.did,
+        position,
+      }),
+    );
 
-    const bobAfter = await request.get(`${solandBaseUrl()}/_soland/self/notifications`, {
-      headers: bobAuth,
-    });
+    const bobAfter = await request.get(
+      `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+      { headers: bobAuth },
+    );
     expect(bobAfter.status()).toBe(200);
     const bobAfterBody = await bobAfter.json();
-    expect(bobAfterBody.last_read_at == null).toBe(true);
-    expect(bobAfterBody.unread_count).toBe(0);
+    expect(bobAfterBody.markers).toEqual([]);
   });
 
   // Main strand: full multi-device read-cursor lifecycle (Phases A-G in
@@ -160,3 +194,42 @@ test.describe("private read marker", () => {
     },
   );
 });
+
+async function readCursorFixture(
+  request: APIRequestContext,
+  label: string,
+) {
+  const stamp = Date.now();
+  const alice = uniqueUser(label);
+  await ensureRegistered(request, alice);
+  const aliceToken = await issueDevSession(request, alice);
+  const realmId = await createRealmApi(request, aliceToken, {
+    title: `read cursor ${stamp}`,
+    discoverability: "listed",
+    history_visibility: "shared",
+    encryption_profile: "none",
+    ownerDid: alice.did,
+  });
+  const message = await sendPlaintextMessageViaApi(
+    request,
+    aliceToken,
+    realmId,
+    `cursor target ${stamp}`,
+    { actorDid: alice.did },
+  );
+  const events = await listRealmEventsViaApi(request, aliceToken, realmId, {
+    limit: 20,
+  });
+  const event = events.find((candidate) => candidate.event_id === message.event_id);
+  expect(event, `message event ${message.event_id}`).toBeTruthy();
+  expect(typeof event!.hlc).toBe("string");
+  return {
+    alice,
+    aliceToken,
+    realmId,
+    position: {
+      event_id: message.event_id,
+      hlc: event!.hlc,
+    },
+  };
+}
