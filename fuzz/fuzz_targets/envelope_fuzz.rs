@@ -6,11 +6,10 @@
 //! validator is a finding — `libfuzzer-sys` will abort and record the input.
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
-
 use cotest::fuzz::envelope_fuzz::{
     fuzz_event_envelope, fuzz_move_envelope, fuzz_seal_envelope, fuzz_snapshot_chunk,
 };
+use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     if data.is_empty() {

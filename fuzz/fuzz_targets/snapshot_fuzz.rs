@@ -7,9 +7,8 @@
 //! anything that still aborts the process.
 #![no_main]
 
-use libfuzzer_sys::fuzz_target;
-
 use cotest::fuzz::snapshot_fuzz::{fuzz_snapshot_chunk_header, fuzz_snapshot_manifest};
+use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     if data.is_empty() {
