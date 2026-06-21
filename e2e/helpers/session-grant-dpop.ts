@@ -3,8 +3,8 @@
 // Contract: cokret-spec/spec/v1/zh/sync/api-conventions.md §3.3 and
 // cotask/tasks/_auth_todos.md "## ② 最终路线".
 //
-// Under ②, the Principal Server (soland) mints no local bearer and offers no
-// grant→bearer exchange. A client accesses `/_cokret/self/*` by presenting
+// Under ②, the Principal Server (soland) does not mint a second local
+// credential. A client accesses `/_cokret/self/*` by presenting
 // `Authorization: Bearer <ck.session.grant>` plus a per-request DPoP proof
 // bound to the request (`htm`/`htu`/`ath`). soland verifies the DPoP against
 // the grant's `cnf.jkt` (RFC 7638 JWK SHA-256 thumbprint) obtained via
@@ -125,8 +125,8 @@ export function jwkThumbprintEd25519(x: string): string {
   return b64urlNoPad(createHash("sha256").update(canonical).digest());
 }
 
-/// `ath` claim per RFC 9449 §4.3: `base64url(sha256(access_token))` (unpadded),
-/// where the access token here is the `ck.session.grant` JWT.
+/// `ath` claim per RFC 9449 §4.3: base64url-encoded SHA-256 of the presented
+/// session credential, unpadded. In Cokret this is the `ck.session.grant` JWT.
 export function dpopAth(grantJwt: string): string {
   return b64urlNoPad(createHash("sha256").update(grantJwt).digest());
 }

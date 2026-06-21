@@ -147,7 +147,7 @@ test.describe("MLS group encryption", () => {
     const aliceToken = await issueDevSession(request, alice);
     const malloryToken = await issueDevSession(request, mallory);
     const alicePage = await openUserPage(browser, alice, {
-      sessionToken: aliceToken,
+      sessionCredential: aliceToken,
     });
 
     try {
@@ -513,8 +513,8 @@ test.describe("MLS group encryption", () => {
       issueDevSession(request, bob),
     ]);
     const [alicePage, bobPage] = await Promise.all([
-      openUserPage(browser, alice, { sessionToken: aliceToken }),
-      openUserPage(browser, bob, { sessionToken: bobToken }),
+      openUserPage(browser, alice, { sessionCredential: aliceToken }),
+      openUserPage(browser, bob, { sessionCredential: bobToken }),
     ]);
 
     try {
@@ -587,7 +587,7 @@ test.describe("MLS group encryption", () => {
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
     const alicePage = await openUserPage(browser, alice, {
-      sessionToken: aliceToken,
+      sessionCredential: aliceToken,
     });
 
     try {

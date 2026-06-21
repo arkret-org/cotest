@@ -69,7 +69,7 @@ test.describe("agent protocol interop", () => {
       contentType: "application/json",
     });
 
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
     try {
       // yougen routes.rs §"/agents" → AgentsPanel; testid pinned in
       // yougen/src/views/agents.rs line 226 (`data-testid="agents-panel"`).

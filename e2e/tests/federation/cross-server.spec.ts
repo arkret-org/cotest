@@ -216,11 +216,11 @@ test.describe("cross-server federation", () => {
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
     const alicePage = await openUserPage(browser, alice, {
-      sessionToken: aliceToken,
+      sessionCredential: aliceToken,
       server: "alpha",
     });
     const bobPage = await openUserPage(browser, bob, {
-      sessionToken: bobToken,
+      sessionCredential: bobToken,
       server: "beta",
     });
 
@@ -269,7 +269,7 @@ test.describe("cross-server federation", () => {
     });
 
     const alicePage = await openUserPage(browser, alice, {
-      sessionToken: aliceToken,
+      sessionCredential: aliceToken,
       server: "alpha",
     });
 
@@ -404,7 +404,7 @@ test.describe("cross-server federation", () => {
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
 
     const alicePage = await openUserPage(browser, alice, {
-      sessionToken: aliceToken,
+      sessionCredential: aliceToken,
       server: "alpha",
     });
 

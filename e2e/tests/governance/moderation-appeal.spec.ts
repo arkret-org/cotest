@@ -75,7 +75,7 @@ test.describe("moderation appeal", () => {
     const targetRef = decisionNotice.event_id.replace(/^ck:event:/, "ck:message:");
     const decision = await issueDecision(request, reviewerToken, realmId, targetRef);
 
-    const appellantPage = await openUserPage(browser, appellant, { sessionToken: appellantToken });
+    const appellantPage = await openUserPage(browser, appellant, { sessionCredential: appellantToken });
     try {
       await appellantPage.gotoTimelineRealm(realmId);
       await expect(appellantPage.page.getByTestId("timeline")).toContainText(

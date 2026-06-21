@@ -241,7 +241,7 @@ async function createBottomConflictFixture(
   const bobTitle = `renamed by bob ${stamp}`;
   await submitRealmTitleUpdate(request, aliceToken, alice.did, realmId, aliceTitle, basis);
   await submitRealmTitleUpdate(request, bobToken, bob.did, realmId, bobTitle, basis);
-  const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+  const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
   return { alice, bob, aliceToken, bobToken, bobPage, realmId, aliceTitle };
 }
 

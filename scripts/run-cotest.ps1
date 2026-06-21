@@ -999,9 +999,9 @@ function New-ReleaseGate {
                 -RequiredTests @("federation_replay_snapshot_and_redaction_contracts_work")))
     $checks.Add((New-ReleaseGateCheck `
                 -Id "session_grant_bridge" `
-                -Description "coauth-style introspection backs soland session grant exchange and push registration." `
+                -Description "coauth-style introspection backs soland session grant presentation and push registration." `
                 -Tests $Tests `
-                -RequiredTests @("session_grant_exchange_uses_configured_coauth_introspection")))
+                -RequiredTests @("session_grant_presentation_uses_configured_coauth_introspection")))
     $checks.Add((New-ReleaseGateCheck `
                 -Id "did_resolver_starid_optional" `
                 -Description "soland advertises the optional starid did:webvh resolver profile through identity discovery." `

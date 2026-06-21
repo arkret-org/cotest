@@ -4,8 +4,8 @@
 //!   1. Spawns `soland` (via the existing [`CokretServer::spawn_with_env`] machinery, which honours
 //!      the pre-built sibling binary fast path).
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
-//!      + generated config). Wires soland → coauth introspection URLs via the soland env
-//!      (`SOLAND_OAUTH_INTROSPECTION_URL` / `SOLAND_SESSION_GRANT_INTROSPECTION_URL`).
+//!      + generated config). Wires soland -> coauth session-grant introspection via
+//!      `SOLAND_SESSION_GRANT_INTROSPECTION_URL`.
 //!   3. Optionally spawns `starid` via the [`external_binary::STARID_SPEC`] (no external deps in
 //!      development mode). Wires soland → starid via `SOLAND_STARID_WEBVH_RESOLVER_URL` +
 //!      `SOLAND_DID_RESOLVER_ALLOW_METHODS`.
@@ -40,9 +40,9 @@ pub struct FourServiceConfig {
     /// Logical name passed to soland (used for the test DID + log directory).
     pub name: String,
     /// Bearer token expected by soland when calling coauth's
-    /// `oauth/introspect` and `session-grants/introspect` endpoints. Must
-    /// match the value coauth's generated config patched in.
-    pub coauth_introspection_bearer: String,
+    /// `session-grants/introspect` endpoint. Must match the value coauth's
+    /// generated config patched in.
+    pub session_grant_introspection_bearer: String,
     /// Bearer token soland presents when registering a did:webvh document
     /// against the embedded provider. Mirrors run-joint-e2e.ps1.
     pub embedded_webvh_registration_bearer: String,
@@ -57,7 +57,7 @@ impl FourServiceConfig {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
-            coauth_introspection_bearer: "cotest-coauth-introspection".to_owned(),
+            session_grant_introspection_bearer: "cotest-session-grant-introspection".to_owned(),
             embedded_webvh_registration_bearer: "cotest-webvh-registration".to_owned(),
             wire_directory_ingest: true,
         }
@@ -200,20 +200,12 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
     if let Some(coauth) = &coauth {
         let base = coauth.base_url().trim_end_matches('/');
         soland_env.push((
-            "SOLAND_OAUTH_INTROSPECTION_URL".to_owned(),
-            format!("{base}/oauth/introspect"),
-        ));
-        soland_env.push((
-            "SOLAND_OAUTH_INTROSPECTION_BEARER".to_owned(),
-            config.coauth_introspection_bearer.clone(),
-        ));
-        soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_URL".to_owned(),
             format!("{base}/_cokret/gate/account/session-grants/introspect"),
         ));
         soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER".to_owned(),
-            config.coauth_introspection_bearer.clone(),
+            config.session_grant_introspection_bearer.clone(),
         ));
         soland_env.push((
             "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER".to_owned(),

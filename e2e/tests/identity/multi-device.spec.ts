@@ -38,8 +38,8 @@ test.describe("multi-device pairing + revocation", () => {
     // Tokens MAY be identical (dev-login is idempotent) or distinct.
     // Either way, both should authenticate.
 
-    const device1 = await openUserPage(browser, alice, { sessionToken: token1 });
-    const device2 = await openUserPage(browser, alice, { sessionToken: token2 });
+    const device1 = await openUserPage(browser, alice, { sessionCredential: token1 });
+    const device2 = await openUserPage(browser, alice, { sessionCredential: token2 });
 
     try {
       await device1.gotoHome();
@@ -222,7 +222,7 @@ test.describe("multi-device pairing + revocation", () => {
     const alice = uniqueUser(`s10-verif-badge-${Date.now()}`);
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const device = await openUserPage(browser, alice, { sessionToken: token });
+    const device = await openUserPage(browser, alice, { sessionCredential: token });
     try {
       await device.gotoHome();
       await device.page.goto("/settings/devices", { waitUntil: "domcontentloaded" });

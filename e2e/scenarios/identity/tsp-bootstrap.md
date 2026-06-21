@@ -17,7 +17,7 @@
 ## 拓扑
 
 - 1 × soland (principal server) — 承载 alice 的事件与 audit log;假设监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 签 alice 的 access token
+- 1 × coauth (auth server) — 签 alice 的 session credential
 - 1 × WebVH host — 服务 alice 的 `did:webvh:<scid>:<host>` 解析(发布 `did.jsonl`,含 `ck.service.tsp` endpoint 声明)
 - 1 × DID:web host — 服务 bob_extern 的 `did:web:bob-extern.example` 解析(发布 `did.json`,同样含 `ck.service.tsp` endpoint 声明)
 - 1 × mock TSP endpoint(并行任务产出的 `mock-tsp-endpoint.mjs`) — 同时扮演 alice 与 bob_extern 的 TSP endpoint;harness 通过 `process.env.MOCK_TSP_ENDPOINT_PORT` 决定监听端口,`process.env.MOCK_TSP_ENDPOINT_VID` 决定其向外宣告的 VID;在 Phase D / E 自动 ACK 收到的 TSP envelope
@@ -38,7 +38,7 @@
 - alice 的 DID Document v0 中的 `service` 数组**已包含**一项 `ck.service.tsp` endpoint,`serviceEndpoint` 指向 `http://127.0.0.1:${MOCK_TSP_ENDPOINT_PORT}/tsp`
 - bob_extern 的 `did:web` document 同样包含 `ck.service.tsp` endpoint,指向同一个 mock(mock 通过 `MOCK_TSP_ENDPOINT_VID` 区分入站消息归属哪个 VID)
 - alice 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
-- alice browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
+- alice browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 - alice 与 bob_extern **之间没有现成的 TSP relationship**(mock 启动时 relationship table 为空)
 
 ## Steps

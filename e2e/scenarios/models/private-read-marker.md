@@ -27,7 +27,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 - 1 × soland (principal server) — 监听 `http://127.0.0.1:<soland_port>`
 - 1 × coauth (auth server) — 监听 `http://127.0.0.1:<coauth_port>`
-- 共享同一个 coauth;alice 两台 device 都从这个 coauth 取 access token
+- 共享同一个 coauth;alice 两台 device 都从这个 coauth 取 session credential
 
 (cotest 现有 harness 已经提供这套拓扑,不需要改 `scripts/run-joint-e2e.ps1`。)
 
@@ -46,7 +46,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
   `device_id` 不同 — 沿用 `identity/multi-device` Phase A 的 dev-login proxy)
 - bob 持有效 dev session token
 - 三个 browser context 都通过 `yougen.config.v1` localStorage 注入 server_url + account_did +
-  device_id + session_token
+  device_id + session_credential
 
 ## Steps
 

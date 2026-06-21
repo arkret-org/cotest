@@ -580,11 +580,11 @@ pub fn run_auth_soft_logout_did_proof_vector() -> Result<()> {
     let fixture = auth_session_proof_fixture()?;
     let vector = case(&fixture, VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF)?;
     let mut session_state = "soft_logged_out";
-    let refresh_token_valid = true;
-    if refresh_token_valid && session_state == "soft_logged_out" {
+    let holder_key_available = true;
+    if holder_key_available && session_state == "soft_logged_out" {
         let reason = ERROR_CODE_DID_PROOF_REQUIRED;
-        if reason != expected_str(vector, "refresh_only_reason")? {
-            bail!("soft logout refresh-only reason drifted");
+        if reason != expected_str(vector, "holder_only_reason")? {
+            bail!("soft logout holder-only reason drifted");
         }
     }
 

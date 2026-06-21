@@ -308,7 +308,7 @@ const server = createServer(async (req, res) => {
     const authorization =
       req.headers.authorization ??
       body.authorization ??
-      (body.access_token ? `Bearer ${body.access_token}` : undefined);
+      (body.session_credential ? `Bearer ${body.session_credential}` : undefined);
     if (!solandBase || !authorization) {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "missing_soland_base_url_or_authorization" }));

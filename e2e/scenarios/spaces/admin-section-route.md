@@ -36,7 +36,7 @@
 
 - `alice` 通过 `ensureRegistered(request, alice)` 注册
 - `alice` 通过 `issueDevSession(request, alice)` 拿 token
-- `alice` 在 yougen 通过 `openUserPage(browser, alice, { sessionToken })` 起 browser context(`yougen.config.v1` localStorage 注入)
+- `alice` 在 yougen 通过 `openUserPage(browser, alice, { sessionCredential })` 起 browser context(`yougen.config.v1` localStorage 注入)
 - `alice` 通过 `JointUserPage.createRealm(...)` 建一个 `discoverability=listed, joinRule=invite` 的 Realm,记录 `realmId`
 
 ## Steps

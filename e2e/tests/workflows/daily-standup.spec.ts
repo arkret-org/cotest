@@ -37,9 +37,9 @@ test.describe("workflow: async daily standup", () => {
       issueDevSession(request, pat),
       issueDevSession(request, quincy),
     ]);
-    const linPage = await openUserPage(browser, lin, { sessionToken: linToken });
-    const patPage = await openUserPage(browser, pat, { sessionToken: patToken });
-    const quincyPage = await openUserPage(browser, quincy, { sessionToken: quincyToken });
+    const linPage = await openUserPage(browser, lin, { sessionCredential: linToken });
+    const patPage = await openUserPage(browser, pat, { sessionCredential: patToken });
+    const quincyPage = await openUserPage(browser, quincy, { sessionCredential: quincyToken });
 
     const linStandup = `[Standup] Yesterday: shipped onboarding. Today: code review. Blockers: none. ${stamp}`;
     const patStandup = `[Standup] Yesterday: kanban bug. Today: deploy fix. Blockers: need Lin's review on PR #88. ${stamp}`;

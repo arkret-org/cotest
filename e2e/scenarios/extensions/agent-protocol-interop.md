@@ -45,7 +45,7 @@
 
 - `alice`、`local_agent`、`remote_agent` 都通过 `POST /_soland/self/account/register` 注册过 (`ensureRegistered`)
 - `alice` 持有 dev session token (`POST /_soland/gate/auth/dev-login`)
-- `alice` 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_token
+- `alice` 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url / account_did / device_id / session_credential
 - `remote_agent` 的 DID Document 暴露至少一个 `service` entry,且 `serviceEndpoint` 字段精确等于 mock-agent-runtime 实际监听的 base URL (spec §6 步骤 4 normative MUST)
 - mock-agent-runtime 健康检查 `GET /healthz` 返回 200,且 `GET /.well-known/agent-card.json` 返回符合 A2A AgentCard 形状的 JSON;ACP `GET /info` 返回 metadata
 - soland 已认领 `ck.profile.agent_runtime.v1` extension profile (gap:目前 `/_cokret/describe` 的 `claimed_profiles` 大概率没有这一条,见 Implementation notes)

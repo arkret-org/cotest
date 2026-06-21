@@ -54,8 +54,8 @@ async function createJointTwoUserRealm(
     issueDevSession(request, bob),
   ]);
   const [alicePage, bobPage] = await Promise.all([
-    openUserPage(browser, alice, { sessionToken: aliceToken }),
-    openUserPage(browser, bob, { sessionToken: bobToken }),
+    openUserPage(browser, alice, { sessionCredential: aliceToken }),
+    openUserPage(browser, bob, { sessionCredential: bobToken }),
   ]);
 
   const realmId = await alicePage.createRealm({

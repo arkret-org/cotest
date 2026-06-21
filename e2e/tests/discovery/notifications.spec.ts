@@ -36,8 +36,8 @@ test.describe("notifications", () => {
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
 
     try {
       const realmId = await alicePage.createRealm({
@@ -78,8 +78,8 @@ test.describe("notifications", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
       const normalMsg = `muted normal message ${stamp}`;
       const mentionMsg = `@${bob.handle.replace(/^@/, "")} muted mention override ${stamp}`;
 
@@ -137,8 +137,8 @@ test.describe("notifications", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
       const suppressedMsg = `DND suppressed ${stamp}`;
       const resumedMsg = `DND resumed ${stamp}`;
 
@@ -337,9 +337,9 @@ test.describe("notifications", () => {
         issueDevSession(request, bob),
         issueDevSession(request, bobDevice2),
       ]);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-      const bobDevice1 = await openUserPage(browser, bob, { sessionToken: bobToken1 });
-      const bobDevice2Page = await openUserPage(browser, bobDevice2, { sessionToken: bobToken2 });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+      const bobDevice1 = await openUserPage(browser, bob, { sessionCredential: bobToken1 });
+      const bobDevice2Page = await openUserPage(browser, bobDevice2, { sessionCredential: bobToken2 });
 
       try {
         const realmId = await alicePage.createRealm({

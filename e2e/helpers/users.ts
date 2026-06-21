@@ -30,10 +30,10 @@ export type UserSession = {
   networkLines: string[];
   serverUrl: string;
   keepDeviceAuthorizationModal: boolean;
-  /// The bearer presented on `/_cokret/self/*`. Under the ②(A+②) model this is
-  /// the `ck.session.grant` JWT; a request to a self-path also requires the DPoP
-  /// + holder-proof material in `grant` below.
-  sessionToken: string;
+  /// The credential presented on `/_cokret/self/*`. Under the ②(A+②) model this
+  /// is the `ck.session.grant` JWT; a request to a self-path also requires the
+  /// DPoP + holder-proof material in `grant` below.
+  sessionCredential: string;
   /// Real grant + DPoP material for direct (non-browser) self-path API calls.
   /// Present when the session was opened with an injected grant.
   grant?: SessionGrantMaterial;
@@ -49,10 +49,10 @@ export type SessionGrantMaterial = {
 };
 
 export type OpenUserOpts = {
-  sessionToken?: string;
+  sessionCredential?: string;
   server?: SolandKey;
   keepDeviceAuthorizationModal?: boolean;
-  /// Real `ck.session.grant` JWT to inject as yougen's bearer (②(A+②) model).
+  /// Real `ck.session.grant` JWT to inject as yougen's session credential.
   /// When set together with `dpopSeedB64url`, yougen's dev-only boot injection
   /// rehydrates the grant + DPoP device key instead of relying on dev-login.
   grantJwt?: string;
@@ -275,11 +275,9 @@ export class JointUserPage {
   }
 
   // Build the Authorization + DPoP + holder-proof headers for a direct
-  // (non-browser) `/_cokret/self/*` call. Under the ②(A+②) model the bearer is
-  // the ck.session.grant and soland requires a per-request DPoP proof plus the
-  // session-grant introspection holder proof; a grant presented bearer-only is
-  // rejected. When the session carries no grant material (legacy bearer), fall
-  // back to bearer-only so dev-bearer call sites keep working.
+  // (non-browser) `/_cokret/self/*` call. Under the ②(A+②) model the credential
+  // is the ck.session.grant and soland requires a per-request DPoP proof plus
+  // the session-grant introspection holder proof.
   private selfPathHeaders(method: string, url: string): Record<string, string> {
     const grant = this.session.grant;
     if (grant) {
@@ -292,11 +290,11 @@ export class JointUserPage {
         url,
       });
     }
-    const token = this.session.sessionToken;
-    if (!token) {
-      throw new Error("selfPathHeaders: no grant material or bearer captured on session");
+    const credential = this.session.sessionCredential;
+    if (!credential) {
+      throw new Error("selfPathHeaders: no grant material or credential captured on session");
     }
-    return { authorization: `Bearer ${token}` };
+    return { authorization: `Bearer ${credential}` };
   }
 
   // Accept a pending invite for this user. Yougen's realm-admin invite list
@@ -461,8 +459,8 @@ export async function issueDevSession(
   );
   expect(response.status()).toBe(200);
   const body = await response.json();
-  expect(body.access_token).toBeTruthy();
-  return body.access_token;
+  expect(body.session_credential).toBeTruthy();
+  return body.session_credential;
 }
 
 export async function openUser(
@@ -471,7 +469,7 @@ export async function openUser(
   opts: OpenUserOpts = {},
 ): Promise<UserSession> {
   const serverUrl = solandBaseUrl(opts.server);
-  const sessionToken = opts.sessionToken ?? "";
+  const sessionCredential = opts.sessionCredential ?? "";
   const diagnosticsDir = path.join(diagnosticsRoot(), sanitize(`${Date.now()}-${user.name}`));
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const context = await browser.newContext({
@@ -494,15 +492,15 @@ export async function openUser(
     (init) => {
       window.localStorage.setItem("yougen.config.v1", JSON.stringify(init.config));
       // The harness injects sessions into localStorage; yougen's wasm build is
-      // IndexedDB-only for bearer/secrets by default (SubtleCrypto, non-
+      // IndexedDB-only for session credentials/secrets by default (SubtleCrypto, non-
       // extractable). Opt into the localStorage compatibility tier so the
-      // injected bearer/seed are accepted (test-only; production leaves this
+      // injected credential/seed are accepted (test-only; production leaves this
       // unset). See yougen secure_key_store WASM_ALLOW_LOCALSTORAGE_SECRETS_FLAG.
       window.localStorage.setItem("yougen.security.allow_localstorage_secrets", "1");
       // ②(A+②) real-grant injection: hand yougen's dev-only boot path the real
       // ck.session.grant + the DPoP device seed it is bound to, so the wasm
       // client rehydrates a genuine grant (coauth introspection passes, device
-      // enrollment runs) instead of a soland-only dev-login bearer. yougen reads
+      // enrollment runs) instead of a soland-only dev-login credential. yougen reads
       // this key only when allow_localstorage_secrets is on. See yougen
       // app.rs inject_test_session_grant.
       if (init.sessionInjection) {
@@ -517,7 +515,7 @@ export async function openUser(
         server_url: serverUrl,
         account_did: user.did,
         device_id: user.deviceId,
-        session_token: sessionToken,
+        session_credential: sessionCredential,
       },
       sessionInjection,
     },
@@ -628,7 +626,7 @@ export async function openUser(
     networkLines,
     serverUrl,
     keepDeviceAuthorizationModal: opts.keepDeviceAuthorizationModal === true,
-    sessionToken,
+    sessionCredential,
     grant,
   };
 }

@@ -53,7 +53,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-alice-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
 
     try {
       const realmId = await createRealmApi(request, aliceToken, {

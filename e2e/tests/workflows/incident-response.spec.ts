@@ -44,9 +44,9 @@ test.describe("workflow: incident response", () => {
         issueDevSession(request, backend),
         issueDevSession(request, comms),
       ]);
-      const oncallPage = await openUserPage(browser, oncall, { sessionToken: oncallToken });
-      const backendPage = await openUserPage(browser, backend, { sessionToken: backendToken });
-      const commsPage = await openUserPage(browser, comms, { sessionToken: commsToken });
+      const oncallPage = await openUserPage(browser, oncall, { sessionCredential: oncallToken });
+      const backendPage = await openUserPage(browser, backend, { sessionCredential: backendToken });
+      const commsPage = await openUserPage(browser, comms, { sessionCredential: commsToken });
 
       const alert = `SEV-2 checkout latency > 3s; impact: EU checkout. ${stamp}`;
       const ack = `Ack. I am taking incident commander. ${stamp}`;
@@ -119,7 +119,7 @@ test.describe("workflow: incident response", () => {
       const oncall = uniqueUser("wf-incident-fsm");
       await ensureRegistered(request, oncall);
       const token = await issueDevSession(request, oncall);
-      const page = await openUserPage(browser, oncall, { sessionToken: token });
+      const page = await openUserPage(browser, oncall, { sessionCredential: token });
 
       try {
         const realmId = await page.createRealm({
@@ -197,7 +197,7 @@ test.describe("workflow: incident response", () => {
       const commander = uniqueUser("wf-incident-priority-commander");
       await ensureRegistered(request, commander);
       const commanderToken = await issueDevSession(request, commander);
-      const commanderPage = await openUserPage(browser, commander, { sessionToken: commanderToken });
+      const commanderPage = await openUserPage(browser, commander, { sessionCredential: commanderToken });
 
       try {
         const realmId = await commanderPage.createRealm({
@@ -235,7 +235,7 @@ test.describe("workflow: incident response", () => {
       const oncall = uniqueUser("wf-incident-postmortem");
       await ensureRegistered(request, oncall);
       const token = await issueDevSession(request, oncall);
-      const page = await openUserPage(browser, oncall, { sessionToken: token });
+      const page = await openUserPage(browser, oncall, { sessionCredential: token });
 
       try {
         const realmId = await page.createRealm({

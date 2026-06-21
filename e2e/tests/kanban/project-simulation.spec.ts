@@ -43,9 +43,9 @@ test.describe("project simulation", () => {
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
     const carolToken = await issueDevSession(request, carol);
-    const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionToken: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionToken: carolToken });
+    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
+    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
 
     try {
       const realmId = await alicePage.createRealm({

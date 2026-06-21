@@ -1,5 +1,5 @@
 //! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
-//! and `session_grant_exchange_uses_configured_coauth_introspection`.
+//! and `session_grant_presentation_uses_configured_coauth_introspection`.
 use std::env;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 

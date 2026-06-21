@@ -39,7 +39,7 @@ test.describe("core object invariants", () => {
       const alice = uniqueUser(`s-coinv-alice-${stamp}`);
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
+      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
       const aliceAuth = { authorization: `Bearer ${aliceToken}` };
 
       try {

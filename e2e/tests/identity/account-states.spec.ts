@@ -37,7 +37,7 @@ test.describe("account states", () => {
     }
   });
 
-  test("soft logout revokes access token while account state remains active", async ({
+  test("soft logout revokes session credential while account state remains active", async ({
     request,
   }) => {
     const alice = uniqueUser("s28-soft-logout");

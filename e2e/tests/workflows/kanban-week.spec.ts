@@ -30,7 +30,7 @@ test.describe("workflow: kanban week-in-review", () => {
     const pat = uniqueUser("wf-kanban-pat");
     await ensureRegistered(request, pat);
     const patToken = await issueDevSession(request, pat);
-    const patPage = await openUserPage(browser, pat, { sessionToken: patToken });
+    const patPage = await openUserPage(browser, pat, { sessionCredential: patToken });
 
     const todayList = `Today-${stamp}`;
     const doingList = `Doing-${stamp}`;

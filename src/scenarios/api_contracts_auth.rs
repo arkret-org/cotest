@@ -91,7 +91,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let token = login["access_token"].as_str().unwrap();
+    let token = login["session_credential"].as_str().unwrap();
 
     let me = expect_json(
         server
@@ -162,7 +162,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let alice_token = alice["access_token"].as_str().unwrap();
+    let alice_token = alice["session_credential"].as_str().unwrap();
 
     let bob = expect_json(
         server

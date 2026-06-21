@@ -3,15 +3,14 @@
 // Contract: cotask/tasks/_auth_todos.md "## ② 最终路线" (D1–D6) and
 // cokret-spec/spec/v1/zh/sync/api-conventions.md §3.3.
 //
-// Under ②, soland mints no local bearer and there is no grant→bearer exchange.
-// A client reaches `/_cokret/self/*` by presenting
+// Under ②, soland does not mint a second local credential. A client reaches
+// `/_cokret/self/*` by presenting
 //   Authorization: Bearer <ck.session.grant>
 //   DPoP: <RFC 9449 proof bound to htm/htu/ath(=hash(grant))>
 // and soland verifies the DPoP against the grant's `cnf.jkt` (obtained via
 // session-grant introspection at coauth), plus audience / scope / principal /
-// device / expiry. Three inbound credential types coexist on soland and are
-// distinguished by the presence of the `DPoP` header (D6): dev-login bearer,
-// coauth OAuth access token, and grant+DPoP.
+// device / expiry. The `DPoP` header distinguishes current session-grant
+// presentation from development and deployment compatibility credentials.
 //
 // Minting approach: a real DPoP-bound grant is obtained from coauth's cotest
 // debug seam (POST /_coauth/gate/account/test/debug/issue-dpop-grant), which
@@ -176,8 +175,12 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       grantAudience: grant.audience,
     });
     const seenGrantSelfRequests: Array<{ url: string; headers: Record<string, string> }> = [];
+    const refreshRequests: string[] = [];
     jointPage.page.on("request", (browserRequest) => {
       const url = browserRequest.url();
+      if (url.includes("/session-grants/refresh")) {
+        refreshRequests.push(url);
+      }
       if (!url.includes("/_cokret/self/") && !url.includes("/_cokret/root/")) {
         return;
       }
@@ -188,6 +191,8 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     });
     try {
       await jointPage.gotoHome();
+      await expect(jointPage.page.getByTestId("client-shell")).toBeVisible({ timeout: 60_000 });
+      await expect(jointPage.page.getByTestId("login-panel")).toHaveCount(0);
       await expect
         .poll(
           () =>
@@ -207,6 +212,24 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
           !headers["x-cokret-session-grant-proof"],
       );
       expect(missingProofs, `grant self/root requests missing DPoP or holder proof`).toEqual([]);
+      expect(refreshRequests, "fresh boot must not rotate the injected grant").toEqual([]);
+
+      await jointPage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(jointPage.page.getByTestId("client-shell")).toBeVisible({ timeout: 60_000 });
+      await expect(jointPage.page.getByTestId("login-panel")).toHaveCount(0);
+      await expect
+        .poll(
+          () =>
+            seenGrantSelfRequests.some(
+              ({ headers }) =>
+                Boolean(headers.dpop) &&
+                Boolean(headers["x-cokret-session-grant-challenge"]) &&
+                Boolean(headers["x-cokret-session-grant-proof"]),
+            ),
+          { timeout: 30_000 },
+        )
+        .toBeTruthy();
+      expect(refreshRequests, "reload with a fresh grant must not rotate it").toEqual([]);
     } finally {
       await jointPage.close();
     }

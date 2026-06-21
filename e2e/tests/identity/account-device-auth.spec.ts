@@ -22,7 +22,7 @@ test.describe("account auth + device strand", () => {
     expect(probe.status()).toBeLessThan(500);
   });
 
-  test("expired access token returns 401 on protected endpoint", async ({ request }) => {
+  test("expired session credential returns 401 on protected endpoint", async ({ request }) => {
     const meResp = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
       headers: { authorization: `Bearer expired-or-bogus-token` },
     });
@@ -33,7 +33,7 @@ test.describe("account auth + device strand", () => {
     // @blocking-on: soland#identity-account-device-auth-gap
     // @user-promise: e2e/scenarios/identity/account-device-auth.md
     // @expected-live-by: 2026Q3
-    "alice registers via OIDC bridge (mock IdP); coauth issues short-term ck.session.grant + refresh_token",
+    "alice registers via OIDC bridge (mock IdP); coauth issues short-term ck.session.grant",
     async () => {
       // spec: account-lifecycle.md §2.1, key-management.md §6
       // harness gap: mock IdP service.
@@ -54,7 +54,7 @@ test.describe("account auth + device strand", () => {
     // @blocking-on: soland#identity-account-device-auth-gap
     // @user-promise: e2e/scenarios/identity/account-device-auth.md
     // @expected-live-by: 2026Q3
-    "expired access token triggers /_cokret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC",
+    "expired session grant triggers /_cokret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC",
     async () => {
       // spec: key-management.md §6 refresh path.
     },
@@ -64,7 +64,7 @@ test.describe("account auth + device strand", () => {
     // @blocking-on: soland#identity-account-device-auth-gap
     // @user-promise: e2e/scenarios/identity/account-device-auth.md
     // @expected-live-by: 2026Q3
-    "soft logout revokes access token but keeps refresh; refresh later restores access",
+    "soft logout revokes session credential; holder-proof refresh later restores access",
     async () => {
       // spec: account-lifecycle.md §3 (soft_logged_out)
     },

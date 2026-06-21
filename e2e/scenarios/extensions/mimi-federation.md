@@ -36,7 +36,7 @@
 
 - alice 通过 `POST /_soland/self/account/register` 注册 (与现有 `ensureRegistered` 行为一致)
 - alice 持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
-- alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_token
+- alice 的 browser context 通过 `yougen.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
 - soland 配置中启用了 `extensions.mimi_interop = true` (extension profile);如果未启用,整个 spec 应该跳过而非失败
 - mimi_facade mock 在测试运行时可达,且预置了 bob_mimi 这一个 MIMI 身份;mock helper 已在 `helpers/mimi-facade.ts` 提供,真实 soland/yougen federation 仍由当前 `.fixme` 锚定
 

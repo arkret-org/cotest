@@ -160,8 +160,8 @@ async function createOfflineFixture(
     },
   );
   const [alicePage, bobPage] = await Promise.all([
-    openUserPage(browser, alice, { sessionToken: aliceToken }),
-    openUserPage(browser, bob, { sessionToken: bobToken }),
+    openUserPage(browser, alice, { sessionCredential: aliceToken }),
+    openUserPage(browser, bob, { sessionCredential: bobToken }),
   ]);
   await Promise.all([alicePage.gotoTimelineRealm(realmId), bobPage.gotoTimelineRealm(realmId)]);
   return { alice, bob, aliceToken, bobToken, alicePage, bobPage, realmId };

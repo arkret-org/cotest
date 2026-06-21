@@ -134,7 +134,7 @@ fn validate_runnable_harness<'a>(
         let operations = string_set(path, "operations")?;
         match name {
             "oidc_session_grant" => {
-                for operation in ["oidc_callback", "session_grant_exchange"] {
+                for operation in ["oidc_callback", "issue_session_grant"] {
                     if !operations.contains(operation) {
                         bail!("runnable_harness {name} missing operation {operation}");
                     }
@@ -186,7 +186,7 @@ fn validate_case_shape(
             require_profile(profile, "ck.profile.full_client.v1", name)?;
             require_expect(expect, "pass", name)?;
             require_operation(case, "oidc_callback")?;
-            require_operation(case, "session_grant_exchange")?;
+            require_operation(case, "issue_session_grant")?;
             require_non_empty(case, "/observed/session_grant_token_type", name)?;
             if case
                 .pointer("/observed/dev_login_used")

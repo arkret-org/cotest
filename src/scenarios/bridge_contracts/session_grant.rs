@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::harness::{CokretServer, expect_json};
 use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
 
-pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Result<()> {
+pub async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
     let principal_id = "did:web:alice-session-grant.example";
     let device_id = "ck:device:0196419b-0000-7000-8000-000000000501";
     let coauth = MockCoauthIntrospectionServer::spawn(principal_id, device_id).await?;
@@ -16,7 +16,7 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
             Some("principal-token".to_owned()),
         ),
     ]);
-    let server = CokretServer::spawn("session-grant-exchange").await?;
+    let server = CokretServer::spawn("session-grant-presentation").await?;
 
     expect_json(
         server
@@ -30,42 +30,6 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
         StatusCode::OK,
     )
     .await?;
-
-    let exchange = expect_json(
-        server
-            .http()
-            .post(server.url("/_cokret/gate/account/session-grants"))
-            .json(&json!({
-                "grant_jwt": "coauth.session.jwt",
-                "principal_id": principal_id,
-                "device_id": device_id,
-                "display_name": "yougen session-grant bridge",
-                "introspection_proof": {
-                    "challenge": "soland-bridge-challenge",
-                    "proof_jwt": "client.session-key.proof.jwt"
-                }
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(exchange["actor"], principal_id);
-    assert_eq!(exchange["device_id"], device_id);
-    assert_eq!(exchange["token_type"], "Bearer");
-    assert!(
-        exchange["access_token"]
-            .as_str()
-            .is_some_and(|token| !token.is_empty())
-    );
-
-    let authenticated = expect_json(
-        server
-            .http()
-            .get(server.url("/_cokret/self/account/viewer"))
-            .bearer_auth(exchange["access_token"].as_str().unwrap()),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(authenticated["principal_id"], principal_id);
 
     let push = expect_json(
         server
@@ -92,13 +56,10 @@ pub async fn session_grant_exchange_uses_configured_coauth_introspection() -> Re
     assert_eq!(push["registration_id"], format!("ck:push:{device_id}"));
 
     let requests = coauth.requests();
-    assert_eq!(requests.len(), 2);
+    assert_eq!(requests.len(), 1);
     assert_eq!(requests[0]["grant_jwt"], "coauth.session.jwt");
     assert_eq!(requests[0]["audience"], server.service_did());
-    assert_eq!(requests[0]["proof"]["challenge"], "soland-bridge-challenge");
-    assert_eq!(requests[1]["grant_jwt"], "coauth.session.jwt");
-    assert_eq!(requests[1]["audience"], server.service_did());
-    assert_eq!(requests[1]["proof"]["challenge"], "soland-push-challenge");
+    assert_eq!(requests[0]["proof"]["challenge"], "soland-push-challenge");
 
     Ok(())
 }

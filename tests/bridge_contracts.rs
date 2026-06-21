@@ -15,7 +15,7 @@ async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn session_grant_exchange_uses_configured_coauth_introspection() -> Result<()> {
-    cotest::scenarios::bridge_contracts::session_grant_exchange_uses_configured_coauth_introspection()
+async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
+    cotest::scenarios::bridge_contracts::session_grant_presentation_uses_configured_coauth_introspection()
         .await
 }
