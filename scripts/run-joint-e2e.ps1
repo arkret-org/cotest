@@ -315,8 +315,10 @@ function Invoke-JointE2ePreflight {
     if ($npx) {
         Push-Location $E2eRoot
         try {
-            $playwrightVersion = (& $npx playwright --version 2>&1) -join "`n"
-            if ($LASTEXITCODE -eq 0) {
+            $playwrightVersionOutput = Invoke-NativeCapture -FilePath $npx -Arguments @("playwright", "--version")
+            $playwrightVersionExitCode = $LASTEXITCODE
+            $playwrightVersion = $playwrightVersionOutput -join "`n"
+            if ($playwrightVersionExitCode -eq 0) {
                 Add-PreflightResult $results "playwright package" "pass" $playwrightVersion
             } else {
                 Add-PreflightResult $results "playwright package" "fail" $playwrightVersion
@@ -326,15 +328,19 @@ function Invoke-JointE2ePreflight {
             foreach ($project in $PlaywrightProjects) {
                 $listArgs += @("--project", $project)
             }
-            $listOutput = (& $npx @listArgs 2>&1) -join "`n"
-            if ($LASTEXITCODE -eq 0) {
+            $listCommandOutput = Invoke-NativeCapture -FilePath $npx -Arguments $listArgs
+            $listExitCode = $LASTEXITCODE
+            $listOutput = $listCommandOutput -join "`n"
+            if ($listExitCode -eq 0) {
                 Add-PreflightResult $results "playwright projects" "pass" ($PlaywrightProjects -join ",")
             } else {
                 Add-PreflightResult $results "playwright projects" "fail" $listOutput
             }
 
-            $browserList = (& $npx playwright install --list 2>&1) -join "`n"
-            if ($LASTEXITCODE -eq 0) {
+            $browserListOutput = Invoke-NativeCapture -FilePath $npx -Arguments @("playwright", "install", "--list")
+            $browserListExitCode = $LASTEXITCODE
+            $browserList = $browserListOutput -join "`n"
+            if ($browserListExitCode -eq 0) {
                 Add-PreflightResult $results "playwright browsers" "pass" "browser registry readable"
             } else {
                 Add-PreflightResult $results "playwright browsers" "fail" $browserList
@@ -1858,6 +1864,8 @@ try {
     $npxCommand = $npxCommandInfo.Source
     Push-Location $e2eRoot
     try {
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         $playwrightOutput = & $npxCommand @playwrightArgs 2>&1
         $exitCode = $LASTEXITCODE
         $playwrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
@@ -1865,6 +1873,9 @@ try {
         $playwrightOutput | ForEach-Object { Write-Host $_ }
     }
     finally {
+        if ($null -ne $previousErrorActionPreference) {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
         Pop-Location
     }
 }
