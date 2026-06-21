@@ -2,11 +2,13 @@
 // Contract: e2e/scenarios/extensions/applet-bridge.md
 // Spec: extensions/applet-integration.md §3-§5, extensions/applet-schema.md
 
+import { createHash, createPrivateKey, sign } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { mockAppletRegistryBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { mockAppletRegistryBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   addRealmMemberApi,
   authHeaders,
+  canonicalJson,
   createRealmApi,
   queryRealmEventsApi,
   wireErrCode,
@@ -302,26 +304,16 @@ test.describe("applet bridge", () => {
   });
 });
 
-// COT-03-003 — inbound transaction-push per-delivery source signature negatives.
-// Spec: extensions/applet-integration.md §7.3.1 (双向对称 normative). The inbound
-// direction app/bridge → cokret edge (`POST /_cokret/edge/applet/transactions`)
-// MUST verify an RFC 9421 HTTP Message Signature per delivery BEFORE processing any
-// event / side-effect; a transaction push carrying only `Authorization: Bearer`
-// (no `Signature`) MUST be rejected. These are pure negatives — they assert the
-// receiver fails closed with the spec failure codes, so a soland that skips inbound
-// source-signature verification (letting any bearer holder ghost-write under the
-// "external applet delivery" identity) turns these into red, instead of being masked
-// by the green happy path. The matching positive path (registry-private-key RFC 9421
-// signature over @method/@target-uri/content-digest + Source-Service-DID) is driven
-// by the bridge happy-path test once soland implements verification.
-test.describe("applet inbound transaction push — per-delivery source signature negatives", () => {
+// Spec: extensions/applet-integration.md §7.3.1. The inbound direction
+// app/bridge → cokret edge (`POST /_cokret/edge/applet/transactions`) MUST
+// verify an RFC 9421 HTTP Message Signature per delivery before processing any
+// event or side effect.
+test.describe("applet inbound transaction push — per-delivery source signature", () => {
   const TRANSACTIONS_PATH = "/_cokret/edge/applet/transactions";
 
-  // Minimal well-formed transaction-push body. Source DID / events are realistic
-  // enough that the request reaches the signature gate rather than failing on shape.
-  function transactionPushBody(stamp: number) {
+  function transactionPushBody(stamp: number, sourceServiceDid = "did:web:applet-bridge.joint-e2e.local") {
     return {
-      source_service_did: "did:web:applet-bridge.joint-e2e.local",
+      source_service_did: sourceServiceDid,
       events: [
         {
           external_event_id: `ext-evt-${stamp}`,
@@ -362,6 +354,55 @@ test.describe("applet inbound transaction push — per-delivery source signature
     await ensureRegistered(request, alice);
     return issueDevSession(request, alice);
   }
+
+  test("valid applet service signature inbound transaction push → 200 accepted", async ({
+    request,
+  }) => {
+    const registryBase = requireMockAppletRegistry();
+    const stamp = Date.now();
+    const alice = uniqueUser(`applet-inbound-ok-${stamp}`);
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, token, {
+      title: `applet inbound signed ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
+    });
+    const sourceServiceDid = `did:web:applet-inbound-${stamp}.joint-e2e.local`;
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:inbound-${stamp}`,
+      namespace: `bridge.inbound.${stamp}`,
+      service_did: sourceServiceDid,
+      webhook_auth: {
+        type: "http_message_signature",
+        key_ref: `${sourceServiceDid}#applet-service-key`,
+        accepted_algs: ["EdDSA"],
+      },
+    });
+    await installApplet(request, token, signed, realmId, `inbound-install-${stamp}`);
+
+    const idempotencyKey = `inbound-ok-${stamp}`;
+    const body = transactionPushBody(stamp, sourceServiceDid);
+    const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const resp = await request.post(targetUri, {
+      headers: {
+        ...authHeaders(token),
+        ...signedAppletTransactionHeaders({
+          body,
+          targetUri,
+          sourceServiceDid,
+          destinationServiceDid: solandServiceDid(),
+          idempotencyKey,
+        }),
+      },
+      data: body,
+    });
+    const responseText = await resp.text();
+    expect(resp.status(), responseText).toBe(200);
+    const outcome = JSON.parse(responseText) as { ok?: boolean; rejected?: unknown[] };
+    expect(outcome.ok).toBe(true);
+    expect(outcome.rejected ?? []).toEqual([]);
+  });
 
   test("missing Signature (bearer-only) inbound transaction push → 401 http_signature_required", async ({
     request,
@@ -429,6 +470,60 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(signatureReason(await expired.json())).toBe("signature_window_invalid");
   });
 });
+
+function signedAppletTransactionHeaders(args: {
+  body: Record<string, unknown>;
+  targetUri: string;
+  sourceServiceDid: string;
+  destinationServiceDid: string;
+  idempotencyKey: string;
+}): Record<string, string> {
+  const canonicalBody = Buffer.from(canonicalJson(args.body), "utf8");
+  const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
+  const created = Math.floor(Date.now() / 1000);
+  const expires = created + 300;
+  const keyid = `${args.sourceServiceDid}#applet-service-key`;
+  const signatureParams =
+    `("@method" "@target-uri" "@authority" "content-digest" ` +
+    `"source-service-did" "destination-service-did" "idempotency-key");` +
+    `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
+  const signatureBase = [
+    `"@method": POST`,
+    `"@target-uri": ${args.targetUri}`,
+    `"@authority": ${new URL(args.targetUri).host}`,
+    `"content-digest": ${contentDigest}`,
+    `"source-service-did": ${args.sourceServiceDid}`,
+    `"destination-service-did": ${args.destinationServiceDid}`,
+    `"idempotency-key": ${args.idempotencyKey}`,
+    `"@signature-params": ${signatureParams}`,
+  ].join("\n");
+  const signature = sign(
+    null,
+    Buffer.from(signatureBase, "utf8"),
+    developmentAppletPrivateKey(keyid),
+  );
+  return {
+    "content-digest": contentDigest,
+    "source-service-did": args.sourceServiceDid,
+    "destination-service-did": args.destinationServiceDid,
+    "idempotency-key": args.idempotencyKey,
+    "signature-input": `sig1=${signatureParams}`,
+    signature: `sig1=:${signature.toString("base64")}:`,
+  };
+}
+
+function developmentAppletPrivateKey(verificationMethod: string) {
+  const seed = createHash("sha256")
+    .update("soland:applet-service-key:")
+    .update(verificationMethod)
+    .digest();
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  return createPrivateKey({
+    key: Buffer.concat([pkcs8Prefix, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+}
 
 function requireMockAppletRegistry(): string {
   const registryBase = mockAppletRegistryBaseUrl();

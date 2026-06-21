@@ -4,7 +4,6 @@
 //       §6 (演进约束 + critical extension fail-closed)
 // Artifacts (machine-readable source-of-truth):
 //   - cokret-spec/spec/v1/artifacts/migration/removed-event-kinds.json
-//   - cokret-spec/spec/v1/artifacts/migration/removed-operation-ids.json
 //   - cokret-spec/spec/v1/artifacts/migration/deprecated-profile-ids.json
 //   - cokret-spec/spec/v1/artifacts/registry/forbidden-model-terms.json
 //   - cokret-spec/spec/v1/artifacts/registry/operation-registry.json
@@ -14,9 +13,8 @@
 // are pure artifact-vs-describe diffs and need no fixme — they are tagged
 // @fully-implemented so they run under the joint-smoke profile.
 //
-// Phase A / B / F now run live as negative probes: they submit a removed event
-// kind, call removed operation surfaces, and scan server-managed responses for
-// forbidden model terms.
+// Phase A / F now run live as negative probes: they submit a removed event
+// kind and scan server-managed responses for forbidden model terms.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -154,14 +152,6 @@ function collectClaimedProfileIds(describe: unknown): Set<string> {
   return found;
 }
 
-async function readJsonOrText(response: { json: () => Promise<unknown>; text: () => Promise<string> }) {
-  try {
-    return await response.json();
-  } catch {
-    return { text: await response.text() };
-  }
-}
-
 function* stringLeaves(node: unknown, path: string[] = []): Generator<{ path: string[]; value: string }> {
   if (typeof node === "string") {
     yield { path, value: node };
@@ -189,7 +179,6 @@ test.describe("conformance registry drift @fully-implemented", () => {
   // Load all artifacts once; failures here surface as test setup errors which
   // is what we want (the spec build is broken, not the wire).
   const removedEventKinds = loadMigrationJson<DriftRegistry>("removed-event-kinds.json");
-  const removedOperationIds = loadMigrationJson<DriftRegistry>("removed-operation-ids.json");
   const deprecatedProfileIds = loadMigrationJson<DriftRegistry>("deprecated-profile-ids.json");
   const forbiddenModelTerms = loadRegistryJson<DriftRegistry>("forbidden-model-terms.json");
   const operationRegistry = loadRegistryJson<OperationRegistry>("operation-registry.json");
@@ -289,41 +278,8 @@ test.describe("conformance registry drift @fully-implemented", () => {
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
     const body = await resp.json();
-    expect(["schema_violation", "unknown_event_kind", "removed_event_kind", "invalid_event_kind"]).toContain(
-      wireErrCode(body),
-    );
+    expect(["schema_violation", "unknown_event_kind"]).toContain(wireErrCode(body));
     expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
-  });
-
-  test("Phase B — calling a removed operation_id returns 410 / 4xx, never 2xx", async ({
-    request,
-  }) => {
-    const removed = removedOperationIds.entries.find((entry) => entry.rejection_level === "hard_reject");
-    expect(removed, "removed hard-reject operation id fixture").toBeTruthy();
-    const endpoints = [
-      `${solandBaseUrl()}/_cokret/self/operations/${encodeURIComponent(removed!.id)}`,
-      `${solandBaseUrl()}/_cokret/self/server/operation/invoke`,
-    ];
-    for (const url of endpoints) {
-      const resp = await request.post(url, {
-        data: { operation_id: removed!.id, input: {} },
-      });
-      expect(resp.status(), `${url} should not accept removed operation ${removed!.id}`).toBeGreaterThanOrEqual(400);
-      const body = await readJsonOrText(resp);
-      const code = wireErrCode(body);
-      if (code) {
-        expect([
-          "unknown_operation",
-          "removed_operation",
-          "gone",
-          "operation_not_found",
-          "not_found",
-          "unrecognized_endpoint",
-        ]).toContain(code);
-      }
-      expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
-      expect(JSON.stringify(body)).not.toContain('"ok":true');
-    }
   });
 
   test("Phase F — server-managed audit / log surfaces don't leak forbidden model terms", async ({

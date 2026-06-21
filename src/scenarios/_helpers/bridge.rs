@@ -1,7 +1,7 @@
 //! Bridge-contract scenario helpers shared by `principal_bridge_contracts_are_discoverable`
 //! and `session_grant_exchange_uses_configured_coauth_introspection`.
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use anyhow::Result;
 use reqwest::StatusCode;
@@ -114,15 +114,24 @@ pub fn snapshot_placeholder(
 
 pub struct EnvOverride {
     previous: Vec<(&'static str, Option<String>)>,
+    _guard: MutexGuard<'static, ()>,
 }
 
 impl EnvOverride {
     pub fn set(pairs: &[(&'static str, Option<String>)]) -> Self {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let guard = ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("EnvOverride global lock poisoned");
         let previous = pairs
             .iter()
             .map(|(key, _)| (*key, env::var(key).ok()))
             .collect();
         for (key, value) in pairs {
+            // SAFETY: EnvOverride serializes all writes performed through this
+            // helper with a process-wide mutex and holds the guard until Drop
+            // restores the previous values.
             unsafe {
                 match value {
                     Some(value) => env::set_var(key, value),
@@ -130,13 +139,18 @@ impl EnvOverride {
                 }
             }
         }
-        Self { previous }
+        Self {
+            previous,
+            _guard: guard,
+        }
     }
 }
 
 impl Drop for EnvOverride {
     fn drop(&mut self) {
         for (key, value) in &self.previous {
+            // SAFETY: the EnvOverride guard is still held while restoring the
+            // previous process environment values.
             unsafe {
                 match value {
                     Some(value) => env::set_var(key, value),

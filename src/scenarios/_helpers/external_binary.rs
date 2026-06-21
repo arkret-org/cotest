@@ -9,8 +9,8 @@
 //!      caller's env before attempting to spawn — when a required dependency env var is missing we
 //!      treat the binary as unavailable (returns `Ok(None)` from `try_spawn`). This is how coauth /
 //!      floria gate themselves until a DB / config is wired into the test run.
-//!   3. Allocates a free local port and exports it back to the caller via the configured bind env
-//!      var (e.g. `STARID_BIND`) and / or `--bind` CLI arg if `bind_arg` is set.
+//!   3. Reserves a local port and exports it back to the caller via the configured bind env var
+//!      (e.g. `STARID_BIND`) and / or `--bind` CLI arg if `bind_arg` is set.
 //!   4. Spawns the child with `stdout` / `stderr` swallowed (Stdio::null) so cargo test output
 //!      stays readable; long-form troubleshooting can re-run with the binary directly.
 //!   5. Waits for `/health` (or any caller-supplied liveness path) to return 2xx, with a deadline;
@@ -31,7 +31,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow, bail};
 use reqwest::Client;
 
-use crate::harness::free_port;
+use crate::harness::{ReservedPort, reserve_port};
 
 /// Configuration for spawning a sibling-checkout binary.
 pub struct ExternalBinarySpec {
@@ -74,6 +74,7 @@ pub struct SpawnedExternalProcess {
     pub base_url: String,
     pub bin_path: PathBuf,
     child: Option<Child>,
+    _port_reservations: Vec<ReservedPort>,
 }
 
 impl SpawnedExternalProcess {
@@ -89,11 +90,17 @@ impl SpawnedExternalProcess {
     /// by the bootstrap helpers in `coauth_bootstrap` / `floria_bootstrap`
     /// where the bind address is not allocated by `try_spawn` but is
     /// instead baked into a generated config file.
-    pub(crate) fn from_child(base_url: String, bin_path: PathBuf, child: Child) -> Self {
+    pub(crate) fn from_child(
+        base_url: String,
+        bin_path: PathBuf,
+        child: Child,
+        port_reservations: Vec<ReservedPort>,
+    ) -> Self {
         Self {
             base_url,
             bin_path,
             child: Some(child),
+            _port_reservations: port_reservations,
         }
     }
 }
@@ -202,8 +209,8 @@ pub async fn try_spawn_with_extra_env(
     }
     let bin_path = locate_external_binary(spec)
         .ok_or_else(|| anyhow!("locate_external_binary returned None after skip_reason check"))?;
-    let port = free_port()?;
-    let bind = format!("127.0.0.1:{port}");
+    let port = reserve_port()?;
+    let bind = format!("127.0.0.1:{}", port.port());
     let base_url = format!("http://{bind}");
 
     let mut command = Command::new(&bin_path);
@@ -237,6 +244,7 @@ pub async fn try_spawn_with_extra_env(
         base_url: base_url.clone(),
         bin_path,
         child: Some(child),
+        _port_reservations: vec![port],
     };
 
     wait_until_healthy(&base_url, spec.health_path, spec.health_timeout)

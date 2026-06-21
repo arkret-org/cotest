@@ -23,11 +23,17 @@ test.describe("account recovery", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    // Recovery setup / list endpoints. Either implemented (200) or absent (404).
-    const recoveryListResp = await request.get(`${solandBaseUrl()}/_cokret/self/keys/recovery`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect([200, 401, 404]).toContain(recoveryListResp.status());
+    const backupsResp = await request.get(
+      `${solandBaseUrl()}/_cokret/self/keys/backups?backup_class=did_recovery`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+      },
+    );
+    expect(backupsResp.status()).toBe(200);
+    const body = await backupsResp.json();
+    const backups = body.backups ?? body.results ?? body;
+    expect(Array.isArray(backups)).toBeTruthy();
+    expect(JSON.stringify(body)).not.toMatch(/plaintext|passphrase|private_key/i);
   });
 
   test.fixme(

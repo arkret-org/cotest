@@ -34,8 +34,8 @@
 
 ## Pre-conditions
 
-- alice 和 bob 都通过 `POST /_soland/self/account/register` 注册过(与现有 `ensureRegistered` 行为一致)
-- alice 和 bob 都持有有效 dev session token(`POST /_soland/gate/auth/dev-login`)
+- alice 和 bob 都通过标准 account registration helper 注册过(与现有 `ensureRegistered` 行为一致)
+- alice 和 bob 都持有有效 dev session token
 - alice 拥有 realm-admin capability(由 cotest harness boot 时种入)
 - `process.env.MOCK_POLICY_SERVER_PORT` 已设置,且 `GET http://127.0.0.1:${MOCK_POLICY_SERVER_PORT}/inspect` 返回 200
 
@@ -43,16 +43,17 @@
 
 ### Phase A — Realm 声明 policy server endpoint
 
-1. **alice** 通过 `POST /_cokret/self/realm/state` 提交一条 `ck.realm.policy_server` Move:
+1. **alice** 通过 `PUT /_cokret/self/realms/{realm_id}/policy-server` 配置 Realm policy server:
    ```json
    {
-     "kind": "ck.realm.policy_server",
-     "endpoint": "http://127.0.0.1:${MOCK_POLICY_SERVER_PORT}/_cokret/self/policy/check",
-     "fail_mode": "closed",
-     "cache_ttl_ms": 5000
+     "policy_server_did": "did:web:policy.example.com",
+     "policy_server_url": "http://127.0.0.1:${MOCK_POLICY_SERVER_PORT}/_cokret/self/policy/check",
+     "cache_ttl_seconds": 5,
+     "timeout_ms": 1500,
+     "on_timeout": "fail_closed"
    }
    ```
-2. 断言:realm state event 落库,`GET /_cokret/self/realm/state` 返回的 `policy_server.endpoint` 等于 mock URL
+2. 断言:`GET /_cokret/self/realms/{realm_id}/policy-server` 返回的 `policy_server_url` 等于 mock URL
 3. 调 `GET ${MOCK_POLICY_SERVER_PORT}/inspect`,记录此时 `checks.length`(后续比较增量)
 
 ### Phase B — 默认 allow:invite 触发 /policy/check
@@ -107,7 +108,7 @@
 
 ## Observable assertions (合并清单)
 
-- Phase A:realm state 中 `policy_server.endpoint` 等于 mock URL,`fail_mode = "closed"`
+- Phase A:Realm policy-server projection 中 `policy_server_url` 等于 mock URL,`on_timeout = "fail_closed"`
 - Phase B 步骤 8-9:allow 决策下邀请成功,mock 收到一条 `action = ck.invite.create` 的 check
 - Phase C 步骤 13-14:deny 决策下 HTTP 412,errcode `policy_denied`,yougen 渲染 reason
 - Phase D 步骤 19-20:obligation `log_event` 写入 audit log,且 mock inspect 标记 obligations_executed=true
@@ -116,14 +117,14 @@
 ## Edge cases / sub-tests
 
 - **E3.1 policy server 超时 fail-closed**:通过 `POST ${MOCK_POLICY_SERVER_PORT}/scenarios` 注入 `{ delay_ms: 9000 }`(超过 soland 的 policy check timeout,假设默认 2s);soland 应 fail-closed(`decision = deny`,reason `policy_timeout`),邀请被拒;`/inspect.checks` 可能为空(请求未到 mock)或带 partial 标记
-- **E3.2 多个 policy_source 优先级**:在 realm `ck.realm.policy_server` 之上,再给 alice 当 owner 的 org 设一条 `ck.org.policy_server`(指向同一 mock 的不同 path,如 `/_cokret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)
-- **E3.3 cache_ttl 幂等**:cache_ttl_ms = 5000 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
+- **E3.2 多个 policy_source 优先级**:在 Realm policy server 之上,再给 alice 当 owner 的 org 配置一条组织级 policy server binding(指向同一 mock 的不同 path,如 `/_cokret/self/policy/check?source=org`);mock 让 org 路径 deny、realm 路径 allow;期望最终决策是 deny(spec §3.2 — org override realm,more specific wins)。组织级 HTTP binding 需等 operation registry 注册后再 live 化。
+- **E3.3 cache_ttl 幂等**:`cache_ttl_seconds = 5` 时,在 5 秒内对**同一** `{actor_id, action, resource}` 触发两次同样的操作(例如 bob 连续两次试图发 `ck.message.create`),soland 只调一次 mock;`/inspect.checks` 在第二次操作后 length 不变(或新增的那条带 `from_cache = true` 标记,取决于 mock 实现)
 
 (E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)
 
 ## Implementation notes
 
-- **soland 缺口**:`ck.realm.policy_server` state event kind 暂未实现;`POST /_cokret/self/policy/check` outbound call 在 cap-gated 路径上未挂;obligation executor (写 audit log + step-up + mask field 三个 kind);cache_ttl 缓存层;fail_mode=closed 兜底分支。统一在 soland `_todos.md` 的 "policy-server integration" backlog。
+- **soland 缺口**:`PUT /_cokret/self/realms/{realm_id}/policy-server` 已覆盖配置投影;`POST /_cokret/self/policy/check` outbound call 在 cap-gated 路径上未挂;obligation executor (写 audit log + step-up + mask field 三个 kind);cache_ttl 缓存层;on_timeout=fail_closed 兜底分支。
 - **coauth 缺口**:无;policy server 走 soland → external HTTP,coauth 不参与。
 - **yougen 缺口**:邀请失败时的 error 渲染 testid (`invite-error`) 可能需要补;policy reason 文本展示。
 - **mock 缺口**:并行任务的 `mock-policy-server.mjs` 必须支持 `POST /scenarios`(规则注入)、`GET /inspect`(checks + signed_transcript)、ed25519 签名 transcript;这是本测试的硬依赖,本 spec 不重复指定,但任何字段不一致都会让本测试 fail。

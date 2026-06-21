@@ -48,16 +48,19 @@ test.describe("federation outbound signing and trust_domain", () => {
 });
 
 async function runSolandOutboxTest(filter: string): Promise<void> {
+  await expectSolandOutboxTestListed(filter);
   const { stdout, stderr } = await execFileAsync(
     CARGO_BIN,
     [
       "test",
+      "--message-format=json",
       "--manifest-path",
       SOLAND_MANIFEST,
       "--test",
       "federation_outbox",
       filter,
       "--",
+      "--exact",
       "--nocapture",
     ],
     {
@@ -71,8 +74,53 @@ async function runSolandOutboxTest(filter: string): Promise<void> {
     },
   );
   const output = `${stdout}\n${stderr}`;
-  expect(output).toContain(`test ${filter} ... ok`);
-  expect(output).toContain("test result: ok");
+  expect(hasCargoBuildFinishedJson(output)).toBeTruthy();
+  const summary = output.match(
+    /test result: ok\. (?<passed>\d+) passed; (?<failed>\d+) failed; (?<ignored>\d+) ignored; (?<measured>\d+) measured; (?<filtered>\d+) filtered out/,
+  );
+  expect(summary, output).toBeTruthy();
+  expect(summary?.groups?.passed).toBe("1");
+  expect(summary?.groups?.failed).toBe("0");
+}
+
+async function expectSolandOutboxTestListed(filter: string): Promise<void> {
+  const { stdout, stderr } = await execFileAsync(
+    CARGO_BIN,
+    [
+      "test",
+      "--manifest-path",
+      SOLAND_MANIFEST,
+      "--test",
+      "federation_outbox",
+      "--",
+      "--list",
+    ],
+    {
+      cwd: SOLAND_CWD,
+      timeout: CARGO_TEST_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      env: {
+        ...process.env,
+        CARGO_TERM_COLOR: "never",
+      },
+    },
+  );
+  const output = `${stdout}\n${stderr}`;
+  const matches = output
+    .split(/\r?\n/)
+    .filter((line) => line.trim() === `${filter}: test`);
+  expect(matches, `soland federation_outbox should list exactly one ${filter}`).toHaveLength(1);
+}
+
+function hasCargoBuildFinishedJson(output: string): boolean {
+  return output.split(/\r?\n/).some((line) => {
+    try {
+      const value = JSON.parse(line) as { reason?: string };
+      return value.reason === "build-finished";
+    } catch {
+      return false;
+    }
+  });
 }
 
 function findSolandManifest(): string {

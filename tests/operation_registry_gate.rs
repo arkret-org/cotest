@@ -151,6 +151,45 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
 }
 
 #[test]
+fn cotest_spec_files_are_scanned() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let artifacts_root = temp.path().join("artifacts");
+    let product_private_path = temp.path().join("operation-product-private-paths.json");
+    let source_dir = temp.path().join("source");
+    write_minimal_artifacts(
+        &artifacts_root,
+        &[(
+            "ck.server.query.describe",
+            "GET /_cokret/describe",
+            "typed_response",
+            None,
+            None,
+        )],
+        &[("GET", "/_cokret/describe", "ck.server.query.describe")],
+    )?;
+    write_json(
+        &product_private_path,
+        &json!({"schema": "cotest.operation-product-private-paths.v1", "allowed": []}),
+    )?;
+    write_source(
+        &source_dir,
+        "e2e/tests/self-gate.spec.ts",
+        r#"await request.post(`${base}/_cokret/self/private-test`, { data: {} });"#,
+    )?;
+
+    let report = build_operation_registry_gate_report_from_paths(paths(
+        &artifacts_root,
+        &product_private_path,
+        OperationSourceRoot::new("cotest", &source_dir).with_dir("e2e/tests"),
+    ))?;
+    let error = validate_operation_registry_gate_report(&report)
+        .expect_err("cotest .spec.ts paths must be scanned")
+        .to_string();
+    assert!(error.contains("cotest POST /_cokret/self/private-test"));
+    Ok(())
+}
+
+#[test]
 fn current_workspace_operation_registry_gate_passes() -> Result<()> {
     let report = build_operation_registry_gate_report()?;
     assert!(

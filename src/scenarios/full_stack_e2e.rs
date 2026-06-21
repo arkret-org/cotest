@@ -53,9 +53,9 @@ use cokret_core::{
 };
 use serde_json::{Value, json};
 
+use crate::scenarios::_helpers::coauth_bootstrap::coauth_with_db_available;
 use crate::scenarios::_helpers::external_binary::{
-    COAUTH_SPEC, FLORIA_SPEC, SOLAND_SPEC, STARID_SPEC, TEABAY_SPEC, skip_reason,
-    try_spawn_with_extra_env,
+    FLORIA_SPEC, SOLAND_SPEC, STARID_SPEC, TEABAY_SPEC, skip_reason, try_spawn_with_extra_env,
 };
 use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
@@ -526,15 +526,15 @@ fn negative_placeholder_proof_sdk_layer() -> Result<()> {
 /// environment. Mirrors `four_service_stack_available` in T3.5 but extends
 /// it to include floria.
 fn full_stack_available() -> bool {
-    skip_reason(&COAUTH_SPEC).is_none()
+    coauth_with_db_available()
         && skip_reason(&STARID_SPEC).is_none()
         && skip_reason(&SOLAND_SPEC).is_none()
         && skip_reason(&TEABAY_SPEC).is_none()
         && skip_reason(&FLORIA_SPEC).is_none()
 }
 
-/// Best-effort live probe: when all five binaries (+ DATABASE_URL +
-/// COAUTH_DATABASE_URI + FLORIA_CONFIG) are present, bring the stack up
+/// Best-effort live probe: when all five binaries (+ Docker for coauth's
+/// ephemeral Postgres, DATABASE_URL for teabay, and FLORIA_CONFIG) are present, bring the stack up
 /// and confirm every health endpoint answers. The detailed wire-level
 /// surfaces (resolve-handle, member_add, push notify) are covered by
 /// dedicated scenarios; T8.1's live leg is the cross-binary boot check.

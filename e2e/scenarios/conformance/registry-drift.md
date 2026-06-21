@@ -19,8 +19,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_cokret/describe`、`/_cokret/self/events/*`、`/_cokret/self/operations/*` (或等价 operation binding)
-- 1 × coauth (auth) — 仅用来给 alice 颁 dev session,使 Phase A/B (写入 / 调用 operation 的尝试) 能携带真实 bearer token
+- 1 × soland (principal) — `${COTEST_SOLAND_BASE_URL}`,暴露 `/_cokret/describe`、`/_cokret/self/events`
+- 1 × coauth (auth) — 仅用来给 alice 颁 dev session,使 Phase A/F 能携带真实 bearer token
 - 1 × cotest harness (Playwright `request` fixture) — 加载 `artifacts/migration/*.json` 与 `artifacts/registry/*.json`,把 entry list 直接当 negative input source
 
 不需要 dual-soland; 不需要 browser context; 不需要新增 mock。
@@ -29,7 +29,7 @@
 
 | 名字 | DID | 角色 | 注册时机 |
 |---|---|---|---|
-| alice | `did:web:alice-drift-<uuid>.example` | 尝试写入 removed event kind / 调用 removed operation id 的发起者 (用 dev session token) | 测试开始前;仅 Phase A/B/F 需要 |
+| alice | `did:web:alice-drift-<uuid>.example` | 尝试写入 removed event kind 的发起者 (用 dev session token) | 测试开始前;仅 Phase A/F 需要 |
 | 无 (live phases) | n/a | Phase C/E 是纯 describe + artifact diff,不需要 actor | n/a |
 
 ## Pre-conditions
@@ -37,7 +37,7 @@
 - soland live 监听 `${COTEST_SOLAND_BASE_URL}` 且 `GET /_cokret/describe` 返回 200 + JSON
 - harness 能 ESM resolve `cokret-spec/spec/v1/artifacts/{migration,registry}/*.json` (相对 `tests/conformance/<spec>.spec.ts` 向上 4 级到 `cokret-spec/`)
 - `removed-event-kinds.json.entries[*].rejection_level === "hard_reject"` 的子集在 cotest 看来是测试输入(其他 `migration_only` 等暂不构造)
-- alice 通过 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 获取了 bearer token (仅 Phase A/B/F)
+- alice 通过标准 account helper 获取 bearer token (仅 Phase A/F)
 
 ## Steps
 
@@ -48,25 +48,13 @@
    ```json
    { "kind": "<removed_id>", "actor_id": "<alice>", "realm_id": "<test_realm>", "payload": {} }
    ```
-3. `POST /_cokret/self/events` (或等价 `/_cokret/self/events/submit` operation) with bearer token
+3. `POST /_cokret/self/events` with bearer token
 4. 断言:
    - HTTP 4xx (期望 400 / 422)
-   - response body `error.code` 在 `{schema_violation, unknown_event_kind, removed_event_kind, invalid_event_kind}` 集合中
+   - response body `error.code` 在 `{schema_violation, unknown_event_kind}` 集合中
    - **NOT** 200 / 201 (即使 reducer 静默丢弃也算 drift — reducer 必须 fail-closed)
    - response body 不含被写入 event 的 echo (没有 partial accept)
 5. **harness** 再调 `GET /_cokret/describe` 一次,断言 `describe.implemented_features.event_kinds[]` (或等价数组) **不包含** 任何 removed id — 实现不得在 describe surface 自称还支持这些 kind
-
-### Phase B — Removed operation IDs hard-reject
-
-6. **harness** load `artifacts/migration/removed-operation-ids.json`,filter `entries[*].rejection_level === "hard_reject"` (e.g. `ck.strand.track.member.add`, `ck.realm.lifecycle.set.apply`)
-7. 对每个 `entry.id`,尝试通过 soland 的 generic operation endpoint 调用:
-   - 若 soland 暴露 `POST /_cokret/self/operations/{operation_id}` → POST with `{}` body + bearer
-   - 否则 fallback 到 `POST /_cokret/self/server/operation/invoke` with `{ operation_id, input: {} }` body
-8. 断言:
-   - HTTP 4xx,优先 410 Gone / 404 Not Found / 400 Bad Request
-   - response body `error.code` 在 `{unknown_operation, removed_operation, gone, operation_not_found}` 集合中
-   - **NOT** 200 + result (operation 必须从 routing table 完全消失,不能是 stub-success)
-9. **harness** 再次调 `/_cokret/describe`,断言 `describe.implemented_features.operations[]` (或 `supported_operations[]`) 与 removed-operation-ids 的 entries 完全 disjoint
 
 ### Phase C — Deprecated profile IDs absent from describe (LIVE)
 

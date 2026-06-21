@@ -32,8 +32,8 @@ pub use event_builder::{
 #[allow(unused_imports)]
 pub(crate) use proof::canonical_event_digest;
 pub(crate) use proof::refresh_event_proof;
-pub(crate) use server::free_port;
 pub use server::{CokretServer, TestServerGroup};
+pub(crate) use server::{ReservedPort, reserve_port};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 

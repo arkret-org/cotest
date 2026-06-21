@@ -19,12 +19,12 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("world_readable history @fully-implemented", () => {
-  test("alice creates space with history_visibility=world_readable; outsider (registered, non-member) reads timeline via API", async ({
+  test("alice creates Realm with history_visibility=world_readable; outsider (registered, non-member) reads timeline via API", async ({
     browser,
     request,
   }) => {
     // spec: realm-and-space.md §3.4 — non-members can read events when
-    // history_visibility=world_readable, even on listed/non-public spaces.
+    // history_visibility=world_readable, even on listed/non-public Realms.
     const stamp = Date.now();
     const alice = uniqueUser("worldread-alice");
     const outsider = uniqueUser("worldread-outsider");
@@ -67,7 +67,7 @@ test.describe("world_readable history @fully-implemented", () => {
   }) => {
     // spec: realm-and-space.md §3.7 — world_readable also opens the read
     // endpoint to anonymous (no bearer) callers. Discoverability remains
-    // `listed`, so the space won't appear in unauthenticated directory
+    // `listed`, so the Realm won't appear in unauthenticated directory
     // queries, but its event stream is readable by id.
     const stamp = Date.now();
     const alice = uniqueUser("worldread-anon-alice");
@@ -99,7 +99,7 @@ test.describe("world_readable history @fully-implemented", () => {
     }
   });
 
-  test("outsider's WRITE on world_readable space is rejected (read-only public access)", async ({
+  test("outsider's WRITE on world_readable Realm is rejected (read-only public access)", async ({
     browser,
     request,
   }) => {

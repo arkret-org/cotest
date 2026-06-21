@@ -44,7 +44,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
 
-use crate::harness::free_port;
+use crate::harness::{ReservedPort, reserve_port};
 use crate::scenarios::_helpers::external_binary::{
     ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
 };
@@ -62,6 +62,14 @@ pub struct EphemeralPg {
     container_name: String,
     /// Set to `false` after a successful explicit shutdown so Drop is a no-op.
     cleanup: bool,
+    _port_reservation: Option<ReservedPort>,
+}
+
+/// Whether the generated-config coauth bootstrap can be attempted in this
+/// environment. This mirrors [`spawn_coauth_with_db`]'s real prerequisites:
+/// a locatable coauth binary plus a Docker-backed ephemeral Postgres path.
+pub fn coauth_with_db_available() -> bool {
+    locate_external_binary(&coauth_binary_probe_spec()).is_some() && docker_available()
 }
 
 impl EphemeralPg {
@@ -103,6 +111,7 @@ pub struct SpawnedCoauth {
     /// Held so the file isn't deleted while coauth is running.
     #[allow(dead_code)]
     pub config: NamedTempFile,
+    _internal_port_reservation: ReservedPort,
     #[allow(dead_code)]
     pub pg: EphemeralPg,
 }
@@ -130,11 +139,11 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
     if !docker_available() {
         return Ok(None);
     }
-    let host_port = match free_port() {
+    let host_port = match reserve_port() {
         Ok(port) => port,
         Err(_) => return Ok(None),
     };
-    let container_name = format!("cotest-pg-{}-{}", std::process::id(), host_port);
+    let container_name = format!("cotest-pg-{}-{}", std::process::id(), host_port.port());
 
     let status = Command::new("docker")
         .args([
@@ -150,7 +159,7 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
             "-e",
             "POSTGRES_DB=cokret",
             "-p",
-            &format!("{host_port}:5432"),
+            &format!("{}:5432", host_port.port()),
             "postgres:16-alpine",
         ])
         .stdout(Stdio::null())
@@ -162,9 +171,13 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
     }
 
     let pg = EphemeralPg {
-        connect_url: format!("postgresql://cokret:cokret@127.0.0.1:{host_port}/cokret"),
+        connect_url: format!(
+            "postgresql://cokret:cokret@127.0.0.1:{}/cokret",
+            host_port.port()
+        ),
         container_name,
         cleanup: true,
+        _port_reservation: Some(host_port),
     };
 
     // pg_isready loop, capped — the container needs a moment after `docker
@@ -185,6 +198,7 @@ pub struct CoauthConfigBundle {
     pub file: NamedTempFile,
     /// `127.0.0.1:<port>` — listener that exposes the `health` resource.
     pub internal_addr: String,
+    internal_port_reservation: ReservedPort,
 }
 
 /// Generate a fresh coauth config YAML and patch it for the supplied
@@ -230,7 +244,8 @@ pub fn bootstrap_coauth_config(
     //    - listener bind address `[::]:7080` → bind_addr
     //    - internal listener `localhost:8091` → 127.0.0.1:<free port> (we don't use it but it must
     //      be free so `coauth server` doesn't collide with another concurrent test instance)
-    let internal_port = free_port().unwrap_or(0);
+    let internal_port =
+        reserve_port().context("failed to reserve coauth internal listener port")?;
     let public_base = format!("http://{bind_addr}/");
     let mut patched = String::with_capacity(raw.len());
     let mut in_database = false;
@@ -300,7 +315,7 @@ pub fn bootstrap_coauth_config(
                 patched.push(' ');
             }
             patched.push_str("port: ");
-            patched.push_str(&internal_port.to_string());
+            patched.push_str(&internal_port.port().to_string());
             patched.push('\n');
             emitted = true;
         }
@@ -363,7 +378,8 @@ pub fn bootstrap_coauth_config(
     tmp.flush().ok();
     Ok(CoauthConfigBundle {
         file: tmp,
-        internal_addr: format!("127.0.0.1:{internal_port}"),
+        internal_addr: format!("127.0.0.1:{}", internal_port.port()),
+        internal_port_reservation: internal_port,
     })
 }
 
@@ -442,19 +458,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     step!("locating coauth binary");
     // 1. Locate the binary first — cheaper than spinning up postgres if the operator has no coauth
     //    checkout on disk.
-    let probe_spec = ExternalBinarySpec {
-        service: "coauth",
-        bin_env: "COAUTH_BIN",
-        sibling_path: &["coauth", "target", "debug"],
-        bind_env: "",
-        bind_arg: None,
-        extra_env: &[],
-        extra_args: &[],
-        required_env_vars: &[],
-        health_path: "/health",
-        health_timeout: Duration::from_secs(45),
-    };
-    let coauth_bin: PathBuf = match locate_external_binary(&probe_spec) {
+    let coauth_bin: PathBuf = match locate_external_binary(&coauth_binary_probe_spec()) {
         Some(p) => {
             step!("located coauth bin: {}", p.display());
             p
@@ -479,11 +483,11 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     };
 
     // 3. Reserve the bind address for coauth's web listener.
-    let bind_port = match free_port() {
+    let bind_port = match reserve_port() {
         Ok(p) => p,
         Err(_) => return Ok(None),
     };
-    let bind_addr = format!("127.0.0.1:{bind_port}");
+    let bind_addr = format!("127.0.0.1:{}", bind_port.port());
 
     // 4. Generate + patch the config YAML.
     step!("generating coauth config");
@@ -533,7 +537,8 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         }
     };
     let base_url = format!("http://{bind_addr}");
-    let server = SpawnedExternalProcess::from_child(base_url.clone(), coauth_bin, child);
+    let server =
+        SpawnedExternalProcess::from_child(base_url.clone(), coauth_bin, child, vec![bind_port]);
 
     // The `health` resource lives on the SEPARATE internal listener
     // (coauth's generated config splits public web traffic from health
@@ -548,17 +553,34 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     step!("coauth /health OK at internal listener");
 
     let config_file = bundle.file;
+    let internal_port_reservation = bundle.internal_port_reservation;
     let internal_base_url = internal_health.clone();
 
     Ok(Some(SpawnedCoauth {
         server,
         internal_base_url,
         config: config_file,
+        _internal_port_reservation: internal_port_reservation,
         pg,
     }))
 }
 
 // ── Internal utilities ─────────────────────────────────────────────────────
+
+fn coauth_binary_probe_spec() -> ExternalBinarySpec {
+    ExternalBinarySpec {
+        service: "coauth",
+        bin_env: "COAUTH_BIN",
+        sibling_path: &["coauth", "target", "debug"],
+        bind_env: "",
+        bind_arg: None,
+        extra_env: &[],
+        extra_args: &[],
+        required_env_vars: &[],
+        health_path: "/health",
+        health_timeout: Duration::from_secs(45),
+    }
+}
 
 fn docker_available() -> bool {
     Command::new("docker")
@@ -636,6 +658,7 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
         connect_url: format!("postgresql://cokret:cokret@127.0.0.1:{host_port}/cokret"),
         container_name,
         cleanup: true,
+        _port_reservation: None,
     };
     if !wait_for_postgres_ready(&pg, Duration::from_secs(60)) {
         return Ok(None);

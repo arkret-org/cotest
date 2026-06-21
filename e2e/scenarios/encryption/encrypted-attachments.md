@@ -46,7 +46,7 @@
    - 生成本地 AEAD key + nonce
    - 用 XChaCha20-Poly1305 加密 `cat.png` → ciphertext
    - 计算 `ciphertext_digest = sha256(ciphertext)`
-3. `POST /_cokret/self/blob/put` 上传:
+3. `POST /_cokret/self/blob/upload` 上传:
    - body: ciphertext bytes
    - meta: `{ realm_id, media_type: "application/octet-stream", encryption: { algorithm: "MLS", group_state_ref: { epoch, key_ref } }, ciphertext_digest }`
    - **关键 invariant**:不带明文文件名、不带 plaintext media type

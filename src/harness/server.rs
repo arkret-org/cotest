@@ -1,8 +1,11 @@
+use std::collections::BTreeSet;
 use std::fs::OpenOptions;
+use std::io::Write as _;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
@@ -23,6 +26,7 @@ pub struct CokretServer {
     service_did: String,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
+    _port_reservations: Vec<ReservedPort>,
 }
 
 pub struct TestServerGroup {
@@ -94,12 +98,13 @@ impl CokretServer {
         bin_path: &Path,
         extra_env: &[(&str, &str)],
     ) -> Result<Self> {
-        let port = free_port()?;
-        let bind = format!("127.0.0.1:{port}");
-        let metrics_bind = format!("127.0.0.1:{}", free_port()?);
-        let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
+        let port = reserve_port()?;
+        let metrics_port = reserve_port()?;
+        let bind = format!("127.0.0.1:{}", port.port());
+        let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
+        let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
         let service_did = format!("did:web:{name}.cotest.local");
-        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{port}-blobs"));
+        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
         let _ = fs::remove_dir_all(&blob_root);
@@ -141,6 +146,7 @@ impl CokretServer {
             service_did,
             blob_root: Some(blob_root),
             log_path,
+            _port_reservations: vec![port, metrics_port],
         })
     }
 
@@ -159,13 +165,14 @@ impl CokretServer {
             return Self::spawn_external_binary_with_env(name, &bin_path, extra_env).await;
         }
 
-        let port = free_port()?;
-        let bind = format!("127.0.0.1:{port}");
-        let metrics_bind = format!("127.0.0.1:{}", free_port()?);
-        let base_url = Url::parse(&format!("http://127.0.0.1:{port}/"))?;
+        let port = reserve_port()?;
+        let metrics_port = reserve_port()?;
+        let bind = format!("127.0.0.1:{}", port.port());
+        let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
+        let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
         let service_did = format!("did:web:{name}.cotest.local");
         let manifest = sut_manifest();
-        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{port}-blobs"));
+        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "process")?;
         let _ = fs::remove_dir_all(&blob_root);
@@ -209,6 +216,7 @@ impl CokretServer {
             service_did,
             blob_root: Some(blob_root),
             log_path,
+            _port_reservations: vec![port, metrics_port],
         })
     }
 
@@ -217,10 +225,10 @@ impl CokretServer {
         docker_network: Option<&str>,
         extra_env: &[(&str, &str)],
     ) -> Result<Self> {
-        let host_port = free_port()?;
+        let host_port = reserve_port()?;
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
-        let base_url = Url::parse(&format!("http://127.0.0.1:{host_port}/"))?;
+        let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
         let service_did = format!("did:web:{name}.cotest.local");
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
@@ -228,7 +236,12 @@ impl CokretServer {
             base_url.as_str().to_owned()
         };
         let image = sut_image();
-        let container_name = format!("cotest-{}-{}-{}", alias, std::process::id(), host_port);
+        let container_name = format!(
+            "cotest-{}-{}-{}",
+            alias,
+            std::process::id(),
+            host_port.port()
+        );
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "docker")?;
 
@@ -240,7 +253,7 @@ impl CokretServer {
             .arg("--name")
             .arg(&container_name)
             .arg("--publish")
-            .arg(format!("127.0.0.1:{host_port}:{container_port}"));
+            .arg(format!("127.0.0.1:{}:{container_port}", host_port.port()));
         if let Some(network_name) = docker_network {
             command
                 .arg("--network")
@@ -291,6 +304,7 @@ impl CokretServer {
             service_did,
             blob_root: None,
             log_path,
+            _port_reservations: vec![host_port],
         })
     }
 
@@ -683,11 +697,102 @@ fn docker_logs(container_name: &str) -> Result<String> {
     Ok(combined)
 }
 
-/// Bind an ephemeral loopback port and return it. Shared across the harness and
-/// the scenario `_helpers` so there is a single source of this idiom.
-pub(crate) fn free_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    Ok(listener.local_addr()?.port())
+/// A loopback port reservation held for the lifetime of the service that will
+/// bind it.
+pub(crate) struct ReservedPort {
+    port: u16,
+    path: PathBuf,
+}
+
+impl ReservedPort {
+    pub(crate) fn port(&self) -> u16 {
+        self.port
+    }
+}
+
+impl Drop for ReservedPort {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+/// Reserve an ephemeral loopback port. The returned guard coordinates with
+/// other cotest binaries through a temp-file reservation and must be held until
+/// the service using the port has shut down.
+pub(crate) fn reserve_port() -> Result<ReservedPort> {
+    static RESERVED_PORTS: OnceLock<Mutex<BTreeSet<u16>>> = OnceLock::new();
+    let reservation_dir = port_reservation_dir()?;
+    cleanup_stale_port_reservations(&reservation_dir);
+
+    let reserved = RESERVED_PORTS.get_or_init(|| Mutex::new(BTreeSet::new()));
+    let mut reserved = reserved
+        .lock()
+        .map_err(|_| anyhow!("port reservation set is poisoned"))?;
+
+    for _ in 0..128 {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        if reserved.contains(&port) {
+            continue;
+        }
+        let path = reservation_dir.join(format!("port-{port}.lock"));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                writeln!(file, "pid={}", std::process::id())?;
+                writeln!(file, "port={port}")?;
+                reserved.insert(port);
+                return Ok(ReservedPort { port, path });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!("failed to create port reservation {}", path.display())
+                });
+            }
+        }
+    }
+
+    Err(anyhow!(
+        "failed to reserve a unique loopback port after 128 attempts"
+    ))
+}
+
+fn port_reservation_dir() -> Result<PathBuf> {
+    let dir = std::env::temp_dir().join("cotest-port-reservations-v1");
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
+}
+
+fn cleanup_stale_port_reservations(dir: &Path) {
+    let stale_after = Duration::from_secs(6 * 60 * 60);
+    let now = SystemTime::now();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        let Some(port) = file_name
+            .strip_prefix("port-")
+            .and_then(|value| value.strip_suffix(".lock"))
+            .and_then(|value| value.parse::<u16>().ok())
+        else {
+            continue;
+        };
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        let is_stale = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > stale_after);
+        if is_stale && TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            let _ = fs::remove_file(path);
+        }
+    }
 }
 
 async fn wait_until_healthy(base_url: Url) -> Result<()> {

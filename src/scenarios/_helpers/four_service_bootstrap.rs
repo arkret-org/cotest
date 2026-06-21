@@ -67,21 +67,21 @@ impl FourServiceConfig {
 /// Aggregated handle for the four-service stack. Each optional field is
 /// `Some` only when the corresponding service was successfully spawned.
 ///
-/// Drop order is enforced via field ordering (LIFO from the bottom). When
-/// adding new services, place them after `soland` so soland is the last
-/// process to be torn down.
+/// Drop order is enforced via field ordering. Rust drops fields from top to
+/// bottom, so upstream dependants are declared before `soland`; soland is the
+/// final process to be torn down.
 pub struct FourServiceStack {
-    /// soland (principal server) — always present (or the bootstrap returns
-    /// `Err`). This is the "main" service the rest of the stack talks to.
-    pub soland: CokretServer,
-    /// coauth (auth/account) — `Some` if docker + sibling binary were
-    /// available; `None` if the bootstrap couldn't bring it up.
-    pub coauth: Option<SpawnedCoauth>,
-    /// starid (DID resolver) — `Some` if sibling binary was available.
-    pub starid: Option<SpawnedExternalProcess>,
     /// teabay (directory) — `Some` if sibling binary + `DATABASE_URL` were
     /// available.
     pub teabay: Option<SpawnedExternalProcess>,
+    /// starid (DID resolver) — `Some` if sibling binary was available.
+    pub starid: Option<SpawnedExternalProcess>,
+    /// coauth (auth/account) — `Some` if docker + sibling binary were
+    /// available; `None` if the bootstrap couldn't bring it up.
+    pub coauth: Option<SpawnedCoauth>,
+    /// soland (principal server) — always present (or the bootstrap returns
+    /// `Err`). This is the "main" service the rest of the stack talks to.
+    pub soland: CokretServer,
 }
 
 impl FourServiceStack {
@@ -254,10 +254,10 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
         .context("four-service bootstrap: failed to spawn soland with wired env")?;
 
     Ok(FourServiceStack {
-        soland,
-        coauth,
-        starid,
         teabay,
+        starid,
+        coauth,
+        soland,
     })
 }
 

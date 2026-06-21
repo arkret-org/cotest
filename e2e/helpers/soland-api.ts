@@ -48,6 +48,12 @@ export function typedId(kind: OperationKind): string {
 }
 
 export function principalControlRealmForDid(did: string): string {
+  const realmId = derivePrincipalControlRealmForDid(did);
+  assertPrincipalControlRealmVectors(did, realmId);
+  return realmId;
+}
+
+function derivePrincipalControlRealmForDid(did: string): string {
   const digest = createHash("sha256")
     .update("ck:realm:principal-control:v1:")
     .update(did)
@@ -789,6 +795,7 @@ const SPEC_ARTIFACTS_ROOT = resolve(
   "v1",
   "artifacts",
 );
+const E2E_FIXTURES_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 
 // The reducer profile soland declares for its federation surface
 // (ck.peer.events.query.describe → supported_profiles), also the vector's profile.
@@ -833,36 +840,105 @@ export function reducerProfileDigest(profileId: string): string {
     );
   }
   const digest = `sha256:${sha256CanonicalJson(row.digest_input)}`;
-  if (profileId === FEDERATION_REDUCER_PROFILE_ID) {
-    assertReducerProfileDigestMatchesVector(digest);
-  }
+  assertReducerProfileDigestMatchesVectors(profileId, digest, registry);
   reducerProfileDigestCache.set(profileId, digest);
   return digest;
 }
 
-// Drift guard: the computed digest MUST reproduce the expected value pinned by
-// ck.vector.federation.reducer_profile_digest.v1 in federation-fixture.json.
-function assertReducerProfileDigestMatchesVector(digest: string): void {
+let principalControlRealmVectorsChecked = false;
+
+function assertPrincipalControlRealmVectors(did: string, realmId: string): void {
   const fixture = JSON.parse(
     readFileSync(
-      join(SPEC_ARTIFACTS_ROOT, "fixtures", "federation-fixture.json"),
+      join(E2E_FIXTURES_ROOT, "principal-control-realm-vectors.json"),
       "utf8",
     ),
-  ) as { cases?: Array<{ name?: string; expected_digest?: string }> };
-  const vectorCase = (fixture.cases ?? []).find(
-    (entry) => entry.name === "reducer_profile_digest_federation_minimal",
+  ) as {
+    vectors?: Array<{
+      principal_id?: string;
+      principal_control_realm_id?: string;
+    }>;
+  };
+  const vectors = fixture.vectors ?? [];
+  if (!principalControlRealmVectorsChecked) {
+    for (const vector of vectors) {
+      if (!vector.principal_id || !vector.principal_control_realm_id) {
+        throw new Error("principal-control-realm-vectors.json contains an incomplete vector");
+      }
+      const actual = derivePrincipalControlRealmForDid(vector.principal_id);
+      if (actual !== vector.principal_control_realm_id) {
+        throw new Error(
+          `principal_control_realm_id ${actual} drifted from vector ${vector.principal_control_realm_id} for ${vector.principal_id}`,
+        );
+      }
+    }
+    principalControlRealmVectorsChecked = true;
+  }
+  const pinned = vectors.find((vector) => vector.principal_id === did);
+  if (pinned?.principal_control_realm_id && pinned.principal_control_realm_id !== realmId) {
+    throw new Error(
+      `principal_control_realm_id ${realmId} drifted from pinned vector ${pinned.principal_control_realm_id} for ${did}`,
+    );
+  }
+}
+
+let reducerProfileVectorsChecked = false;
+
+function assertReducerProfileDigestMatchesVectors(
+  profileId: string,
+  digest: string,
+  registry: {
+    profiles?: Array<{
+      profile_id?: string;
+      status?: string;
+      digest_input?: unknown;
+    }>;
+  },
+): void {
+  const fixture = JSON.parse(
+    readFileSync(
+      join(E2E_FIXTURES_ROOT, "reducer-profile-digest-vectors.json"),
+      "utf8",
+    ),
+  ) as { vectors?: Array<{ profile_id?: string; expected_digest?: string }> };
+  const vectors = new Map(
+    (fixture.vectors ?? []).map((entry) => [entry.profile_id, entry.expected_digest]),
   );
-  if (!vectorCase?.expected_digest) {
+  const expected = vectors.get(profileId);
+  if (!expected) {
     throw new Error(
-      "federation-fixture.json lacks the reducer_profile_digest_federation_minimal vector case",
+      `reducer-profile-digest-vectors.json lacks a vector for ${profileId}`,
     );
   }
-  if (vectorCase.expected_digest !== digest) {
+  if (expected !== digest) {
     throw new Error(
-      `computed reducer_profile_digest ${digest} drifted from ` +
-        `ck.vector.federation.reducer_profile_digest.v1 expected ${vectorCase.expected_digest}`,
+      `computed reducer_profile_digest ${digest} drifted from vector ${expected} for ${profileId}`,
     );
   }
+  if (reducerProfileVectorsChecked) {
+    return;
+  }
+  for (const row of registry.profiles ?? []) {
+    if (row.status !== "active") {
+      continue;
+    }
+    if (!row.profile_id || row.digest_input === undefined) {
+      throw new Error("reducer-profile-registry contains an incomplete active profile");
+    }
+    const rowExpected = vectors.get(row.profile_id);
+    if (!rowExpected) {
+      throw new Error(
+        `reducer-profile-digest-vectors.json lacks an active profile vector for ${row.profile_id}`,
+      );
+    }
+    const actual = `sha256:${sha256CanonicalJson(row.digest_input)}`;
+    if (actual !== rowExpected) {
+      throw new Error(
+        `active reducer profile ${row.profile_id} digest ${actual} drifted from vector ${rowExpected}`,
+      );
+    }
+  }
+  reducerProfileVectorsChecked = true;
 }
 
 // federation.md §4.1: membership_frontier / delivery_binding_frontier are the

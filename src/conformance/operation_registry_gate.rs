@@ -322,6 +322,10 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
                 .with_dir("src/api")
                 .with_file("tests/e2e/mockCokretApi.ts")
                 .with_file("tests/e2e/mockCokretContract.ts"),
+            OperationSourceRoot::new("cotest", cotest_root.clone())
+                .with_dir("e2e/helpers")
+                .with_dir("e2e/tests")
+                .with_dir("src/scenarios"),
         ],
     }
 }
@@ -736,7 +740,7 @@ fn scan_source_dir(
             scan_source_dir(source, root, &path, out)?;
             continue;
         }
-        if source_file_extension_allowed(&path) && !is_generated_or_test_file(&path) {
+        if source_file_extension_allowed(&path) && source_file_should_be_scanned(source, &path) {
             scan_source_file(source, root, &path, out)?;
         }
     }
@@ -758,6 +762,10 @@ fn is_generated_or_test_file(path: &Path) -> bool {
         || name.ends_with(".spec.ts")
         || name.ends_with("_test.rs")
         || name == "tests.rs"
+}
+
+fn source_file_should_be_scanned(source: &str, path: &Path) -> bool {
+    source == "cotest" || !is_generated_or_test_file(path)
 }
 
 fn scan_source_file(

@@ -37,17 +37,17 @@ test.describe("encrypted attachments", () => {
   test("blob upload endpoint exists and rejects unauthenticated downloads with opaque error", async ({
     request,
   }) => {
-    const alice = uniqueUser("s12-probe");
-    await ensureRegistered(request, alice);
-    const token = await issueDevSession(request, alice);
-
-    // Probe endpoints
-    const putResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/put`, {
-      headers: { authorization: `Bearer ${token}` },
-      data: { realm_id: "ck:realm:probe", media_type: "application/octet-stream" },
+    const uploadResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-cokret-realm-id": "ck:realm:0196419b-0000-7000-8000-00000000prob",
+        "x-cokret-content-digest":
+          "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      },
+      data: Buffer.alloc(0),
     });
-    // Either 4xx for missing body, or 404 if endpoint absent. 5xx is a bug.
-    expect(putResp.status()).toBeLessThan(500);
+    expect(uploadResp.status()).toBe(401);
+    expect(wireErrCode(await uploadResp.json())).toBe("unauthenticated");
 
     const probeBlobRef = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     const getResp = await request.get(

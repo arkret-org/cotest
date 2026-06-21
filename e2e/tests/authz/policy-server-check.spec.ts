@@ -138,24 +138,27 @@ test.describe("policy server check", () => {
       void bobToken;
 
       try {
-        // Phase A — Realm declares policy server endpoint.
-        // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        const realmResp = await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: {
-            kind: "ck.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
-            fail_mode: "closed",
-            cache_ttl_ms: 5000,
-          },
-        });
-        expect(realmResp.status()).toBe(200);
-
         const realmId = await alicePage.createRealm({
           title: `S30 policy ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
         });
+        // Phase A — Realm declares policy server endpoint.
+        // soland gap: runtime invite integration not implemented; coauth /policy/check v2 missing
+        const realmResp = await request.put(
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+          {
+            headers: authHeaders(aliceToken),
+            data: {
+              policy_server_did: mockPolicyServerDid() ?? "did:web:policy.example.com",
+              policy_server_url: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
+              cache_ttl_seconds: 5,
+              timeout_ms: 1500,
+              on_timeout: "fail_closed",
+            },
+          },
+        );
+        expect(realmResp.status()).toBe(200);
 
         // Phase B — mock default allow → invite succeeds.
         // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
@@ -243,16 +246,6 @@ test.describe("policy server check", () => {
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
       try {
-        // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: {
-            kind: "ck.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
-            fail_mode: "closed",
-            cache_ttl_ms: 0,
-          },
-        });
         await request.post(`${mockPolicyServerBaseUrl()}/scenarios`, {
           data: { default: { decision: "allow", delay_ms: 9000 } },
         });
@@ -262,6 +255,19 @@ test.describe("policy server check", () => {
           discoverability: "listed",
           joinRule: "invite",
         });
+        await request.put(
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+          {
+            headers: authHeaders(aliceToken),
+            data: {
+              policy_server_did: mockPolicyServerDid() ?? "did:web:policy.example.com",
+              policy_server_url: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
+              cache_ttl_seconds: 0,
+              timeout_ms: 1500,
+              on_timeout: "fail_closed",
+            },
+          },
+        );
         void realmId;
         void bob;
         // (drive invite; assert soland responds 412 errcode="policy_denied"
@@ -291,25 +297,32 @@ test.describe("policy server check", () => {
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
       try {
-        // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: {
-            kind: "ck.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=realm`,
-            fail_mode: "closed",
-            cache_ttl_ms: 0,
-          },
+        const realmId = await alicePage.createRealm({
+          title: `S30 multisrc ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
         });
-        await request.post(`${solandBaseUrl()}/_cokret/self/org/state`, {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: {
-            kind: "ck.org.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=org`,
-            fail_mode: "closed",
-            cache_ttl_ms: 0,
+        await request.put(
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+          {
+            headers: authHeaders(aliceToken),
+            data: {
+              policy_server_did: mockPolicyServerDid() ?? "did:web:policy.example.com",
+              policy_server_url: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=realm`,
+              cache_ttl_seconds: 0,
+              timeout_ms: 1500,
+              on_timeout: "fail_closed",
+            },
           },
-        });
+        );
+        const orgPolicyServerBinding = {
+          policy_server_did: mockPolicyServerDid() ?? "did:web:policy-org.example.com",
+          policy_server_url: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check?source=org`,
+          cache_ttl_seconds: 0,
+          timeout_ms: 1500,
+          on_timeout: "fail_closed",
+        };
+        void orgPolicyServerBinding;
         // Mock: realm path → allow, org path → deny. Expected final: deny.
         await request.post(`${mockPolicyServerBaseUrl()}/scenarios`, {
           data: {
@@ -348,19 +361,27 @@ test.describe("policy server check", () => {
       const alicePage = await openUserPage(browser, alice, { sessionToken: aliceToken });
 
       try {
-        // soland gap: policy_server endpoint integration not implemented; coauth /policy/check v2 missing
-        await request.post(`${solandBaseUrl()}/_cokret/self/realm/state`, {
-          headers: { authorization: `Bearer ${aliceToken}` },
-          data: {
-            kind: "ck.realm.policy_server",
-            endpoint: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
-            fail_mode: "closed",
-            cache_ttl_ms: 5000,
-          },
-        });
         await request.post(`${mockPolicyServerBaseUrl()}/scenarios`, {
           data: { default: { decision: "allow" } },
         });
+        const realmId = await alicePage.createRealm({
+          title: `S30 cache ${stamp}`,
+          discoverability: "listed",
+          joinRule: "invite",
+        });
+        await request.put(
+          `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+          {
+            headers: authHeaders(aliceToken),
+            data: {
+              policy_server_did: mockPolicyServerDid() ?? "did:web:policy.example.com",
+              policy_server_url: `${mockPolicyServerBaseUrl()}/_cokret/self/policy/check`,
+              cache_ttl_seconds: 5,
+              timeout_ms: 1500,
+              on_timeout: "fail_closed",
+            },
+          },
+        );
 
         const baseline = await request.get(`${mockPolicyServerBaseUrl()}/inspect`);
         const baselineBody = await baseline.json();

@@ -88,7 +88,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
    claimed profile 不覆盖的 kind(候选 `ck.applet.transaction.v1` ↔
    `ck.profile.applet_service.v1`,后者不在 soland claimed 列表)
 7. alice 注册 + dev-login
-8. `POST /_cokret/self/events/submit` `{ kind: "<unsupported_kind>", ...minimal payload... }`
+8. `POST /_cokret/self/events` with a minimal Event envelope whose `kind` is `<unsupported_kind>`
    + Bearer token
 9. 断言:
    - HTTP 4xx

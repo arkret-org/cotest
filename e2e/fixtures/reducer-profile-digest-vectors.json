@@ -1,0 +1,28 @@
+{
+  "schema": "cotest.reducer_profile_digest_vectors.v1",
+  "source": "cokret-spec/spec/v1/artifacts/registry/reducer-profile-registry.json",
+  "canonicalization": "json_jcs",
+  "digest_suite": "sha256",
+  "vectors": [
+    {
+      "profile_id": "ck.profile.core_event_store.v1",
+      "expected_digest": "sha256:8cbcbb23c1f6b3dd7a2636f26cf133f41e9417d05c51f21eb4c599a1f671ec25"
+    },
+    {
+      "profile_id": "ck.profile.chat_mvp.v1",
+      "expected_digest": "sha256:14b0b9d43de6bdf0a3bb648ea773b58db361f49406c5bdedae954396bc6f733e"
+    },
+    {
+      "profile_id": "ck.profile.kanban_mvp.v1",
+      "expected_digest": "sha256:7ed96e293ed964cf823a5b3d96428d81ee03f3f31793f9360267456e0187d226"
+    },
+    {
+      "profile_id": "ck.profile.principal_server.v1",
+      "expected_digest": "sha256:981a1029f04e7d9fce2fd8957b713be8622943ff3223182c09af8c4827d21023"
+    },
+    {
+      "profile_id": "ck.profile.federation_minimal.v1",
+      "expected_digest": "sha256:1fa83b8ca1719c604c298d83e89b0456f3af5ed1382cf8dcb025b074a34e0109"
+    }
+  ]
+}

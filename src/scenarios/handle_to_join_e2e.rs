@@ -44,9 +44,8 @@ use cokret_core::{
 };
 use serde_json::{Value, json};
 
-use crate::scenarios::_helpers::external_binary::{
-    COAUTH_SPEC, SOLAND_SPEC, TEABAY_SPEC, skip_reason,
-};
+use crate::scenarios::_helpers::coauth_bootstrap::coauth_with_db_available;
+use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, TEABAY_SPEC, skip_reason};
 use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
 
 // ── Test fixture knobs ─────────────────────────────────────────────────────
@@ -393,11 +392,11 @@ fn negative_case_did_document_fallback_rejected() -> Result<()> {
 // ── Live-stack probe (best-effort) ─────────────────────────────────────────
 
 /// Whether the full four-service stack is wired in the current environment.
-/// All three sibling binaries plus their required env vars MUST be present
+/// All three sibling binaries plus their actual runtime prerequisites MUST be present
 /// for the live leg to run. Anything else is a silent skip, matching the
 /// rest of the `_helpers` suite.
 fn four_service_stack_available() -> bool {
-    skip_reason(&COAUTH_SPEC).is_none()
+    coauth_with_db_available()
         && skip_reason(&SOLAND_SPEC).is_none()
         && skip_reason(&TEABAY_SPEC).is_none()
 }

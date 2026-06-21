@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
 
-use crate::harness::free_port;
+use crate::harness::reserve_port;
 use crate::scenarios::_helpers::external_binary::{
     ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
 };
@@ -99,12 +99,12 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         None => return Ok(None),
     };
 
-    let bind_port = match free_port() {
+    let bind_port = match reserve_port() {
         Ok(p) => p,
         Err(_) => return Ok(None),
     };
-    let bind_addr = format!("127.0.0.1:{bind_port}");
-    let config_file = match render_floria_config(bind_port, custom_pushkin_url) {
+    let bind_addr = format!("127.0.0.1:{}", bind_port.port());
+    let config_file = match render_floria_config(bind_port.port(), custom_pushkin_url) {
         Ok(f) => f,
         Err(_) => return Ok(None),
     };
@@ -125,7 +125,8 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         Err(_) => return Ok(None),
     };
     let base_url = format!("http://{bind_addr}");
-    let server = SpawnedExternalProcess::from_child(base_url.clone(), floria_bin, child);
+    let server =
+        SpawnedExternalProcess::from_child(base_url.clone(), floria_bin, child, vec![bind_port]);
 
     if !wait_for_health(&base_url, Duration::from_secs(30)).await {
         return Ok(None);

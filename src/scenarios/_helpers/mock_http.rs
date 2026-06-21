@@ -20,12 +20,15 @@ use salvo::conn::{Listener, TcpListener};
 use salvo::prelude::Server;
 use tokio::task::JoinHandle;
 
+use crate::harness::ReservedPort;
+
 /// A running in-process salvo mock server bound to an ephemeral loopback port.
 ///
 /// Dropping it aborts the serve task, releasing the port.
 pub struct MockServer {
     addr: SocketAddr,
     task: JoinHandle<()>,
+    _port_reservation: ReservedPort,
 }
 
 impl MockServer {
@@ -44,10 +47,15 @@ impl Drop for MockServer {
 /// Bind `router` on an ephemeral loopback port and serve it on the current
 /// tokio runtime. Must be called from within a tokio runtime.
 pub async fn spawn_mock(router: Router) -> Result<MockServer> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], crate::harness::free_port()?));
+    let port = crate::harness::reserve_port()?;
+    let addr = SocketAddr::from(([127, 0, 0, 1], port.port()));
     let acceptor = TcpListener::new(addr).bind().await;
     let task = tokio::spawn(async move {
         Server::new(acceptor).serve(router).await;
     });
-    Ok(MockServer { addr, task })
+    Ok(MockServer {
+        addr,
+        task,
+        _port_reservation: port,
+    })
 }

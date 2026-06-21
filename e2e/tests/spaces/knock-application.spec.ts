@@ -5,9 +5,9 @@
 //   - §3.11 reuse limits / cooldown
 //
 // Soland implementation status (2026-05 audit):
-//   ✓ PUT /_soland/self/spaces/{id}/policy can set join_rule="knock"
-//   ✓ POST /_cokret/self/moves accepts ck.member.state{membership="knock"}
-//   ✗ space.join_policy cell family not registered
+//   ✓ Realm policy projection can set default_join_rule="knock"
+//   ✓ POST /_cokret/self/events accepts ck.member.state{membership="knock"}
+//   ✗ Realm join-policy cell family not registered
 //   ✗ member.application / member.application.review event kinds not present
 //   ✗ cooldown_after_reject not enforced
 //   ✗ ck.invite.create.refs[role="join_authorised_by"] not validated
@@ -26,7 +26,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("knock + application + cooldown", () => {
-  test("alice opens a knock space and lists bob in member.state=knock after he knocks", async ({
+  test("alice opens a knock Realm and lists bob in member.state=knock after he knocks", async ({
     browser,
     request,
   }) => {
@@ -49,9 +49,9 @@ test.describe("knock + application + cooldown", () => {
       });
 
       // bob submits ck.member.state{membership="knock"} — soland accepts via
-      // POST /_cokret/self/moves. Constructing a signed Move here would duplicate
-      // SDK code, so we go through soland's higher-level "knock" REST shim
-      // if it exists; otherwise the membership endpoint MAY be wired.
+      // POST /_cokret/self/events. Constructing a signed Event here would duplicate
+      // SDK code, so we go through the membership projection shim if it exists;
+      // otherwise the canonical event endpoint remains the normative path.
       const knockResp = await request.post(
         `${solandBaseUrl()}/_soland/self/realms/${encodeURIComponent(realmId)}/members`,
         {
@@ -92,7 +92,7 @@ test.describe("knock + application + cooldown", () => {
     async () => {
       // spec: models/realm-and-space.md §3.6.2-§3.6.3
       // soland gap: member.application{,.review} event kinds not registered;
-      //             no /_soland/self/spaces/:id/applications listing endpoint.
+      //             no canonical Realm application listing operation.
     },
   );
 

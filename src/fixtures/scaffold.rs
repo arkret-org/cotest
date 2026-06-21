@@ -3,7 +3,7 @@
 //! CT-12 (2026-05-18): audit established that `CokretServer::spawn*` already
 //! gives each scenario complete isolation:
 //!
-//! - a brand-new SUT process (or docker container) on a freshly-allocated `free_port()`,
+//! - a brand-new SUT process (or docker container) on a freshly-reserved port,
 //! - a unique blob root at `temp_dir().join("cotest-{name}-{port}-blobs")` (the port is
 //!   system-unique while the listener is held, so two parallel spawns cannot collide on the path),
 //! - a unique `did:web:{name}.cotest.local` service DID,
