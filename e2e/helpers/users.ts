@@ -178,6 +178,12 @@ export class JointUserPage {
     await this.dismissDeviceAuthorizationPrompt();
   }
 
+  async gotoNotifications() {
+    await this.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("notifications-panel")).toBeVisible({ timeout: 120_000 });
+    await this.dismissDeviceAuthorizationPrompt();
+  }
+
   async gotoRealmAdmin(realmId: string) {
     await this.page.goto(`/realms/${realmId}/settings`, { waitUntil: "domcontentloaded" });
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
@@ -404,6 +410,36 @@ export class JointUserPage {
         `acceptInviteById: ck.member.state{join} returned ${acceptResp.status()} for invite ${inviteId}: ${text}`,
       );
     }
+  }
+
+  // Accept a pending Realm invite through the visible yougen notification UI.
+  async acceptInviteFromNotifications(realmId: string) {
+    await this.gotoNotifications();
+    const refresh = this.page.getByTestId("refresh-notifications");
+    const inviteItem = this.page
+      .getByTestId("notification-item")
+      .filter({ has: this.page.locator(`[title="${realmId}"]`) })
+      .filter({ hasText: /Realm invite|You were invited/i });
+
+    await expect
+      .poll(
+        async () => {
+          if (await refresh.isVisible().catch(() => false)) {
+            await refresh.click();
+          }
+          return inviteItem.count();
+        },
+        { timeout: 45_000, intervals: [500, 1_000, 2_000, 5_000] },
+      )
+      .toBeGreaterThan(0);
+
+    const accept = inviteItem.first().getByTestId("notification-action");
+    await expect(accept).toBeVisible({ timeout: 30_000 });
+    await accept.click();
+    await expect(this.page.getByTestId("notifications-status")).toContainText(
+      /Joined Realm/,
+      { timeout: 45_000 },
+    );
   }
 
   // Send a message into realmId's timeline. Asserts persistence write-status.
