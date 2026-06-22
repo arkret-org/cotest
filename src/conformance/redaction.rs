@@ -189,12 +189,16 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                         "receipt_conforms_schema": true,
                         "stub_conforms_schema": true,
                         "rejects_standalone_content_fingerprint": true,
+                        "rejects_stub_digest_mismatch": true,
+                        "rejects_empty_proofs": true,
                         "legal_hold_requires_evidence": true,
                     }),
                     &json!({
                         "receipt_conforms_schema": true,
                         "stub_conforms_schema": true,
                         "rejects_standalone_content_fingerprint": true,
+                        "rejects_stub_digest_mismatch": true,
+                        "rejects_empty_proofs": true,
                         "legal_hold_requires_evidence": true,
                     }),
                 );
@@ -386,7 +390,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let original_event_id = "ck:event:01970e58-0004-7000-8000-000000000004";
     let redaction_event_id = "ck:event:01970e58-0004-7000-8000-000000000001";
     let receipt_id = "ck:receipt:01970e58-0004-7000-8000-000000000010";
-    let digest = format!("sha256:{DIGEST64}");
+    let event_digest = format!("sha256:{DIGEST64}");
 
     let stub = json!({
         "stub_schema": "ck.schema.erasure_verification_stub.v1",
@@ -394,9 +398,11 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
         "completed_at": "2026-04-29T00:00:00Z",
-        "event_digest": digest,
+        "event_digest": event_digest,
         "redaction_authorization_ref": redaction_event_id,
     });
+    let digest = cokret_core::canonical::canonical_sha256(&stub)
+        .map_err(|err| anyhow!("hard_erasure_receipt: canonical stub digest failed: {err}"))?;
     if !stub_validator.is_valid(&stub) {
         let detail = stub_validator
             .iter_errors(&stub)
@@ -439,6 +445,26 @@ fn assert_hard_erasure_receipt() -> Result<()> {
             .unwrap_or_else(|| "<no error reported>".to_string());
         bail!("hard_erasure_receipt: completed receipt rejected by schema: {detail}");
     }
+    verify_erasure_receipt_stub_digest(&receipt, &stub)?;
+
+    let tampered_stub = json!({
+        "stub_schema": "ck.schema.erasure_verification_stub.v1",
+        "subject": {"kind": "event", "ref": "ck:event:01970e58-0004-7000-8000-0000000000ff"},
+        "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
+        "receipt_id": receipt_id,
+        "completed_at": "2026-04-29T00:00:00Z",
+        "event_digest": event_digest,
+        "redaction_authorization_ref": redaction_event_id,
+    });
+    if verify_erasure_receipt_stub_digest(&receipt, &tampered_stub).is_ok() {
+        bail!("hard_erasure_receipt: tampered retained_stub digest was accepted");
+    }
+
+    let mut without_proofs = receipt.clone();
+    without_proofs["proofs"] = json!([]);
+    if verify_erasure_receipt_stub_digest(&without_proofs, &stub).is_ok() {
+        bail!("hard_erasure_receipt: receipt with empty proofs was accepted");
+    }
 
     let mut blocked = receipt.clone();
     blocked["outcome"] = json!("blocked_by_legal_hold");
@@ -459,6 +485,26 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+fn verify_erasure_receipt_stub_digest(receipt: &Value, retained_stub: &Value) -> Result<()> {
+    let digest = receipt
+        .get("retained_stub_digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("erasure receipt missing retained_stub_digest"))?;
+    let proofs = receipt
+        .get("proofs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("erasure receipt missing proofs"))?;
+    if proofs.is_empty() {
+        bail!("erasure receipt proofs must not be empty");
+    }
+    let recomputed = cokret_core::canonical::canonical_sha256(retained_stub)
+        .map_err(|err| anyhow!("erasure receipt retained_stub canonicalization failed: {err}"))?;
+    if recomputed != digest {
+        bail!("erasure_receipt_stub_digest_mismatch");
+    }
     Ok(())
 }
 

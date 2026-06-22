@@ -14,7 +14,7 @@
 use anyhow::{Result, anyhow};
 use cokret_core::{
     Did, Discoverability, EncryptionFloor, EncryptionProfile, FederationPolicy, HistoryVisibility,
-    JoinRule, Realm, RealmId, SecurityClass, TypedTrustDomainId,
+    JoinRule, NotaryProfile, NotaryValue, Realm, RealmId, SecurityClass, TypedTrustDomainId,
 };
 
 const REALM_ID: &str = "ck:realm:01904100-0000-7000-8000-000000000aa1";
@@ -46,7 +46,7 @@ fn build_realm(
         trust_domain,
         summary: None,
         security_class,
-        created_by: principal,
+        created_by: principal.clone(),
         owning_organizations: Vec::new(),
         schema_refs: vec!["ck.profile.realm.v1".to_owned()],
         policy_id: None,
@@ -68,11 +68,13 @@ fn build_realm(
         labels: Vec::new(),
         metadata: std::collections::BTreeMap::new(),
         relation_profiles: Vec::new(),
-        notary_profile: None,
-        notary: None,
-        // `max_anchor_staleness_ms` 已随双平面拆分退役且无直接后继字段
-        // (renames.json: replacement=null);revocation 滞后由
-        // `revocation_freshness_window_ms` 治理。
+        notary_profile: NotaryProfile::SingleDid,
+        notary: NotaryValue::SingleDid {
+            did: principal.clone(),
+        },
+        // `max_anchor_staleness_ms` was retired by the dual-plane split
+        // without a direct replacement; revocation staleness is governed by
+        // `revocation_freshness_window_ms`.
         revocation_freshness_window_ms: None,
         max_delegation_lifetime_ms: 86_400_000,
         bottom_escalation_after_ms: None,

@@ -613,7 +613,8 @@ fn evaluate_moderation_evidence_package(scenario: &Value) -> Result<Value> {
     if target_refs.is_empty() {
         return Ok(json!({"decision": "reject", "reason": "schema_violation"}));
     }
-    if required_str(scenario, "recipient_public_key_ref")? != required_str(scenario, "encrypted_to")?
+    if required_str(scenario, "recipient_public_key_ref")?
+        != required_str(scenario, "encrypted_to")?
     {
         return Ok(json!({"decision": "reject", "reason": "evidence_recipient_mismatch"}));
     }

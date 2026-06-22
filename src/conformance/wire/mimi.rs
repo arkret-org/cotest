@@ -52,9 +52,7 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
                 validate_provider_directory_case(case, drafts)?
             }
             "ck.vector.mimi.room_binding_projection.v1" => validate_room_binding_case(case)?,
-            "ck.vector.mimi.keypackage_claim_lifecycle.v1" => {
-                validate_keypackage_claim_case(case)?
-            }
+            "ck.vector.mimi.keypackage_claim_lifecycle.v1" => validate_keypackage_claim_case(case)?,
             "ck.vector.mimi.content_roundtrip.v1" => validate_content_roundtrip_case(case)?,
             "ck.vector.mimi.identifier_query_privacy.v1" => validate_identifier_query_case(case)?,
             "ck.vector.mimi.consent_isolation.v1" => validate_consent_isolation_case(case)?,
@@ -177,7 +175,10 @@ fn validate_content_roundtrip_case(case: &Value) -> Result<()> {
     if !digest.starts_with("sha256:") || digest.len() != "sha256:".len() + 64 {
         bail!("content roundtrip must carry a sha256 original envelope digest");
     }
-    require_expected(case, "mapped_event_preserves_original_envelope_digest_and_mimi_message_id")
+    require_expected(
+        case,
+        "mapped_event_preserves_original_envelope_digest_and_mimi_message_id",
+    )
 }
 
 fn validate_identifier_query_case(case: &Value) -> Result<()> {
@@ -196,7 +197,10 @@ fn validate_consent_isolation_case(case: &Value) -> Result<()> {
     if required_str(input, "consent_state")? != "accepted" {
         bail!("consent isolation vector must start from accepted consent");
     }
-    require_expected(case, "consent_does_not_grant_space_read_or_write_capability")
+    require_expected(
+        case,
+        "consent_does_not_grant_space_read_or_write_capability",
+    )
 }
 
 fn validate_proxy_download_case(case: &Value) -> Result<()> {
@@ -212,7 +216,10 @@ fn validate_unsupported_draft_case(case: &Value, drafts: &Value) -> Result<()> {
     if required_str(input, "protocol_draft")? == required_str(drafts, "protocol")? {
         bail!("unsupported draft vector must not use the pinned protocol draft");
     }
-    require_expected(case, "reject_or_negotiate_new_profile_without_mutating_reducer_profile")
+    require_expected(
+        case,
+        "reject_or_negotiate_new_profile_without_mutating_reducer_profile",
+    )
 }
 
 fn require_expected(case: &Value, expected: &str) -> Result<()> {

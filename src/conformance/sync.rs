@@ -293,9 +293,10 @@ fn apply_snapshot_inclusion_mutation(
                 .get_mut("proofs")
                 .and_then(Value::as_array_mut)
                 .ok_or_else(|| anyhow!("response proofs must be mutable array"))?;
-            let Some(proof) = proofs.iter_mut().find(|proof| {
-                proof.get("kind").and_then(Value::as_str) == Some("actor_seq_range")
-            }) else {
+            let Some(proof) = proofs
+                .iter_mut()
+                .find(|proof| proof.get("kind").and_then(Value::as_str) == Some("actor_seq_range"))
+            else {
                 bail!("cannot drop gap attribution from actor_seq_range proof");
             };
             proof["gap_attribution"] = Value::Array(Vec::new());
