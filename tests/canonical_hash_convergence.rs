@@ -16,7 +16,9 @@
 //! failures in federation / replication tests).
 
 use cokret::{CanonicalFixtureBuilder, CanonicalFixtureSuite};
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
+use cokret_core::canonical::{
+    blake3_digest, canonical_hash, canonical_json_bytes, canonical_sha256, verify_digest,
+};
 use serde_json::{Value, json};
 
 /// A canonical-hash test vector: the input payload shape, the wire
@@ -154,6 +156,23 @@ fn sdk_canonical_sha256_matches_pinned_vectors() {
         "one or more canonical hash vectors drifted:\n{}",
         drifted.join("\n")
     );
+}
+
+#[test]
+fn sdk_blake3_digest_backend_matches_known_vector() {
+    let digest = blake3_digest(b"");
+    assert_eq!(
+        digest,
+        "blake3:af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+    );
+    assert!(cokret_core::Hash::new(digest.clone()).is_ok());
+    verify_digest(b"", &digest).expect("empty BLAKE3 digest verifies");
+    assert!(verify_digest(b"not-empty", &digest).is_err());
+
+    let payload = json!({ "b": 2, "a": 1 });
+    let canonical = canonical_hash(&payload, "blake3").expect("canonical BLAKE3");
+    assert!(canonical.starts_with("blake3:"));
+    assert!(cokret_core::Hash::new(canonical).is_ok());
 }
 
 /// Diagnostic: prints the SDK-computed canonical digest for every vector.

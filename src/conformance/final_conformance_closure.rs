@@ -367,14 +367,28 @@ fn run_calendar_rsvp_occurrence_key_case(case: &Value) -> Result<()> {
 
 fn evaluate_calendar_occurrence(occurrence: &Value, timezone: &str) -> Result<Value> {
     let local_start = required_str(occurrence, "local_start")?;
-    let occurrence_key = if required_bool(occurrence, "all_day")? {
-        local_start
+    let all_day = required_bool(occurrence, "all_day")?;
+    let mut fields = BTreeMap::new();
+    fields.insert("timezone".to_owned(), Value::String(timezone.to_owned()));
+    fields.insert("all_day".to_owned(), Value::Bool(all_day));
+    if all_day {
+        let date = local_start
             .get(..10)
-            .ok_or_else(|| anyhow!("all-day local_start must include local date"))?
-            .to_owned()
+            .ok_or_else(|| anyhow!("all-day local_start must include local date"))?;
+        fields.insert("start".to_owned(), Value::String(date.to_owned()));
+        fields.insert("end".to_owned(), Value::String(date.to_owned()));
     } else {
-        format!("{local_start}[{timezone}]")
-    };
+        let start = chrono::NaiveDateTime::parse_from_str(local_start, "%Y-%m-%dT%H:%M:%S")
+            .map_err(|error| anyhow!("non-all-day local_start invalid: {error}"))?;
+        let end = start + chrono::Duration::hours(1);
+        fields.insert("start".to_owned(), Value::String(local_start.to_owned()));
+        fields.insert(
+            "end".to_owned(),
+            Value::String(end.format("%Y-%m-%dT%H:%M:%S").to_string()),
+        );
+    }
+    let occurrence_key =
+        cokret_core::canonical_calendar_rsvp_occurrence_key(&fields, Some(local_start))?;
     Ok(json!({"occurrence_key": occurrence_key}))
 }
 

@@ -415,32 +415,28 @@ fn test_3_accountable_principals_strict_reject_profile_toggle() {
 fn test_4_cursor_opaque_round_trip_stateful_only() -> Result<()> {
     // Stateful core body is the default — round-trip via the SDK
     // primitives is exercised by `run_cursor_opaque_core_vector`. Here
-    // we additionally assert that a stateless body parses through the
-    // SDK struct but a server with no `ck.profile.stateless_cursor.v1`
-    // declaration MUST reject it. We pin both at the wire layer; the
-    // server-side acceptance gate lands under soland P2-impl.
-    use std::collections::BTreeMap;
-
+    // we additionally assert that a stateless body is rejected by the
+    // SDK's closed stateful cursor shape. Servers without
+    // `ck.profile.stateless_cursor.v1` have no compat path.
     use cokret_core::cursor::{Cursor, CursorPurpose};
-    let stateless = Cursor {
-        v: "1".to_owned(),
-        purpose: CursorPurpose::Stream,
-        t: "2026-05-27T00:00:00Z".to_owned(),
-        s: BTreeMap::new(),
-        d: None,
-        target: None,
-        x: 1_900_000_000_000,
-        h: None,
-        issuer_kid: Some("did:web:server.example#cursor-1".to_owned()),
-        mac: Some("AAAAAAAAAAAAAAAAAAAAAA".to_owned()),
-        sig: None,
-        filter_digest: None,
-    };
-    if stateless.h.is_some() {
-        bail!("stateless cursor body must not carry stateful handle");
+
+    let stateless = serde_json::json!({
+        "v": "1",
+        "purpose": CursorPurpose::Stream,
+        "t": "2026-05-27T00:00:00Z",
+        "s": {},
+        "x": 1_900_000_000_000_i64,
+        "issuer_kid": "did:web:server.example#cursor-1",
+        "mac": "AAAAAAAAAAAAAAAAAAAAAA"
+    });
+    if stateless.get("h").is_some() {
+        bail!("stateless cursor wire body must not carry stateful handle");
     }
-    if stateless.issuer_kid.is_none() {
-        bail!("stateless cursor body must carry issuer_kid");
+    if stateless.get("issuer_kid").is_none() {
+        bail!("stateless cursor wire body must carry issuer_kid");
+    }
+    if serde_json::from_value::<Cursor>(stateless).is_ok() {
+        bail!("stateless cursor wire body unexpectedly parsed as core Cursor");
     }
     Ok(())
 }

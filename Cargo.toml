@@ -85,8 +85,10 @@ anyhow = "1.0.102"
 argon2 = {version = "0.5.3",default-features = false,features = ["alloc", "password-hash"]}
 arbitrary = "1.4"
 base64 = "0.22.1"
+blake3 = {version = "1.5.5",default-features = false}
 chacha20poly1305 = {version = "0.10.1",default-features = false}
 chrono = "0.4.45"
+chrono-tz = {version = "0.10.4",default-features = false}
 cokret = {path = "../cokret-rust-sdk/crates/sdk"}
 cokret-core = {path = "../cokret-rust-sdk/crates/core"}
 cokret-http-client = {path = "../cokret-rust-sdk/crates/http-client"}

@@ -290,6 +290,7 @@ fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStat
         mode: None,
         session_focus: None,
         participants: None,
+        removed_participants: None,
         recording_state: Some("ready".to_owned()),
         recording_result: Some(CallStatePayloadRecordingResult {
             content_digest: artifact_ref.map(|artifact| artifact.content_digest.clone()),
@@ -508,6 +509,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         mode: None,
         session_focus: None,
         participants: None,
+        removed_participants: None,
         recording_state: None,
         recording_result: None,
         transcript_state: Some("ready".to_owned()),
