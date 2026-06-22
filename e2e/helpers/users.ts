@@ -510,7 +510,7 @@ export class JointUserPage {
         async () => {
           const current =
             (await writeStatus.textContent().catch(() => ""))?.trim() ?? "";
-          return current.endsWith("Message sent");
+          return current.toLowerCase().endsWith("message sent");
         },
         { timeout: 30_000 },
       )
@@ -551,7 +551,7 @@ export class JointUserPage {
                 .textContent()
                 .catch(() => "")
             )?.trim() ?? "";
-          return current.endsWith("Message sent");
+          return current.toLowerCase().endsWith("message sent");
         },
         { timeout: 30_000 },
       )
