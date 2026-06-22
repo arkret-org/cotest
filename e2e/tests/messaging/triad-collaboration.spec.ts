@@ -243,27 +243,25 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(alicePage.page, testInfo, "B-m1-sent");
 
       await bobPage.gotoTimelineRealm(realmId);
-      await expect(bobPage.page.getByTestId("timeline")).toContainText(m1, {
+      await expect(bobPage.page.getByTestId("message-list")).toContainText(m1, {
         timeout: 30_000,
       });
       await stepShot(bobPage.page, testInfo, "B-bob-received-m1");
 
-      // Reply to M1, then edit. Timeline view's reply testids:
-      // reply-button, reply-to-banner (composer banner), reply-indicator (per
-      // event marker). yougen/src/views/timeline.rs.
+      // Reply to M1, then edit. Chat view's reply testids use the `chat-*` prefix.
       const m1Event = bobPage.timelineEvent(m1);
-      await m1Event.getByTestId("reply-button").click();
-      await expect(bobPage.page.getByTestId("reply-to-banner")).toBeVisible();
+      await m1Event.getByTestId("chat-reply-button").click();
+      await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await bobPage.sendTimelineMessage(realmId, m2);
       const m2EventOnBob = bobPage.timelineEvent(m2);
-      await expect(m2EventOnBob.getByTestId("reply-indicator")).toBeVisible();
+      await expect(m2EventOnBob.getByTestId("chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "B-bob-replied");
 
-      await m2EventOnBob.getByTestId("edit-button").click();
-      await bobPage.page.getByTestId("edit-composer").locator("textarea").fill(m2Edited);
-      await bobPage.page.getByTestId("save-edit-button").click();
+      await m2EventOnBob.getByTestId("chat-edit-button").click();
+      await bobPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(m2Edited);
+      await bobPage.page.getByTestId("chat-save-edit-button").click();
       await expect(bobPage.timelineEvent(m2Edited)).toBeVisible({ timeout: 30_000 });
-      await expect(bobPage.page.getByTestId("write-status")).toContainText(/revised/);
+      await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await stepShot(bobPage.page, testInfo, "B-bob-edited-m2");
 
       // Alice sees the edited reply.
@@ -294,24 +292,24 @@ test.describe("single-server triad collaboration", () => {
       // (she never saw M2 anyway because of history_visibility).
       await bobPage.gotoTimelineRealm(realmId);
       const m2Tombstone = bobPage.timelineEvent(m2Edited);
-      await m2Tombstone.getByTestId("redact-button").click();
-      await bobPage.page.getByTestId("confirm-redact-button").click();
-      await expect(bobPage.page.getByTestId("redacted-tombstone")).toBeVisible({ timeout: 30_000 });
-      await expect(bobPage.page.getByTestId("write-status")).toContainText(/tombstoned/);
+      await m2Tombstone.getByTestId("chat-redact-button").click();
+      await bobPage.page.getByTestId("chat-confirm-redact-button").click();
+      await expect(bobPage.page.getByTestId("chat-redacted-tombstone")).toBeVisible({ timeout: 30_000 });
+      await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message removed/i);
       await stepShot(bobPage.page, testInfo, "E-bob-redacted");
 
       await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("redacted-tombstone")).toBeVisible({ timeout: 30_000 });
+      await expect(alicePage.page.getByTestId("chat-redacted-tombstone")).toBeVisible({ timeout: 30_000 });
       // The redacted body should not be visible in plain form anymore.
-      await expect(alicePage.page.getByTestId("timeline")).not.toContainText(m2Edited);
+      await expect(alicePage.page.getByTestId("message-list")).not.toContainText(m2Edited);
       await stepShot(alicePage.page, testInfo, "E-alice-sees-tombstone");
 
       await carolPage.gotoTimelineRealm(realmId);
       // Carol only sees M3 (and possibly the tombstone marker for M2, but never
       // its original text).
       await expect(carolPage.timelineEvent(m3)).toBeVisible();
-      await expect(carolPage.page.getByTestId("timeline")).not.toContainText(m1);
-      await expect(carolPage.page.getByTestId("timeline")).not.toContainText(m2Edited);
+      await expect(carolPage.page.getByTestId("message-list")).not.toContainText(m1);
+      await expect(carolPage.page.getByTestId("message-list")).not.toContainText(m2Edited);
     } finally {
       await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
     }
@@ -425,3 +423,4 @@ test.describe("single-server triad collaboration", () => {
     });
   });
 });
+

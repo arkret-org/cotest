@@ -57,27 +57,27 @@ test.describe("workflow: team onboarding", () => {
 
       // Phase B — Yuki picks up the welcome and replies.
       await yukiPage.gotoTimelineRealm(realmId);
-      await expect(yukiPage.page.getByTestId("timeline")).toContainText(welcome, {
+      await expect(yukiPage.page.getByTestId("message-list")).toContainText(welcome, {
         timeout: 30_000,
       });
       const welcomeOnYuki = yukiPage.timelineEvent(welcome);
-      await welcomeOnYuki.getByTestId("reply-button").click();
-      await expect(yukiPage.page.getByTestId("reply-to-banner")).toBeVisible();
+      await welcomeOnYuki.getByTestId("chat-reply-button").click();
+      await expect(yukiPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await yukiPage.sendTimelineMessage(realmId, yukiThanks);
       await expect(yukiPage.timelineEvent(yukiThanks)).toBeVisible({ timeout: 30_000 });
       await expect(
-        yukiPage.timelineEvent(yukiThanks).getByTestId("reply-indicator"),
+        yukiPage.timelineEvent(yukiThanks).getByTestId("chat-reply-indicator"),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(yukiPage.page, testInfo, "B-yuki-replied");
 
       // Phase C — Mei edits the welcome in place; Yuki sees the patched copy.
       await meiPage.gotoTimelineRealm(realmId);
       await expect(meiPage.timelineEvent(welcome)).toBeVisible({ timeout: 30_000 });
-      await meiPage.timelineEvent(welcome).getByTestId("edit-button").click();
-      await meiPage.page.getByTestId("edit-composer").locator("textarea").fill(welcomeEdited);
-      await meiPage.page.getByTestId("save-edit-button").click();
+      await meiPage.timelineEvent(welcome).getByTestId("chat-edit-button").click();
+      await meiPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(welcomeEdited);
+      await meiPage.page.getByTestId("chat-save-edit-button").click();
       await expect(meiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
-      await expect(meiPage.page.getByTestId("write-status")).toContainText(/revised/);
+      await expect(meiPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await yukiPage.gotoTimelineRealm(realmId);
       await expect(yukiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
       await stepShot(meiPage.page, testInfo, "C-welcome-edited");
@@ -115,3 +115,4 @@ test.describe("workflow: team onboarding", () => {
     },
   );
 });
+

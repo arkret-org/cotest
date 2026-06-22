@@ -66,7 +66,7 @@ test.describe("workflow: async daily standup", () => {
       for (const actor of [linPage, patPage, quincyPage]) {
         await actor.gotoTimelineRealm(realmId);
         for (const body of [linStandup, patStandup, quincyStandup]) {
-          await expect(actor.page.getByTestId("timeline")).toContainText(body, {
+          await expect(actor.page.getByTestId("message-list")).toContainText(body, {
             timeout: 30_000,
           });
         }
@@ -75,15 +75,15 @@ test.describe("workflow: async daily standup", () => {
 
       // Phase C — Lin replies on Pat's standup to unblock the PR review.
       await linPage.gotoTimelineRealm(realmId);
-      await expect(linPage.page.getByTestId("timeline")).toContainText(patStandup, {
+      await expect(linPage.page.getByTestId("message-list")).toContainText(patStandup, {
         timeout: 30_000,
       });
-      await linPage.timelineEvent(patStandup).getByTestId("reply-button").click();
-      await expect(linPage.page.getByTestId("reply-to-banner")).toBeVisible();
+      await linPage.timelineEvent(patStandup).getByTestId("chat-reply-button").click();
+      await expect(linPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await linPage.sendTimelineMessage(realmId, linUnblockPat);
       await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
       await expect(
-        linPage.timelineEvent(linUnblockPat).getByTestId("reply-indicator"),
+        linPage.timelineEvent(linUnblockPat).getByTestId("chat-reply-indicator"),
       ).toBeVisible({ timeout: 30_000 });
 
       await patPage.gotoTimelineRealm(realmId);
@@ -93,11 +93,11 @@ test.describe("workflow: async daily standup", () => {
       // Phase D — Lin realises 30min is wrong and edits the reply.
       await linPage.gotoTimelineRealm(realmId);
       await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
-      await linPage.timelineEvent(linUnblockPat).getByTestId("edit-button").click();
-      await linPage.page.getByTestId("edit-composer").locator("textarea").fill(linUnblockPatFixed);
-      await linPage.page.getByTestId("save-edit-button").click();
+      await linPage.timelineEvent(linUnblockPat).getByTestId("chat-edit-button").click();
+      await linPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(linUnblockPatFixed);
+      await linPage.page.getByTestId("chat-save-edit-button").click();
       await expect(linPage.timelineEvent(linUnblockPatFixed)).toBeVisible({ timeout: 30_000 });
-      await expect(linPage.page.getByTestId("write-status")).toContainText(/revised/);
+      await expect(linPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await patPage.gotoTimelineRealm(realmId);
       await expect(patPage.timelineEvent(linUnblockPatFixed)).toBeVisible({ timeout: 30_000 });
       await stepShot(patPage.page, testInfo, "D-eta-corrected");
@@ -126,3 +126,4 @@ test.describe("workflow: async daily standup", () => {
     },
   );
 });
+

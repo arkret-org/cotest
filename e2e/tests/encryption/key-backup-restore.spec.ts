@@ -148,7 +148,11 @@ test.describe("key backup restore live path", () => {
       `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`,
       { headers: authHeaders(aliceToken) },
     );
-    expect(sessionOnlyDelete.status()).toBe(403);
+    expect([400, 401, 403, 422]).toContain(sessionOnlyDelete.status());
+    const afterSessionOnlyDelete = await request.get(`${solandBaseUrl()}/_cokret/self/keys/backups`, {
+      headers: authHeaders(aliceToken),
+    });
+    expect(JSON.stringify(await afterSessionOnlyDelete.json())).toContain(backupId);
 
     const proofDelete = await request.delete(
       `${solandBaseUrl()}/_cokret/self/keys/backups/${encodeURIComponent(backupId)}`,

@@ -106,7 +106,7 @@ test.describe("applet bridge", () => {
       const events = await queryRealmEventsApi(request, aliceToken, realmId);
       expect(JSON.stringify(events)).toContain(text);
       await alicePage.gotoTimelineRealm(realmId);
-      await expect(alicePage.page.getByTestId("timeline")).toContainText(text, {
+      await expect(alicePage.page.getByTestId("message-list")).toContainText(text, {
         timeout: 30_000,
       });
 
@@ -633,3 +633,4 @@ async function didDocument(
   expect(response.status()).toBe(200);
   return (await response.json()) as Record<string, unknown>;
 }
+

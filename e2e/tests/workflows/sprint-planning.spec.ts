@@ -64,27 +64,27 @@ test.describe("workflow: sprint planning", () => {
 
       // Phase B — both engineers receive the kickoff and reply with claims.
       await bobPage.gotoTimelineRealm(realmId);
-      await expect(bobPage.page.getByTestId("timeline")).toContainText(kickoff, {
+      await expect(bobPage.page.getByTestId("message-list")).toContainText(kickoff, {
         timeout: 30_000,
       });
-      await bobPage.timelineEvent(kickoff).getByTestId("reply-button").click();
-      await expect(bobPage.page.getByTestId("reply-to-banner")).toBeVisible();
+      await bobPage.timelineEvent(kickoff).getByTestId("chat-reply-button").click();
+      await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await bobPage.sendTimelineMessage(realmId, bobClaim);
       await expect(bobPage.timelineEvent(bobClaim)).toBeVisible({ timeout: 30_000 });
-      await expect(bobPage.timelineEvent(bobClaim).getByTestId("reply-indicator")).toBeVisible({
+      await expect(bobPage.timelineEvent(bobClaim).getByTestId("chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(bobPage.page, testInfo, "B-bob-claimed");
 
       await carolPage.gotoTimelineRealm(realmId);
-      await expect(carolPage.page.getByTestId("timeline")).toContainText(kickoff, {
+      await expect(carolPage.page.getByTestId("message-list")).toContainText(kickoff, {
         timeout: 30_000,
       });
-      await carolPage.timelineEvent(kickoff).getByTestId("reply-button").click();
-      await expect(carolPage.page.getByTestId("reply-to-banner")).toBeVisible();
+      await carolPage.timelineEvent(kickoff).getByTestId("chat-reply-button").click();
+      await expect(carolPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await carolPage.sendTimelineMessage(realmId, carolClaim);
       await expect(carolPage.timelineEvent(carolClaim)).toBeVisible({ timeout: 30_000 });
-      await expect(carolPage.timelineEvent(carolClaim).getByTestId("reply-indicator")).toBeVisible({
+      await expect(carolPage.timelineEvent(carolClaim).getByTestId("chat-reply-indicator")).toBeVisible({
         timeout: 30_000,
       });
       await stepShot(carolPage.page, testInfo, "B-carol-claimed");
@@ -372,3 +372,4 @@ async function setCardDetailEditorValue(page: Page, value: string): Promise<void
     );
   }, value);
 }
+

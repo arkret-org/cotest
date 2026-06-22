@@ -15,6 +15,7 @@ import {
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  canonicalTimestamp,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -26,6 +27,7 @@ import {
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
+import { grantCircleMemberManageCapability } from "../../helpers/circle-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -34,7 +36,11 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     request,
   }) => {
     const fixture = await createDiscussionFixture(request, "inline-track");
-    const defaultStrandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
+    const defaultStrandId = await resolveDefaultStrandId(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
     const body = `inline discussion ${Date.now()}`;
     await submitSignedEventApi(
       request,
@@ -106,7 +112,9 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       fixture.realmId,
     );
     const ids = events.map((event) => event.event_id);
-    expect(ids).toEqual(expect.arrayContaining([before.event_id, after.event_id]));
+    expect(ids).toEqual(
+      expect.arrayContaining([before.event_id, after.event_id]),
+    );
     expect(JSON.stringify(eventById(events, after.event_id))).toContain(
       promoted.circleId,
     );
@@ -174,7 +182,11 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       "circle-private message",
     );
 
-    const carolEvents = await listRealmEventsViaApi(request, carolToken, realmId);
+    const carolEvents = await listRealmEventsViaApi(
+      request,
+      carolToken,
+      realmId,
+    );
     const carolIds = carolEvents.map((event) => event.event_id);
     expect(carolIds).toContain(publicMessage.event_id);
     expect(carolIds).not.toContain(privateMessage.event_id);
@@ -206,18 +218,34 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       "private receipt target",
     );
     const sentAt = new Date();
-    const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
-      headers: authHeaders(fixture.bobToken),
-      data: {
-        kind: "ck.receipt.read",
-        realm_id: fixture.realmId,
-        actor_id: fixture.bob.did,
-        device_id: fixture.bob.deviceId,
-        sent_at: sentAt.toISOString(),
-        expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
-        payload: { event_id: privateMessage.event_id },
+    const sentAtIso = sentAt.toISOString();
+    const receipt = await request.post(
+      `${solandBaseUrl()}/_cokret/self/ephemeral`,
+      {
+        headers: authHeaders(fixture.bobToken),
+        data: {
+          kind: "ck.receipt.read",
+          realm_id: fixture.realmId,
+          actor_id: fixture.bob.did,
+          device_id: fixture.bob.deviceId,
+          sent_at: sentAtIso,
+          expires_at: new Date(sentAt.getTime() + 30_000).toISOString(),
+          payload: {
+            receipt_type: "read",
+            schema: "ck.schema.read_receipt.v1",
+            realm_id: fixture.realmId,
+            actor_id: fixture.bob.did,
+            read_scope: {
+              kind: "strand",
+              ref: promoted.privateStrandId,
+              track_name: "discussion",
+            },
+            event_id: privateMessage.event_id,
+            created_at: sentAtIso,
+          },
+        },
       },
-    });
+    );
     expect(receipt.status()).toBe(200);
     expect(
       await listReadMarkersViaApi(request, fixture.aliceToken, fixture.realmId),
@@ -292,7 +320,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       fixture.aliceToken,
       fixture.realmId,
     );
-    expect(events.map((event) => event.event_kind)).toEqual(
+    expect(events.map((event) => event.kind)).toEqual(
       expect.arrayContaining([
         "ck.circle.create",
         "ck.strand.create",
@@ -302,23 +330,29 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     expect(
       events.some(
         (event) =>
-          event.event_kind === "ck.strand.update" &&
+          event.kind === "ck.strand.update" &&
           JSON.stringify(eventPayload(event)).includes("scope_circle_id"),
       ),
     ).toBe(false);
-    expect(eventPayload(findStrandCreate(events, promoted.privateStrandId))).toMatchObject({
+    expect(
+      eventPayload(findStrandCreate(events, promoted.privateStrandId)),
+    ).toMatchObject({
       object: {
         id: promoted.privateStrandId,
         realm_id: fixture.realmId,
         scope_circle_id: promoted.circleId,
       },
     });
-    expect(eventPayload(findRelationCreate(events, promoted.relationId))).toMatchObject({
-      relation_id: promoted.relationId,
-      relation_kind: "confidential_discussion_of",
-      from_ref: promoted.privateStrandId,
-      to_ref: publicStrandId,
-      scope_circle_id: promoted.circleId,
+    expect(
+      eventPayload(findRelationCreate(events, promoted.relationId)),
+    ).toMatchObject({
+      relation: {
+        id: promoted.relationId,
+        kind: "confidential_discussion_of",
+        from_ref: promoted.privateStrandId,
+        to_ref: publicStrandId,
+        scope_circle_id: promoted.circleId,
+      },
     });
   });
 
@@ -345,14 +379,20 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
 
     const events = await listRealmEventsViaApi(
       request,
-      fixture.bobToken,
+      fixture.aliceToken,
       fixture.realmId,
     );
-    const realmCreate = events.find((event) => event.event_kind === "ck.realm.create");
+    const publicStrandCreate = findStrandCreate(events, publicStrandId);
     const circleCreate = findCircleCreate(events, promoted.circleId);
-    expect(eventPayload(realmCreate)).toMatchObject({
-      object: { encryption_profile: "none" },
+    expect(eventPayload(publicStrandCreate)).toMatchObject({
+      object: {
+        id: publicStrandId,
+        realm_id: fixture.realmId,
+      },
     });
+    expect(JSON.stringify(eventPayload(publicStrandCreate))).not.toContain(
+      "scope_circle_id",
+    );
     expect(eventPayload(circleCreate)).toMatchObject({
       object: { encryption_profile: "mls_rfc9420" },
     });
@@ -363,26 +403,34 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
   }) => {
     const fixture = await createDiscussionFixture(request, "orphan-scope");
     const orphanCircleId = typedId("circle");
-    const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-      headers: authHeaders(fixture.aliceToken),
-      data: signedEventEnvelope({
-        actorDid: fixture.alice.did,
-        realmId: fixture.realmId,
-        kind: "ck.strand.create",
-        payload: {
-          object: strandObject(
-            fixture.realmId,
-            typedId("strand"),
-            fixture.alice,
-            "orphan scoped Strand",
-            { scopeCircleId: orphanCircleId },
-          ),
-        },
-      }),
-    });
+    const createdAt = canonicalTimestamp();
+    const response = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(fixture.aliceToken),
+        data: signedEventEnvelope({
+          actorDid: fixture.alice.did,
+          realmId: fixture.realmId,
+          kind: "ck.strand.create",
+          createdAt,
+          payload: {
+            object: strandObject(
+              fixture.realmId,
+              typedId("strand"),
+              fixture.alice,
+              "orphan scoped Strand",
+              createdAt,
+              { scopeCircleId: orphanCircleId },
+            ),
+          },
+        }),
+      },
+    );
     const body = await response.text();
     expect(response.status(), body).not.toBe(200);
-    expect(body).toMatch(/circle_unknown|circle_not_found|circle_realm_mismatch/);
+    expect(body).toMatch(
+      /circle_unknown|circle_not_found|circle_realm_mismatch/,
+    );
   });
 
   test("scope_circle_id rebind on an existing Strand is rejected", async ({
@@ -400,18 +448,21 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       members: [fixture.alice],
     });
 
-    const response = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-      headers: authHeaders(fixture.aliceToken),
-      data: signedEventEnvelope({
-        actorDid: fixture.alice.did,
-        realmId: fixture.realmId,
-        kind: "ck.strand.update",
-        payload: {
-          strand_id: strandId,
-          patch: { scope_circle_id: { $op: "set", value: circleId } },
-        },
-      }),
-    });
+    const response = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(fixture.aliceToken),
+        data: signedEventEnvelope({
+          actorDid: fixture.alice.did,
+          realmId: fixture.realmId,
+          kind: "ck.strand.update",
+          payload: {
+            strand_id: strandId,
+            patch: { scope_circle_id: { $op: "set", value: circleId } },
+          },
+        }),
+      },
+    );
     const body = await response.text();
     expect(response.status(), body).not.toBe(200);
     expect(body).toContain("scope_rebind_forbidden");
@@ -465,6 +516,7 @@ async function createStrandViaApi(
   opts: { scopeCircleId?: string } = {},
 ) {
   const strandId = typedId("strand");
+  const createdAt = canonicalTimestamp();
   await submitSignedEventApi(
     request,
     token,
@@ -472,8 +524,9 @@ async function createStrandViaApi(
       actorDid: actor.did,
       realmId,
       kind: "ck.strand.create",
+      createdAt,
       payload: {
-        object: strandObject(realmId, strandId, actor, title, opts),
+        object: strandObject(realmId, strandId, actor, title, createdAt, opts),
       },
     }),
     { context: `create strand ${title}` },
@@ -486,25 +539,27 @@ function strandObject(
   strandId: string,
   actor: JointUser,
   title: string,
+  createdAt: string,
   opts: { scopeCircleId?: string } = {},
 ) {
   return {
     id: strandId,
     schema: "ck.schema.strand.v1",
     realm_id: realmId,
-    title: `${title} ${Date.now()}`,
-    stage: "draft",
-    stage_changed_at: new Date().toISOString(),
+    metadata: {
+      title: `${title} ${Date.now()}`,
+      fields: {},
+    },
     tracks: {
       discussion: {
+        enabled: true,
         is_primary: true,
         profile: "discussion",
       },
     },
     ...(opts.scopeCircleId ? { scope_circle_id: opts.scopeCircleId } : {}),
     created_by: actor.did,
-    created_at: new Date().toISOString(),
-    fields: {},
+    created_at: createdAt,
   };
 }
 
@@ -547,6 +602,7 @@ async function createDiscussionCircleViaApi(
   },
 ) {
   const circleId = typedId("circle");
+  const createdAt = canonicalTimestamp();
   await submitSignedEventApi(
     request,
     fixture.aliceToken,
@@ -554,6 +610,7 @@ async function createDiscussionCircleViaApi(
       actorDid: fixture.alice.did,
       realmId: fixture.realmId,
       kind: "ck.circle.create",
+      createdAt,
       payload: {
         object: {
           id: circleId,
@@ -571,12 +628,18 @@ async function createDiscussionCircleViaApi(
           encryption_profile: opts.circleEncryptionProfile ?? "none",
           state: "active",
           created_by: fixture.alice.did,
-          created_at: new Date().toISOString(),
+          created_at: createdAt,
         },
       },
     }),
     { context: `create circle ${circleId}` },
   );
+  await grantCircleMemberManageCapability(request, fixture.aliceToken, {
+    ownerDid: fixture.alice.did,
+    realmId: fixture.realmId,
+    subjectDid: fixture.alice.did,
+    circleId,
+  });
   for (const member of opts.members) {
     await joinRealmMemberViaApi(
       request,
@@ -592,7 +655,7 @@ async function createDiscussionCircleViaApi(
       fixture.realmId,
       circleId,
       member.did,
-      "active",
+      "join",
     );
   }
   return circleId;
@@ -630,7 +693,7 @@ async function submitCircleMemberStateViaApi(
   realmId: string,
   circleId: string,
   memberDid: string,
-  state: "active" | "removed" | "banned" | "left" | "invited",
+  membership: "join" | "invite" | "knock" | "leave" | "ban",
 ) {
   await submitSignedEventApi(
     request,
@@ -641,13 +704,16 @@ async function submitCircleMemberStateViaApi(
       kind: "ck.circle.member.state",
       payload: {
         circle_id: circleId,
-        actor: memberDid,
         actor_id: memberDid,
-        state,
-        sender: actor.did,
+        membership,
+        actor_capability: {
+          action: "ck.circle.member.manage",
+          circle_id: circleId,
+          allowed: true,
+        },
       },
     }),
-    { context: `circle ${circleId} member ${memberDid} -> ${state}` },
+    { context: `circle ${circleId} member ${memberDid} -> ${membership}` },
   );
 }
 
@@ -669,12 +735,14 @@ async function createConfidentialDiscussionRelationViaApi(
       realmId,
       kind: "ck.relation.create",
       payload: {
-        relation_id: relationId,
-        relation_kind: "confidential_discussion_of",
-        from_ref: privateStrandId,
-        to_ref: publicStrandId,
-        scope_circle_id: circleId,
-        fields: { role: "promoted_discussion" },
+        relation: {
+          id: relationId,
+          kind: "confidential_discussion_of",
+          from_ref: privateStrandId,
+          to_ref: publicStrandId,
+          scope_circle_id: circleId,
+          fields: { role: "promoted_discussion" },
+        },
       },
     }),
     { context: `link private discussion ${privateStrandId}` },
@@ -743,14 +811,16 @@ function findEventByPayload(
 ): Record<string, unknown> {
   const event = events.find(
     (candidate) =>
-      candidate.event_kind === kind &&
+      candidate.kind === kind &&
       JSON.stringify(eventPayload(candidate)).includes(needle),
   );
   expect(event, `${kind} carrying ${needle}`).toBeTruthy();
   return event!;
 }
 
-function eventPayload(event: Record<string, unknown> | undefined): Record<string, unknown> {
+function eventPayload(
+  event: Record<string, unknown> | undefined,
+): Record<string, unknown> {
   const payload = event?.payload;
   if (payload && typeof payload === "object" && !Array.isArray(payload)) {
     return payload as Record<string, unknown>;

@@ -36,11 +36,15 @@ async function gotoChat(page: JointUserPage, realmId: string) {
   if (!page.page.url().includes(`/chat/${realmId}`)) {
     await page.page.goto(`/chat/${realmId}`, { waitUntil: "domcontentloaded" });
   }
-  await expect(page.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(page.page.getByTestId("chat-panel")).toBeVisible({
+    timeout: 120_000,
+  });
   // Wait for the discussion list to populate at least one channel — yougen's
   // send-chat-button silently no-ops if no selected_channel matches a known
   // channel (chat.rs:2186-2189). Sync hydrates the channel list after mount.
-  await expect(page.page.getByTestId("channel-item").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.page.getByTestId("channel-item").first()).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 async function sendChat(page: JointUserPage, realmId: string, body: string) {
@@ -57,9 +61,12 @@ async function accountSubscribeTimelineEvents(
   token: string,
   realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const subscribe = await request.get(`${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`, {
-    headers: authHeaders(token),
-  });
+  const subscribe = await request.get(
+    `${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`,
+    {
+      headers: authHeaders(token),
+    },
+  );
   expect(subscribe.status()).toBe(200);
   const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
   const realmFrame = frame.realms[realmId];
@@ -69,7 +76,9 @@ async function accountSubscribeTimelineEvents(
 }
 
 test.describe("chat advanced", () => {
-  test("API reactions add/remove round-trip as projection events", async ({ request }) => {
+  test("API reactions add/remove round-trip as projection events", async ({
+    request,
+  }) => {
     const fixture = await createChatApiFixture(request, "reaction-api");
     const message = await sendPlaintextMessageViaApi(
       request,
@@ -109,17 +118,25 @@ test.describe("chat advanced", () => {
       { context: "remove reaction" },
     );
 
-    const events = await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId);
-    expect(events.map((event) => event.event_kind)).toEqual(
+    const events = await listRealmEventsViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    expect(events.map((event) => event.kind)).toEqual(
       expect.arrayContaining(["ck.reaction.add", "ck.reaction.remove"]),
     );
-    expect(events.find((event) => event.event_kind === "ck.reaction.add")?.payload).toMatchObject({
+    expect(
+      events.find((event) => event.kind === "ck.reaction.add")?.payload,
+    ).toMatchObject({
       target_ref: messageRef,
       key: "+1",
     });
   });
 
-  test("API reply messages preserve reply_to and discussion track ordering", async ({ request }) => {
+  test("API reply messages preserve reply_to and discussion track ordering", async ({
+    request,
+  }) => {
     const fixture = await createChatApiFixture(request, "reply-api");
     const root = await sendPlaintextMessageViaApi(
       request,
@@ -129,7 +146,11 @@ test.describe("chat advanced", () => {
       { actorDid: fixture.alice.did },
     );
     const rootMessageRef = root.event_id.replace(/^ck:event:/, "ck:message:");
-    const strandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
+    const strandId = await resolveDefaultStrandId(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
     const replyBody = `reply ${Date.now()}`;
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
@@ -142,10 +163,18 @@ test.describe("chat advanced", () => {
         content: { kind: "ck.content.text", body: replyBody },
       },
     });
-    await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
+    await submitSignedEventApi(request, fixture.bobToken, reply, {
+      context: "reply message",
+    });
 
-    const events = await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId);
-    const messageEvents = events.filter((event) => event.event_kind === "ck.message.create");
+    const events = await listRealmEventsViaApi(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    const messageEvents = events.filter(
+      (event) => event.kind === "ck.message.create",
+    );
     expect(messageEvents.map((event) => event.event_id)).toEqual([
       root.event_id,
       reply.event_id,
@@ -156,9 +185,15 @@ test.describe("chat advanced", () => {
     });
   });
 
-  test("API mention payload persists mention routing metadata", async ({ request }) => {
+  test("API mention payload persists mention routing metadata", async ({
+    request,
+  }) => {
     const fixture = await createChatApiFixture(request, "mention-api");
-    const strandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
+    const strandId = await resolveDefaultStrandId(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
     const body = `@${fixture.bob.handle.replace(/^@/, "")} review ${Date.now()}`;
     await submitSignedEventApi(
       request,
@@ -173,7 +208,13 @@ test.describe("chat advanced", () => {
           content: {
             kind: "ck.content.text",
             body,
-            mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
+            mentions: [
+              {
+                type: "actor",
+                did: fixture.bob.did,
+                handle: fixture.bob.handle,
+              },
+            ],
           },
           mention_routing_hint: {
             mentioned: [fixture.bob.did],
@@ -183,15 +224,21 @@ test.describe("chat advanced", () => {
       { context: "mention message" },
     );
 
-    const events = await listRealmEventsViaApi(request, fixture.bobToken, fixture.realmId);
+    const events = await listRealmEventsViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
     const mention = events.find(
       (event) =>
-        event.event_kind === "ck.message.create" &&
+        event.kind === "ck.message.create" &&
         JSON.stringify(event.payload).includes(fixture.bob.did),
     );
     expect(mention?.payload).toMatchObject({
       content: {
-        mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
+        mentions: [
+          { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
+        ],
       },
       mention_routing_hint: { mentioned: [fixture.bob.did] },
     });
@@ -201,7 +248,11 @@ test.describe("chat advanced", () => {
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "sync-projection-api");
-    const strandId = await resolveDefaultStrandId(request, fixture.aliceToken, fixture.realmId);
+    const strandId = await resolveDefaultStrandId(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
     const body = `@${fixture.bob.handle.replace(/^@/, "")} sync projection ${Date.now()}`;
     const root = signedEventEnvelope({
       actorDid: fixture.alice.did,
@@ -213,28 +264,34 @@ test.describe("chat advanced", () => {
         content: {
           kind: "ck.content.text",
           body,
-          mentions: [{ type: "actor", did: fixture.bob.did, handle: fixture.bob.handle }],
+          mentions: [
+            { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
+          ],
         },
         mention_routing_hint: {
           mentioned: [fixture.bob.did],
         },
       },
     });
-    await submitSignedEventApi(request, fixture.aliceToken, root, { context: "root mention" });
+    await submitSignedEventApi(request, fixture.aliceToken, root, {
+      context: "root mention",
+    });
     const rootEventId = String(root.event_id);
     const rootMessageRef = rootEventId.replace(/^ck:event:/, "ck:message:");
     const reply = signedEventEnvelope({
       actorDid: fixture.bob.did,
       realmId: fixture.realmId,
       kind: "ck.message.create",
-        payload: {
-          strand_id: strandId,
-          track_name: "discussion",
-          reply_to: rootMessageRef,
-          content: { kind: "ck.content.text", body: `reply ${Date.now()}` },
-        },
+      payload: {
+        strand_id: strandId,
+        track_name: "discussion",
+        reply_to: rootMessageRef,
+        content: { kind: "ck.content.text", body: `reply ${Date.now()}` },
+      },
     });
-    await submitSignedEventApi(request, fixture.bobToken, reply, { context: "reply message" });
+    await submitSignedEventApi(request, fixture.bobToken, reply, {
+      context: "reply message",
+    });
 
     await submitSignedEventApi(
       request,
@@ -275,23 +332,38 @@ test.describe("chat advanced", () => {
       fixture.aliceToken,
       fixture.realmId,
     );
-    const rootProjection = events.find((event) => event.event_id === rootEventId);
+    const rootProjection = events.find(
+      (event) => event.event_id === rootEventId,
+    );
     expect(rootProjection).toMatchObject({
       mention_routing_hint: { mentioned: [fixture.bob.did] },
       mentions: [{ did: fixture.bob.did }],
       reaction_summary: { "+1": [fixture.alice.did] },
     });
-    expect(JSON.stringify(rootProjection?.reaction_summary)).not.toContain(fixture.bob.did);
+    expect(JSON.stringify(rootProjection?.reaction_summary)).not.toContain(
+      fixture.bob.did,
+    );
     expect(rootProjection?.reactions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ actor: fixture.alice.did, key: "+1", active: true }),
+        expect.objectContaining({
+          actor: fixture.alice.did,
+          key: "+1",
+          active: true,
+        }),
       ]),
     );
 
-    const replyProjection = events.find((event) => event.event_id === reply.event_id);
+    const replyProjection = events.find(
+      (event) => event.event_id === reply.event_id,
+    );
     expect(replyProjection).toMatchObject({
       reply_to: rootMessageRef,
-      relations: [expect.objectContaining({ kind: "reply_to", target_ref: rootMessageRef })],
+      relations: [
+        expect.objectContaining({
+          kind: "reply_to",
+          target_ref: rootMessageRef,
+        }),
+      ],
     });
   });
 
@@ -300,32 +372,38 @@ test.describe("chat advanced", () => {
   }) => {
     const fixture = await createChatApiFixture(request, "typing-api");
     const sentAt = new Date();
-    const typing = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
-      headers: authHeaders(fixture.aliceToken),
-      data: {
-        kind: "ck.typing",
-        realm_id: fixture.realmId,
-        actor_id: fixture.alice.did,
-        device_id: fixture.alice.deviceId,
-        sent_at: sentAt.toISOString(),
-        expires_at: new Date(sentAt.getTime() + 5_000).toISOString(),
-        payload: {
-          typing: true,
-          scope_id: "discussion",
+    const typing = await request.post(
+      `${solandBaseUrl()}/_cokret/self/ephemeral`,
+      {
+        headers: authHeaders(fixture.aliceToken),
+        data: {
+          kind: "ck.typing",
+          realm_id: fixture.realmId,
+          actor_id: fixture.alice.did,
+          device_id: fixture.alice.deviceId,
+          sent_at: sentAt.toISOString(),
+          expires_at: new Date(sentAt.getTime() + 5_000).toISOString(),
+          payload: {
+            typing: true,
+            scope_id: fixture.realmId,
+          },
         },
       },
-    });
+    );
     expect(typing.status()).toBe(200);
 
-    const subscribe = await request.get(`${solandBaseUrl()}/_cokret/self/account/subscribe`, {
-      headers: authHeaders(fixture.bobToken),
-    });
+    const subscribe = await request.get(
+      `${solandBaseUrl()}/_cokret/self/account/subscribe`,
+      {
+        headers: authHeaders(fixture.bobToken),
+      },
+    );
     expect(subscribe.status()).toBe(200);
     const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
     const realmFrame = frame.realms[fixture.realmId];
     const ephemeral = realmFrame.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
-    expect(JSON.stringify(ephemeral)).toContain("discussion");
+    expect(JSON.stringify(ephemeral)).toContain(fixture.realmId);
   });
 
   test("chat route hydrates the default discussion channel on first mount", async ({
@@ -338,9 +416,9 @@ test.describe("chat advanced", () => {
     });
     try {
       await gotoChat(alicePage, fixture.realmId);
-      await expect(alicePage.page.getByTestId("channel-item").first()).toContainText(
-        /Discussion|Default Strand/,
-      );
+      await expect(
+        alicePage.page.getByTestId("channel-item").first(),
+      ).toContainText(/Discussion|Default Strand/);
     } finally {
       await alicePage.close();
     }
@@ -349,12 +427,10 @@ test.describe("chat advanced", () => {
   // Direct `/chat/:realm_id` channel hydration is covered live above. The
   // remaining browser-driven chat workflows stay fixme until their owning
   // server/client projections are closed.
-  test.fixme(
-    // @blocking-on: soland#messaging-chat-advanced-gap
-    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-    // @expected-live-by: 2026Q3
-    "reactions converge (OR-Set) and replies render with reply indicator",
-    async ({
+  test.fixme(// @blocking-on: soland#messaging-chat-advanced-gap
+  // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+  // @expected-live-by: 2026Q3
+  "reactions converge (OR-Set) and replies render with reply indicator", async ({
     browser,
     request,
   }, testInfo) => {
@@ -372,9 +448,15 @@ test.describe("chat advanced", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
+    const alicePage = await openUserPage(browser, alice, {
+      sessionCredential: aliceToken,
+    });
+    const bobPage = await openUserPage(browser, bob, {
+      sessionCredential: bobToken,
+    });
+    const carolPage = await openUserPage(browser, carol, {
+      sessionCredential: carolToken,
+    });
 
     const m1 = `S14 ship it ${stamp}`;
     const m2 = `S14 yes ship ${stamp}`;
@@ -392,39 +474,67 @@ test.describe("chat advanced", () => {
       await sendChat(alicePage, realmId, m1);
 
       await gotoChat(bobPage, realmId);
-      const bobOnM1 = bobPage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
+      const bobOnM1 = bobPage.page
+        .getByTestId("chat-message")
+        .filter({ hasText: m1 })
+        .first();
       await expect(bobOnM1).toBeVisible({ timeout: 30_000 });
       await bobOnM1.getByTestId("chat-react-button").click();
       const bobPicker = bobPage.page.getByTestId("chat-reaction-picker");
       await expect(bobPicker).toBeVisible();
       await bobPicker.getByRole("button").first().click();
-      await expect(bobOnM1.getByTestId("chat-reactions")).toBeVisible({ timeout: 30_000 });
+      await expect(bobOnM1.getByTestId("chat-reactions")).toBeVisible({
+        timeout: 30_000,
+      });
 
       await gotoChat(carolPage, realmId);
-      const carolOnM1 = carolPage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
+      const carolOnM1 = carolPage.page
+        .getByTestId("chat-message")
+        .filter({ hasText: m1 })
+        .first();
       await expect(carolOnM1).toBeVisible({ timeout: 30_000 });
       await carolOnM1.getByTestId("chat-react-button").click();
-      await carolPage.page.getByTestId("chat-reaction-picker").getByRole("button").first().click();
-      await expect(carolOnM1.getByTestId("chat-reactions")).toBeVisible({ timeout: 30_000 });
+      await carolPage.page
+        .getByTestId("chat-reaction-picker")
+        .getByRole("button")
+        .first()
+        .click();
+      await expect(carolOnM1.getByTestId("chat-reactions")).toBeVisible({
+        timeout: 30_000,
+      });
 
       await gotoChat(alicePage, realmId);
-      const aliceOnM1 = alicePage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
-      await expect(aliceOnM1.getByTestId("chat-reactions")).toBeVisible({ timeout: 30_000 });
+      const aliceOnM1 = alicePage.page
+        .getByTestId("chat-message")
+        .filter({ hasText: m1 })
+        .first();
+      await expect(aliceOnM1.getByTestId("chat-reactions")).toBeVisible({
+        timeout: 30_000,
+      });
       await stepShot(alicePage.page, testInfo, "reactions-converged");
 
       await gotoChat(bobPage, realmId);
-      const bobOnM1Reload = bobPage.page.getByTestId("chat-message").filter({ hasText: m1 }).first();
+      const bobOnM1Reload = bobPage.page
+        .getByTestId("chat-message")
+        .filter({ hasText: m1 })
+        .first();
       await bobOnM1Reload.getByTestId("chat-reply-button").click();
       await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await sendChat(bobPage, realmId, m2);
-      const bobOnM2 = bobPage.page.getByTestId("chat-message").filter({ hasText: m2 }).first();
+      const bobOnM2 = bobPage.page
+        .getByTestId("chat-message")
+        .filter({ hasText: m2 })
+        .first();
       await expect(bobOnM2.getByTestId("chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "reply-chain");
     } finally {
-      await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        carolPage.close(),
+        bobPage.close(),
+        alicePage.close(),
+      ]);
     }
-  },
-  );
+  });
 
   test("E14.D mentions route notifications only to the mentioned actor", async ({
     // @user-promise: e2e/scenarios/messaging/chat-advanced.md
@@ -446,11 +556,18 @@ test.describe("chat advanced", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
+    const alicePage = await openUserPage(browser, alice, {
+      sessionCredential: aliceToken,
+    });
+    const bobPage = await openUserPage(browser, bob, {
+      sessionCredential: bobToken,
+    });
+    const carolPage = await openUserPage(browser, carol, {
+      sessionCredential: carolToken,
+    });
 
-    const mention = `@${bob.handle.replace(/^@/, "")} can you review the incident note? ${stamp}`;
+    const mentionSuffix = `can you review the incident note? ${stamp}`;
+    let mention = "";
 
     try {
       const realmId = await alicePage.createRealm({
@@ -459,32 +576,57 @@ test.describe("chat advanced", () => {
         joinRule: "invite",
         seedMembers: [bob.did, carol.did],
       });
-      await Promise.all([bobPage.acceptInvite(realmId), carolPage.acceptInvite(realmId)]);
+      await Promise.all([
+        bobPage.acceptInvite(realmId),
+        carolPage.acceptInvite(realmId),
+      ]);
 
-      await sendChat(alicePage, realmId, mention);
+      mention = await alicePage.sendTimelineMentionMessage(
+        realmId,
+        bob.did,
+        mentionSuffix,
+      );
       await stepShot(alicePage.page, testInfo, "mention-sent");
 
-      await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
-      await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible({
-        timeout: 30_000,
+      await bobPage.page.goto("/notifications", {
+        waitUntil: "domcontentloaded",
       });
+      await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible(
+        {
+          timeout: 30_000,
+        },
+      );
       await expect(
-        bobPage.page.getByTestId("notification-item").filter({ hasText: mention }),
+        bobPage.page
+          .getByTestId("notification-item")
+          .filter({ hasText: mention }),
       ).toBeVisible({ timeout: 30_000 });
       await expect(
-        bobPage.page.getByTestId("notification-item").filter({ hasText: /mention/i }),
+        bobPage.page
+          .getByTestId("notification-item")
+          .filter({ hasText: /mention/i }),
       ).toBeVisible({ timeout: 30_000 });
 
-      await carolPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
-      await expect(carolPage.page.getByTestId("notifications-panel")).toBeVisible({
+      await carolPage.page.goto("/notifications", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        carolPage.page.getByTestId("notifications-panel"),
+      ).toBeVisible({
         timeout: 30_000,
       });
       await expect(
-        carolPage.page.getByTestId("notification-item").filter({ hasText: mention }),
+        carolPage.page
+          .getByTestId("notification-item")
+          .filter({ hasText: mention }),
       ).toHaveCount(0);
       await stepShot(bobPage.page, testInfo, "mention-notification-routed");
     } finally {
-      await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        carolPage.close(),
+        bobPage.close(),
+        alicePage.close(),
+      ]);
     }
   });
 
@@ -510,9 +652,15 @@ test.describe("chat advanced", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-    const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
-    const carolPage = await openUserPage(browser, carol, { sessionCredential: carolToken });
+    const alicePage = await openUserPage(browser, alice, {
+      sessionCredential: aliceToken,
+    });
+    const bobPage = await openUserPage(browser, bob, {
+      sessionCredential: bobToken,
+    });
+    const carolPage = await openUserPage(browser, carol, {
+      sessionCredential: carolToken,
+    });
 
     const question = `Which rollout window should we use? ${stamp}`;
     const optionA = `Now ${stamp}`;
@@ -525,33 +673,68 @@ test.describe("chat advanced", () => {
         joinRule: "invite",
         seedMembers: [bob.did, carol.did],
       });
-      await Promise.all([bobPage.acceptInvite(realmId), carolPage.acceptInvite(realmId)]);
+      await Promise.all([
+        bobPage.acceptInvite(realmId),
+        carolPage.acceptInvite(realmId),
+      ]);
 
       await gotoChat(alicePage, realmId);
       await alicePage.page.getByTestId("open-poll-composer-button").click();
       await alicePage.page.getByTestId("poll-question-input").fill(question);
-      await alicePage.page.getByTestId("poll-option-input").nth(0).fill(optionA);
-      await alicePage.page.getByTestId("poll-option-input").nth(1).fill(optionB);
+      await alicePage.page
+        .getByTestId("poll-option-input")
+        .nth(0)
+        .fill(optionA);
+      await alicePage.page
+        .getByTestId("poll-option-input")
+        .nth(1)
+        .fill(optionB);
       await alicePage.page.getByTestId("send-poll-button").click();
-      const poll = alicePage.page.getByTestId("poll-card").filter({ hasText: question }).first();
+      const poll = alicePage.page
+        .getByTestId("poll-card")
+        .filter({ hasText: question })
+        .first();
       await expect(poll).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "poll-created");
 
       await gotoChat(bobPage, realmId);
-      const bobPoll = bobPage.page.getByTestId("poll-card").filter({ hasText: question }).first();
-      await bobPoll.getByTestId("poll-option").filter({ hasText: optionA }).click();
-      await expect(bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA })).toContainText(/1/);
+      const bobPoll = bobPage.page
+        .getByTestId("poll-card")
+        .filter({ hasText: question })
+        .first();
+      await bobPoll
+        .getByTestId("poll-option")
+        .filter({ hasText: optionA })
+        .click();
+      await expect(
+        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }),
+      ).toContainText(/1/);
 
       // Vote replacement: bob switches from optionA to optionB; optionA count
       // drops back to zero and optionB becomes bob's single vote.
-      await bobPoll.getByTestId("poll-option").filter({ hasText: optionB }).click();
-      await expect(bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA })).toContainText(/0/);
-      await expect(bobPoll.getByTestId("poll-result-row").filter({ hasText: optionB })).toContainText(/1/);
+      await bobPoll
+        .getByTestId("poll-option")
+        .filter({ hasText: optionB })
+        .click();
+      await expect(
+        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionA }),
+      ).toContainText(/0/);
+      await expect(
+        bobPoll.getByTestId("poll-result-row").filter({ hasText: optionB }),
+      ).toContainText(/1/);
 
       await gotoChat(carolPage, realmId);
-      const carolPoll = carolPage.page.getByTestId("poll-card").filter({ hasText: question }).first();
-      await carolPoll.getByTestId("poll-option").filter({ hasText: optionB }).click();
-      await expect(carolPoll.getByTestId("poll-result-row").filter({ hasText: optionB })).toContainText(/2/);
+      const carolPoll = carolPage.page
+        .getByTestId("poll-card")
+        .filter({ hasText: question })
+        .first();
+      await carolPoll
+        .getByTestId("poll-option")
+        .filter({ hasText: optionB })
+        .click();
+      await expect(
+        carolPoll.getByTestId("poll-result-row").filter({ hasText: optionB }),
+      ).toContainText(/2/);
 
       await gotoChat(alicePage, realmId);
       await poll.getByTestId("poll-close-button").click();
@@ -561,150 +744,186 @@ test.describe("chat advanced", () => {
       await expect(poll.getByTestId("poll-option")).toHaveCount(0);
       await stepShot(alicePage.page, testInfo, "poll-closed");
     } finally {
-      await Promise.allSettled([carolPage.close(), bobPage.close(), alicePage.close()]);
+      await Promise.allSettled([
+        carolPage.close(),
+        bobPage.close(),
+        alicePage.close(),
+      ]);
     }
   });
 
-  test(
-    // @blocking-on: soland#messaging-chat-advanced-gap
-    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-    // @expected-live-by: 2026Q3
-    "E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000",
-    async ({ browser, request }, testInfo) => {
-      // spec: profiles-presence.md §3.5
-      const stamp = Date.now();
-      const alice = uniqueUser("s14f-alice");
-      const bob = uniqueUser("s14f-bob");
-      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-      const [aliceToken, bobToken] = await Promise.all([
-        issueDevSession(request, alice),
-        issueDevSession(request, bob),
-      ]);
-      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
+  test(// @blocking-on: soland#messaging-chat-advanced-gap
+  // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+  // @expected-live-by: 2026Q3
+  "E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    // spec: profiles-presence.md §3.5
+    const stamp = Date.now();
+    const alice = uniqueUser("s14f-alice");
+    const bob = uniqueUser("s14f-bob");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const alicePage = await openUserPage(browser, alice, {
+      sessionCredential: aliceToken,
+    });
+    const bobPage = await openUserPage(browser, bob, {
+      sessionCredential: bobToken,
+    });
 
-      try {
-        const realmId = await alicePage.createRealm({
-          title: `S14F Typing ${stamp}`,
-          discoverability: "listed",
-          joinRule: "invite",
-          seedMembers: [bob.did],
-        });
-        await bobPage.acceptInvite(realmId);
-        await Promise.all([gotoChat(alicePage, realmId), gotoChat(bobPage, realmId)]);
-
-        await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
-        await expect(
-          bobPage.page.getByTestId("typing-indicator").filter({ hasText: alice.displayName }),
-        ).toBeVisible({ timeout: 1_000 });
-        await stepShot(bobPage.page, testInfo, "typing-visible");
-        await expect(
-          bobPage.page.getByTestId("typing-indicator").filter({ hasText: alice.displayName }),
-        ).toHaveCount(0, { timeout: 7_000 });
-      } finally {
-        await Promise.allSettled([bobPage.close(), alicePage.close()]);
-      }
-    },
-  );
-
-  test(
-    // @blocking-on: soland#messaging-chat-advanced-gap
-    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-    // @expected-live-by: 2026Q3
-    "E14.G presence state propagates online/offline within 1s after page open/close",
-    async ({ browser, request }, testInfo) => {
-      // spec: profiles-presence.md §3.2-§3.4
-      const stamp = Date.now();
-      const alice = uniqueUser("s14g-alice");
-      const bob = uniqueUser("s14g-bob");
-      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-      const [aliceToken, bobToken] = await Promise.all([
-        issueDevSession(request, alice),
-        issueDevSession(request, bob),
-      ]);
-      const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
-      const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
-
-      try {
-        const realmId = await alicePage.createRealm({
-          title: `S14G Presence ${stamp}`,
-          discoverability: "listed",
-          joinRule: "invite",
-          seedMembers: [bob.did],
-        });
-        await bobPage.acceptInvite(realmId);
-        await Promise.all([gotoChat(alicePage, realmId), gotoChat(bobPage, realmId)]);
-
-        await expect(
-          alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
-        ).toContainText(/online/i, { timeout: 1_000 });
-        await stepShot(alicePage.page, testInfo, "presence-online");
-
-        await bobPage.close();
-        await expect(
-          alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
-        ).toContainText(/offline|last seen/i, { timeout: 5_000 });
-      } finally {
-        await Promise.allSettled([alicePage.close()]);
-      }
-    },
-  );
-
-  test(
-    // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-    "E14.2 mention in E2EE Realm uses sidecar hash; server log does not contain mentionee.did plaintext",
-    async ({ request }) => {
-      // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
-      const stamp = Date.now();
-      const alice = uniqueUser("s142-alice");
-      const bob = uniqueUser("s142-bob");
-      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-      const [aliceToken, bobToken] = await Promise.all([
-        issueDevSession(request, alice),
-        issueDevSession(request, bob),
-      ]);
-      const realmId = await createSharedRealmViaApi(
-        request,
-        alice,
-        aliceToken,
-        bob,
-        bobToken,
-        {
-          title: `S14.2 E2EE Mention ${stamp}`,
-          historyVisibility: "shared",
-          encryptionProfile: "mls_rfc9420",
-        },
-      );
-      const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
-      const sidecarHash = mentionSidecarHash(realmId, bob.did);
-      const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
-      const envelope = signedEventEnvelope({
-        actorDid: alice.did,
-        realmId: realmId,
-        kind: "ck.message.create",
-        payload: {
-          strand_id: strandId,
-          track_name: "discussion",
-          mention_sidecar_hash: [sidecarHash],
-          encrypted_content: encryptedEnvelope("ck.message.v1", "opaque-e2ee-mention", realmId),
-        },
+    try {
+      const realmId = await alicePage.createRealm({
+        title: `S14F Typing ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [bob.did],
       });
-      await submitSignedEventApi(request, aliceToken, envelope, {
-        context: "submit E2EE mention sidecar message",
-      });
+      await bobPage.acceptInvite(realmId);
+      await Promise.all([
+        gotoChat(alicePage, realmId),
+        gotoChat(bobPage, realmId),
+      ]);
 
-      const events = await listRealmEventsViaApi(request, aliceToken, realmId, { limit: 100 });
-      const messageEvent = events.find(
-        (event) => String(event.event_id) === String(envelope.event_id),
-      );
-      expect(messageEvent, "encrypted sidecar message event").toBeTruthy();
-      const rawServerView = JSON.stringify(messageEvent);
-      expect(rawServerView).not.toContain(bob.did);
-      expect(rawServerView).not.toContain(plaintext);
-      expect(rawServerView).toContain("mention_sidecar_hash");
-      expect(rawServerView).toContain(sidecarHash);
-    },
-  );
+      await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
+      await expect(
+        bobPage.page
+          .getByTestId("typing-indicator")
+          .filter({ hasText: alice.displayName }),
+      ).toBeVisible({ timeout: 1_000 });
+      await stepShot(bobPage.page, testInfo, "typing-visible");
+      await expect(
+        bobPage.page
+          .getByTestId("typing-indicator")
+          .filter({ hasText: alice.displayName }),
+      ).toHaveCount(0, { timeout: 7_000 });
+    } finally {
+      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+    }
+  });
+
+  test(// @blocking-on: soland#messaging-chat-advanced-gap
+  // @user-promise: e2e/scenarios/messaging/chat-advanced.md
+  // @expected-live-by: 2026Q3
+  "E14.G presence state propagates online/offline within 1s after page open/close", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    // spec: profiles-presence.md §3.2-§3.4
+    const stamp = Date.now();
+    const alice = uniqueUser("s14g-alice");
+    const bob = uniqueUser("s14g-bob");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const alicePage = await openUserPage(browser, alice, {
+      sessionCredential: aliceToken,
+    });
+    const bobPage = await openUserPage(browser, bob, {
+      sessionCredential: bobToken,
+    });
+
+    try {
+      const realmId = await alicePage.createRealm({
+        title: `S14G Presence ${stamp}`,
+        discoverability: "listed",
+        joinRule: "invite",
+        seedMembers: [bob.did],
+      });
+      await bobPage.acceptInvite(realmId);
+      await Promise.all([
+        gotoChat(alicePage, realmId),
+        gotoChat(bobPage, realmId),
+      ]);
+
+      await expect(
+        alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
+      ).toContainText(/online/i, { timeout: 1_000 });
+      await stepShot(alicePage.page, testInfo, "presence-online");
+
+      await bobPage.close();
+      await expect(
+        alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
+      ).toContainText(/offline|last seen/i, { timeout: 5_000 });
+    } finally {
+      await Promise.allSettled([alicePage.close()]);
+    }
+  });
+
+  test(// @user-promise: e2e/scenarios/messaging/chat-advanced.md
+  "E14.2 mention in E2EE Realm uses sidecar hash; server log does not contain mentionee.did plaintext", async ({
+    request,
+  }) => {
+    // spec: push-notifications.md §4.5 evaluation_locus + mention sidecar hash
+    const stamp = Date.now();
+    const alice = uniqueUser("s142-alice");
+    const bob = uniqueUser("s142-bob");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const realmId = await createSharedRealmViaApi(
+      request,
+      alice,
+      aliceToken,
+      bob,
+      bobToken,
+      {
+        title: `S14.2 E2EE Mention ${stamp}`,
+        historyVisibility: "shared",
+        encryptionProfile: "mls_rfc9420",
+      },
+    );
+    const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
+    const sidecarHash = mentionSidecarHash(realmId, bob.did);
+    const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
+    const envelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: realmId,
+      kind: "ck.message.create",
+      payload: {
+        strand_id: strandId,
+        track_name: "discussion",
+        mention_sidecar_hash: [sidecarHash],
+        encrypted_content: encryptedEnvelope(
+          "ck.message.v1",
+          "opaque-e2ee-mention",
+          realmId,
+        ),
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, envelope, {
+      context: "submit E2EE mention sidecar message",
+    });
+
+    const events = await listRealmEventsViaApi(request, aliceToken, realmId, {
+      limit: 100,
+    });
+    const messageEvent = events.find(
+      (event) => String(event.event_id) === String(envelope.event_id),
+    );
+    expect(messageEvent, "encrypted sidecar message event").toBeTruthy();
+    const rawServerView = JSON.stringify(messageEvent);
+    expect(rawServerView).not.toContain(bob.did);
+    expect(rawServerView).not.toContain(plaintext);
+    expect(rawServerView).toContain("mention_sidecar_hash");
+    expect(rawServerView).toContain(sidecarHash);
+  });
 });
 
 function mentionSidecarHash(realmId: string, did: string): string {
@@ -728,7 +947,8 @@ function encryptedEnvelope(
     aad,
     key_ref: {
       algorithm: "MLS",
-      group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      group_state_ref:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     },
   };
   return {
@@ -743,7 +963,10 @@ function sha256Digest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-function encryptedPayloadDigest(metadata: Record<string, unknown>, ciphertext: string): string {
+function encryptedPayloadDigest(
+  metadata: Record<string, unknown>,
+  ciphertext: string,
+): string {
   const hash = createHash("sha256");
   hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
   hash.update(Buffer.from(ciphertext, "base64url"));
@@ -754,14 +977,24 @@ async function createChatApiFixture(request: APIRequestContext, label: string) {
   const stamp = Date.now();
   const alice = uniqueUser(`${label}-alice`);
   const bob = uniqueUser(`${label}-bob`);
-  await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+  ]);
   const [aliceToken, bobToken] = await Promise.all([
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
-    title: `${label} ${stamp}`,
-    historyVisibility: "shared",
-  });
+  const realmId = await createSharedRealmViaApi(
+    request,
+    alice,
+    aliceToken,
+    bob,
+    bobToken,
+    {
+      title: `${label} ${stamp}`,
+      historyVisibility: "shared",
+    },
+  );
   return { alice, bob, aliceToken, bobToken, realmId };
 }

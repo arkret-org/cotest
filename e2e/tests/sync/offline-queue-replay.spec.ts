@@ -68,7 +68,7 @@ test.describe("offline queue replay", () => {
 
       await expectServerEventsContain(request, fixture.aliceToken, fixture.realmId, bodies);
       await expect
-        .poll(async () => (await fixture.bobPage.page.getByTestId("timeline").innerText()).includes("(pending)"), {
+        .poll(async () => (await fixture.bobPage.page.getByTestId("message-list").innerText()).includes("(pending)"), {
           timeout: 30_000,
         })
         .toBe(false);
@@ -168,8 +168,8 @@ async function createOfflineFixture(
 }
 
 async function composeMessage(userPage: JointUserPage, body: string) {
-  await userPage.page.getByTestId("composer-input").fill(body);
-  await userPage.page.getByTestId("send-button").click();
+  await userPage.page.getByTestId("chat-input").fill(body);
+  await userPage.page.getByTestId("send-chat-button").click();
   await expect(userPage.timelineEvent(body)).toBeVisible({ timeout: 30_000 });
 }
 
@@ -212,3 +212,4 @@ async function banMember(request: APIRequestContext, fixture: OfflineFixture) {
 async function closeFixture(fixture: OfflineFixture) {
   await Promise.allSettled([fixture.bobPage.close(), fixture.alicePage.close()]);
 }
+

@@ -89,9 +89,8 @@ test.describe("core object invariants", () => {
         // ── Step 4: read the event log for this Realm to recover the
         // `created_at` + `event_id` + `actor_id` + `kind` fields that
         // RealmLifecycleResponse does not currently surface. The events
-        // query response item shape (soland/src/routing/events/projection.rs
-        // projection_event_json) is { event_id, realm_id, event_kind,
-        // sender, payload, created_at, ... }.
+        // query response item shape follows the Event Envelope projection:
+        // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
         const eventsRes = await request.get(
           `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`,
           { headers: aliceAuth },
@@ -100,8 +99,8 @@ test.describe("core object invariants", () => {
         const eventsBody = (await eventsRes.json()) as {
           events?: Array<{
             event_id?: string;
-            event_kind?: string;
-            sender?: string;
+            kind?: string;
+            actor_id?: string;
             created_at?: string;
             realm_id?: string;
           }>;
@@ -111,10 +110,10 @@ test.describe("core object invariants", () => {
 
         // Find the Realm lifecycle / create event — soland writes lifecycle
         // ops via record_space_lifecycle_operation, so the kind is in the
-        // ck.realm.* family. We accept any ck.realm.* event_kind to stay
+        // ck.realm.* family. We accept any ck.realm.* kind to stay
         // resilient to soland's exact lifecycle op naming.
         const lifecycleEvent =
-          events.find((event) => event.event_kind?.startsWith("ck.realm.")) ?? events[0];
+          events.find((event) => event.kind?.startsWith("ck.realm.")) ?? events[0];
         expect(lifecycleEvent).toBeTruthy();
         // Common-field (Event Envelope §2.2): event_id.
         expect(lifecycleEvent.event_id).toMatch(/^ck:event:/);
@@ -122,11 +121,11 @@ test.describe("core object invariants", () => {
         expect(lifecycleEvent.created_at).toMatch(
           /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
         );
-        // Common-field (§2.2): actor_id — soland projects this as `sender`.
-        expect(lifecycleEvent.sender).toBe(alice.did);
+        // Common-field (§2.2): actor_id.
+        expect(lifecycleEvent.actor_id).toBe(alice.did);
         // Common-field: kind (§2.2 — Event Envelope `kind`).
-        expect(typeof lifecycleEvent.event_kind).toBe("string");
-        expect(lifecycleEvent.event_kind?.length ?? 0).toBeGreaterThan(0);
+        expect(typeof lifecycleEvent.kind).toBe("string");
+        expect(lifecycleEvent.kind?.length ?? 0).toBeGreaterThan(0);
         // Realm scoping: event must reference the Realm we just created.
         expect(lifecycleEvent.realm_id).toBe(realmId);
 

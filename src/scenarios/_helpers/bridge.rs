@@ -242,8 +242,8 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
     res.render(Json(json!({
         "active": true,
         "status": "active",
-        "proof_required": true,
-        "one_time_use_consumed": true,
+        "proof_required": false,
+        "one_time_use_consumed": false,
         "grant": {
             "id": "ck:grant:0196419b-0000-7000-8000-000000000901",
             "issuer": "did:web:coauth.cotest.local",

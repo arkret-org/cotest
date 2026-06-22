@@ -113,8 +113,8 @@ async function sendEncryptedTimelineMessage(
     { timeout: 60_000 },
   );
 
-  await userPage.page.getByTestId("composer-input").fill(body);
-  await userPage.page.getByTestId("send-button").click();
+  await userPage.page.getByTestId("chat-input").fill(body);
+  await userPage.page.getByTestId("send-chat-button").click();
 
   const response = await messageSubmit;
   const postData = response.request().postData() ?? "";
@@ -125,8 +125,8 @@ async function sendEncryptedTimelineMessage(
   expect(postData).toContain("encrypted_content");
   expect(postData).toContain("mls-rfc9420");
   expect(postData).not.toContain(body);
-  await expect(userPage.page.getByTestId("write-status")).toContainText(
-    /encrypted message sent/,
+  await expect(userPage.page.getByTestId("chat-status")).toContainText(
+    /Encrypted message sent/i,
     { timeout: 30_000 },
   );
   return postData;
@@ -538,7 +538,7 @@ test.describe("MLS group encryption", () => {
       await expect(alicePage.timelineEvent(plaintext)).toBeVisible({ timeout: 30_000 });
 
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(bobPage.page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
+      await expect(bobPage.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
       const bobMessage = bobPage.timelineEvent(plaintext);
       await expect(bobMessage).toBeVisible({ timeout: 60_000 });
       await expect(bobMessage.getByTestId("event-body")).toContainText(plaintext);
@@ -623,7 +623,7 @@ test.describe("MLS group encryption", () => {
       );
       await expect(epochBanner).toBeVisible({ timeout: 30_000 });
       await expect(epochBanner).toContainText("epoch_update_required");
-      await expect(alicePage.page.getByTestId("send-button")).toBeDisabled();
+      await expect(alicePage.page.getByTestId("send-chat-button")).toBeDisabled();
       await stepShot(alicePage.page, testInfo, "epoch-update-required-after-ban");
     } finally {
       await alicePage.close();
@@ -792,3 +792,4 @@ test.describe("MLS group encryption", () => {
     },
   );
 });
+

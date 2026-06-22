@@ -39,12 +39,18 @@ test.describe("encrypted attachments", () => {
   }) => {
     const uploadResp = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
       headers: {
-        "content-type": "application/octet-stream",
         "x-cokret-realm-id": "ck:realm:0196419b-0000-7000-8000-00000000prob",
         "x-cokret-content-digest":
           "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       },
-      data: Buffer.alloc(0),
+      multipart: {
+        content: {
+          name: "empty.bin",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.alloc(0),
+        },
+        size_bytes: "0",
+      },
     });
     expect(uploadResp.status()).toBe(401);
     expect(wireErrCode(await uploadResp.json())).toBe("unauthenticated");
@@ -105,14 +111,20 @@ test.describe("encrypted attachments", () => {
     const upload = await request.post(`${solandBaseUrl()}/_cokret/self/blob/upload`, {
       headers: {
         ...authHeaders(aliceToken),
-        "content-type": "image/png",
         "x-cokret-filename": "cat.png",
         "x-cokret-realm-id": realmId,
         "x-cokret-blob-encrypted": "true",
         "x-cokret-attachment-envelope": JSON.stringify(envelope),
         "x-cokret-content-digest": ciphertextDigest,
       },
-      data: ciphertext,
+      multipart: {
+        content: {
+          name: "cat.png",
+          mimeType: "image/png",
+          buffer: ciphertext,
+        },
+        size_bytes: String(ciphertext.length),
+      },
     });
     const uploadText = await upload.text();
     expect(upload.ok(), uploadText).toBeTruthy();

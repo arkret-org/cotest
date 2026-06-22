@@ -62,8 +62,16 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
   // A per-describe shared setup: register a user, mint a device key + grant.
   // When the debug seam is unavailable the dependent tests skip with a clear
   // message rather than fail.
+  let sharedAccount:
+    | {
+        coauth: string;
+        actorDid: string;
+        deviceId: string;
+        displayName: string;
+      }
+    | undefined;
 
-  async function setupGrant(
+  async function setupAccount(
     request: APIRequestContext,
   ): Promise<
     | {
@@ -71,11 +79,12 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
         actorDid: string;
         deviceId: string;
         displayName: string;
-        deviceKey: DpopDeviceKey;
-        grant: DpopBoundGrant;
       }
     | undefined
   > {
+    if (sharedAccount) {
+      return sharedAccount;
+    }
     const coauth = coauthBaseUrl();
     if (!coauth) {
       return undefined;
@@ -90,12 +99,38 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
       displayName: account.displayName,
     };
     await ensureRegistered(request, user);
+    sharedAccount = {
+      coauth,
+      actorDid: user.did,
+      deviceId: user.deviceId,
+      displayName: user.displayName,
+    };
+    return sharedAccount;
+  }
+
+  async function setupGrant(
+    request: APIRequestContext,
+  ): Promise<
+    | {
+        coauth: string;
+        actorDid: string;
+        deviceId: string;
+        displayName: string;
+        deviceKey: DpopDeviceKey;
+        grant: DpopBoundGrant;
+      }
+    | undefined
+  > {
+    const account = await setupAccount(request);
+    if (!account) {
+      return undefined;
+    }
     const deviceKey = generateDpopDeviceKey();
     const grant = await mintDpopBoundGrant(
       request,
-      coauth,
-      user.did,
-      user.deviceId,
+      account.coauth,
+      account.actorDid,
+      account.deviceId,
       deviceKey,
       { audience: solandServiceDid() },
     );
@@ -106,10 +141,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
     expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
     expect(grant.audience).toBe(solandServiceDid());
     return {
-      coauth,
-      actorDid: user.did,
-      deviceId: user.deviceId,
-      displayName: user.displayName,
+      ...account,
       deviceKey,
       grant,
     };
@@ -197,21 +229,15 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
         .poll(
           () =>
             seenGrantSelfRequests.some(
-              ({ headers }) =>
-                Boolean(headers.dpop) &&
-                Boolean(headers["x-cokret-session-grant-challenge"]) &&
-                Boolean(headers["x-cokret-session-grant-proof"]),
+              ({ headers }) => Boolean(headers.dpop),
             ),
           { timeout: 30_000 },
         )
         .toBeTruthy();
       const missingProofs = seenGrantSelfRequests.filter(
-        ({ headers }) =>
-          !headers.dpop ||
-          !headers["x-cokret-session-grant-challenge"] ||
-          !headers["x-cokret-session-grant-proof"],
+        ({ headers }) => !headers.dpop,
       );
-      expect(missingProofs, `grant self/root requests missing DPoP or holder proof`).toEqual([]);
+      expect(missingProofs, `grant self/root requests missing DPoP`).toEqual([]);
       expect(refreshRequests, "fresh boot must not rotate the injected grant").toEqual([]);
 
       await jointPage.page.reload({ waitUntil: "domcontentloaded" });
@@ -221,10 +247,7 @@ test.describe("session-grant + DPoP self-path (② A+②)", () => {
         .poll(
           () =>
             seenGrantSelfRequests.some(
-              ({ headers }) =>
-                Boolean(headers.dpop) &&
-                Boolean(headers["x-cokret-session-grant-challenge"]) &&
-                Boolean(headers["x-cokret-session-grant-proof"]),
+              ({ headers }) => Boolean(headers.dpop),
             ),
           { timeout: 30_000 },
         )

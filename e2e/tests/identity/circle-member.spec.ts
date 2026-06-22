@@ -29,6 +29,7 @@ import {
   createCircleCokret,
   errorWireCode,
   getCircleCokret,
+  grantCircleMemberManageCapability,
 } from "../../helpers/circle-api";
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
@@ -72,18 +73,34 @@ test.describe("circle membership (same principal server)", () => {
     expect(circle.realm_id).toBe(realmId);
     expect(circle.state).toBe("active");
 
-    // alice (realm owner) pulls bob into the Circle. bob is NOT consulted.
+    // Circle-local management is not inherited from Realm ownership. Alice
+    // explicitly grants herself member management for this Circle, joins so she
+    // can read the member list, then pulls Bob. Bob is NOT consulted.
+    await grantCircleMemberManageCapability(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: alice.did,
+      circleId: circle.circle_id,
+    });
+    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+      actorId: alice.did,
+      membership: "join",
+    });
     const membership = await addCircleMemberCokret(
       request,
       aliceToken,
       circle.circle_id,
-      { actorId: bob.did, state: "active" },
+      { actorId: bob.did, membership: "join" },
     );
-    expect(membership.state).toBe("active");
+    expect(membership.membership).toBe("join");
     expect(membership.actor_id).toBe(bob.did);
 
     // CORE ASSERTION: bob did zero operations yet is a Circle member.
-    const fetched = await getCircleCokret(request, aliceToken, circle.circle_id);
+    const fetched = await getCircleCokret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
     expect(fetched.members).toContain(bob.did);
   });
 
@@ -110,6 +127,16 @@ test.describe("circle membership (same principal server)", () => {
       title: `S8n circle ${Date.now()}`,
       joinRule: "invite",
     });
+    await grantCircleMemberManageCapability(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: alice.did,
+      circleId: circle.circle_id,
+    });
+    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+      actorId: alice.did,
+      membership: "join",
+    });
 
     // mallory is NOT a realm member. Pulling her in must fail closed on the
     // strict-subset invariant.
@@ -117,7 +144,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      { actorId: mallory.did, state: "active" },
+      { actorId: mallory.did, membership: "join" },
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(422);
@@ -126,7 +153,11 @@ test.describe("circle membership (same principal server)", () => {
     );
 
     // mallory is not a member.
-    const fetched = await getCircleCokret(request, aliceToken, circle.circle_id);
+    const fetched = await getCircleCokret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
     expect(fetched.members ?? []).not.toContain(mallory.did);
   });
 
@@ -165,6 +196,16 @@ test.describe("circle membership (same principal server)", () => {
       title: `S8c circle ${Date.now()}`,
       joinRule: "invite",
     });
+    await grantCircleMemberManageCapability(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: alice.did,
+      circleId: circle.circle_id,
+    });
+    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+      actorId: alice.did,
+      membership: "join",
+    });
 
     // carol (non-owner, no manage capability on the Circle) tries to pull dave
     // in. The HTTP surface evaluates `ck.circle.member.manage` and fails
@@ -173,7 +214,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       carolToken,
       circle.circle_id,
-      { actorId: dave.did, state: "active" },
+      { actorId: dave.did, membership: "join" },
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(403);
@@ -182,7 +223,11 @@ test.describe("circle membership (same principal server)", () => {
     );
 
     // dave is not a Circle member.
-    const fetched = await getCircleCokret(request, aliceToken, circle.circle_id);
+    const fetched = await getCircleCokret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
     expect(fetched.members ?? []).not.toContain(dave.did);
   });
 });

@@ -78,7 +78,7 @@ test.describe("moderation appeal", () => {
     const appellantPage = await openUserPage(browser, appellant, { sessionCredential: appellantToken });
     try {
       await appellantPage.gotoTimelineRealm(realmId);
-      await expect(appellantPage.page.getByTestId("timeline")).toContainText(
+      await expect(appellantPage.page.getByTestId("message-list")).toContainText(
         "Moderation decision",
         { timeout: 120_000 },
       );
@@ -433,3 +433,4 @@ async function getAppealHistory(request: APIRequestContext, token: string, appea
   const body = JSON.parse(text) as { history: Array<Record<string, unknown>> };
   return body.history;
 }
+

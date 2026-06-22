@@ -48,21 +48,6 @@ async function postJson(
   return { status: resp.status(), body, raw };
 }
 
-async function getJson(
-  request: APIRequestContext,
-  url: string,
-): Promise<{ status: number; body: any; raw: string }> {
-  const resp = await request.get(url);
-  const raw = await resp.text();
-  let body: any = null;
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch {
-    body = null;
-  }
-  return { status: resp.status(), body, raw };
-}
-
 // Poll verify-email until the async-minted code lands. `invalid_code` (worker
 // hasn't stored the code yet) and `rate_limited` are retryable; anything else
 // is a hard failure.
@@ -92,7 +77,37 @@ async function verifyEmailWithRetry(
     }
     await new Promise((r) => setTimeout(r, 1_500));
   }
-  throw new Error(`coauth verify-email timed out waiting for the dev code (last: ${last})`);
+  throw new Error(
+    `coauth verify-email timed out waiting for the dev code (last: ${last})`,
+  );
+}
+
+async function beginRegistrationWithRetry(
+  request: APIRequestContext,
+  base: string,
+  data: Record<string, unknown>,
+): Promise<{ id: string; next: RegStep }> {
+  const deadline = Date.now() + 60_000;
+  let last = "";
+  while (Date.now() < deadline) {
+    const begin = await postJson(request, base, data);
+    if (
+      begin.status === 200 &&
+      begin.body?.status === "success" &&
+      begin.body?.id
+    ) {
+      return {
+        id: begin.body.id as string,
+        next: begin.body.next_step as RegStep,
+      };
+    }
+    last = begin.raw;
+    if (begin.body?.error !== "rate_limited") {
+      throw new Error(`coauth register failed (${begin.status}): ${begin.raw}`);
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  throw new Error(`coauth register timed out after rate limits (last: ${last})`);
 }
 
 export async function registerCoauthPasswordAccount(
@@ -110,17 +125,14 @@ export async function registerCoauthPasswordAccount(
   const base = `${coauthBase}/_coauth/gate/account/auth/register`;
 
   // 1. begin password registration
-  const begin = await postJson(request, base, {
+  const begin = await beginRegistrationWithRetry(request, base, {
     handle: slug,
     email,
     password,
     password_confirm: password,
   });
-  if (begin.status !== 200 || begin.body?.status !== "success" || !begin.body?.id) {
-    throw new Error(`coauth register failed (${begin.status}): ${begin.raw}`);
-  }
-  const id: string = begin.body.id;
-  let next: RegStep = begin.body.next_step;
+  const id = begin.id;
+  let next = begin.next;
 
   // 2. verify email (async-minted dev code)
   if (next === "verify_email") {
@@ -138,19 +150,14 @@ export async function registerCoauthPasswordAccount(
     next = dn.body.next_step;
   }
 
-  // 4. finish (creates the account + registers the webvh DID at soland)
+  // 4. finish (creates the account and returns the local coauth subject DID)
   const fin = await postJson(request, `${base}/${id}/finish`, {});
   if (fin.status !== 200 || fin.body?.status !== "success") {
     throw new Error(`coauth finish failed (${fin.status}): ${fin.raw}`);
   }
-
-  const viewer = await getJson(request, `${coauthBase}/_coauth/self/viewer`);
-  if (viewer.status !== 200 || viewer.body?.viewer?.__typename !== "User") {
-    throw new Error(`coauth viewer after register failed (${viewer.status}): ${viewer.raw}`);
-  }
-  const did = viewer.body.viewer.did;
+  const did = fin.body?.did;
   if (!did) {
-    throw new Error(`coauth viewer after register did not include viewer.did: ${viewer.raw}`);
+    throw new Error(`coauth finish did not include did: ${fin.raw}`);
   }
 
   return {
@@ -159,6 +166,5 @@ export async function registerCoauthPasswordAccount(
     password,
     displayName,
     did,
-    principalId: viewer.body.viewer.principal?.principal_id,
   };
 }

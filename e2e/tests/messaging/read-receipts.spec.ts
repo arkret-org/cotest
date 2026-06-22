@@ -14,6 +14,10 @@ import {
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  signedEventEnvelope,
+  submitSignedEventApi,
+} from "../../helpers/soland-api";
+import {
   ensureRegistered,
   issueDevSession,
   uniqueUser,
@@ -31,7 +35,10 @@ test.describe("read receipts + privacy", () => {
     const stamp = Date.now();
     const alice = uniqueUser("g2t7-receipt-alice");
     const bob = uniqueUser("g2t7-receipt-bob");
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
     const [aliceToken, bobToken] = await Promise.all([
       issueDevSession(request, alice),
       issueDevSession(request, bob),
@@ -60,20 +67,31 @@ test.describe("read receipts + privacy", () => {
 
     const sentAt = new Date();
     const expiresAt = new Date(sentAt.getTime() + 5 * 60 * 1000);
-    const receipt = await request.post(`${solandBaseUrl()}/_cokret/self/ephemeral`, {
-      headers: authHeaders(aliceToken),
-      data: {
-        kind: "ck.receipt.read",
-        realm_id: realmId,
-        actor_id: alice.did,
-        device_id: alice.deviceId,
-        sent_at: sentAt.toISOString(),
-        expires_at: expiresAt.toISOString(),
-        payload: {
-          event_id: message.event_id,
+    const receipt = await request.post(
+      `${solandBaseUrl()}/_cokret/self/ephemeral`,
+      {
+        headers: authHeaders(aliceToken),
+        data: {
+          kind: "ck.receipt.read",
+          realm_id: realmId,
+          actor_id: alice.did,
+          device_id: alice.deviceId,
+          sent_at: sentAt.toISOString(),
+          expires_at: expiresAt.toISOString(),
+          payload: {
+            receipt_type: "read",
+            schema: "ck.schema.read_receipt.v1",
+            realm_id: realmId,
+            actor_id: alice.did,
+            event_id: message.event_id,
+            read_scope: {
+              kind: "realm",
+            },
+            created_at: sentAt.toISOString(),
+          },
         },
       },
-    });
+    );
     expect(receipt.status()).toBe(200);
     const receiptBody = await receipt.json();
     expect(receiptBody.accepted).toBe(true);
@@ -88,7 +106,9 @@ test.describe("read receipts + privacy", () => {
     expect(bobMarkers).toHaveLength(0);
   });
 
-  test("ck.receipt.read rejects TTL above the 5 minute hard ceiling", async ({ request }) => {
+  test("ck.receipt.read rejects TTL above the 5 minute hard ceiling", async ({
+    request,
+  }) => {
     const fixture = await createReceiptFixture(request, "ttl-too-long");
     const receipt = await postReceipt(request, fixture.aliceToken, {
       ...receiptEnvelope(fixture, 5 * 60 * 1000 + 1),
@@ -98,7 +118,9 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("hard TTL");
   });
 
-  test("ck.receipt.read rejects already expired envelopes", async ({ request }) => {
+  test("ck.receipt.read rejects already expired envelopes", async ({
+    request,
+  }) => {
     const fixture = await createReceiptFixture(request, "expired");
     const sentAt = new Date(Date.now() - 10_000);
     const receipt = await postReceipt(request, fixture.aliceToken, {
@@ -138,118 +160,108 @@ test.describe("read receipts + privacy", () => {
     expect(JSON.stringify(body)).toContain("not a joined member");
   });
 
-  test(
-    "alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window",
-    async ({ request }) => {
-      const fixture = await createReceiptFixture(request, "highest-visible");
-      await sendPlaintextMessageViaApi(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-        `highest visible second ${Date.now()}`,
-        { actorDid: fixture.bob.did },
-      );
-      const highest = await sendPlaintextMessageViaApi(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-        `highest visible third ${Date.now()}`,
-        { actorDid: fixture.bob.did },
-      );
-      const receipt = receiptEnvelope(fixture);
-      receipt.payload.event_id = highest.event_id;
-      const response = await postReceipt(request, fixture.aliceToken, receipt);
-      expect(response.status()).toBe(200);
-      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId))
-        .toHaveLength(0);
-    },
-  );
+  test("alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "highest-visible");
+    await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `highest visible second ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const highest = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `highest visible third ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const receipt = receiptEnvelope(fixture);
+    receipt.payload.event_id = highest.event_id;
+    const response = await postReceipt(request, fixture.aliceToken, receipt);
+    expect(response.status()).toBe(200);
+    expect(
+      await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
+    ).toHaveLength(0);
+  });
 
-  test(
-    "alice toggles preference=false; subsequent reads do NOT emit ck.receipt.read; bob's view stops updating",
-    async ({ request }) => {
-      const fixture = await createReceiptFixture(request, "preference-disabled");
-      expect(await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId))
-        .toHaveLength(0);
-    },
-  );
+  test("alice toggles preference=false; subsequent reads do NOT emit ck.receipt.read; bob's view stops updating", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "preference-disabled");
+    expect(
+      await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
+    ).toHaveLength(0);
+  });
 
-  test(
-    "alice re-enables preference; new reads emit a single fresh ck.receipt.read; reads during the disabled window stay invisible",
-    async ({ request }) => {
-      const fixture = await createReceiptFixture(request, "preference-reenabled");
-      const hiddenWindowMessage = await sendPlaintextMessageViaApi(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-        `disabled-window ${Date.now()}`,
-        { actorDid: fixture.bob.did },
-      );
-      const freshMessage = await sendPlaintextMessageViaApi(
-        request,
-        fixture.bobToken,
-        fixture.realmId,
-        `reenabled-window ${Date.now()}`,
-        { actorDid: fixture.bob.did },
-      );
-      const receipt = receiptEnvelope(fixture);
-      receipt.payload.event_id = freshMessage.event_id;
-      const response = await postReceipt(request, fixture.aliceToken, receipt);
-      expect(response.status()).toBe(200);
-      expect(JSON.stringify(receipt.payload)).not.toContain(hiddenWindowMessage.event_id);
-    },
-  );
+  test("alice re-enables preference; new reads emit a single fresh ck.receipt.read; reads during the disabled window stay invisible", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "preference-reenabled");
+    const hiddenWindowMessage = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `disabled-window ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const freshMessage = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `reenabled-window ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const receipt = receiptEnvelope(fixture);
+    receipt.payload.event_id = freshMessage.event_id;
+    const response = await postReceipt(request, fixture.aliceToken, receipt);
+    expect(response.status()).toBe(200);
+    expect(JSON.stringify(receipt.payload)).not.toContain(
+      hiddenWindowMessage.event_id,
+    );
+  });
 
-  test(
-    "space disclosure=required locks the client toggle; even with preference=false, client sends receipts",
-    async ({ request }) => {
-      const fixture = await createReceiptFixture(request, "disclosure-required");
-      const receipt = receiptEnvelope(fixture);
-      (receipt.payload as Record<string, unknown>).disclosure = "required";
-      const response = await postReceipt(request, fixture.aliceToken, receipt);
-      expect(response.status()).toBe(200);
-    },
-  );
+  test("space disclosure=required locks the client toggle; even with preference=false, client sends receipts", async ({
+    request,
+  }) => {
+    const fixture = await createReceiptFixture(request, "disclosure-required");
+    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
+      disclosure: "required",
+    });
+    const receipt = receiptEnvelope(fixture);
+    const response = await postReceipt(request, fixture.aliceToken, receipt);
+    expect(response.status()).toBe(200);
+  });
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
-    "space disclosure=disabled: client does not send; Sync Service silently drops any inbound ck.receipt.read for the space",
-    async () => {
-      // spec: read-receipts.md §2.5
-    },
-  );
+  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
+  // @user-promise: e2e/scenarios/messaging/read-receipts.md
+  // @expected-live-by: 2026Q3
+  "space disclosure=disabled: client does not send; Sync Service silently drops any inbound ck.receipt.read for the space", async () => {
+    // spec: read-receipts.md §2.5
+  });
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
-    "actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob",
-    async () => {
-      // spec: read-receipts.md §3.1-§3.2
-    },
-  );
+  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
+  // @user-promise: e2e/scenarios/messaging/read-receipts.md
+  // @expected-live-by: 2026Q3
+  "actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async () => {
+    // spec: read-receipts.md §3.1-§3.2
+  });
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
-    "E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted",
-    async () => {
-      // spec: read-receipts.md §2.3
-    },
-  );
+  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
+  // @user-promise: e2e/scenarios/messaging/read-receipts.md
+  // @expected-live-by: 2026Q3
+  "E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted", async () => {
+    // spec: read-receipts.md §2.3
+  });
 
-  test.fixme(
-    // @blocking-on: soland#messaging-read-receipts-gap
-    // @user-promise: e2e/scenarios/messaging/read-receipts.md
-    // @expected-live-by: 2026Q3
-    "E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt",
-    async () => {
-      // spec: read-receipts.md §3.2
-    },
-  );
+  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
+  // @user-promise: e2e/scenarios/messaging/read-receipts.md
+  // @expected-live-by: 2026Q3
+  "E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt", async () => {
+    // spec: read-receipts.md §3.2
+  });
 });
 
 type ReceiptFixture = Awaited<ReturnType<typeof createReceiptFixture>>;
@@ -258,16 +270,26 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
   const stamp = Date.now();
   const alice = uniqueUser(`${label}-alice`);
   const bob = uniqueUser(`${label}-bob`);
-  await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+  await Promise.all([
+    ensureRegistered(request, alice),
+    ensureRegistered(request, bob),
+  ]);
   const [aliceToken, bobToken] = await Promise.all([
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
-  const realmId = await createSharedRealmViaApi(request, bob, bobToken, alice, aliceToken, {
-    title: `${label} receipt ${stamp}`,
-    discoverability: "listed",
-    historyVisibility: "shared",
-  });
+  const realmId = await createSharedRealmViaApi(
+    request,
+    bob,
+    bobToken,
+    alice,
+    aliceToken,
+    {
+      title: `${label} receipt ${stamp}`,
+      discoverability: "listed",
+      historyVisibility: "shared",
+    },
+  );
   await allowPlaintextMessagesViaApi(request, bobToken, realmId);
   const message = await sendPlaintextMessageViaApi(
     request,
@@ -279,7 +301,11 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
   return { alice, bob, aliceToken, bobToken, realmId, message };
 }
 
-function receiptEnvelope(fixture: ReceiptFixture, ttlMs = 5 * 60 * 1000, sentAt = new Date()) {
+function receiptEnvelope(
+  fixture: ReceiptFixture,
+  ttlMs = 5 * 60 * 1000,
+  sentAt = new Date(),
+) {
   return {
     kind: "ck.receipt.read",
     realm_id: fixture.realmId,
@@ -288,9 +314,37 @@ function receiptEnvelope(fixture: ReceiptFixture, ttlMs = 5 * 60 * 1000, sentAt 
     sent_at: sentAt.toISOString(),
     expires_at: new Date(sentAt.getTime() + ttlMs).toISOString(),
     payload: {
+      receipt_type: "read",
+      schema: "ck.schema.read_receipt.v1",
+      realm_id: fixture.realmId,
+      actor_id: fixture.alice.did,
       event_id: fixture.message.event_id,
+      read_scope: {
+        kind: "realm",
+      },
+      created_at: sentAt.toISOString(),
     },
   };
+}
+
+async function setReadReceiptPolicy(
+  request: APIRequestContext,
+  token: string,
+  fixture: ReceiptFixture,
+  payload: Record<string, unknown>,
+) {
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: fixture.bob.did,
+      realmId: fixture.realmId,
+      kind: "ck.realm.read_receipt_policy",
+      schemaId: "ck.schema.event_payload.v1",
+      payload,
+    }),
+    { context: `read receipt policy ${fixture.realmId}` },
+  );
 }
 
 async function postReceipt(

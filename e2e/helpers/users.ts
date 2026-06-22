@@ -13,7 +13,10 @@ import {
 import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
 import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
-import { dpopDeviceKeyFromSeedB64url, selfPathGrantHeaders } from "./session-grant-dpop";
+import {
+  dpopDeviceKeyFromSeedB64url,
+  selfPathGrantHeaders,
+} from "./session-grant-dpop";
 
 export type JointUser = {
   name: string;
@@ -60,8 +63,8 @@ export type OpenUserOpts = {
   /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
   /// bound to (its thumbprint == the grant's `cnf.jkt`).
   dpopSeedB64url?: string;
-  /// coauth-assigned grant id (DB row id), required for yougen to mint the
-  /// session-grant introspection holder proof soland forwards to coauth.
+  /// coauth-assigned grant id (DB row id), persisted by yougen with the grant
+  /// so refresh/logout paths can identify the current grant chain.
   grantId?: string;
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
@@ -118,7 +121,10 @@ function objectRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function stringField(record: Record<string, unknown>, field: string): string | undefined {
+function stringField(
+  record: Record<string, unknown>,
+  field: string,
+): string | undefined {
   const value = record[field];
   return typeof value === "string" ? value : undefined;
 }
@@ -142,13 +148,17 @@ export class JointUserPage {
 
   async gotoHome() {
     await this.page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("client-shell")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("client-shell")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoLogin() {
     await this.page.goto("/login", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("login-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("login-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
@@ -156,37 +166,51 @@ export class JointUserPage {
     // yougen's /setup is the Overview; the Realm wizard lives at the
     // /setup/realms section. yougen/src/routes.rs §SetupSection.
     await this.page.goto("/setup/realms", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoOnboarding() {
     await this.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("account-strand")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("account-strand")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoDirectory() {
     await this.page.goto("/directory", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("directory-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("directory-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoSettings() {
     await this.page.goto("/settings", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("settings-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("settings-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoNotifications() {
     await this.page.goto("/notifications", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("notifications-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("notifications-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
   async gotoRealmAdmin(realmId: string) {
-    await this.page.goto(`/realms/${realmId}/settings`, { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
+    await this.page.goto(`/realms/${realmId}/settings`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
@@ -197,7 +221,9 @@ export class JointUserPage {
       await this.page.goto(`/realms/${realmId}/members`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(this.page.getByTestId("realm-members-panel")).toBeVisible({ timeout: 120_000 });
+      await expect(this.page.getByTestId("realm-members-panel")).toBeVisible({
+        timeout: 120_000,
+      });
       await this.dismissDeviceAuthorizationPrompt();
       return;
     }
@@ -205,7 +231,9 @@ export class JointUserPage {
     await this.page.goto(`/realms/${realmId}/settings/${section}`, {
       waitUntil: "domcontentloaded",
     });
-    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({ timeout: 120_000 });
+    await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
     const sectionLabel: Record<string, string> = {
       members: "Members",
@@ -226,8 +254,10 @@ export class JointUserPage {
   }
 
   async gotoTimelineRealm(realmId: string) {
-    await this.page.goto(`/timeline/${realmId}`, { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("timeline")).toBeVisible({ timeout: 120_000 });
+    await this.page.goto(`/chat/${realmId}`, { waitUntil: "domcontentloaded" });
+    await expect(this.page.getByTestId("message-list")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
@@ -250,23 +280,37 @@ export class JointUserPage {
     await basicsNext.click();
 
     if (opts.discoverability !== undefined) {
-      await selectDxcOption(strand.getByTestId("realm-discoverability-input"), opts.discoverability);
+      await selectDxcOption(
+        strand.getByTestId("realm-discoverability-input"),
+        opts.discoverability,
+      );
     }
     if (opts.joinRule !== undefined) {
-      await selectDxcOption(strand.getByTestId("realm-policy-join-rule-input"), opts.joinRule);
+      await selectDxcOption(
+        strand.getByTestId("realm-policy-join-rule-input"),
+        opts.joinRule,
+      );
     }
     if (opts.historyVisibility !== undefined) {
-      await selectDxcOption(strand.getByTestId("realm-policy-history-visibility-input"), opts.historyVisibility);
+      await selectDxcOption(
+        strand.getByTestId("realm-policy-history-visibility-input"),
+        opts.historyVisibility,
+      );
     }
     if (opts.encryptionProfile !== undefined) {
-      await selectDxcOption(strand.getByTestId("realm-encryption-profile-input"), opts.encryptionProfile);
+      await selectDxcOption(
+        strand.getByTestId("realm-encryption-profile-input"),
+        opts.encryptionProfile,
+      );
     }
     const policyNext = strand.getByTestId("new-realm-next-button").first();
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });
     await policyNext.click();
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
-      await strand.getByTestId("seed-members-input").fill(opts.seedMembers.join("\n"));
+      await strand
+        .getByTestId("seed-members-input")
+        .fill(opts.seedMembers.join("\n"));
     }
     const createButton = strand.getByTestId("create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
@@ -277,19 +321,26 @@ export class JointUserPage {
     // up the Recovery Key first. Test accounts generally have no recovery
     // configured, so accept the personal_node override and re-create. The gate
     // never appears for unencrypted Realms or when recovery is configured.
-    const recoveryGate = this.page.getByTestId("encrypted-realm-recovery-gate").last();
+    const recoveryGate = this.page
+      .getByTestId("encrypted-realm-recovery-gate")
+      .last();
     const gateAppeared = await recoveryGate
       .waitFor({ state: "visible", timeout: 2_000 })
       .then(() => true)
       .catch(() => false);
     if (gateAppeared) {
-      await this.page.getByTestId("encrypted-realm-recovery-gate-override").last().click();
+      await this.page
+        .getByTestId("encrypted-realm-recovery-gate-override")
+        .last()
+        .click();
       await expect(recoveryGate).toBeHidden({ timeout: 10_000 });
       await expect(createButton).toBeEnabled({ timeout: 30_000 });
       await createButton.click();
     }
 
-    await expect(strand).toContainText(/created ck:realm:/, { timeout: 30_000 });
+    await expect(strand).toContainText(/created ck:realm:/, {
+      timeout: 30_000,
+    });
     const text = await strand.innerText();
     const match = text.match(/created (ck:realm:[^\s]+)/);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
@@ -316,25 +367,24 @@ export class JointUserPage {
     return await status.innerText();
   }
 
-  // Build the Authorization + DPoP + holder-proof headers for a direct
-  // (non-browser) `/_cokret/self/*` call. Under the ②(A+②) model the credential
-  // is the ck.session.grant and soland requires a per-request DPoP proof plus
-  // the session-grant introspection holder proof.
+  // Build the Authorization + DPoP headers for a direct (non-browser)
+  // `/_cokret/self/*` call. Under the ②(A+②) model the credential is the
+  // ck.session.grant and soland requires a per-request DPoP proof.
   private selfPathHeaders(method: string, url: string): Record<string, string> {
     const grant = this.session.grant;
     if (grant) {
       return selfPathGrantHeaders({
         deviceKey: dpopDeviceKeyFromSeedB64url(grant.dpopSeedB64url),
-        grantId: grant.grantId,
         grantJwt: grant.grantJwt,
-        audience: grant.audience,
         method,
         url,
       });
     }
     const credential = this.session.sessionCredential;
     if (!credential) {
-      throw new Error("selfPathHeaders: no grant material or credential captured on session");
+      throw new Error(
+        "selfPathHeaders: no grant material or credential captured on session",
+      );
     }
     return { authorization: `Bearer ${credential}` };
   }
@@ -361,7 +411,9 @@ export class JointUserPage {
     const invites = Array.isArray(body.invites)
       ? body.invites
           .map(objectRecord)
-          .filter((invite): invite is Record<string, unknown> => invite !== undefined)
+          .filter(
+            (invite): invite is Record<string, unknown> => invite !== undefined,
+          )
       : [];
     const invite = invites.find(
       (i) =>
@@ -442,35 +494,77 @@ export class JointUserPage {
     );
   }
 
-  // Send a message into realmId's timeline. Asserts persistence write-status.
+  // Send a message into realmId's chat feed. Asserts chat-status persistence.
   async sendTimelineMessage(realmId: string, body: string) {
-    if (!this.page.url().includes(`/timeline/${realmId}`)) {
+    if (!this.page.url().includes(`/chat/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
-    const writeStatus = this.page.getByTestId("write-status");
-    const previousWriteStatus = (await writeStatus.textContent({ timeout: 500 }).catch(() => ""))
-      ?.trim()
-      ?? "";
-    await this.page.getByTestId("composer-input").fill(body);
-    await this.page.getByTestId("send-button").click();
-    await expect(this.page.getByTestId("timeline")).toContainText(body, { timeout: 30_000 });
+    const writeStatus = this.page.getByTestId("chat-status");
+    await this.page.getByTestId("chat-input").fill(body);
+    await this.page.getByTestId("send-chat-button").click();
+    await expect(this.page.getByTestId("message-list")).toContainText(body, {
+      timeout: 30_000,
+    });
     await expect
       .poll(
         async () => {
-          const current = (await writeStatus.textContent().catch(() => ""))?.trim() ?? "";
-          return current.startsWith("persisted ") && current !== previousWriteStatus;
+          const current =
+            (await writeStatus.textContent().catch(() => ""))?.trim() ?? "";
+          return current.endsWith("Message sent");
         },
         { timeout: 30_000 },
       )
       .toBe(true);
   }
 
-  // Read visible timeline event texts as an array (deduped on `body`).
-  async readTimelineTexts(realmId: string): Promise<string[]> {
-    if (!this.page.url().includes(`/timeline/${realmId}`)) {
+  async sendTimelineMentionMessage(
+    realmId: string,
+    mentionDid: string,
+    suffix: string,
+  ): Promise<string> {
+    if (!this.page.url().includes(`/chat/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
-    const events = this.page.getByTestId("timeline-event");
+    const input = this.page.getByTestId("chat-input");
+    await input.fill("");
+    await this.page.getByTestId("mention-trigger-button").click();
+    const escapedDid = mentionDid.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const suggestion = this.page.locator(
+      `[data-testid="mention-suggestion"][data-mention-did="${escapedDid}"]`,
+    );
+    await expect(suggestion).toBeVisible({ timeout: 30_000 });
+    await suggestion.click();
+    const prefix = (await input.inputValue()).trimEnd();
+    const body = `${prefix} ${suffix.trim()}`.trim();
+    await input.fill(body);
+    await this.page.getByTestId("send-chat-button").click();
+    await expect(this.page.getByTestId("message-list")).toContainText(body, {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(
+        async () => {
+          const current =
+            (
+              await this.page
+                .getByTestId("chat-status")
+                .textContent()
+                .catch(() => "")
+            )?.trim() ?? "";
+          return current.endsWith("Message sent");
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    return body;
+  }
+
+  // Read visible timeline event texts as an array (deduped on `body`).
+  async readTimelineTexts(realmId: string): Promise<string[]> {
+    if (!this.page.url().includes(`/chat/${realmId}`)) {
+      await this.gotoTimelineRealm(realmId);
+    }
+    const events = this.page.getByTestId("chat-message");
     const count = await events.count();
     const out: string[] = [];
     for (let i = 0; i < count; i += 1) {
@@ -480,7 +574,10 @@ export class JointUserPage {
   }
 
   timelineEvent(body: string): Locator {
-    return this.page.getByTestId("timeline-event").filter({ hasText: body }).first();
+    return this.page
+      .getByTestId("chat-message")
+      .filter({ hasText: body })
+      .first();
   }
 
   async close() {
@@ -562,7 +659,10 @@ export async function openUser(
 ): Promise<UserSession> {
   const serverUrl = solandBaseUrl(opts.server);
   const sessionCredential = opts.sessionCredential ?? "";
-  const diagnosticsDir = path.join(diagnosticsRoot(), sanitize(`${Date.now()}-${user.name}`));
+  const diagnosticsDir = path.join(
+    diagnosticsRoot(),
+    sanitize(`${Date.now()}-${user.name}`),
+  );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const context = await browser.newContext({
     recordHar: {
@@ -582,13 +682,19 @@ export async function openUser(
       : undefined;
   await context.addInitScript(
     (init) => {
-      window.localStorage.setItem("yougen.config.v1", JSON.stringify(init.config));
+      window.localStorage.setItem(
+        "yougen.config.v1",
+        JSON.stringify(init.config),
+      );
       // The harness injects sessions into localStorage; yougen's wasm build is
       // IndexedDB-only for session credentials/secrets by default (SubtleCrypto, non-
       // extractable). Opt into the localStorage compatibility tier so the
       // injected credential/seed are accepted (test-only; production leaves this
       // unset). See yougen secure_key_store WASM_ALLOW_LOCALSTORAGE_SECRETS_FLAG.
-      window.localStorage.setItem("yougen.security.allow_localstorage_secrets", "1");
+      window.localStorage.setItem(
+        "yougen.security.allow_localstorage_secrets",
+        "1",
+      );
       // ②(A+②) real-grant injection: hand yougen's dev-only boot path the real
       // ck.session.grant + the DPoP device seed it is bound to, so the wasm
       // client rehydrates a genuine grant (coauth introspection passes, device
@@ -617,27 +723,32 @@ export async function openUser(
   // events, even though the app underneath is interactive. We never want to
   // observe it during e2e — kill it permanently via CSS injected on every
   // navigation.
-  await context.addInitScript((init) => {
-    const inject = () => {
-      if (!document.head) return;
-      const id = "__cotest_hide_dx_toast";
-      if (document.getElementById(id)) return;
-      const style = document.createElement("style");
-      style.id = id;
-      style.textContent =
-        "#__dx-toast,#__dx-toast-container{display:none!important;visibility:hidden!important;pointer-events:none!important}";
-      if (init.hideDeviceAuthorizationPrompt) {
-        style.textContent +=
-          "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-reopen'],[class*='dx-dialog-backdrop']:has([data-testid='device-authorization-modal']){display:none!important;visibility:hidden!important;pointer-events:none!important}";
+  await context.addInitScript(
+    (init) => {
+      const inject = () => {
+        if (!document.head) return;
+        const id = "__cotest_hide_dx_toast";
+        if (document.getElementById(id)) return;
+        const style = document.createElement("style");
+        style.id = id;
+        style.textContent =
+          "#__dx-toast,#__dx-toast-container{display:none!important;visibility:hidden!important;pointer-events:none!important}";
+        if (init.hideDeviceAuthorizationPrompt) {
+          style.textContent +=
+            "\n[data-testid='device-authorization-modal'],[data-testid='device-authorization-reopen'],[class*='dx-dialog-backdrop']:has([data-testid='device-authorization-modal']){display:none!important;visibility:hidden!important;pointer-events:none!important}";
+        }
+        document.head.appendChild(style);
+      };
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", inject);
+      } else {
+        inject();
       }
-      document.head.appendChild(style);
-    };
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", inject);
-    } else {
-      inject();
-    }
-  }, { hideDeviceAuthorizationPrompt: opts.keepDeviceAuthorizationModal !== true });
+    },
+    {
+      hideDeviceAuthorizationPrompt: opts.keepDeviceAuthorizationModal !== true,
+    },
+  );
   const page = await context.newPage();
   const consoleLines: string[] = [];
   const networkLines: string[] = [];
@@ -736,8 +847,16 @@ export async function openUserPage(
 }
 
 export async function closeUser(session: UserSession) {
-  fs.writeFileSync(path.join(session.diagnosticsDir, "console.jsonl"), session.consoleLines.join("\n"), "utf8");
-  fs.writeFileSync(path.join(session.diagnosticsDir, "network.jsonl"), session.networkLines.join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(session.diagnosticsDir, "console.jsonl"),
+    session.consoleLines.join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(session.diagnosticsDir, "network.jsonl"),
+    session.networkLines.join("\n"),
+    "utf8",
+  );
   await session.context.close();
 }
 

@@ -17,9 +17,23 @@
 // Wire shapes mirror soland src/routing/circles.rs (CreateCircleRequestBody /
 // CircleMemberRequestBody / CircleOutcome / CircleMembershipOutcome).
 
+import {
+  createHash,
+  createPrivateKey,
+  sign as nodeSign,
+  type KeyObject,
+} from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
-import { authHeaders, expectJsonOk } from "./soland-api";
+import {
+  authHeaders,
+  canonicalJson,
+  canonicalTimestamp,
+  expectJsonOk,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+} from "./soland-api";
 
 export type CircleOutcome = {
   circle_id: string;
@@ -42,8 +56,126 @@ export type CircleOutcome = {
 export type CircleMembershipOutcome = {
   circle_id: string;
   actor_id: string;
-  state: string;
+  membership: CircleMembership;
 };
+
+export type CircleMembership = "join" | "invite" | "knock" | "leave" | "ban";
+
+function base64url(input: Buffer | string): string {
+  return Buffer.from(input).toString("base64url");
+}
+
+function sha256Canonical(value: unknown): string {
+  return `sha256:${createHash("sha256")
+    .update(canonicalJson(value), "utf8")
+    .digest("hex")}`;
+}
+
+function developmentPrivateKey(actorDid: string): KeyObject {
+  const seed = createHash("sha256")
+    .update("soland:anchorer-ephemeral:")
+    .update(actorDid)
+    .digest();
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  return createPrivateKey({
+    key: Buffer.concat([pkcs8Prefix, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+}
+
+function genericDetachedJwsProof(args: {
+  issuerDid: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}): Record<string, unknown> {
+  const verificationMethod = `${args.issuerDid}#device`;
+  const payloadDigest = sha256Canonical(args.payload);
+  const bindingObject = {
+    payload_digest: payloadDigest,
+    did: args.issuerDid,
+    verification_method: verificationMethod,
+    created_at: args.createdAt,
+  };
+  const protectedHeader = base64url(canonicalJson({ alg: "EdDSA" }));
+  const bindingPayload = base64url(canonicalJson(bindingObject));
+  const signature = nodeSign(
+    null,
+    Buffer.from(`${protectedHeader}.${bindingPayload}`, "utf8"),
+    developmentPrivateKey(args.issuerDid),
+  );
+  return {
+    kind: "detached_jws",
+    alg: "EdDSA",
+    verification_method: verificationMethod,
+    payload_digest: payloadDigest,
+    created_at: args.createdAt,
+    jws: `${protectedHeader}..${base64url(signature)}`,
+  };
+}
+
+export async function grantCircleMemberManageCapability(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: {
+    ownerDid: string;
+    realmId: string;
+    subjectDid: string;
+    circleId: string;
+    server?: SolandKey;
+  },
+): Promise<string> {
+  const grantId = typedId("grant");
+  const issuedAt = canonicalTimestamp();
+  const unsignedGrant: Record<string, unknown> = {
+    id: grantId,
+    grant_id: grantId,
+    schema: "ck.schema.capability.v1",
+    realm_id: args.realmId,
+    issuer: args.ownerDid,
+    subject: args.subjectDid,
+    actions: ["ck.circle.member.manage"],
+    resources: [
+      { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
+    ],
+    constraints: [
+      {
+        constraint_type: "scope_limitation",
+        effect: "allow",
+        allowed_circle_ids: [args.circleId],
+      },
+    ],
+    issued_at: issuedAt,
+  };
+  await submitSignedEventApi(
+    request,
+    ownerToken,
+    signedEventEnvelope({
+      actorDid: args.ownerDid,
+      realmId: args.realmId,
+      kind: "ck.capability.grant",
+      payload: {
+        grant_id: grantId,
+        grant: {
+          ...unsignedGrant,
+          proofs: [
+            genericDetachedJwsProof({
+              issuerDid: args.ownerDid,
+              payload: unsignedGrant,
+              createdAt: issuedAt,
+            }),
+          ],
+        },
+      },
+      createdAt: issuedAt,
+    }),
+    {
+      server: args.server,
+      context: `grant ck.circle.member.manage for ${args.circleId} to ${args.subjectDid}`,
+    },
+  );
+  return grantId;
+}
 
 // Create a Circle bound to `realmId`. Defaults `join_rule` to "invite" (the
 // soland default) so admin-only one-way adds are the membership path.
@@ -95,7 +227,7 @@ export async function addCircleMemberRaw(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  args: { actorId: string; state?: string; server?: SolandKey },
+  args: { actorId: string; membership?: CircleMembership; server?: SolandKey },
 ): Promise<APIResponse> {
   return await request.post(
     `${solandBaseUrl(args.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/members`,
@@ -103,7 +235,9 @@ export async function addCircleMemberRaw(
       headers: authHeaders(token),
       data: {
         actor_id: args.actorId,
-        ...(args.state !== undefined ? { state: args.state } : {}),
+        ...(args.membership !== undefined
+          ? { membership: args.membership }
+          : {}),
       },
     },
   );
@@ -114,7 +248,7 @@ export async function addCircleMemberCokret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  args: { actorId: string; state?: string; server?: SolandKey },
+  args: { actorId: string; membership?: CircleMembership; server?: SolandKey },
 ): Promise<CircleMembershipOutcome> {
   const response = await addCircleMemberRaw(request, token, circleId, args);
   return await expectJsonOk<CircleMembershipOutcome>(

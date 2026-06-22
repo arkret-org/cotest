@@ -44,47 +44,32 @@ test.describe("account onboarding", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
-    const bridgeResponse = await request.get(`${coauth}/_coauth/gate/account/auth/bridge/describe`);
+    const bridgeResponse = await request.get(`${coauth}/_coauth/gate/account/integration/describe`);
     expect(bridgeResponse.status()).toBe(200);
     const bridge = await bridgeResponse.json();
-    expect(bridge.todos).toEqual([]);
-    expect(bridge.oauth.supported_strands).toContain("authorization_code_pkce_browser");
-    expect(bridge.oauth.browser_bridge_session_path).toBe(
-      "/_coauth/gate/account/auth/oidc/browser-bridge/session",
-    );
-    expect(bridge.oauth.exchange_path).toBe("/_coauth/gate/account/auth/oidc/exchange");
-    expect(bridge.passkey.register_start_path).toBe(
-      "/_coauth/gate/account/auth/passkey/register/start",
-    );
-    expect(bridge.cokret.session_grants_introspect_path).toBe(
-      "/_coauth/gate/account/session-grants/introspect",
+    expect(bridge.contract).toBe("cokret.rest.integration_manifest.v1");
+    expect(bridge.describe_path).toBe("/_coauth/gate/account/integration/describe");
+    expect(bridge.surfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "session_grants",
+          method: "POST",
+          path: "/_cokret/gate/account/session-grants",
+          contract: "ck.gate.account.command.issue_session_grant",
+        }),
+        expect.objectContaining({
+          name: "passkey_auth",
+          path: "/_coauth/gate/account/auth/passkey/{register,auth}/{start,finish}",
+        }),
+      ]),
     );
 
     const user = uniqueUser("p1-025-webvh-email");
-    const exchangeDescribe = await request.get(`${coauth}${bridge.oauth.exchange_describe_path}`);
-    expect(exchangeDescribe.status()).toBe(200);
-    const exchange = await exchangeDescribe.json();
-    expect(exchange.required_fields).toEqual(
-      expect.arrayContaining(["authorization_code", "code_verifier", "device_id"]),
-    );
-    expect(exchange.validation_layers).toContain("cokret_session_grant_issuance");
-
-    const bridgeSessionResponse = await request.post(
-      `${coauth}${bridge.oauth.browser_bridge_session_path}`,
-      {
-        data: {
-          redirect_uri: "urn:yougen:oauth:callback",
-          login_hint: user.handle.slice(1),
-          device_id: user.deviceId,
-          principal_audience: solandServiceDid(),
-        },
-      },
-    );
-    expect(bridgeSessionResponse.status()).toBe(200);
-    const bridgeSession = await bridgeSessionResponse.json();
-    expect(bridgeSession.authorize_url).toContain("code_challenge=");
-    expect(bridgeSession.authorize_url).toContain(encodeURIComponent(solandServiceDid()));
-    expect(bridgeSession.code_challenge_method).toBe("S256");
+    const serviceDescribe = await request.get(`${coauth}/_cokret/describe`);
+    expect(serviceDescribe.status()).toBe(200);
+    const service = await serviceDescribe.json();
+    expect(service.supported_operations).toContain("ck.gate.account.command.issue_session_grant");
+    expect(JSON.stringify(service.auth_metadata)).toContain(solandServiceDid());
 
     const start = await request.post(`${coauth}/_coauth/gate/account/auth/register/webvh/start`, {
       data: {

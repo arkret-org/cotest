@@ -33,9 +33,8 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const exportProbe = await request.post(`${solandBaseUrl()}/_soland/self/account/export`, {
+    const exportProbe = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${token}` },
-      data: {},
     });
     expect(exportProbe.status()).toBeLessThan(500);
 
@@ -59,9 +58,8 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.post(`${solandBaseUrl()}/_soland/self/account/export`, {
+    const exportResp = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${aliceToken}` },
-      data: {},
     });
     expect(exportResp.status()).toBe(200);
     const bundle = await exportResp.json();

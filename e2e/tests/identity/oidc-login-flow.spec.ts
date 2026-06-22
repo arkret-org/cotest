@@ -2,7 +2,7 @@
 //
 // End-to-end regression net for the login chain brought up on 2026-06-16:
 // yougen Continue → coauth /authorize → password login → consent →
-// /auth/callback → session-grant issuance → introspection (holder proof) →
+// /auth/callback → session-grant issuance → self-path grant+DPoP →
 // signed-in app. One serial flow walks the whole account lifecycle:
 //
 //   1. new-user registration (self-contained, over coauth's registration API)

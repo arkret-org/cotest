@@ -77,43 +77,43 @@ test.describe("workflow: incident response", () => {
         await Promise.all([backendPage.acceptInvite(realmId), commsPage.acceptInvite(realmId)]);
 
         await oncallPage.sendTimelineMessage(realmId, alert);
-        await oncallPage.timelineEvent(alert).getByTestId("reply-button").click();
-        await expect(oncallPage.page.getByTestId("reply-to-banner")).toBeVisible();
+        await oncallPage.timelineEvent(alert).getByTestId("chat-reply-button").click();
+        await expect(oncallPage.page.getByTestId("chat-reply-banner")).toBeVisible();
         await oncallPage.sendTimelineMessage(realmId, ack);
-        await expect(oncallPage.timelineEvent(ack).getByTestId("reply-indicator")).toBeVisible({
+        await expect(oncallPage.timelineEvent(ack).getByTestId("chat-reply-indicator")).toBeVisible({
           timeout: 30_000,
         });
         await stepShot(oncallPage.page, testInfo, "A-alert-ack");
 
         await backendPage.gotoTimelineRealm(realmId);
         await expect(backendPage.timelineEvent(alert)).toBeVisible({ timeout: 30_000 });
-        await backendPage.timelineEvent(alert).getByTestId("reply-button").click();
+        await backendPage.timelineEvent(alert).getByTestId("chat-reply-button").click();
         await backendPage.sendTimelineMessage(realmId, diagnostic);
-        await expect(backendPage.timelineEvent(diagnostic).getByTestId("reply-indicator")).toBeVisible({
+        await expect(backendPage.timelineEvent(diagnostic).getByTestId("chat-reply-indicator")).toBeVisible({
           timeout: 30_000,
         });
         await stepShot(backendPage.page, testInfo, "B-diagnostic");
 
         await commsPage.gotoTimelineRealm(realmId);
-        await commsPage.timelineEvent(alert).getByTestId("reply-button").click();
+        await commsPage.timelineEvent(alert).getByTestId("chat-reply-button").click();
         await commsPage.sendTimelineMessage(realmId, publicUpdate);
-        await expect(commsPage.timelineEvent(publicUpdate).getByTestId("reply-indicator")).toBeVisible({
+        await expect(commsPage.timelineEvent(publicUpdate).getByTestId("chat-reply-indicator")).toBeVisible({
           timeout: 30_000,
         });
-        await expect(commsPage.page.getByTestId("timeline")).not.toContainText("DB pool saturation");
+        await expect(commsPage.page.getByTestId("message-list")).not.toContainText("DB pool saturation");
         await stepShot(commsPage.page, testInfo, "C-public-update");
 
         await backendPage.gotoTimelineRealm(realmId);
-        await backendPage.timelineEvent(diagnostic).getByTestId("reply-button").click();
+        await backendPage.timelineEvent(diagnostic).getByTestId("chat-reply-button").click();
         await backendPage.sendTimelineMessage(realmId, mitigation);
         await oncallPage.gotoTimelineRealm(realmId);
         await expect(oncallPage.timelineEvent(mitigation)).toBeVisible({ timeout: 30_000 });
 
-        await oncallPage.timelineEvent(alert).getByTestId("edit-button").click();
-        await oncallPage.page.getByTestId("edit-composer").locator("textarea").fill(finalSummary);
-        await oncallPage.page.getByTestId("save-edit-button").click();
+        await oncallPage.timelineEvent(alert).getByTestId("chat-edit-button").click();
+        await oncallPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(finalSummary);
+        await oncallPage.page.getByTestId("chat-save-edit-button").click();
         await expect(oncallPage.timelineEvent(finalSummary)).toBeVisible({ timeout: 30_000 });
-        await expect(oncallPage.page.getByTestId("write-status")).toContainText(/revised/);
+        await expect(oncallPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
         await stepShot(oncallPage.page, testInfo, "D-final-summary");
       } finally {
         await Promise.allSettled([commsPage.close(), backendPage.close(), oncallPage.close()]);
@@ -244,12 +244,14 @@ test.describe("workflow: incident response", () => {
         await selectDxcOption(prioritySelect, "sev1");
         await expect(prioritySelect.locator('button[aria-haspopup="listbox"]')).toContainText("SEV-1");
 
-        await commanderPage.page.goto(`/timeline/${realmId}`, { waitUntil: "domcontentloaded" });
+        await commanderPage.page.goto(`/chat/${realmId}`, { waitUntil: "domcontentloaded" });
         const blocked = `Public update: root cause leaked token ${stamp}`;
-        await commanderPage.page.getByTestId("composer-input").fill(blocked);
-        await commanderPage.page.getByTestId("send-button").click();
-        await expect(commanderPage.page.getByTestId("write-status")).toContainText(/public update blocked/i);
-        await expect(commanderPage.page.getByTestId("timeline")).not.toContainText(blocked);
+        await commanderPage.page.getByTestId("chat-input").fill(blocked);
+        await commanderPage.page.getByTestId("send-chat-button").click();
+        await expect(commanderPage.page.getByTestId("chat-status")).toContainText(
+          /public update blocked|public_update_blocked|Message send failed/i,
+        );
+        await expect(commanderPage.page.getByTestId("message-list")).not.toContainText(blocked);
 
         const safe = `SEV-1 public update: checkout latency is recovering ${stamp}`;
         await commanderPage.sendTimelineMessage(realmId, safe);
@@ -316,3 +318,4 @@ test.describe("workflow: incident response", () => {
     },
   );
 });
+

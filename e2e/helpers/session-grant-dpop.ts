@@ -170,53 +170,13 @@ function b64urlJson(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-/// `grant_jwt_hash` per coauth: `"sha256:<hex>"` of the grant JWT bytes
-/// (coauth: `session_grant.rs::session_grant_jwt_hash`).
-function grantJwtHash(grantJwt: string): string {
-  return `sha256:${createHash("sha256").update(grantJwt).digest("hex")}`;
-}
-
-/// The session-grant introspection holder proof soland forwards to coauth on a
-/// cache-miss `/_cokret/self/*` request. coauth verifies the JWS against the
-/// grant's `session_public_key` — which, for a debug-issued DPoP-bound grant,
-/// IS the DPoP device key — and checks `grant_id` / `grant_jwt_hash` /
-/// `audience` / `challenge` exactly (coauth:
-/// `session_grant.rs::verify_session_grant_introspection_proof`).
-///
-/// Returns the `{challenge, proofJwt}` pair carried in the
-/// `x-cokret-session-grant-challenge` / `x-cokret-session-grant-proof` headers.
-export function mintSessionGrantIntrospectionProof(args: {
-  deviceKey: DpopDeviceKey;
-  grantId: string;
-  grantJwt: string;
-  audience: string;
-}): { challenge: string; proofJwt: string } {
-  const challenge = `${Date.now()}-${args.grantId}`;
-  const now = Date.now();
-  const header = { typ: "JWT", alg: "EdDSA" };
-  const claims = {
-    type: "ck.session_grant.introspection_proof.v1",
-    grant_id: args.grantId,
-    grant_jwt_hash: grantJwtHash(args.grantJwt),
-    audience: args.audience,
-    challenge,
-    issued_at: new Date(now).toISOString(),
-    expires_at: new Date(now + 60_000).toISOString(),
-  };
-  const signingInput = `${b64urlJson(header)}.${b64urlJson(claims)}`;
-  const signature = sign(null, Buffer.from(signingInput, "utf8"), args.deviceKey.privateKey);
-  return { challenge, proofJwt: `${signingInput}.${b64urlNoPad(signature)}` };
-}
-
 /// Build the full header set for a real grant + DPoP request to a soland
 /// `/_cokret/self/*` (or `/root/`) endpoint: `Authorization: Bearer <grant>`, a
-/// request-bound `DPoP` proof, and the session-grant introspection holder proof
-/// headers. `deviceKey` MUST be the key the grant is bound to (`cnf.jkt`).
+/// request-bound `DPoP` proof. `deviceKey` MUST be the key the grant is bound
+/// to (`cnf.jkt`).
 export function selfPathGrantHeaders(args: {
   deviceKey: DpopDeviceKey;
-  grantId: string;
   grantJwt: string;
-  audience: string;
   method: string;
   url: string;
 }): Record<string, string> {
@@ -226,17 +186,9 @@ export function selfPathGrantHeaders(args: {
     url: args.url,
     grantJwt: args.grantJwt,
   });
-  const holder = mintSessionGrantIntrospectionProof({
-    deviceKey: args.deviceKey,
-    grantId: args.grantId,
-    grantJwt: args.grantJwt,
-    audience: args.audience,
-  });
   return {
     authorization: `Bearer ${args.grantJwt}`,
     dpop,
-    "x-cokret-session-grant-challenge": holder.challenge,
-    "x-cokret-session-grant-proof": holder.proofJwt,
   };
 }
 
