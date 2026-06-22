@@ -239,21 +239,39 @@ test.describe("workflow: incident response", () => {
           joinRule: "invite",
         });
 
+        await commanderPage.page.goto("/settings", { waitUntil: "domcontentloaded" });
+        const prioritySelect = commanderPage.page.getByTestId("settings-timeline-priority-select");
+        await selectDxcOption(prioritySelect, "sev1");
+        await expect(prioritySelect.locator('button[aria-haspopup="listbox"]')).toContainText("SEV-1");
+
         await commanderPage.page.goto(`/timeline/${realmId}`, { waitUntil: "domcontentloaded" });
-        await expect(commanderPage.page.getByTestId("incident-response-controls")).toBeVisible({
-          timeout: 120_000,
-        });
-        await selectDxcOption(commanderPage.page.getByTestId("incident-priority-select"), "sev1");
-        await expect(commanderPage.page.getByTestId("incident-priority-select")).toHaveValue("sev1");
         const blocked = `Public update: root cause leaked token ${stamp}`;
         await commanderPage.page.getByTestId("composer-input").fill(blocked);
         await commanderPage.page.getByTestId("send-button").click();
-        await expect(commanderPage.page.getByTestId("public-update-guard-status")).toContainText(/blocked/i);
         await expect(commanderPage.page.getByTestId("write-status")).toContainText(/public update blocked/i);
         await expect(commanderPage.page.getByTestId("timeline")).not.toContainText(blocked);
 
         const safe = `SEV-1 public update: checkout latency is recovering ${stamp}`;
         await commanderPage.sendTimelineMessage(realmId, safe);
+        await expect(commanderPage.timelineEvent(safe)).toBeVisible({ timeout: 30_000 });
+
+        const eventLog = await queryRealmEventsApi(request, commanderToken, realmId);
+        const events = Array.isArray(eventLog.events) ? eventLog.events : [];
+        const messageCreate = events.find((event) => {
+          if (!event || typeof event !== "object") {
+            return false;
+          }
+          const record = event as Record<string, unknown>;
+          return record.kind === "ck.message.create" && JSON.stringify(record.payload ?? {}).includes(safe);
+        }) as Record<string, unknown> | undefined;
+        expect(messageCreate).toBeTruthy();
+        const payload = messageCreate?.payload as Record<string, unknown>;
+        const content = payload.content as Record<string, unknown>;
+        const notification = content.notification as Record<string, unknown>;
+        expect(payload.priority).toBeUndefined();
+        expect(content.priority).toBe("critical");
+        expect(notification.priority).toBe("critical");
+        expect(notification.priority_override).toBe(true);
       } finally {
         await commanderPage.close();
       }
