@@ -16,6 +16,8 @@ pub const VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING: &str =
     "ck.vector.mls.governance_epoch_binding.v1";
 pub const VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP: &str =
     "ck.vector.moderation.franking_roundtrip.v1";
+pub const VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE: &str =
+    "ck.vector.moderation.evidence_package_minimal_disclosure.v1";
 pub const VECTOR_ID_MODERATION_APPEAL_ATOMICITY: &str = "ck.vector.moderation.appeal_atomicity.v1";
 pub const VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE: &str =
     "ck.vector.relation.reference_projection_indistinguishable.v1";
@@ -28,6 +30,7 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_FEDERATION_TIMING_BUCKET,
     VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING,
     VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP,
+    VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
     VECTOR_ID_MODERATION_APPEAL_ATOMICITY,
     VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
     VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY,
@@ -48,6 +51,10 @@ pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     run_moderation_franking_roundtrip_case(case(
         &fixture,
         VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP,
+    )?)?;
+    run_moderation_evidence_package_minimal_disclosure_case(case(
+        &fixture,
+        VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
     )?)?;
     run_moderation_appeal_atomicity_case(case(&fixture, VECTOR_ID_MODERATION_APPEAL_ATOMICITY)?)?;
     run_relation_reference_projection_indistinguishable_case(case(
@@ -87,6 +94,14 @@ pub fn run_mls_governance_epoch_binding_vector() -> Result<()> {
 pub fn run_moderation_franking_roundtrip_vector() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
     run_moderation_franking_roundtrip_case(case(&fixture, VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP)?)
+}
+
+pub fn run_moderation_evidence_package_minimal_disclosure_vector() -> Result<()> {
+    let fixture = final_conformance_closure_fixture()?;
+    run_moderation_evidence_package_minimal_disclosure_case(case(
+        &fixture,
+        VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
+    )?)
 }
 
 pub fn run_moderation_appeal_atomicity_vector() -> Result<()> {
@@ -562,6 +577,73 @@ fn evaluate_moderation_franking_roundtrip(scenario: &Value) -> Result<Value> {
     }
     Ok(json!({
         "decision": "verifiable_delivery_proof",
+        "governance_key_released": false,
+    }))
+}
+
+fn run_moderation_evidence_package_minimal_disclosure_case(case: &Value) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for scenario in required_array(case, "cases")? {
+        let name = required_str(scenario, "name")?;
+        seen.insert(name.to_owned());
+        let observed = evaluate_moderation_evidence_package(scenario)?;
+        assert_expected_subset(name, expected(scenario)?, &observed)?;
+        record_step(
+            VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
+            name,
+            scenario,
+            &observed,
+        );
+    }
+    for required in [
+        "targeted_encrypted_package_valid",
+        "history_key_release_rejected",
+        "unrelated_message_plaintext_rejected",
+        "recipient_binding_missing_rejected",
+    ] {
+        if !seen.contains(required) {
+            bail!("moderation evidence-package vector missing case {required}");
+        }
+    }
+    Ok(())
+}
+
+fn evaluate_moderation_evidence_package(scenario: &Value) -> Result<Value> {
+    let target_refs = string_set(scenario, "target_refs")?;
+    if target_refs.is_empty() {
+        return Ok(json!({"decision": "reject", "reason": "schema_violation"}));
+    }
+    if required_str(scenario, "recipient_public_key_ref")? != required_str(scenario, "encrypted_to")?
+    {
+        return Ok(json!({"decision": "reject", "reason": "evidence_recipient_mismatch"}));
+    }
+    if !required_bool(scenario, "reporter_signature_present")? {
+        return Ok(json!({"decision": "reject", "reason": "schema_violation"}));
+    }
+
+    let forbidden_material = string_set(scenario, "forbidden_material")?;
+    if !forbidden_material.is_empty() {
+        return Ok(json!({"decision": "reject", "reason": "schema_violation"}));
+    }
+
+    let plaintext_event_refs = string_set(scenario, "plaintext_event_refs")?;
+    if !plaintext_event_refs.is_subset(&target_refs) {
+        return Ok(json!({
+            "decision": "reject",
+            "reason": "minimal_disclosure_violation",
+        }));
+    }
+
+    let included_material = string_set(scenario, "included_material")?;
+    if !(included_material.contains("encrypted_envelope")
+        && included_material.contains("franking_proof"))
+    {
+        return Ok(json!({"decision": "reject", "reason": "schema_violation"}));
+    }
+
+    Ok(json!({
+        "decision": "accept",
+        "minimal_disclosure": true,
         "governance_key_released": false,
     }))
 }

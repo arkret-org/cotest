@@ -1,10 +1,247 @@
-//! MIMI component and read-receipt-policy wire-model conformance vectors.
+//! MIMI interop, component, and read-receipt-policy wire-model conformance vectors.
+
+use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use super::{emit_vector, load_local_fixture};
-use crate::conformance::{required_str, validate_profile};
+use crate::conformance::{load_fixture_value, required_str, validate_profile};
+
+const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
+    "ck.vector.mimi.provider_directory_draft_pinning.v1",
+    "ck.vector.mimi.room_binding_projection.v1",
+    "ck.vector.mimi.keypackage_claim_lifecycle.v1",
+    "ck.vector.mimi.content_roundtrip.v1",
+    "ck.vector.mimi.identifier_query_privacy.v1",
+    "ck.vector.mimi.consent_isolation.v1",
+    "ck.vector.mimi.proxy_download_policy.v1",
+    "ck.vector.mimi.unsupported_draft_fail_closed.v1",
+];
+
+/// MIMI Provider Facade artifact vectors.
+pub fn run_mimi_interop_fixture_suite() -> Result<()> {
+    let fixture = load_fixture_value("mimi-interop-fixture.json")?;
+    validate_profile(&fixture, "ck.profile.mimi_interop.v1")?;
+    if required_str(&fixture, "suite")? != "mimi_interop" {
+        bail!("mimi interop fixture suite drifted");
+    }
+    if required_str(&fixture, "runner")? != "cotest::conformance::mimi_interop" {
+        bail!("mimi interop fixture runner drifted");
+    }
+
+    let covers = string_set(&fixture, "covers_vectors")?;
+    for vector_id in MIMI_INTEROP_VECTOR_IDS {
+        if !covers.contains(vector_id) {
+            bail!("mimi interop fixture missing covers_vectors entry {vector_id}");
+        }
+    }
+
+    let drafts = required_field(&fixture, "drafts")?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("mimi interop fixture missing cases[]"))?;
+    let mut seen = BTreeSet::new();
+    for case in cases {
+        let vector_id = required_str(case, "vector_id")?;
+        let name = required_str(case, "name")?;
+        seen.insert(vector_id.to_owned());
+        match vector_id {
+            "ck.vector.mimi.provider_directory_draft_pinning.v1" => {
+                validate_provider_directory_case(case, drafts)?
+            }
+            "ck.vector.mimi.room_binding_projection.v1" => validate_room_binding_case(case)?,
+            "ck.vector.mimi.keypackage_claim_lifecycle.v1" => {
+                validate_keypackage_claim_case(case)?
+            }
+            "ck.vector.mimi.content_roundtrip.v1" => validate_content_roundtrip_case(case)?,
+            "ck.vector.mimi.identifier_query_privacy.v1" => validate_identifier_query_case(case)?,
+            "ck.vector.mimi.consent_isolation.v1" => validate_consent_isolation_case(case)?,
+            "ck.vector.mimi.proxy_download_policy.v1" => validate_proxy_download_case(case)?,
+            "ck.vector.mimi.unsupported_draft_fail_closed.v1" => {
+                validate_unsupported_draft_case(case, drafts)?
+            }
+            other => bail!("unexpected MIMI interop vector id {other}"),
+        }
+        emit_vector(
+            "mimi_interop.case",
+            case,
+            json!({"vector_id": vector_id, "name": name}),
+        );
+    }
+    for vector_id in MIMI_INTEROP_VECTOR_IDS {
+        if !seen.contains(*vector_id) {
+            bail!("mimi interop fixture missing asserted case {vector_id}");
+        }
+    }
+    Ok(())
+}
+
+fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "service_type")? != "mimi_provider_facade" {
+        bail!("provider directory must advertise mimi_provider_facade service_type");
+    }
+    let supported = string_set(input, "supported_profiles")?;
+    if !supported.contains("ck.profile.mimi_interop.v1") {
+        bail!("provider directory must advertise ck.profile.mimi_interop.v1");
+    }
+    let mimi = required_field(input, "mimi")?;
+    for (field, draft_field) in [
+        ("protocol", "protocol_draft"),
+        ("content", "content_draft"),
+        ("room_policy", "room_policy_draft"),
+        ("identifier", "identifier_draft"),
+    ] {
+        if required_str(mimi, draft_field)? != required_str(drafts, field)? {
+            bail!("provider directory draft field {draft_field} drifted");
+        }
+    }
+    let features = string_set(mimi, "features")?;
+    for required in [
+        "key_material",
+        "submit_message",
+        "group_info",
+        "consent",
+        "identifier_query",
+        "report_abuse",
+        "proxy_download",
+    ] {
+        if !features.contains(required) {
+            bail!("provider directory missing feature {required}");
+        }
+    }
+    require_expected(case, "accepted_only_when_profile_and_pinned_drafts_match")
+}
+
+fn validate_room_binding_case(case: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "kind")? != "ck.mimi.room_binding" {
+        bail!("room binding case must use ck.mimi.room_binding");
+    }
+    let payload = required_field(input, "payload")?;
+    if required_str(payload, "profile")? != "ck.profile.mimi_interop.v1" {
+        bail!("room binding profile drifted");
+    }
+    if required_str(payload, "status")? != "accepted" {
+        bail!("room binding vector must pin accepted status");
+    }
+    if !required_str(payload, "mimi_room_uri")?.starts_with("mimi://") {
+        bail!("room binding must use a MIMI room URI");
+    }
+    let scope = required_field(payload, "binding_scope")?;
+    if !required_str(scope, "realm_id")?.starts_with("ck:realm:") {
+        bail!("room binding scope must include realm_id");
+    }
+    require_expected(case, "mimi_room_is_projection_not_canonical_truth")
+}
+
+fn validate_keypackage_claim_case(case: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "operation_id")? != "ck.open.mimi.exchange.request_key_material" {
+        bail!("keypackage vector operation id drifted");
+    }
+    let response = required_field(input, "response")?;
+    for field in ["claim_id", "keypackage_ref", "device_binding", "expires_at"] {
+        let _ = required_str(response, field)?;
+    }
+    if response.get("single_use").and_then(Value::as_bool) != Some(true) {
+        bail!("keypackage response must be single_use");
+    }
+    let after_welcome = required_field(input, "after_welcome")?;
+    if required_str(after_welcome, "claim_state")? != "consumed" {
+        bail!("keypackage claim must be consumed after Welcome");
+    }
+    let failure_shape = required_field(input, "failure_shape")?;
+    for field in ["policy_denied", "no_available_device", "target_not_visible"] {
+        if required_str(failure_shape, field)? != "not_found_equivalent" {
+            bail!("keypackage failure shape {field} must be enumeration-safe");
+        }
+    }
+    require_expected(
+        case,
+        "single_use_keypackage_claim_consumed_after_welcome_and_failure_shape_is_enumeration_safe",
+    )
+}
+
+fn validate_content_roundtrip_case(case: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "target_format")? != "ck.message.create" {
+        bail!("content roundtrip target format drifted");
+    }
+    if !required_str(input, "source_format")?.contains("GFM-MIMI") {
+        bail!("content roundtrip must pin the MIMI markdown variant");
+    }
+    let digest = required_str(input, "original_envelope_digest")?;
+    if !digest.starts_with("sha256:") || digest.len() != "sha256:".len() + 64 {
+        bail!("content roundtrip must carry a sha256 original envelope digest");
+    }
+    require_expected(case, "mapped_event_preserves_original_envelope_digest_and_mimi_message_id")
+}
+
+fn validate_identifier_query_case(case: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "privacy_mode")? != "private_contact_discovery" {
+        bail!("identifier query must use private contact discovery");
+    }
+    require_expected(
+        case,
+        "returns_psi_match_bits_and_invite_handoff_without_exposing_contact_graph",
+    )
+}
+
+fn validate_consent_isolation_case(case: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "consent_state")? != "accepted" {
+        bail!("consent isolation vector must start from accepted consent");
+    }
+    require_expected(case, "consent_does_not_grant_space_read_or_write_capability")
+}
+
+fn validate_proxy_download_case(case: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "asset_privacy_policy")? != "provider_proxy" {
+        bail!("proxy download vector must pin provider_proxy asset policy");
+    }
+    require_expected(case, "direct_object_store_url_is_not_returned")
+}
+
+fn validate_unsupported_draft_case(case: &Value, drafts: &Value) -> Result<()> {
+    let input = required_field(case, "input")?;
+    if required_str(input, "protocol_draft")? == required_str(drafts, "protocol")? {
+        bail!("unsupported draft vector must not use the pinned protocol draft");
+    }
+    require_expected(case, "reject_or_negotiate_new_profile_without_mutating_reducer_profile")
+}
+
+fn require_expected(case: &Value, expected: &str) -> Result<()> {
+    let actual = required_str(case, "expected")?;
+    if actual != expected {
+        bail!("MIMI interop expected outcome drifted: expected {expected}, got {actual}");
+    }
+    Ok(())
+}
+
+fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
+    value
+        .get(field)
+        .ok_or_else(|| anyhow!("missing object field {field}"))
+}
+
+fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
+    Ok(value
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing array field {field}"))?
+        .iter()
+        .map(|entry| {
+            entry
+                .as_str()
+                .ok_or_else(|| anyhow!("{field} entry must be string"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?)
+}
 
 /// W8 — MIMI Room Policy Component round-trip matrix.
 ///
@@ -155,6 +392,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     let mut covered_required = false;
     let mut covered_disabled = false;
     let mut covered_visibility_private = false;
+    let mut covered_display_false_local_only = false;
     let mut covered_branch_tighten = false;
     let mut covered_branch_loosen_blocked = false;
     let mut covered_strand_overrides_realm = false;
@@ -207,10 +445,42 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                     .ok_or_else(|| {
                         anyhow!("vector {name} parent missing scope_overrides_allowed")
                     })?;
-                let composed_disclosure =
-                    tighten_disclosure(parent_disclosure, branch_disclosure, overrides_allowed)?;
-                let composed_visibility =
-                    tighten_visibility(parent_visibility, branch_visibility, overrides_allowed)?;
+                let child_rejection = child_policy_rejection(
+                    parent_disclosure,
+                    branch_disclosure,
+                    parent_visibility,
+                    branch_visibility,
+                    overrides_allowed,
+                    parent
+                        .get("allow_child_privacy_tightening_against_required")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                )?;
+                if let Some(rejection) = child_rejection {
+                    let declared = expected
+                        .get("reducer_action")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!("vector {name} rejected child policy missing reducer_action")
+                        })?;
+                    if declared != rejection {
+                        bail!(
+                            "vector {name} reducer_action: expected {declared}, computed {rejection}"
+                        );
+                    }
+                } else if expected.get("reducer_action").is_some() {
+                    bail!("vector {name} declared reducer_action but child policy is valid");
+                }
+                let composed_disclosure = if child_rejection.is_some() {
+                    parent_disclosure.to_owned()
+                } else {
+                    branch_disclosure.to_owned()
+                };
+                let composed_visibility = if child_rejection.is_some() {
+                    parent_visibility.to_owned()
+                } else {
+                    branch_visibility.to_owned()
+                };
                 if let Some(declared) = expected.get("composed_disclosure").and_then(Value::as_str)
                     && declared != composed_disclosure
                 {
@@ -232,6 +502,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
 
         // Resolve the user preference for the scope_lookup target.
         let pref_send = resolve_pref_send(vector, prefs)?;
+        let pref_display = resolve_pref_display(vector, prefs)?;
 
         // Compute decision per spec §2.4-§2.5 rules.
         let (decision, is_send, is_locked) = match eff_disclosure.as_str() {
@@ -265,10 +536,16 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
         if expected_is_locked != is_locked {
             bail!("vector {name} is_locked: expected {expected_is_locked}, computed {is_locked}");
         }
+        if let Some(expected_display) = expected.get("is_display").and_then(Value::as_bool)
+            && expected_display != pref_display
+        {
+            bail!("vector {name} is_display: expected {expected_display}, computed {pref_display}");
+        }
 
         // Visibility-private fanout MUST be explicitly recorded so that
         // Sync Service implementations have a vector to check against.
         if eff_visibility == "private"
+            && eff_disclosure != "disabled"
             && expected.get("sync_service_fanout").and_then(Value::as_str) != Some("sender_only")
         {
             bail!(
@@ -288,6 +565,18 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
             "disclosure_required_locks_client_send" => covered_required = true,
             "disclosure_disabled_drops_receipt_at_sync_service" => covered_disabled = true,
             "visibility_private_fanout_only_to_sender" => covered_visibility_private = true,
+            "display_false_hides_local_indicator_only" => {
+                covered_display_false_local_only = true;
+                if expected.get("is_display").and_then(Value::as_bool) != Some(false) {
+                    bail!("vector {name} must record expected.is_display=false");
+                }
+                if expected.get("sync_service_fanout").and_then(Value::as_str) != Some("members") {
+                    bail!("vector {name} must keep Sync Service fanout unchanged");
+                }
+                if expected.get("unread_action").and_then(Value::as_str) != Some("unchanged") {
+                    bail!("vector {name} must keep unread accounting unchanged");
+                }
+            }
             "branch_overrides_tighten_only" => covered_branch_tighten = true,
             "branch_overrides_loosen_rejected_when_not_allowed" => {
                 covered_branch_loosen_blocked = true
@@ -306,6 +595,7 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
                 "is_locked": is_locked,
                 "effective_disclosure": eff_disclosure,
                 "effective_visibility": eff_visibility,
+                "is_display": pref_display,
             }),
         );
     }
@@ -313,52 +603,68 @@ pub fn run_read_receipt_policy_fixture_suite() -> Result<()> {
     if !(covered_required
         && covered_disabled
         && covered_visibility_private
+        && covered_display_false_local_only
         && covered_branch_tighten
         && covered_branch_loosen_blocked
         && covered_strand_overrides_realm
         && covered_realm_overrides_default)
     {
         bail!(
-            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / branch-tighten / branch-loosen-blocked / strand-overrides-realm / realm-overrides-default"
+            "read_receipt_policy fixture must cover required-lock / disabled-drop / private-fanout / display-false-local-only / branch-tighten / branch-loosen-blocked / strand-overrides-realm / realm-overrides-default"
         );
     }
 
     Ok(())
 }
-fn tighten_disclosure(parent: &str, branch: &str, overrides_allowed: bool) -> Result<String> {
-    let valid = ["required", "optional", "disabled"];
-    if !valid.contains(&parent) {
-        bail!("invalid parent disclosure {parent}");
+fn child_policy_rejection(
+    parent_disclosure: &str,
+    child_disclosure: &str,
+    parent_visibility: &str,
+    child_visibility: &str,
+    overrides_allowed: bool,
+    allow_required_privacy_tightening: bool,
+) -> Result<Option<&'static str>> {
+    validate_disclosure(parent_disclosure)?;
+    validate_disclosure(child_disclosure)?;
+    let parent_visibility_rank = visibility_rank(parent_visibility)?;
+    let child_visibility_rank = visibility_rank(child_visibility)?;
+    if !overrides_allowed
+        && (parent_disclosure != child_disclosure || parent_visibility != child_visibility)
+    {
+        return Ok(Some("reject_loosening_strand_scope_move"));
     }
-    if !valid.contains(&branch) {
-        bail!("invalid branch disclosure {branch}");
-    }
-    let is_tighter = matches!(
-        (parent, branch),
-        ("optional", "required") | ("optional", "disabled")
-    );
-    Ok(if is_tighter || overrides_allowed {
-        branch.to_owned()
-    } else {
-        parent.to_owned()
-    })
-}
-fn tighten_visibility(parent: &str, branch: &str, overrides_allowed: bool) -> Result<String> {
-    let rank = |v: &str| -> Result<i32> {
-        match v {
-            "public" => Ok(2),
-            "members" => Ok(1),
-            "private" => Ok(0),
-            other => bail!("invalid visibility {other}"),
+    match (parent_disclosure, child_disclosure) {
+        ("required", "required")
+        | ("optional", "optional")
+        | ("optional", "disabled")
+        | ("disabled", "disabled") => {}
+        ("required", "optional" | "disabled") if allow_required_privacy_tightening => {}
+        ("required", "optional" | "disabled") => {
+            return Ok(Some("read_receipt_compliance_floor_violated"));
         }
-    };
-    let parent_rank = rank(parent)?;
-    let branch_rank = rank(branch)?;
-    Ok(if branch_rank <= parent_rank || overrides_allowed {
-        branch.to_owned()
-    } else {
-        parent.to_owned()
-    })
+        _ => return Ok(Some("reject_loosening_strand_scope_move")),
+    }
+    if child_visibility_rank < parent_visibility_rank {
+        return Ok(Some("reject_loosening_strand_scope_move"));
+    }
+    Ok(None)
+}
+
+fn validate_disclosure(value: &str) -> Result<()> {
+    let valid = ["required", "optional", "disabled"];
+    if !valid.contains(&value) {
+        bail!("invalid disclosure {value}");
+    }
+    Ok(())
+}
+
+fn visibility_rank(value: &str) -> Result<i32> {
+    match value {
+        "public" => Ok(0),
+        "members" => Ok(1),
+        "private" => Ok(2),
+        other => bail!("invalid visibility {other}"),
+    }
 }
 fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
     // Resolution order per spec discovery/client-preferences.md §3.8:
@@ -382,6 +688,32 @@ fn resolve_pref_send(vector: &Value, prefs: &Value) -> Result<bool> {
     }
     Ok(prefs
         .pointer("/default/send")
+        .and_then(Value::as_bool)
+        .unwrap_or(true))
+}
+
+fn resolve_pref_display(vector: &Value, prefs: &Value) -> Result<bool> {
+    // Resolution order per spec discovery/client-preferences.md Â§3.8:
+    // strand -> realm -> default. Display only gates local rendering.
+    let lookup = vector.get("scope_lookup");
+    if let Some(lookup) = lookup
+        && let Some(strand_id) = lookup.get("strand_id").and_then(Value::as_str)
+        && let Some(strands) = prefs.get("strands").and_then(Value::as_object)
+        && let Some(entry) = strands.get(strand_id)
+        && let Some(display) = entry.get("display").and_then(Value::as_bool)
+    {
+        return Ok(display);
+    }
+    if let Some(lookup) = lookup
+        && let Some(realm_id) = lookup.get("realm_id").and_then(Value::as_str)
+        && let Some(realms) = prefs.get("realms").and_then(Value::as_object)
+        && let Some(entry) = realms.get(realm_id)
+        && let Some(display) = entry.get("display").and_then(Value::as_bool)
+    {
+        return Ok(display);
+    }
+    Ok(prefs
+        .pointer("/default/display")
         .and_then(Value::as_bool)
         .unwrap_or(true))
 }

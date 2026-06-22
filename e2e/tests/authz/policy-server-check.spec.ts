@@ -47,6 +47,36 @@ test.describe("policy server check", () => {
     request,
   }) => {
     const stamp = Date.now();
+    const describeResp = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+    const describe = await expectJsonOk<Record<string, unknown>>(
+      describeResp,
+      "server describe authz self surface",
+    );
+    expect(describe.supported_operations).toEqual(
+      expect.arrayContaining([
+        "ck.self.authz.query.check",
+        "ck.self.authz.grants.query.effective",
+        "ck.self.authz.invites.query.list",
+        "ck.self.policy.query.check",
+      ]),
+    );
+    const limits = describe.limits as Record<string, unknown>;
+    const authzPolicy = limits.authz_policy as Record<string, unknown>;
+    expect(authzPolicy.self_surface_status).toBe("standard_self_supported");
+    const authzCheck = authzPolicy.authz_check as Record<string, unknown>;
+    expect(authzCheck.path).toBe("/_cokret/self/authz/check");
+    expect(authzCheck.operation_specific_error_codes).toEqual(
+      expect.arrayContaining(["policy_unavailable"]),
+    );
+    expect(authzCheck.usable_as_event_auth_context).toBe(false);
+    const effectiveGrants = authzPolicy.effective_grants as Record<string, unknown>;
+    expect(effectiveGrants.path).toBe("/_cokret/self/authz/effective-grants");
+    const invites = authzPolicy.invites as Record<string, unknown>;
+    expect(invites.path).toBe("/_cokret/self/authz/invites");
+    expect(invites.response_schema_ref).toBe(
+      "schemas/authz-operations.schema.json#/$defs/authz_invite_list",
+    );
+
     const alice = uniqueUser(`s30-policy-config-alice-${stamp}`);
     const bob = uniqueUser(`s30-policy-config-bob-${stamp}`);
     await Promise.all([

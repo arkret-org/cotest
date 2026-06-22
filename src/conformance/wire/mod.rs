@@ -60,7 +60,10 @@ pub use lattice::{
     run_membership_fsm_fixture_suite, run_mls_move_covered_frontier_fixture_suite,
     run_state_resolution_quarantine_fixture_suite,
 };
-pub use mimi::{run_mimi_components_fixture_suite, run_read_receipt_policy_fixture_suite};
+pub use mimi::{
+    run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
+    run_read_receipt_policy_fixture_suite,
+};
 pub use multisig::{
     run_multi_admin_distinct_approver_gate_check, run_production_signing_fixture_suite,
     run_threshold_multisig_fixture_suite,

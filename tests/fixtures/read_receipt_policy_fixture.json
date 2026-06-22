@@ -60,17 +60,38 @@
       }
     },
     {
+      "name": "display_false_hides_local_indicator_only",
+      "comment": "When display=false, the client hides other members' read-receipt indicator locally only. The preference MUST NOT change whether this actor sends receipts, Sync Service fanout, unread accounting, or private read cursors.",
+      "policy": {
+        "scope": "realm",
+        "disclosure": "optional",
+        "visibility": "members",
+        "scope_overrides_allowed": true
+      },
+      "preferences": {
+        "default": { "send": true, "display": false }
+      },
+      "expected": {
+        "decision": "send",
+        "is_send": true,
+        "is_locked": false,
+        "is_display": false,
+        "sync_service_fanout": "members",
+        "unread_action": "unchanged"
+      }
+    },
+    {
       "name": "branch_overrides_tighten_only",
-      "comment": "A Strand/Circle scope (upgraded discussion timeline, Strand.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy without scope_overrides_allowed=true. Optional → Required at the Strand/Circle scope is a tightening (forces send), Members → Private is also a tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.strand.track.read_receipt_policy) — the Strand/Circle-scope surface is the only legitimate scope for a per-discussion override.",
+      "comment": "A Strand/Circle scope (upgraded discussion timeline, Strand.scope_circle_id binding) MAY tighten the parent Realm's read-receipt policy only when scope_overrides_allowed=true. Optional → Disabled at the Strand/Circle scope is a privacy tightening, Members → Private is also a visibility tightening (smaller audience). Note: track-level overrides are removed in v1 (see removed-event-kinds.json: cx.strand.track.read_receipt_policy) — the Strand/Circle-scope surface is the only legitimate scope for a per-discussion override.",
       "policy": {
         "scope": "strand",
         "parent": {
           "disclosure": "optional",
           "visibility": "members",
-          "scope_overrides_allowed": false
+          "scope_overrides_allowed": true
         },
         "child_scope": {
-          "disclosure": "required",
+          "disclosure": "disabled",
           "visibility": "private",
           "scope_overrides_allowed": false
         }
@@ -79,12 +100,12 @@
         "default": { "send": false }
       },
       "expected": {
-        "composed_disclosure": "required",
+        "composed_disclosure": "disabled",
         "composed_visibility": "private",
-        "decision": "forced_send",
-        "is_send": true,
+        "decision": "forced_skip",
+        "is_send": false,
         "is_locked": true,
-        "sync_service_fanout": "sender_only"
+        "sync_service_action": "drop_with_policy_violation"
       }
     },
     {

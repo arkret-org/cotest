@@ -11,9 +11,9 @@
 // (`coauth/crates/backend/src/handlers/cokret.rs::server_describe`) already serve
 // `GET /_cokret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase B (error envelope) is also live on
-// soland. Phases C (pagination cursor), D (idempotency key) and E
-// (unsupported_feature fail-closed) stay pinned via test.fixme until the
-// matching wire paths are tightened end-to-end.
+// soland. Phase E (unsupported_feature fail-closed) is live; Phases C
+// (pagination cursor) and D (idempotency key) stay pinned via test.fixme until
+// the matching wire paths are tightened end-to-end.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
 // run under joint-smoke. The untagged service-surface block carries Phase B plus the
@@ -21,6 +21,7 @@
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -295,35 +296,53 @@ test.describe("service surface contract — error envelope, pagination, idempote
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#sync-service-surface-contract-gap
-    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
-    // @expected-live-by: 2026Q3
+  test(
     "Phase E: event requiring an undeclared feature is rejected with unsupported_feature (fail-closed)",
-    async () => {
+    async ({ request }) => {
       // spec: api-conventions.md §5.1 (unsupported_feature is reserved for
       //         Event.requirements.features[] / requirements.critical_extensions[]
-      //         pointing at a feature this implementation has NOT advertised;
-      //         MUST NOT be substituted with unsupported_event_kind or
-      //         generic schema_violation),
+      //         pointing at a feature this implementation has NOT advertised),
       //       service-surface.md §2.4 (services must publish supported_features).
-      //
-      // 1) Pull soland's describe (re-use Phase A); compute pickFeature =
-      //    a feature id that is in NEITHER supported_features NOR implemented_features
-      //    (e.g. "ck.feature.mimi_room_passthrough.v1" on default dev soland).
-      // 2) POST /_cokret/self/events with envelope:
-      //      { ..., requirements: { features: [pickFeature], critical_extensions: [] }, ... }
-      // 3) Assert: status 4xx (likely 422 or 400),
-      //            error.code === "unsupported_feature",
-      //            error.code !== "unsupported_event_kind",
-      //            error.code !== "schema_violation".
-      // 4) Verify the event did NOT land: poll frontier / events list and confirm
-      //    no event with that envelope id is observable.
-      //
-      // Blocked on: soland's envelope validator currently surfaces feature gaps
-      // through a mix of codes (schema_violation / capability_denied); §5.1
-      // demands the specific `unsupported_feature` code. Pin until validator
-      // emits the canonical code on the features[] gap.
+      const describe = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+      expect(describe.status()).toBe(200);
+      const description = await describe.json();
+      const declared = new Set<string>([
+        ...((description.supported_features ?? []) as string[]),
+        ...((description.implemented_features ?? []) as string[]),
+        ...((description.experimental_features ?? []) as string[]),
+      ]);
+      const undeclaredFeature = "ck.feature.mimi_room_passthrough.v1";
+      expect(declared.has(undeclaredFeature), "fixture feature must be undeclared").toBe(false);
+
+      const alice = uniqueUser("ssc-phase-e");
+      await ensureRegistered(request, alice);
+      const token = await issueDevSession(request, alice);
+      const eventId = `ck:event:01904100-0000-7000-8000-${Date.now()
+        .toString()
+        .slice(-12)
+        .padStart(12, "0")}`;
+      const envelope = signedEventEnvelope({
+        actorDid: alice.did,
+        eventId,
+        realmId: "ck:realm:01904100-0000-7000-8000-000000001101",
+        kind: "ck.message.create",
+        payload: {
+          strand_id: "ck:strand:01904100-0000-7000-8000-000000001101",
+          track_name: "discussion",
+          content: { kind: "ck.content.text", body: "must not accept unknown feature" },
+        },
+      });
+      (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
+
+      const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: { authorization: `Bearer ${token}` },
+        data: envelope,
+      });
+      expect(resp.status()).toBeGreaterThanOrEqual(400);
+      const body = await resp.json();
+      expect(wireErrCode(body)).toBe("unsupported_feature");
+      expect(JSON.stringify(body)).not.toContain('"accepted"');
+      expect(JSON.stringify(body)).not.toContain(eventId);
     },
   );
 });
