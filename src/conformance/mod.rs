@@ -115,8 +115,7 @@ pub use capability::{
 };
 pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
 pub use cursor_vectors::{
-    ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector,
-    run_cursor_opaque_stateless_profile_vector, run_cursor_vector_suite,
+    ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector, run_cursor_vector_suite,
 };
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,

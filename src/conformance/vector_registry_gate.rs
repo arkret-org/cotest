@@ -175,7 +175,7 @@ pub fn validate_vector_registry_gate_report_with_mode(
 fn vector_registry_gate_mode_from_env() -> Result<VectorRegistryGateMode> {
     let value = match std::env::var(STRICT_GATE_ENV) {
         Ok(value) => value,
-        Err(std::env::VarError::NotPresent) => return Ok(VectorRegistryGateMode::Lenient),
+        Err(std::env::VarError::NotPresent) => return Ok(VectorRegistryGateMode::Strict),
         Err(std::env::VarError::NotUnicode(_)) => {
             bail!("{STRICT_GATE_ENV} must be valid UTF-8")
         }

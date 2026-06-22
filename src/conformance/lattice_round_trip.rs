@@ -728,7 +728,7 @@ fn notary_cell_single_did_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("01");
     let value = json!({
-        "kind": "single_did",
+        "type": "single_did",
         "did": "did:web:hub.example",
     });
     let ops = vec![SealedOp::new(move_id("a1"), op_set(value))];
@@ -743,7 +743,7 @@ fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("02");
     let value = json!({
-        "kind": "threshold",
+        "type": "threshold",
         "k": 2,
         "n": 3,
         "members": [
@@ -764,7 +764,7 @@ fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("03");
     let value = json!({
-        "kind": "open_set",
+        "type": "open_set",
         "members": [
             "did:web:peer1.example",
             "did:web:peer2.example"
@@ -782,7 +782,7 @@ fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("04");
     let value = json!({
-        "kind": "mixed",
+        "type": "mixed",
         "primary": "did:web:hub.example",
         "recovery_members": [
             "did:web:recovery1.example",
@@ -807,14 +807,14 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
         SealedOp::new(
             move_id("a5"),
             op_set(json!({
-                "kind": "single_did",
+                "type": "single_did",
                 "did": "did:web:hub-a.example",
             })),
         ),
         SealedOp::new(
             move_id("a6"),
             op_set(json!({
-                "kind": "single_did",
+                "type": "single_did",
                 "did": "did:web:hub-b.example",
             })),
         ),
