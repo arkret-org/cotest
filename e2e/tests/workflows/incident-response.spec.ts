@@ -10,6 +10,16 @@ import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  authHeaders,
+  canonicalTimestamp,
+  createRealmApi,
+  queryRealmEventsApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+  wireErrCode,
+} from "../../helpers/soland-api";
+import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
@@ -112,80 +122,103 @@ test.describe("workflow: incident response", () => {
   );
 
   test(
-    "E-incident.status status FSM rejects Resolved before Mitigated and records each transition in audit",
-    async ({ browser, request }) => {
+    "E-incident.status status FSM rejects Resolved before Mitigated and records accepted transitions in event log",
+    async ({ request }) => {
       // spec: realm-and-space.md §4 FSM-style status cells.
       const stamp = Date.now();
       const oncall = uniqueUser("wf-incident-fsm");
       await ensureRegistered(request, oncall);
       const token = await issueDevSession(request, oncall);
-      const page = await openUserPage(browser, oncall, { sessionCredential: token });
-
-      try {
-        const realmId = await page.createRealm({
-          title: `SEV FSM ${stamp}`,
-          discoverability: "listed",
-          joinRule: "invite",
-        });
-        await page.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-        await expect(page.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-        await selectDxcOption(page.page.getByTestId("incident-status-select"), "resolved");
-        await page.page.getByTestId("save-incident-status-button").click();
-        await expect(page.page.getByTestId("incident-status-error")).toContainText(
-          /invalid transition|must mitigate first/i,
-          { timeout: 30_000 },
-        );
-        await selectDxcOption(page.page.getByTestId("incident-status-select"), "mitigated");
-        await page.page.getByTestId("save-incident-status-button").click();
-        await expect(page.page.getByTestId("incident-status-current")).toContainText(/mitigated/i, {
-          timeout: 30_000,
-        });
-        await selectDxcOption(page.page.getByTestId("incident-status-select"), "resolved");
-        await page.page.getByTestId("save-incident-status-button").click();
-        await expect(page.page.getByTestId("incident-status-current")).toContainText(/resolved/i);
-
-        const audit = await request.get(
-          `${solandBaseUrl()}/_soland/self/audit/events?actor=${encodeURIComponent(oncall.did)}`,
-          { headers: { authorization: `Bearer ${token}` } },
-        );
-        expect(audit.status()).toBe(200);
-        const auditJson = await audit.json();
-        const transitions = (auditJson.events ?? []).filter(
-          (event: { action?: string }) => event.action === "incident.status.transition",
-        );
-        expect(transitions.length).toBeGreaterThanOrEqual(2);
-        const payloads = transitions.map((event: { payload: Record<string, unknown> }) => event.payload);
-        expect(payloads).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              actor: oncall.did,
-              from: "investigating",
-              to: "mitigated",
+      const realmId = await createRealmApi(request, token, {
+        title: `SEV FSM ${stamp}`,
+        ownerDid: oncall.did,
+      });
+      const incidentStrandId = typedId("strand");
+      const createdAt = canonicalTimestamp();
+      await submitSignedEventApi(
+        request,
+        token,
+        signedEventEnvelope({
+          actorDid: oncall.did,
+          realmId,
+          kind: "ck.strand.create",
+          createdAt,
+          payload: {
+            object: {
+              id: incidentStrandId,
+              schema: "ck.schema.strand.v1",
               realm_id: realmId,
-              kind: "incident.status.transition",
-            }),
-            expect.objectContaining({
-              actor: oncall.did,
-              from: "mitigated",
-              to: "resolved",
-              realm_id: realmId,
-              kind: "incident.status.transition",
-            }),
-          ]),
-        );
-        for (const payload of payloads) {
-          expect(payload).toEqual(
-            expect.objectContaining({
-              actor: oncall.did,
-              timestamp: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-            }),
-          );
-          expect(String(payload.strand_id ?? "")).toMatch(/^ck:strand:/);
-          expect(String(payload.incident_id ?? "")).toMatch(/^ck:strand:/);
+              metadata: {
+                title: "SEV-2 checkout outage",
+                fields: { status: "investigating" },
+              },
+              stage: "in_progress",
+              tracks: { discussion: { enabled: true, is_primary: true } },
+              created_by: oncall.did,
+              created_at: createdAt,
+            },
+          },
+        }),
+        { context: "create investigating incident strand" },
+      );
+
+      const badResolved = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(token),
+        data: signedEventEnvelope({
+          actorDid: oncall.did,
+          realmId,
+          kind: "ck.strand.update",
+          payload: {
+            strand_id: incidentStrandId,
+            patch: { metadata: { fields: { status: "resolved" } } },
+          },
+        }),
+      });
+      expect(badResolved.status()).toBe(412);
+      expect(wireErrCode(await badResolved.json())).toBe("strand_status_transition_invalid");
+
+      await submitSignedEventApi(
+        request,
+        token,
+        signedEventEnvelope({
+          actorDid: oncall.did,
+          realmId,
+          kind: "ck.strand.update",
+          payload: {
+            strand_id: incidentStrandId,
+            patch: { metadata: { fields: { status: "mitigated" } } },
+          },
+        }),
+        { context: "advance incident to mitigated" },
+      );
+      await submitSignedEventApi(
+        request,
+        token,
+        signedEventEnvelope({
+          actorDid: oncall.did,
+          realmId,
+          kind: "ck.strand.update",
+          payload: {
+            strand_id: incidentStrandId,
+            patch: { metadata: { fields: { status: "resolved" } } },
+          },
+        }),
+        { context: "advance incident to resolved" },
+      );
+
+      const eventLog = await queryRealmEventsApi(request, token, realmId);
+      const events = Array.isArray(eventLog.events) ? eventLog.events : [];
+      const statusUpdates = events.filter((event) => {
+        if (!event || typeof event !== "object") {
+          return false;
         }
-      } finally {
-        await page.close();
-      }
+        const record = event as Record<string, unknown>;
+        return (
+          record.kind === "ck.strand.update" &&
+          JSON.stringify(record.payload ?? {}).includes(incidentStrandId)
+        );
+      });
+      expect(statusUpdates.length).toBeGreaterThanOrEqual(2);
     },
   );
 

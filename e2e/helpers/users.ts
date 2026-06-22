@@ -411,29 +411,22 @@ export class JointUserPage {
     if (!this.page.url().includes(`/timeline/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
-    const writeResponse = this.page.waitForResponse(
-      (response) => {
-        const request = response.request();
-        return (
-          request.method() === "POST" &&
-          /\/(?:api\/v1|_cokret\/self)\/events(?:\?|$)/.test(response.url()) &&
-          (request.postData() ?? "").includes(body)
-        );
-      },
-      { timeout: 30_000 },
-    );
+    const writeStatus = this.page.getByTestId("write-status");
+    const previousWriteStatus = (await writeStatus.textContent({ timeout: 500 }).catch(() => ""))
+      ?.trim()
+      ?? "";
     await this.page.getByTestId("composer-input").fill(body);
     await this.page.getByTestId("send-button").click();
-    const persisted = await writeResponse;
-    if (![200, 201].includes(persisted.status())) {
-      throw new Error(
-        `sendTimelineMessage: /_cokret/self/events returned ${persisted.status()} for ${body}`,
-      );
-    }
     await expect(this.page.getByTestId("timeline")).toContainText(body, { timeout: 30_000 });
-    await expect(this.page.getByTestId("write-status")).toContainText(/persisted/, {
-      timeout: 30_000,
-    });
+    await expect
+      .poll(
+        async () => {
+          const current = (await writeStatus.textContent().catch(() => ""))?.trim() ?? "";
+          return current.startsWith("persisted ") && current !== previousWriteStatus;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
   }
 
   // Read visible timeline event texts as an array (deduped on `body`).

@@ -106,10 +106,12 @@ test.describe("project simulation", () => {
               id: taskStrandId,
               schema: "ck.schema.strand.v1",
               realm_id: realmId,
-              title: "Implement login",
+              metadata: {
+                title: "Implement login",
+                fields: { status: "todo" },
+              },
               stage: "planned",
               tracks: { discussion: { enabled: true, is_primary: true } },
-              fields: { status: "todo" },
               created_by: alice.did,
               created_at: taskCreatedAt,
             },
@@ -125,9 +127,8 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            target_ref: taskStrandId,
             strand_id: taskStrandId,
-            patch: { fields: { status: "done" } },
+            patch: { metadata: { fields: { status: "done" } } },
           },
         }),
       });
@@ -142,9 +143,8 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            target_ref: taskStrandId,
             strand_id: taskStrandId,
-            patch: { fields: { status: "in_progress" } },
+            patch: { metadata: { fields: { status: "in_progress" } } },
           },
         }),
         { context: "advance card to in_progress" },
@@ -158,9 +158,8 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            target_ref: taskStrandId,
             strand_id: taskStrandId,
-            patch: { fields: { status: "done" } },
+            patch: { metadata: { fields: { status: "done" } } },
           },
         }),
         { context: "advance card to done" },
@@ -180,10 +179,12 @@ test.describe("project simulation", () => {
               id: incidentStrandId,
               schema: "ck.schema.strand.v1",
               realm_id: realmId,
-              title: "SEV-2 checkout outage",
+              metadata: {
+                title: "SEV-2 checkout outage",
+                fields: { status: "investigating" },
+              },
               stage: "in_progress",
               tracks: { discussion: { enabled: true, is_primary: true } },
-              fields: { status: "investigating" },
               created_by: alice.did,
               created_at: incidentCreatedAt,
             },
@@ -199,9 +200,8 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            target_ref: incidentStrandId,
             strand_id: incidentStrandId,
-            patch: { fields: { status: "resolved" } },
+            patch: { metadata: { fields: { status: "resolved" } } },
           },
         }),
       });
