@@ -457,7 +457,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
           realmId: fixture.realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: strandId,
+            target_ref: strandId,
             patch: { scope_circle_id: { $op: "set", value: circleId } },
           },
         }),

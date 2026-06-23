@@ -142,7 +142,7 @@ test.describe("core object invariants", () => {
   // checks exist in the reducer but no HTTP path drives them with a stale
   // expected_revision. Live this once soland adds:
   //   POST /_cokret/self/events  with { kind: "ck.strand.update", preconditions: [...],
-  //                                effects: [...], payload: { strand_id, patch } }
+  //                                effects: [...], payload: { target_ref, patch } }
   // and returns { error_code: "failed_precondition", reason: "..." } on
   // head_eq mismatch (spec models/event-and-patch.md §4.2.4 / §4.2.5).
   test.fixme(
@@ -193,7 +193,7 @@ test.describe("core object invariants", () => {
               op: { kind: "set", value: { "fields.status": "done" } },
             },
           ],
-          payload: { strand_id: strandId, patch: { "fields.status": "done" } },
+          payload: { target_ref: strandId, patch: { "fields.status": "done" } },
         },
       });
       expect(staleMove.status()).toBeGreaterThanOrEqual(400);

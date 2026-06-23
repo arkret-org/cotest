@@ -552,8 +552,9 @@ async function installApplet(
   idempotencyKey: string,
 ): Promise<AppletRegistration> {
   const response = await rawInstallApplet(request, token, signed, realmId, idempotencyKey);
-  expect(response.status()).toBe(201);
-  return installRegistrationFromResponse(signed, realmId, await response.json());
+  const responseText = await response.text();
+  expect(response.status(), responseText).toBe(201);
+  return installRegistrationFromResponse(signed, realmId, JSON.parse(responseText));
 }
 
 async function rawInstallApplet(
@@ -633,4 +634,3 @@ async function didDocument(
   expect(response.status()).toBe(200);
   return (await response.json()) as Record<string, unknown>;
 }
-

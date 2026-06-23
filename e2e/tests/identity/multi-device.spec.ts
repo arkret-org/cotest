@@ -168,6 +168,9 @@ test.describe("multi-device pairing + revocation", () => {
           payload: {
             principal_id: alice.did,
             device_id: alice.deviceId,
+            revoked_by: alice.deviceId,
+            revoked_at: new Date().toISOString(),
+            reason: "self_revoke_probe",
           },
         }),
       },

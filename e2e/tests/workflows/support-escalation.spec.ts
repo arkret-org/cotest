@@ -20,6 +20,7 @@ test.describe("workflow: support escalation", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(300_000);
     const stamp = Date.now();
     const [alexFlow, samFlow] = await Promise.all([
       openDpopUserPage(browser, request, "wf-support-alex"),

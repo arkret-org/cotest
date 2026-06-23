@@ -7,7 +7,12 @@
 //   - crypto-media/device-lifecycle.md §3 (registration paths)
 
 import { expect, test } from "@playwright/test";
-import { coauthBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/env";
+import {
+  coauthBaseUrl,
+  coauthServiceDid,
+  solandBaseUrl,
+  solandServiceDid,
+} from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -69,7 +74,12 @@ test.describe("account onboarding", () => {
     expect(serviceDescribe.status()).toBe(200);
     const service = await serviceDescribe.json();
     expect(service.supported_operations).toContain("ck.gate.account.command.issue_session_grant");
-    expect(JSON.stringify(service.auth_metadata)).toContain(solandServiceDid());
+    expect(service.auth_metadata?.issuer_did).toBe(coauthServiceDid());
+    expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth).origin);
+    expect(service.auth_metadata?.account_authority?.gate_account_base).toBe(
+      `${coauth}/_cokret/gate/account`,
+    );
+    expect(JSON.stringify(service.auth_metadata)).not.toContain(solandServiceDid());
 
     const start = await request.post(`${coauth}/_coauth/gate/account/auth/register/webvh/start`, {
       data: {

@@ -211,7 +211,7 @@ test.describe("workflow: incident response", () => {
           realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: incidentStrandId,
+            target_ref: incidentStrandId,
             patch: { metadata: { fields: { status: "resolved" } } },
           },
         }),
@@ -230,7 +230,7 @@ test.describe("workflow: incident response", () => {
         realmId,
         kind: "ck.strand.update",
         payload: {
-          strand_id: incidentStrandId,
+          target_ref: incidentStrandId,
           patch: { metadata: { fields: { status: "mitigated" } } },
         },
       }),
@@ -244,7 +244,7 @@ test.describe("workflow: incident response", () => {
         realmId,
         kind: "ck.strand.update",
         payload: {
-          strand_id: incidentStrandId,
+          target_ref: incidentStrandId,
           patch: { metadata: { fields: { status: "resolved" } } },
         },
       }),

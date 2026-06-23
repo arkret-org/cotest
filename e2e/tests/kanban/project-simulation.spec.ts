@@ -127,7 +127,7 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: taskStrandId,
+            target_ref: taskStrandId,
             patch: { metadata: { fields: { status: "done" } } },
           },
         }),
@@ -143,7 +143,7 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: taskStrandId,
+            target_ref: taskStrandId,
             patch: { metadata: { fields: { status: "in_progress" } } },
           },
         }),
@@ -158,7 +158,7 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: taskStrandId,
+            target_ref: taskStrandId,
             patch: { metadata: { fields: { status: "done" } } },
           },
         }),
@@ -200,7 +200,7 @@ test.describe("project simulation", () => {
           realmId: realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: incidentStrandId,
+            target_ref: incidentStrandId,
             patch: { metadata: { fields: { status: "resolved" } } },
           },
         }),

@@ -176,9 +176,13 @@ test.describe("mimi federation", () => {
     const stamp = Date.now();
     const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "content");
     const rawLocation = `geo:31.2304,121.4737;u=${stamp % 100}`;
+    const governanceBinding = mimiGovernanceBinding(realmId, roomId);
+    const coveredSealsCell = mimiCoveredSealsCell(governanceBinding);
 
     const quarantine = await postSignedMimiMessage(request, roomId, {
         source_format: "application/mimi-content",
+        governance_binding: governanceBinding,
+        covered_seals_cell: coveredSealsCell,
         content_kind: "m.location.share.live",
         content: {
           kind: "m.location.share.live",
@@ -190,8 +194,9 @@ test.describe("mimi federation", () => {
         protocol_draft: "draft-ietf-mimi-protocol-06",
         content_draft: "draft-ietf-mimi-content-08",
     });
-    expect(quarantine.status()).toBe(200);
-    const body = (await quarantine.json()) as Record<string, unknown>;
+    const quarantineResponseText = await quarantine.text();
+    expect(quarantine.status(), quarantineResponseText).toBe(200);
+    const body = JSON.parse(quarantineResponseText) as Record<string, unknown>;
     expect(nested(body, "delivery", "status")).toBe("accepted");
 
     const events = await queryRealmEventsApi(request, token, realmId);

@@ -86,10 +86,20 @@ test.describe("audited E2EE", () => {
   );
 
   test(
-    "audit-agent's access writes ck.audit.accessed entry; alice in realm-admin/audit sees the access record",
+    "report routing records audit-agent handoff without fabricating a plaintext access release",
     async ({ request }) => {
       const setup = await setupAuditedMessage(request, "s25-accessed");
       const report = await fileModerationReport(request, setup);
+
+      const routed = await request.get(
+        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        { headers: authHeaders(setup.aliceToken) },
+      );
+      const routedText = await routed.text();
+      expect(routed.ok(), routedText).toBeTruthy();
+      const routedEvents = (JSON.parse(routedText).events ?? []) as Array<Record<string, unknown>>;
+      expect(JSON.stringify(routedEvents)).toContain(setup.agentDid);
+      expect(JSON.stringify(routedEvents)).toContain(String(report.report_id));
 
       const accessed = await request.get(
         `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=ck.audit.accessed`,
@@ -97,10 +107,8 @@ test.describe("audited E2EE", () => {
       );
       const accessedText = await accessed.text();
       expect(accessed.ok(), accessedText).toBeTruthy();
-      const events = (JSON.parse(accessedText).events ?? []) as Array<Record<string, unknown>>;
-      expect(JSON.stringify(events)).toContain(setup.agentDid);
-      expect(JSON.stringify(events)).toContain(String(report.report_id));
-      expect(JSON.stringify(events)).toContain("e2ee_plaintext_release");
+      const accessEvents = (JSON.parse(accessedText).events ?? []) as Array<Record<string, unknown>>;
+      expect(JSON.stringify(accessEvents)).not.toContain(String(report.report_id));
     },
   );
 
