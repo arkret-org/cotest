@@ -148,6 +148,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: String::new(),
             ssk_generation: Some(1),
+            device_authorize_event_id: None,
             signed_fields: key_backup_signed_fields(),
             extra: BTreeMap::new(),
         }),

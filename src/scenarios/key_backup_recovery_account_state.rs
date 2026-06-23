@@ -227,6 +227,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: "c2lnbmF0dXJl".to_owned(),
             ssk_generation: Some(1),
+            device_authorize_event_id: None,
             signed_fields: [
                 "backup_id",
                 "actor_id",

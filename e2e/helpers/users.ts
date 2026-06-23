@@ -19,7 +19,10 @@ import {
 } from "./env";
 import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
-import { registerCoauthPasswordAccount } from "./coauth-register";
+import {
+  registerCoauthPasswordAccount,
+  type CoauthPasswordAccount,
+} from "./coauth-register";
 import {
   dpopDeviceSeedB64url,
   dpopDeviceKeyFromSeedB64url,
@@ -760,6 +763,19 @@ export async function createDpopUserSession(
   const account = await registerCoauthPasswordAccount(request, coauth, {
     password: "1amTesting!",
   });
+  return createDpopUserSessionForAccount(request, prefix, account, opts);
+}
+
+export async function createDpopUserSessionForAccount(
+  request: APIRequestContext,
+  prefix: string,
+  account: CoauthPasswordAccount,
+  opts: { server?: SolandKey; coauthBase?: string } = {},
+): Promise<DpopUserSession | undefined> {
+  const coauth = opts.coauthBase ?? coauthBaseUrl();
+  if (!coauth) {
+    return undefined;
+  }
   const seed = uniqueUser(prefix);
   const deviceKey = generateDpopDeviceKey();
   const audience = solandServiceDid(opts.server);

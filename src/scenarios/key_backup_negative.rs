@@ -198,6 +198,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: "c2lnbmF0dXJl".to_owned(),
             ssk_generation: Some(1),
+            device_authorize_event_id: None,
             signed_fields: key_backup_signed_fields(),
             extra: BTreeMap::new(),
         }),

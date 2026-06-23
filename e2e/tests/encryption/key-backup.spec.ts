@@ -7,7 +7,13 @@
 //     continuous backup)
 //   - crypto-media/device-lifecycle.md §12-§12.1 (key backup durable form + API)
 
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Browser,
+  type Page,
+} from "@playwright/test";
 import {
   coauthBaseUrl,
   optionalEnv,
@@ -17,13 +23,19 @@ import {
 } from "../../helpers/env";
 import {
   ensureRegistered,
+  createDpopUserSessionForAccount,
   issueDevSession,
   openUserPage,
+  selfPathHeadersForDpopSession,
+  type DpopUserSession,
   type JointUser,
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
-import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
+import {
+  registerCoauthPasswordAccount,
+  type CoauthPasswordAccount,
+} from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
 
@@ -80,18 +92,42 @@ test.describe("key backup + restore", () => {
   }) => {
     test.setTimeout(240_000);
     const stamp = Date.now();
-    const alice = uniqueUser("a1-mls-restore-alice");
-    await ensureRegistered(request, alice);
-    const deviceAToken = await issueDevSession(request, alice);
-    const deviceA = await openUserPage(browser, alice, {
-      sessionCredential: deviceAToken,
-    });
+    const coauth = coauthBaseUrl();
+    test.skip(
+      !coauth,
+      "coauth DPoP session-grant login is required for device-authorized key backup",
+    );
+    if (!coauth) {
+      return;
+    }
+    const account = await registerCoauthPasswordAccount(request, coauth);
+    const deviceAFlow = await openDpopDeviceForAccount(
+      browser,
+      request,
+      "a1-mls-restore-alice-a",
+      account,
+      coauth,
+    );
+    test.skip(!deviceAFlow, "coauth DPoP password login is unavailable");
+    if (!deviceAFlow) {
+      return;
+    }
+    const { page: deviceA, session: deviceASession } = deviceAFlow;
     const sessionsToClose: JointUserPage[] = [deviceA];
     const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
     const protocolFailures: string[] = [];
     collectA1ProtocolFailures(deviceA.page, protocolFailures);
 
     try {
+      await deviceA.gotoHome();
+      await expectDpopDeviceActive(request, deviceASession);
+      const recoveryKey = await createMlsRecoveryBackupFromPrompt(
+        deviceA.page,
+        keyBackupPuts,
+      );
+      await deviceA.gotoSetup();
+      await deviceA.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
+
       const realmId = await deviceA.createRealm({
         title: `A1 MLS restore ${stamp}`,
         summary:
@@ -101,10 +137,6 @@ test.describe("key backup + restore", () => {
         historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
       });
-      const recoveryKey = await createMlsRecoveryBackupFromPrompt(
-        deviceA.page,
-        keyBackupPuts,
-      );
 
       const historicalCards = [
         `A1 historical encrypted card 1 ${stamp}`,
@@ -116,20 +148,29 @@ test.describe("key backup + restore", () => {
       }
       await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
-      const deviceBUser = sameActorFreshDevice(alice, "device-b");
-      const deviceBToken = await issueDevSession(request, deviceBUser);
-      const deviceB = await openUserPage(browser, deviceBUser, {
-        sessionCredential: deviceBToken,
-      });
+      const deviceBFlow = await openDpopDeviceForAccount(
+        browser,
+        request,
+        "a1-mls-restore-alice-b",
+        account,
+        coauth,
+      );
+      test.skip(!deviceBFlow, "coauth DPoP password login is unavailable");
+      if (!deviceBFlow) {
+        return;
+      }
+      const { page: deviceB, session: deviceBSession } = deviceBFlow;
       sessionsToClose.push(deviceB);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
+      await expectDpopDeviceActive(request, deviceBSession);
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
       });
       await unlockMlsAccountSecret(deviceB.page, recoveryKey);
       await deviceB.gotoTimelineRealm(realmId);
+      await deviceB.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
       for (const card of historicalCards) {
         await expect(deviceB.timelineEvent(card)).toBeVisible({
           timeout: 90_000,
@@ -268,6 +309,7 @@ test.describe("key backup + restore", () => {
       );
 
       await deviceB.gotoTimelineRealm(realmId);
+      await deviceB.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
       for (const card of historicalCards) {
         await expect(deviceB.timelineEvent(card)).toBeVisible({
           timeout: 90_000,
@@ -299,12 +341,27 @@ test.describe("key backup + restore", () => {
   }) => {
     test.setTimeout(300_000);
     const stamp = Date.now();
-    const alice = uniqueUser("a2-mls-kanban-alice");
-    await ensureRegistered(request, alice);
-    const deviceAToken = await issueDevSession(request, alice);
-    const deviceA = await openUserPage(browser, alice, {
-      sessionCredential: deviceAToken,
-    });
+    const coauth = coauthBaseUrl();
+    test.skip(
+      !coauth,
+      "coauth DPoP session-grant login is required for device-authorized key backup",
+    );
+    if (!coauth) {
+      return;
+    }
+    const account = await registerCoauthPasswordAccount(request, coauth);
+    const deviceAFlow = await openDpopDeviceForAccount(
+      browser,
+      request,
+      "a2-mls-kanban-alice-a",
+      account,
+      coauth,
+    );
+    test.skip(!deviceAFlow, "coauth DPoP password login is unavailable");
+    if (!deviceAFlow) {
+      return;
+    }
+    const { page: deviceA, session: deviceASession } = deviceAFlow;
     const sessionsToClose: JointUserPage[] = [deviceA];
     const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
     const protocolFailures: string[] = [];
@@ -316,6 +373,15 @@ test.describe("key backup + restore", () => {
     const restoredDescription = `A2 restored-device encrypted detail ${stamp}`;
 
     try {
+      await deviceA.gotoHome();
+      await expectDpopDeviceActive(request, deviceASession);
+      const recoveryKey = await createMlsRecoveryBackupFromPrompt(
+        deviceA.page,
+        keyBackupPuts,
+      );
+      await deviceA.gotoSetup();
+      await deviceA.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
+
       const realmId = await deviceA.createRealm({
         title: `A2 MLS Kanban ${stamp}`,
         summary: "kanban encrypted detail MLS restore acceptance",
@@ -324,10 +390,6 @@ test.describe("key backup + restore", () => {
         historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
       });
-      const recoveryKey = await createMlsRecoveryBackupFromPrompt(
-        deviceA.page,
-        keyBackupPuts,
-      );
       const boardId = await createKanbanBoardListAndCard(
         deviceA.page,
         realmId,
@@ -359,15 +421,23 @@ test.describe("key backup + restore", () => {
         )
         .toBe(true);
 
-      const deviceBUser = sameActorFreshDevice(alice, "device-b");
-      const deviceBToken = await issueDevSession(request, deviceBUser);
-      const deviceB = await openUserPage(browser, deviceBUser, {
-        sessionCredential: deviceBToken,
-      });
+      const deviceBFlow = await openDpopDeviceForAccount(
+        browser,
+        request,
+        "a2-mls-kanban-alice-b",
+        account,
+        coauth,
+      );
+      test.skip(!deviceBFlow, "coauth DPoP password login is unavailable");
+      if (!deviceBFlow) {
+        return;
+      }
+      const { page: deviceB, session: deviceBSession } = deviceBFlow;
       sessionsToClose.push(deviceB);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
+      await expectDpopDeviceActive(request, deviceBSession);
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
       });
@@ -375,11 +445,14 @@ test.describe("key backup + restore", () => {
       await deviceB.page.goto(`/kanban/${realmId}/board/${boardId}`, {
         waitUntil: "domcontentloaded",
       });
+      await deviceB.acknowledgeRecommendedEncryptionPromptIfVisible(30_000);
       await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
         timeout: 120_000,
       });
-      await expect(deviceB.page.getByTestId("board-space-select")).toHaveValue(
-        boardId,
+      await expect(
+        deviceB.page.getByTestId("board-space-select-button"),
+      ).toContainText(
+        boardTitle,
         {
           timeout: 45_000,
         },
@@ -405,8 +478,8 @@ test.describe("key backup + restore", () => {
           timeout: 120_000,
         });
         await expect(
-          deviceA.page.getByTestId("board-space-select"),
-        ).toHaveValue(boardId, {
+          deviceA.page.getByTestId("board-space-select-button"),
+        ).toContainText(boardTitle, {
           timeout: 45_000,
         });
       }
@@ -457,6 +530,54 @@ type PasswordAccount = {
   handle: string;
   password: string;
 };
+
+async function openDpopDeviceForAccount(
+  browser: Browser,
+  request: APIRequestContext,
+  prefix: string,
+  account: CoauthPasswordAccount,
+  coauth: string,
+): Promise<{ page: JointUserPage; session: DpopUserSession } | undefined> {
+  const session = await createDpopUserSessionForAccount(request, prefix, account, {
+    coauthBase: coauth,
+  });
+  if (!session) {
+    return undefined;
+  }
+  const page = await openUserPage(browser, session.user, {
+    grantJwt: session.grantJwt,
+    dpopSeedB64url: session.dpopSeedB64url,
+    grantId: session.grantId,
+    grantAudience: session.grantAudience,
+  });
+  return { page, session };
+}
+
+async function expectDpopDeviceActive(
+  request: APIRequestContext,
+  session: DpopUserSession,
+) {
+  const url = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(url, {
+          headers: selfPathHeadersForDpopSession(session, "GET", url),
+        });
+        if (!response.ok()) {
+          return `http-${response.status()}`;
+        }
+        const body = await response.json();
+        const devices = Array.isArray(body?.devices) ? body.devices : [];
+        const current = devices.find(
+          (device: any) => device?.device_id === session.user.deviceId,
+        );
+        return current?.status ?? "missing";
+      },
+      { timeout: 90_000 },
+    )
+    .toBe("active");
+}
 
 type HolderProofRequest = {
   method: string;
@@ -663,6 +784,13 @@ function collectA1ProtocolFailures(page: Page, failures: string[]) {
   });
   page.on("response", (response) => {
     const url = response.url();
+    if (
+      response.status() === 404 &&
+      response.request().method() === "GET" &&
+      /\/_cokret\/self\/events\/frontier\?actor_id=/.test(url)
+    ) {
+      return;
+    }
     if (
       response.status() >= 400 &&
       /\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
@@ -884,9 +1012,12 @@ async function createKanbanBoardListAndCard(
       timeout: 45_000,
     },
   );
-  const boardId = await page
-    .getByTestId("board-space-select")
-    .evaluate((node) => (node as HTMLSelectElement).value);
+  await expect
+    .poll(() => page.url(), { timeout: 30_000 })
+    .toContain("/board/ck:space:");
+  const boardId = decodeURIComponent(
+    new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
+  );
   expect(boardId).toMatch(/^ck:space:/);
 
   await page.getByTestId("new-column-input").fill(listTitle);

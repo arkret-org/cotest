@@ -37,6 +37,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 ## Pre-conditions
 
 - alice 已 onboard,device-A 在 `R_e2ee` 中(epoch N)
+- device-A 是已授权 key-management 设备(存在 accepted `ck.device.authorize` / service-attested enrollment,device list 状态为 active);未授权 dev-login 设备 MUST NOT 生成新的 Recovery Key root
 - bob 在 `R_e2ee` 中
 - alice 在 Phase A 生成的 24 词 Recovery Key 由测试捕获并跨 browser context 传递(UI 只显示一次)
 
