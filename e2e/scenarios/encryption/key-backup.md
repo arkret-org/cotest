@@ -46,19 +46,14 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 1. alice 进 `/settings/recovery`(RecoveryPanel)点 "Generate"(`recovery-key-regenerate`);或首次创建 encrypted Realm 时自动弹出 `MlsBackupPrompt`(`mls-backup-modal`),点 `mls-backup-submit` 自动生成 — **无用户口令输入**(spec §7.7/§7.10)
 2. UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写(`mls-backup-generated-key` / `recovery-key-current`);本地只保存 SHA-256 指纹,词串不上传
-3. 客户端用 Recovery Key seal 账户 secret:
-   - Argon2id(词串为 KDF 输入;salt=random, memoryCost=64MB, iterations=3)→ `derived_key`
-   - XChaCha20-Poly1305 加密 `{ mls_account_secret(账户 MLS secret), ... }`
-   - `key_commitment = SHA256(HKDF(derived_key, info="cokret-key-backup-commitment-v1"))`
-   - 同一账户 secret 另上传一份 HPKE `recovery_public_key` envelope(加密给 RK 公钥,§7.5.2 推荐形态)
-4. `PUT /_cokret/self/keys/backups/<backup_id>` body 含:
+3. 客户端用 Recovery Key 建立 `recovery_public_key` 恢复根,发布 `backup_class="did_recovery"` envelope 并保存本地 recovery public key metadata。若此时本地已经存在 account MLS secret,客户端同时上传 HPKE `recovery_public_key` 的 `mls_account_secret` envelope;若 account MLS secret 尚未生成,则在首次加密写入后由 §7.10 自动补传。
+4. 首次 encrypted write 生成/轮换 account MLS secret 后,客户端自动上传 `PUT /_cokret/self/keys/backups/<backup_id>`:
    - `backup_class: "secret_storage"`
-   - `kdf_params: { algorithm: "argon2id", salt, memory_cost, iterations }`(`passphrase_kdf` envelope;wire method 仍合法,见 §7.5.1)
-   - `ciphertext` (base64)
-   - `ciphertext_digest: sha256:...`
-   - `key_commitment: sha256:...`
+   - `encryption.recipient_method: "recovery_public_key"`
+   - `contents[].item_type: "mls_account_secret"`
+   - `ciphertext` / `ciphertext_digest` 等 envelope metadata
 5. 断言:`GET /_cokret/self/keys/backups` 列出该 backup,**metadata only**(no plaintext, no Recovery Key words)
-6. UI 显示 "Backed up" sync badge(`recovery-key-sync-badge`);此后自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
+6. UI 显示 recovery root 已配置;`mls_account_secret` 与自有内容 sidecar / 轮换材料按 §7.10 自动持续备份,无需手动触发
 > **§7.10 持续备份时序(yougen 实现语义)**:RK 已配置的账号上,任一加密写引发的
 > `ck.mls.commit` 被接受后约 **1.5s(debounce)** 内,该 Realm 的 `mls_history`
 > successor envelope PUT 上行;同 Realm 后续 commit 受 **5min min-interval** 合并补传。

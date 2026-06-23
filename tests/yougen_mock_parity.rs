@@ -932,6 +932,11 @@ async fn call_live_soland(
     rendered_path: &str,
     body: Option<Value>,
 ) -> Result<HttpSnapshot> {
+    let body = if case.id == "ephemeral" {
+        inject_live_default_strand_id(server, ctx, body).await?
+    } else {
+        body
+    };
     let method = case
         .method
         .parse::<Method>()
@@ -951,6 +956,31 @@ async fn call_live_soland(
     let text = response.text().await?;
     let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
     Ok(HttpSnapshot { status, body })
+}
+
+async fn inject_live_default_strand_id(
+    server: &CokretServer,
+    ctx: &TemplateContext,
+    body: Option<Value>,
+) -> Result<Option<Value>> {
+    let Some(mut body) = body else {
+        return Ok(None);
+    };
+    let realm = server
+        .http()
+        .get(server.url(&format!("/_cokret/self/realms/{}", ctx.realm_id)))
+        .bearer_auth(&ctx.alice_token)
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+    let strand_id = realm["default_strand_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("live realm projection has no default_strand_id: {realm}"))?;
+    if let Some(payload) = body.get_mut("payload").and_then(Value::as_object_mut) {
+        payload.insert("strand_id".to_owned(), Value::String(strand_id.to_owned()));
+    }
+    Ok(Some(body))
 }
 
 fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {

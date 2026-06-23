@@ -105,17 +105,6 @@ test.describe("key backup + restore", () => {
         deviceA.page,
         keyBackupPuts,
       );
-      await expect
-        .poll(
-          () =>
-            keyBackupPuts.some(
-              (hit) =>
-                hit.status === 200 &&
-                /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
-            ),
-          { timeout: 120_000 },
-        )
-        .toBe(true);
 
       const historicalCards = [
         `A1 historical encrypted card 1 ${stamp}`,
@@ -125,6 +114,7 @@ test.describe("key backup + restore", () => {
       for (const card of historicalCards) {
         await deviceA.sendTimelineMessage(realmId, card);
       }
+      await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
       const deviceBUser = sameActorFreshDevice(alice, "device-b");
       const deviceBToken = await issueDevSession(request, deviceBUser);
@@ -236,6 +226,7 @@ test.describe("key backup + restore", () => {
       for (const card of historicalCards) {
         await deviceA.sendTimelineMessage(realmId, card);
       }
+      await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
       const deviceB = await openUserPage(browser, uniqueUser("a3-oidc-mls-b"));
       sessionsToClose.push(deviceB);
@@ -723,18 +714,6 @@ async function createMlsRecoveryBackupFromPrompt(
       page.getByTestId("recovery-key-setup-generated-key-warning").last(),
     ).toBeVisible();
 
-    await expect
-      .poll(
-        () =>
-          keyBackupPuts.some(
-            (hit) =>
-              hit.status === 200 &&
-              /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
-          ),
-        { timeout: 120_000 },
-      )
-      .toBe(true);
-
     await page
       .getByTestId("recovery-key-setup-confirm-key")
       .last()
@@ -750,7 +729,7 @@ async function createMlsRecoveryBackupFromPrompt(
     .then(() => true)
     .catch(() => false);
   if (!legacyPromptVisible) {
-    return createMlsRecoveryBackupFromRecoverySettings(page, keyBackupPuts);
+    return createMlsRecoveryBackupFromRecoverySettings(page);
   }
 
   await expect(legacyPrompt).toBeVisible({
@@ -778,17 +757,7 @@ async function createMlsRecoveryBackupFromPrompt(
   ).toBeVisible();
   await expect(page.getByTestId("mls-backup-saved")).toBeVisible();
 
-  await expect
-    .poll(
-      () =>
-        keyBackupPuts.some(
-          (hit) =>
-            hit.status === 200 &&
-            /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
-        ),
-      { timeout: 120_000 },
-    )
-    .toBe(true);
+  await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
   await page.getByTestId("mls-backup-saved").click();
   await expect(page.getByTestId("mls-backup-modal")).toHaveCount(0);
@@ -797,7 +766,6 @@ async function createMlsRecoveryBackupFromPrompt(
 
 async function createMlsRecoveryBackupFromRecoverySettings(
   page: Page,
-  keyBackupPuts: KeyBackupPut[],
 ): Promise<string> {
   await page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("recovery-key-section")).toBeVisible({
@@ -820,6 +788,16 @@ async function createMlsRecoveryBackupFromRecoverySettings(
     .toBe(24);
   await expect(page.getByTestId("recovery-key-live-warning")).toBeVisible();
 
+  await expect(page.getByTestId("recovery-key-status")).toContainText(
+    /(?:DID recovery backup is on the server|encrypted history (?:is|are) backed up)/i,
+    { timeout: 30_000 },
+  );
+  return recoveryKey;
+}
+
+async function expectMlsAccountSecretBackupUploaded(
+  keyBackupPuts: KeyBackupPut[],
+) {
   await expect
     .poll(
       () =>
@@ -831,12 +809,6 @@ async function createMlsRecoveryBackupFromRecoverySettings(
       { timeout: 120_000 },
     )
     .toBe(true);
-
-  await expect(page.getByTestId("recovery-key-status")).toContainText(
-    /encrypted history (?:is|are) backed up/i,
-    { timeout: 30_000 },
-  );
-  return recoveryKey;
 }
 
 function normalizeRecoveryKeyText(value: string): string {
