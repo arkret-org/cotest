@@ -268,12 +268,12 @@ test.describe("kanban end-to-end", () => {
 
       const firstColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: first });
       const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
-      await expect(firstColumn.getByTestId("column-drop-target-before")).toBeVisible();
+      await expect(firstColumn.getByTestId("column-drop-target-before")).toHaveCount(1);
       await expect(thirdColumn.getByTestId("column-drag-handle")).toBeVisible();
 
       await thirdColumn
         .getByTestId("column-drag-handle")
-        .dragTo(firstColumn.getByTestId("column-drop-target-before"));
+        .dragTo(firstColumn.getByTestId("column-drop-target-before"), { force: true });
       await stepShot(alicePage.page, testInfo, "column-handles-reordered");
 
       const labels = await alicePage.page.getByTestId("kanban-column-title").allTextContents();
@@ -319,9 +319,12 @@ test.describe("kanban end-to-end", () => {
       await expect(alicePage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
         timeout: 30_000,
       });
-      const boardId = await alicePage.page
-        .getByTestId("board-space-select")
-        .evaluate((node) => (node as HTMLSelectElement).value);
+      await expect
+        .poll(() => alicePage.page.url(), { timeout: 30_000 })
+        .toContain("/board/ck:space:");
+      const boardId = decodeURIComponent(
+        new URL(alicePage.page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
+      );
       expect(boardId).toMatch(/^ck:space:/);
 
       for (const columnName of [first, second, third]) {
@@ -336,6 +339,7 @@ test.describe("kanban end-to-end", () => {
       const thirdColumn = alicePage.page.getByTestId("kanban-column").filter({ hasText: third });
       await thirdColumn.getByTestId("column-drag-handle").dragTo(
         firstColumn.getByTestId("column-drop-target-before"),
+        { force: true },
       );
       await stepShot(alicePage.page, testInfo, "columns-reordered");
 

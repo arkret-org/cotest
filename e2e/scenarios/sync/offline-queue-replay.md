@@ -1,15 +1,13 @@
-# Offline queue replay
+# Offline write fail-fast
 
-验证真实 yougen + soland 下的离线写入队列:客户端离线发消息时显示 pending,网络恢复后自动 flush;如果离线期间成员资格被移除,队列必须丢弃而不是无限重试或把消息写入服务器。
+当前 v1 spec 没有要求客户端必须提供持久离线写入队列；真实 yougen 也已经移除旧的 `offline_queue`/pending badge/drain worker 链路。离线 compose 需要 fail-fast：本地可以显示失败的 optimistic bubble 和重试入口，但不得把未经签名/未通过当前 auth frontier 的写入缓存成自动 replay 承诺。
 
 ## Live 用例
 
-1. Bob 离线发送消息后,yougen timeline 显示 `(pending)`。
-2. Bob 恢复在线后,单条 pending message 自动持久化到 soland。
-3. Bob 离线连续发送 3 条消息,恢复在线后全部 flush,本地 pending 标记清零。
-4. Bob 离线期间被 Alice ban,恢复在线后 pending change 被丢弃。
-5. 被丢弃的离线消息不会出现在 soland 事件流中。
+1. Bob 离线发送消息后,yougen timeline 显示本地失败状态,并暴露错误/重试入口。
+2. 该离线失败消息不会出现在 soland 事件流中。
 
 ## 不验证
 
-- Kanban card 离线重排和 epoch drift 重新加密。这两段依赖更完整的本地 outbox/MLS epoch manager;本 scenario 先把用户最直接可见的消息队列语义转成 live。
+- 自动 pending replay、本地持久 outbox、离线期间成员资格变化后的 drain 决策。这些不是当前 v1 live contract;若未来重新引入,必须同时实现 DPoP/session 绑定、Event signing、actor frontier refresh 和 app-shell drain worker。
+- Kanban card 离线重排和 epoch drift 重新加密。这两段同样依赖完整的本地 outbox/MLS epoch manager。

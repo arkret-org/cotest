@@ -49,6 +49,7 @@ test.describe("workflow: team onboarding", () => {
         summary: "Day-1 onboarding hub",
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [yuki.did],
       });
       await yukiPage.acceptInvite(realmId);

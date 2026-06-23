@@ -52,6 +52,7 @@ test.describe("workflow: support escalation", () => {
         summary: "Backend escalation for checkout failures",
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [sam.did],
       });
       await samPage.acceptInvite(realmId);

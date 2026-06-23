@@ -395,18 +395,19 @@ test.describe("account states", () => {
     const transition = (
       auditBody.events as Array<{
         action: string;
-        target: Record<string, unknown>;
+        payload: Record<string, unknown>;
       }>
     ).find(
       (event) =>
         event.action === "org.cokret.soland.account.state_change" &&
-        event.target?.subject === alice.did,
+        event.payload?.subject === alice.did,
     );
     expect(transition).toBeTruthy();
-    expect(transition!.target.from).toBe("active");
-    expect(transition!.target.to).toBe("suspended");
-    expect(transition!.target.reason).toBe("audit_probe");
-    expect(transition!.target.timestamp).toBeTruthy();
+    expect(transition!.payload.from).toBe("active");
+    expect(transition!.payload.to).toBe("suspended");
+    expect(transition!.payload.actor).toBe(admin.did);
+    expect(transition!.payload.reason).toBe("audit_probe");
+    expect(transition!.payload.timestamp).toBeTruthy();
   });
 
   test.fixme(// @blocking-on: soland#identity-account-states-gap

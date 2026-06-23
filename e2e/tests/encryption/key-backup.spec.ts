@@ -698,6 +698,14 @@ async function createMlsRecoveryBackupFromPrompt(
   page: Page,
   keyBackupPuts: KeyBackupPut[],
 ): Promise<string> {
+  const legacyPromptVisible = await page
+    .getByTestId("mls-backup-modal")
+    .isVisible({ timeout: 2_000 })
+    .catch(() => false);
+  if (!legacyPromptVisible) {
+    return createMlsRecoveryBackupFromRecoverySettings(page, keyBackupPuts);
+  }
+
   await expect(page.getByTestId("mls-backup-modal")).toBeVisible({
     timeout: 90_000,
   });
@@ -738,6 +746,47 @@ async function createMlsRecoveryBackupFromPrompt(
   await page.getByTestId("mls-backup-saved").click();
   await expect(page.getByTestId("mls-backup-modal")).toHaveCount(0);
   return recoveryKey;
+}
+
+async function createMlsRecoveryBackupFromRecoverySettings(
+  page: Page,
+  keyBackupPuts: KeyBackupPut[],
+): Promise<string> {
+  await page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("recovery-key-section")).toBeVisible({
+    timeout: 120_000,
+  });
+  await page.getByTestId("recovery-key-regenerate").click();
+
+  const generatedKeyField = page.getByTestId("recovery-key-current");
+  await expect(generatedKeyField).toContainText(/\S+/, { timeout: 120_000 });
+  const recoveryKey = normalizeRecoveryKeyText(
+    (await generatedKeyField.textContent()) ?? "",
+  );
+  expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+  await expect(page.getByTestId("recovery-key-live-warning")).toBeVisible();
+
+  await expect
+    .poll(
+      () =>
+        keyBackupPuts.some(
+          (hit) =>
+            hit.status === 200 &&
+            /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
+        ),
+      { timeout: 120_000 },
+    )
+    .toBe(true);
+
+  await expect(page.getByTestId("recovery-key-status")).toContainText(
+    /encrypted history (?:is|are) backed up/i,
+    { timeout: 30_000 },
+  );
+  return recoveryKey;
+}
+
+function normalizeRecoveryKeyText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {

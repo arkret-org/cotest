@@ -129,6 +129,16 @@ test.describe("circle membership (same principal server)", () => {
       subjectDid: alice.did,
       circleId: circle.circle_id,
     });
+    await grantCircleMemberManageCapability(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: alice.did,
+      circleId: circle.circle_id,
+    });
+    await addCircleMemberCokret(request, aliceToken, circle.circle_id, {
+      actorId: alice.did,
+      membership: "join",
+    });
 
     const archived = await archiveCircleCokret(
       request,

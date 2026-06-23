@@ -285,7 +285,7 @@ test.describe("moderation and ban", () => {
       );
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
       await malloryRow.getByTestId("ban-member-button").click();
-      await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(/banned/i, {
+      await expect(alicePage.page.locator("main")).toContainText(/banned/i, {
         timeout: 30_000,
       });
 

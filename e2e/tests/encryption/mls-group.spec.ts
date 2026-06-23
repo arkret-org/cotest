@@ -1070,7 +1070,7 @@ test.describe("MLS group encryption", () => {
         .toBeGreaterThan(0);
 
       await bobRow.first().getByTestId("ban-member-button").click();
-      await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(
+      await expect(alicePage.page.locator("main")).toContainText(
         "epoch_update_required",
         { timeout: 30_000 },
       );

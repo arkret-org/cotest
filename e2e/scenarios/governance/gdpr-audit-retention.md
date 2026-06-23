@@ -31,7 +31,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase B — alice 导出 GDPR 数据
 
 2. alice 进 `/settings/account` → "Export my data"
-3. yougen 调 `POST /_soland/self/account/export`
+3. yougen 调 `GET /_soland/self/account/export`
 4. soland 异步生成 zip 包(可能 base64 inline 或返回 download URL)
 5. 断言:返回 200 + `export_id` + (可选)`download_url`
 6. alice 下载并解压 → 内含 JSON:`{ account: { did, handle, profile }, spaces: [...], messages: [...], devices: [...], audit_log: [...] }`

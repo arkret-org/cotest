@@ -63,6 +63,7 @@ test.describe("workflow: sprint planning", () => {
         summary: "Sprint planning + claims",
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [bob.did, carol.did],
       });
       await Promise.all([
@@ -197,6 +198,7 @@ test.describe("workflow: sprint planning", () => {
         summary: "Cross-user kanban hydration",
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [bob.did, carol.did],
       });
       await Promise.all([

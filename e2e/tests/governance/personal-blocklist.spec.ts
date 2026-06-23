@@ -139,6 +139,7 @@ test.describe("personal blocklist", () => {
           discoverability: "listed",
           joinRule: "invite",
           historyVisibility: "joined",
+          encryptionProfile: "none",
           seedMembers: [bob.did],
         });
         await bobPage.acceptInvite(realmId);

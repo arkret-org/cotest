@@ -1,4 +1,4 @@
-// Offline queue replay
+// Offline write fail-fast
 // Contract: e2e/scenarios/sync/offline-queue-replay.md
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
@@ -7,7 +7,6 @@ import {
   createSharedRealmViaApi,
   listRealmEventsViaApi,
 } from "../../helpers/api";
-import { signedEventEnvelope, submitSignedEventApi } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -19,101 +18,22 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("offline queue replay", () => {
-  test("offline compose shows a pending timeline badge", async ({ browser, request }) => {
-    const fixture = await createOfflineFixture(browser, request, "pending-badge");
-    try {
-      await fixture.bobPage.page.context().setOffline(true);
-      const body = `offline pending badge ${Date.now()}`;
-      await composeMessage(fixture.bobPage, body);
-      await expect(fixture.bobPage.timelineEvent(body)).toContainText("(pending)");
-      await expect(fixture.bobPage.page.getByTestId("write-status")).toContainText(/pending sync/);
-    } finally {
-      await fixture.bobPage.page.context().setOffline(false).catch(() => undefined);
-      await closeFixture(fixture);
-    }
-  });
-
-  test("offline queued message auto-flushes when the browser comes back online", async ({
+test.describe("offline write fail-fast", () => {
+  test("offline compose is marked failed locally and is not written to soland", async ({
     browser,
     request,
   }) => {
-    const fixture = await createOfflineFixture(browser, request, "single-flush");
+    const fixture = await createOfflineFixture(browser, request, "fail-fast");
     try {
-      const body = `offline auto flush ${Date.now()}`;
       await fixture.bobPage.page.context().setOffline(true);
+      const body = `offline fail fast ${Date.now()}`;
       await composeMessage(fixture.bobPage, body);
+      const row = fixture.bobPage.timelineEvent(body);
+      await expect(row).toHaveClass(/is-failed/);
+      await expect(row).not.toContainText("(pending)");
+      await expect(row.getByTestId("chat-message-error")).toContainText(/error sending request/i);
+
       await fixture.bobPage.page.context().setOffline(false);
-
-      await expect(fixture.bobPage.timelineEvent(body)).not.toContainText("(pending)", {
-        timeout: 30_000,
-      });
-      await expectServerEventsContain(request, fixture.aliceToken, fixture.realmId, [body]);
-    } finally {
-      await fixture.bobPage.page.context().setOffline(false).catch(() => undefined);
-      await closeFixture(fixture);
-    }
-  });
-
-  test("three offline messages flush and leave no pending markers", async ({ browser, request }) => {
-    const fixture = await createOfflineFixture(browser, request, "multi-flush");
-    try {
-      const bodies = [0, 1, 2].map((idx) => `offline multi ${idx} ${Date.now()}`);
-      await fixture.bobPage.page.context().setOffline(true);
-      for (const body of bodies) {
-        await composeMessage(fixture.bobPage, body);
-        await expect(fixture.bobPage.timelineEvent(body)).toContainText("(pending)");
-      }
-      await fixture.bobPage.page.context().setOffline(false);
-
-      await expectServerEventsContain(request, fixture.aliceToken, fixture.realmId, bodies);
-      await expect
-        .poll(async () => (await fixture.bobPage.page.getByTestId("message-list").innerText()).includes("(pending)"), {
-          timeout: 30_000,
-        })
-        .toBe(false);
-    } finally {
-      await fixture.bobPage.page.context().setOffline(false).catch(() => undefined);
-      await closeFixture(fixture);
-    }
-  });
-
-  test("queued offline message is discarded when Bob is banned before reconnect", async ({
-    browser,
-    request,
-  }) => {
-    const fixture = await createOfflineFixture(browser, request, "ban-discard");
-    try {
-      const body = `offline banned discard ${Date.now()}`;
-      await fixture.bobPage.page.context().setOffline(true);
-      await composeMessage(fixture.bobPage, body);
-      await banMember(request, fixture);
-      await fixture.bobPage.page.context().setOffline(false);
-
-      await expect(fixture.bobPage.page.getByTestId("write-status")).toContainText(
-        /discarded pending change/,
-        { timeout: 30_000 },
-      );
-      await expect(fixture.bobPage.timelineEvent(body)).not.toContainText("(pending)");
-    } finally {
-      await fixture.bobPage.page.context().setOffline(false).catch(() => undefined);
-      await closeFixture(fixture);
-    }
-  });
-
-  test("discarded offline message is not written to soland", async ({ browser, request }) => {
-    const fixture = await createOfflineFixture(browser, request, "ban-not-written");
-    try {
-      const body = `offline banned not written ${Date.now()}`;
-      await fixture.bobPage.page.context().setOffline(true);
-      await composeMessage(fixture.bobPage, body);
-      await banMember(request, fixture);
-      await fixture.bobPage.page.context().setOffline(false);
-
-      await expect(fixture.bobPage.page.getByTestId("write-status")).toContainText(
-        /discarded pending change/,
-        { timeout: 30_000 },
-      );
       const serialized = JSON.stringify(
         await listRealmEventsViaApi(request, fixture.aliceToken, fixture.realmId),
       );
@@ -173,43 +93,6 @@ async function composeMessage(userPage: JointUserPage, body: string) {
   await expect(userPage.timelineEvent(body)).toBeVisible({ timeout: 30_000 });
 }
 
-async function expectServerEventsContain(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  bodies: string[],
-) {
-  await expect
-    .poll(async () => JSON.stringify(await listRealmEventsViaApi(request, token, realmId)), {
-      timeout: 30_000,
-    })
-    .toContain(bodies[bodies.length - 1]);
-  const serialized = JSON.stringify(await listRealmEventsViaApi(request, token, realmId));
-  for (const body of bodies) {
-    expect(serialized).toContain(body);
-  }
-}
-
-async function banMember(request: APIRequestContext, fixture: OfflineFixture) {
-  await submitSignedEventApi(
-    request,
-    fixture.aliceToken,
-    signedEventEnvelope({
-      actorDid: fixture.alice.did,
-      realmId: fixture.realmId,
-      kind: "ck.member.state",
-      payload: {
-        realm_id: fixture.realmId,
-        actor_id: fixture.bob.did,
-        membership: "ban",
-        reason: "offline_queue_discard_test",
-      },
-    }),
-    { context: `ban ${fixture.bob.did} during offline queue test` },
-  );
-}
-
 async function closeFixture(fixture: OfflineFixture) {
   await Promise.allSettled([fixture.bobPage.close(), fixture.alicePage.close()]);
 }
-

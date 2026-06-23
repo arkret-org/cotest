@@ -52,6 +52,7 @@ test.describe("workflow: async daily standup", () => {
         summary: "Async standup channel",
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [pat.did, quincy.did],
       });
       await Promise.all([

@@ -24,6 +24,10 @@ import {
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
+import {
+  requestContactCokret,
+  respondContactCokret,
+} from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -115,13 +119,14 @@ test.describe("GDPR / audit / retention", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // bob and alice connect so bob's directory search can see alice pre-erase.
-    await request.post(`${solandBaseUrl()}/_soland/self/contacts/request`, {
-      headers: { authorization: `Bearer ${bobToken}` },
-      data: { target: alice.did },
+    const { outcome } = await requestContactCokret(request, bobToken, alice.did, {
+      requestedScopes: ["direct_message"],
     });
-    await request.post(`${solandBaseUrl()}/_soland/self/contacts/respond`, {
-      headers: { authorization: `Bearer ${aliceToken}` },
-      data: { requester: bob.did, action: "accept" },
+    await respondContactCokret(request, aliceToken, {
+      requestId: outcome.request_event_ref,
+      requester: bob.did,
+      action: "accept",
+      grantedScopes: ["direct_message"],
     });
 
     // Pre-erasure: bob's directory search returns alice.
@@ -168,9 +173,8 @@ test.describe("GDPR / audit / retention", () => {
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
 
-    const exportResp = await request.post(`${solandBaseUrl()}/_soland/self/account/export`, {
+    const exportResp = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${aliceToken}` },
-      data: {},
     });
     expect(exportResp.status()).toBe(200);
     const eraseResp = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
@@ -242,12 +246,12 @@ test.describe("GDPR / audit / retention", () => {
     const tombstone = (
       sweepBody.tombstoned as Array<{
         event_id?: string;
-        anchored?: boolean;
+        sealed?: boolean;
         physical_delete?: boolean;
       }>
     ).find((row) => row.event_id === sent.event_id);
     expect(tombstone).toBeTruthy();
-    expect(tombstone?.anchored).toBe(true);
+    expect(tombstone?.sealed).toBe(true);
     expect(tombstone?.physical_delete).toBe(false);
 
     const after = await queryRealmEventsApi(request, aliceToken, realmId);

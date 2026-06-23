@@ -10,6 +10,7 @@
 // New `requested_scopes:[...]` contract (NOT the legacy `/_soland` + `scope`
 // surface that consent-grant.spec.ts exercises).
 
+import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -19,6 +20,7 @@ import {
 } from "../../helpers/users";
 import {
   authHeaders,
+  canonicalJson,
   createRealmApi,
   queryRealmEventsApi,
   signedEventEnvelope,
@@ -34,6 +36,7 @@ import {
   requestContactCokret,
   resolveDirectConversationCokret,
   respondContactCokret,
+  seedDirectConversationIdentityCokret,
   setInviteReceivePolicyCokret,
   tombstoneContactCokret,
 } from "../../helpers/contact-api";
@@ -149,6 +152,10 @@ test.describe("contact graph (same principal server)", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
+    await Promise.all([
+      seedDirectConversationIdentityCokret(request, aliceToken, alice),
+      seedDirectConversationIdentityCokret(request, bobToken, bob),
+    ]);
 
     // Establish a bidirectional direct_message contact. direct conversation
     // resolve requires (1) accepted contact for the pair and (2) the PEER
@@ -196,25 +203,29 @@ test.describe("contact graph (same principal server)", () => {
     expect(aliceRow?.direct_conversation?.realm_id).toBe(realmId);
     expect(aliceRow?.direct_conversation?.state).toBe("active");
 
-    // Message leg (live): `direct_conversation.resolve(create=true)` now stands
-    // up a real event-log DM Realm (ck.realm.create + both members' join +
-    // main ck.strand.create), so a ck.message.create into the bound main strand is
-    // accepted AND readable by the peer through the canonical event read API.
-    // spec contact-and-direct-conversation.md §6 step5 / §7 / §8.
-    const body = `dm body ${Date.now()}`;
+    // Message leg (live): direct conversations are private Realms, so message
+    // content must be carried as encrypted_content unless the Realm explicitly
+    // lists a plaintext-visible service. The peer still reads the canonical
+    // event envelope and ciphertext through the standard event API.
+    const plaintext = `dm body ${Date.now()}`;
+    const ciphertext = Buffer.from(
+      `opaque-direct-ciphertext-${Date.now()}`,
+      "utf8",
+    ).toString("base64url");
+    const envelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ck.message.create",
+      payload: {
+        strand_id: resolved.main_strand_id!,
+        track_name: "discussion",
+        encrypted_content: encryptedEnvelope(ciphertext, realmId),
+      },
+    });
     await submitSignedEventApi(
       request,
       aliceToken,
-      signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ck.message.create",
-        payload: {
-          strand_id: resolved.main_strand_id!,
-          track_name: "discussion",
-          content: { kind: "ck.content.text", body },
-        },
-      }),
+      envelope,
       { context: "dm message into direct realm" },
     );
     // The peer (bob) reads the message back through the bound realm: a real
@@ -222,7 +233,12 @@ test.describe("contact graph (same principal server)", () => {
     const events = await queryRealmEventsApi(request, bobToken, realmId, {
       limit: 50,
     });
-    expect(JSON.stringify(events)).toContain(body);
+    const serverView = JSON.stringify(events);
+    expect(serverView).toContain(String(envelope.event_id));
+    expect(serverView).toContain("encrypted_content");
+    expect(serverView).toContain("payload_digest");
+    expect(serverView).toContain(ciphertext);
+    expect(serverView).not.toContain(plaintext);
   });
 
   // S4 (core closed loop): already friends (invite scope) -> use
@@ -515,3 +531,44 @@ test.describe("contact graph (same principal server)", () => {
     void request;
   });
 });
+
+function encryptedEnvelope(
+  ciphertext: string,
+  realmId: string,
+): Record<string, unknown> {
+  const aad = { realm_id: realmId, event_kind: "ck.message.create" };
+  const payloadMetadata = {
+    scheme: "mls-rfc9420",
+    version: "1.0",
+    group_id: "mls_test",
+    epoch: 1,
+    content_type: "application/vnd.cokret.message+json",
+    aad_visibility_event_id: "hidden",
+    aad,
+    key_ref: {
+      algorithm: "MLS",
+      group_state_ref:
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    },
+  };
+  return {
+    ...payloadMetadata,
+    ciphertext,
+    aad_digest: sha256Digest(canonicalJson(aad)),
+    payload_digest: encryptedPayloadDigest(payloadMetadata, ciphertext),
+  };
+}
+
+function sha256Digest(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function encryptedPayloadDigest(
+  metadata: Record<string, unknown>,
+  ciphertext: string,
+): string {
+  const hash = createHash("sha256");
+  hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
+  hash.update(Buffer.from(ciphertext, "base64url"));
+  return `sha256:${hash.digest("hex")}`;
+}

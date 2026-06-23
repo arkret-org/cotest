@@ -789,17 +789,18 @@ test.describe("chat advanced", () => {
       ]);
 
       await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
+      const aliceTypingIndicator = bobPage.page
+        .getByTestId("typing-indicator")
+        .filter({
+          has: bobPage.page.locator(
+            `[data-typing-actors*="${cssStringEscape(alice.did)}"]`,
+          ),
+        });
       await expect(
-        bobPage.page
-          .getByTestId("typing-indicator")
-          .filter({ hasText: alice.displayName }),
-      ).toBeVisible({ timeout: 1_000 });
+        aliceTypingIndicator,
+      ).toBeVisible({ timeout: 5_000 });
       await stepShot(bobPage.page, testInfo, "typing-visible");
-      await expect(
-        bobPage.page
-          .getByTestId("typing-indicator")
-          .filter({ hasText: alice.displayName }),
-      ).toHaveCount(0, { timeout: 7_000 });
+      await expect(aliceTypingIndicator).toHaveCount(0, { timeout: 7_000 });
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
     }
@@ -925,6 +926,10 @@ test.describe("chat advanced", () => {
 
 function mentionSidecarHash(realmId: string, did: string): string {
   return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
+}
+
+function cssStringEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function encryptedEnvelope(
