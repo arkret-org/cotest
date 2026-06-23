@@ -11,12 +11,7 @@
 
 import { expect, test } from "@playwright/test";
 import { stepShot } from "../../helpers/screenshots";
-import {
-  ensureRegistered,
-  issueDevSession,
-  openUserPage,
-  uniqueUser,
-} from "../../helpers/users";
+import { openDpopUserPage } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -26,15 +21,20 @@ test.describe("workflow: team onboarding", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const mei = uniqueUser("wf-onboard-mei");
-    const yuki = uniqueUser("wf-onboard-yuki");
-    await Promise.all([ensureRegistered(request, mei), ensureRegistered(request, yuki)]);
-    const [meiToken, yukiToken] = await Promise.all([
-      issueDevSession(request, mei),
-      issueDevSession(request, yuki),
+    const [meiFlow, yukiFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "wf-onboard-mei"),
+      openDpopUserPage(browser, request, "wf-onboard-yuki"),
     ]);
-    const meiPage = await openUserPage(browser, mei, { sessionCredential: meiToken });
-    const yukiPage = await openUserPage(browser, yuki, { sessionCredential: yukiToken });
+    test.skip(
+      !meiFlow || !yukiFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!meiFlow || !yukiFlow) {
+      return;
+    }
+    const yuki = yukiFlow.user;
+    const meiPage = meiFlow.page;
+    const yukiPage = yukiFlow.page;
 
     const welcome = `Hi Yuki, welcome aboard! Ping me if anything blocks you. ${stamp}`;
     const welcomeEdited = `${welcome} (Onboarding hub: https://corp.example/onboarding)`;
@@ -60,8 +60,7 @@ test.describe("workflow: team onboarding", () => {
       await expect(yukiPage.page.getByTestId("message-list")).toContainText(welcome, {
         timeout: 30_000,
       });
-      const welcomeOnYuki = yukiPage.timelineEvent(welcome);
-      await welcomeOnYuki.getByTestId("chat-reply-button").click();
+      await yukiPage.clickTimelineReply(welcome);
       await expect(yukiPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await yukiPage.sendTimelineMessage(realmId, yukiThanks);
       await expect(yukiPage.timelineEvent(yukiThanks)).toBeVisible({ timeout: 30_000 });
@@ -73,7 +72,7 @@ test.describe("workflow: team onboarding", () => {
       // Phase C — Mei edits the welcome in place; Yuki sees the patched copy.
       await meiPage.gotoTimelineRealm(realmId);
       await expect(meiPage.timelineEvent(welcome)).toBeVisible({ timeout: 30_000 });
-      await meiPage.timelineEvent(welcome).getByTestId("chat-edit-button").click();
+      await meiPage.clickTimelineEdit(welcome);
       await meiPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(welcomeEdited);
       await meiPage.page.getByTestId("chat-save-edit-button").click();
       await expect(meiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
@@ -115,4 +114,3 @@ test.describe("workflow: team onboarding", () => {
     },
   );
 });
-

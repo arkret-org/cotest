@@ -90,6 +90,12 @@ export type DpopUserSession = {
   deviceKey: DpopDeviceKey;
 };
 
+export type DpopUserPageSession = {
+  user: JointUser;
+  session: DpopUserSession;
+  page: JointUserPage;
+};
+
 export type CreateRealmOpts = {
   title: string;
   summary?: string;
@@ -653,6 +659,23 @@ export class JointUserPage {
       .first();
   }
 
+  async clickTimelineReply(body: string) {
+    await this.clickTimelineAction(body, "chat-reply-button");
+  }
+
+  async clickTimelineEdit(body: string) {
+    await this.clickTimelineAction(body, "chat-edit-button");
+  }
+
+  private async clickTimelineAction(body: string, testId: string) {
+    const event = this.timelineEvent(body);
+    await expect(event).toBeVisible({ timeout: 30_000 });
+    await event.hover();
+    const action = event.getByTestId(testId);
+    await expect(action).toBeVisible({ timeout: 30_000 });
+    await action.click();
+  }
+
   async close() {
     await closeUser(this.session);
   }
@@ -790,6 +813,48 @@ export async function createDpopUserSession(
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     deviceKey,
   };
+}
+
+export async function openDpopUserPage(
+  browser: Browser,
+  request: APIRequestContext,
+  prefix: string,
+  opts: {
+    server?: SolandKey;
+    coauthBase?: string;
+    prepareMlsDevice?: boolean;
+  } = {},
+): Promise<DpopUserPageSession | undefined> {
+  const session = await createDpopUserSession(request, prefix, opts);
+  if (!session) {
+    return undefined;
+  }
+  const page = await openUserPage(browser, session.user, {
+    server: opts.server,
+    grantJwt: session.grantJwt,
+    dpopSeedB64url: session.dpopSeedB64url,
+    grantId: session.grantId,
+    grantAudience: session.grantAudience,
+  });
+  if (opts.prepareMlsDevice !== false) {
+    await page.gotoHome();
+    await page.completeRecoveryKeySetupIfPrompted();
+    await page.acknowledgeRecommendedEncryptionPromptIfVisible();
+  }
+  return { user: session.user, session, page };
+}
+
+export function selfPathHeadersForDpopSession(
+  session: DpopUserSession,
+  method: string,
+  url: string,
+): Record<string, string> {
+  return selfPathGrantHeaders({
+    deviceKey: session.deviceKey,
+    grantJwt: session.grantJwt,
+    method,
+    url,
+  });
 }
 
 export async function openUser(

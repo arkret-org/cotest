@@ -128,6 +128,28 @@ def main() -> int:
     )
     src = replace_top_level_section(src, "account", account)
 
+    rate_limiting = (
+        "rate_limiting:\n"
+        "  registration:\n"
+        "    burst: 100000\n"
+        "    per_second: 100000\n"
+        "  login:\n"
+        "    per_ip:\n"
+        "      burst: 100000\n"
+        "      per_second: 100000\n"
+        "    per_account:\n"
+        "      burst: 100000\n"
+        "      per_second: 100000\n"
+        "  email_authentication:\n"
+        "    per_ip:\n"
+        "      burst: 100000\n"
+        "      per_second: 100000\n"
+        "    per_address:\n"
+        "      burst: 100000\n"
+        "      per_second: 100000\n"
+    )
+    src = replace_top_level_section(src, "rate_limiting", rate_limiting)
+
     if args.mock_email_base_url:
         mock_email_send = trailing_slash(args.mock_email_base_url) + "mock/email/verification/send"
         email = (

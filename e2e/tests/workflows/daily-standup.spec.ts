@@ -9,12 +9,7 @@
 
 import { expect, test } from "@playwright/test";
 import { stepShot } from "../../helpers/screenshots";
-import {
-  ensureRegistered,
-  issueDevSession,
-  openUserPage,
-  uniqueUser,
-} from "../../helpers/users";
+import { openDpopUserPage } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -23,23 +18,26 @@ test.describe("workflow: async daily standup", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
-    const lin = uniqueUser("wf-standup-lin");
-    const pat = uniqueUser("wf-standup-pat");
-    const quincy = uniqueUser("wf-standup-quincy");
-    await Promise.all([
-      ensureRegistered(request, lin),
-      ensureRegistered(request, pat),
-      ensureRegistered(request, quincy),
+    const encryptedSyncTimeout = 90_000;
+    const [linFlow, patFlow, quincyFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "wf-standup-lin"),
+      openDpopUserPage(browser, request, "wf-standup-pat"),
+      openDpopUserPage(browser, request, "wf-standup-quincy"),
     ]);
-    const [linToken, patToken, quincyToken] = await Promise.all([
-      issueDevSession(request, lin),
-      issueDevSession(request, pat),
-      issueDevSession(request, quincy),
-    ]);
-    const linPage = await openUserPage(browser, lin, { sessionCredential: linToken });
-    const patPage = await openUserPage(browser, pat, { sessionCredential: patToken });
-    const quincyPage = await openUserPage(browser, quincy, { sessionCredential: quincyToken });
+    test.skip(
+      !linFlow || !patFlow || !quincyFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!linFlow || !patFlow || !quincyFlow) {
+      return;
+    }
+    const pat = patFlow.user;
+    const quincy = quincyFlow.user;
+    const linPage = linFlow.page;
+    const patPage = patFlow.page;
+    const quincyPage = quincyFlow.page;
 
     const linStandup = `[Standup] Yesterday: shipped onboarding. Today: code review. Blockers: none. ${stamp}`;
     const patStandup = `[Standup] Yesterday: kanban bug. Today: deploy fix. Blockers: need Lin's review on PR #88. ${stamp}`;
@@ -56,7 +54,14 @@ test.describe("workflow: async daily standup", () => {
         joinRule: "invite",
         seedMembers: [pat.did, quincy.did],
       });
-      await Promise.all([patPage.acceptInvite(realmId), quincyPage.acceptInvite(realmId)]);
+      await Promise.all([
+        patPage.acceptInvite(realmId),
+        quincyPage.acceptInvite(realmId),
+      ]);
+      await Promise.all([
+        patPage.gotoTimelineRealm(realmId),
+        quincyPage.gotoTimelineRealm(realmId),
+      ]);
 
       // Phase B — three standups land.
       await linPage.sendTimelineMessage(realmId, linStandup);
@@ -66,64 +71,84 @@ test.describe("workflow: async daily standup", () => {
       for (const actor of [linPage, patPage, quincyPage]) {
         await actor.gotoTimelineRealm(realmId);
         for (const body of [linStandup, patStandup, quincyStandup]) {
-          await expect(actor.page.getByTestId("message-list")).toContainText(body, {
-            timeout: 30_000,
-          });
+          await expect(actor.page.getByTestId("message-list")).toContainText(
+            body,
+            {
+              timeout: encryptedSyncTimeout,
+            },
+          );
         }
       }
       await stepShot(linPage.page, testInfo, "B-three-standups");
 
       // Phase C — Lin replies on Pat's standup to unblock the PR review.
       await linPage.gotoTimelineRealm(realmId);
-      await expect(linPage.page.getByTestId("message-list")).toContainText(patStandup, {
-        timeout: 30_000,
-      });
-      await linPage.timelineEvent(patStandup).getByTestId("chat-reply-button").click();
+      await expect(linPage.page.getByTestId("message-list")).toContainText(
+        patStandup,
+        {
+          timeout: encryptedSyncTimeout,
+        },
+      );
+      await linPage.clickTimelineReply(patStandup);
       await expect(linPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await linPage.sendTimelineMessage(realmId, linUnblockPat);
-      await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
+      await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({
+        timeout: encryptedSyncTimeout,
+      });
       await expect(
-        linPage.timelineEvent(linUnblockPat).getByTestId("chat-reply-indicator"),
-      ).toBeVisible({ timeout: 30_000 });
+        linPage
+          .timelineEvent(linUnblockPat)
+          .getByTestId("chat-reply-indicator"),
+      ).toBeVisible({ timeout: encryptedSyncTimeout });
 
       await patPage.gotoTimelineRealm(realmId);
-      await expect(patPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
+      await expect(patPage.timelineEvent(linUnblockPat)).toBeVisible({
+        timeout: encryptedSyncTimeout,
+      });
       await stepShot(patPage.page, testInfo, "C-unblock-landed");
 
       // Phase D — Lin realises 30min is wrong and edits the reply.
       await linPage.gotoTimelineRealm(realmId);
-      await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({ timeout: 30_000 });
-      await linPage.timelineEvent(linUnblockPat).getByTestId("chat-edit-button").click();
-      await linPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(linUnblockPatFixed);
+      await expect(linPage.timelineEvent(linUnblockPat)).toBeVisible({
+        timeout: encryptedSyncTimeout,
+      });
+      await linPage.clickTimelineEdit(linUnblockPat);
+      await linPage.page
+        .getByTestId("chat-edit-composer")
+        .locator("textarea")
+        .fill(linUnblockPatFixed);
       await linPage.page.getByTestId("chat-save-edit-button").click();
-      await expect(linPage.timelineEvent(linUnblockPatFixed)).toBeVisible({ timeout: 30_000 });
-      await expect(linPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
+      await expect(linPage.timelineEvent(linUnblockPatFixed)).toBeVisible({
+        timeout: encryptedSyncTimeout,
+      });
+      await expect(linPage.page.getByTestId("chat-status")).toContainText(
+        /Message updated/i,
+      );
       await patPage.gotoTimelineRealm(realmId);
-      await expect(patPage.timelineEvent(linUnblockPatFixed)).toBeVisible({ timeout: 30_000 });
+      await expect(patPage.timelineEvent(linUnblockPatFixed)).toBeVisible({
+        timeout: encryptedSyncTimeout,
+      });
       await stepShot(patPage.page, testInfo, "D-eta-corrected");
     } finally {
-      await Promise.allSettled([quincyPage.close(), patPage.close(), linPage.close()]);
+      await Promise.allSettled([
+        quincyPage.close(),
+        patPage.close(),
+        linPage.close(),
+      ]);
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#workflows-daily-standup-gap
-    // @user-promise: e2e/scenarios/workflows/daily-standup.md
-    // @expected-live-by: 2026Q3
-    "E-standup.offline pat is offline mid-post; reconnect flushes the outbox",
-    async () => {
-      // yougen gap: outbox UX + offline persistence (sync/offline-conflict).
-    },
-  );
+  test.fixme(// @blocking-on: soland#workflows-daily-standup-gap
+  // @user-promise: e2e/scenarios/workflows/daily-standup.md
+  // @expected-live-by: 2026Q3
+  "E-standup.offline pat is offline mid-post; reconnect flushes the outbox", async () => {
+    // yougen gap: outbox UX + offline persistence (sync/offline-conflict).
+  });
 
-  test.fixme(
-    // @blocking-on: soland#workflows-daily-standup-gap
-    // @user-promise: e2e/scenarios/workflows/daily-standup.md
-    // @expected-live-by: 2026Q3
-    "E-standup.redact lin redacts their own standup after spotting a wrong template",
-    async () => {
-      // Same redact pattern as triad — pulled out here for the standup story.
-    },
-  );
+  test.fixme(// @blocking-on: soland#workflows-daily-standup-gap
+  // @user-promise: e2e/scenarios/workflows/daily-standup.md
+  // @expected-live-by: 2026Q3
+  "E-standup.redact lin redacts their own standup after spotting a wrong template", async () => {
+    // Same redact pattern as triad — pulled out here for the standup story.
+  });
 });
-

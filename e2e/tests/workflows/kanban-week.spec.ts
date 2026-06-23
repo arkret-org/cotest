@@ -13,10 +13,9 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
-  ensureRegistered,
-  issueDevSession,
-  openUserPage,
-  uniqueUser,
+  openDpopUserPage,
+  selfPathHeadersForDpopSession,
+  type DpopUserSession,
 } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -27,10 +26,15 @@ test.describe("workflow: kanban week-in-review", () => {
     request,
   }, testInfo) => {
     const stamp = Date.now();
-    const pat = uniqueUser("wf-kanban-pat");
-    await ensureRegistered(request, pat);
-    const patToken = await issueDevSession(request, pat);
-    const patPage = await openUserPage(browser, pat, { sessionCredential: patToken });
+    const patFlow = await openDpopUserPage(browser, request, "wf-kanban-pat");
+    test.skip(
+      !patFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!patFlow) {
+      return;
+    }
+    const patPage = patFlow.page;
 
     const todayList = `Today-${stamp}`;
     const doingList = `Doing-${stamp}`;
@@ -162,10 +166,10 @@ test.describe("workflow: kanban week-in-review", () => {
         .getAttribute("data-space-container-id");
       expect(todayListId ?? "").toMatch(/^ck:space:/);
       await expect
-        .poll(async () => strandState(request, realmId, patToken, prStrandIdValue))
+        .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue))
         .toBe("active");
       await expect
-        .poll(async () => strandState(request, realmId, patToken, specStrandIdValue))
+        .poll(async () => strandState(request, realmId, patFlow.session, specStrandIdValue))
         .toBe("active");
 
       // list-archive-button is hover-revealed on the column header — hover
@@ -178,12 +182,12 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => strandState(request, realmId, patToken, prStrandIdValue), {
+        .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("archived");
       await expect
-        .poll(async () => strandState(request, realmId, patToken, specStrandIdValue), {
+        .poll(async () => strandState(request, realmId, patFlow.session, specStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("archived");
@@ -198,12 +202,12 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => strandState(request, realmId, patToken, prStrandIdValue), {
+        .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("active");
       await expect
-        .poll(async () => strandState(request, realmId, patToken, specStrandIdValue), {
+        .poll(async () => strandState(request, realmId, patFlow.session, specStrandIdValue), {
           timeout: 30_000,
         })
         .toBe("active");
@@ -217,13 +221,13 @@ test.describe("workflow: kanban week-in-review", () => {
 async function strandState(
   request: APIRequestContext,
   realmId: string,
-  token: string,
+  session: DpopUserSession,
   strandId: string,
 ): Promise<string | undefined> {
-  const resp = await request.get(
-    `${solandBaseUrl()}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}&include_terminal=true`,
-    { headers: { authorization: `Bearer ${token}` } },
-  );
+  const url = `${solandBaseUrl()}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}&include_terminal=true`;
+  const resp = await request.get(url, {
+    headers: selfPathHeadersForDpopSession(session, "GET", url),
+  });
   if (resp.status() !== 200) {
     return undefined;
   }

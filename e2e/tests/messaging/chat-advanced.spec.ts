@@ -514,11 +514,7 @@ test.describe("chat advanced", () => {
       await stepShot(alicePage.page, testInfo, "reactions-converged");
 
       await gotoChat(bobPage, realmId);
-      const bobOnM1Reload = bobPage.page
-        .getByTestId("chat-message")
-        .filter({ hasText: m1 })
-        .first();
-      await bobOnM1Reload.getByTestId("chat-reply-button").click();
+      await bobPage.clickTimelineReply(m1);
       await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await sendChat(bobPage, realmId, m2);
       const bobOnM2 = bobPage.page

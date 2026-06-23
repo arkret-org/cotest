@@ -249,15 +249,14 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(bobPage.page, testInfo, "B-bob-received-m1");
 
       // Reply to M1, then edit. Chat view's reply testids use the `chat-*` prefix.
-      const m1Event = bobPage.timelineEvent(m1);
-      await m1Event.getByTestId("chat-reply-button").click();
+      await bobPage.clickTimelineReply(m1);
       await expect(bobPage.page.getByTestId("chat-reply-banner")).toBeVisible();
       await bobPage.sendTimelineMessage(realmId, m2);
       const m2EventOnBob = bobPage.timelineEvent(m2);
       await expect(m2EventOnBob.getByTestId("chat-reply-indicator")).toBeVisible();
       await stepShot(bobPage.page, testInfo, "B-bob-replied");
 
-      await m2EventOnBob.getByTestId("chat-edit-button").click();
+      await bobPage.clickTimelineEdit(m2);
       await bobPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(m2Edited);
       await bobPage.page.getByTestId("chat-save-edit-button").click();
       await expect(bobPage.timelineEvent(m2Edited)).toBeVisible({ timeout: 30_000 });
@@ -423,4 +422,3 @@ test.describe("single-server triad collaboration", () => {
     });
   });
 });
-
