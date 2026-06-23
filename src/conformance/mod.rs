@@ -660,56 +660,63 @@ pub(crate) const RANK_ALPHABET: &str =
 pub(crate) const RANK_MAX_LENGTH: usize = 128;
 
 pub(crate) fn rank_between(left: Option<&str>, right: Option<&str>) -> Result<String> {
-    if let Some(rank) = left {
-        validate_rank(rank, RANK_MAX_LENGTH)?;
-    }
-    if let Some(rank) = right {
-        validate_rank(rank, RANK_MAX_LENGTH)?;
+    let left = left.unwrap_or("");
+    let right = right.unwrap_or("");
+    validate_rank_boundary(left)?;
+    validate_rank_boundary(right)?;
+    if !left.is_empty() && !right.is_empty() && left >= right {
+        bail!("left rank must be lower than right rank");
     }
 
-    match (left, right) {
-        (Some(left), Some(right)) if left >= right => {
-            bail!("left rank must be lower than right rank");
+    let alphabet = RANK_ALPHABET.as_bytes();
+    let left_bytes = left.as_bytes();
+    let right_bytes = right.as_bytes();
+    let mut prefix: Vec<u8> = Vec::with_capacity(8);
+    let mut index = 0usize;
+    while prefix.len() < RANK_MAX_LENGTH {
+        let lower = left_bytes
+            .get(index)
+            .map(|byte| rank_byte_index(*byte).expect("validated rank boundary"))
+            .unwrap_or(-1);
+        let upper = if right_bytes.is_empty() {
+            alphabet.len() as i32
+        } else {
+            right_bytes
+                .get(index)
+                .map(|byte| rank_byte_index(*byte).expect("validated rank boundary"))
+                .unwrap_or(alphabet.len() as i32)
+        };
+        if upper - lower > 1 {
+            prefix.push(alphabet[((lower + upper) / 2) as usize]);
+            return String::from_utf8(prefix).map_err(Into::into);
         }
-        (Some(left), Some(right)) if right.starts_with(left) => {
-            let candidate = format!("{left}0");
-            if candidate.as_str() < right {
-                return Ok(candidate);
-            }
-            bail!("no dense rank between {left} and {right}");
-        }
-        (Some(left), Some(right)) if left.len() == right.len() && left.len() >= 2 => {
-            let left_prefix = &left[..left.len() - 1];
-            let right_prefix = &right[..right.len() - 1];
-            if left_prefix != right_prefix {
-                bail!("rank prefixes differ for {left} / {right}");
-            }
-            let left_digit = rank_char_index(left.chars().last().unwrap())?;
-            let right_digit = rank_char_index(right.chars().last().unwrap())?;
-            if right_digit <= left_digit + 1 {
-                bail!("no Realm between {left} and {right}");
-            }
-            let middle = (left_digit + right_digit) / 2;
-            Ok(format!("{left_prefix}{}", rank_char_at(middle)?))
-        }
-        (left, right) => {
-            let lower = match left {
-                Some(rank) if rank.len() == 1 => rank_char_index(rank.chars().next().unwrap())?,
-                Some(rank) => bail!("unsupported lower boundary rank {rank}"),
-                None => -1,
-            };
-            let upper = match right {
-                Some(rank) if rank.len() == 1 => rank_char_index(rank.chars().next().unwrap())?,
-                Some(rank) => bail!("unsupported upper boundary rank {rank}"),
-                None => RANK_ALPHABET.len() as i32,
-            };
-            if upper <= lower + 1 {
+        if let Some(byte) = left_bytes.get(index) {
+            prefix.push(*byte);
+        } else {
+            prefix.push(alphabet[0]);
+            if !right_bytes.is_empty() && prefix.as_slice() == right_bytes {
                 bail!("no rank available between boundaries");
             }
-            let middle = (lower + upper) / 2;
-            Ok(rank_char_at(middle)?.to_string())
+            return String::from_utf8(prefix).map_err(Into::into);
         }
+        index += 1;
     }
+    bail!("no rank available between boundaries");
+}
+
+fn validate_rank_boundary(rank: &str) -> Result<()> {
+    if rank.len() > RANK_MAX_LENGTH || !rank.bytes().all(|byte| rank_byte_index(byte).is_some()) {
+        bail!("invalid_rank");
+    }
+    Ok(())
+}
+
+fn rank_byte_index(byte: u8) -> Option<i32> {
+    RANK_ALPHABET
+        .as_bytes()
+        .iter()
+        .position(|candidate| *candidate == byte)
+        .map(|index| index as i32)
 }
 
 pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
@@ -722,42 +729,52 @@ pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn rank_char_index(ch: char) -> Result<i32> {
-    RANK_ALPHABET
-        .chars()
-        .position(|candidate| candidate == ch)
-        .map(|index| index as i32)
-        .ok_or_else(|| anyhow!("invalid_rank"))
-}
-
-pub(crate) fn rank_char_at(index: i32) -> Result<char> {
-    if index < 0 {
-        bail!("invalid_rank");
-    }
-    RANK_ALPHABET
-        .chars()
-        .nth(index as usize)
-        .ok_or_else(|| anyhow!("invalid_rank"))
-}
-
 pub(crate) fn rebalance_assignments(edges: &[RankEdge]) -> Result<Vec<RankAssignment>> {
     let count = edges.len();
     validate_rebalance_assignment_count(count, count)?;
-    let alphabet_span = (RANK_ALPHABET.len() + 1) as f64;
-    let denominator = (count + 1) as f64;
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    let denominator = count as u128 + 1;
+    let required_capacity = denominator
+        .checked_mul(2)
+        .ok_or_else(|| anyhow!("too many rank rebalance assignments"))?;
+    let mut width = 0usize;
+    let mut capacity = 1u128;
+    while capacity < required_capacity {
+        width += 1;
+        if width > RANK_MAX_LENGTH {
+            bail!("too many rank rebalance assignments");
+        }
+        capacity = capacity
+            .checked_mul(RANK_ALPHABET.len() as u128)
+            .ok_or_else(|| anyhow!("too many rank rebalance assignments"))?;
+    }
     edges
         .iter()
         .enumerate()
         .map(|(index, edge)| {
-            let rank_index =
-                (-1.0 + (((index + 1) as f64 * alphabet_span) / denominator)).round() as i32;
+            let rank_number = (index as u128 + 1)
+                .checked_mul(capacity)
+                .map(|product| product / denominator)
+                .ok_or_else(|| anyhow!("too many rank rebalance assignments"))?;
             Ok(RankAssignment {
                 relation_id: edge.relation_id.clone(),
                 object_ref: edge.object_ref.clone(),
-                rank: rank_char_at(rank_index)?.to_string(),
+                rank: format_rank_number(rank_number, width),
             })
         })
         .collect()
+}
+
+fn format_rank_number(mut value: u128, width: usize) -> String {
+    let alphabet = RANK_ALPHABET.as_bytes();
+    let mut output = vec![alphabet[0]; width];
+    for byte in output.iter_mut().rev() {
+        *byte = alphabet[(value % alphabet.len() as u128) as usize];
+        value /= alphabet.len() as u128;
+    }
+    String::from_utf8(output).expect("rank alphabet is valid UTF-8")
 }
 
 pub(crate) fn validate_rebalance_assignment_count(
