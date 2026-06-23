@@ -56,6 +56,68 @@ test.describe("personal blocklist", () => {
 
   });
 
+  test("Complement account_data control: same data_type overwrites and sync returns latest entry", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser("s31-accountdata");
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const dataType = `client.complement_probe.${stamp}`;
+    const first = { version: 1, label: `first-${stamp}` };
+    const second = { version: 2, label: `second-${stamp}` };
+
+    const firstPut = await request.put(
+      `${solandBaseUrl()}/_cokret/self/account_data/${encodeURIComponent(dataType)}`,
+      {
+        headers: authHeaders(token),
+        data: { content: first },
+      },
+    );
+    expect(firstPut.status()).toBe(201);
+    expect(((await firstPut.json()) as { content?: Record<string, unknown> }).content)
+      .toMatchObject(first);
+
+    const secondPut = await request.put(
+      `${solandBaseUrl()}/_cokret/self/account_data/${encodeURIComponent(dataType)}`,
+      {
+        headers: authHeaders(token),
+        data: { content: second },
+      },
+    );
+    expect(secondPut.status()).toBe(200);
+    expect(((await secondPut.json()) as { content?: Record<string, unknown> }).content)
+      .toMatchObject(second);
+
+    const get = await request.get(
+      `${solandBaseUrl()}/_cokret/self/account_data/${encodeURIComponent(dataType)}`,
+      { headers: authHeaders(token) },
+    );
+    expect(get.status()).toBe(200);
+    expect(((await get.json()) as { content?: Record<string, unknown> }).content)
+      .toMatchObject(second);
+
+    const list = await request.get(`${solandBaseUrl()}/_cokret/self/account_data`, {
+      headers: authHeaders(token),
+    });
+    expect(list.status()).toBe(200);
+    const listBody = (await list.json()) as { entries?: Array<Record<string, unknown>> };
+    const listEntries = (listBody.entries ?? []).filter((entry) => entry.data_type === dataType);
+    expect(listEntries).toHaveLength(1);
+    const listEntry = listEntries[0];
+    expect(listEntry).toBeTruthy();
+    expect(listEntry!.content).toMatchObject(second);
+
+    const sync = await accountSubscribeDeltaApi(request, token);
+    const accountData = sync.account_data as { events?: Array<Record<string, unknown>> } | undefined;
+    const syncEntries = (accountData?.events ?? []).filter((entry) => entry.data_type === dataType);
+    expect(syncEntries).toHaveLength(1);
+    const syncEntry = syncEntries[0];
+    expect(syncEntry).toBeTruthy();
+    expect(syncEntry!.content).toMatchObject(second);
+    expect(JSON.stringify(syncEntry)).not.toContain(first.label);
+  });
+
   test(
     "alice blocks bob; bob's messages filtered from alice's timeline; unblock restores visibility; federation propagates block",
     async ({ browser, request }, testInfo) => {
@@ -381,4 +443,3 @@ async function readNotificationsText(
 function eventsText(body: Record<string, unknown>): string {
   return JSON.stringify(body);
 }
-

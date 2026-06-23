@@ -20,8 +20,17 @@
 // remaining fixme placeholders, so the extra live probe does not broaden PR-level gating.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  createRealmViaApi,
+  listRealmEventsViaApi,
+} from "../../helpers/api";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
-import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
+import {
+  authHeaders,
+  resolveDefaultStrandId,
+  signedEventEnvelope,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -64,6 +73,43 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   });
   expect(wrongMethodBody.error?.message, "wrong method error message").toBeTruthy();
   expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^ck:[a-z_]+:/);
+}
+
+function submittedEventId(body: unknown): string | undefined {
+  if (!body || typeof body !== "object") {
+    return undefined;
+  }
+  const record = body as Record<string, unknown>;
+  if (typeof record.event_id === "string") {
+    return record.event_id;
+  }
+  for (const key of ["accepted", "duplicate"]) {
+    const values = record[key];
+    if (Array.isArray(values) && typeof values[0] === "string") {
+      return values[0];
+    }
+  }
+  return undefined;
+}
+
+function submittedEventOutcome(
+  body: unknown,
+  eventId: string,
+): "accepted" | "duplicate" | undefined {
+  if (!body || typeof body !== "object") {
+    return undefined;
+  }
+  const record = body as Record<string, unknown>;
+  if (record.status === "accepted" || record.status === "duplicate") {
+    return record.status;
+  }
+  if (Array.isArray(record.duplicate) && record.duplicate.includes(eventId)) {
+    return "duplicate";
+  }
+  if (Array.isArray(record.accepted) && record.accepted.includes(eventId)) {
+    return "accepted";
+  }
+  return undefined;
 }
 
 // ---------- LIVE: describe-endpoint probes (soland + coauth) ----------
@@ -227,6 +273,84 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §5.2 (404 unrecognized_endpoint, MUST NOT return HTML / stack /
       //         framework error, MUST terminate at routing layer with no side effects).
       await expectCanonicalSolandErrorEnvelope(request);
+    },
+  );
+
+  test(
+    "Phase D0: Event ID replay is idempotent and body drift returns duplicate_conflict",
+    async ({ request }) => {
+      // spec: api-conventions.md §6 (`event_id` idempotency path) and
+      //       §4.2 (`ck.self.events.command.submit` write surface).
+      //
+      // Matrix Complement's transaction replay coverage maps most directly to
+      // Cokret's canonical Event ID replay: exact same Event is duplicate/no-op;
+      // same event_id with a different canonical body is a conflict.
+      const stamp = Date.now();
+      const alice = uniqueUser(`ssc-event-id-alice-${stamp}`);
+      await ensureRegistered(request, alice);
+      const token = await issueDevSession(request, alice);
+      const realmId = await createRealmViaApi(request, token, {
+        title: `ssc event idempotency ${stamp}`,
+        historyVisibility: "shared",
+        ownerDid: alice.did,
+      });
+      const strandId = await resolveDefaultStrandId(request, token, realmId);
+      const body = `event id replay ${stamp}`;
+      const envelope = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ck.message.create",
+        payload: {
+          strand_id: strandId,
+          track_name: "discussion",
+          content: { kind: "ck.content.text", body },
+        },
+      });
+      const eventId = String(envelope.event_id);
+
+      const first = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(token),
+        data: envelope,
+      });
+      expect([200, 201], `first submit returned ${first.status()}`).toContain(first.status());
+      const firstBody = await first.json();
+      expect(submittedEventId(firstBody)).toBe(eventId);
+      expect(submittedEventOutcome(firstBody, eventId)).toBe("accepted");
+
+      const duplicate = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(token),
+        data: envelope,
+      });
+      expect(duplicate.status(), `duplicate submit status`).toBe(200);
+      const duplicateBody = await duplicate.json();
+      expect(submittedEventId(duplicateBody)).toBe(eventId);
+      expect(submittedEventOutcome(duplicateBody, eventId)).toBe("duplicate");
+
+      const eventsAfterDuplicate = await listRealmEventsViaApi(request, token, realmId);
+      expect(eventsAfterDuplicate.filter((event) => event.event_id === eventId)).toHaveLength(1);
+
+      const drift = signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        eventId,
+        kind: "ck.message.create",
+        payload: {
+          strand_id: strandId,
+          track_name: "discussion",
+          content: { kind: "ck.content.text", body: `${body} drift` },
+        },
+      });
+      const conflict = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(token),
+        data: drift,
+      });
+      expect(conflict.status(), "same event_id with different body").toBe(409);
+      expect(wireErrCode(await conflict.json())).toBe("duplicate_conflict");
+
+      const eventsAfterConflict = await listRealmEventsViaApi(request, token, realmId);
+      expect(eventsAfterConflict.filter((event) => event.event_id === eventId)).toHaveLength(1);
+      expect(JSON.stringify(eventsAfterConflict)).toContain(body);
+      expect(JSON.stringify(eventsAfterConflict)).not.toContain(`${body} drift`);
     },
   );
 

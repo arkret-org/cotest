@@ -11,8 +11,10 @@ import {
   listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
+import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  authHeaders,
   canonicalTimestamp,
   listInvitesApi,
   resolveDefaultStrandId,
@@ -37,6 +39,26 @@ function eventPayload(event: Record<string, unknown> | undefined): Record<string
   return payload && typeof payload === "object"
     ? (payload as Record<string, unknown>)
     : {};
+}
+
+function visibleMemberDids(realm: Record<string, unknown>): string[] {
+  const members = realm.members;
+  if (!Array.isArray(members)) {
+    return [];
+  }
+  return members.flatMap((member) => {
+    if (typeof member === "string") {
+      return [member];
+    }
+    if (!member || typeof member !== "object") {
+      return [];
+    }
+    const record = member as Record<string, unknown>;
+    const did = [record.did, record.actor_id, record.actor, record.id].find(
+      (candidate): candidate is string => typeof candidate === "string",
+    );
+    return did ? [did] : [];
+  });
 }
 
 test.describe("single-server triad collaboration", () => {
@@ -419,6 +441,115 @@ test.describe("single-server triad collaboration", () => {
       const carolEvents = await listRealmEventsViaApi(request, carolToken, realmId);
       expect(carolEvents.map((event) => event.event_id)).toContain(pre.event_id);
       expect(JSON.stringify(carolEvents)).toContain(preMessage);
+    });
+
+    test("E1.4 membership leave gates writes; owner re-add restores membership", async ({
+      request,
+    }) => {
+      const stamp = Date.now();
+      const alice = uniqueUser("s1e14-alice");
+      const bob = uniqueUser("s1e14-bob");
+      await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+        title: `S1.4 Leave Rejoin ${stamp}`,
+        historyVisibility: "shared",
+      });
+      const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
+      const beforeLeave = await sendPlaintextMessageViaApi(
+        request,
+        bobToken,
+        realmId,
+        `before leave ${stamp}`,
+        { actorDid: bob.did },
+      );
+
+      await submitSignedEventApi(
+        request,
+        bobToken,
+        signedEventEnvelope({
+          actorDid: bob.did,
+          realmId,
+          kind: "ck.member.state",
+          payload: {
+            realm_id: realmId,
+            actor_id: bob.did,
+            membership: "leave",
+            reason: "self_leave",
+          },
+        }),
+        { context: "bob leaves realm" },
+      );
+
+      const realmAfterLeave = await request.get(
+        `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(realmAfterLeave.status()).toBe(200);
+      expect(visibleMemberDids(await realmAfterLeave.json())).not.toContain(bob.did);
+
+      const afterLeaveBody = `after leave rejected ${stamp}`;
+      const rejected = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(bobToken),
+        data: signedEventEnvelope({
+          actorDid: bob.did,
+          realmId,
+          kind: "ck.message.create",
+          payload: {
+            strand_id: strandId,
+            track_name: "discussion",
+            content: { kind: "ck.content.text", body: afterLeaveBody },
+          },
+        }),
+      });
+      expect(
+        rejected.status(),
+        "left member cannot write ordinary messages",
+      ).toBeGreaterThanOrEqual(400);
+
+      const eventsAfterLeave = await listRealmEventsViaApi(request, aliceToken, realmId);
+      const bobMemberEvents = eventsAfterLeave.filter(
+        (event) =>
+          eventKind(event) === "ck.member.state" &&
+          eventPayload(event).actor_id === bob.did,
+      );
+      expect(eventPayload(bobMemberEvents[bobMemberEvents.length - 1])).toMatchObject({
+        membership: "leave",
+      });
+      expect(JSON.stringify(eventsAfterLeave)).not.toContain(afterLeaveBody);
+
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.member.state",
+          payload: {
+            realm_id: realmId,
+            actor_id: bob.did,
+            membership: "join",
+            delivery_status: "unroutable",
+            reason: "owner_readd",
+          },
+        }),
+        { context: "owner re-adds bob" },
+      );
+      const afterRejoin = await sendPlaintextMessageViaApi(
+        request,
+        bobToken,
+        realmId,
+        `after rejoin ${stamp}`,
+        { actorDid: bob.did },
+      );
+      const finalEvents = await listRealmEventsViaApi(request, aliceToken, realmId);
+      expect(finalEvents.map((event) => event.event_id)).toEqual(
+        expect.arrayContaining([beforeLeave.event_id, afterRejoin.event_id]),
+      );
+      expect(JSON.stringify(finalEvents)).not.toContain(afterLeaveBody);
     });
   });
 });

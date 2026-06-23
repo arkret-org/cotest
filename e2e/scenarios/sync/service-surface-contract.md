@@ -110,24 +110,37 @@
 18. **Cursor expiry 子断言**:把 step 14 的 `next_cursor` 篡改一个字符(保持 base64url 合法),POST 给 list endpoint
 19. 断言:`error.code ∈ { "invalid_param", "cursor_expired" }` 且 HTTP 4xx;**不得** 静默从头返回 page 1
 
+### Phase D0 — Event ID replay(§6)
+
+20. 构造最小 `POST /_cokret/self/events` envelope，记录 `event_id`
+21. 用完全相同的 envelope 重放一次
+22. 断言:
+    - 第二次返回 duplicate/no-op 语义，`event_id` 与首次一致
+    - 事件列表中该 `event_id` 只出现一次
+23. 用同一个 `event_id` 但修改 canonical body 的 envelope 再提交一次
+24. 断言:
+    - HTTP 409
+    - `error.code === "duplicate_conflict"`
+    - drift body 没有落入可见事件列表
+
 ### Phase D — Idempotency key(§6)
 
-20. 构造写请求 body B1(可以是最小 `POST /_cokret/self/events` envelope,或一个不需要复杂 prerequisite 的 op)
-21. `POST ... ` with `Idempotency-Key: ssc-${uuid}` + body B1 → response R1(HTTP 2xx,带 `event_id` 或 `request_id`)
-22. **同样的** `Idempotency-Key` + **同样的** canonical body B1 → response R2
-23. 断言:
+25. 构造写请求 body B1(可以是最小 `POST /_cokret/self/events` envelope,或一个不需要复杂 prerequisite 的 op)
+26. `POST ... ` with `Idempotency-Key: ssc-${uuid}` + body B1 → response R1(HTTP 2xx,带 `event_id` 或 `request_id`)
+27. **同样的** `Idempotency-Key` + **同样的** canonical body B1 → response R2
+28. 断言:
     - R2 与 R1 在 `event_id` / `request_id` / accepted 状态等关键字段上一致(spec §6:相同幂等键 + 相同 body → 与首次语义等价)
     - 服务端**没有**因第二次提交产生新事件(可以通过 list endpoint 或 frontier 旁路验证)
-24. **不同 body 同键** 反例:同样的 `Idempotency-Key` + 修改一个字段的 body B2 → response R3
-25. 断言:
+29. **不同 body 同键** 反例:同样的 `Idempotency-Key` + 修改一个字段的 body B2 → response R3
+30. 断言:
     - `error.code === "duplicate_conflict"`(spec §6 第 2 条)
     - HTTP 409
 
 ### Phase E — Unsupported feature fail-closed(§5.1)
 
-26. 从 Phase A 的 describe 响应里取 `supported_features` 与 `implemented_features`,选一个**两者都不在**的 feature 标识(例如 `ck.feature.mimi_room_passthrough.v1` 在普通 dev soland 上不出现)
-27. 构造一个 `POST /_cokret/self/events` 请求,在 envelope 的 `requirements.features[]` 字段里声明依赖该 feature
-28. 断言:
+31. 从 Phase A 的 describe 响应里取 `supported_features` 与 `implemented_features`,选一个**两者都不在**的 feature 标识(例如 `ck.feature.mimi_room_passthrough.v1` 在普通 dev soland 上不出现)
+32. 构造一个 `POST /_cokret/self/events` 请求,在 envelope 的 `requirements.features[]` 字段里声明依赖该 feature
+33. 断言:
     - HTTP 4xx
     - `error.code === "unsupported_feature"`(spec §5.1:该 code 专门用于 `Event.requirements.features[]` 命中实现未声明 feature)
     - **MUST NOT** 是 `unsupported_event_kind`(spec §5.1 第 4 条:二者不得互相替代)
@@ -139,6 +152,7 @@
 - Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_type` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
 - Phase B:未知路径 → 404 `unrecognized_endpoint`;错误 method → 405 `method_not_allowed`;两者都符合 §5 错误 envelope,不返回 HTML/栈信息
 - Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ck:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
+- Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op;同 `event_id` 不同 body → `duplicate_conflict` / 409;事件只投影一次
 - Phase D:同键同 body → 与首次等价;同键不同 body → `duplicate_conflict` / 409;副作用只发生一次
 - Phase E:`requirements.features[]` 引用未实现 feature → `unsupported_feature` / 4xx;event 未落库;不被泛 code 替代
 
@@ -155,7 +169,8 @@
 - **soland describe 已实现**:`soland/src/routing/system/describe.rs` + `soland/src/wire.rs` 已经写入 `claimed_profiles` / `verified_profiles` / `implemented_features` 等字段;Phase A 在 soland 侧可以**直接 live**
 - **coauth describe 已实现**:`coauth/crates/backend/src/handlers/cokret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
 - **`/sync/operations` 不存在**:Phase C 的实际 list endpoint 取决于哪些 list-style endpoint 在当前 soland 已落地。当前已知的 list endpoint 例如 `/_cokret/self/authz/invites`、`/_cokret/self/events?after=...` 可作为 fallback;但 spec §7.1 的 `items` / `next_cursor` / `has_more` 形状未必所有现有 list endpoint 都满足。Phase C 整体保持 fixme 直到至少一个 list endpoint 符合 §7.1 wire shape
-- **idempotency 在 soland 当前路径**:soland 当前依赖 `event_id` 幂等(spec §4.2);独立的 `Idempotency-Key` header 路径未必所有 write endpoint 都已实现 — Phase D 整体 fixme,直到 `Idempotency-Key` header 被 events / authz write 路径接受
+- **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖
+- **Idempotency-Key header 仍为 fixme**:独立的 `Idempotency-Key` header 路径未必所有 write endpoint 都已实现 — Phase D 整体 fixme,直到 `Idempotency-Key` header 被 events / authz write 路径接受
 - **`unsupported_feature` 触发条件**:spec §5.1 要求该 code 用于 `Event.requirements.features[]`;具体是否在当前 reducer 路径上被严格执行需要 probe — Phase E 整体 fixme,等 soland 在 envelope validation 阶段返回该 code
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession` + `solandBaseUrl()` / `coauthBaseUrl()`;不要新增 helper
 

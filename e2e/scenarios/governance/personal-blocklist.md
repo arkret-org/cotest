@@ -112,12 +112,13 @@
 - **E11.1 Quarantine vs block**:同一个 Realm 中 admin 把 bob 的某条消息 quarantine(`POST /_cokret/self/moderation/quarantine`)— 这是**服务端**操作,影响**所有**成员;alice 的个人 block 只影响 alice 自己。验证两者**互不依赖**:即使 alice 没 block bob,quarantine 的消息对 alice 也不可见(以 placeholder 渲染);即使 admin 没 quarantine,alice block 也能让 bob 的消息对 alice 单独不可见。
 - **E11.2 mute vs block 差异**:alice 在 `/settings/notifications` 把 bob mute(不是 block)→ bob 的消息在 alice timeline **仍可见**,但 push notification 不送达(`notifications-panel` 中无新条目)。这与 block 的"完全隐藏"形成对照。
 - **E11.3 被 block 的用户视角**:bob 在 `/timeline/${realmId}` 自己看自己的消息,M1/M2/M3 都正常显示,`write-status` 全部 `persisted`;bob 的 `/notifications` 不会出现"You were blocked by alice"这类提示(spec §4 明确:block 不可被被 block 方探测,反 social-graph 泄露)。
+- **E11.4 account_data overwrite**:同一 `client.*` data_type 重复 `PUT /_cokret/self/account_data/{data_type}` 只保留最新 `content`;direct GET/list 与 `ck.self.account.stream.subscribe` 都只能看到一个最新 entry。
 
 ## Implementation notes
 
 - **yougen 实现**:`/settings/blocked-users` 页面已写入 `LocalStateStore::client_blocklist` 并通过 `ck.account.blocklist` account_data 同步;`blocked-users-panel` / `blocked-users-list` / `blocked-user-row` / `block-target-input` / `block-user-button` / `unblock-button` / `write-status` testids 已接入。
 - **soland 实现**:`ck.account_data.set` + `ck.self.account.stream.subscribe` 已用于个人 blocklist;事件 query、account sync timeline、`/_soland/self/notifications` 与 `index/notifications` 都会按 actor-private blocklist 过滤;`POST account_data blocklist event` 与 `GET account_data blocklist events` 支持 block hint 记录和 unblock retract。
-- **测试侧**:主流程、E11.1、E11.2、E11.3 均为 live tests;Phase G 的跨服务器成本用本地 blocklist account_data 记录/撤回端点验证,完整双 soland outbox suppression 可在 `federation/cross-server` harness 扩展时继续加深。
+- **测试侧**:主流程、E11.1、E11.2、E11.3、E11.4 均为 live tests;Phase G 的跨服务器成本用本地 blocklist account_data 记录/撤回端点验证,完整双 soland outbox suppression 可在 `federation/cross-server` harness 扩展时继续加深。
 
 ## 风险
 
