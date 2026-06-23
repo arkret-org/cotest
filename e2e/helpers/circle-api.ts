@@ -2,7 +2,7 @@
 //
 // Face note: Circle administration is now a NORMATIVE Cokret protocol surface.
 // The `ck.self.circle.*` operations (list/create/get/members/scope-rotate/
-// archive/tombstone) are published in the cokret-spec OpenAPI artifact
+// archive/restore/tombstone) are published in the cokret-spec OpenAPI artifact
 // (`/_cokret/self/circles*`), the operation registry, and the contract catalog,
 // so soland mounts them under the `/_cokret` tree. (Previously these were
 // CKP-0014 §5 implementation-local DRAFT candidates served under
@@ -177,6 +177,69 @@ export async function grantCircleMemberManageCapability(
   return grantId;
 }
 
+export async function grantCircleManageCapability(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: {
+    ownerDid: string;
+    realmId: string;
+    subjectDid: string;
+    circleId: string;
+    server?: SolandKey;
+  },
+): Promise<string> {
+  const grantId = typedId("grant");
+  const issuedAt = canonicalTimestamp();
+  const unsignedGrant: Record<string, unknown> = {
+    id: grantId,
+    grant_id: grantId,
+    schema: "ck.schema.capability.v1",
+    realm_id: args.realmId,
+    issuer: args.ownerDid,
+    subject: args.subjectDid,
+    actions: ["ck.circle.manage"],
+    resources: [
+      { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
+    ],
+    constraints: [
+      {
+        constraint_type: "scope_limitation",
+        effect: "allow",
+        allowed_circle_ids: [args.circleId],
+      },
+    ],
+    issued_at: issuedAt,
+  };
+  await submitSignedEventApi(
+    request,
+    ownerToken,
+    signedEventEnvelope({
+      actorDid: args.ownerDid,
+      realmId: args.realmId,
+      kind: "ck.capability.grant",
+      payload: {
+        grant_id: grantId,
+        grant: {
+          ...unsignedGrant,
+          proofs: [
+            genericDetachedJwsProof({
+              issuerDid: args.ownerDid,
+              payload: unsignedGrant,
+              createdAt: issuedAt,
+            }),
+          ],
+        },
+      },
+      createdAt: issuedAt,
+    }),
+    {
+      server: args.server,
+      context: `grant ck.circle.manage for ${args.circleId} to ${args.subjectDid}`,
+    },
+  );
+  return grantId;
+}
+
 // Create a Circle bound to `realmId`. Defaults `join_rule` to "invite" (the
 // soland default) so admin-only one-way adds are the membership path.
 export async function createCircleCokret(
@@ -271,6 +334,74 @@ export async function removeCircleMemberCokret(
   return await expectJsonOk<CircleMembershipOutcome>(
     response,
     `remove circle member ${actorId} <- ${circleId}`,
+  );
+}
+
+async function submitCircleLifecycleCokret(
+  request: APIRequestContext,
+  token: string,
+  circleId: string,
+  action: "archive" | "restore" | "tombstone",
+  opts: { reasonCode?: string; server?: SolandKey } = {},
+): Promise<CircleOutcome> {
+  const response = await request.post(
+    `${solandBaseUrl(opts.server)}/_cokret/self/circles/${encodeURIComponent(circleId)}/${action}`,
+    {
+      headers: authHeaders(token),
+      data:
+        opts.reasonCode !== undefined
+          ? { reason_code: opts.reasonCode }
+          : {},
+    },
+  );
+  return await expectJsonOk<CircleOutcome>(
+    response,
+    `${action} circle ${circleId}`,
+  );
+}
+
+export async function archiveCircleCokret(
+  request: APIRequestContext,
+  token: string,
+  circleId: string,
+  opts: { reasonCode?: string; server?: SolandKey } = {},
+): Promise<CircleOutcome> {
+  return await submitCircleLifecycleCokret(
+    request,
+    token,
+    circleId,
+    "archive",
+    opts,
+  );
+}
+
+export async function restoreCircleCokret(
+  request: APIRequestContext,
+  token: string,
+  circleId: string,
+  opts: { reasonCode?: string; server?: SolandKey } = {},
+): Promise<CircleOutcome> {
+  return await submitCircleLifecycleCokret(
+    request,
+    token,
+    circleId,
+    "restore",
+    opts,
+  );
+}
+
+export async function tombstoneCircleCokret(
+  request: APIRequestContext,
+  token: string,
+  circleId: string,
+  opts: { reasonCode?: string; server?: SolandKey } = {},
+): Promise<CircleOutcome> {
+  return await submitCircleLifecycleCokret(
+    request,
+    token,
+    circleId,
+    "tombstone",
+    opts,
   );
 }
 

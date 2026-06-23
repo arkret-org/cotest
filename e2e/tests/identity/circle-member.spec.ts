@@ -26,10 +26,13 @@ import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
 import {
   addCircleMemberCokret,
   addCircleMemberRaw,
+  archiveCircleCokret,
   createCircleCokret,
   errorWireCode,
   getCircleCokret,
+  grantCircleManageCapability,
   grantCircleMemberManageCapability,
+  restoreCircleCokret,
 } from "../../helpers/circle-api";
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
@@ -102,6 +105,51 @@ test.describe("circle membership (same principal server)", () => {
       circle.circle_id,
     );
     expect(fetched.members).toContain(bob.did);
+  });
+
+  test("S8 lifecycle archive then restore returns Circle to active", async ({
+    request,
+  }) => {
+    const alice = uniqueUser("circle-s8r-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S8 restore circle realm ${Date.now()}`,
+      ownerDid: alice.did,
+    });
+    const circle = await createCircleCokret(request, aliceToken, {
+      realmId,
+      title: `S8 restore circle ${Date.now()}`,
+      joinRule: "invite",
+    });
+    await grantCircleManageCapability(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: alice.did,
+      circleId: circle.circle_id,
+    });
+
+    const archived = await archiveCircleCokret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
+    expect(archived.state).toBe("archived");
+
+    const restored = await restoreCircleCokret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
+    expect(restored.state).toBe("active");
+
+    const fetched = await getCircleCokret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
+    expect(fetched.state).toBe("active");
   });
 
   // S8 negative: pulling a NON realm member (mallory never joined the realm)
