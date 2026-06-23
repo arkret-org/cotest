@@ -759,11 +759,18 @@ async function createMlsRecoveryBackupFromRecoverySettings(
   await page.getByTestId("recovery-key-regenerate").click();
 
   const generatedKeyField = page.getByTestId("recovery-key-current");
-  await expect(generatedKeyField).toContainText(/\S+/, { timeout: 120_000 });
-  const recoveryKey = normalizeRecoveryKeyText(
-    (await generatedKeyField.textContent()) ?? "",
-  );
-  expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+  let recoveryKey = "";
+  await expect
+    .poll(
+      async () => {
+        recoveryKey = normalizeRecoveryKeyText(
+          (await generatedKeyField.textContent()) ?? "",
+        );
+        return recoveryKey.split(/\s+/).filter(Boolean).length;
+      },
+      { timeout: 120_000 },
+    )
+    .toBe(24);
   await expect(page.getByTestId("recovery-key-live-warning")).toBeVisible();
 
   await expect

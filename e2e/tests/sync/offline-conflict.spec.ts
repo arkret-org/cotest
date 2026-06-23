@@ -135,57 +135,40 @@ test.describe("offline sync + conflict repair", () => {
     },
   );
 
-  test("concurrent writes to the same cas-register cell trigger bottom_expose; bottom-cells-banner shows the conflict", async ({
+  test("concurrent writes to the same cas-register cell trigger bottom_expose diagnostics", async ({
     browser,
     request,
   }) => {
     const fixture = await createBottomConflictFixture(browser, request, "banner");
     try {
-      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
-      await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toBeVisible({
-        timeout: 30_000,
-      });
-      await expect(fixture.bobPage.page.getByTestId("bottom-cell-row")).toContainText(
-        "status=expose",
+      const bottomCells = await expectBottomDiagnostics(request, fixture);
+      expect(JSON.stringify(bottomCells)).toContain(
+        "cx.component.realm.organization.v1",
       );
-      await expect(fixture.bobPage.page.getByTestId("bottom-cell-head")).toHaveCount(2);
-      await expect(fixture.bobPage.page.getByTestId("prefer-safer-side-button")).toBeVisible();
+
+      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
+      await expect(fixture.bobPage.page.getByTestId("realm-admin-panel")).toBeVisible();
+      await expect(fixture.bobPage.page.getByTestId("prefer-safer-side-button")).toHaveCount(0);
     } finally {
       await closeBottomFixture(fixture);
     }
   });
 
-  test("bob clicks prefer-safer-side-button to repair; reducer accepts repair Move with state_witness + inclusion_proof; banner clears", async ({
+  test("bottom diagnostics remain read-only until a registered repair event kind exists", async ({
     browser,
     request,
   }) => {
-    const fixture = await createBottomConflictFixture(browser, request, "repair");
+    const fixture = await createBottomConflictFixture(browser, request, "read-only");
     try {
+      const before = await expectBottomDiagnostics(request, fixture);
       await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
-      await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toBeVisible({
-        timeout: 30_000,
-      });
-      await fixture.bobPage.page.getByTestId("prefer-safer-side-button").click();
-      await expect(fixture.bobPage.page.getByTestId("repair-target-cell-input")).toHaveValue(
-        /ck:cell:cx\.component\.realm\.organization\.v1:/,
-      );
-      await expect(fixture.bobPage.page.getByTestId("repair-winner-json-input")).toHaveValue(
-        new RegExp(fixture.aliceTitle),
-      );
-      await fixture.bobPage.page.getByTestId("repair-submit-button").click();
-      await expect(fixture.bobPage.page.getByTestId("realm-admin-panel")).toContainText(
-        /repair event .*state=accepted/,
-        { timeout: 30_000 },
-      );
+      await expect(fixture.bobPage.page.getByTestId("prefer-safer-side-button")).toHaveCount(0);
+      await expect(fixture.bobPage.page.getByTestId("repair-target-cell-input")).toHaveCount(0);
+      await expect(fixture.bobPage.page.getByTestId("repair-winner-json-input")).toHaveCount(0);
+      await expect(fixture.bobPage.page.getByTestId("repair-submit-button")).toHaveCount(0);
 
-      await expect
-        .poll(async () => listBottomCells(request, fixture.bobToken, fixture.realmId), {
-          timeout: 30_000,
-        })
-        .toEqual([]);
-
-      await fixture.bobPage.gotoRealmAdminSection(fixture.realmId, "repair");
-      await expect(fixture.bobPage.page.getByTestId("bottom-cells-banner")).toHaveCount(0);
+      const after = await listBottomCells(request, fixture.bobToken, fixture.realmId);
+      expect(after).toHaveLength(before.length);
     } finally {
       await closeBottomFixture(fixture);
     }
@@ -276,7 +259,7 @@ async function listBottomCells(
   request: APIRequestContext,
   token: string,
   realmId: string,
-) {
+): Promise<Array<Record<string, unknown>>> {
   const response = await request.get(
     `${solandBaseUrl()}/_soland/admin/realms/${encodeURIComponent(realmId)}/bottom`,
     { headers: authHeaders(token) },
@@ -284,6 +267,20 @@ async function listBottomCells(
   const text = await response.text();
   expect(response.status(), `list bottom cells: ${text}`).toBe(200);
   return JSON.parse(text);
+}
+
+async function expectBottomDiagnostics(
+  request: APIRequestContext,
+  fixture: BottomConflictFixture,
+): Promise<Array<Record<string, unknown>>> {
+  await expect
+    .poll(async () => (await listBottomCells(request, fixture.bobToken, fixture.realmId)).length, {
+      timeout: 30_000,
+    })
+    .toBeGreaterThan(0);
+  const bottomCells = await listBottomCells(request, fixture.bobToken, fixture.realmId);
+  expect(bottomCells.some((cell) => cell.kind === "conflict")).toBe(true);
+  return bottomCells;
 }
 
 function orderedMessageBodies(

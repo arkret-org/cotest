@@ -121,13 +121,20 @@ test.describe("notifications", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await bobPage.page
-        .getByTestId("realm-notification-target-input")
-        .fill(realmId);
-      await bobPage.page.getByTestId("realm-mute-toggle").check();
+      await selectDxcOption(
+        bobPage.page.getByTestId("realm-override-realm-select"),
+        realmId,
+      );
+      await selectDxcOption(
+        bobPage.page.getByTestId("realm-override-level-select"),
+        "muted",
+      );
+      await bobPage.page.getByTestId("realm-override-add").click();
       await expect(
-        bobPage.page.getByTestId("notification-settings-status"),
-      ).toContainText(/muted/i, { timeout: 30_000 });
+        bobPage.page.locator(
+          `[data-testid="settings-muted-realm-row"][data-realm-id="${cssStringEscape(realmId)}"]`,
+        ),
+      ).toBeVisible({ timeout: 30_000 });
 
       await alicePage.sendTimelineMessage(realmId, normalMsg);
       await bobPage.page.goto("/notifications", {
@@ -483,6 +490,10 @@ test.describe("notifications", () => {
 
 function mentionSidecarHash(realmId: string, did: string): string {
   return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
+}
+
+function cssStringEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function encryptedEnvelope(

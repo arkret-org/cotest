@@ -789,16 +789,10 @@ test.describe("chat advanced", () => {
       ]);
 
       await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
-      const aliceTypingIndicator = bobPage.page
-        .getByTestId("typing-indicator")
-        .filter({
-          has: bobPage.page.locator(
-            `[data-typing-actors*="${cssStringEscape(alice.did)}"]`,
-          ),
-        });
-      await expect(
-        aliceTypingIndicator,
-      ).toBeVisible({ timeout: 5_000 });
+      const aliceTypingIndicator = bobPage.page.locator(
+        `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.did)}"]`,
+      );
+      await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
       await stepShot(bobPage.page, testInfo, "typing-visible");
       await expect(aliceTypingIndicator).toHaveCount(0, { timeout: 7_000 });
     } finally {

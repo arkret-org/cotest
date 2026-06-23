@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move;若离线期间 alice 改了同 cell,冲突进 `bottom_cells_banner`;bob 在 `/realms/:id/admin/repair` 用 `prefer-safer-side` 决议;最终 alice/bob 两端收敛。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move;若离线期间 alice 改了同 cell,冲突进入 bottom diagnostics。当前规范还没有注册可由 yougen 提交的 repair event kind,所以 Realm admin 只读展示 bottom 诊断;人工 repair 通过后续 CKP 注册的标准事件恢复。
 
 ## Spec 锚点
 
@@ -52,16 +52,14 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
     - alice 提交 `ck.space.update { title: "renamed by alice" }`
     - bob 提交 `ck.space.update { title: "renamed by bob" }`
     - 取消拦截 → 两条 move 都到 soland,但因为都基于旧 frontier,reducer 检测到 cas-register 冲突
-13. soland 把该 cell 标 `bottom_expose`,生成 `bottom_cells_banner` 数据
-14. 断言:bob `/realms/<S>/admin` 进入 → `bottom-cells-banner` 可见;`bottom-cell-row` 显示该 cell 的两个 head
+13. soland 把该 cell 标 `bottom_expose`,并通过 admin bottom diagnostics 暴露未决 cell
+14. 断言:`GET /_soland/admin/realms/<S>/bottom` 返回 kind=`conflict` 且 cell_id 指向 `cx.component.realm.organization.v1`
 
-### Phase E — bob 用 prefer-safer-side 决议
+### Phase E — repair 仍为只读诊断
 
-15. bob 点 `prefer-safer-side-button`(对应 member.state 或 cell 安全侧)
-16. yougen 客户端把 `repair-winner-json-input` 填好(spec 安全语义)
-17. bob 提交 repair Move,reducer 接受 → cell 回到 `active`
-18. 断言:banner 消失;cell value 是 "safer" 那一方
-19. alice 拉 sync → 看到 cell 现在的 value;她那侧的 banner 也消失
+15. 断言:yougen 不渲染 `prefer-safer-side-button`、`repair-target-cell-input`、`repair-winner-json-input`、`repair-submit-button`
+16. 断言:`GET /_soland/admin/realms/<S>/bottom` 仍返回该 bottom cell,直到标准 repair event kind 注册并被实现
+17. 备注:后续 CKP 注册 repair kind 后,本阶段再升级为提交标准 repair Move 并验证 cell 回到 active
 
 ### Phase F — Backfill via pull
 
@@ -72,14 +70,14 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 - **E26.1 outbox 满**:bob 长期离线,outbox 满;客户端 UI 显示 "Too many pending changes, please reconnect"
 - **E26.2 冲突未决期间再写**:Phase D 后 cell 还在 bottom_expose,bob 再尝试写该 cell → reducer 拒,reason `cell_bottom_state`,UI 提示必须先 repair
-- **E26.3 repair Move 被拒**:测试 harness 让 bob 提交 prefer-safer-side 但 `state_witness` 篡改 → reducer 拒,banner 留着
+- **E26.3 repair Move 被拒**:等待标准 repair event kind 注册后恢复;测试 harness 让 bob 提交 repair 但 `state_witness` 篡改 → reducer 拒,bottom 诊断保留
 - **E26.4 重连后冲突 + 排序**:多个 cell 同时 bottom_expose;bob 必须逐个 repair
 
 ## Implementation notes
 
-- **soland 已落地**:`ck.realm.update` 同 anchor basis 的 cas-register 冲突进入 `bottom=expose`;`ck.conflict.repair` 验证 `conflict_heads`、`state_witness` / recovery capability shape 后清理 bottom;account sync 输出 `anchor_view.bottom_cells`。
-- **yougen 已落地**:sync 解析 `anchor_view.bottom_cells`;admin repair UI 为 realm organization conflict 填充 safer-side winner;repair Move 使用当前 session actor 提交。
-- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 的 `bottom_expose` 与 `prefer-safer-side-button` repair 流程已从 fixme 升为 live。
+- **soland 已落地**:`ck.realm.update` 同 anchor basis 的 cas-register 冲突进入 `bottom=expose`;admin bottom diagnostics 可列出未决 cell。
+- **yougen 已落地**:sync 解析 bottom diagnostics;Realm admin repair 区当前只读展示冲突,不再 mint 未注册的 `ck.conflict.repair`。
+- **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 的 `bottom_expose` diagnostics 与 read-only repair surface 为 live。
 - **剩余边界**:outbox capacity、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。
 
 ## 总耗时预估
