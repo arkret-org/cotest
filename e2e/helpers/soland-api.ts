@@ -115,6 +115,31 @@ export async function expectJsonOk<T = Record<string, unknown>>(
   return JSON.parse(text) as T;
 }
 
+export function plaintextVisibleServiceDeclarations(serviceDids: string[]) {
+  return Array.from(
+    new Set(serviceDids.map((service) => service.trim()).filter(Boolean)),
+  ).map((serviceDid) => ({
+    service_did: serviceDid,
+    service_type: "principal_server",
+    data_classes: [
+      "message_content",
+      "attachment_plaintext",
+      "attachment_preview",
+      "thumbnail",
+      "full_text_index",
+      "notification_summary",
+      "inbox_preview",
+    ],
+    purposes: [
+      "message_index",
+      "attachment_download",
+      "notification_fanout",
+      "inbox_preview",
+    ],
+    visibility: "private_plaintext",
+  }));
+}
+
 export async function createRealmApi(
   request: APIRequestContext,
   token: string,
@@ -139,11 +164,14 @@ export async function createRealmApi(
     data.ownerDid ?? (await currentActorDidApi(request, token, opts));
   const realmId = typedId("realm");
   const createdAt = canonicalTimestamp();
-  const plaintextVisibleServices =
+  const plaintextVisibleServiceDids =
     data.plaintext_visible_services ??
-    Array.from(
-      new Set([solandServiceDid(opts.server), "did:web:soland.local"]),
-    );
+    (data.encryption_profile === "mls_rfc9420"
+      ? []
+      : [solandServiceDid(opts.server), "did:web:soland.local"]);
+  const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
+    plaintextVisibleServiceDids,
+  );
 
   await submitSignedEventApi(
     request,

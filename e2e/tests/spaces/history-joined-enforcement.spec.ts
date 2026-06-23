@@ -7,6 +7,7 @@ import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
+  plaintextVisibleServiceDeclarations,
   resolveDefaultStrandId,
   singleDidNotary,
   signedEventEnvelope,
@@ -207,9 +208,10 @@ async function createRealm(
   historyVisibility: "joined" | "shared",
   createdAtValue: string,
 ) {
-  const plaintextVisibleServices = Array.from(
-    new Set([solandServiceDid(), "did:web:soland.local"]),
-  );
+  const plaintextVisibleServices = plaintextVisibleServiceDeclarations([
+    solandServiceDid(),
+    "did:web:soland.local",
+  ]);
   await submitSignedEventApi(
     request,
     token,

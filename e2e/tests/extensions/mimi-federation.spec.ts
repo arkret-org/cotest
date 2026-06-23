@@ -99,7 +99,7 @@ test.describe("mimi federation", () => {
         content_draft: "draft-ietf-mimi-content-08",
     });
     expect(unmarked.status()).toBe(400);
-    expect(wireErrCode(await unmarked.json())).toBe("mimi_e2ee_boundary_unmarked");
+    expect(wireErrCode(await unmarked.json())).toBe("mimi_governance_binding_missing");
 
     const downgradeText = `explicit downgrade ${stamp}`;
     const downgrade = await postSignedMimiMessage(request, roomId, {
@@ -115,8 +115,9 @@ test.describe("mimi federation", () => {
         protocol_draft: "draft-ietf-mimi-protocol-06",
         content_draft: "draft-ietf-mimi-content-08",
     });
-    expect(downgrade.status()).toBe(200);
-    const downgradeBody = (await downgrade.json()) as Record<string, unknown>;
+    const downgradeResponseText = await downgrade.text();
+    expect(downgrade.status(), downgradeResponseText).toBe(200);
+    const downgradeBody = JSON.parse(downgradeResponseText) as Record<string, unknown>;
     expect(nested(downgradeBody, "delivery", "status")).toBe("accepted");
 
     const transcriptText = `transcript bound ${stamp}`;

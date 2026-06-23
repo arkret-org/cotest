@@ -26,7 +26,7 @@ test.describe("organization policy inheritance", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    const probe = await request.get(`${solandBaseUrl()}/_cokret/self/organizations`, {
+    const probe = await request.get(`${solandBaseUrl()}/_soland/self/organizations`, {
       headers: { authorization: `Bearer ${token}` },
     });
     expect([200, 401, 403, 404]).toContain(probe.status());
@@ -44,7 +44,7 @@ test.describe("organization policy inheritance", () => {
       });
 
       const policy = await request.get(
-        `${solandBaseUrl()}/_cokret/self/organizations/${encodeURIComponent(orgDid)}/policy`,
+        `${solandBaseUrl()}/_soland/self/organizations/${encodeURIComponent(orgDid)}/policy`,
         { headers: authHeaders(aliceToken) },
       );
       expect(policy.ok()).toBeTruthy();
@@ -91,7 +91,7 @@ test.describe("organization policy inheritance", () => {
       expect(deniedJoin.status()).toBe(403);
       expect(JSON.stringify(await deniedJoin.json())).toContain("organization_policy_denied");
 
-      const noApproval = await request.post(
+      const noApproval = await request.put(
         `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
@@ -103,7 +103,7 @@ test.describe("organization policy inheritance", () => {
       expect(noApproval.status()).toBe(403);
       expect(wireErrCode(await noApproval.json())).toBe("requires_organization_approval");
 
-      const withApproval = await request.post(
+      const withApproval = await request.put(
         `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/moderation-policy`,
         {
           headers: authHeaders(aliceToken),
@@ -145,7 +145,7 @@ test.describe("organization policy inheritance", () => {
       });
 
       const update = await request.post(
-        `${solandBaseUrl()}/_cokret/self/organizations/${encodeURIComponent(orgDid)}/policy`,
+        `${solandBaseUrl()}/_soland/self/organizations/${encodeURIComponent(orgDid)}/policy`,
         {
           headers: authHeaders(aliceToken),
           data: {
@@ -170,11 +170,12 @@ test.describe("organization policy inheritance", () => {
         expect(effective.ok()).toBeTruthy();
         const body = await effective.json();
         expect(JSON.stringify(body)).toContain("did:web:later-denied.example");
-        expect(body.organization_policy_layers?.[0]?.version).toBe(2);
-        expect(body.organization_policy_layers?.[0]?.applies_to_realms).toEqual(
+        const organizationPolicyLayers = body.effective_policy?.organization_policy_layers ?? [];
+        expect(organizationPolicyLayers[0]?.version).toBe(2);
+        expect(organizationPolicyLayers[0]?.applies_to_realms).toEqual(
           expect.arrayContaining([first, second]),
         );
-        expect(body.fanout?.rewrites_realm_policy).toBe(false);
+        expect(body.effective_policy?.organization_policy_fanout?.rewrites_realm_policy).toBe(false);
       }
     },
   );
@@ -259,7 +260,7 @@ async function setupAcmeOrg(request: APIRequestContext, label: string) {
   ]);
   const aliceToken = await issueDevSession(request, alice);
 
-  const org = await request.post(`${solandBaseUrl()}/_cokret/self/organizations`, {
+  const org = await request.post(`${solandBaseUrl()}/_soland/self/organizations`, {
     headers: authHeaders(aliceToken),
     data: {
       organization_did: orgDid,
@@ -273,17 +274,21 @@ async function setupAcmeOrg(request: APIRequestContext, label: string) {
   expect(org.ok()).toBeTruthy();
 
   const policy = await request.post(
-    `${solandBaseUrl()}/_cokret/self/organizations/${encodeURIComponent(orgDid)}/policy`,
+    `${solandBaseUrl()}/_soland/self/organizations/${encodeURIComponent(orgDid)}/policy`,
     {
       headers: authHeaders(aliceToken),
       data: {
         policy_id: `ck:org-policy:${label}-${stamp}`,
         targets: [{ kind: "actor", did: mallory.did, action: "deny_join" }],
-        appeal: { enabled: true, endpoint: "/_cokret/self/moderation/appeals" },
+        appeal: { enabled: true, endpoint: "/_cokret/self/events" },
       },
     },
   );
-  expect(policy.ok()).toBeTruthy();
+  const policyText = await policy.text();
+  expect(
+    policy.ok(),
+    `policy returned ${policy.status()}: ${policyText}`,
+  ).toBeTruthy();
 
   return { alice, mallory, bob, aliceToken, orgDid };
 }

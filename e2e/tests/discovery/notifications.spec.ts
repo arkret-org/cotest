@@ -108,6 +108,7 @@ test.describe("notifications", () => {
         title: `S23 Muted ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [bob.did],
       });
       await bobPage.acceptInvite(realmId);

@@ -17,6 +17,7 @@ const execFileAsync = promisify(execFile);
 const CARGO_TEST_TIMEOUT_MS = 180_000;
 const SOLAND_MANIFEST = findSolandManifest();
 const SOLAND_CWD = path.dirname(SOLAND_MANIFEST);
+const CARGO_TARGET_DIR = path.join(SOLAND_CWD, "target", "cotest-federation-outbox");
 const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
 
 test.describe.configure({ mode: "serial" });
@@ -70,6 +71,7 @@ async function runSolandOutboxTest(filter: string): Promise<void> {
       env: {
         ...process.env,
         CARGO_TERM_COLOR: "never",
+        CARGO_TARGET_DIR,
       },
     },
   );
@@ -102,6 +104,7 @@ async function expectSolandOutboxTestListed(filter: string): Promise<void> {
       env: {
         ...process.env,
         CARGO_TERM_COLOR: "never",
+        CARGO_TARGET_DIR,
       },
     },
   );

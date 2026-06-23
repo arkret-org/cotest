@@ -44,6 +44,7 @@ E2EE Realm 启用 audited mode 后,服务端能记录每条消息的 franking �
 ### Phase C — reporter 举报
 
 7. reporter 举报 `M1`,`POST /_cokret/self/moderation/report { realm_id, target_ref: M1.event_id, report_reason_code: "harassment" }`
+   - reporter 响应只断言 `{report_id,status:"submitted"}`;不得向普通 reporter 暴露 `routed_to` 的具体 audit-agent / moderator DID。
 8. Report 触发 `audit_disclosure_policy.trigger = report_filed`
 9. soland 通知 audit-agent service:`POST <agent_url>/_cokret/self/audit-agent/invite` 与 `POST <agent_url>/_cokret/self/audit-agent/events`
 

@@ -11,7 +11,12 @@ import {
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
-import { signedEventEnvelope, submitSignedEventApi } from "../../helpers/soland-api";
+import {
+  canonicalTimestamp,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  uuidV7,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -19,6 +24,7 @@ import {
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
+import { grantCallCapability } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
@@ -73,7 +79,13 @@ test.describe("moderation appeal", () => {
       { actorDid: reviewer.did },
     );
     const targetRef = decisionNotice.event_id.replace(/^ck:event:/, "ck:message:");
-    const decision = await issueDecision(request, reviewerToken, realmId, targetRef);
+    const decision = await issueDecision(
+      request,
+      reviewerToken,
+      realmId,
+      targetRef,
+      reviewer.did,
+    );
 
     const appellantPage = await openUserPage(browser, appellant, { sessionCredential: appellantToken });
     try {
@@ -116,12 +128,12 @@ test.describe("moderation appeal", () => {
     const fixture = await createAppealFixture(request, "fsm");
     const appeal = await submitAppeal(request, fixture);
 
-    await reviewAppeal(request, fixture.reviewerToken, appeal.appeal_id);
-    await decideAppeal(request, fixture.reviewerToken, appeal.appeal_id, {
+    await reviewAppeal(request, fixture, appeal.appeal_id);
+    await decideAppeal(request, fixture, appeal.appeal_id, {
       verdict: "uphold",
       reason_text_ref: "appeal reviewed; decision upheld",
     });
-    await closeAppeal(request, fixture.reviewerToken, appeal.appeal_id);
+    await closeAppeal(request, fixture, appeal.appeal_id);
 
     const history = await getAppealHistory(request, fixture.reviewerToken, appeal.appeal_id);
     expect(history.map((event) => event.appeal_state)).toEqual([
@@ -142,96 +154,123 @@ test.describe("moderation appeal", () => {
     const fixture = await createAppealFixture(request, "self-review");
     const appeal = await submitAppeal(request, fixture);
 
-    const response = await request.post(
-      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
-        appeal.appeal_id,
-      )}/review`,
+    const response = await postModerationEvent(
+      request,
+      fixture.moderatorToken,
+      fixture.moderator.did,
+      fixture.realmId,
+      "ck.moderation.appeal.review",
       {
-        headers: authHeaders(fixture.moderatorToken),
-        data: { notes_ref: "self review attempt" },
+        appeal_id: appeal.appeal_id,
+        realm_id: fixture.realmId,
+        reviewer: fixture.moderator.did,
+        reviewed_at: canonicalTimestamp(),
+        notes_ref: "self review attempt",
       },
     );
-    expect(response.status()).toBeGreaterThanOrEqual(400);
-    expect(await response.text()).toContain("separation of duties");
+    expect(response.status()).toBe(412);
+    expect(await response.text()).toContain("appeal_self_review_forbidden");
   });
 
   test("duplicate active appeal for the same decision is rejected", async ({ request }) => {
     const fixture = await createAppealFixture(request, "duplicate");
     await submitAppeal(request, fixture);
 
-    const duplicate = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/appeal`, {
-      headers: authHeaders(fixture.appellantToken),
-      data: appealPayload(fixture),
-    });
-    expect(duplicate.status()).toBe(409);
-    expect(await duplicate.text()).toContain("active appeal already exists");
+    const duplicate = await postModerationEvent(
+      request,
+      fixture.appellantToken,
+      fixture.appellant.did,
+      fixture.realmId,
+      "ck.moderation.appeal.submit",
+      appealPayload(fixture),
+    );
+    expect(duplicate.status()).toBe(412);
+    expect(await duplicate.text()).toContain("moderation_appeal_duplicate_active");
   });
 
   test("appeal decision before review fails the FSM precondition", async ({ request }) => {
     const fixture = await createAppealFixture(request, "decision-before-review");
     const appeal = await submitAppeal(request, fixture);
 
-    const response = await request.post(
-      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
-        appeal.appeal_id,
-      )}/decision`,
+    const response = await postModerationEvent(
+      request,
+      fixture.reviewerToken,
+      fixture.reviewer.did,
+      fixture.realmId,
+      "ck.moderation.appeal.decision",
       {
-        headers: authHeaders(fixture.reviewerToken),
-        data: { verdict: "uphold", reason_text_ref: "too early" },
+        appeal_id: appeal.appeal_id,
+        realm_id: fixture.realmId,
+        reviewer: fixture.reviewer.did,
+        verdict: "uphold",
+        reason_text_ref: "too early",
+        decided_at: canonicalTimestamp(),
       },
     );
-    expect(response.status()).toBeGreaterThanOrEqual(400);
-    expect(await response.text()).toContain("cannot transition");
+    expect(response.status()).toBe(412);
+    expect(await response.text()).toContain("moderation_appeal_invalid_transition");
   });
 
   test("appeal close before decision fails the FSM precondition", async ({ request }) => {
     const fixture = await createAppealFixture(request, "close-before-decision");
     const appeal = await submitAppeal(request, fixture);
-    await reviewAppeal(request, fixture.reviewerToken, appeal.appeal_id);
+    await reviewAppeal(request, fixture, appeal.appeal_id);
 
-    const response = await request.post(
-      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
-        appeal.appeal_id,
-      )}/close`,
+    const response = await postModerationEvent(
+      request,
+      fixture.reviewerToken,
+      fixture.reviewer.did,
+      fixture.realmId,
+      "ck.moderation.appeal.close",
       {
-        headers: authHeaders(fixture.reviewerToken),
-        data: { auto_closed: false },
+        appeal_id: appeal.appeal_id,
+        realm_id: fixture.realmId,
+        closer: fixture.reviewer.did,
+        closed_at: canonicalTimestamp(),
+        auto_closed: false,
+        close_reason: "reviewer_closed",
       },
     );
-    expect(response.status()).toBeGreaterThanOrEqual(400);
-    expect(await response.text()).toContain("cannot transition");
+    expect(response.status()).toBe(412);
+    expect(await response.text()).toContain("moderation_appeal_invalid_transition");
   });
 
   test("overturn verdict requires an explicit decision lift", async ({ request }) => {
     const fixture = await createAppealFixture(request, "overturn-missing-lift");
     const appeal = await submitAppeal(request, fixture);
-    await reviewAppeal(request, fixture.reviewerToken, appeal.appeal_id);
+    await reviewAppeal(request, fixture, appeal.appeal_id);
 
-    const response = await request.post(
-      `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(
-        appeal.appeal_id,
-      )}/decision`,
+    const response = await postModerationEvent(
+      request,
+      fixture.reviewerToken,
+      fixture.reviewer.did,
+      fixture.realmId,
+      "ck.moderation.appeal.decision",
       {
-        headers: authHeaders(fixture.reviewerToken),
-        data: { verdict: "overturn", reason_text_ref: "missing lift" },
+        appeal_id: appeal.appeal_id,
+        realm_id: fixture.realmId,
+        reviewer: fixture.reviewer.did,
+        verdict: "overturn",
+        reason_text_ref: "missing lift",
+        decided_at: canonicalTimestamp(),
       },
     );
-    expect(response.status()).toBeGreaterThanOrEqual(400);
-    expect(await response.text()).toContain("decision_lift_ref");
+    expect(response.status()).toBe(412);
+    expect(await response.text()).toContain("appeal_overturn_missing_lift");
   });
 
   test("decision lift lets reviewer overturn and close the appeal", async ({ request }) => {
     const fixture = await createAppealFixture(request, "overturn-with-lift");
     const appeal = await submitAppeal(request, fixture);
-    await reviewAppeal(request, fixture.reviewerToken, appeal.appeal_id);
-    const lift = await liftDecision(request, fixture.reviewerToken, fixture.decisionId, appeal.appeal_id);
+    await reviewAppeal(request, fixture, appeal.appeal_id);
+    const lift = await liftDecision(request, fixture, appeal.appeal_id);
 
-    await decideAppeal(request, fixture.reviewerToken, appeal.appeal_id, {
+    await decideAppeal(request, fixture, appeal.appeal_id, {
       verdict: "overturn",
       reason_text_ref: "appeal accepted",
-      decision_lift_ref: String(lift.decision_id ?? fixture.decisionId),
     });
-    await closeAppeal(request, fixture.reviewerToken, appeal.appeal_id);
+    expect(lift.decision_id).toBe(fixture.decisionId);
+    await closeAppeal(request, fixture, appeal.appeal_id);
 
     const history = await getAppealHistory(request, fixture.reviewerToken, appeal.appeal_id);
     expect(history.at(-2)).toMatchObject({
@@ -274,11 +313,43 @@ async function createAppealFixture(
   ]);
   const realmId = await createSharedRealmViaApi(
     request,
+    moderator,
+    moderatorToken,
     appellant,
     appellantToken,
-    reviewer,
-    reviewerToken,
     { title: `appeal ${label} ${stamp}`, historyVisibility: "shared" },
+  );
+  await submitSignedEventApi(
+    request,
+    moderatorToken,
+    signedEventEnvelope({
+      actorDid: moderator.did,
+      realmId,
+      kind: "ck.member.state",
+      payload: {
+        realm_id: realmId,
+        actor_id: reviewer.did,
+        membership: "join",
+        delivery_status: "unroutable",
+      },
+    }),
+    { context: `join ${reviewer.did}` },
+  );
+  await grantCallCapability(
+    request,
+    moderatorToken,
+    moderator.did,
+    realmId,
+    reviewer.did,
+    "ck.moderation.appeal.review",
+  );
+  await grantCallCapability(
+    request,
+    moderatorToken,
+    moderator.did,
+    realmId,
+    reviewer.did,
+    "ck.moderation.decision.lift",
   );
   const message = await sendPlaintextMessageViaApi(
     request,
@@ -288,7 +359,13 @@ async function createAppealFixture(
     { actorDid: appellant.did },
   );
   const targetRef = message.event_id.replace(/^ck:event:/, "ck:message:");
-  const decision = await issueDecision(request, moderatorToken, realmId, targetRef);
+  const decision = await issueDecision(
+    request,
+    moderatorToken,
+    realmId,
+    targetRef,
+    moderator.did,
+  );
   return {
     appellant,
     moderator,
@@ -307,19 +384,22 @@ async function issueDecision(
   token: string,
   realmId: string,
   targetRef: string,
+  actorDid: string,
 ) {
-  const response = await request.post(`${solandBaseUrl()}/_soland/admin/moderation/decision`, {
-    headers: authHeaders(token),
-    data: {
-      target_ref: targetRef,
-      realm_id: realmId,
-      action: "ban",
-      reason_text_ref: "moderation decision rationale",
-    },
+  const envelope = signedModerationEvent(actorDid, realmId, "ck.moderation.decision", {
+    target_ref: targetRef,
+    decision: "quarantine",
+    action: "quarantine_message",
+    issuer: actorDid,
+    reason_code: "abuse_review",
+    reason: "moderation decision rationale",
+    request_canonical_digest:
+      "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   });
-  const text = await response.text();
-  expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as { decision_id: string };
+  await submitSignedEventApi(request, token, envelope, {
+    context: `submit moderation decision for ${targetRef}`,
+  });
+  return { decision_id: String(envelope.event_id) };
 }
 
 async function banMemberViaApi(
@@ -349,78 +429,168 @@ async function banMemberViaApi(
 
 function appealPayload(fixture: AppealFixture) {
   return {
+    appeal_id: `ck:appeal:${uuidV7()}`,
+    realm_id: fixture.realmId,
     decision_ref: fixture.decisionId,
     target_ref: fixture.targetRef,
-    realm_id: fixture.realmId,
+    appellant: fixture.appellant.did,
     reason_text_ref: "appeal narrative",
     evidence_refs: [`ck:evidence:${fixture.decisionId}`],
+    evidence_visibility: "reviewers_only",
+    created_at: canonicalTimestamp(),
   };
 }
 
 async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) {
-  const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/appeal`, {
-    headers: authHeaders(fixture.appellantToken),
-    data: appealPayload(fixture),
+  const payload = appealPayload(fixture);
+  const envelope = signedModerationEvent(
+    fixture.appellant.did,
+    fixture.realmId,
+    "ck.moderation.appeal.submit",
+    payload,
+  );
+  await submitSignedEventApi(request, fixture.appellantToken, envelope, {
+    context: `submit appeal ${payload.appeal_id}`,
   });
-  const text = await response.text();
-  expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as { appeal_id: string; state: string };
+  return {
+    appeal_id: String(payload.appeal_id),
+    event_id: String(envelope.event_id),
+    state: "submitted",
+  };
 }
 
-async function reviewAppeal(request: APIRequestContext, token: string, appealId: string) {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}/review`,
-    { headers: authHeaders(token), data: { notes_ref: "review notes" } },
+async function reviewAppeal(
+  request: APIRequestContext,
+  fixture: AppealFixture,
+  appealId: string,
+) {
+  return await submitModerationEvent(
+    request,
+    fixture.reviewerToken,
+    fixture.reviewer.did,
+    fixture.realmId,
+    "ck.moderation.appeal.review",
+    {
+      appeal_id: appealId,
+      realm_id: fixture.realmId,
+      reviewer: fixture.reviewer.did,
+      reviewed_at: canonicalTimestamp(),
+      notes_ref: "review notes",
+    },
   );
-  const text = await response.text();
-  expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as Record<string, unknown>;
 }
 
 async function decideAppeal(
   request: APIRequestContext,
-  token: string,
+  fixture: AppealFixture,
   appealId: string,
   data: Record<string, unknown>,
 ) {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}/decision`,
-    { headers: authHeaders(token), data },
+  return await submitModerationEvent(
+    request,
+    fixture.reviewerToken,
+    fixture.reviewer.did,
+    fixture.realmId,
+    "ck.moderation.appeal.decision",
+    {
+      appeal_id: appealId,
+      realm_id: fixture.realmId,
+      reviewer: fixture.reviewer.did,
+      ...data,
+      decided_at: data.decided_at ?? canonicalTimestamp(),
+    },
   );
-  const text = await response.text();
-  expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as Record<string, unknown>;
 }
 
-async function closeAppeal(request: APIRequestContext, token: string, appealId: string) {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}/close`,
-    { headers: authHeaders(token), data: { auto_closed: false } },
+async function closeAppeal(
+  request: APIRequestContext,
+  fixture: AppealFixture,
+  appealId: string,
+) {
+  return await submitModerationEvent(
+    request,
+    fixture.reviewerToken,
+    fixture.reviewer.did,
+    fixture.realmId,
+    "ck.moderation.appeal.close",
+    {
+      appeal_id: appealId,
+      realm_id: fixture.realmId,
+      closer: fixture.reviewer.did,
+      closed_at: canonicalTimestamp(),
+      auto_closed: false,
+      close_reason: "reviewer_closed",
+    },
   );
-  const text = await response.text();
-  expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as Record<string, unknown>;
 }
 
 async function liftDecision(
   request: APIRequestContext,
-  token: string,
-  decisionId: string,
+  fixture: AppealFixture,
   appealId: string,
 ) {
-  const response = await request.post(
-    `${solandBaseUrl()}/_soland/admin/moderation/decision/${encodeURIComponent(decisionId)}/lift`,
+  const envelope = signedModerationEvent(
+    fixture.reviewer.did,
+    fixture.realmId,
+    "ck.moderation.decision.lift",
     {
-      headers: authHeaders(token),
-      data: {
-        reason_text_ref: "appeal accepted",
-        appeal_ref: appealId,
-      },
+      target_ref: fixture.targetRef,
+      decision_ref: fixture.decisionId,
+      reason_code: "policy_recall",
+      reason: `appeal accepted ${appealId}`,
+      effective_at: canonicalTimestamp(),
     },
   );
-  const text = await response.text();
-  expect(response.status(), text).toBe(200);
-  return JSON.parse(text) as Record<string, unknown>;
+  await submitSignedEventApi(request, fixture.reviewerToken, envelope, {
+    context: `lift moderation decision ${fixture.decisionId}`,
+  });
+  return { decision_id: fixture.decisionId, event_id: String(envelope.event_id) };
+}
+
+function signedModerationEvent(
+  actorDid: string,
+  realmId: string,
+  kind: string,
+  payload: Record<string, unknown>,
+) {
+  return signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind,
+    schemaId: kind.startsWith("ck.moderation.appeal.")
+      ? "ck.schema.moderation_appeal.v1"
+      : "ck.schema.event_payload.v1",
+    payload,
+  });
+}
+
+async function submitModerationEvent(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  kind: string,
+  payload: Record<string, unknown>,
+) {
+  const envelope = signedModerationEvent(actorDid, realmId, kind, payload);
+  await submitSignedEventApi(request, token, envelope, {
+    context: `submit ${kind}`,
+  });
+  return { event_id: String(envelope.event_id) };
+}
+
+async function postModerationEvent(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  kind: string,
+  payload: Record<string, unknown>,
+) {
+  return await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    headers: authHeaders(token),
+    data: signedModerationEvent(actorDid, realmId, kind, payload),
+  });
 }
 
 async function getAppealHistory(request: APIRequestContext, token: string, appealId: string) {

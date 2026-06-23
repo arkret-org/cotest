@@ -188,9 +188,7 @@ test.describe("encrypted attachments", () => {
   });
 
   test("yougen encrypts E12.2 thumbnails as separate client-side ciphertext assets", async () => {
-    await runYougenLibTest(
-      "blob::tests::encrypt_mls_attachment_bundle_encrypts_thumbnail_as_separate_asset",
-    );
+    await runYougenLibTest("blob::tests::thumbnail_is_always_whole_file_and_independent");
   });
 
   test.fixme(

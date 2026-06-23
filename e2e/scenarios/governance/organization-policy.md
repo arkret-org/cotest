@@ -29,7 +29,7 @@
 
 1. 测试 harness 注册 organization DID `did:web:acme.example`
 2. acme-org 提交 `ck.organization.moderation_policy`,payload `{ targets: [{ kind: "actor", did: mallory.did, action: "deny_join" }], content_filters: [], appeal: { enabled: true } }`
-3. 断言:`GET /_cokret/self/organizations/acme/policy` 返回该 policy
+3. 断言:`GET /_soland/self/organizations/acme/policy` 返回该 policy
 
 ### Phase B — alice 在 Acme 下建 Realm
 
@@ -45,7 +45,7 @@
 
 ### Phase D — Realm-level override
 
-10. alice 觉得 mallory 特殊情况要放行;在 `R_acme` 层提交 `ck.realm.moderation_policy { allow_override: [{ target: mallory.did, action: "allow_join" }] }`
+10. alice 觉得 mallory 特殊情况要放行;通过 `PUT /_cokret/self/realms/{realm_id}/moderation-policy` 在 `R_acme` 层提交 `ck.realm.moderation_policy { allow_override: [{ target: mallory.did, action: "allow_join" }] }`
 11. 但 spec 可能要求 override organization policy 必须有 `ck.organization.override_approval` 由 acme-org 签 → 验证这个 gating
 12. (sub-test:无 approval)reducer 拒 alice 的 override;reason `requires_organization_approval`
 13. (sub-test:有 approval)acme-org 签 approval → reducer 接受;mallory 现在能 join
@@ -68,7 +68,7 @@
 
 ## Implementation notes
 
-- **soland 已落地**:`/_cokret/self/organizations` 提供本地 organization registry/policy surface;`ck.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/_cokret/self/realms/{id}/effective-policy` 返回 organization layers、fanout Realm list、Realm override。
+- **soland 已落地**:`/_soland/self/organizations` 提供本地 organization registry/policy surface（部署本地产品面,不是 `/_cokret` 标准协议面）;`ck.realm.create.object.owning_organizations[]` 自动建立 Realm→Organization 继承链;`/_cokret/self/realms/{id}/effective-policy` 的 `effective_policy` map 返回 organization layers、fanout Realm list、Realm override。
 - **join gate 已落地**:`ck.member.state{membership="join"}` 会读取 inherited organization policy,命中 `deny_join` target 时返回 `organization_policy_denied`。
 - **override approval 已落地**:Realm 级 `allow_join` override 若覆盖组织 `deny_join`,必须携带 `organization_approval`;否则返回 `requires_organization_approval`。
 - **yougen directory 已落地**:Organization directory tab 会显示 verified badge、member count,并根据 linked Realm 数量提示 organization policy inheritance 状态。

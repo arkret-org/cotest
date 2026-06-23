@@ -74,7 +74,7 @@ test.describe("audited E2EE", () => {
       const setup = await setupAuditedMessage(request, "s25-report");
       const report = await fileModerationReport(request, setup);
       expect(report.status).toBe("submitted");
-      expect(report.routed_to).toContain(setup.agentDid);
+      expect(report.routed_to).toBeUndefined();
 
       const inspect = await (await request.get(`${setup.agentBaseUrl}/inspect`)).json();
       expect(JSON.stringify(inspect)).toContain(String(report.report_id));
@@ -240,7 +240,7 @@ async function fileModerationReport(request: APIRequestContext, setup: AuditedSe
   return JSON.parse(text) as {
     report_id: string;
     status: string;
-    routed_to: string[];
+    routed_to?: string[];
   };
 }
 

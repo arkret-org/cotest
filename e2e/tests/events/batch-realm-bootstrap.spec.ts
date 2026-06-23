@@ -7,6 +7,7 @@ import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
+  plaintextVisibleServiceDeclarations,
   queryRealmEventsApi,
   sendMessageApi,
   signedEventEnvelope,
@@ -42,9 +43,10 @@ test.describe.fixme("events submit batch Realm bootstrap", () => {
     const aliceToken = await issueDevSession(request, alice);
     const realmId = typedId("realm");
     const createdAt = canonicalTimestamp();
-    const plaintextVisibleServices = Array.from(
-      new Set([solandServiceDid(), "did:web:soland.local"]),
-    );
+    const plaintextVisibleServices = plaintextVisibleServiceDeclarations([
+      solandServiceDid(),
+      "did:web:soland.local",
+    ]);
     const createEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,

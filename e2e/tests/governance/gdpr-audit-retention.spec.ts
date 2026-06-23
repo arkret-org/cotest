@@ -45,12 +45,12 @@ test.describe("GDPR / audit / retention", () => {
     expect(eraseProbe.status()).toBeLessThan(500);
   });
 
-  test("GDPR export returns a JSON bundle containing account/profile/spaces/devices/audit_log facets", async ({
+  test("GDPR export returns a JSON bundle containing account/profile/realms/devices/audit_log facets", async ({
     request,
   }) => {
     // spec: identity/account-lifecycle.md §8 — export MUST surface
     // the principal's data in a single bundle. v1 ships account /
-    // profile / spaces / devices / audit_log; the `messages` slot
+    // profile / realms / devices / audit_log; the `messages` slot
     // is present but empty until the projection-events filter lands
     // (acceptable per spec — bundle shape is the contract).
     const stamp = Date.now();
@@ -66,7 +66,7 @@ test.describe("GDPR / audit / retention", () => {
     expect(bundle.did).toBe(alice.did);
     expect(bundle.account).toBeTruthy();
     expect(bundle.profile).toBeTruthy();
-    expect(Array.isArray(bundle.spaces)).toBe(true);
+    expect(Array.isArray(bundle.realms)).toBe(true);
     expect(Array.isArray(bundle.devices)).toBe(true);
     expect(Array.isArray(bundle.audit_log)).toBe(true);
     expect(bundle.exported_at).toBeTruthy();

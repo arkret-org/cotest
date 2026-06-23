@@ -7,14 +7,22 @@
 //   - models/realm-and-space.md §2.2 encryption_profile, §3.7.2 E2EE Realm
 
 import { expect, test } from "@playwright/test";
+import {
+  createHash,
+  generateKeyPairSync,
+  sign as nodeSign,
+  type KeyObject,
+} from "node:crypto";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
   b64url,
+  canonicalJson,
   canonicalTimestamp,
   addRealmMemberApi,
   createRealmApi,
+  principalControlRealmForDid,
   singleDidNotary,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -31,10 +39,359 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-// Build an encrypted Realm via a direct ck.realm.create envelope. The shared
-// createRealmApi helper puts `plaintext_visible_services` at the payload root,
-// which the current soland realm_create schema rejects (additionalProperties);
-// this inline shape mirrors the accepted envelope used elsewhere in this file.
+function sha256Digest(value: Buffer): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+const BASE58BTC_ALPHABET =
+  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const WEBVH_SCID_PLACEHOLDER = "{SCID}";
+const CROSS_SIGNING_BINDING_LABEL = "ck-cross-signing-bind-v1\n";
+const MLS_GOVERNANCE_BINDING_FULL_PROFILE =
+  "ck.profile.mls_governance_binding.full.v1";
+const MLS_REDUCER_PROFILE_V1 = "ck.reducer.v1";
+
+type Ed25519FixtureKey = {
+  privateKey: KeyObject;
+  publicKeyMultibase: string;
+};
+
+type WebvhPrincipalFixture = {
+  did: string;
+  didKeyId: string;
+  psk: Ed25519FixtureKey;
+  ssk: Ed25519FixtureKey;
+  usk: Ed25519FixtureKey;
+  sskKid: string;
+};
+
+function base58btc(bytes: Buffer): string {
+  if (bytes.length === 0) {
+    return "";
+  }
+  const digits = [0];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i += 1) {
+      const value = digits[i] * 256 + carry;
+      digits[i] = value % 58;
+      carry = Math.floor(value / 58);
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = Math.floor(carry / 58);
+    }
+  }
+  for (const byte of bytes) {
+    if (byte !== 0) {
+      break;
+    }
+    digits.push(0);
+  }
+  return digits
+    .reverse()
+    .map((digit) => BASE58BTC_ALPHABET[digit])
+    .join("");
+}
+
+function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
+  const der = publicKey.export({ format: "der", type: "spki" }) as Buffer;
+  if (der.length < 32) {
+    throw new Error("Ed25519 SPKI public key is too short");
+  }
+  return der.subarray(der.length - 32);
+}
+
+function ed25519PublicKeyMultibase(publicKey: KeyObject): string {
+  return `z${base58btc(
+    Buffer.concat([Buffer.from([0xed, 0x01]), rawEd25519PublicKey(publicKey)]),
+  )}`;
+}
+
+function ed25519FixtureKey(): Ed25519FixtureKey {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  return {
+    privateKey,
+    publicKeyMultibase: ed25519PublicKeyMultibase(publicKey),
+  };
+}
+
+function ed25519SignatureB64url(privateKey: KeyObject, payload: Buffer): string {
+  return nodeSign(null, payload, privateKey).toString("base64url");
+}
+
+function ed25519SignatureBase58(privateKey: KeyObject, payload: Buffer): string {
+  return `z${base58btc(nodeSign(null, payload, privateKey))}`;
+}
+
+function sha256MultihashMultibase(payload: Buffer): string {
+  return `z${base58btc(
+    Buffer.concat([
+      Buffer.from([0x12, 0x20]),
+      createHash("sha256").update(payload).digest(),
+    ]),
+  )}`;
+}
+
+function canonicalBytes(value: unknown): Buffer {
+  return Buffer.from(canonicalJson(value), "utf8");
+}
+
+function substituteScid(value: unknown, scid: string): unknown {
+  if (typeof value === "string") {
+    return value.replaceAll(WEBVH_SCID_PLACEHOLDER, scid);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => substituteScid(item, scid));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        substituteScid(item, scid),
+      ]),
+    );
+  }
+  return value;
+}
+
+function stripVersionId(value: Record<string, unknown>): Record<string, unknown> {
+  const { versionId: _versionId, ...rest } = value;
+  return rest;
+}
+
+function webvhAuthorities(): { methodAuthority: string; serviceEndpoint: string } {
+  const serviceEndpoint = solandBaseUrl().replace(/\/$/, "");
+  const parsed = new URL(serviceEndpoint);
+  const host = parsed.hostname;
+  if (!host.includes(".")) {
+    throw new Error(`soland host must contain a dot for did:webvh: ${host}`);
+  }
+  return {
+    methodAuthority: parsed.port ? `${host}%3A${parsed.port}` : host,
+    serviceEndpoint,
+  };
+}
+
+async function registerWebvhPrincipal(
+  request: import("@playwright/test").APIRequestContext,
+  localId: string,
+): Promise<WebvhPrincipalFixture> {
+  const psk = ed25519FixtureKey();
+  const updateKey = ed25519FixtureKey();
+  const ssk = ed25519FixtureKey();
+  const usk = ed25519FixtureKey();
+  const { methodAuthority, serviceEndpoint } = webvhAuthorities();
+  const didKeyFragment = "did-key-1";
+  const updateKeyFragment = "update-key-1";
+  const placeholderDid = `did:webvh:${WEBVH_SCID_PLACEHOLDER}:${methodAuthority}:webvh:${localId}`;
+  const placeholderDidKeyId = `${placeholderDid}#${didKeyFragment}`;
+  const versionTime = canonicalTimestamp();
+  const didDocumentSkeleton = {
+    "@context": ["https://www.w3.org/ns/did/v1"],
+    id: placeholderDid,
+    verificationMethod: [
+      {
+        id: placeholderDidKeyId,
+        type: "Multikey",
+        controller: placeholderDid,
+        publicKeyMultibase: psk.publicKeyMultibase,
+      },
+    ],
+    authentication: [placeholderDidKeyId],
+    assertionMethod: [placeholderDidKeyId],
+    alsoKnownAs: [],
+    service: [
+      {
+        id: `${placeholderDid}#soland`,
+        type: "CokretPrincipalServer",
+        serviceEndpoint,
+      },
+    ],
+  };
+  const entrySkeleton = {
+    versionId: `0-${WEBVH_SCID_PLACEHOLDER}`,
+    versionTime,
+    parameters: {
+      scid: WEBVH_SCID_PLACEHOLDER,
+      method: "did:webvh:1.0",
+      updateKeys: [updateKey.publicKeyMultibase],
+    },
+    state: didDocumentSkeleton,
+  };
+  const scid = sha256MultihashMultibase(canonicalBytes(entrySkeleton));
+  const realizedEntry = substituteScid(entrySkeleton, scid) as Record<string, unknown>;
+  const versionHash = sha256MultihashMultibase(
+    canonicalBytes(stripVersionId(realizedEntry)),
+  );
+  const signedEntry = {
+    ...realizedEntry,
+    versionId: `1-${versionHash}`,
+  };
+  const proof = {
+    type: "DataIntegrityProof",
+    cryptosuite: "eddsa-jcs-2022",
+    verificationMethod: `did:key:${updateKey.publicKeyMultibase}#${updateKey.publicKeyMultibase}`,
+    proofValue: ed25519SignatureBase58(updateKey.privateKey, canonicalBytes(signedEntry)),
+  };
+  const response = await request.post(
+    `${solandBaseUrl()}/_soland/root/identity/webvh/register`,
+    {
+      headers: {
+        authorization: `Bearer ${
+          process.env.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER ??
+          "joint-e2e-webvh-registration"
+        }`,
+      },
+      data: {
+        local_id: localId,
+        did_public_key_multibase: psk.publicKeyMultibase,
+        update_public_key_multibase: updateKey.publicKeyMultibase,
+        did_key_id: didKeyFragment,
+        update_key_id: updateKeyFragment,
+        also_known_as: [],
+        version_time: versionTime,
+        proof,
+      },
+    },
+  );
+  const body = await response.json();
+  expect(
+    response.status(),
+    `embedded webvh register returned ${response.status()}: ${JSON.stringify(body)}`,
+  ).toBe(201);
+  const did = String(body.did);
+  return {
+    did,
+    didKeyId: String(body.did_key_id),
+    psk,
+    ssk,
+    usk,
+    sskKid: `${did}#ck_self_signing_v1`,
+  };
+}
+
+async function solandTrustDomain(
+  request: import("@playwright/test").APIRequestContext,
+): Promise<string> {
+  const response = await request.get(`${solandBaseUrl()}/_cokret/describe`);
+  expect(response.ok()).toBeTruthy();
+  const body = await response.json();
+  return String(body.trust_domain ?? "ck:trust_domain:soland.joint-e2e.local");
+}
+
+function crossSigningBindingInput(args: {
+  principalId: string;
+  trustDomain: string;
+  subordinateKeyKind: "self_signing" | "user_signing";
+  subordinateKid: string;
+  subordinateAlg: string;
+  subordinatePublicKey: string;
+  generation: number;
+}): Buffer {
+  return Buffer.concat([
+    Buffer.from(CROSS_SIGNING_BINDING_LABEL, "utf8"),
+    canonicalBytes({
+      principal_id: args.principalId,
+      trust_domain: args.trustDomain,
+      subordinate_key_kind: args.subordinateKeyKind,
+      subordinate_kid: args.subordinateKid,
+      subordinate_alg: args.subordinateAlg,
+      subordinate_public_key: args.subordinatePublicKey,
+      generation: args.generation,
+    }),
+  ]);
+}
+
+async function publishCrossSigning(
+  request: import("@playwright/test").APIRequestContext,
+  token: string,
+  fixture: WebvhPrincipalFixture,
+): Promise<string> {
+  const trustDomain = await solandTrustDomain(request);
+  const realmId = principalControlRealmForDid(fixture.did);
+  const pskKid = fixture.didKeyId;
+  const principalSigningKey = {
+    kid: pskKid,
+    alg: "EdDSA",
+    public_key: fixture.psk.publicKeyMultibase,
+    key_format: "multibase",
+  };
+  const selfSigningKey = {
+    kid: fixture.sskKid,
+    alg: "EdDSA",
+    public_key: fixture.ssk.publicKeyMultibase,
+    key_format: "multibase",
+  };
+  const userSigningKey = {
+    kid: `${fixture.did}#ck_user_signing_v1`,
+    alg: "EdDSA",
+    public_key: fixture.usk.publicKeyMultibase,
+    key_format: "multibase",
+  };
+  const generation = 1;
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: fixture.did,
+      realmId,
+      kind: "ck.cross_signing.publish",
+      payload: {
+        principal_id: fixture.did,
+        trust_domain: trustDomain,
+        principal_signing_key: principalSigningKey,
+        self_signing_key: {
+          ...selfSigningKey,
+          binding: {
+            verification_method: pskKid,
+            alg: "EdDSA",
+            signature: ed25519SignatureB64url(
+              fixture.psk.privateKey,
+              crossSigningBindingInput({
+                principalId: fixture.did,
+                trustDomain,
+                subordinateKeyKind: "self_signing",
+                subordinateKid: selfSigningKey.kid,
+                subordinateAlg: selfSigningKey.alg,
+                subordinatePublicKey: selfSigningKey.public_key,
+                generation,
+              }),
+            ),
+          },
+        },
+        user_signing_key: {
+          ...userSigningKey,
+          binding: {
+            verification_method: pskKid,
+            alg: "EdDSA",
+            signature: ed25519SignatureB64url(
+              fixture.psk.privateKey,
+              crossSigningBindingInput({
+                principalId: fixture.did,
+                trustDomain,
+                subordinateKeyKind: "user_signing",
+                subordinateKid: userSigningKey.kid,
+                subordinateAlg: userSigningKey.alg,
+                subordinatePublicKey: userSigningKey.public_key,
+                generation,
+              }),
+            ),
+          },
+        },
+        expected_previous_generation: 0,
+        generation,
+        issued_at: canonicalTimestamp(),
+      },
+    }),
+    { context: `publish cross-signing ${fixture.did}` },
+  );
+  return trustDomain;
+}
+
+// Build an encrypted Realm via a direct ck.realm.create envelope. This local
+// helper deliberately omits plaintext service declarations so the MLS tests
+// exercise the encrypted path only.
 async function createEncryptedRealm(
   request: import("@playwright/test").APIRequestContext,
   token: string,
@@ -84,21 +441,14 @@ async function sendEncryptedTimelineMessage(
 ): Promise<string> {
   await userPage.gotoTimelineRealm(realmId);
 
-  const encryptToggle = userPage.page.getByTestId("encrypt-local-button");
-  await expect(encryptToggle).toBeVisible({ timeout: 30_000 });
-  const toggleChecked = async () =>
-    encryptToggle.evaluate((element) => {
-      const input = element as HTMLInputElement;
-      return (
-        input.checked === true ||
-        element.getAttribute("aria-checked") === "true" ||
-        element.getAttribute("data-state") === "checked"
-      );
-    });
-  if (!(await toggleChecked())) {
-    await encryptToggle.click();
-  }
-  await expect.poll(toggleChecked, { timeout: 5_000 }).toBe(true);
+  const secondarySecureButton = userPage.page.getByTestId("send-e2ee-move-button");
+  const primarySendButton = userPage.page.getByTestId("send-chat-button");
+  const secureSendButton = (await secondarySecureButton
+    .isVisible()
+    .catch(() => false))
+    ? secondarySecureButton
+    : primarySendButton;
+  await expect(secureSendButton).toBeVisible({ timeout: 30_000 });
 
   const messageSubmit = userPage.page.waitForResponse(
     (response) => {
@@ -114,7 +464,7 @@ async function sendEncryptedTimelineMessage(
   );
 
   await userPage.page.getByTestId("chat-input").fill(body);
-  await userPage.page.getByTestId("send-chat-button").click();
+  await secureSendButton.click();
 
   const response = await messageSubmit;
   const postData = response.request().postData() ?? "";
@@ -250,8 +600,16 @@ test.describe("MLS group encryption", () => {
     // monotonic commit epoch. Full client derivation of epoch secrets
     // remains a later yougen+MLS concern.
     const stamp = Date.now();
-    const alice = uniqueUser("s11-claim-alice");
-    const bob = uniqueUser("s11-claim-bob");
+    const aliceFixture = await registerWebvhPrincipal(
+      request,
+      `s11-claim-alice-${stamp.toString(36)}`,
+    );
+    const bobFixture = await registerWebvhPrincipal(
+      request,
+      `s11-claim-bob-${stamp.toString(36)}`,
+    );
+    const alice = { ...uniqueUser("s11-claim-alice"), did: aliceFixture.did };
+    const bob = { ...uniqueUser("s11-claim-bob"), did: bobFixture.did };
     await Promise.all([
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
@@ -260,37 +618,66 @@ test.describe("MLS group encryption", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
+    await Promise.all([
+      publishCrossSigning(request, aliceToken, aliceFixture),
+      publishCrossSigning(request, bobToken, bobFixture),
+    ]);
 
     const keypackageId = typedId("mls_keypackage");
+    const keyPackage = b64url(`opaque-keypackage-${stamp}`);
+    const keypackageDigest = sha256Digest(Buffer.from(keyPackage, "base64url"));
+    const keypackageRef = keypackageDigest;
+    const keypackageCapabilities = ["ck.mls.profile.full"];
     const groupId = typedId("mls_group");
-    const nowSeconds = Math.floor(Date.now() / 1000);
     const digest = (nibble: string) => `sha256:${nibble.repeat(64)}`;
+    const createdAt = canonicalTimestamp();
+    const expiresAt = canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000));
+    const deviceSignature = {
+      kid: `${bob.did}#${bob.deviceId}`,
+      alg: "EdDSA",
+      sig: b64url(`device-signature-${stamp}`),
+    };
 
     const publish = await request.post(
       `${solandBaseUrl()}/_cokret/self/keys/keypackages/upload`,
       {
         headers: authHeaders(bobToken),
         data: {
-          keypackage_id: keypackageId,
-          actor_id: bob.did,
+          principal_id: bob.did,
           device_id: bob.deviceId,
-          lifetime: {
-            not_before: nowSeconds - 60,
-            not_after: nowSeconds + 3600,
-          },
-          key_package_bytes_b64: b64url(`opaque-keypackage-${stamp}`),
+          device_signature: deviceSignature,
+          key_packages: [
+            {
+              keypackage_id: keypackageId,
+              keypackage_ref: keypackageRef,
+              key_package: keyPackage,
+              keypackage_digest: keypackageDigest,
+              cipher_suites: [
+                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+              ],
+              capabilities: keypackageCapabilities,
+              device_signature: deviceSignature,
+              created_at: createdAt,
+              expires_at: expiresAt,
+              last_resort: false,
+            },
+          ],
         },
       },
     );
-    expect(publish.ok()).toBeTruthy();
-    const publishBody = await publish.json();
-    expect(publishBody.keypackage_id).toBe(keypackageId);
-    expect(publishBody.actor_id).toBe(bob.did);
-    expect(publishBody.device_id).toBe(bob.deviceId);
-    expect(publishBody.claimed).toBe(false);
+    const publishBody = await publish
+      .json()
+      .catch(async () => ({ raw: await publish.text() }));
+    expect(
+      publish.ok(),
+      `KeyPackage upload failed with ${publish.status()}: ${JSON.stringify(publishBody)}`,
+    ).toBeTruthy();
+    expect(publishBody.accepted).toBe(1);
+    expect(publishBody.rejected ?? []).toEqual([]);
+    expect(publishBody.key_package_refs).toContain(keypackageRef);
 
     const pendingBefore = await request.get(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
       {
         headers: authHeaders(bobToken),
       },
@@ -302,26 +689,52 @@ test.describe("MLS group encryption", () => {
       `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(aliceToken),
-        data: { keypackage_id: keypackageId, group_id: groupId },
+        data: {
+          target_principal_id: bob.did,
+          target_device_ids: [bob.deviceId],
+          intended_realm_id: typedId("realm"),
+          requester: alice.did,
+          required_capabilities: keypackageCapabilities,
+          claim_nonce: `claim-${stamp}`,
+          expires_at: expiresAt,
+          mls_group_id: groupId,
+          proofs: [],
+        },
       },
     );
     expect(claim.ok()).toBeTruthy();
     const claimBody = await claim.json();
-    expect(claimBody.keypackage_id).toBe(keypackageId);
-    expect(claimBody.group_id).toBe(groupId);
-    expect(claimBody.claimed_at).toBeTruthy();
+    expect(claimBody.claims).toHaveLength(1);
+    expect(claimBody.failures ?? []).toEqual([]);
+    expect(claimBody.claims[0].keypackage_ref).toBe(keypackageRef);
+    expect(claimBody.claims[0].device_id).toBe(bob.deviceId);
+    expect(claimBody.claims[0].key_package).toBe(keyPackage);
+    const keypackageClaim = claimBody.claims[0] as Record<string, unknown>;
+    const claimId = String(keypackageClaim.claim_id);
+    const capabilitiesDigest = String(keypackageClaim.capabilities_digest);
+    const claimSskGeneration = Number(keypackageClaim.ssk_generation);
 
     const claimAgain = await request.post(
       `${solandBaseUrl()}/_cokret/self/keys/keypackages/claim`,
       {
         headers: authHeaders(aliceToken),
-        data: { keypackage_id: keypackageId, group_id: typedId("mls_group") },
+        data: {
+          target_principal_id: bob.did,
+          target_device_ids: [bob.deviceId],
+          intended_realm_id: typedId("realm"),
+          requester: alice.did,
+          required_capabilities: keypackageCapabilities,
+          claim_nonce: `claim-again-${stamp}`,
+          expires_at: expiresAt,
+          mls_group_id: typedId("mls_group"),
+          proofs: [],
+        },
       },
     );
-    expect(claimAgain.status()).toBe(409);
-    expect(wireErrCode(await claimAgain.json())).toBe(
-      "mls_keypackage_already_claimed",
-    );
+    expect(claimAgain.ok()).toBeTruthy();
+    const claimAgainBody = await claimAgain.json();
+    expect(claimAgainBody.claims ?? []).toEqual([]);
+    expect(claimAgainBody.failures?.[0]?.reason_code).toBe("mls_keypackage_not_found");
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `MLS lifecycle ${stamp}`,
@@ -333,15 +746,19 @@ test.describe("MLS group encryption", () => {
     const genesisEventId = typedId("event");
     const commitEventId = typedId("event");
     const frontierEventRef = genesisEventId;
+    const effectiveScope = { kind: "realm", realm_id: realmId };
     const genesisBinding = {
       binding_version: 1,
       encoding_profile: "cbor-deterministic-rfc8949-v1",
       realm_id: realmId,
+      effective_scope: effectiveScope,
       mls_group_id: groupId,
       previous_epoch: 0,
       next_epoch: 0,
       membership_frontier: [frontierEventRef],
       policy_root: digest("2"),
+      binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+      reducer_profile: MLS_REDUCER_PROFILE_V1,
     };
     const genesisBody = await submitSignedEventApi(
       request,
@@ -353,10 +770,7 @@ test.describe("MLS group encryption", () => {
         eventId: genesisEventId,
         payload: {
           mls_group_id: groupId,
-          realm_key_scope: {
-            realm_id: realmId,
-            policy_digest: digest("2"),
-          },
+          effective_scope: effectiveScope,
           epoch: 0,
           creator_principal_id: alice.did,
           creator_device_id: alice.deviceId,
@@ -371,10 +785,24 @@ test.describe("MLS group encryption", () => {
         context: "submit MLS genesis",
       },
     );
-    expect(genesisBody.event_id).toBe(genesisEventId);
+    expect(genesisBody.accepted ?? []).toContain(genesisEventId);
 
     const welcomeId = typedId("mls_welcome");
-    const keypackageDigest = digest("5");
+    const welcomeEventId = typedId("event");
+    const welcomeCiphertext = b64url(`opaque-mls-welcome-${stamp}`);
+    const welcomeDigest = sha256Digest(Buffer.from(welcomeCiphertext, "base64url"));
+    const claimEnvelopeCreatedAt = canonicalTimestamp();
+    const claimEnvelopeUnsigned = {
+      keypackage_ref: keypackageRef,
+      keypackage_digest: keypackageDigest,
+      intended_realm_id: realmId,
+      claim_id: claimId,
+      requester_did: alice.did,
+      ssk_generation: claimSskGeneration,
+      nonce: `claim-${stamp}`,
+      welcome_digest: welcomeDigest,
+      created_at: claimEnvelopeCreatedAt,
+    };
     const welcomeBody = await submitSignedEventApi(
       request,
       aliceToken,
@@ -382,24 +810,35 @@ test.describe("MLS group encryption", () => {
         actorDid: alice.did,
         realmId,
         kind: "ck.mls.welcome",
+        eventId: welcomeEventId,
         payload: {
           welcome_id: welcomeId,
           mls_group_id: groupId,
           epoch: 1,
           recipient_principal_id: bob.did,
           recipient_device_id: bob.deviceId,
-          key_package_id: keypackageId,
-          keypackage_ref: keypackageDigest,
+          keypackage_ref: keypackageRef,
           keypackage_digest: keypackageDigest,
-          claim_id: `claim-${stamp}`,
+          claim_id: claimId,
           claim_ref: {
-            claim_id: `claim-${stamp}`,
-            keypackage_ref: keypackageDigest,
+            claim_id: claimId,
+            keypackage_ref: keypackageRef,
             keypackage_digest: keypackageDigest,
-            capabilities_digest: digest("6"),
-            ssk_generation: 1,
+            capabilities_digest: capabilitiesDigest,
+            ssk_generation: claimSskGeneration,
           },
-          ciphertext: `opaque-mls-welcome-${stamp}`,
+          claim_envelope: {
+            ...claimEnvelopeUnsigned,
+            signature: {
+              kid: aliceFixture.sskKid,
+              alg: "EdDSA",
+              sig: ed25519SignatureB64url(
+                aliceFixture.ssk.privateKey,
+                canonicalBytes(claimEnvelopeUnsigned),
+              ),
+            },
+          },
+          ciphertext: welcomeCiphertext,
           expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
           commit_ref: commitEventId,
           governance_binding: genesisBinding,
@@ -409,37 +848,27 @@ test.describe("MLS group encryption", () => {
         context: "submit MLS welcome",
       },
     );
-    expect(welcomeBody.event_id).toMatch(/^ck:event:/);
+    expect(welcomeBody.accepted ?? []).toContain(welcomeEventId);
 
     const commitPayload = (label: string, nextEpoch = 1) => ({
-      group_id: groupId,
-      expected_prev_epoch: 0,
-      leader_actor_id: alice.did,
-      commit_bytes_b64: b64url(label),
       mls_group_id: groupId,
       base_epoch: 0,
       base_epoch_ref: frontierEventRef,
       proposal_refs: [],
       next_epoch: nextEpoch,
-      commit_digest: digest("7"),
+      commit_digest: sha256Digest(Buffer.from(label, "utf8")),
       governance_binding: {
         binding_version: 1,
         encoding_profile: "cbor-deterministic-rfc8949-v1",
         realm_id: realmId,
+        effective_scope: effectiveScope,
         mls_group_id: groupId,
         previous_epoch: 0,
         next_epoch: nextEpoch,
         membership_frontier: [frontierEventRef],
         policy_root: digest("2"),
-        threshold: {
-          k: 2,
-          n: 3,
-          signers: [alice.did, bob.did, "did:web:mls-auditor.example"],
-        },
-        signatures: [
-          { signer_did: alice.did, signature_b64: b64url(`alice-${stamp}`) },
-          { signer_did: bob.did, signature_b64: b64url(`bob-${stamp}`) },
-        ],
+        binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+        reducer_profile: MLS_REDUCER_PROFILE_V1,
       },
     });
     const commitEnvelope = signedEventEnvelope({
@@ -457,10 +886,10 @@ test.describe("MLS group encryption", () => {
         context: "submit MLS commit",
       },
     );
-    expect(commitBody.event_id).toMatch(/^ck:event:/);
+    expect(commitBody.accepted ?? []).toContain(commitEventId);
 
     const pendingAfterWelcome = await request.get(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
       {
         headers: authHeaders(bobToken),
       },
@@ -470,13 +899,14 @@ test.describe("MLS group encryption", () => {
     expect(pendingAfterWelcomeBody.welcomes).toHaveLength(1);
     expect(pendingAfterWelcomeBody.welcomes[0]).toMatchObject({
       welcome_id: welcomeId,
-      group_id: groupId,
-      key_package_id: keypackageId,
+      mls_group_ref: groupId,
+      key_package_id: keypackageRef,
     });
+    expect(pendingAfterWelcomeBody.welcomes[0].group_id).toBeUndefined();
     expect(pendingAfterWelcomeBody.welcomes[0].delivered_at).toBeTruthy();
 
     const pendingAfterDrain = await request.get(
-      `${solandBaseUrl()}/_cokret/self/keys/keypackages/welcomes/pending`,
+      `${solandBaseUrl()}/_soland/self/keys/keypackages/welcomes/pending`,
       {
         headers: authHeaders(bobToken),
       },
@@ -792,4 +1222,3 @@ test.describe("MLS group encryption", () => {
     },
   );
 });
-

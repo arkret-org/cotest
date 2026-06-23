@@ -574,6 +574,7 @@ test.describe("chat advanced", () => {
         title: `S14D Mention ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "none",
         seedMembers: [bob.did, carol.did],
       });
       await Promise.all([

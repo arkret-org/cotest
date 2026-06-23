@@ -261,6 +261,20 @@ export async function grantCallCapability(
   const grantId = typedId("grant");
   const resources = [{ kind: "realm", realm_id: realmId }];
   const issuedAt = canonicalTimestamp();
+  const delegationConstraint: Record<string, unknown> = {
+    constraint_type: "delegation_control",
+    effect: "allow",
+    max_delegation_depth: 0,
+  };
+  if (
+    [
+      "ck.moderation.decision",
+      "ck.moderation.decision.lift",
+      "ck.realm.moderation_policy",
+    ].includes(action)
+  ) {
+    delegationConstraint.depends_on_moderation_state = true;
+  }
   const unsignedGrant: Record<string, unknown> = {
     id: grantId,
     schema: "ck.schema.capability.v1",
@@ -269,6 +283,7 @@ export async function grantCallCapability(
     subject: subjectDid,
     actions: [action],
     resources,
+    constraints: [delegationConstraint],
     issued_at: issuedAt,
   };
   const grant = {

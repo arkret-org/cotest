@@ -73,14 +73,14 @@
    ```
 8. 断言:响应 200 + `report_id` + `status="submitted"`
 9. 断言 §3.3 隐私要求:
-   - bob 作为 reporter 调用 `GET /_cokret/self/moderation/reports?realm_id=S` → 能看到这个 report
-   - mallory 用自己的 token 调用 list-reports endpoint → **看不到** 这个 report
+   - bob 作为 reporter 只能拿到提交响应里的 `report_id`,不能通过 list endpoint 枚举 report
+   - mallory 用自己的 token 调用实现私有 admin collection → **看不到** 这个 report
    - mallory 的 timeline 上 `M_bad` 没有任何"被举报"的标记
    - carol (旁观者) 同样看不到 report
 
 ### Phase D — alice 处理:capability 检查 + anchored ban
 
-10. **alice** 调用 `GET /_cokret/self/moderation/reports?realm_id=S` 或 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
+10. **alice** 调用实现私有 `GET /_soland/admin/reports` → 能看到 bob 提交的这个 report
 11. **alice** 决定 ban mallory:
     - 调用 `ck.member.state` Move,membership = `ban`,subject = mallory.did
     - 该 Move 必须签名 + 引用 `ck.moderation.decision` capability grant
@@ -136,7 +136,7 @@
 
 ## Implementation notes
 
-- **soland report privacy**:`GET /_cokret/self/moderation/reports` 只向 reporter、realm owner、配置的 admin principal 返回 report;dev-mode `GET /_soland/admin/reports` 复用同一过滤,避免被举报人或普通成员通过 admin collection 读到 report。
+- **soland report privacy**:`POST /_cokret/self/moderation/report` 是唯一标准 reporter 写入口;v1 没有注册 `GET /_cokret/self/moderation/reports`。dev-mode `GET /_soland/admin/reports` 是实现私有调试投影,只向 realm owner、配置的 admin principal 或持有 moderation review/decision 权限的 actor 返回 report;避免 reporter、被举报人或普通成员枚举 report。
 - **ban Move 权限**:`soland` 对 direct submit 的 `ck.member.state{membership="ban"}` 执行 owner/moderation gate;bob 这类非 moderator 被 `missing_capability` 拒绝,alice 作为 owner 可接受。
 - **yougen owner ban UI**:`/realms/:id/admin/members` 的 `member-row[data-member-did]` + `ban-member-button` 现在作为 live 路径,owner 点击后提交 canonical `ck.member.state` direct event,并从 server projection 中移除被封禁成员。
 - **idempotent ban**:重复 `ck.member.state{membership="ban"}` 通过 federation/service convergence 路径保持幂等,最终成员列表不重复、不恢复被 ban 成员。
