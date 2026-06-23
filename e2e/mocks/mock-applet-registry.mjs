@@ -31,7 +31,14 @@
 //     → bot actor minted → ghost transaction with accountability".
 
 import { createServer } from "node:http";
-import { createHash, randomBytes, randomUUID, sign } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  randomBytes,
+  randomUUID,
+  sign,
+} from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
 
@@ -74,6 +81,24 @@ function canonicalJson(value) {
 
 function canonicalHash(value) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+}
+
+function rfc3339Now() {
+  return new Date().toISOString().replace(".000Z", "Z");
+}
+
+function developmentAppletPublicJwk(verificationMethod) {
+  const seed = createHash("sha256")
+    .update("soland:applet-service-key:")
+    .update(verificationMethod)
+    .digest();
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  const privateKey = createPrivateKey({
+    key: Buffer.concat([pkcs8Prefix, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+  return createPublicKey(privateKey).export({ format: "jwk" });
 }
 
 function uuidV7Like() {
@@ -134,8 +159,32 @@ function signedPackage(body) {
     typeof body.applet_id === "string" && body.applet_id.startsWith("ck:applet:")
       ? body.applet_id
       : typedId("applet");
-  const createdAt = new Date().toISOString();
+  const createdAt = rfc3339Now();
   const serviceDid = body.service_did ?? `did:web:applet-${safe}.joint-e2e.local`;
+  const webhookAuth = body.webhook_auth ?? {
+    type: "http_message_signature",
+    key_ref: `${serviceDid}#applet-service-key`,
+    accepted_algs: ["EdDSA"],
+  };
+  const webhookPublicJwk = developmentAppletPublicJwk(webhookAuth.key_ref);
+  const webhookPublicKeyMaterial = canonicalJson(webhookPublicJwk);
+  const serviceDidDocument = {
+    id: serviceDid,
+    verificationMethod: {
+      [webhookAuth.key_ref]: webhookPublicKeyMaterial,
+    },
+    updated: createdAt,
+  };
+  const registrationEpochEvidence = {
+    service_did: serviceDid,
+    did_document_digest: canonicalHash(serviceDidDocument),
+    accepted_signing_keys: [
+      {
+        key_ref: webhookAuth.key_ref,
+        public_key_digest: canonicalHash(webhookPublicJwk),
+      },
+    ],
+  };
   const packageBase = {
     schema: "ck.schema.applet_package.v1",
     package_id: body.package_id ?? `package:${safe}:${uuidV7Like()}`,
@@ -171,11 +220,7 @@ function signedPackage(body) {
         },
       ],
     },
-    webhook_auth: body.webhook_auth ?? {
-      type: "http_message_signature",
-      key_ref: `${registryDid}#mock-applet-registry-key-1`,
-      accepted_algs: ["EdDSA"],
-    },
+    webhook_auth: webhookAuth,
     receive_events: body.receive_events ?? true,
     receive_ephemeral: body.receive_ephemeral ?? false,
     rate_limited: body.rate_limited ?? true,
@@ -203,6 +248,7 @@ function signedPackage(body) {
         namespace: safe,
         created_at: createdAt,
       }),
+    registration_epoch_evidence: registrationEpochEvidence,
     created_at: createdAt,
   };
   if (body.widget) {
@@ -220,7 +266,7 @@ function signedPackage(body) {
       kind: "detached_jws",
       alg: "EdDSA",
       verification_method: `${registryDid}#mock-applet-registry-key-1`,
-      payload_digest: payloadDigest,
+      event_digest: payloadDigest,
       created_at: createdAt,
       jws,
     },
@@ -229,6 +275,7 @@ function signedPackage(body) {
     applet_package: appletPackage,
     package_digest: packageDigest,
     signing_did: registryDid,
+    service_did_document: serviceDidDocument,
   };
 }
 
@@ -317,7 +364,7 @@ const server = createServer(async (req, res) => {
     let upstream;
     try {
       upstream = await fetch(
-        `${String(solandBase).replace(/\/$/, "")}/_soland/self/applets/${encodeURIComponent(
+        `${String(solandBase).replace(/\/$/, "")}/_soland/edge/applets/${encodeURIComponent(
           body.applet_id,
         )}/ghosts`,
         {

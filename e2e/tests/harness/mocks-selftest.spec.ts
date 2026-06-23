@@ -379,7 +379,11 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(body.applet_package.ghost_policy.enabled).toBe(true);
     expect(body.applet_package.delegation_policy.enabled).toBe(false);
     expect(body.applet_package.e2ee_policy.enabled).toBe(false);
-    expect(body.applet_package.proof.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(body.applet_package.proof.event_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(body.applet_package.registration_epoch_evidence.service_did).toBe(
+      body.applet_package.service_did,
+    );
+    expect(body.service_did_document.id).toBe(body.applet_package.service_did);
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");
