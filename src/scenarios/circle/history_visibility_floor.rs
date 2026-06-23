@@ -65,7 +65,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
         (Shared, WorldReadable, Shared),
     ];
     for (realm, circle, expected) in cases_realm_wins {
-        let got = compute_effective_history_visibility(realm.clone(), circle.clone())?;
+        let got = compute_effective_history_visibility(*realm, *circle)?;
         if got != *expected {
             return Err(anyhow!(
                 "realm-wins case realm={realm:?} circle={circle:?}: expected \
@@ -84,7 +84,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
         (Invited, Joined, Joined),
     ];
     for (realm, circle, expected) in cases_circle_wins {
-        let got = compute_effective_history_visibility(realm.clone(), circle.clone())?;
+        let got = compute_effective_history_visibility(*realm, *circle)?;
         if got != *expected {
             return Err(anyhow!(
                 "circle-wins case realm={realm:?} circle={circle:?}: expected \
@@ -95,7 +95,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
 
     // ── Equal levels → return that level.
     for level in [WorldReadable, Shared, Invited, Joined] {
-        let got = compute_effective_history_visibility(level.clone(), level.clone())?;
+        let got = compute_effective_history_visibility(level, level)?;
         if got != level {
             return Err(anyhow!(
                 "equal-levels case ({level:?}, {level:?}) MUST yield {level:?}; got {got:?}"
@@ -140,7 +140,7 @@ pub async fn history_visibility_floor_run() -> Result<()> {
         (Joined, "joined"),
         (Restricted, "restricted"),
     ] {
-        let s = serde_json::to_value(&variant).map_err(|e| anyhow!("serialise: {e}"))?;
+        let s = serde_json::to_value(variant).map_err(|e| anyhow!("serialise: {e}"))?;
         let s = s
             .as_str()
             .ok_or_else(|| anyhow!("HistoryVisibility MUST serialise as a JSON string"))?

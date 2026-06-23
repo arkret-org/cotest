@@ -329,7 +329,7 @@ fn merkle_event_set_root(entries: &[Value]) -> Result<String> {
         })
         .collect::<Result<Vec<_>>>()?;
     while level.len() > 1 {
-        let mut next = Vec::with_capacity((level.len() + 1) / 2);
+        let mut next = Vec::with_capacity(level.len().div_ceil(2));
         let mut chunks = level.chunks_exact(2);
         for pair in &mut chunks {
             let mut bytes = digest_bytes(&pair[0])?;

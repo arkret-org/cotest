@@ -103,58 +103,58 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
         }
 
         // (3) signed compaction equivalence
-        if let Some(compaction) = vector.get("signed_compaction") {
-            if !compaction.is_null() {
-                let comp_id = required_str(compaction, "id")?;
-                validate_anchor_id_shape(comp_id, name)?;
-                let comp_frontier: std::collections::BTreeSet<String> = compaction
-                    .get("frontier")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("vector {name} signed_compaction missing frontier[]"))?
-                    .iter()
-                    .map(|v| {
-                        v.as_str().map(ToOwned::to_owned).ok_or_else(|| {
-                            anyhow!("vector {name} signed_compaction frontier entry not a string")
-                        })
+        if let Some(compaction) = vector.get("signed_compaction")
+            && !compaction.is_null()
+        {
+            let comp_id = required_str(compaction, "id")?;
+            validate_anchor_id_shape(comp_id, name)?;
+            let comp_frontier: std::collections::BTreeSet<String> = compaction
+                .get("frontier")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("vector {name} signed_compaction missing frontier[]"))?
+                .iter()
+                .map(|v| {
+                    v.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                        anyhow!("vector {name} signed_compaction frontier entry not a string")
                     })
-                    .collect::<Result<_>>()?;
-                if comp_frontier != view_frontier {
+                })
+                .collect::<Result<_>>()?;
+            if comp_frontier != view_frontier {
+                bail!(
+                    "vector {name} signed_compaction frontier MUST equal effective_view frontier"
+                );
+            }
+            let comp_state_root = required_str(compaction, "state_root")?;
+            let view_state_root = required_str(view, "state_root")?;
+            if comp_state_root != view_state_root {
+                bail!(
+                    "vector {name} signed_compaction state_root drift: expected {view_state_root}, got {comp_state_root}"
+                );
+            }
+            // (4) bottom_diagnostics preserved
+            let view_diags = view
+                .get("bottom_diagnostics")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("vector {name} view missing bottom_diagnostics"))?;
+            let comp_diags = compaction
+                .get("bottom_diagnostics")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    anyhow!("vector {name} signed_compaction missing bottom_diagnostics")
+                })?;
+            for diag in view_diags {
+                if !comp_diags.iter().any(|d| d == diag) {
                     bail!(
-                        "vector {name} signed_compaction frontier MUST equal effective_view frontier"
+                        "vector {name} signed_compaction dropped a bottom diagnostic from the effective view (compaction must be information-preserving for ⊥ cells)"
                     );
                 }
-                let comp_state_root = required_str(compaction, "state_root")?;
-                let view_state_root = required_str(view, "state_root")?;
-                if comp_state_root != view_state_root {
-                    bail!(
-                        "vector {name} signed_compaction state_root drift: expected {view_state_root}, got {comp_state_root}"
-                    );
-                }
-                // (4) bottom_diagnostics preserved
-                let view_diags = view
-                    .get("bottom_diagnostics")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("vector {name} view missing bottom_diagnostics"))?;
-                let comp_diags = compaction
-                    .get("bottom_diagnostics")
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| {
-                        anyhow!("vector {name} signed_compaction missing bottom_diagnostics")
-                    })?;
-                for diag in view_diags {
-                    if !comp_diags.iter().any(|d| d == diag) {
-                        bail!(
-                            "vector {name} signed_compaction dropped a bottom diagnostic from the effective view (compaction must be information-preserving for ⊥ cells)"
-                        );
-                    }
-                }
-                let signature = compaction
-                    .get("signature")
-                    .ok_or_else(|| anyhow!("vector {name} signed_compaction missing signature"))?;
-                let alg = required_str(signature, "alg")?;
-                if alg != "EdDSA" {
-                    bail!("vector {name} signed_compaction signature.alg must be EdDSA, got {alg}");
-                }
+            }
+            let signature = compaction
+                .get("signature")
+                .ok_or_else(|| anyhow!("vector {name} signed_compaction missing signature"))?;
+            let alg = required_str(signature, "alg")?;
+            if alg != "EdDSA" {
+                bail!("vector {name} signed_compaction signature.alg must be EdDSA, got {alg}");
             }
         }
 

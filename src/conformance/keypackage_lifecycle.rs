@@ -451,14 +451,14 @@ fn claim_from_pool(
         ));
     }
 
-    if feature_supported {
-        if let Some(package) = pool.iter_mut().find(|package| {
+    if feature_supported
+        && let Some(package) = pool.iter_mut().find(|package| {
             package.last_resort
                 && package.state == MiniKeypackageState::Published
                 && &package.intended_realm_id == realm_id
-        }) {
-            return Ok(claim_outcome_value(package.claim_record(claim_id), 0));
-        }
+        })
+    {
+        return Ok(claim_outcome_value(package.claim_record(claim_id), 0));
     }
 
     Ok(claim_failure_outcome_value(
@@ -859,43 +859,46 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
     })
 }
 
-fn welcome_payload_value(
-    keypackage_ref: &str,
-    top_digest: &str,
-    claim_digest: &str,
-    envelope_digest: &str,
-    capabilities_digest: &str,
-    claim_id: &str,
+#[derive(Clone, Copy)]
+struct WelcomePayloadFixture<'a> {
+    keypackage_ref: &'a str,
+    top_digest: &'a str,
+    claim_digest: &'a str,
+    envelope_digest: &'a str,
+    capabilities_digest: &'a str,
+    claim_id: &'a str,
     ssk_generation: u64,
-    intended_realm_id: &str,
-    requester_did: &str,
-    claim_nonce: &str,
-    welcome_digest: &str,
-) -> Value {
+    intended_realm_id: &'a str,
+    requester_did: &'a str,
+    claim_nonce: &'a str,
+    welcome_digest: &'a str,
+}
+
+fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
     json!({
         "mls_group_id": "mls-group-a",
         "epoch": 1,
         "recipient_principal_id": "did:web:alice.example",
         "recipient_device_id": "ck:device:0196419b-0000-7000-8000-000000000001",
-        "keypackage_ref": keypackage_ref,
-        "keypackage_digest": top_digest,
-        "claim_id": claim_id,
+        "keypackage_ref": fixture.keypackage_ref,
+        "keypackage_digest": fixture.top_digest,
+        "claim_id": fixture.claim_id,
         "claim_ref": {
-            "claim_id": claim_id,
-            "keypackage_ref": keypackage_ref,
-            "keypackage_digest": claim_digest,
-            "capabilities_digest": capabilities_digest,
-            "ssk_generation": ssk_generation
+            "claim_id": fixture.claim_id,
+            "keypackage_ref": fixture.keypackage_ref,
+            "keypackage_digest": fixture.claim_digest,
+            "capabilities_digest": fixture.capabilities_digest,
+            "ssk_generation": fixture.ssk_generation
         },
         "claim_envelope": {
-            "keypackage_ref": keypackage_ref,
-            "keypackage_digest": envelope_digest,
-            "intended_realm_id": intended_realm_id,
-            "claim_id": claim_id,
-            "requester_did": requester_did,
-            "ssk_generation": ssk_generation,
-            "nonce": claim_nonce,
-            "welcome_digest": welcome_digest,
+            "keypackage_ref": fixture.keypackage_ref,
+            "keypackage_digest": fixture.envelope_digest,
+            "intended_realm_id": fixture.intended_realm_id,
+            "claim_id": fixture.claim_id,
+            "requester_did": fixture.requester_did,
+            "ssk_generation": fixture.ssk_generation,
+            "nonce": fixture.claim_nonce,
+            "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00Z",
             "signature": {
                 "kid": "did:web:alice.example#ck_self_signing_v1",
@@ -946,19 +949,20 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     schema_valid(MLS_KEYPACKAGE_PAYLOAD_SCHEMA, &published_value)?;
     let published: MlsKeypackagePayload = serde_json::from_value(published_value)?;
 
-    let good_value = welcome_payload_value(
+    let good_welcome = WelcomePayloadFixture {
         keypackage_ref,
-        digest,
-        digest,
-        digest,
+        top_digest: digest,
+        claim_digest: digest,
+        envelope_digest: digest,
         capabilities_digest,
         claim_id,
         ssk_generation,
-        intended_realm_id.as_str(),
-        requester_did.as_str(),
+        intended_realm_id: intended_realm_id.as_str(),
+        requester_did: requester_did.as_str(),
         claim_nonce,
-        welcome_digest.as_str(),
-    );
+        welcome_digest: welcome_digest.as_str(),
+    };
+    let good_value = welcome_payload_value(good_welcome);
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &good_value)?;
     let good: MlsWelcomePayload = serde_json::from_value(good_value)?;
     validate_mls_welcome_claim_envelope(
@@ -976,19 +980,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     )
     .map_err(|reason| anyhow!("good welcome rejected: {reason}"))?;
 
-    let bad_top_value = welcome_payload_value(
-        keypackage_ref,
-        mismatched_digest,
-        digest,
-        digest,
-        capabilities_digest,
-        claim_id,
-        ssk_generation,
-        intended_realm_id.as_str(),
-        requester_did.as_str(),
-        claim_nonce,
-        welcome_digest.as_str(),
-    );
+    let bad_top_value = welcome_payload_value(WelcomePayloadFixture {
+        top_digest: mismatched_digest,
+        ..good_welcome
+    });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_top_value)?;
     let bad_top: MlsWelcomePayload = serde_json::from_value(bad_top_value)?;
     let reason = validate_mls_welcome_claim_envelope(
@@ -1013,19 +1008,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         bail!("welcome vector must reject before decrypt");
     }
 
-    let bad_claim_ref_value = welcome_payload_value(
-        keypackage_ref,
-        digest,
-        mismatched_digest,
-        digest,
-        capabilities_digest,
-        claim_id,
-        ssk_generation,
-        intended_realm_id.as_str(),
-        requester_did.as_str(),
-        claim_nonce,
-        welcome_digest.as_str(),
-    );
+    let bad_claim_ref_value = welcome_payload_value(WelcomePayloadFixture {
+        claim_digest: mismatched_digest,
+        ..good_welcome
+    });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_claim_ref_value)?;
     let bad_claim_ref: MlsWelcomePayload = serde_json::from_value(bad_claim_ref_value)?;
     if validate_mls_welcome_claim_envelope(
@@ -1045,19 +1031,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     {
         bail!("mismatched claim_ref keypackage_digest was accepted");
     }
-    let bad_realm_value = welcome_payload_value(
-        keypackage_ref,
-        digest,
-        digest,
-        digest,
-        capabilities_digest,
-        claim_id,
-        ssk_generation,
-        "ck:realm:0196419b-0000-7000-8000-000000000002",
-        requester_did.as_str(),
-        claim_nonce,
-        welcome_digest.as_str(),
-    );
+    let bad_realm_value = welcome_payload_value(WelcomePayloadFixture {
+        intended_realm_id: "ck:realm:0196419b-0000-7000-8000-000000000002",
+        ..good_welcome
+    });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_realm_value)?;
     let bad_realm: MlsWelcomePayload = serde_json::from_value(bad_realm_value)?;
     if validate_mls_welcome_claim_envelope(
@@ -1080,19 +1057,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let bad_welcome_digest = Hash::new(
         "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_owned(),
     )?;
-    let bad_welcome_digest_value = welcome_payload_value(
-        keypackage_ref,
-        digest,
-        digest,
-        digest,
-        capabilities_digest,
-        claim_id,
-        ssk_generation,
-        intended_realm_id.as_str(),
-        requester_did.as_str(),
-        claim_nonce,
-        bad_welcome_digest.as_str(),
-    );
+    let bad_welcome_digest_value = welcome_payload_value(WelcomePayloadFixture {
+        welcome_digest: bad_welcome_digest.as_str(),
+        ..good_welcome
+    });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_welcome_digest_value)?;
     let bad_welcome_digest_payload: MlsWelcomePayload =
         serde_json::from_value(bad_welcome_digest_value)?;
@@ -1113,19 +1081,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     {
         bail!("mismatched claim_envelope welcome_digest was accepted");
     }
-    let bad_nonce_value = welcome_payload_value(
-        keypackage_ref,
-        digest,
-        digest,
-        digest,
-        capabilities_digest,
-        claim_id,
-        ssk_generation,
-        intended_realm_id.as_str(),
-        requester_did.as_str(),
-        "different-claim-nonce",
-        welcome_digest.as_str(),
-    );
+    let bad_nonce_value = welcome_payload_value(WelcomePayloadFixture {
+        claim_nonce: "different-claim-nonce",
+        ..good_welcome
+    });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_nonce_value)?;
     let bad_nonce: MlsWelcomePayload = serde_json::from_value(bad_nonce_value)?;
     if validate_mls_welcome_claim_envelope(

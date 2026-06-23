@@ -550,15 +550,14 @@ fn validate_event_envelope(
         ));
     }
 
-    if let Some(frontier) = &context.actor_frontier {
-        if frontier.actor_id == value_field_str(event, "actor_id")?
-            && actor_seq <= frontier.actor_seq
-        {
-            return Ok(EventEnvelopeDecision::reject(
-                "causal_conflict",
-                "actor_seq must monotonically advance actor frontier",
-            ));
-        }
+    if let Some(frontier) = &context.actor_frontier
+        && frontier.actor_id == value_field_str(event, "actor_id")?
+        && actor_seq <= frontier.actor_seq
+    {
+        return Ok(EventEnvelopeDecision::reject(
+            "causal_conflict",
+            "actor_seq must monotonically advance actor frontier",
+        ));
     }
 
     if let Some(now_hlc_ms) = context.now_hlc_ms {
@@ -574,13 +573,12 @@ fn validate_event_envelope(
     if let Some(revoked_at) = context
         .revoked_at_by_actor
         .get(value_field_str(event, "actor_id")?)
+        && value_field_str(event, "created_at")? <= revoked_at.as_str()
     {
-        if value_field_str(event, "created_at")? <= revoked_at.as_str() {
-            return Ok(EventEnvelopeDecision::reject(
-                "authorization_denied",
-                "backdated event after revoke",
-            ));
-        }
+        return Ok(EventEnvelopeDecision::reject(
+            "authorization_denied",
+            "backdated event after revoke",
+        ));
     }
 
     // Check critical_extensions in both event.critical_extensions and
@@ -948,14 +946,14 @@ fn assert_event_decision(
             actual.error_code
         );
     }
-    if let Some(expected_error_code) = expected_error_code {
-        if actual.error_code != Some(expected_error_code) {
-            bail!(
-                "event envelope {context} expected error {expected_error_code}, got {:?} ({})",
-                actual.error_code,
-                actual.reason
-            );
-        }
+    if let Some(expected_error_code) = expected_error_code
+        && actual.error_code != Some(expected_error_code)
+    {
+        bail!(
+            "event envelope {context} expected error {expected_error_code}, got {:?} ({})",
+            actual.error_code,
+            actual.reason
+        );
     }
     Ok(())
 }

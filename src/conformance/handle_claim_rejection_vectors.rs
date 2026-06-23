@@ -55,10 +55,10 @@ fn compile_handle_claim_schema() -> Result<jsonschema::Validator> {
         let raw = fs::read_to_string(&path)?;
         let value: Value = serde_json::from_str(&raw)
             .map_err(|err| anyhow!("schema file {} invalid JSON: {err}", path.display()))?;
-        if let Some(id) = value.get("$id").and_then(Value::as_str) {
-            if id.starts_with(SCHEMA_ID_PREFIX) {
-                resources.push((id.to_owned(), value));
-            }
+        if let Some(id) = value.get("$id").and_then(Value::as_str)
+            && id.starts_with(SCHEMA_ID_PREFIX)
+        {
+            resources.push((id.to_owned(), value));
         }
     }
     let mut builder = Registry::new();
@@ -170,13 +170,13 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         let did = Did::new(typed.to_owned());
         // Some typed ids may not even parse as a Did; if they do, the
         // dedicated validator MUST reject them.
-        if let Ok(did) = did {
-            if validate_handle_claim_subject(&did).is_ok() {
-                bail!(
-                    "VECT-COT-7: validate_handle_claim_subject MUST reject typed id `{typed}` \
+        if let Ok(did) = did
+            && validate_handle_claim_subject(&did).is_ok()
+        {
+            bail!(
+                "VECT-COT-7: validate_handle_claim_subject MUST reject typed id `{typed}` \
                      (reason handle_claim_subject_not_principal_did)"
-                );
-            }
+            );
         }
     }
 

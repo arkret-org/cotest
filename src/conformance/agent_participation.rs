@@ -425,11 +425,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         bail!("agent participation entry without participation_scope passed schema validation");
     }
 
-    let no_grant_runtime = if materialized_grants(effective).is_empty() {
-        "failed_precondition"
-    } else {
-        "failed_precondition"
-    };
+    let no_grant_runtime = "failed_precondition";
     if no_grant_runtime != expected_str(vector, "runtime_without_grant")? {
         bail!("session overlay runtime boundary drifted");
     }

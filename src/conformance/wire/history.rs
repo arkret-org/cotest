@@ -508,10 +508,11 @@ fn project_history_visibility(
     event_origin_ts: u64,
 ) -> bool {
     // Banned/leave viewers see nothing except world_readable.
-    if let Some(state) = viewer_membership {
-        if matches!(state, "ban" | "leave") && visibility != "world_readable" {
-            return false;
-        }
+    if let Some(state) = viewer_membership
+        && matches!(state, "ban" | "leave")
+        && visibility != "world_readable"
+    {
+        return false;
     }
     match visibility {
         "world_readable" => true,

@@ -290,17 +290,14 @@ fn evaluate_direct_grant_request_fixture(fixture: &Value) -> Result<()> {
             expected_matched
         );
     }
-    if decision == "deny" {
-        if let Some(expected_reason) = fixture
+    if decision == "deny"
+        && let Some(expected_reason) = fixture
             .pointer("/expected/reason_code")
             .and_then(Value::as_str)
-        {
-            let reason = deny_reason_for_request(request);
-            if reason != expected_reason {
-                bail!(
-                    "capability fixture {name}: deny reason {reason} but expected {expected_reason}"
-                );
-            }
+    {
+        let reason = deny_reason_for_request(request);
+        if reason != expected_reason {
+            bail!("capability fixture {name}: deny reason {reason} but expected {expected_reason}");
         }
     }
     Ok(())
@@ -429,15 +426,15 @@ fn evaluate_chain(base: &Value, delegations: &[Delegation], query: &ActionQuery)
         for constraint in &delegation.constraints {
             match constraint.get("constraint_type").and_then(Value::as_str) {
                 Some("temporal") => {
-                    if let Some(not_before) = constraint.get("not_before").and_then(Value::as_str) {
-                        if query.request_time.as_str() < not_before {
-                            time = false;
-                        }
+                    if let Some(not_before) = constraint.get("not_before").and_then(Value::as_str)
+                        && query.request_time.as_str() < not_before
+                    {
+                        time = false;
                     }
-                    if let Some(expires_at) = constraint.get("expires_at").and_then(Value::as_str) {
-                        if query.request_time.as_str() > expires_at {
-                            time = false;
-                        }
+                    if let Some(expires_at) = constraint.get("expires_at").and_then(Value::as_str)
+                        && query.request_time.as_str() > expires_at
+                    {
+                        time = false;
                     }
                 }
                 Some("quota") => {
@@ -592,10 +589,10 @@ fn message_event_authorized(
                     granted = true;
                 }
             }
-            Some("ck.capability.revoke") => {
-                if event.pointer("/payload/grant_id").and_then(Value::as_str) == Some(grant_id) {
-                    revoked = true;
-                }
+            Some("ck.capability.revoke")
+                if event.pointer("/payload/grant_id").and_then(Value::as_str) == Some(grant_id) =>
+            {
+                revoked = true;
             }
             _ => {}
         }
@@ -712,10 +709,11 @@ fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             let parent = grant.get("parent_grant_id").and_then(Value::as_str);
-            if let Some(parent) = parent {
-                if revoked.contains(parent) && revoked.insert(grant_id.to_owned()) {
-                    changed = true;
-                }
+            if let Some(parent) = parent
+                && revoked.contains(parent)
+                && revoked.insert(grant_id.to_owned())
+            {
+                changed = true;
             }
         }
         if !changed {

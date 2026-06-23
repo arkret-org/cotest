@@ -116,10 +116,10 @@ impl Drop for TranscriptGuard {
         // BufWriter so any lingering buffered bytes hit disk before the test
         // process exits (cargo test's default panic-handler skips Drop on the
         // global subscriber, which would otherwise lose the tail of the log).
-        if let Ok(mut guard) = registry().lock() {
-            if let Some(mut file) = guard.remove(&self.scenario) {
-                let _ = file.flush();
-            }
+        if let Ok(mut guard) = registry().lock()
+            && let Some(mut file) = guard.remove(&self.scenario)
+        {
+            let _ = file.flush();
         }
         let previous = self.previous.take();
         ACTIVE_SCENARIO.with(|cell| {

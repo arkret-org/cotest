@@ -547,18 +547,18 @@ fn expected(value: &Value) -> Result<&Value> {
 }
 
 fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    Ok(required_array(value, field)?
+    required_array(value, field)?
         .iter()
         .map(|entry| {
             entry
                 .as_str()
                 .ok_or_else(|| anyhow!("{field} entry must be string"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }
 
 fn string_set_obj<'a>(value: &'a Map<String, Value>, field: &str) -> Result<BTreeSet<&'a str>> {
-    Ok(value
+    value
         .get(field)
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("missing array field {field}"))?
@@ -568,5 +568,5 @@ fn string_set_obj<'a>(value: &'a Map<String, Value>, field: &str) -> Result<BTre
                 .as_str()
                 .ok_or_else(|| anyhow!("{field} entry must be string"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }

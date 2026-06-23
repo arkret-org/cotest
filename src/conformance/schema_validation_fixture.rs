@@ -316,23 +316,23 @@ fn inline_openapi_refs_inner(
     }
     match value {
         Value::Object(map) => {
-            if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
-                if let Some(component_name) = reference.strip_prefix("#/components/schemas/") {
-                    if seen.contains(component_name) {
-                        // Cycle: leave the reference as-is and let
-                        // jsonschema handle it (or fail). For our fixture
-                        // there are no cycles, so this path is unused.
-                        return Ok(value.clone());
-                    }
-                    let pointer = format!("/components/schemas/{component_name}");
-                    let resolved = openapi
-                        .pointer(&pointer)
-                        .ok_or_else(|| anyhow!("openapi $ref target missing: {reference}"))?;
-                    seen.insert(component_name.to_string());
-                    let expanded = inline_openapi_refs_inner(resolved, openapi, seen, depth + 1)?;
-                    seen.remove(component_name);
-                    return Ok(expanded);
+            if let Some(reference) = map.get("$ref").and_then(Value::as_str)
+                && let Some(component_name) = reference.strip_prefix("#/components/schemas/")
+            {
+                if seen.contains(component_name) {
+                    // Cycle: leave the reference as-is and let
+                    // jsonschema handle it (or fail). For our fixture
+                    // there are no cycles, so this path is unused.
+                    return Ok(value.clone());
                 }
+                let pointer = format!("/components/schemas/{component_name}");
+                let resolved = openapi
+                    .pointer(&pointer)
+                    .ok_or_else(|| anyhow!("openapi $ref target missing: {reference}"))?;
+                seen.insert(component_name.to_string());
+                let expanded = inline_openapi_refs_inner(resolved, openapi, seen, depth + 1)?;
+                seen.remove(component_name);
+                return Ok(expanded);
             }
             let mut out = serde_json::Map::new();
             for (k, v) in map {

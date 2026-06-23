@@ -78,7 +78,7 @@ pub async fn metadata_encryption_floor_run() -> Result<()> {
     use EncryptionFloor::*;
 
     // ── Strictness order MUST be allow_plaintext < e2ee_required.
-    if !(rank(AllowPlaintext) < rank(E2eeRequired)) {
+    if rank(AllowPlaintext) >= rank(E2eeRequired) {
         return Err(anyhow!(
             "strictness order drifted: allow_plaintext={} e2ee_required={}",
             rank(AllowPlaintext),

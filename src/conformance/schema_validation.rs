@@ -141,28 +141,26 @@ pub fn run_schema_validation_suite() -> Result<()> {
                     .map_err(|err| anyhow!("compile property {schema_id}#{field} failed: {err}"))?;
                 compiled_property_validators += 1;
 
-                if let Some(enum_values) = prop.get("enum").and_then(Value::as_array) {
-                    if !enum_values.is_empty() {
-                        let bogus = json!("__cotest_invalid_enum__");
-                        if prop_validator.is_valid(&bogus) {
-                            bail!(
-                                "schema {schema_id} property {field} accepted invalid enum value"
-                            );
-                        }
-                        enum_negative_vectors += 1;
+                if let Some(enum_values) = prop.get("enum").and_then(Value::as_array)
+                    && !enum_values.is_empty()
+                {
+                    let bogus = json!("__cotest_invalid_enum__");
+                    if prop_validator.is_valid(&bogus) {
+                        bail!("schema {schema_id} property {field} accepted invalid enum value");
                     }
+                    enum_negative_vectors += 1;
                 }
 
-                if let Some(pattern) = prop.get("pattern").and_then(Value::as_str) {
-                    if pattern.starts_with("^ck:") {
-                        for bogus in [json!("ck:invalid:!!!"), json!("not-a-typed-id"), json!("")] {
-                            if prop_validator.is_valid(&bogus) {
-                                bail!(
-                                    "schema {schema_id} property {field} accepted invalid typed-id {bogus}"
-                                );
-                            }
-                            typed_id_negative_vectors += 1;
+                if let Some(pattern) = prop.get("pattern").and_then(Value::as_str)
+                    && pattern.starts_with("^ck:")
+                {
+                    for bogus in [json!("ck:invalid:!!!"), json!("not-a-typed-id"), json!("")] {
+                        if prop_validator.is_valid(&bogus) {
+                            bail!(
+                                "schema {schema_id} property {field} accepted invalid typed-id {bogus}"
+                            );
                         }
+                        typed_id_negative_vectors += 1;
                     }
                 }
             }

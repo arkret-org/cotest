@@ -683,7 +683,7 @@ fn required_value_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
 }
 
 fn string_set(value: &Value) -> Result<BTreeSet<String>> {
-    Ok(value
+    value
         .as_array()
         .ok_or_else(|| anyhow!("expected string array"))?
         .iter()
@@ -692,7 +692,7 @@ fn string_set(value: &Value) -> Result<BTreeSet<String>> {
                 .map(str::to_owned)
                 .ok_or_else(|| anyhow!("expected string array item"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }
 
 fn contains_key_recursive(value: &Value, needle: &str) -> bool {

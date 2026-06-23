@@ -205,10 +205,10 @@ pub fn run_device_cross_signing_trust_fixture_suite() -> Result<()> {
                 bail!("vector {name} alice_master.key_id must end with #master");
             }
         }
-        if let Some(aus) = v.get("alice_user_signing") {
-            if required_str(aus, "signed_by")? != "did:ck:user:alice#master" {
-                bail!("vector {name} alice_user_signing.signed_by must be alice#master");
-            }
+        if let Some(aus) = v.get("alice_user_signing")
+            && required_str(aus, "signed_by")? != "did:ck:user:alice#master"
+        {
+            bail!("vector {name} alice_user_signing.signed_by must be alice#master");
         }
 
         match name {

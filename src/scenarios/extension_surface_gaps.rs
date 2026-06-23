@@ -98,12 +98,11 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         StatusCode::CREATED,
     )
     .await?;
-    assert_eq!(
+    assert!(
         provisioned["agent_principal_id"]
             .as_str()
             .unwrap_or_default()
-            .starts_with("did:web:agent-"),
-        true
+            .starts_with("did:web:agent-")
     );
 
     expect_api_error(

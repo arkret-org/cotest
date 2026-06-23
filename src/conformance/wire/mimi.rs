@@ -237,7 +237,7 @@ fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
 }
 
 fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    Ok(value
+    value
         .get(field)
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("missing array field {field}"))?
@@ -247,7 +247,7 @@ fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
                 .as_str()
                 .ok_or_else(|| anyhow!("{field} entry must be string"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }
 
 /// W8 — MIMI Room Policy Component round-trip matrix.

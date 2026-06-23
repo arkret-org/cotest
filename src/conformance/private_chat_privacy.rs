@@ -692,19 +692,19 @@ fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .ok_or_else(|| anyhow!("field `{field}` must be a string"))
 }
 
-fn value_array<'a>(value: &'a Value) -> Result<&'a Vec<Value>> {
+fn value_array(value: &Value) -> Result<&Vec<Value>> {
     value.as_array().ok_or_else(|| anyhow!("expected array"))
 }
 
 fn string_set(value: &Value) -> Result<BTreeSet<String>> {
-    Ok(value_array(value)?
+    value_array(value)?
         .iter()
         .map(|item| {
             item.as_str()
                 .map(str::to_owned)
                 .ok_or_else(|| anyhow!("expected string array item"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }
 
 fn validate_realm_id(value: &str) -> Result<()> {

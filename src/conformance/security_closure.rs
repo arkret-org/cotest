@@ -285,17 +285,16 @@ pub fn validate_security_closure_fixture(fixture: &SecurityClosureFixture) -> Re
                 .expected_state_transition
                 .get("outcome")
                 .and_then(Value::as_str)
+                && state_outcome != step.expected.outcome
             {
-                if state_outcome != step.expected.outcome {
-                    bail!(
-                        "security-closure-vectors[{}].{}.runner.expected_state_transition.outcome `{}` \
+                bail!(
+                    "security-closure-vectors[{}].{}.runner.expected_state_transition.outcome `{}` \
                          does not match expected.outcome `{}`",
-                        vector.vector_id,
-                        step.name,
-                        state_outcome,
-                        step.expected.outcome,
-                    );
-                }
+                    vector.vector_id,
+                    step.name,
+                    state_outcome,
+                    step.expected.outcome,
+                );
             }
         }
     }

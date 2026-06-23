@@ -289,22 +289,27 @@ fn require_covered_fields(proof: &MiniDidProof, required: &[String]) -> bool {
         .all(|required| proof.covered_fields.iter().any(|field| field == required))
 }
 
-fn validate_did_proof(
-    challenge: &mut MiniDidProofChallenge,
-    proof: &MiniDidProof,
-    expected_principal_id: &str,
-    expected_device_id: Option<&str>,
-    expected_request_digest: &Hash,
-    required_fields: &[String],
+struct DidProofValidation<'a> {
+    expected_principal_id: &'a str,
+    expected_device_id: Option<&'a str>,
+    expected_request_digest: &'a Hash,
+    required_fields: &'a [String],
     now: DateTime<Utc>,
     max_window: Duration,
     skew: Duration,
+}
+
+fn validate_did_proof(
+    challenge: &mut MiniDidProofChallenge,
+    proof: &MiniDidProof,
+    validation: &DidProofValidation<'_>,
 ) -> std::result::Result<(), &'static str> {
     if !proof.signature_valid
-        || proof.principal_id != expected_principal_id
-        || expected_device_id.is_some() && proof.device_id.as_deref() != expected_device_id
-        || !require_covered_fields(proof, required_fields)
-        || &proof.request_canonical_digest != expected_request_digest
+        || proof.principal_id != validation.expected_principal_id
+        || validation.expected_device_id.is_some()
+            && proof.device_id.as_deref() != validation.expected_device_id
+        || !require_covered_fields(proof, validation.required_fields)
+        || &proof.request_canonical_digest != validation.expected_request_digest
         || proof.challenge != challenge.challenge
     {
         return Err(ERROR_CODE_PROOF_INVALID);
@@ -318,10 +323,10 @@ fn validate_did_proof(
     if proof.issued_at != challenge.issued_at || proof.expires_at != challenge.expires_at {
         return Err(ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
     }
-    if proof.expires_at - proof.issued_at > max_window
-        || proof.issued_at > now + skew
-        || now > proof.expires_at
-        || now - proof.issued_at > max_window + skew
+    if proof.expires_at - proof.issued_at > validation.max_window
+        || proof.issued_at > validation.now + validation.skew
+        || validation.now > proof.expires_at
+        || validation.now - proof.issued_at > validation.max_window + validation.skew
     {
         return Err(ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
     }
@@ -364,18 +369,32 @@ fn signing_key(seed: u8) -> Ed25519SigningKey {
     cokret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
 }
 
-fn sign_self_request(
-    signing_key: &Ed25519SigningKey,
-    key_id: &str,
-    method: &str,
-    target_uri: &str,
-    authority: &str,
-    path: &str,
-    body: &[u8],
-    idempotency_key: Option<&str>,
+struct SelfRequestSigning<'a> {
+    signing_key: &'a Ed25519SigningKey,
+    key_id: &'a str,
+    method: &'a str,
+    target_uri: &'a str,
+    authority: &'a str,
+    path: &'a str,
+    body: &'a [u8],
+    idempotency_key: Option<&'a str>,
     created: i64,
     expires: i64,
-) -> Result<SignedRequest> {
+}
+
+fn sign_self_request(request: SelfRequestSigning<'_>) -> Result<SignedRequest> {
+    let SelfRequestSigning {
+        signing_key,
+        key_id,
+        method,
+        target_uri,
+        authority,
+        path,
+        body,
+        idempotency_key,
+        created,
+        expires,
+    } = request;
     let mut covered = vec![
         Component::Method,
         Component::TargetUri,
@@ -612,18 +631,17 @@ pub fn run_auth_soft_logout_did_proof_vector() -> Result<()> {
         expires_at,
         required_fields.clone(),
     )?;
-    validate_did_proof(
-        &mut challenge,
-        &proof,
-        required_str(vector, "principal_id")?,
-        Some(required_str(vector, "device_id")?),
-        &request_digest,
-        &required_fields,
+    let validation = DidProofValidation {
+        expected_principal_id: required_str(vector, "principal_id")?,
+        expected_device_id: Some(required_str(vector, "device_id")?),
+        expected_request_digest: &request_digest,
+        required_fields: &required_fields,
         now,
-        Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64),
-        Duration::seconds(300),
-    )
-    .map_err(|reason| anyhow!("soft logout proof rejected: {reason}"))?;
+        max_window: Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64),
+        skew: Duration::seconds(300),
+    };
+    validate_did_proof(&mut challenge, &proof, &validation)
+        .map_err(|reason| anyhow!("soft logout proof rejected: {reason}"))?;
     session_state = "active";
     if session_state != expected_str(vector, "proof_restores_state")? {
         bail!("soft logout proof did not restore the session to active");
@@ -671,33 +689,21 @@ pub fn run_identity_did_proof_replay_window_vector() -> Result<()> {
         expires_at,
         covered_fields.clone(),
     )?;
-    validate_did_proof(
-        &mut challenge,
-        &proof,
-        required_str(vector, "principal_id")?,
-        Some(required_str(vector, "device_id")?),
-        &request_digest,
-        &covered_fields,
-        issued_at,
+    let validation = DidProofValidation {
+        expected_principal_id: required_str(vector, "principal_id")?,
+        expected_device_id: Some(required_str(vector, "device_id")?),
+        expected_request_digest: &request_digest,
+        required_fields: &covered_fields,
+        now: issued_at,
         max_window,
         skew,
-    )
-    .map_err(|reason| anyhow!("first DID proof use rejected: {reason}"))?;
+    };
+    validate_did_proof(&mut challenge, &proof, &validation)
+        .map_err(|reason| anyhow!("first DID proof use rejected: {reason}"))?;
     if expected_str(vector, "first_use")? != "accepted" {
         bail!("DID proof first-use expectation drifted");
     }
-    if validate_did_proof(
-        &mut challenge,
-        &proof,
-        required_str(vector, "principal_id")?,
-        Some(required_str(vector, "device_id")?),
-        &request_digest,
-        &covered_fields,
-        issued_at,
-        max_window,
-        skew,
-    )
-    .err()
+    if validate_did_proof(&mut challenge, &proof, &validation).err()
         != Some(expected_str(vector, "second_use_reason")?)
     {
         bail!("DID proof replay did not fail closed");
@@ -714,18 +720,7 @@ pub fn run_identity_did_proof_replay_window_vector() -> Result<()> {
     let mut cross_audience = proof.clone();
     cross_audience.audience = required_str(vector, "other_audience")?.to_owned();
     cross_audience.origin = required_str(vector, "other_origin")?.to_owned();
-    if validate_did_proof(
-        &mut audience_challenge,
-        &cross_audience,
-        required_str(vector, "principal_id")?,
-        Some(required_str(vector, "device_id")?),
-        &request_digest,
-        &covered_fields,
-        issued_at,
-        max_window,
-        skew,
-    )
-    .err()
+    if validate_did_proof(&mut audience_challenge, &cross_audience, &validation).err()
         != Some(expected_str(vector, "audience_origin_reason")?)
     {
         bail!("DID proof audience/origin replay did not fail closed");
@@ -746,18 +741,7 @@ pub fn run_identity_did_proof_replay_window_vector() -> Result<()> {
         parse_time(required_str(vector, "wide_expires_at")?)?,
         covered_fields.clone(),
     )?;
-    if validate_did_proof(
-        &mut wide_challenge,
-        &wide_proof,
-        required_str(vector, "principal_id")?,
-        Some(required_str(vector, "device_id")?),
-        &request_digest,
-        &covered_fields,
-        issued_at,
-        max_window,
-        skew,
-    )
-    .err()
+    if validate_did_proof(&mut wide_challenge, &wide_proof, &validation).err()
         != Some(expected_str(vector, "window_reason")?)
     {
         bail!("wide DID proof replay window was not rejected");
@@ -779,18 +763,7 @@ pub fn run_identity_did_proof_replay_window_vector() -> Result<()> {
         future_issued_at + max_window,
         covered_fields.clone(),
     )?;
-    if validate_did_proof(
-        &mut future_challenge,
-        &future_proof,
-        required_str(vector, "principal_id")?,
-        Some(required_str(vector, "device_id")?),
-        &request_digest,
-        &covered_fields,
-        issued_at,
-        max_window,
-        skew,
-    )
-    .err()
+    if validate_did_proof(&mut future_challenge, &future_proof, &validation).err()
         != Some(expected_str(vector, "future_reason")?)
     {
         bail!("future-issued DID proof was not rejected");
@@ -808,18 +781,18 @@ pub fn run_session_pop_presentation_vector() -> Result<()> {
     if expires - created != 120 {
         bail!("PoP fixture control window drifted");
     }
-    let request = sign_self_request(
-        &key,
-        required_str(vector, "key_id")?,
-        required_str(vector, "method")?,
-        required_str(vector, "target_uri")?,
-        required_str(vector, "authority")?,
-        required_str(vector, "path")?,
+    let request = sign_self_request(SelfRequestSigning {
+        signing_key: &key,
+        key_id: required_str(vector, "key_id")?,
+        method: required_str(vector, "method")?,
+        target_uri: required_str(vector, "target_uri")?,
+        authority: required_str(vector, "authority")?,
+        path: required_str(vector, "path")?,
         body,
-        Some(required_str(vector, "idempotency_key")?),
+        idempotency_key: Some(required_str(vector, "idempotency_key")?),
         created,
         expires,
-    )?;
+    })?;
     verify_self_pop(
         &request,
         &key.verifying_key(),
@@ -895,18 +868,18 @@ pub fn run_session_bearer_replay_rejected_high_security_vector() -> Result<()> {
     if expires - created <= required_u64(vector, "max_window_seconds")? as i64 {
         bail!("over-window PoP control is not outside the replay window");
     }
-    let request = sign_self_request(
-        &key,
-        "did:web:alice.example#session-key-1",
-        "POST",
-        "https://soland.example.com/_cokret/self/events",
-        "soland.example.com",
-        "/_cokret/self/events",
+    let request = sign_self_request(SelfRequestSigning {
+        signing_key: &key,
+        key_id: "did:web:alice.example#session-key-1",
+        method: "POST",
+        target_uri: "https://soland.example.com/_cokret/self/events",
+        authority: "soland.example.com",
+        path: "/_cokret/self/events",
         body,
-        None,
+        idempotency_key: None,
         created,
         expires,
-    )?;
+    })?;
     if verify_self_pop(
         &request,
         &key.verifying_key(),

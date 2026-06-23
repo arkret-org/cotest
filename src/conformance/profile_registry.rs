@@ -299,10 +299,10 @@ fn collect_declared_implementation_profiles(profiles: &Value) -> Result<BTreeSet
     ] {
         if let Some(array) = profiles.get(field).and_then(Value::as_array) {
             for entry in array {
-                if let Some(profile) = entry.as_str() {
-                    if profile.starts_with("ck.profile.") {
-                        declared.insert(profile.to_owned());
-                    }
+                if let Some(profile) = entry.as_str()
+                    && profile.starts_with("ck.profile.")
+                {
+                    declared.insert(profile.to_owned());
                 }
             }
         }

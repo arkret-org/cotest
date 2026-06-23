@@ -376,37 +376,34 @@ fn run_range_completeness_witness_disagreement_case(case: &Value) -> Result<()> 
 }
 
 fn evaluate_range_completeness_step(step: &Value) -> Result<Value> {
-    if let Some(witnesses) = step.get("witnesses").and_then(Value::as_array) {
-        if witnesses.len() >= 2
-            && required_str(&witnesses[0], "realm_id")? == required_str(&witnesses[1], "realm_id")?
-            && required_str(&witnesses[0], "actor_id")? == required_str(&witnesses[1], "actor_id")?
-            && required_u64(&witnesses[0], "actor_seq")?
-                == required_u64(&witnesses[1], "actor_seq")?
-            && required_str(&witnesses[0], "event_digest")?
-                != required_str(&witnesses[1], "event_digest")?
-        {
-            return Ok(json!({
-                "decision": "reject",
-                "reason": "witness_disagreement",
-                "quarantine": true,
-            }));
-        }
+    if let Some(witnesses) = step.get("witnesses").and_then(Value::as_array)
+        && witnesses.len() >= 2
+        && required_str(&witnesses[0], "realm_id")? == required_str(&witnesses[1], "realm_id")?
+        && required_str(&witnesses[0], "actor_id")? == required_str(&witnesses[1], "actor_id")?
+        && required_u64(&witnesses[0], "actor_seq")? == required_u64(&witnesses[1], "actor_seq")?
+        && required_str(&witnesses[0], "event_digest")?
+            != required_str(&witnesses[1], "event_digest")?
+    {
+        return Ok(json!({
+            "decision": "reject",
+            "reason": "witness_disagreement",
+            "quarantine": true,
+        }));
     }
-    if let Some(attestations) = step.get("attestations").and_then(Value::as_array) {
-        if attestations.len() >= 2
-            && required_str(&attestations[0], "from_frontier")?
-                == required_str(&attestations[1], "from_frontier")?
-            && required_str(&attestations[0], "to_frontier")?
-                == required_str(&attestations[1], "to_frontier")?
-            && required_str(&attestations[0], "range_root")?
-                != required_str(&attestations[1], "range_root")?
-        {
-            return Ok(json!({
-                "decision": "reject",
-                "reason": "witness_disagreement",
-                "quarantine": true,
-            }));
-        }
+    if let Some(attestations) = step.get("attestations").and_then(Value::as_array)
+        && attestations.len() >= 2
+        && required_str(&attestations[0], "from_frontier")?
+            == required_str(&attestations[1], "from_frontier")?
+        && required_str(&attestations[0], "to_frontier")?
+            == required_str(&attestations[1], "to_frontier")?
+        && required_str(&attestations[0], "range_root")?
+            != required_str(&attestations[1], "range_root")?
+    {
+        return Ok(json!({
+            "decision": "reject",
+            "reason": "witness_disagreement",
+            "quarantine": true,
+        }));
     }
     if step.get("security_class").and_then(Value::as_str) == Some("high_assurance")
         && step.get("attestation_mode").and_then(Value::as_str) == Some("single_source")
@@ -482,13 +479,13 @@ fn run_device_recovery_lifecycle_case(case: &Value) -> Result<()> {
 }
 
 fn evaluate_device_recovery_step(step: &Value, current_generation: u64) -> Result<Value> {
-    if let Some(proof_generation) = step.get("proof_ssk_generation").and_then(Value::as_u64) {
-        if proof_generation != current_generation {
-            return Ok(json!({
-                "decision": "reject",
-                "reason": "device_recovery_ssk_generation_mismatch",
-            }));
-        }
+    if let Some(proof_generation) = step.get("proof_ssk_generation").and_then(Value::as_u64)
+        && proof_generation != current_generation
+    {
+        return Ok(json!({
+            "decision": "reject",
+            "reason": "device_recovery_ssk_generation_mismatch",
+        }));
     }
     if step.get("proof_verified").and_then(Value::as_bool) == Some(true) {
         let unlocked = step
@@ -707,12 +704,12 @@ fn expected(value: &Value) -> Result<&Value> {
 }
 
 fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    Ok(required_array(value, field)?
+    required_array(value, field)?
         .iter()
         .map(|entry| {
             entry
                 .as_str()
                 .ok_or_else(|| anyhow!("{field} entry must be string"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }

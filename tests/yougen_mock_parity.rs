@@ -87,7 +87,7 @@ struct AllowedDiff {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Snapshot {
+struct HttpSnapshot {
     status: u16,
     body: Value,
 }
@@ -95,8 +95,8 @@ struct Snapshot {
 #[derive(Debug)]
 struct CaseResult {
     id: String,
-    mock: Snapshot,
-    live: Snapshot,
+    mock: HttpSnapshot,
+    live: HttpSnapshot,
     allowed_reason: Option<String>,
 }
 
@@ -844,7 +844,7 @@ fn call_mock_contract(
     case: &ParityCase,
     rendered_path: &str,
     body: Option<Value>,
-) -> Result<Snapshot> {
+) -> Result<HttpSnapshot> {
     let (path_only, query) = split_path_query(rendered_path);
     let request = json!({
         "method": case.method,
@@ -904,12 +904,12 @@ process.stdout.write(JSON.stringify(context.__result ?? null));
     let raw: Value = serde_json::from_slice(&output.stdout)
         .with_context(|| format!("parse node mock response for {}", case.id))?;
     if raw.is_null() {
-        return Ok(Snapshot {
+        return Ok(HttpSnapshot {
             status: 599,
             body: json!({"error": "mock_contract_not_handled"}),
         });
     }
-    Ok(Snapshot {
+    Ok(HttpSnapshot {
         status: raw["status"].as_u64().unwrap_or(200) as u16,
         body: raw.get("body").cloned().unwrap_or(Value::Null),
     })
@@ -931,7 +931,7 @@ async fn call_live_soland(
     ctx: &TemplateContext,
     rendered_path: &str,
     body: Option<Value>,
-) -> Result<Snapshot> {
+) -> Result<HttpSnapshot> {
     let method = case
         .method
         .parse::<Method>()
@@ -950,10 +950,10 @@ async fn call_live_soland(
     let status = response.status().as_u16();
     let text = response.text().await?;
     let body = serde_json::from_str(&text).unwrap_or(Value::String(text));
-    Ok(Snapshot { status, body })
+    Ok(HttpSnapshot { status, body })
 }
 
-fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
+fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {
     let body = match case_id {
         "server_describe" => normalize_server_describe(snapshot.body),
         "account_profile" => json!({
@@ -1005,7 +1005,7 @@ fn normalize_snapshot(case_id: &str, snapshot: Snapshot) -> Snapshot {
         }
         _ => normalize_value(snapshot.body),
     };
-    Snapshot {
+    HttpSnapshot {
         status: snapshot.status,
         body,
     }

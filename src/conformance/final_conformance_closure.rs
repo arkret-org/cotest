@@ -325,17 +325,15 @@ fn evaluate_applet_transaction(
     if let Some(registration_epoch) = transaction
         .get("registration_epoch")
         .and_then(Value::as_str)
-    {
-        if Some(registration_epoch)
+        && Some(registration_epoch)
             != active_install
                 .get("registration_epoch")
                 .and_then(Value::as_str)
-        {
-            return Ok(json!({
-                "decision": "reject",
-                "reason": "applet_registration_unauthorized",
-            }));
-        }
+    {
+        return Ok(json!({
+            "decision": "reject",
+            "reason": "applet_registration_unauthorized",
+        }));
     }
 
     if required_str(transaction, "actor_namespace")?
@@ -1077,14 +1075,14 @@ fn expected(value: &Value) -> Result<&Value> {
 }
 
 fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    Ok(required_array(value, field)?
+    required_array(value, field)?
         .iter()
         .map(|entry| {
             entry
                 .as_str()
                 .ok_or_else(|| anyhow!("{field} entry must be string"))
         })
-        .collect::<Result<BTreeSet<_>>>()?)
+        .collect::<Result<BTreeSet<_>>>()
 }
 
 fn string_vec(value: &Value, field: &str) -> Result<Vec<String>> {

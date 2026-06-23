@@ -174,10 +174,10 @@ fn run_state_root_incremental_case(case: &Value) -> Result<()> {
             bail!("state_root transition {name} returned empty Merkle root for empty delta");
         }
 
-        if let Some(cell) = expected_str_opt(transition, "new_cell_present")? {
-            if !full_cells.contains_key(&cell_ref(cell)?) {
-                bail!("state_root transition {name} did not include new cell {cell}");
-            }
+        if let Some(cell) = expected_str_opt(transition, "new_cell_present")?
+            && !full_cells.contains_key(&cell_ref(cell)?)
+        {
+            bail!("state_root transition {name} did not include new cell {cell}");
         }
 
         if let Some(cell) = expected_str_opt(transition, "tombstone_cell_remains")? {
@@ -189,13 +189,13 @@ fn run_state_root_incremental_case(case: &Value) -> Result<()> {
             }
         }
 
-        if let Some(expected_count) = expected_u64_opt(transition, "final_cell_count")? {
-            if full_cells.len() as u64 != expected_count {
-                bail!(
-                    "state_root transition {name} expected {expected_count} cells, got {}",
-                    full_cells.len()
-                );
-            }
+        if let Some(expected_count) = expected_u64_opt(transition, "final_cell_count")?
+            && full_cells.len() as u64 != expected_count
+        {
+            bail!(
+                "state_root transition {name} expected {expected_count} cells, got {}",
+                full_cells.len()
+            );
         }
 
         record_vector_event(
@@ -482,23 +482,13 @@ fn is_tombstone_state(state: &CellState) -> bool {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Default)]
 struct TrackState {
     enabled: bool,
     #[serde(default)]
     is_primary: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     profile: Option<String>,
-}
-
-impl Default for TrackState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            is_primary: false,
-            profile: None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
