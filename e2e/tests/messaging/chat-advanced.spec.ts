@@ -371,6 +371,11 @@ test.describe("chat advanced", () => {
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "typing-api");
+    const strandId = await resolveDefaultStrandId(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
     const sentAt = new Date();
     const typing = await request.post(
       `${solandBaseUrl()}/_cokret/self/ephemeral`,
@@ -385,7 +390,7 @@ test.describe("chat advanced", () => {
           expires_at: new Date(sentAt.getTime() + 5_000).toISOString(),
           payload: {
             typing: true,
-            scope_id: fixture.realmId,
+            strand_id: strandId,
           },
         },
       },
@@ -403,7 +408,7 @@ test.describe("chat advanced", () => {
     const realmFrame = frame.realms[fixture.realmId];
     const ephemeral = realmFrame.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
-    expect(JSON.stringify(ephemeral)).toContain(fixture.realmId);
+    expect(JSON.stringify(ephemeral)).toContain(strandId);
   });
 
   test("chat route hydrates the default discussion channel on first mount", async ({

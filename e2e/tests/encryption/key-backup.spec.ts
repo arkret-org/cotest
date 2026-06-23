@@ -698,15 +698,62 @@ async function createMlsRecoveryBackupFromPrompt(
   page: Page,
   keyBackupPuts: KeyBackupPut[],
 ): Promise<string> {
-  const legacyPromptVisible = await page
-    .getByTestId("mls-backup-modal")
-    .isVisible({ timeout: 2_000 })
+  const setupPrompt = page.getByTestId("recovery-key-setup-modal").last();
+  const setupPromptVisible = await setupPrompt
+    .waitFor({ state: "visible", timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (setupPromptVisible) {
+    await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
+      "role",
+      "dialog",
+    );
+    await expect(page.getByTestId("recovery-key-setup-banner")).toHaveAttribute(
+      "aria-modal",
+      "true",
+    );
+
+    const generatedKeyField = page
+      .getByTestId("recovery-key-setup-generated-key")
+      .last();
+    await expect(generatedKeyField).toBeVisible({ timeout: 120_000 });
+    const recoveryKey = (await generatedKeyField.inputValue()).trim();
+    expect(recoveryKey.split(/\s+/)).toHaveLength(24);
+    await expect(
+      page.getByTestId("recovery-key-setup-generated-key-warning").last(),
+    ).toBeVisible();
+
+    await expect
+      .poll(
+        () =>
+          keyBackupPuts.some(
+            (hit) =>
+              hit.status === 200 &&
+              /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData),
+          ),
+        { timeout: 120_000 },
+      )
+      .toBe(true);
+
+    await page
+      .getByTestId("recovery-key-setup-confirm-key")
+      .last()
+      .fill(recoveryKey);
+    await page.getByTestId("recovery-key-setup-saved").last().click();
+    await expect(setupPrompt).toBeHidden({ timeout: 30_000 });
+    return recoveryKey;
+  }
+
+  const legacyPrompt = page.getByTestId("mls-backup-modal");
+  const legacyPromptVisible = await legacyPrompt
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
     .catch(() => false);
   if (!legacyPromptVisible) {
     return createMlsRecoveryBackupFromRecoverySettings(page, keyBackupPuts);
   }
 
-  await expect(page.getByTestId("mls-backup-modal")).toBeVisible({
+  await expect(legacyPrompt).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByTestId("mls-backup-banner")).toHaveAttribute(

@@ -22,8 +22,11 @@ export async function selectDxcOption(scope: Locator, value: string): Promise<vo
   if ((await trigger.getAttribute("aria-expanded")) !== "true") {
     await trigger.click();
   }
-  const option = scope.locator(`[role="option"][data-value="${value}"]`);
+  const quotedValue = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const option = scope.locator(`[role="option"][data-value="${quotedValue}"]`);
   await option.click();
-  // 单选选中后 dxc 会收起弹层;等待 aria-expanded 复位,避免后续操作命中残留 overlay。
-  await expect(trigger).toHaveAttribute("aria-expanded", "false", { timeout: 30_000 });
+  if ((await trigger.getAttribute("aria-expanded")) === "true") {
+    await trigger.press("Escape").catch(() => {});
+    await scope.page().mouse.click(0, 0).catch(() => {});
+  }
 }

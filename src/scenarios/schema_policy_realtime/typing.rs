@@ -3,7 +3,7 @@ use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, expect_api_error, expect_json};
+use crate::harness::{CokretServer, TestActorClient, expect_api_error, expect_json};
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = CokretServer::spawn("typing-push-rules").await?;
@@ -30,11 +30,15 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let realm_id = alice.create_realm("Typing And Push Realm").await?;
     alice.add_member(&realm_id, &bob).await?;
+    let strand_id = default_strand_id(&alice, &realm_id).await?;
 
     expect_api_error(
-        carol
-            .post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&carol.actor, &realm_id, true)),
+        carol.post("/_cokret/self/ephemeral").json(&typing_envelope(
+            &carol.actor,
+            &realm_id,
+            &strand_id,
+            true,
+        )),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -42,7 +46,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let typing = expect_json(
         bob.post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&bob.actor, &realm_id, true)),
+            .json(&typing_envelope(&bob.actor, &realm_id, &strand_id, true)),
         StatusCode::OK,
     )
     .await?;
@@ -55,7 +59,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
         .unwrap();
     assert_eq!(ephemeral.len(), 1);
     assert_eq!(ephemeral[0]["type"], "ck.typing");
-    assert_eq!(ephemeral[0]["scope_id"], "ck:thread:typing");
+    assert_eq!(ephemeral[0]["strand_id"], strand_id);
     assert!(
         ephemeral[0]["actors"]
             .as_array()
@@ -66,7 +70,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let stopped = expect_json(
         bob.post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&bob.actor, &realm_id, false)),
+            .json(&typing_envelope(&bob.actor, &realm_id, &strand_id, false)),
         StatusCode::OK,
     )
     .await?;
@@ -146,7 +150,21 @@ fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value>
         .and_then(|events| events.iter().find(|event| event["data_type"] == data_type))
 }
 
-fn typing_envelope(actor_id: &str, realm_id: &str, typing: bool) -> Value {
+async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
+    let realm = expect_json(
+        client.get(&format!("/_cokret/self/realms/{realm_id}")),
+        StatusCode::OK,
+    )
+    .await?;
+    realm["default_strand_id"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            anyhow::anyhow!("realm projection did not expose default_strand_id: {realm}")
+        })
+}
+
+fn typing_envelope(actor_id: &str, realm_id: &str, strand_id: &str, typing: bool) -> Value {
     let sent_at = Utc::now();
     let expires_at = sent_at + ChronoDuration::seconds(30);
     json!({
@@ -156,7 +174,7 @@ fn typing_envelope(actor_id: &str, realm_id: &str, typing: bool) -> Value {
         "sent_at": sent_at,
         "expires_at": expires_at,
         "payload": {
-            "scope_id": "ck:thread:typing",
+            "strand_id": strand_id,
             "typing": typing
         }
     })
