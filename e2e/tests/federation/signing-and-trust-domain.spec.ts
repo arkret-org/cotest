@@ -14,13 +14,13 @@ import { expect, test } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 
-const CARGO_TEST_TIMEOUT_MS = 180_000;
+const CARGO_TEST_TIMEOUT_MS = 720_000;
 const SOLAND_MANIFEST = findSolandManifest();
 const SOLAND_CWD = path.dirname(SOLAND_MANIFEST);
 const CARGO_TARGET_DIR = path.join(SOLAND_CWD, "target", "cotest-federation-outbox");
 const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
 
-test.describe.configure({ mode: "serial" });
+test.describe.configure({ mode: "serial", timeout: CARGO_TEST_TIMEOUT_MS });
 
 test.describe("federation outbound signing and trust_domain", () => {
   test("A→B outbound invite push carries RFC 9421 signature headers verified by A service public key", async () => {

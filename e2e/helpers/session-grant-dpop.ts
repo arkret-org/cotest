@@ -140,9 +140,12 @@ export function mintDpopProof(args: {
   deviceKey: DpopDeviceKey;
   method: string;
   url: string;
-  grantJwt: string;
+  grantJwt?: string;
   jti?: string;
   iatSkewSeconds?: number;
+  /// Omit `ath` for token-minting kickoff requests where no access token exists
+  /// yet. Follow-up protected-resource requests keep the default `ath`.
+  includeAth?: boolean;
   /// Override the `ath` claim (negative tests: a wrong/absent grant binding).
   athOverride?: string;
 }): string {
@@ -152,15 +155,26 @@ export function mintDpopProof(args: {
     jwk: args.deviceKey.publicJwk,
   };
   const iat = Math.floor(Date.now() / 1000) + (args.iatSkewSeconds ?? 0);
-  const claims = {
+  const claims: {
+    jti: string;
+    htm: string;
+    htu: string;
+    iat: number;
+    ath?: string;
+  } = {
     jti: args.jti ?? randomUUID(),
     htm: args.method.toUpperCase(),
     // Strip query/fragment so the signed htu matches the verifier's
     // canonicalization (it compares scheme+authority+path only).
     htu: args.url.split("#")[0].split("?")[0],
     iat,
-    ath: args.athOverride ?? dpopAth(args.grantJwt),
   };
+  if (args.includeAth !== false) {
+    if (!args.grantJwt && args.athOverride === undefined) {
+      throw new Error("mintDpopProof requires grantJwt unless includeAth is false");
+    }
+    claims.ath = args.athOverride ?? dpopAth(args.grantJwt!);
+  }
   const signingInput = `${b64urlJson(header)}.${b64urlJson(claims)}`;
   const signature = sign(null, Buffer.from(signingInput, "utf8"), args.deviceKey.privateKey);
   return `${signingInput}.${b64urlNoPad(signature)}`;
@@ -189,6 +203,23 @@ export function selfPathGrantHeaders(args: {
   return {
     authorization: `Bearer ${args.grantJwt}`,
     dpop,
+  };
+}
+
+/// Build the DPoP header for a session-grant kickoff request. There is no
+/// access token yet, so RFC 9449 `ath` is intentionally absent.
+export function kickoffDpopHeaders(args: {
+  deviceKey: DpopDeviceKey;
+  method: string;
+  url: string;
+}): Record<string, string> {
+  return {
+    dpop: mintDpopProof({
+      deviceKey: args.deviceKey,
+      method: args.method,
+      url: args.url,
+      includeAth: false,
+    }),
   };
 }
 

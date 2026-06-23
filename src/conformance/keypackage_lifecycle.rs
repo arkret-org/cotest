@@ -969,7 +969,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        ssk_generation,
+        Some(ssk_generation),
+        None,
+        Some(ssk_generation),
+        None,
     )
     .map_err(|reason| anyhow!("good welcome rejected: {reason}"))?;
 
@@ -996,7 +999,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        ssk_generation,
+        Some(ssk_generation),
+        None,
+        Some(ssk_generation),
+        None,
     )
     .err()
     .ok_or_else(|| anyhow!("mismatched top-level welcome digest was accepted"))?;
@@ -1030,7 +1036,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        ssk_generation,
+        Some(ssk_generation),
+        None,
+        Some(ssk_generation),
+        None,
     )
     .is_ok()
     {
@@ -1059,7 +1068,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        ssk_generation,
+        Some(ssk_generation),
+        None,
+        Some(ssk_generation),
+        None,
     )
     .is_ok()
     {
@@ -1092,7 +1104,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        ssk_generation,
+        Some(ssk_generation),
+        None,
+        Some(ssk_generation),
+        None,
     )
     .is_ok()
     {
@@ -1121,7 +1136,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        ssk_generation,
+        Some(ssk_generation),
+        None,
+        Some(ssk_generation),
+        None,
     )
     .is_ok()
     {

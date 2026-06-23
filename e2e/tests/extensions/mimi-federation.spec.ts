@@ -85,10 +85,14 @@ test.describe("mimi federation", () => {
   }) => {
     const stamp = Date.now();
     const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "e2ee");
+    const governanceBinding = mimiGovernanceBinding(realmId, roomId);
+    const coveredSealsCell = mimiCoveredSealsCell(governanceBinding);
 
     const unmarked = await postSignedMimiMessage(request, roomId, {
         source_format: "application/mimi-content",
         e2ee: true,
+        governance_binding: governanceBinding,
+        covered_seals_cell: coveredSealsCell,
         content: {
           kind: "ck.content.text",
           body: `silent plaintext leak ${stamp}`,
@@ -99,13 +103,15 @@ test.describe("mimi federation", () => {
         content_draft: "draft-ietf-mimi-content-08",
     });
     expect(unmarked.status()).toBe(400);
-    expect(wireErrCode(await unmarked.json())).toBe("mimi_governance_binding_missing");
+    expect(wireErrCode(await unmarked.json())).toBe("mimi_e2ee_boundary_unmarked");
 
     const downgradeText = `explicit downgrade ${stamp}`;
     const downgrade = await postSignedMimiMessage(request, roomId, {
         source_format: "application/mimi-content",
         e2ee: true,
         e2ee_downgrade: "mimi_bridge",
+        governance_binding: governanceBinding,
+        covered_seals_cell: coveredSealsCell,
         content: {
           kind: "ck.content.text",
           body: downgradeText,
@@ -125,6 +131,8 @@ test.describe("mimi federation", () => {
     const transcript = await postSignedMimiMessage(request, roomId, {
         source_format: "application/mimi-content",
         e2ee: true,
+        governance_binding: governanceBinding,
+        covered_seals_cell: coveredSealsCell,
         transcript_binding: {
           profile: "mls-via-ietf-mimi",
           transcript_hash: transcriptHash,
@@ -256,6 +264,38 @@ async function createBoundMimiRoom(
 
 function mimiMessagesUrl(roomId: string): string {
   return `${solandBaseUrl()}/_cokret/open/mimi/strands/${encodeURIComponent(roomId)}/messages`;
+}
+
+function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, unknown> {
+  const policyRoot = `sha256:${"2".repeat(64)}`;
+  return {
+    binding_version: 1,
+    encoding_profile: "cbor-deterministic-rfc8949-v1",
+    realm_id: realmId,
+    effective_scope: {
+      kind: "realm",
+      realm_id: realmId,
+    },
+    mls_group_id: `mls:${roomId}`,
+    previous_epoch: 0,
+    next_epoch: 1,
+    membership_frontier: [`ck:event:${"1".repeat(8)}-${"1".repeat(4)}-7${"1".repeat(3)}-8${"1".repeat(3)}-${"1".repeat(12)}`],
+    policy_root: policyRoot,
+    binding_profile: "ck.profile.mls_governance_binding.full.v1",
+    reducer_profile: "ck.reducer.v1",
+  };
+}
+
+function mimiCoveredSealsCell(
+  governanceBinding: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    profile: "ck.covered_seals_cell.v1",
+    governance_binding_digest: `sha256:${createHash("sha256")
+      .update(canonicalJson(governanceBinding))
+      .digest("hex")}`,
+    frontier: ["mimi-frontier"],
+  };
 }
 
 async function postSignedMimiMessage(

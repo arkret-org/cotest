@@ -30,12 +30,14 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  createDpopUserSession,
   ensureRegistered,
   issueDevSession,
   openUserPage,
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 
 test.describe.configure({ mode: "serial" });
 
@@ -457,7 +459,8 @@ async function sendEncryptedTimelineMessage(
       return (
         request.method() === "POST" &&
         response.url().includes("/_cokret/self/events") &&
-        postData.includes("ck.message.create")
+        postData.includes("ck.message.create") &&
+        [200, 201].includes(response.status())
       );
     },
     { timeout: 60_000 },
@@ -468,10 +471,6 @@ async function sendEncryptedTimelineMessage(
 
   const response = await messageSubmit;
   const postData = response.request().postData() ?? "";
-  expect(
-    [200, 201],
-    `encrypted ck.message.create submit returned ${response.status()}: ${await response.text()}`,
-  ).toContain(response.status());
   expect(postData).toContain("encrypted_content");
   expect(postData).toContain("mls-rfc9420");
   expect(postData).not.toContain(body);
@@ -935,27 +934,51 @@ test.describe("MLS group encryption", () => {
     // leave the new member with usable MLS state for messages sent after join.
     // Spec: encryption-and-audit.md §2.2-§2.4, §2.3.1-§2.3.3.
     const stamp = Date.now();
-    const alice = uniqueUser("s11-decrypt-alice");
-    const bob = uniqueUser("s11-decrypt-bob");
-    await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      createDpopUserSession(request, "s11-decrypt-alice"),
+      createDpopUserSession(request, "s11-decrypt-bob"),
     ]);
+    test.skip(
+      !aliceSession || !bobSession,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    const alice = aliceSession!.user;
+    const bob = bobSession!.user;
     const [alicePage, bobPage] = await Promise.all([
-      openUserPage(browser, alice, { sessionCredential: aliceToken }),
-      openUserPage(browser, bob, { sessionCredential: bobToken }),
+      openUserPage(browser, alice, {
+        grantJwt: aliceSession!.grantJwt,
+        dpopSeedB64url: aliceSession!.dpopSeedB64url,
+        grantId: aliceSession!.grantId,
+        grantAudience: aliceSession!.grantAudience,
+      }),
+      openUserPage(browser, bob, {
+        grantJwt: bobSession!.grantJwt,
+        dpopSeedB64url: bobSession!.dpopSeedB64url,
+        grantId: bobSession!.grantId,
+        grantAudience: bobSession!.grantAudience,
+      }),
     ]);
 
     try {
+      await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
+      await Promise.all([
+        alicePage.completeRecoveryKeySetupIfPrompted(),
+        bobPage.completeRecoveryKeySetupIfPrompted(),
+      ]);
+      await Promise.all([
+        alicePage.acknowledgeRecommendedEncryptionPromptIfVisible(),
+        bobPage.acknowledgeRecommendedEncryptionPromptIfVisible(),
+      ]);
+
       const realmId = await alicePage.createRealm({
         title: `S11 joined decrypt ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
         historyVisibility: "joined",
         encryptionProfile: "mls_rfc9420",
-        seedMembers: [bob.did],
       });
+      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
+      expect(inviteStatus).toContain("MLS Welcome queued");
       await bobPage.acceptInvite(realmId);
 
       // Route-context bootstrap is where Bob applies pending MLS Welcome state.
@@ -973,10 +996,15 @@ test.describe("MLS group encryption", () => {
       await expect(bobMessage).toBeVisible({ timeout: 60_000 });
       await expect(bobMessage.getByTestId("event-body")).toContainText(plaintext);
 
-      const rawEvents = await request.get(
-        `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
-        { headers: authHeaders(bobToken) },
-      );
+      const rawEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+      const rawEvents = await request.get(rawEventsUrl, {
+        headers: selfPathGrantHeaders({
+          deviceKey: bobSession!.deviceKey,
+          grantJwt: bobSession!.grantJwt,
+          method: "GET",
+          url: rawEventsUrl,
+        }),
+      });
       expect(rawEvents.status()).toBe(200);
       const rawWire = JSON.stringify(await rawEvents.json());
       expect(rawWire).toContain("encrypted_content");

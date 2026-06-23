@@ -10,12 +10,23 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
-import { diagnosticsRoot, type SolandKey, solandBaseUrl } from "./env";
+import {
+  coauthBaseUrl,
+  diagnosticsRoot,
+  type SolandKey,
+  solandBaseUrl,
+  solandServiceDid,
+} from "./env";
 import { signedEventEnvelope } from "./soland-api";
 import { selectDxcOption } from "./dxc-select";
+import { registerCoauthPasswordAccount } from "./coauth-register";
 import {
+  dpopDeviceSeedB64url,
   dpopDeviceKeyFromSeedB64url,
+  generateDpopDeviceKey,
+  kickoffDpopHeaders,
   selfPathGrantHeaders,
+  type DpopDeviceKey,
 } from "./session-grant-dpop";
 
 export type JointUser = {
@@ -68,6 +79,15 @@ export type OpenUserOpts = {
   grantId?: string;
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
+};
+
+export type DpopUserSession = {
+  user: JointUser;
+  grantJwt: string;
+  grantId: string;
+  grantAudience: string;
+  dpopSeedB64url: string;
+  deviceKey: DpopDeviceKey;
 };
 
 export type CreateRealmOpts = {
@@ -265,6 +285,59 @@ export class JointUserPage {
     if (!this.session.keepDeviceAuthorizationModal) {
       await dismissDeviceAuthorizationPrompt(this.page);
     }
+  }
+
+  async completeRecoveryKeySetupIfPrompted(
+    timeoutMs = 5_000,
+  ): Promise<string | undefined> {
+    const modal = this.page.getByTestId("recovery-key-setup-modal").last();
+    const visible = await modal
+      .waitFor({ state: "visible", timeout: timeoutMs })
+      .then(() => true)
+      .catch(() => false);
+    if (!visible) {
+      return undefined;
+    }
+
+    const generatedKeyField = this.page
+      .getByTestId("recovery-key-setup-generated-key")
+      .last();
+    await expect(generatedKeyField).toBeVisible({ timeout: 30_000 });
+    const recoveryKey = (await generatedKeyField.inputValue()).trim();
+    expect(
+      recoveryKey.split(/\s+/),
+      "recovery-key setup prompt must expose a 24-word key",
+    ).toHaveLength(24);
+
+    await this.page
+      .getByTestId("recovery-key-setup-confirm-key")
+      .last()
+      .fill(recoveryKey);
+    await this.page.getByTestId("recovery-key-setup-saved").last().click();
+    await expect(modal).toBeHidden({ timeout: 30_000 });
+    return recoveryKey;
+  }
+
+  async acknowledgeRecommendedEncryptionPromptIfVisible(
+    timeoutMs = 5_000,
+  ): Promise<boolean> {
+    const modal = this.page
+      .getByTestId("recommended-encryption-floor-modal")
+      .last();
+    const visible = await modal
+      .waitFor({ state: "visible", timeout: timeoutMs })
+      .then(() => true)
+      .catch(() => false);
+    if (!visible) {
+      return false;
+    }
+
+    await this.page
+      .getByTestId("recommended-encryption-floor-enable")
+      .last()
+      .click();
+    await expect(modal).toBeHidden({ timeout: 10_000 });
+    return true;
   }
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
@@ -650,6 +723,73 @@ export async function issueDevSession(
   const body = await response.json();
   expect(body.session_credential).toBeTruthy();
   return body.session_credential;
+}
+
+export async function createDpopUserSession(
+  request: APIRequestContext,
+  prefix: string,
+  opts: { server?: SolandKey; coauthBase?: string } = {},
+): Promise<DpopUserSession | undefined> {
+  const coauth = opts.coauthBase ?? coauthBaseUrl();
+  if (!coauth) {
+    return undefined;
+  }
+  const account = await registerCoauthPasswordAccount(request, coauth, {
+    password: "1amTesting!",
+  });
+  const seed = uniqueUser(prefix);
+  const deviceKey = generateDpopDeviceKey();
+  const audience = solandServiceDid(opts.server);
+  const loginUrl = `${coauth}/_coauth/gate/account/auth/login`;
+  const login = await request.post(loginUrl, {
+    headers: kickoffDpopHeaders({
+      deviceKey,
+      method: "POST",
+      url: loginUrl,
+    }),
+    data: {
+      handle: account.handle,
+      password: account.password,
+      audience,
+      device_id: seed.deviceId,
+    },
+  });
+  const raw = await login.text();
+  let body: any = null;
+  try {
+    body = raw ? JSON.parse(raw) : {};
+  } catch {
+    body = null;
+  }
+  if (login.status() === 404) {
+    return undefined;
+  }
+  if (!login.ok() || body?.status !== "success") {
+    throw new Error(`coauth DPoP password login returned ${login.status()}: ${raw}`);
+  }
+  const grant = body?.session_grant;
+  const principalDid = body?.viewer?.did;
+  if (!principalDid || !grant?.grant_jwt || !grant?.id || !grant?.audience) {
+    throw new Error(`coauth DPoP password login omitted principal grant: ${raw}`);
+  }
+  expect(grant.audience).toBe(audience);
+  expect(Array.isArray(grant.scopes)).toBeTruthy();
+  expect(grant.scopes).toContain(`urn:cokret:client:device:${seed.deviceId}`);
+  const user = {
+    ...seed,
+    name: account.handle,
+    did: principalDid,
+    handle: `@${account.handle}`,
+    displayName: account.displayName,
+  };
+  return {
+    user,
+    grantJwt: grant.grant_jwt,
+    grantId: grant.id,
+    grantAudience: grant.audience,
+    dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
+    deviceKey,
+  };
 }
 
 export async function openUser(
