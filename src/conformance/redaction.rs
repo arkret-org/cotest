@@ -395,7 +395,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let stub = json!({
         "stub_schema": "ck.schema.erasure_verification_stub.v1",
         "subject": {"kind": "event", "ref": original_event_id},
-        "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
+        "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
         "completed_at": "2026-04-29T00:00:00Z",
         "event_digest": event_digest,
@@ -425,7 +425,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "receipt_id": receipt_id,
         "issuer": "did:web:erasure.example.com",
         "subject": {"kind": "event", "ref": original_event_id},
-        "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
+        "scope": {"storage_boundary": "canonical_log_minimization"},
         "outcome": "completed",
         "erased_classes": ["canonical_payload_bytes", "derived_plaintext"],
         "retained_stub_digest": digest,
@@ -450,7 +450,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let tampered_stub = json!({
         "stub_schema": "ck.schema.erasure_verification_stub.v1",
         "subject": {"kind": "event", "ref": "ck:event:01970e58-0004-7000-8000-0000000000ff"},
-        "erasure_scope": {"storage_boundary": "canonical_log_minimization"},
+        "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
         "completed_at": "2026-04-29T00:00:00Z",
         "event_digest": event_digest,

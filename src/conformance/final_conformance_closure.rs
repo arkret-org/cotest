@@ -38,6 +38,23 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
 const FINAL_CONFORMANCE_CLOSURE_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
+const APPLET_TRANSACTION_OPERATION_ID: &str = "ck.edge.applet.command.transaction";
+const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_cokret_inbound";
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+struct AppletTransactionReplayIdentity {
+    operation_id: String,
+    direction: String,
+    source_service_did: String,
+    destination_service_did: String,
+    idempotency_key: String,
+}
+
+#[derive(Clone, Debug)]
+struct AppletTransactionReplayRecord {
+    body_digest: String,
+    source_signature_anchor_digest: String,
+}
 
 pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
@@ -187,6 +204,18 @@ fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
 fn run_applet_transaction_source_signature_anchor_case(case: &Value) -> Result<()> {
     let active_install = required_object(case, "active_install")?;
     let required_components = string_set(case, "required_components")?;
+    assert_required_assertions(
+        case,
+        &[
+            "valid_transaction_requires_http_signature_anchor",
+            "bearer_only_rejected",
+            "source_destination_and_content_digest_bound",
+            "idempotent_replay_returns_cached_outcome",
+            "idempotency_identity_body_drift_rejected",
+            "active_install_and_actor_namespace_required",
+        ],
+    )?;
+    let inferred_anchor_by_name = inferred_source_signature_anchors(case)?;
     let mut cache = BTreeMap::new();
     let mut accepted_by_name = BTreeMap::new();
     let mut seen = BTreeSet::new();
@@ -200,6 +229,7 @@ fn run_applet_transaction_source_signature_anchor_case(case: &Value) -> Result<(
             transaction,
             &mut cache,
             &mut accepted_by_name,
+            &inferred_anchor_by_name,
         )?;
         assert_expected_subset(name, expected(transaction)?, &observed)?;
         record_step(
@@ -230,23 +260,31 @@ fn evaluate_applet_transaction(
     active_install: &Map<String, Value>,
     required_components: &BTreeSet<&str>,
     transaction: &Value,
-    cache: &mut BTreeMap<String, String>,
-    accepted_by_name: &mut BTreeMap<String, String>,
+    cache: &mut BTreeMap<AppletTransactionReplayIdentity, AppletTransactionReplayRecord>,
+    accepted_by_name: &mut BTreeMap<String, AppletTransactionReplayIdentity>,
+    inferred_anchor_by_name: &BTreeMap<String, String>,
 ) -> Result<Value> {
     if let Some(replay_of) = transaction.get("replay_of").and_then(Value::as_str) {
-        let original_idempotency_key = accepted_by_name
+        let original_identity = accepted_by_name
             .get(replay_of)
             .ok_or_else(|| anyhow!("replay references unknown accepted transaction {replay_of}"))?;
         let idempotency_key = required_str(transaction, "idempotency_key")?;
-        if original_idempotency_key != idempotency_key {
+        if original_identity.idempotency_key != idempotency_key {
             return Ok(json!({"decision": "reject", "reason": "duplicate_conflict"}));
         }
         let body_digest = required_str(transaction, "body_digest")?;
-        return match cache.get(idempotency_key) {
-            Some(cached_body_digest) if cached_body_digest == body_digest => Ok(json!({
-                "decision": "accept_cached",
-                "side_effects_applied": false,
-            })),
+        let source_signature_anchor_digest =
+            required_str(transaction, "source_signature_anchor_digest")?;
+        return match cache.get(original_identity) {
+            Some(record)
+                if record.body_digest == body_digest
+                    && record.source_signature_anchor_digest == source_signature_anchor_digest =>
+            {
+                Ok(json!({
+                    "decision": "accept_cached",
+                    "side_effects_applied": false,
+                }))
+            }
             Some(_) => Ok(json!({"decision": "reject", "reason": "duplicate_conflict"})),
             None => Ok(json!({"decision": "reject", "reason": "failed_precondition"})),
         };
@@ -312,8 +350,18 @@ fn evaluate_applet_transaction(
 
     let idempotency_key = required_str(transaction, "idempotency_key")?;
     let body_digest = required_str(transaction, "body_digest")?;
-    if let Some(cached_body_digest) = cache.get(idempotency_key) {
-        if cached_body_digest == body_digest {
+    let source_signature_anchor_digest =
+        source_signature_anchor_digest_for_transaction(transaction, inferred_anchor_by_name)?;
+    let replay_identity = applet_transaction_replay_identity(
+        transaction,
+        source_header,
+        destination_header,
+        idempotency_key,
+    )?;
+    if let Some(record) = cache.get(&replay_identity) {
+        if record.body_digest == body_digest
+            && record.source_signature_anchor_digest == source_signature_anchor_digest
+        {
             return Ok(json!({
                 "decision": "accept_cached",
                 "side_effects_applied": false,
@@ -322,10 +370,16 @@ fn evaluate_applet_transaction(
         return Ok(json!({"decision": "reject", "reason": "duplicate_conflict"}));
     }
 
-    cache.insert(idempotency_key.to_owned(), body_digest.to_owned());
+    cache.insert(
+        replay_identity.clone(),
+        AppletTransactionReplayRecord {
+            body_digest: body_digest.to_owned(),
+            source_signature_anchor_digest: source_signature_anchor_digest.to_owned(),
+        },
+    );
     accepted_by_name.insert(
         required_str(transaction, "name")?.to_owned(),
-        idempotency_key.to_owned(),
+        replay_identity,
     );
 
     Ok(json!({
@@ -333,6 +387,82 @@ fn evaluate_applet_transaction(
         "source_signature_anchor_persisted": true,
         "side_effects_applied": true,
     }))
+}
+
+fn assert_required_assertions(case: &Value, required: &[&str]) -> Result<()> {
+    let assertions = string_set(case, "assertions")?;
+    for assertion in required {
+        if !assertions.contains(*assertion) {
+            bail!("applet transaction vector missing assertion {assertion}");
+        }
+    }
+    Ok(())
+}
+
+fn inferred_source_signature_anchors(case: &Value) -> Result<BTreeMap<String, String>> {
+    let mut anchors = BTreeMap::new();
+    for transaction in required_array(case, "transactions")? {
+        let Some(replay_of) = transaction.get("replay_of").and_then(Value::as_str) else {
+            continue;
+        };
+        if expected(transaction)?
+            .get("decision")
+            .and_then(Value::as_str)
+            != Some("accept_cached")
+        {
+            continue;
+        }
+        let anchor = required_str(transaction, "source_signature_anchor_digest")?;
+        match anchors.insert(replay_of.to_owned(), anchor.to_owned()) {
+            Some(previous) if previous != anchor => {
+                bail!("accepted replay anchor for {replay_of} drifted: {previous} != {anchor}")
+            }
+            _ => {}
+        }
+    }
+    Ok(anchors)
+}
+
+fn source_signature_anchor_digest_for_transaction<'a>(
+    transaction: &'a Value,
+    inferred_anchor_by_name: &'a BTreeMap<String, String>,
+) -> Result<&'a str> {
+    if let Some(anchor) = transaction
+        .get("source_signature_anchor_digest")
+        .and_then(Value::as_str)
+    {
+        return Ok(anchor);
+    }
+    let name = required_str(transaction, "name")?;
+    inferred_anchor_by_name
+        .get(name)
+        .map(String::as_str)
+        .ok_or_else(|| {
+            anyhow!("accepted transaction {name} missing source signature anchor digest")
+        })
+}
+
+fn applet_transaction_replay_identity(
+    transaction: &Value,
+    source_service_did: &str,
+    destination_service_did: &str,
+    idempotency_key: &str,
+) -> Result<AppletTransactionReplayIdentity> {
+    Ok(AppletTransactionReplayIdentity {
+        operation_id: transaction
+            .get("operation_id")
+            .and_then(Value::as_str)
+            .unwrap_or(APPLET_TRANSACTION_OPERATION_ID)
+            .to_owned(),
+        direction: transaction
+            .get("direction")
+            .and_then(Value::as_str)
+            .unwrap_or(APPLET_TRANSACTION_DEFAULT_DIRECTION)
+            .to_owned(),
+        source_service_did: source_service_did.to_owned(),
+        destination_service_did: destination_service_did.to_owned(),
+        idempotency_key: idempotency_key.to_owned(),
+    })
 }
 
 fn covered_components_include_all(

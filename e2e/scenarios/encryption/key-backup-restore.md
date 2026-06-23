@@ -5,7 +5,7 @@
 ## 范围
 
 - `PUT /_cokret/self/keys/backups/{backup_id}` 接受 `passphrase_kdf` envelope(含 §7.6 series 链字段 `series_id`/`series_seq`),且 actor 必须等于当前 session actor。
-- `GET /_cokret/self/keys/backups/{backup_id}` 只允许 owner 读取,且 bearer-only 的全密文读取必须被拒(需要 `x-cokret-key-backup-unlock-proof`,spec §7.7.1/§7.8)。
+- `POST /_cokret/self/keys/backups/{backup_id}/unlock` 只允许 owner 携带 JSON body `proof` 解锁全密文; bearer-only 必须被拒(spec §7.7.1/§7.8)。
 - `GET /_cokret/self/keys/backups` 按 owner 过滤,不得暴露 Recovery Key 词串或 plaintext key material。
 - Argon2id floor:常规 backup 至少 `memory_kib=65536, iterations=3, parallelism>=1`;`mixed_secret_storage=true` 走更高 floor。
 - `DELETE /_cokret/self/keys/backups/{backup_id}` 不接受 session-token-only 删除,必须带 ownership proof header。
@@ -25,3 +25,4 @@
 5. `mixed_secret_storage=true` 必须使用更高 KDF floor。
 6. session-token-only DELETE 被拒;带 ownership proof 后删除成功。
 7. yougen 真实 crypto:Argon2id + XChaCha20-Poly1305 seal/open round trip、wrong-Recovery-Key commitment reject、24 词 BIP-39 输入校验、late recovery banner 从 `late_recovery_original_event_id` 构造。
+8. A3 real OIDC: 用真实 coauth 密码/OIDC 登录获取 `ck.session.grant`,Device-A 上传 MLS account-secret backup,Device-B fresh browser 用同一账号登录后输入 24 词 Recovery Key 恢复 MLS;所有 `/_cokret/self/*` / `/_cokret/root/*` grant 请求必须带 DPoP holder proof,unlock 必须带 body `proof`,并明确拒绝 bearer-only unlock。

@@ -8,7 +8,13 @@
 //   - crypto-media/device-lifecycle.md §12-§12.1 (key backup durable form + API)
 
 import { expect, test, type Page } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import {
+  coauthBaseUrl,
+  optionalEnv,
+  realOidcLoginHandle,
+  realOidcLoginPassword,
+  solandBaseUrl,
+} from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -17,6 +23,7 @@ import {
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
+import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 
 test.describe.configure({ mode: "serial" });
 
@@ -150,6 +157,139 @@ test.describe("key backup + restore", () => {
       expect(
         protocolFailures.filter((line) =>
           /MLS runtime|SnapshotDecryptFailed|\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
+            line,
+          ),
+        ),
+        protocolFailures.join("\n"),
+      ).toEqual([]);
+    } finally {
+      await Promise.allSettled(
+        sessionsToClose.map((session) => session.close()),
+      );
+    }
+  });
+
+  test("A3 real password/OIDC login restores MLS on a fresh browser with session-grant holder proof", async ({
+    browser,
+    request,
+  }) => {
+    test.setTimeout(420_000);
+    const coauth = coauthBaseUrl();
+    const restoreOptIn = optionalEnv("COTEST_REAL_MLS_RESTORE_OIDC");
+    if (restoreOptIn && !coauth) {
+      throw new Error(
+        "COTEST_REAL_MLS_RESTORE_OIDC=1 requires COTEST_COAUTH_BASE_URL; refusing to fall back to dev-login",
+      );
+    }
+    test.skip(!coauth, "coauth not started for this run");
+    test.skip(
+      !restoreOptIn && !optionalEnv("COTEST_REAL_OIDC_LOGIN"),
+      "set COTEST_REAL_MLS_RESTORE_OIDC=1 to run the real OIDC MLS restore acceptance",
+    );
+
+    const stamp = Date.now();
+    const envHandle = realOidcLoginHandle();
+    const envPassword = realOidcLoginPassword();
+    const account: PasswordAccount =
+      envHandle && envPassword
+        ? { handle: envHandle, password: envPassword }
+        : await registerCoauthPasswordAccount(request, coauth!);
+
+    const deviceA = await openUserPage(browser, uniqueUser("a3-oidc-mls-a"));
+    const sessionsToClose: JointUserPage[] = [deviceA];
+    const protocolFailures: string[] = [];
+    const deviceATrace = collectSessionGrantHolderProofTrace(deviceA.page);
+    const keyBackupPuts = collectKeyBackupPuts(deviceA.page);
+    collectA1ProtocolFailures(deviceA.page, protocolFailures);
+
+    try {
+      await deviceA.gotoLogin();
+      await serverLoginViaCoauth(deviceA.page, account);
+      await expectGrantDpopSelfPath(deviceATrace, "device A real OIDC login");
+
+      const realmId = await deviceA.createRealm({
+        title: `A3 real OIDC MLS restore ${stamp}`,
+        summary: "fresh-browser restore must use real coauth session grant",
+        discoverability: "unlisted",
+        joinRule: "invite",
+        historyVisibility: "joined",
+        encryptionProfile: "mls_rfc9420",
+      });
+      const recoveryKey = await createMlsRecoveryBackupFromPrompt(
+        deviceA.page,
+        keyBackupPuts,
+      );
+      await expectGrantDpopSelfPath(deviceATrace, "device A key backup upload");
+      expect(
+        deviceATrace.authorizedSelfRequests.filter((hit) => hit.missingDpop),
+        "real OIDC device A must not fall back to naked bearer self/root calls",
+      ).toEqual([]);
+      expect(
+        deviceATrace.keyBackupWrites.some((hit) => hit.status === 200 && hit.hasDpop),
+        "key backup write must be authenticated by the real grant plus DPoP holder proof",
+      ).toBe(true);
+
+      const historicalCards = [
+        `A3 historical encrypted card 1 ${stamp}`,
+        `A3 historical encrypted card 2 ${stamp}`,
+      ];
+      for (const card of historicalCards) {
+        await deviceA.sendTimelineMessage(realmId, card);
+      }
+
+      const deviceB = await openUserPage(browser, uniqueUser("a3-oidc-mls-b"));
+      sessionsToClose.push(deviceB);
+      const deviceBTrace = collectSessionGrantHolderProofTrace(deviceB.page);
+      collectA1ProtocolFailures(deviceB.page, protocolFailures);
+
+      await deviceB.gotoLogin();
+      await serverLoginViaCoauth(deviceB.page, account);
+      await expectGrantDpopSelfPath(deviceBTrace, "device B real OIDC login");
+      await deviceB.gotoHome();
+      await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
+        timeout: 90_000,
+      });
+      await unlockMlsAccountSecret(deviceB.page, recoveryKey);
+      const successfulUnlock = await expectSuccessfulUnlockWithHolderProof(deviceBTrace);
+
+      const nakedUnlock = await deviceB.page.request.post(successfulUnlock.url, {
+        headers: {
+          authorization: `Bearer ${successfulUnlock.grantJwt}`,
+          "content-type": "application/json",
+        },
+        data: JSON.parse(successfulUnlock.postData),
+      });
+      expect(
+        [401, 403],
+        `bearer-only key-backup unlock must fail closed, got ${nakedUnlock.status()}: ${await nakedUnlock.text()}`,
+      ).toContain(nakedUnlock.status());
+
+      const reloadTraceStart = deviceBTrace.authorizedSelfRequests.length;
+      await deviceB.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(deviceB.page.getByTestId("client-shell")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(deviceB.page.getByTestId("login-panel")).toHaveCount(0);
+      await expectNewGrantDpopSelfPath(
+        deviceBTrace,
+        reloadTraceStart,
+        "device B fresh-browser reload",
+      );
+
+      await deviceB.gotoTimelineRealm(realmId);
+      for (const card of historicalCards) {
+        await expect(deviceB.timelineEvent(card)).toBeVisible({
+          timeout: 90_000,
+        });
+      }
+
+      expect(
+        deviceBTrace.authorizedSelfRequests.filter((hit) => hit.missingDpop),
+        "real OIDC device B must not fall back to naked bearer self/root calls",
+      ).toEqual([]);
+      expect(
+        protocolFailures.filter((line) =>
+          /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/.test(
             line,
           ),
         ),
@@ -322,6 +462,32 @@ type KeyBackupPut = {
   postData: string;
 };
 
+type PasswordAccount = {
+  handle: string;
+  password: string;
+};
+
+type HolderProofRequest = {
+  method: string;
+  url: string;
+  status: number;
+  hasDpop: boolean;
+  missingDpop: boolean;
+  authorization: string;
+  grantJwt: string;
+  postData: string;
+};
+
+type KeyBackupUnlockRequest = HolderProofRequest & {
+  hasProofBody: boolean;
+};
+
+type SessionGrantHolderProofTrace = {
+  authorizedSelfRequests: HolderProofRequest[];
+  keyBackupWrites: HolderProofRequest[];
+  unlocks: KeyBackupUnlockRequest[];
+};
+
 function collectKeyBackupPuts(page: Page): KeyBackupPut[] {
   const hits: KeyBackupPut[] = [];
   page.on("response", (response) => {
@@ -338,6 +504,140 @@ function collectKeyBackupPuts(page: Page): KeyBackupPut[] {
     });
   });
   return hits;
+}
+
+function collectSessionGrantHolderProofTrace(
+  page: Page,
+): SessionGrantHolderProofTrace {
+  const trace: SessionGrantHolderProofTrace = {
+    authorizedSelfRequests: [],
+    keyBackupWrites: [],
+    unlocks: [],
+  };
+  page.on("response", (response) => {
+    const request = response.request();
+    const url = response.url();
+    if (!/\/_cokret\/(?:self|root)\//.test(url)) {
+      return;
+    }
+    const headers = request.headers();
+    const authorization = headers.authorization ?? "";
+    if (!/^Bearer\s+\S+/.test(authorization)) {
+      return;
+    }
+    const postData = request.postData() ?? "";
+    const hit: HolderProofRequest = {
+      method: request.method(),
+      url,
+      status: response.status(),
+      hasDpop: Boolean(headers.dpop),
+      missingDpop: !headers.dpop,
+      authorization,
+      grantJwt: authorization.replace(/^Bearer\s+/i, ""),
+      postData,
+    };
+    trace.authorizedSelfRequests.push(hit);
+    if (
+      hit.method === "PUT" &&
+      /\/_cokret\/self\/keys\/backups\/[^/]+$/.test(url)
+    ) {
+      trace.keyBackupWrites.push(hit);
+    }
+    if (
+      hit.method === "POST" &&
+      /\/_cokret\/self\/keys\/backups\/[^/]+\/unlock$/.test(url)
+    ) {
+      trace.unlocks.push({
+        ...hit,
+        hasProofBody: /"proof"\s*:/.test(postData),
+      });
+    }
+  });
+  return trace;
+}
+
+async function expectGrantDpopSelfPath(
+  trace: SessionGrantHolderProofTrace,
+  label: string,
+) {
+  await expectNewGrantDpopSelfPath(trace, 0, label);
+}
+
+async function expectNewGrantDpopSelfPath(
+  trace: SessionGrantHolderProofTrace,
+  startIndex: number,
+  label: string,
+) {
+  await expect
+    .poll(
+      () =>
+        trace.authorizedSelfRequests
+          .slice(startIndex)
+          .some(isRealGrantDpopSelfRequest),
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+  expect(
+    trace.authorizedSelfRequests
+      .slice(startIndex)
+      .some(isRealGrantDpopSelfRequest),
+    `${label}: expected a real session-grant JWT self/root request with DPoP`,
+  ).toBe(true);
+}
+
+function isRealGrantDpopSelfRequest(hit: HolderProofRequest): boolean {
+  return hit.hasDpop && hit.status < 500 && hit.grantJwt.split(".").length >= 3;
+}
+
+async function expectSuccessfulUnlockWithHolderProof(
+  trace: SessionGrantHolderProofTrace,
+): Promise<KeyBackupUnlockRequest> {
+  await expect
+    .poll(
+      () =>
+        trace.unlocks.some(
+          (hit) =>
+            hit.status === 200 &&
+            hit.hasProofBody &&
+            isRealGrantDpopSelfRequest(hit),
+        ),
+      { timeout: 120_000 },
+    )
+    .toBe(true);
+  return trace.unlocks.find(
+    (hit) =>
+      hit.status === 200 && hit.hasProofBody && isRealGrantDpopSelfRequest(hit),
+  )!;
+}
+
+async function serverLoginViaCoauth(
+  page: Page,
+  account: PasswordAccount,
+): Promise<void> {
+  await page.getByTestId("login-server-url").fill(solandBaseUrl());
+  await page.getByTestId("start-server-login-button").click();
+
+  const loginHandle = page.locator("#login-handle");
+  const shell = page.getByTestId("client-shell");
+  await expect(loginHandle.or(shell)).toBeVisible({ timeout: 60_000 });
+  if (await loginHandle.isVisible()) {
+    await loginHandle.fill(account.handle);
+    await page.locator("#login-password").fill(account.password);
+    await page.getByTestId("coauth-login-submit").click();
+  }
+
+  const approve = page.getByTestId("coauth-oauth-approve");
+  const consentShown = await approve
+    .waitFor({ state: "visible", timeout: 20_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (consentShown) {
+    await approve.click();
+  }
+
+  await expect(shell).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId("login-panel")).toHaveCount(0);
+  expect(new URL(page.url()).pathname).not.toBe("/login");
 }
 
 function collectA1ProtocolFailures(page: Page, failures: string[]) {
@@ -454,6 +754,13 @@ async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   );
   // `mls-unlock-passphrase` is the historical testid of the unlock input;
   // since the Recovery Key convergence it accepts only the 24-word key.
+  const showRecoveryKey = page.getByTestId("mls-unlock-show-recovery-key");
+  if (await showRecoveryKey.isVisible().catch(() => false)) {
+    await showRecoveryKey.click();
+  }
+  await expect(page.getByTestId("mls-unlock-passphrase")).toBeVisible({
+    timeout: 30_000,
+  });
   await page.getByTestId("mls-unlock-passphrase").fill(recoveryKey);
   await page.getByTestId("mls-unlock-submit").click();
   await expect(page.getByTestId("mls-unlock-status")).toContainText(
