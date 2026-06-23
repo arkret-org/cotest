@@ -8,9 +8,12 @@ import { mockAppletRegistryBaseUrl, solandBaseUrl, solandServiceDid } from "../.
 import {
   addRealmMemberApi,
   authHeaders,
+  canonicalTimestamp,
   canonicalJson,
   createRealmApi,
   queryRealmEventsApi,
+  resolveDefaultStrandId,
+  typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -26,6 +29,7 @@ type SignedPackage = {
   applet_package: Record<string, unknown> & {
     applet_id: string;
     bot_actor_id: string;
+    service_did: string;
     namespaces?: {
       handles?: Array<{ pattern: string }>;
     };
@@ -33,6 +37,7 @@ type SignedPackage = {
   };
   package_digest: string;
   signing_did: string;
+  service_did_document?: Record<string, unknown>;
 };
 
 type AppletRegistration = {
@@ -41,6 +46,7 @@ type AppletRegistration = {
   portal_realm_id: string;
   namespace: string;
   status: string;
+  capability_grant_refs: string[];
 };
 
 test.describe("applet bridge", () => {
@@ -97,8 +103,9 @@ test.describe("applet bridge", () => {
           payload: { kind: "message", text },
         },
       });
-      expect(external.status()).toBe(200);
-      const externalBody = await external.json();
+      const externalText = await external.text();
+      expect(external.status(), externalText).toBe(200);
+      const externalBody = JSON.parse(externalText);
       const ghostActorDid = String(externalBody.ghost_actor_id);
       expect(ghostActorDid).toMatch(/^did:web:ghost-ext-user-x-/);
       expect(String(externalBody.message_id)).toMatch(/^ck:message:/);
@@ -128,12 +135,13 @@ test.describe("applet bridge", () => {
           data: {
             effective_scope: { kind: "realm", realm_id: realmId },
             reason_code: "revoke_test",
-            revoke_mode: "revoke_all",
+            revoke_mode: "revoke_runtime_only",
           },
         },
       );
-      expect(revoke.status()).toBe(200);
-      expect((await revoke.json()).status).toBe("revoked");
+      const revokeText = await revoke.text();
+      expect(revoke.status(), revokeText).toBe(200);
+      expect(JSON.parse(revokeText).ok).toBe(true);
 
       const afterRevokeText = `after revoke ${stamp}`;
       const afterRevoke = await request.post(`${registryBase}/external-event`, {
@@ -227,14 +235,16 @@ test.describe("applet bridge", () => {
         data: {
           effective_scope: { kind: "realm", realm_id: realmId },
           reason_code: "revoke_test",
-          revoke_mode: "revoke_all",
+          revoke_mode: "revoke_runtime_only",
         },
       },
     );
-    expect(revoke.status()).toBe(200);
+    const revokeText = await revoke.text();
+    expect(revoke.status(), revokeText).toBe(200);
+    expect(JSON.parse(revokeText).ok).toBe(true);
 
     const botWrite = await request.post(
-      `${solandBaseUrl()}/_soland/self/applets/${encodeURIComponent(
+      `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(
         registration.applet_id,
       )}/bot/messages`,
       {
@@ -311,15 +321,51 @@ test.describe("applet bridge", () => {
 test.describe("applet inbound transaction push — per-delivery source signature", () => {
   const TRANSACTIONS_PATH = "/_cokret/edge/applet/transactions";
 
-  function transactionPushBody(stamp: number, sourceServiceDid = "did:web:applet-bridge.joint-e2e.local") {
+  function transactionPushBody(args: {
+    stamp: number;
+    sourceServiceDid?: string;
+    realmId?: string;
+    actorDid?: string;
+    appletId?: string;
+    authorizationRef?: string;
+    strandId?: string;
+  }) {
+    const sourceServiceDid = args.sourceServiceDid ?? "did:web:applet-bridge.joint-e2e.local";
+    const realmId = args.realmId ?? typedId("realm");
+    const actorDid = args.actorDid ?? `did:web:bot-applet-${args.stamp}.joint-e2e.local`;
+    const event = {
+      event_id: typedId("event"),
+      kind: "ck.message.create",
+      realm_id: realmId,
+      actor_id: actorDid,
+      actor_seq: 1,
+      created_at: canonicalTimestamp(),
+      hlc: hlcForStamp(args.stamp),
+      prev_refs: [],
+      refs: [],
+      requirements: {
+        schema: ["ck.schema.message.v1"],
+      },
+      payload: {
+        strand_id: args.strandId ?? typedId("strand"),
+        track_name: "discussion",
+        content: { kind: "ck.content.text", body: `inbound push ${args.stamp}` },
+      },
+      executed_by: sourceServiceDid,
+      authorization_ref: args.authorizationRef ?? typedId("grant"),
+      applet_id: args.appletId ?? typedAppletId(),
+      external_ref: {
+        protocol: "demo-bridge",
+        external_id: `ext-evt-${args.stamp}`,
+        external_user_id: "ext-user-X",
+      },
+    };
     return {
       source_service_did: sourceServiceDid,
       events: [
         {
-          external_event_id: `ext-evt-${stamp}`,
-          kind: "message",
-          external_ref: { source_network: "demo-bridge", external_user_id: "ext-user-X" },
-          payload: { kind: "message", text: `inbound push ${stamp}` },
+          ...event,
+          proofs: [appletEventProof(sourceServiceDid, event)],
         },
       ],
     };
@@ -373,16 +419,26 @@ test.describe("applet inbound transaction push — per-delivery source signature
       package_id: `package:bridge:inbound-${stamp}`,
       namespace: `bridge.inbound.${stamp}`,
       service_did: sourceServiceDid,
+      capabilities: ["message:write"],
       webhook_auth: {
         type: "http_message_signature",
         key_ref: `${sourceServiceDid}#applet-service-key`,
         accepted_algs: ["EdDSA"],
       },
     });
-    await installApplet(request, token, signed, realmId, `inbound-install-${stamp}`);
+    const registration = await installApplet(request, token, signed, realmId, `inbound-install-${stamp}`);
+    await addRealmMemberApi(request, token, realmId, registration.bot_actor_id);
 
     const idempotencyKey = `inbound-ok-${stamp}`;
-    const body = transactionPushBody(stamp, sourceServiceDid);
+    const body = transactionPushBody({
+      stamp,
+      sourceServiceDid,
+      realmId,
+      actorDid: registration.bot_actor_id,
+      appletId: registration.applet_id,
+      authorizationRef: registration.capability_grant_refs[0],
+      strandId: await resolveDefaultStrandId(request, token, realmId),
+    });
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
     const resp = await request.post(targetUri, {
       headers: {
@@ -416,7 +472,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         "Source-Service-DID": "did:web:applet-bridge.joint-e2e.local",
         "Idempotency-Key": `inbound-nosig-${stamp}`,
       },
-      data: transactionPushBody(stamp),
+      data: transactionPushBody({ stamp }),
     });
     expect(resp.status()).toBe(401);
     expect(signatureReason(await resp.json())).toBe("http_signature_required");
@@ -439,7 +495,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-did" "destination-service-did" "idempotency-key");created=1700000000;expires=1700000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
         Signature: "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
       },
-      data: transactionPushBody(stamp),
+      data: transactionPushBody({ stamp }),
     });
     expect(resp.status()).toBe(401);
     expect(signatureReason(await resp.json())).toBe("http_signature_invalid");
@@ -450,21 +506,28 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }) => {
     const token = await setupBearer(request);
     const stamp = Date.now();
+    const sourceServiceDid = "did:web:applet-bridge.joint-e2e.local";
+    const idempotencyKey = `inbound-expired-${stamp}`;
+    const body = transactionPushBody({ stamp, sourceServiceDid });
+    const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
     // created/expires far in the past → outside the §7.3.1 freshness window
     // (expires-created ≤ 300s, created within ±30s skew, expires not past). Even
     // a byte-identical replay after replay-cache eviction MUST be rejected on the
     // created/expires check alone.
-    const expired = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
+    const expired = await request.post(targetUri, {
       headers: {
         ...authHeaders(token),
-        "Source-Service-DID": "did:web:applet-bridge.joint-e2e.local",
-        "Idempotency-Key": `inbound-expired-${stamp}`,
-        "Content-Digest": "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
-        "Signature-Input":
-          'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-did" "destination-service-did" "idempotency-key");created=1000000000;expires=1000000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
-        Signature: "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
+        ...signedAppletTransactionHeaders({
+          body,
+          targetUri,
+          sourceServiceDid,
+          destinationServiceDid: solandServiceDid(),
+          idempotencyKey,
+          created: 1_000_000_000,
+          expires: 1_000_000_200,
+        }),
       },
-      data: transactionPushBody(stamp),
+      data: body,
     });
     expect(expired.status()).toBe(401);
     expect(signatureReason(await expired.json())).toBe("signature_window_invalid");
@@ -477,11 +540,13 @@ function signedAppletTransactionHeaders(args: {
   sourceServiceDid: string;
   destinationServiceDid: string;
   idempotencyKey: string;
+  created?: number;
+  expires?: number;
 }): Record<string, string> {
   const canonicalBody = Buffer.from(canonicalJson(args.body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
-  const created = Math.floor(Date.now() / 1000);
-  const expires = created + 300;
+  const created = args.created ?? Math.floor(Date.now() / 1000);
+  const expires = args.expires ?? created + 300;
   const keyid = `${args.sourceServiceDid}#applet-service-key`;
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" ` +
@@ -564,6 +629,7 @@ async function rawInstallApplet(
   realmId: string,
   idempotencyKey: string,
 ) {
+  await publishAppletServiceDidDocument(request, signed);
   const effectiveScope = { kind: "realm", realm_id: realmId };
   const preview = await request.post(
     `${solandBaseUrl()}/_cokret/self/applets/install/preview`,
@@ -606,6 +672,39 @@ async function rawInstallApplet(
   });
 }
 
+async function publishAppletServiceDidDocument(
+  request: APIRequestContext,
+  signed: SignedPackage,
+): Promise<void> {
+  if (!signed.service_did_document) {
+    return;
+  }
+  const response = await request.post(
+    `${solandBaseUrl()}/_cokret/root/identity/submit-did-operation`,
+    {
+      data: {
+        did: signed.applet_package.service_did,
+        did_method: didMethod(signed.applet_package.service_did),
+        operation: {
+          type: "replace",
+          state: signed.service_did_document,
+        },
+        proofs: [],
+      },
+    },
+  );
+  const responseText = await response.text();
+  expect(response.status(), responseText).toBe(200);
+}
+
+function didMethod(did: string): string {
+  const match = /^did:([^:]+):/.exec(did);
+  if (!match) {
+    throw new Error(`invalid DID: ${did}`);
+  }
+  return `did:${match[1]}`;
+}
+
 function installRegistrationFromResponse(
   signed: SignedPackage,
   realmId: string,
@@ -619,7 +718,35 @@ function installRegistrationFromResponse(
       signed.applet_package.namespaces?.handles?.[0]?.pattern ??
       signed.applet_package.applet_id,
     status: String(response.effective_status),
+    capability_grant_refs: Array.isArray(response.capability_grant_refs)
+      ? response.capability_grant_refs.map(String)
+      : [],
   };
+}
+
+function typedAppletId(): string {
+  return typedId("operation").replace("ck:operation:", "ck:applet:");
+}
+
+function appletEventProof(
+  sourceServiceDid: string,
+  event: Record<string, unknown>,
+): Record<string, unknown> {
+  const eventDigest = `sha256:${createHash("sha256").update(canonicalJson(event)).digest("hex")}`;
+  return {
+    kind: "detached_jws",
+    alg: "EdDSA",
+    verification_method: `${sourceServiceDid}#applet-service-key`,
+    event_digest: eventDigest,
+    created_at: canonicalTimestamp(),
+    jws: Buffer.from(`${eventDigest}:joint-e2e`).toString("base64url"),
+  };
+}
+
+function hlcForStamp(stamp: number): string {
+  const physical = Math.max(Date.now(), stamp).toString(16).padStart(12, "0").slice(-12);
+  const node = createHash("sha256").update(String(stamp)).digest("hex").slice(0, 8);
+  return `${physical}-0000-${node}`;
 }
 
 async function didDocument(
@@ -631,6 +758,18 @@ async function didDocument(
     `${solandBaseUrl()}/_cokret/root/identity/document?did=${encodeURIComponent(did)}`,
     { headers: authHeaders(token) },
   );
-  expect(response.status()).toBe(200);
-  return (await response.json()) as Record<string, unknown>;
+  const responseText = await response.text();
+  expect(response.status(), responseText).toBe(200);
+  const body = JSON.parse(responseText) as Record<string, unknown>;
+  const didDocument = body.did_document;
+  if (
+    didDocument &&
+    typeof didDocument === "object" &&
+    "document" in didDocument &&
+    (didDocument as Record<string, unknown>).document &&
+    typeof (didDocument as Record<string, unknown>).document === "object"
+  ) {
+    return (didDocument as Record<string, unknown>).document as Record<string, unknown>;
+  }
+  return body;
 }
