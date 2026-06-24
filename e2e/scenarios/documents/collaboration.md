@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证 Document Morph 的本地 1.0 可用链路:服务端接受 `ck.morph.create/update`,投影当前正文、版本快照、关联 Relation、range comment 与 orphan comment;yougen 提供 `/document/new` 和 `/document/:id` UI,可创建、查看、保存版本、提交 range comment,并渲染 cursor presence 外壳。
+验证 Document Morph 的本地 1.0 可用链路:服务端接受 `ck.morph.create/update`,投影当前正文、版本快照、关联 Relation、range comment 与 orphan comment;yougen 提供 `/document/:realm_id` 和 `/document/:realm_id/morph/:morph_id` UI,可创建、查看、保存版本、提交 range comment,并渲染 cursor presence 外壳。
 
 不验证:真正并发 CRDT/OT 合并、ephemeral cursor 跨端实时传播、带 `state_witness`/`inclusion_proof` 的历史版本恢复、加密文档、导出格式。这些属于后续协作深水区,不再阻塞 GAP-P2-040/041。
 
@@ -47,12 +47,12 @@
 
 1. alice 在 UI 创建 Realm,seed bob。
 2. bob 接受 invite。
-3. alice 打开 `/document/new`,填写 title/body/link,点击 `save-document-button`。
+3. alice 打开 `/document/:realm_id`,填写 title/body/link,点击 `save-document-button`。
 4. harness 从 soland Morph projection 解析新 `morph_id`。
-5. bob 打开 `/document/:morph_id`,断言正文 hydrate 成 alice 初始内容。
+5. bob 打开 `/document/:realm_id/morph/:morph_id`,断言正文 hydrate 成 alice 初始内容。
 6. 默认构建中 bob 看到 `document-collaboration-deferred`；启用 `experimental-document-collaboration` 时 bob 看到 `document-cursor-self` 和 `document-presence-list` presence UI shell。
 7. bob 用 comment composer 提交 `6..40` range comment,harness 轮询 soland projection 确认 comment 已同步。
-8. alice 把正文缩短后保存,重新打开 `/document/:morph_id`。
+8. alice 把正文缩短后保存,重新打开 `/document/:realm_id/morph/:morph_id`。
 9. 断言:
    - 正文 hydrate 为最新短正文
    - `document-version-row` 渲染 create/update 两个版本

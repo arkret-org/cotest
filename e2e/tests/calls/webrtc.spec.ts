@@ -202,17 +202,28 @@ test.describe("calls — canonical wire", () => {
     expect(iceBucketUnix(refreshed)).toBe(
       floorToBucketUnix(refreshed.issued_at, 300),
     );
-    // §4.1/§4.2 — within the same pseudonym bucket the TURN username is stable
-    // across refreshes (an active leg keeps its pseudonym).
-    const turnOf = (ice: any) =>
-      ice.ice_servers.find((s: any) => typeof s.username === "string");
+    // §4.1/§4.2 — within the same pseudonym bucket an active leg keeps its
+    // pseudonym. The REST username expiry can still move, which changes the
+    // username and HMAC credential.
     const issuedTurn = turnOf(issued);
     const refreshedTurn = turnOf(refreshed);
     expect(issuedTurn, "issued ICE config carries a TURN server").toBeTruthy();
+    expect(
+      refreshedTurn,
+      "refreshed ICE config carries a TURN server",
+    ).toBeTruthy();
+    const issuedUsername = parseTurnUsername(issuedTurn.username as string);
+    const refreshedUsername = parseTurnUsername(
+      refreshedTurn.username as string,
+    );
     if (iceBucketUnix(refreshed) === iceBucketUnix(issued)) {
-      expect(refreshedTurn.username).toBe(issuedTurn.username);
-      expect(refreshedTurn.credential).toBe(issuedTurn.credential);
+      expect(refreshedUsername.pseudonym).toBe(issuedUsername.pseudonym);
     }
+    expect(refreshedUsername.expiryUnix).toBeGreaterThanOrEqual(
+      issuedUsername.expiryUnix,
+    );
+    expect(issuedTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
+    expect(refreshedTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(refreshed.refresh_lead_seconds).toBeGreaterThan(0);
     expect(refreshed.refresh_lead_seconds).toBeLessThan(refreshed.ttl_seconds);
   });
@@ -244,8 +255,6 @@ test.describe("calls — canonical wire", () => {
     expect(bobResp.status(), await bobResp.text()).toBe(200);
     const aliceIce = await aliceResp.json();
     const bobIce = await bobResp.json();
-    const turnOf = (ice: any) =>
-      ice.ice_servers.find((s: any) => typeof s.username === "string");
     const aliceTurn = turnOf(aliceIce);
     const bobTurn = turnOf(bobIce);
     expect(aliceTurn).toBeTruthy();
@@ -254,12 +263,9 @@ test.describe("calls — canonical wire", () => {
     const bobUsername = bobTurn.username as string;
 
     // REST-style username = `<expiry-unix>:ck_pseudonym_call_<16hex>` (§4.1).
-    const pattern = /^(\d+):(ck_pseudonym_call_[0-9a-f]{16})$/;
-    const aliceMatch = aliceUsername.match(pattern);
-    const bobMatch = bobUsername.match(pattern);
-    expect(aliceMatch, aliceUsername).not.toBeNull();
-    expect(bobMatch, bobUsername).not.toBeNull();
-    expect(Number(aliceMatch![1])).toBe(
+    const aliceParsed = parseTurnUsername(aliceUsername);
+    const bobParsed = parseTurnUsername(bobUsername);
+    expect(aliceParsed.expiryUnix).toBe(
       Math.floor(new Date(aliceTurn.expires_at as string).getTime() / 1000),
     );
     // credential = base64(HMAC-SHA256(turn_shared_secret, username)).
@@ -273,7 +279,7 @@ test.describe("calls — canonical wire", () => {
     expect(bobUsername).not.toContain("did:web");
     expect(bobUsername).not.toContain(bob.name);
     // Distinct principals get distinct pseudonyms.
-    expect(bobMatch![2]).not.toBe(aliceMatch![2]);
+    expect(bobParsed.pseudonym).not.toBe(aliceParsed.pseudonym);
   });
 });
 
@@ -304,4 +310,17 @@ function iceBucketUnix(ice: { issued_at_bucket: string }): number {
 function floorToBucketUnix(issuedAt: string, bucketSeconds: number): number {
   const issuedUnix = Math.floor(new Date(issuedAt).getTime() / 1000);
   return Math.floor(issuedUnix / bucketSeconds) * bucketSeconds;
+}
+
+function turnOf(ice: any): any {
+  return ice.ice_servers.find((s: any) => typeof s.username === "string");
+}
+
+function parseTurnUsername(username: string): {
+  expiryUnix: number;
+  pseudonym: string;
+} {
+  const match = username.match(/^(\d+):(ck_pseudonym_call_[0-9a-f]{16})$/);
+  expect(match, `TURN username must be REST-style: ${username}`).not.toBeNull();
+  return { expiryUnix: Number(match![1]), pseudonym: match![2] };
 }
