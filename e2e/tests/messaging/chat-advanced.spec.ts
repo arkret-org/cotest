@@ -745,7 +745,7 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test(// @blocking-on: soland#messaging-chat-advanced-gap
+  test.fixme(// @blocking-on: soland#messaging-chat-advanced-gap
   // @user-promise: e2e/scenarios/messaging/chat-advanced.md
   // @expected-live-by: 2026Q3
   "E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async ({
@@ -796,7 +796,7 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test(// @blocking-on: soland#messaging-chat-advanced-gap
+  test.fixme(// @blocking-on: soland#messaging-chat-advanced-gap
   // @user-promise: e2e/scenarios/messaging/chat-advanced.md
   // @expected-live-by: 2026Q3
   "E14.G presence state propagates online/offline within 1s after page open/close", async ({

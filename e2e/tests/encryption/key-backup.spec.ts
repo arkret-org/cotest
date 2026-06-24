@@ -161,6 +161,7 @@ test.describe("key backup + restore", () => {
       }
       const { page: deviceB, session: deviceBSession } = deviceBFlow;
       sessionsToClose.push(deviceB);
+      const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
@@ -178,8 +179,18 @@ test.describe("key backup + restore", () => {
       }
 
       const deviceBCard = `A1 restored device writes encrypted card ${stamp}`;
+      const deviceBPrivatePlaintextBackupsBefore =
+        mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts);
       await deviceB.sendTimelineMessage(realmId, deviceBCard);
+      await expect
+        .poll(() => mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts), {
+          timeout: 120_000,
+        })
+        .toBeGreaterThan(deviceBPrivatePlaintextBackupsBefore);
       await deviceA.gotoTimelineRealm(realmId);
+      if (await restoreMlsHistoryIfPrompted(deviceA.page, recoveryKey)) {
+        await deviceA.gotoTimelineRealm(realmId);
+      }
       await deviceA.page.reload({ waitUntil: "domcontentloaded" });
       await expect(deviceA.timelineEvent(deviceBCard)).toBeVisible({
         timeout: 90_000,

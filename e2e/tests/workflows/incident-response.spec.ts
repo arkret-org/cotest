@@ -292,6 +292,7 @@ test.describe("workflow: incident response", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "mls_rfc9420",
+        completeRecoveryKeySetup: true,
       });
 
       await commanderPage.page.goto(`/chat/${realmId}`, {
@@ -375,7 +376,7 @@ test.describe("workflow: incident response", () => {
       await page.page.getByTestId("document-link-incident-input").fill(realmId);
       await page.page.getByTestId("save-document-button").click();
       await expect(page.page.getByTestId("document-status")).toContainText(
-        /saved/i,
+        /Saved and synced document/i,
         {
           timeout: 30_000,
         },
@@ -384,6 +385,18 @@ test.describe("workflow: incident response", () => {
         .getByTestId("document-body-editor")
         .fill("Impact, root cause, action items. Final owner assigned.");
       await page.page.getByTestId("save-document-button").click();
+      await expect(page.page.getByTestId("document-status")).toContainText(
+        /Saved locally/i,
+        {
+          timeout: 30_000,
+        },
+      );
+      await expect(page.page.getByTestId("document-status")).toContainText(
+        /Saved and synced document/i,
+        {
+          timeout: 30_000,
+        },
+      );
       await page.page.getByTestId("document-versions-button").click();
       await expect(page.page.getByTestId("version-entry")).toHaveCount(2, {
         timeout: 30_000,
