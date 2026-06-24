@@ -432,6 +432,7 @@ fn run_history_sharing_e2ee_prejoin_key_share_policy_case(case: &Value) -> Resul
     for required in [
         "missing_history_sharing_policy",
         "policy_allows_archive_node",
+        "read_allowed_but_key_source_not_authorized",
         "client_without_legal_share",
     ] {
         if !seen.contains(required) {
@@ -455,24 +456,56 @@ fn evaluate_history_sharing_scenario(scenario: &Value) -> Result<Value> {
         .ok_or_else(|| anyhow!("history_sharing_policy must be object or null"))?;
     let allowed_sources = string_set_obj(policy, "allowed_key_sources")?;
     let key_source = required_str(scenario, "key_source")?;
-    let allowed = required_str_obj(policy, "pre_join_history")? == "allow_if_visibility_allows"
-        && allowed_sources.contains(key_source)
-        && policy
-            .get("audit_satisfied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        && scenario
-            .get("receiver_state_valid")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-    if allowed {
+    // Read eligibility (history-visibility §3/§6) and key delivery
+    // (device-lifecycle §13 canonical gate) are separate decisions: a reader
+    // can be allowed to read pre-join history yet still be denied the key when
+    // the requesting key source is not in the matched rule's `key_sources`.
+    let pre_join_ok =
+        required_str_obj(policy, "pre_join_history")? == "allow_if_visibility_allows";
+    let receiver_ok = scenario
+        .get("receiver_state_valid")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let audit_ok = policy
+        .get("audit_satisfied")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let source_ok = allowed_sources.contains(key_source);
+    // Read passes on visibility + receiver + policy permitting pre-join read.
+    let read_allowed = pre_join_ok && receiver_ok;
+    // Key delivery additionally requires an authorized source and audit.
+    if read_allowed && source_ok && audit_ok {
         return Ok(json!({
             "decision": "share_key",
             "key_scope_policy_digest": required_str_obj(policy, "policy_digest")?,
             "membership_frontier_digest_present": scenario.get("membership_frontier_digest").is_some(),
         }));
     }
-    Ok(json!({"decision": "withhold", "reason": "policy_denied"}))
+    if read_allowed {
+        // Source-scoped withholding (device-lifecycle §13.1): read is authorized
+        // but the requested source is not in `key_sources` (or audit unmet). This is
+        // NOT terminal for the reader — withheld_reason_code stays `policy_denied`,
+        // but the event stays in the recoverable `decryption_pending` lane and the
+        // client retries against a policy-authorized source. `retry_key_sources`
+        // advertises the authorized set (safe: reader already passed read eligibility).
+        let mut retry_key_sources: Vec<&str> = allowed_sources.iter().copied().collect();
+        retry_key_sources.sort_unstable();
+        return Ok(json!({
+            "decision": "withhold",
+            "reason": "policy_denied",
+            "read_allowed": true,
+            "terminal_for_reader": false,
+            "client_prejoin_event_state": "decryption_pending",
+            "retry_key_sources": retry_key_sources,
+        }));
+    }
+    // Principal-scoped denial: not read-eligible — terminal fail-closed.
+    Ok(json!({
+        "decision": "withhold",
+        "reason": "policy_denied",
+        "read_allowed": false,
+        "terminal_for_reader": true,
+    }))
 }
 
 fn assert_expected_subset(name: &str, expected: &Value, observed: &Value) -> Result<()> {
