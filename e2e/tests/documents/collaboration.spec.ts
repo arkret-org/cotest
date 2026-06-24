@@ -211,7 +211,9 @@ test.describe("Document Morph collaboration", () => {
       );
       const morphId = await waitForDocumentMorphId(request, aliceToken, realmId, title);
 
-      await bobPage.page.goto(`/document/${morphId}`, { waitUntil: "domcontentloaded" });
+      await bobPage.page.goto(`/document/${realmId}/morph/${morphId}`, {
+        waitUntil: "domcontentloaded",
+      });
       await expect(bobPage.page.getByTestId("document-panel")).toBeVisible({
         timeout: 120_000,
       });
@@ -251,7 +253,9 @@ test.describe("Document Morph collaboration", () => {
         { timeout: 45_000 },
       );
 
-      await alicePage.page.goto(`/document/${morphId}`, { waitUntil: "domcontentloaded" });
+      await alicePage.page.goto(`/document/${realmId}/morph/${morphId}`, {
+        waitUntil: "domcontentloaded",
+      });
       await expect(alicePage.page.getByTestId("document-body-editor")).toHaveValue("Short.", {
         timeout: 45_000,
       });
