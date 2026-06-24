@@ -11,12 +11,12 @@ use serde_json::json;
 use crate::harness::{CokretServer, expect_json};
 
 pub async fn run(server: &CokretServer, token: &str) -> Result<()> {
-    register_device(server, token).await?;
-    notify_blind_wakeup(server).await?;
+    let push_target_id = register_device(server, token).await?;
+    notify_blind_wakeup(server, &push_target_id).await?;
     Ok(())
 }
 
-async fn register_device(server: &CokretServer, token: &str) -> Result<()> {
+async fn register_device(server: &CokretServer, token: &str) -> Result<String> {
     let push = expect_json(
         server
             .http()
@@ -33,16 +33,22 @@ async fn register_device(server: &CokretServer, token: &str) -> Result<()> {
     )
     .await?;
     assert_eq!(push["ok"], true);
-    Ok(())
+    // The registration returns the device's derived push target pseudonym; the
+    // blind wakeup routes by that target so the registered device is matched.
+    Ok(push["registration_id"]
+        .as_str()
+        .expect("register-device must return a registration_id")
+        .to_owned())
 }
 
-async fn notify_blind_wakeup(server: &CokretServer) -> Result<()> {
+async fn notify_blind_wakeup(server: &CokretServer, push_target_id: &str) -> Result<()> {
     let notify = expect_json(
         server
             .http()
             .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
                 "notification": {
+                    "push_target_id": push_target_id,
                     "wakeup_kind": "message",
                     "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ck:device:01904100-0000-7000-8000-00000000dead"}]
                 }
