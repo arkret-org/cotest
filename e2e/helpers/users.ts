@@ -367,7 +367,7 @@ export class JointUserPage {
 
   private async withPassivePromptRetry(operation: () => Promise<void>) {
     let lastError: unknown;
-    const promptHandling = { completeRecoveryKeySetup: false };
+    const promptHandling = { completeRecoveryKeySetup: true };
     for (let attempt = 0; attempt < 4; attempt += 1) {
       await this.dismissCreateRealmBlockingPrompts(promptHandling);
       try {
@@ -383,6 +383,10 @@ export class JointUserPage {
       }
     }
     throw lastError;
+  }
+
+  async clickWithPassivePromptRetry(locator: Locator) {
+    await this.withPassivePromptRetry(() => locator.click({ timeout: 5_000 }));
   }
 
   async completeRecoveryKeySetupIfPrompted(
@@ -442,7 +446,7 @@ export class JointUserPage {
     await this.gotoSetup();
     const promptHandling = {
       completeRecoveryKeySetup:
-        opts.completeRecoveryKeySetup ?? opts.encryptionProfile === "none",
+        opts.completeRecoveryKeySetup ?? opts.encryptionProfile !== "mls_rfc9420",
     };
     await this.dismissCreateRealmBlockingPrompts(promptHandling);
     const strand = this.page.getByTestId("realm-lifecycle-strand").last();
@@ -681,7 +685,9 @@ export class JointUserPage {
       await this.gotoTimelineRealm(realmId);
     }
     await this.page.getByTestId("chat-input").fill(body);
-    await this.page.getByTestId("send-chat-button").click();
+    await this.clickWithPassivePromptRetry(
+      this.page.getByTestId("send-chat-button"),
+    );
     await this.waitForTimelineEventSettled(body);
   }
 
@@ -705,7 +711,9 @@ export class JointUserPage {
     const prefix = (await input.inputValue()).trimEnd();
     const body = `${prefix} ${suffix.trim()}`.trim();
     await input.fill(body);
-    await this.page.getByTestId("send-chat-button").click();
+    await this.clickWithPassivePromptRetry(
+      this.page.getByTestId("send-chat-button"),
+    );
     await this.waitForTimelineEventSettled(body);
     return body;
   }

@@ -36,7 +36,7 @@
 3. harness 提交 `ck.relation.create`,把 document Morph 关联回 Realm/incident ref。
 4. harness 提交 `ck.message.create`,content 含 `anchor_range:{target_ref,start,end}` 与 comment body。
 5. harness 提交 `ck.morph.update`,把 document body 缩短。
-6. 断言 `GET /_cokret/self/projection/documents/:morph_id` 返回:
+6. 断言 `GET /_cokret/self/realms/:realm_id/morphs/:morph_id` 返回:
    - current body 为更新后的 body
    - `versions[]` 含 create/update 两个快照
    - `relations[]` 含刚创建的 relation

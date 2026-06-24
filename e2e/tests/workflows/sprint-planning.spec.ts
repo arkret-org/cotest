@@ -294,7 +294,7 @@ test.describe("workflow: sprint planning", () => {
         .filter({ hasText: backlog })
         .getByTestId("kanban-card")
         .filter({ hasText: liveStory });
-      await bobLiveCard.click();
+      await bobPage.clickWithPassivePromptRetry(bobLiveCard);
       await expect(bobPage.page.getByTestId("card-detail-modal")).toBeVisible({
         timeout: 30_000,
       });
@@ -302,7 +302,7 @@ test.describe("workflow: sprint planning", () => {
       const meiLiveCard = backlogColumn
         .getByTestId("kanban-card")
         .filter({ hasText: liveStory });
-      await meiLiveCard.click();
+      await meiPage.clickWithPassivePromptRetry(meiLiveCard);
       await expect(meiPage.page.getByTestId("card-detail-modal")).toBeVisible({
         timeout: 30_000,
       });
@@ -449,7 +449,7 @@ async function boardSpaceIdByTitle(
   session: DpopUserSession,
   title: string,
 ): Promise<string> {
-  const url = `${solandBaseUrl()}/_cokret/self/projection/spaces?realm_id=${encodeURIComponent(realmId)}`;
+  const url = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/spaces`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });
@@ -475,7 +475,7 @@ async function strandTitlesForBoard(
   session: DpopUserSession,
   boardId: string,
 ): Promise<string[]> {
-  const url = `${solandBaseUrl()}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}`;
+  const url = `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`;
   const resp = await request.get(url, {
     headers: selfPathHeadersForDpopSession(session, "GET", url),
   });

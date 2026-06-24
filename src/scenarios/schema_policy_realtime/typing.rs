@@ -122,8 +122,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let listed_rules =
         account_data_entry(&listed_sync, "ck.push_rules").expect("ck.push_rules account_data row");
     assert_eq!(
-        listed_rules["content"]["client_side_conformance"]["encrypted_account_data"],
-        true,
+        listed_rules["content"]["client_side_conformance"]["encrypted_account_data"], true,
         "push_rules must round-trip as an encrypted-account-data conformance marker: {listed_rules}"
     );
 
@@ -157,9 +156,10 @@ fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value>
 }
 
 /// Author the realm's conversation Strand (the message/typing envelope derives
-/// `strand_id` from the realm id) and return its id. soland does NOT auto-create
-/// a Strand on realm create, and the ephemeral/typing scope resolves through the
-/// projected Strand, so it must exist before typing into it.
+/// `strand_id` from the realm id), then return the default Strand exposed by the
+/// realm-scoped projection. soland does NOT auto-create a Strand on realm
+/// create, and the ephemeral/typing scope resolves through the projected Strand,
+/// so it must exist before typing into it.
 async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
     let strand_id = realm_id.replace("ck:realm:", "ck:strand:");
     let created = client
@@ -178,8 +178,49 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
             }),
         )
         .await?;
-    assert_eq!(created["status"], "accepted", "strand create must be accepted");
-    Ok(strand_id)
+    assert_eq!(
+        created["status"], "accepted",
+        "strand create must be accepted"
+    );
+
+    // The Realm lifecycle view (`GET /_cokret/self/realms/{realm_id}`) is
+    // `additionalProperties:false` and does NOT carry `default_strand_id`
+    // (per `realm-read-operations.schema.json`). soland exposes the default
+    // Strand via the per-row `is_default` flag on the Strand-list projection
+    // (`GET /_cokret/self/realms/{realm_id}/strands`), computed as
+    // `strand_id == realm.default_strand_id` at query time.
+    let realm_path_id = encode_path_segment(realm_id);
+    let strands = expect_json(
+        client.get(&format!("/_cokret/self/realms/{realm_path_id}/strands")),
+        StatusCode::OK,
+    )
+    .await?;
+    let projected_default = strands["strands"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["is_default"] == true))
+        .and_then(|row| row["strand_id"].as_str())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            anyhow::anyhow!("strand projection did not expose a default strand: {strands}")
+        })?;
+    assert_eq!(
+        projected_default, strand_id,
+        "realm-scoped strand projection exposed the wrong default strand"
+    );
+    Ok(projected_default)
+}
+
+fn encode_path_segment(segment: &str) -> String {
+    let mut encoded = String::with_capacity(segment.len());
+    for byte in segment.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(char::from(byte));
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
 }
 
 fn typing_envelope(actor_id: &str, realm_id: &str, strand_id: &str, typing: bool) -> Value {

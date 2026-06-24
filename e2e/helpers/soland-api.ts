@@ -714,7 +714,7 @@ export async function resolveDefaultStrandId(
 
   // Fallback: discover via the Strand projection's derived is_default marker.
   const flowsResp = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}`,
+    `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`,
     { headers: authHeaders(token) },
   );
   expect(

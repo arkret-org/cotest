@@ -140,7 +140,7 @@ test.describe("Document Morph collaboration", () => {
       { context: "update document morph body" },
     );
 
-    const projection = await readDocumentProjection(request, token, morphId);
+    const projection = await readDocumentProjection(request, token, realmId, morphId);
     expect(projection.document.morph_id).toBe(morphId);
     expect(projection.document.realm_id).toBe(realmId);
     expect(projection.document.morph_type).toBe("document");
@@ -241,7 +241,7 @@ test.describe("Document Morph collaboration", () => {
           "needs more evidence",
           { timeout: 45_000 },
         );
-        await waitForDocumentComment(request, bobToken, morphId, "needs more evidence");
+        await waitForDocumentComment(request, bobToken, realmId, morphId, "needs more evidence");
       }
 
       await alicePage.page.getByTestId("document-body-editor").fill("Short.");
@@ -294,9 +294,14 @@ function paragraphDocumentBody(body: string) {
   };
 }
 
-async function readDocumentProjection(request: APIRequestContext, token: string, morphId: string) {
+async function readDocumentProjection(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  morphId: string,
+) {
   const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/projection/documents/${encodeURIComponent(morphId)}`,
+    `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/morphs/${encodeURIComponent(morphId)}`,
     { headers: authHeaders(token) },
   );
   const text = await response.text();
@@ -312,7 +317,7 @@ async function waitForDocumentMorphId(
 ): Promise<string> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const response = await request.get(
-      `${solandBaseUrl()}/_cokret/self/projection/morphs?realm_id=${encodeURIComponent(realmId)}`,
+      `${solandBaseUrl()}/_cokret/self/realms/${encodeURIComponent(realmId)}/morphs`,
       { headers: authHeaders(token) },
     );
     if (response.ok()) {
@@ -333,11 +338,12 @@ async function waitForDocumentMorphId(
 async function waitForDocumentComment(
   request: APIRequestContext,
   token: string,
+  realmId: string,
   morphId: string,
   body: string,
 ) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const projection = await readDocumentProjection(request, token, morphId);
+    const projection = await readDocumentProjection(request, token, realmId, morphId);
     if ((projection.comments ?? []).some((comment: Record<string, unknown>) => comment.body === body)) {
       return;
     }

@@ -204,7 +204,7 @@ async function resolveDefaultStrandId(
     }
   }
   const flowsResp = await request.get(
-    `${serverUrl}/_cokret/self/projection/strands?realm_id=${encodeURIComponent(realmId)}`,
+    `${serverUrl}/_cokret/self/realms/${encodeURIComponent(realmId)}/strands`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   expect(
