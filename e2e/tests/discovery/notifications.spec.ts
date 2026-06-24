@@ -447,9 +447,6 @@ test.describe("notifications", () => {
       issueDevSession(request, bob),
       issueDevSession(request, bobDevice2),
     ]);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
     const bobDevice1 = await openUserPage(browser, bob, {
       sessionCredential: bobToken1,
     });
@@ -458,45 +455,51 @@ test.describe("notifications", () => {
     });
 
     try {
-      const realmId = await alicePage.createRealm({
+      const realmId = await createRealmApi(request, aliceToken, {
         title: `S23 Cross Device ${stamp}`,
         discoverability: "listed",
-        joinRule: "invite",
-        seedMembers: [bob.did],
+        history_visibility: "shared",
+        encryption_profile: "none",
       });
-      await bobDevice1.acceptInvite(realmId);
-      await alicePage.sendTimelineMessage(
-        realmId,
-        `cross-device unread ${stamp}`,
-      );
+      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+      const msg = `cross-device unread ${stamp}`;
+      await sendMessageApi(request, aliceToken, realmId, msg, {
+        mentions: [bob.did],
+      });
 
       await bobDevice1.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
-      await expect(bobDevice1.page.getByTestId("unread-count")).toContainText(
-        /[1-9]/,
-        {
-          timeout: 30_000,
-        },
-      );
+      const device1Row = bobDevice1.page
+        .getByTestId("notification-item")
+        .filter({ hasText: msg });
+      await expect(device1Row).toBeVisible({ timeout: 30_000 });
+      await expect(device1Row.getByTestId("mark-read-button")).toBeVisible({
+        timeout: 30_000,
+      });
 
       await bobDevice2Page.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
+      const device2Row = bobDevice2Page.page
+        .getByTestId("notification-item")
+        .filter({ hasText: msg });
+      await expect(device2Row).toBeVisible({ timeout: 30_000 });
       await bobDevice2Page.page.getByTestId("mark-all-read-button").click();
-      await expect(
-        bobDevice2Page.page.getByTestId("unread-count"),
-      ).toContainText(/0/, {
+      await expect(device2Row.getByTestId("mark-unread-button")).toBeVisible({
         timeout: 30_000,
       });
 
       await bobDevice1.page.reload({ waitUntil: "domcontentloaded" });
-      await expect(bobDevice1.page.getByTestId("unread-count")).toContainText(
-        /0/,
-        {
-          timeout: 30_000,
-        },
-      );
+      const device1ClearedRow = bobDevice1.page
+        .getByTestId("notification-item")
+        .filter({ hasText: msg });
+      await expect(
+        device1ClearedRow.getByTestId("mark-unread-button"),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(
+        device1ClearedRow.getByTestId("mark-read-button"),
+      ).toHaveCount(0);
       await stepShot(
         bobDevice1.page,
         testInfo,
@@ -506,7 +509,6 @@ test.describe("notifications", () => {
       await Promise.allSettled([
         bobDevice2Page.close(),
         bobDevice1.close(),
-        alicePage.close(),
       ]);
     }
   });

@@ -107,6 +107,7 @@ export type CreateRealmOpts = {
   historyVisibility?: string;
   encryptionProfile?: string;
   seedMembers?: string[];
+  completeRecoveryKeySetup?: boolean;
 };
 
 function buildInviteLocatorUrl(serverUrl: string, subjectDid: string): string {
@@ -317,6 +318,73 @@ export class JointUserPage {
     }
   }
 
+  private async dismissCreateRealmBlockingPrompts(opts: {
+    completeRecoveryKeySetup: boolean;
+  }): Promise<boolean> {
+    let handled = false;
+    if (opts.completeRecoveryKeySetup) {
+      const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(250);
+      handled ||= recoveryKey !== undefined;
+    }
+    for (const [testId, modalTestId] of [
+      ["recommended-encryption-floor-dismiss", "recommended-encryption-floor-modal"],
+      ["mls-recovery-missing-dismiss", "mls-recovery-missing-modal"],
+      ["mls-unlock-dismiss", "mls-unlock-modal"],
+    ] as const) {
+      const button = this.page.getByTestId(testId).last();
+      if (await button.isVisible({ timeout: 250 }).catch(() => false)) {
+        await button.click();
+        await expect(this.page.getByTestId(modalTestId).last()).toBeHidden({
+          timeout: 10_000,
+        });
+        handled = true;
+      }
+    }
+    return handled;
+  }
+
+  private async clickCreateRealmControl(
+    locator: Locator,
+    promptHandling: { completeRecoveryKeySetup: boolean },
+  ) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await this.dismissCreateRealmBlockingPrompts(promptHandling);
+      try {
+        await locator.click({ timeout: 5_000 });
+        return;
+      } catch (error) {
+        lastError = error;
+        const handled =
+          await this.dismissCreateRealmBlockingPrompts(promptHandling);
+        if (!handled) {
+          await this.page.waitForTimeout(250);
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private async withPassivePromptRetry(operation: () => Promise<void>) {
+    let lastError: unknown;
+    const promptHandling = { completeRecoveryKeySetup: false };
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await this.dismissCreateRealmBlockingPrompts(promptHandling);
+      try {
+        await operation();
+        return;
+      } catch (error) {
+        lastError = error;
+        const handled =
+          await this.dismissCreateRealmBlockingPrompts(promptHandling);
+        if (!handled) {
+          await this.page.waitForTimeout(250);
+        }
+      }
+    }
+    throw lastError;
+  }
+
   async completeRecoveryKeySetupIfPrompted(
     timeoutMs = 5_000,
   ): Promise<string | undefined> {
@@ -372,6 +440,11 @@ export class JointUserPage {
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
     await this.gotoSetup();
+    const promptHandling = {
+      completeRecoveryKeySetup:
+        opts.completeRecoveryKeySetup ?? opts.encryptionProfile === "none",
+    };
+    await this.dismissCreateRealmBlockingPrompts(promptHandling);
     const strand = this.page.getByTestId("realm-lifecycle-strand").last();
 
     await strand.getByTestId("realm-title-input").fill(opts.title);
@@ -380,7 +453,7 @@ export class JointUserPage {
     }
     const basicsNext = strand.getByTestId("new-realm-next-button").first();
     await expect(basicsNext).toBeEnabled({ timeout: 30_000 });
-    await basicsNext.click();
+    await this.clickCreateRealmControl(basicsNext, promptHandling);
 
     if (opts.discoverability !== undefined) {
       await selectDxcOption(
@@ -408,7 +481,7 @@ export class JointUserPage {
     }
     const policyNext = strand.getByTestId("new-realm-next-button").first();
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });
-    await policyNext.click();
+    await this.clickCreateRealmControl(policyNext, promptHandling);
 
     if (opts.seedMembers && opts.seedMembers.length > 0) {
       await strand
@@ -417,7 +490,7 @@ export class JointUserPage {
     }
     const createButton = strand.getByTestId("create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
-    await createButton.click();
+    await this.clickCreateRealmControl(createButton, promptHandling);
 
     // S6 recovery soft-gate (key-management §7.11): creating an end-to-end
     // encrypted Realm with no recovery path configured prompts the user to set
@@ -677,10 +750,10 @@ export class JointUserPage {
   private async clickTimelineAction(body: string, testId: string) {
     const event = this.timelineEvent(body);
     await expect(event).toBeVisible({ timeout: 30_000 });
-    await event.hover();
+    await this.withPassivePromptRetry(() => event.hover({ timeout: 5_000 }));
     const action = event.getByTestId(testId);
     await expect(action).toBeVisible({ timeout: 30_000 });
-    await action.click();
+    await this.withPassivePromptRetry(() => action.click({ timeout: 5_000 }));
   }
 
   async close() {
@@ -739,20 +812,29 @@ export async function issueDevSession(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`,
-    {
-      data: {
-        actor: user.did,
-        device_id: user.deviceId,
-        display_name: user.displayName,
-      },
-    },
-  );
-  expect(response.status()).toBe(200);
-  const body = await response.json();
-  expect(body.session_credential).toBeTruthy();
-  return body.session_credential;
+  const url = `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`;
+  const data = {
+    actor: user.did,
+    device_id: user.deviceId,
+    display_name: user.displayName,
+  };
+  const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
+  for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
+    const response = await request.post(url, { data });
+    if (response.status() === 200) {
+      const body = await response.json();
+      expect(body.session_credential).toBeTruthy();
+      return body.session_credential;
+    }
+    const text = await response.text();
+    if (response.status() !== 429 || attempt === backoffMs.length - 1) {
+      throw new Error(
+        `issueDevSession: ${url} returned ${response.status()} for ${user.did}: ${text}`,
+      );
+    }
+    await sleep(retryAfterMs(response, backoffMs[attempt]));
+  }
+  throw new Error(`issueDevSession: exhausted retry loop for ${user.did}`);
 }
 
 export async function createDpopUserSession(
