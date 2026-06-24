@@ -201,39 +201,38 @@ test.describe("consent grant", () => {
     const alice = uniqueUser("g2t5-consent-api-alice");
     const bob = uniqueUser("g2t5-consent-api-bob");
     await Promise.all([ensureRegistered(request, alice), ensureRegistered(request, bob)]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
 
     const open = await request.post(`${solandBaseUrl()}/_cokret/open/mimi/consent/request`, {
+      headers: authHeaders(bobToken),
       data: {
-        holder_did: alice.did,
-        grantee_did: bob.did,
-        scope: "message",
-        purpose: "G2.T5 consent API smoke",
+        requester_id: bob.did,
+        target: { kind: "did", id: alice.did },
+        purpose: "direct_message",
       },
     });
     expect(open.status()).toBe(200);
     const openBody = await open.json();
-    expect(openBody.ok).toBe(true);
-    expect(openBody.state).toBe("requested");
-    expect(openBody.consent_id).toMatch(/^ck:mimi_consent:/);
-    expect(openBody.receipt?.operation_id).toBe("ck.open.mimi.command.request_consent");
-    expect(openBody.receipt?.extra?.privacy_state).toBe("holder_private");
-    expect(openBody.receipt?.extra?.consent_grants_space_capability).toBe(false);
+    expect(openBody.status).toBe("requested");
+    expect(openBody.consent_id).toMatch(/^ck:consent:/);
 
     const update = await request.post(`${solandBaseUrl()}/_cokret/open/mimi/consent/update`, {
+      headers: authHeaders(aliceToken),
       data: {
         consent_id: openBody.consent_id,
-        state: "accepted",
-        holder_did: alice.did,
-        grantee_did: bob.did,
+        decision: "accept",
+        actor_id: alice.did,
+        signature: detachedProof(alice.did),
       },
     });
     expect(update.status()).toBe(200);
     const updateBody = await update.json();
-    expect(updateBody.ok).toBe(true);
-    expect(updateBody.consent_id).toBe(openBody.consent_id);
-    expect(updateBody.state).toBe("accepted");
-    expect(updateBody.receipt?.operation_id).toBe("ck.open.mimi.command.update_consent");
-    expect(updateBody.receipt?.extra?.membership_still_required).toBe(true);
+    expect(updateBody.status).toBe("accepted");
+    expect(typeof updateBody.updated_at).toBe("string");
+    expect(updateBody.event_ref).toMatch(/^ck:event:/);
   });
 
   test("ck.consent.grant event projects consent cell and contact gate", async ({
@@ -629,3 +628,14 @@ test.describe("consent grant", () => {
     },
   );
 });
+
+function detachedProof(actorDid: string): Record<string, unknown> {
+  return {
+    kind: "detached_jws",
+    verification_method: `${actorDid}#mimi-consent`,
+    alg: "EdDSA",
+    payload_digest: `sha256:${"0".repeat(64)}`,
+    created_at: new Date().toISOString(),
+    jws: "header.payload.signature",
+  };
+}

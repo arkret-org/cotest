@@ -333,7 +333,13 @@ export async function sendMessageApi(
   token: string,
   realmId: string,
   body: string,
-  opts: { server?: SolandKey; encrypted?: boolean; createdAt?: string } = {},
+  opts: {
+    server?: SolandKey;
+    encrypted?: boolean;
+    createdAt?: string;
+    mentions?: string[];
+    actorSeq?: number;
+  } = {},
 ) {
   const actorDid = await currentActorDidApi(request, token, opts);
   const strandId = await resolveDefaultStrandId(request, token, realmId, { server: opts.server });
@@ -341,6 +347,7 @@ export async function sendMessageApi(
     actorDid,
     realmId,
     kind: "ck.message.create",
+    actorSeq: opts.actorSeq,
     createdAt: opts.createdAt,
     payload: {
       strand_id: strandId,
@@ -348,6 +355,7 @@ export async function sendMessageApi(
       content: {
         kind: "ck.content.text",
         body,
+        ...(opts.mentions ? { mentions: opts.mentions } : {}),
       },
     },
   });

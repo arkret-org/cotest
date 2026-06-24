@@ -128,6 +128,27 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const MAX_SESSION_DIAGNOSTIC_LINES = 5000;
+const MAX_SESSION_DIAGNOSTIC_LINE_CHARS = 4000;
+
+function pushDiagnosticLine(lines: string[], line: string) {
+  const value =
+    line.length > MAX_SESSION_DIAGNOSTIC_LINE_CHARS
+      ? `${line.slice(0, MAX_SESSION_DIAGNOSTIC_LINE_CHARS)}... [truncated]`
+      : line;
+  if (lines.length < MAX_SESSION_DIAGNOSTIC_LINES) {
+    lines.push(value);
+  } else if (lines.length === MAX_SESSION_DIAGNOSTIC_LINES) {
+    lines.push(
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        type: "diagnostic_truncated",
+        retained_lines: MAX_SESSION_DIAGNOSTIC_LINES,
+      }),
+    );
+  }
+}
+
 function retryAfterMs(response: APIResponse, fallbackMs: number): number {
   const raw = response.headers()["retry-after"];
   if (!raw) {
@@ -787,12 +808,16 @@ export async function createDpopUserSessionForAccount(
     return undefined;
   }
   if (!login.ok() || body?.status !== "success") {
-    throw new Error(`coauth DPoP password login returned ${login.status()}: ${raw}`);
+    throw new Error(
+      `coauth DPoP password login returned ${login.status()}: ${raw}`,
+    );
   }
   const grant = body?.session_grant;
   const principalDid = body?.viewer?.did;
   if (!principalDid || !grant?.grant_jwt || !grant?.id || !grant?.audience) {
-    throw new Error(`coauth DPoP password login omitted principal grant: ${raw}`);
+    throw new Error(
+      `coauth DPoP password login omitted principal grant: ${raw}`,
+    );
   }
   expect(grant.audience).toBe(audience);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
@@ -957,7 +982,8 @@ export async function openUser(
   const consoleLines: string[] = [];
   const networkLines: string[] = [];
   page.on("console", (message) => {
-    consoleLines.push(
+    pushDiagnosticLine(
+      consoleLines,
       JSON.stringify({
         ts: new Date().toISOString(),
         type: message.type(),
@@ -967,7 +993,8 @@ export async function openUser(
     );
   });
   page.on("pageerror", (error) => {
-    consoleLines.push(
+    pushDiagnosticLine(
+      consoleLines,
       JSON.stringify({
         ts: new Date().toISOString(),
         type: "pageerror",
@@ -977,7 +1004,8 @@ export async function openUser(
     );
   });
   page.on("requestfailed", (request) => {
-    networkLines.push(
+    pushDiagnosticLine(
+      networkLines,
       JSON.stringify({
         ts: new Date().toISOString(),
         type: "requestfailed",
@@ -992,7 +1020,8 @@ export async function openUser(
       void response
         .text()
         .then((body) => {
-          networkLines.push(
+          pushDiagnosticLine(
+            networkLines,
             JSON.stringify({
               ts: new Date().toISOString(),
               type: "http-error",
@@ -1004,7 +1033,8 @@ export async function openUser(
           );
         })
         .catch(() => {
-          networkLines.push(
+          pushDiagnosticLine(
+            networkLines,
             JSON.stringify({
               ts: new Date().toISOString(),
               type: "http-error",

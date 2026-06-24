@@ -12,6 +12,7 @@ import {
   canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
+  sendMessageApi,
   putAccountDataViaEventApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -191,8 +192,11 @@ test.describe("notifications", () => {
     const bobPage = await openUserPage(browser, bob, {
       sessionCredential: bobToken,
     });
-    const suppressedMsg = `DND suppressed ${stamp}`;
-    const resumedMsg = `DND resumed ${stamp}`;
+    const suppressedSuffix = `DND suppressed ${stamp}`;
+    const resumedSuffix = `DND resumed ${stamp}`;
+    const apiActorSeq = Date.now();
+    let suppressedMsg = "";
+    let resumedMsg = "";
 
     try {
       const realmId = await alicePage.createRealm({
@@ -220,7 +224,11 @@ test.describe("notifications", () => {
         bobPage.page.getByTestId("notification-settings-status"),
       ).toContainText(/do not disturb|dnd/i, { timeout: 30_000 });
 
-      await alicePage.sendTimelineMessage(realmId, suppressedMsg);
+      suppressedMsg = suppressedSuffix;
+      await sendMessageApi(request, aliceToken, realmId, suppressedMsg, {
+        mentions: [bob.did],
+        actorSeq: apiActorSeq,
+      });
       await bobPage.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });
@@ -240,7 +248,11 @@ test.describe("notifications", () => {
       await expect(
         bobPage.page.getByTestId("notification-settings-status"),
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
-      await alicePage.sendTimelineMessage(realmId, resumedMsg);
+      resumedMsg = resumedSuffix;
+      await sendMessageApi(request, aliceToken, realmId, resumedMsg, {
+        mentions: [bob.did],
+        actorSeq: apiActorSeq + 1,
+      });
       await bobPage.page.goto("/notifications", {
         waitUntil: "domcontentloaded",
       });

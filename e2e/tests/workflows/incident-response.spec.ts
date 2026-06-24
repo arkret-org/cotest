@@ -291,6 +291,7 @@ test.describe("workflow: incident response", () => {
         title: `SEV-1 priority ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
+        encryptionProfile: "mls_rfc9420",
       });
 
       await commanderPage.page.goto(`/chat/${realmId}`, {
