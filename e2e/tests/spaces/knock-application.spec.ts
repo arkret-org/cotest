@@ -70,9 +70,11 @@ test.describe("knock + application + cooldown", () => {
       // table; we just look for bob's DID anywhere in realm-admin-panel.
       await alicePage.gotoRealmAdmin(realmId);
       if (knockResp.ok()) {
-        await expect(alicePage.page.getByTestId("realm-admin-panel")).toContainText(bob.did, {
-          timeout: 30_000,
-        });
+        await expect(
+          alicePage.page
+            .getByTestId("realm-admin-panel")
+            .locator(`[data-member-did="${bob.did}"]`),
+        ).toBeVisible({ timeout: 30_000 });
       }
     } finally {
       await alicePage.close();

@@ -284,9 +284,10 @@ test.describe("cross-server federation", () => {
       await stepShot(alicePage.page, testInfo, "alpha-invite-issued");
 
       // The invite MUST be visible in α's space-invites list right after issuing.
-      const aliceInviteRow = alicePage.page
-        .getByTestId("invite-row")
-        .filter({ hasText: bob.did });
+      const aliceInviteRow = alicePage.page.locator(
+        `[data-testid="pending-invite-row"][data-member-did="${bob.did}"], ` +
+          `[data-testid="invite-row"][data-member-did="${bob.did}"]`,
+      );
       await expect(aliceInviteRow).toBeVisible({ timeout: 30_000 });
     } finally {
       await alicePage.close();

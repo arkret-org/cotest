@@ -159,9 +159,10 @@ test.describe("personal blocklist", () => {
         });
         await alicePage.page.getByTestId("block-target-input").fill(bob.did);
         await alicePage.page.getByTestId("block-user-button").click();
-        await expect(alicePage.page.getByTestId("blocked-users-list")).toContainText(bob.did, {
-          timeout: 30_000,
-        });
+        const bobBlockedRow = alicePage.page.locator(
+          `[data-testid="blocked-user-row"][data-actor-did="${bob.did}"]`,
+        );
+        await expect(bobBlockedRow).toBeVisible({ timeout: 30_000 });
         await expect(alicePage.page.getByTestId("write-status")).toContainText(
           /blocklist updated/i,
           { timeout: 30_000 },
@@ -198,14 +199,8 @@ test.describe("personal blocklist", () => {
         await alicePage.page.goto("/settings/blocked-users", {
           waitUntil: "domcontentloaded",
         });
-        await alicePage.page
-          .getByTestId("blocked-user-row")
-          .filter({ hasText: bob.did })
-          .getByTestId("unblock-button")
-          .click();
-        await expect(alicePage.page.getByTestId("blocked-users-list")).not.toContainText(bob.did, {
-          timeout: 30_000,
-        });
+        await bobBlockedRow.getByTestId("unblock-button").click();
+        await expect(bobBlockedRow).toHaveCount(0, { timeout: 30_000 });
         await expect
           .poll(async () => await blocklistClearedOrTombstoned(request, aliceToken, bob.did), {
             timeout: 30_000,

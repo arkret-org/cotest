@@ -430,7 +430,11 @@ export class JointUserPage {
   }
 
   // Drive the Realm admin invite modal to invite `targetDid` into realmId.
-  async inviteFromAdmin(realmId: string, targetDid: string): Promise<string> {
+  async inviteFromAdmin(
+    realmId: string,
+    targetDid: string,
+    expectedDisplayLabel?: string,
+  ): Promise<string> {
     await this.gotoRealmAdminSection(realmId, "members");
     const members = this.page.getByTestId("realm-members-panel");
     await expect(members).toBeVisible({ timeout: 120_000 });
@@ -442,8 +446,9 @@ export class JointUserPage {
       .fill(buildInviteLocatorUrl(this.serverUrl, targetDid));
     await invite.getByTestId("send-invite-button").click();
     const status = members.getByTestId("realm-members-status");
+    const displayLabel = expectedDisplayLabel ?? displayLabelForDid(targetDid);
     await expect(status).toContainText(
-      new RegExp(`invited ${escapeRegex(targetDid)}`),
+      new RegExp(`invited (${escapeRegex(displayLabel)}|${escapeRegex(targetDid)})`),
       { timeout: 30_000 },
     );
     return await status.innerText();
@@ -1078,6 +1083,18 @@ function sanitize(value: string): string {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function displayLabelForDid(did: string): string {
+  const materialized = did.match(/^did:web:([^:]+):users:([^:]+)$/);
+  if (materialized) {
+    return `${materialized[2]}:${materialized[1]}`;
+  }
+  const simpleExample = did.match(/^did:web:([a-z0-9._-]+)\.example$/i);
+  if (simpleExample) {
+    return `${simpleExample[1].toLowerCase()}:example.com`;
+  }
+  return did;
 }
 
 async function dismissDeviceAuthorizationPrompt(page: Page) {

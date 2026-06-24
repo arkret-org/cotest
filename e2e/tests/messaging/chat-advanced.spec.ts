@@ -844,15 +844,14 @@ test.describe("chat advanced", () => {
         gotoChat(bobPage, realmId),
       ]);
 
-      await expect(
-        alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
-      ).toContainText(/online/i, { timeout: 1_000 });
+      const bobPresenceRow = alicePage.page.locator(
+        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,
+      );
+      await expect(bobPresenceRow).toContainText(/online/i, { timeout: 1_000 });
       await stepShot(alicePage.page, testInfo, "presence-online");
 
       await bobPage.close();
-      await expect(
-        alicePage.page.getByTestId("presence-row").filter({ hasText: bob.did }),
-      ).toContainText(/offline|last seen/i, { timeout: 5_000 });
+      await expect(bobPresenceRow).toContainText(/offline|last seen/i, { timeout: 5_000 });
     } finally {
       await Promise.allSettled([alicePage.close()]);
     }

@@ -87,12 +87,11 @@ test.describe("discovery", () => {
         .getByTestId("directory-search-input")
         .fill(bob.handle);
       await alicePage.page.getByTestId("directory-search-button").click();
-      await expect(alicePage.page.getByTestId("actor-result")).toContainText(
-        bob.did,
-        {
-          timeout: 30_000,
-        },
-      );
+      await expect(
+        alicePage.page.locator(
+          `[data-testid="actor-result-did"][title="${cssStringEscape(bob.did)}"]`,
+        ),
+      ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "post-contact-visible");
     } finally {
       await Promise.allSettled([bobPage.close(), alicePage.close()]);
@@ -309,3 +308,7 @@ test.describe("discovery", () => {
     }
   });
 });
+
+function cssStringEscape(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
