@@ -90,6 +90,20 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
         "initial account subscribe must not include ck.push_rules: {initial_sync}"
     );
 
+    // `ck.push_rules` is private account_data: soland requires the content to be
+    // a client-side-encrypted carrier (the plaintext rules never leave the
+    // client). cotest cannot run real E2EE, so it submits the spec
+    // `client_side_conformance` marker that attests the client encrypted the
+    // payload; the zero-knowledge account_data store round-trips the carrier
+    // opaquely.
+    let push_rules_carrier = json!({
+        "client_side_conformance": {
+            "encrypted_account_data": true,
+            "payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "content_type": "application/vnd.cokret.account-data+json",
+        "ciphertext": "opaque-client-envelope"
+    });
     let rules_written = bob
         .submit_event(
             &realm_id,
@@ -97,16 +111,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             json!({
                 "key": "ck.push_rules",
                 "owner": bob.actor.as_str(),
-                "body": {
-                    "rules": [
-                        {"rule_id": "global.default"},
-                        {
-                            "rule_id": "global.mute.messages",
-                            "actions": ["dont_notify"],
-                            "conditions": [{"field": "notification.type", "equals": "message"}]
-                        }
-                    ]
-                },
+                "body": push_rules_carrier,
                 "updated_at": "2026-05-02T00:00:00Z"
             }),
         )
@@ -116,10 +121,11 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let listed_sync = bob.sync().await?;
     let listed_rules =
         account_data_entry(&listed_sync, "ck.push_rules").expect("ck.push_rules account_data row");
-    let rules = listed_rules["content"]["rules"].as_array().unwrap();
-    assert_eq!(rules.len(), 2);
-    assert_eq!(rules[0]["rule_id"], "global.default");
-    assert_eq!(rules[1]["actions"][0], "dont_notify");
+    assert_eq!(
+        listed_rules["content"]["client_side_conformance"]["encrypted_account_data"],
+        true,
+        "push_rules must round-trip as an encrypted-account-data conformance marker: {listed_rules}"
+    );
 
     let deleted_rules = bob
         .submit_event(
@@ -150,12 +156,11 @@ fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value>
         .and_then(|events| events.iter().find(|event| event["data_type"] == data_type))
 }
 
+/// Author the realm's conversation Strand (the message/typing envelope derives
+/// `strand_id` from the realm id) and return its id. soland does NOT auto-create
+/// a Strand on realm create, and the ephemeral/typing scope resolves through the
+/// projected Strand, so it must exist before typing into it.
 async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    // soland does NOT auto-create a default Strand on realm create; the Realm's
-    // `default_strand_id` pointer is only set by `ck.realm.set_default_strand`,
-    // which requires the named Strand to already exist (and the Strand-list
-    // projection only carries an `is_default` row once that pointer is set).
-    // Author the Strand as the realm owner, then point the Realm default at it.
     let strand_id = realm_id.replace("ck:realm:", "ck:strand:");
     let created = client
         .submit_event(
@@ -174,20 +179,6 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
         )
         .await?;
     assert_eq!(created["status"], "accepted", "strand create must be accepted");
-    let defaulted = client
-        .submit_event(
-            realm_id,
-            "ck.realm.set_default_strand",
-            json!({
-                "strand_id": strand_id,
-                "expected_default_strand_id": Value::Null
-            }),
-        )
-        .await?;
-    assert_eq!(
-        defaulted["status"], "accepted",
-        "set_default_strand must be accepted"
-    );
     Ok(strand_id)
 }
 
