@@ -1410,8 +1410,23 @@ function Test-SpecArtifactSync {
         }
     }
 
-    $output = & $PythonExe $pipelineScript check 2>&1
+    # `artifact_pipeline.py check` reports lint failures on stderr. Merging that
+    # stderr into the output stream with `2>&1` while $ErrorActionPreference is
+    # "Stop" promotes every stderr line to a terminating NativeCommandError,
+    # which would abort report generation before the summary is written. A
+    # failing lint is an expected, gracefully-degraded outcome (status =
+    # "failed"), so relax the error action for just this native call and rely on
+    # $LASTEXITCODE to classify the result.
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $PythonExe $pipelineScript check 2>&1
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
     $exitCode = $LASTEXITCODE
+    $output = @($output | ForEach-Object { [string]$_ })
     $errors = @($output | Where-Object { $_ -match "^(ERROR|FAIL|DRIFT)" })
 
     [pscustomobject]@{
