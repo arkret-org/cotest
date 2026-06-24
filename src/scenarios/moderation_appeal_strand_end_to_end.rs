@@ -25,9 +25,10 @@
 //! Anchor batch → close.
 
 use anyhow::{Result, anyhow};
+use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
     ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT, ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN,
-    TypedAppealId, is_known_error_code,
+    TypedAppealId,
 };
 
 pub const APPEAL_KIND_SUBMIT: &str = "ck.moderation.appeal.submit";
@@ -63,14 +64,19 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
             EXPECTED_SELF_REVIEW_FORBIDDEN,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT) {
+    // Both appeal codes are spec `reason_codes`, not top-level error `codes`,
+    // so they are validated against the registry union rather than the SDK's
+    // codes-only `KNOWN_ERROR_CODES` table.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT}"
+            "error-code-registry missing reason code {ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT}"
         ));
     }
-    if !is_known_error_code(ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN) {
+    if !registry_identifiers.contains(ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN}"
+            "error-code-registry missing reason code {ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN}"
         ));
     }
     // Typed appeal id round-trip.

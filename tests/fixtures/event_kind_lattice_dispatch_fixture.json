@@ -25,6 +25,7 @@
       "ck.component.session.grant.v1"
     ],
     "cas_register_families": [
+      "ck.component.call.summary.v1",
       "ck.component.circle.member.v1",
       "ck.component.circle.tombstone.v1",
       "ck.component.cross_signing.publish.v1",

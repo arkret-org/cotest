@@ -87,6 +87,23 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            // Round 4 (2026-06-24): directory resolve operations gained
+            // failure-blinding vectors. Missing / hidden / unauthorized
+            // resolutions MUST be indistinguishable — same 404 / not_found /
+            // body shape / timing class — and MUST NOT leak the listed
+            // binding fields.
+            "resolve_handle_failure_blinding" => {
+                validate_resolve_failure_blinding(
+                    &case,
+                    "ck.find.directory.query.resolve_handle",
+                )?;
+            }
+            "resolve_agent_selector_failure_blinding" => {
+                validate_resolve_failure_blinding(
+                    &case,
+                    "ck.find.directory.query.resolve_agent_selector",
+                )?;
+            }
             "private_contact_discovery_padding_and_cardinality" => {
                 let input = case
                     .input
@@ -444,6 +461,120 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Vectors `ck.vector.directory.resolve_handle_failure_blinding.v1` and
+/// `ck.vector.directory.resolve_agent_selector_failure_blinding.v1`.
+///
+/// A directory resolve over a missing, hidden, or unauthorized target MUST be
+/// externally indistinguishable: identical HTTP status (404), identical error
+/// code (`not_found`), identical body shape, identical timing class, and the
+/// response MUST NOT include any of the binding/identity fields that would let
+/// a probe distinguish "hidden" from "missing".
+fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str) -> Result<()> {
+    let op_id = case.operation_id.as_deref();
+    if op_id != Some(expected_op) {
+        bail!(
+            "privacy fixture {} operation_id {:?} drifted from {expected_op}",
+            case.name,
+            op_id
+        );
+    }
+    let inputs = case
+        .inputs
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing inputs", case.name))?;
+    if inputs.len() < 3 {
+        bail!(
+            "privacy fixture {} must cover missing/hidden/unauthorized inputs",
+            case.name
+        );
+    }
+    let expected = case
+        .expected
+        .as_ref()
+        .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
+
+    if expected.get("same_http_status").and_then(Value::as_u64) != Some(404) {
+        bail!(
+            "privacy fixture {} same_http_status is not 404",
+            case.name
+        );
+    }
+    if expected.get("same_error_code").and_then(Value::as_str) != Some("not_found") {
+        bail!(
+            "privacy fixture {} same_error_code is not not_found",
+            case.name
+        );
+    }
+    if expected.get("same_timing_class").and_then(Value::as_str) != Some("directory_hidden_not_found")
+    {
+        bail!(
+            "privacy fixture {} same_timing_class drifted",
+            case.name
+        );
+    }
+    let body_shape = expected
+        .get("same_body_shape")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("privacy fixture {} missing same_body_shape", case.name))?;
+    if body_shape.is_empty() {
+        bail!(
+            "privacy fixture {} same_body_shape must not be empty",
+            case.name
+        );
+    }
+    let must_not_include = expected
+        .get("must_not_include")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("privacy fixture {} missing must_not_include", case.name))?;
+    if must_not_include.is_empty() {
+        bail!(
+            "privacy fixture {} must_not_include must not be empty",
+            case.name
+        );
+    }
+
+    // Each forbidden field must be a string, and must never appear in any
+    // input request body (the blinded response shares one body shape that
+    // excludes these fields regardless of the underlying failure reason).
+    for field in must_not_include {
+        let field = field.as_str().ok_or_else(|| {
+            anyhow!(
+                "privacy fixture {} must_not_include entry must be string",
+                case.name
+            )
+        })?;
+        for input in inputs {
+            if let Some(body) = input.get("body")
+                && contains_key_recursive(body, field)
+            {
+                bail!(
+                    "privacy fixture {} input leaks blinded field {field}",
+                    case.name
+                );
+            }
+        }
+    }
+
+    record_vector_event(
+        "privacy.resolve_failure_blinding",
+        &json!({
+            "operation_id": expected_op,
+            "input_count": inputs.len(),
+        }),
+        &json!({
+            "same_http_status": 404,
+            "same_error_code": "not_found",
+            "same_timing_class": "directory_hidden_not_found",
+        }),
+        &json!({
+            "operation_id": case.operation_id.clone(),
+            "same_http_status": expected.get("same_http_status").cloned(),
+            "must_not_include_count": must_not_include.len(),
+        }),
+    );
     Ok(())
 }
 

@@ -95,6 +95,42 @@ fn next_typed_id(kind: &str) -> String {
     format!("ck:{kind}:01999999-0000-7000-8000-{seq:012x}")
 }
 
+/// Normalise a single `plaintext_visible_services` entry into the spec-typed
+/// `plaintext_visible_services_payload` `services[]` item shape
+/// (`event-payload.schema.json#/$defs/plaintext_visible_services_payload`).
+///
+/// A bare DID string carries no declared `data_classes`, so soland's realm
+/// projection records an empty per-service class map and fails closed on any
+/// private-realm plaintext send. The harness default therefore declares the
+/// common plaintext data classes for the service. Entries that are already
+/// objects (callers that hand-build a typed service) pass through unchanged.
+fn normalize_plaintext_visible_service(entry: &Value) -> Value {
+    if entry.is_object() {
+        return entry.clone();
+    }
+    match entry.as_str() {
+        Some(service_did) => json!({
+            "service_did": service_did,
+            "service_type": "principal_server",
+            "data_classes": [
+                "message_content",
+                "strand_content",
+                "attachment_plaintext",
+                "attachment_preview",
+                "thumbnail",
+                "full_text_index",
+                "search_snippet",
+                "notification_summary",
+                "inbox_preview",
+                "history_preview"
+            ],
+            "purposes": ["cotest-harness-default"],
+            "visibility": "private_plaintext"
+        }),
+        None => entry.clone(),
+    }
+}
+
 fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &Value) -> Value {
     let title = input
         .get("title")
@@ -125,11 +161,29 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
         .get("encryption_profile")
         .and_then(Value::as_str)
         .unwrap_or("none");
+    // soland grants plaintext data classes per declared service (it reads the
+    // typed `services[].data_classes` map, not a bare DID list — see
+    // RealmMetaRecord::allows_plaintext_data_class). A flat DID string projects
+    // to an EMPTY data-class map, so every private-realm plaintext send would
+    // fail closed with `capability_denied` (403). Normalise each entry to the
+    // spec-typed `plaintext_visible_services_payload` item shape; pre-typed
+    // objects (e.g. the media-plaintext scenarios) pass through unchanged.
     let plaintext_visible_services = input
         .get("plaintext_visible_services")
         .cloned()
         .filter(Value::is_array)
         .unwrap_or_else(|| json!([service_did]));
+    let plaintext_visible_services = Value::Array(
+        plaintext_visible_services
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(normalize_plaintext_visible_service)
+                    .collect()
+            })
+            .unwrap_or_default(),
+    );
 
     json!({
         "object": {

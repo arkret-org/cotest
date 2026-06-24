@@ -15,7 +15,10 @@ pub fn run_capability_fixture_suite() -> Result<()> {
         .ok_or_else(|| anyhow!("capability artifact missing fixtures"))?;
     for fixture in fixtures {
         let name = required_str(fixture, "name")?;
-        if fixture.get("expected").is_none() && fixture.get("requests").is_none() {
+        if fixture.get("expected").is_none()
+            && fixture.get("requests").is_none()
+            && fixture.get("cases").is_none()
+        {
             bail!("capability fixture {name} missing expected outcome");
         }
         if name == "approval_constraint_requires_controller_approval" {
@@ -50,6 +53,7 @@ pub fn run_capability_fixture_suite() -> Result<()> {
             }
             "revoke_rollback_forward_recompute" => evaluate_revoke_rollback_fixture(fixture)?,
             "revoke_downstream_recheck" => evaluate_revoke_downstream_fixture(fixture)?,
+            "sensitive_field_handling" => evaluate_sensitive_field_handling_fixture(fixture)?,
             _ => {}
         }
     }
@@ -802,6 +806,162 @@ fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
             "revoked_grant_currently_valid": revoked_grant_currently_valid,
         }),
     );
+    Ok(())
+}
+
+/// Vector `ck.vector.auth.sensitive_field_handling.v1` (capability §field-access).
+///
+/// A field-access constraint projects an actor's read view. Fields listed in
+/// `sensitive_fields` MUST be transformed per the effective `sensitive_handling`
+/// mode before they leave the boundary, and the projection MUST NEVER emit the
+/// original sensitive value. The four cases pin the three handling modes plus
+/// the no-digest-key fallback:
+///   - `hash` with a digest key → `digest:`-prefixed opaque value, original gone.
+///   - `hash` without a digest key → fall back to omitting the field entirely.
+///   - `redact` → fixed `[redacted]` marker.
+///   - default (no handling declared) → omit.
+fn evaluate_sensitive_field_handling_fixture(fixture: &Value) -> Result<()> {
+    let name = required_str(fixture, "name")?;
+    let constraint = fixture
+        .get("constraint")
+        .ok_or_else(|| anyhow!("capability fixture {name} missing constraint"))?;
+    let sensitive_fields = str_vec(constraint, "/sensitive_fields");
+    if sensitive_fields.is_empty() {
+        bail!("capability fixture {name}: constraint declares no sensitive_fields");
+    }
+    let default_handling = constraint
+        .get("sensitive_handling")
+        .and_then(Value::as_str)
+        .unwrap_or("omit");
+    let projection_input = fixture
+        .get("projection_input")
+        .ok_or_else(|| anyhow!("capability fixture {name} missing projection_input"))?;
+
+    // Resolve the original plaintext value of each sensitive field via dotted path.
+    let original_value = |dotted: &str| -> Option<String> {
+        let pointer = format!("/{}", dotted.replace('.', "/"));
+        projection_input
+            .pointer(&pointer)
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    };
+
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("capability fixture {name} missing cases[]"))?;
+
+    for case in cases {
+        let case_name = required_str(case, "name")?;
+        let expected = case
+            .get("expected")
+            .ok_or_else(|| anyhow!("capability fixture {name}/{case_name} missing expected"))?;
+
+        // Effective handling mode for this case.
+        let remove_handling = case
+            .get("remove_sensitive_handling")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let mut handling = if remove_handling {
+            "omit".to_owned()
+        } else if let Some(override_mode) =
+            case.get("override_sensitive_handling").and_then(Value::as_str)
+        {
+            override_mode.to_owned()
+        } else {
+            default_handling.to_owned()
+        };
+        // hash without an available digest key falls back to omit.
+        let digest_key_available = case
+            .get("available_digest_key")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        if handling == "hash" && !digest_key_available {
+            handling = "omit".to_owned();
+        }
+
+        // Independently assert that no original sensitive value leaks through a
+        // projected scalar field (every mode shares this invariant). The
+        // `must_not_include_original_values` array intentionally restates the
+        // originals, so only scalar string values are scanned, not arrays.
+        for field in &sensitive_fields {
+            if let Some(original) = original_value(field) {
+                let leaked = expected
+                    .as_object()
+                    .map(|map| {
+                        map.values()
+                            .any(|value| value.as_str() == Some(original.as_str()))
+                    })
+                    .unwrap_or(false);
+                if leaked {
+                    bail!(
+                        "capability fixture {name}/{case_name}: projection leaked original sensitive value for {field}"
+                    );
+                }
+            }
+        }
+
+        match handling.as_str() {
+            "hash" => {
+                for field in &sensitive_fields {
+                    let projected = expected
+                        .get(field)
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| {
+                            anyhow!(
+                                "capability fixture {name}/{case_name}: hash mode missing projected {field}"
+                            )
+                        })?;
+                    if !projected.starts_with("digest:") {
+                        bail!(
+                            "capability fixture {name}/{case_name}: hashed {field} `{projected}` is not digest:-prefixed"
+                        );
+                    }
+                    if let Some(original) = original_value(field)
+                        && projected == original
+                    {
+                        bail!(
+                            "capability fixture {name}/{case_name}: hashed {field} still equals original value"
+                        );
+                    }
+                }
+            }
+            "redact" => {
+                for field in &sensitive_fields {
+                    let projected = expected.get(field).and_then(Value::as_str);
+                    if projected != Some("[redacted]") {
+                        bail!(
+                            "capability fixture {name}/{case_name}: redacted {field} must be `[redacted]`, got {projected:?}"
+                        );
+                    }
+                }
+            }
+            "omit" => {
+                let omitted = str_vec(expected, "/omitted_fields");
+                for field in &sensitive_fields {
+                    if !omitted.iter().any(|omitted_field| omitted_field == field) {
+                        bail!(
+                            "capability fixture {name}/{case_name}: omit mode must list {field} in omitted_fields"
+                        );
+                    }
+                    if expected.get(field).is_some() {
+                        bail!(
+                            "capability fixture {name}/{case_name}: omit mode must not emit {field}"
+                        );
+                    }
+                }
+            }
+            other => bail!("capability fixture {name}/{case_name}: unknown handling mode {other}"),
+        }
+
+        record_vector_event(
+            "capability.sensitive_field_handling",
+            &json!({"case": case_name, "handling": handling}),
+            expected,
+            &json!({"handling": handling, "sensitive_fields": sensitive_fields}),
+        );
+    }
+
     Ok(())
 }
 

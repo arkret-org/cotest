@@ -86,7 +86,9 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert_eq!(ice["signature"]["alg"], "EdDSA");
     assert_eq!(
         ice["signature"]["signature_input"],
-        "soland-media-ice-config-v1"
+        // Spec ice-config-response.schema.json fixes this domain-separation
+        // label to `ck.media.ice_config.v1`.
+        "ck.media.ice_config.v1"
     );
     assert!(
         ice["signature"]["kid"]

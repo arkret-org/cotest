@@ -22,7 +22,8 @@
 //! decrypting.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP, is_known_error_code};
+use cokret_core::ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP;
+use cokret_core::schema::embedded_error_code_identifiers;
 
 /// The canonical error code surfaced by the reducer when a late key
 /// share is accepted by a Realm whose membership for the recipient was
@@ -44,9 +45,13 @@ pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
             EXPECTED_REASON,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP) {
+    // `late_recovery_rejected_membership` is a spec `reason_code` (applies_to=
+    // audit_decision); validate against the registry union, not codes-only.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP}"
+            "error-code-registry missing reason code {ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP}"
         ));
     }
     Ok(())

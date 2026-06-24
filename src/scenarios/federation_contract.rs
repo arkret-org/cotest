@@ -227,6 +227,12 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     let server = CokretServer::spawn("federation-invalid").await?;
 
+    // Per federation.md §3.2 the inbound trust-header check (Source-Trust-Domain
+    // et al.) runs BEFORE body-schema validation, and a missing/invalid trust
+    // header is reported as `schema_violation` (minimal disclosure — soland does
+    // not leak body-parse details to an unauthenticated federation peer). These
+    // two requests carry no signed federation headers, so both are rejected at
+    // the trust-header gate regardless of whether the body is malformed.
     expect_api_error(
         server
             .http()
@@ -234,7 +240,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "schema_violation",
     )
     .await?;
     expect_api_error(
@@ -243,7 +249,7 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             .post(server.url("/_cokret/peer/events"))
             .json(&json!({"operations": []})),
         StatusCode::BAD_REQUEST,
-        "bad_json",
+        "schema_violation",
     )
     .await?;
     expect_api_error(

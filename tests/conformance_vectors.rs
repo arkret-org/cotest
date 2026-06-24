@@ -81,12 +81,15 @@ fn sidecar_vector_suite_runs_clean() {
     assert_eq!(ALL_SIDECAR_VECTOR_IDS.len(), 4);
 }
 
-// ─── P0 / VECT-CUR-1..2 — cursor vectors ───────────────────────────────────
+// ─── P0 / VECT-CUR-1 — cursor vectors ──────────────────────────────────────
 
 #[test]
 fn cursor_vector_suite_runs_clean() {
     run_cursor_vector_suite().expect("cursor vectors must pass");
-    assert_eq!(ALL_CURSOR_VECTOR_IDS.len(), 2);
+    // `ALL_CURSOR_VECTOR_IDS` is the authoritative set for the encoding
+    // cursor_opaque family (one vector); the high-assurance cursor revoke
+    // vector lives under the service-closure suite, so this set has length 1.
+    assert_eq!(ALL_CURSOR_VECTOR_IDS.len(), 1);
 }
 
 // ─── R3.1 / VECT-MID-1..7 — MemberIdentity vectors ─────────────────────────

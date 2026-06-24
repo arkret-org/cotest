@@ -32,9 +32,10 @@ use cokret_core::models::{
     MediaDecryptPolicyValue, MediaPlaintextService, derive_media_decrypt_metadata_digest,
     verify_media_decrypt_metadata,
 };
+use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
     Did, ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
-    ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE, is_known_error_code,
+    ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
 };
 
 pub const EXPECTED_MLS_GOVERNANCE_BINDING_STALE: &str = "mls_governance_binding_stale";
@@ -61,14 +62,19 @@ pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()>
             EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE) {
+    // Both codes are spec `reason_codes`, not top-level error `codes`, so they
+    // are validated against the registry union rather than the SDK's codes-only
+    // `KNOWN_ERROR_CODES` table.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE}"
+            "error-code-registry missing reason code {ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE}"
         ));
     }
-    if !is_known_error_code(ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED) {
+    if !registry_identifiers.contains(ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED}"
+            "error-code-registry missing reason code {ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED}"
         ));
     }
     Ok(())

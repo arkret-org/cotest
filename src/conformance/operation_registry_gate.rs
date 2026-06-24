@@ -764,7 +764,23 @@ fn is_generated_or_test_file(path: &Path) -> bool {
         || name == "tests.rs"
 }
 
+/// Pure data files that embed a verbatim copy of the spec artifacts, NOT
+/// implementation source. The SDK ships `embedded_artifacts.json` — a mirror of
+/// the spec's `/_cokret/*` registries — which the path scanner would otherwise
+/// read as if every mirrored path string were an operation the implementation
+/// actually exposes (with a guessed HTTP method), producing spurious
+/// unregistered-operation entries.
+fn is_artifact_mirror_file(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some("embedded_artifacts.json")
+    )
+}
+
 fn source_file_should_be_scanned(source: &str, path: &Path) -> bool {
+    if is_artifact_mirror_file(path) {
+        return false;
+    }
     source == "cotest" || !is_generated_or_test_file(path)
 }
 

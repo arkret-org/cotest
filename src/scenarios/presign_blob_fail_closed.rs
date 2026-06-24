@@ -29,7 +29,8 @@
 //! and must be tracked separately on the coverage dashboard.
 
 use anyhow::{Result, anyhow};
-use cokret_core::{ERROR_CODE_BLOB_REDACTED, ERROR_CODE_LEGAL_HOLD_ACTIVE, is_known_error_code};
+use cokret_core::schema::embedded_error_code_identifiers;
+use cokret_core::{ERROR_CODE_BLOB_REDACTED, ERROR_CODE_LEGAL_HOLD_ACTIVE};
 
 pub const EXPECTED_LEGAL_HOLD: &str = "legal_hold_active";
 pub const EXPECTED_BLOB_REDACTED: &str = "blob_redacted";
@@ -48,9 +49,13 @@ pub async fn presign_blob_legal_hold_run() -> Result<()> {
             EXPECTED_LEGAL_HOLD,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_LEGAL_HOLD_ACTIVE) {
+    // `legal_hold_active` is a spec `reason_code` (applies_to=auth_decision),
+    // not a top-level error `code`; validate against the registry union.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_LEGAL_HOLD_ACTIVE) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_LEGAL_HOLD_ACTIVE}"
+            "error-code-registry missing reason code {ERROR_CODE_LEGAL_HOLD_ACTIVE}"
         ));
     }
     Ok(())
@@ -66,9 +71,13 @@ pub async fn presign_blob_redacted_run() -> Result<()> {
             EXPECTED_BLOB_REDACTED,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_BLOB_REDACTED) {
+    // `blob_redacted` is a spec `reason_code` (applies_to=state_resolution),
+    // not a top-level error `code`; validate against the registry union.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_BLOB_REDACTED) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_BLOB_REDACTED}"
+            "error-code-registry missing reason code {ERROR_CODE_BLOB_REDACTED}"
         ));
     }
     Ok(())

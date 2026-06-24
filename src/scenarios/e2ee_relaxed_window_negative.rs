@@ -16,9 +16,10 @@
 //! This module covers the two negative branches.
 
 use anyhow::{Result, anyhow};
+use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
     ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE,
-    ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING, is_known_error_code,
+    ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING,
 };
 
 pub const ABSOLUTE_HARD_CEILING_MS: u64 = 300_000;
@@ -52,9 +53,14 @@ pub async fn e2ee_relaxed_window_exceeds_ceiling_run() -> Result<()> {
             EXPECTED_RELAXED_EXCEEDS_CEILING,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING) {
+    // `relaxed_window_exceeds_ceiling` is a spec `reason_code`, not a top-level
+    // error `code`, so it is validated against the registry union rather than
+    // the SDK's codes-only `KNOWN_ERROR_CODES` table.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING}"
+            "error-code-registry missing reason code {ERROR_CODE_RELAXED_WINDOW_EXCEEDS_CEILING}"
         ));
     }
     Ok(())
@@ -74,9 +80,13 @@ pub async fn e2ee_relaxed_disallowed_in_compliance_run() -> Result<()> {
             EXPECTED_RELAXED_DISALLOWED_IN_COMPLIANCE,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE) {
+    // `e2ee_relaxed_disallowed_in_compliance_profile` is a spec `reason_code`;
+    // validate against the registry union, not the codes-only table.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing \
+            "error-code-registry missing reason code \
              {ERROR_CODE_E2EE_RELAXED_DISALLOWED_IN_COMPLIANCE_PROFILE}"
         ));
     }

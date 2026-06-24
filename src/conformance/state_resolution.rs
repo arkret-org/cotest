@@ -12,8 +12,8 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Map, Value, json};
 
 use super::{
-    canonical_json, load_artifact_json, load_fixture_value, looks_like_sha256_digest, required_str,
-    sha256_prefixed, validate_profile,
+    canonical_json, load_fixture_value, looks_like_sha256_digest, required_str, sha256_prefixed,
+    validate_profile,
 };
 use crate::transcripts::record_vector_event;
 
@@ -47,7 +47,8 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_inclusion_list = false;
     let mut seen_notary_fault = false;
     let mut seen_threshold_forensics = false;
-    let mut seen_rename_family = false;
+    let mut seen_concurrent_revocation = false;
+    let mut seen_conflict_recovery = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -425,18 +426,35 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            "rename_family_reject" => {
-                validate_rename_family_reject(vector, name)?;
-                seen_rename_family = true;
+            "open_set_concurrent_revocation_fail_closed" => {
+                validate_open_set_concurrent_revocation_fail_closed(vector, name)?;
+                seen_concurrent_revocation = true;
                 record_vector_event(
-                    "state_resolution.cba.rename_family_reject",
+                    "state_resolution.cba.open_set_concurrent_revocation_fail_closed",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "parser_tier": "current_parser",
-                        "rejection_level": "hard_reject",
+                        "concurrent_revoke": "reject_or_hide",
+                        "authorization_cell_bottom": "fail_closed",
+                        "light_client": "pending_or_fail_closed",
                     }),
                     &json!({
-                        "parser_tier": pointer_str(vector, "/parser_tier"),
+                        "notary_profile": pointer_str(vector, "/notary_profile"),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
+            "conflict_recovery_move" => {
+                validate_conflict_recovery_move(vector, name)?;
+                seen_conflict_recovery = true;
+                record_vector_event(
+                    "state_resolution.cba.conflict_recovery_move",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "valid_recovery": "accept_after_valid_seal",
+                        "unsealed_recovery": "control_pending",
+                    }),
+                    &json!({
+                        "cell": pointer_str(vector, "/cell"),
                         "case_count": required_array(vector, "/cases", name)?.len(),
                     }),
                 );
@@ -459,14 +477,15 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_inclusion_list
         && seen_notary_fault
         && seen_threshold_forensics
-        && seen_rename_family)
+        && seen_concurrent_revocation
+        && seen_conflict_recovery)
     {
         bail!(
-            "cba lattice fixture must cover all 15 normative vectors \
+            "cba lattice fixture must cover all 16 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / \
-              threshold_forensics / rename_family)"
+              threshold_forensics / concurrent_revocation / conflict_recovery)"
         );
     }
 
@@ -1052,61 +1071,232 @@ fn validate_threshold_forensic_attribution(vector: &Value, vector_name: &str) ->
     )
 }
 
-fn validate_rename_family_reject(vector: &Value, vector_name: &str) -> Result<()> {
-    require_str_eq(vector, "/parser_tier", "current_parser", vector_name)?;
-    require_bool_eq(vector, "/migration_tool_only", true, vector_name)?;
-    let renames = load_artifact_json("migration/renames.json")?;
+/// Vector `ck.vector.cba_lattice.open_set_concurrent_revocation_fail_closed.v1`.
+///
+/// A DataEvent with a locally valid `seal_ref` MUST be re-evaluated against the
+/// joined multi-leaf control view of an open-set notary. When a concurrent
+/// revocation branch is observed (capability no longer live, or the
+/// authorization cell is bottom) the event MUST fail closed / be hidden rather
+/// than trusting the lone seal_ref, and a light client that cannot verify the
+/// joined view MUST NOT fan out or treat the seal_ref as sufficient.
+fn validate_open_set_concurrent_revocation_fail_closed(
+    vector: &Value,
+    vector_name: &str,
+) -> Result<()> {
+    require_str_eq(vector, "/notary_profile", "open_set", vector_name)?;
+    require_array_len_at_least(vector, "/joined_leaf_set", 2, vector_name)?;
+    require_str_eq(vector, "/data_event/plane", "data", vector_name)?;
+
     let mut seen = BTreeSet::new();
     for case in required_array(vector, "/cases", vector_name)? {
-        let legacy = required_pointer_str(case, "/legacy_identifier", vector_name)?;
-        let kind_class = required_pointer_str(case, "/kind_class", vector_name)?;
-        let expected_error = required_pointer_str(case, "/expected_error", vector_name)?;
-        if !matches!(
-            expected_error,
-            "unknown_field" | "unknown_kind" | "schema_violation"
-        ) {
-            bail!("vector {vector_name} invalid parser error {expected_error}");
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "concurrent_revoke_branch" => {
+                require_bool_eq(
+                    case,
+                    "/joined_control_view/capability_grant_live",
+                    false,
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/data_event_result",
+                    "reject_or_hide",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/freshness_window_applies",
+                    false,
+                    vector_name,
+                )?;
+            }
+            "authorization_cell_bottom" => {
+                require_str_eq(
+                    case,
+                    "/joined_control_view/cell_status",
+                    "bottom",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/data_event_result",
+                    "fail_closed",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/freshness_window_applies",
+                    false,
+                    vector_name,
+                )?;
+            }
+            "light_client_without_joined_view" => {
+                require_bool_eq(case, "/verifiable_joined_view", false, vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/data_event_result",
+                    "pending_or_fail_closed",
+                    vector_name,
+                )?;
+                require_bool_eq(case, "/expected/must_not_fanout", true, vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/must_not_treat_seal_ref_as_sufficient",
+                    true,
+                    vector_name,
+                )?;
+            }
+            other => {
+                bail!("vector {vector_name} unknown concurrent revocation case {other}");
+            }
         }
-        if !migration_entry_is_cba_hard_reject(&renames, legacy, kind_class) {
-            bail!(
-                "vector {vector_name} legacy identifier {legacy} is not a cba hard-reject rename"
-            );
-        }
-        seen.insert(legacy.to_owned());
     }
     require_seen(
         vector_name,
         &seen,
         &[
-            "anchor_ref",
-            "anchor_basis",
-            "governance_ref",
-            "anchorer_signature",
-            "signer_seq",
-            "anchored_at",
-            "ck:anchor:",
-            "anchor_profile",
-            "anchorer",
-            "covered_seals",
-            "pending_anchor",
-            "rejected_anchor",
+            "concurrent_revoke_branch",
+            "authorization_cell_bottom",
+            "light_client_without_joined_view",
         ],
     )
 }
 
-fn migration_entry_is_cba_hard_reject(renames: &Value, legacy: &str, kind_class: &str) -> bool {
-    renames
-        .pointer("/entries")
-        .and_then(Value::as_array)
-        .is_some_and(|entries| {
-            entries.iter().any(|entry| {
-                entry.get("id").and_then(Value::as_str) == Some(legacy)
-                    && entry.get("kind_class").and_then(Value::as_str) == Some(kind_class)
-                    && entry.get("migration_group").and_then(Value::as_str)
-                        == Some("cba_notary_seal_rename")
-                    && entry.get("rejection_level").and_then(Value::as_str) == Some("hard_reject")
-            })
-        })
+/// Vector `ck.vector.cba_lattice.conflict_recovery_move.v1`.
+///
+/// A `bottom=reject` control cell that has gone to bottom-by-conflict recovers
+/// ONLY through a sealed Control Move that carries a critical
+/// `recovery_capability` ref and a critical `state_witness` ref taken from
+/// before the conflict. Missing / post-conflict / unsealed witnesses, an
+/// unsealed recovery capability, and a lagging revoke all fail precondition;
+/// an unsealed recovery move stays `control_pending` and the cell remains
+/// bottom.
+fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(vector, "/bottom_state/status", "bottom", vector_name)?;
+    require_str_eq(vector, "/bottom_state/reason", "conflict", vector_name)?;
+    require_str_eq(
+        vector,
+        "/valid_recovery_move/plane",
+        "control",
+        vector_name,
+    )?;
+
+    let refs = required_array(vector, "/valid_recovery_move/refs", vector_name)?;
+    for required_role in ["recovery_capability", "state_witness"] {
+        if !refs.iter().any(|reference| {
+            reference.get("role").and_then(Value::as_str) == Some(required_role)
+                && reference.get("critical").and_then(Value::as_bool) == Some(true)
+        }) {
+            bail!(
+                "vector {vector_name} valid_recovery_move missing critical {required_role} ref"
+            );
+        }
+    }
+
+    let mut seen = BTreeSet::new();
+    for case in required_array(vector, "/cases", vector_name)? {
+        let case_name = required_pointer_str(case, "/name", vector_name)?;
+        seen.insert(case_name.to_owned());
+        match case_name {
+            "valid_recovery" => {
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "accept_after_valid_seal",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/cell_status", "value", vector_name)?;
+            }
+            "missing_state_witness" => {
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "failed_precondition",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "recovery_witness_missing",
+                    vector_name,
+                )?;
+            }
+            "post_conflict_witness" => {
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "failed_precondition",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "recovery_witness_post_conflict",
+                    vector_name,
+                )?;
+            }
+            "recovery_capability_not_sealed" => {
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "failed_precondition",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "recovery_capability_not_sealed",
+                    vector_name,
+                )?;
+            }
+            "witness_revoke_lagging" => {
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "failed_precondition",
+                    vector_name,
+                )?;
+                require_str_eq(
+                    case,
+                    "/expected/reason",
+                    "recovery_witness_revoke_lagging",
+                    vector_name,
+                )?;
+            }
+            "unsealed_recovery_move" => {
+                require_str_eq(
+                    case,
+                    "/expected/result",
+                    "control_pending",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/query_result",
+                    "failed_bottom",
+                    vector_name,
+                )?;
+            }
+            other => bail!("vector {vector_name} unknown conflict recovery case {other}"),
+        }
+    }
+    require_seen(
+        vector_name,
+        &seen,
+        &[
+            "valid_recovery",
+            "missing_state_witness",
+            "post_conflict_witness",
+            "recovery_capability_not_sealed",
+            "witness_revoke_lagging",
+            "unsealed_recovery_move",
+        ],
+    )
 }
 
 fn union_digest_sets(mut left: BTreeSet<String>, right: BTreeSet<String>) -> BTreeSet<String> {

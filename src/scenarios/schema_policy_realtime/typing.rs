@@ -151,16 +151,26 @@ fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value>
 }
 
 async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    let realm = expect_json(
-        client.get(&format!("/_cokret/self/realms/{realm_id}")),
+    // The Realm lifecycle view (`GET /_cokret/self/realms/{realm_id}`) is
+    // `additionalProperties:false` and does NOT carry `default_strand_id`
+    // (per `realm-read-operations.schema.json`). soland exposes the default
+    // Strand via the per-row `is_default` flag on the Strand-list projection
+    // (`GET /_cokret/self/projection/strands?realm_id=...`), computed as
+    // `strand_id == realm.default_strand_id` at query time.
+    let strands = expect_json(
+        client.get(&format!(
+            "/_cokret/self/projection/strands?realm_id={realm_id}"
+        )),
         StatusCode::OK,
     )
     .await?;
-    realm["default_strand_id"]
-        .as_str()
+    strands["strands"]
+        .as_array()
+        .and_then(|rows| rows.iter().find(|row| row["is_default"] == true))
+        .and_then(|row| row["strand_id"].as_str())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            anyhow::anyhow!("realm projection did not expose default_strand_id: {realm}")
+            anyhow::anyhow!("strand projection did not expose a default strand: {strands}")
         })
 }
 

@@ -21,7 +21,11 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     assert_eq!(integration["service_kind"], "principal_server");
     assert_eq!(
         integration["dependencies"][0]["required_contract"],
-        "oauth2.token_introspection.rfc7662"
+        // This is soland's private integration manifest (`/_soland/*`), not a
+        // spec-normative surface. soland declares the introspection dependency
+        // with the protocol-native contract id `ck.gate.account.session_grant.introspect`
+        // (cf. spec operation `ck.gate.account.command.introspect_session_grant`).
+        "ck.gate.account.session_grant.introspect"
     );
     assert_eq!(
         integration["surfaces"][0]["path"],

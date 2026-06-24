@@ -15,6 +15,11 @@ const PROFILE_LIST_FIELDS: &[&str] = &[
     "encoding_extension_profiles",
     "hash_extension_profiles",
     "signature_extension_profiles",
+    // 2026-06: the spec's conformance-profiles.json added a
+    // `kem_extension_profiles` catalog group (e.g. `ck.profile.hpke.p256.v1`,
+    // `ck.profile.kem.hybrid_xwing.v1`). Without it the dependency-graph node
+    // for those KEM profiles trips `not_declared_in_any_profile_catalog`.
+    "kem_extension_profiles",
     "hardening_profiles",
     "vector_profiles",
     "notary_profiles",

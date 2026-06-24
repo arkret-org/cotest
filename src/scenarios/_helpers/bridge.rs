@@ -254,7 +254,12 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "scopes": ["urn:cokret:principal-server:session.bind"],
             "expires_at": (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
             "revoked_at": null,
-            "revocation_ref": "ck:session:mock"
+            "revocation_ref": "ck:session:mock",
+            // `SessionGrantIntrospectGrant.session_public_key` is a required
+            // (non-Option) field in the SDK wire type; omitting it makes soland
+            // fail to deserialize the introspection outcome and return 503.
+            // Supply a well-formed Ed25519 OKP JWK so the S2S contract holds.
+            "session_public_key": "{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\"}"
         }
     })));
 }

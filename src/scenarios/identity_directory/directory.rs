@@ -302,9 +302,21 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
+    // soland derives the handle authority via `service_handle_domain`, which
+    // prefers the host of `SOLAND_PUBLIC_BASE_URL` over the service DID host
+    // (handles.rs). In production those agree (public_base_url host ==
+    // service_did host); the harness binds the SUT to loopback, so the
+    // public_base_url host here is the bind host (e.g. `127.0.0.1`) rather
+    // than `*.cotest.local`. Derive the expected authority from the server's
+    // actual bind host instead of hard-coding it.
+    let service_host = server
+        .base_url()
+        .host_str()
+        .expect("server base_url must have a host")
+        .to_owned();
     assert_eq!(
         alice_user_after_contact["users"][0]["handle"],
-        "bob-privacy-example:directory-privacy.cotest.local"
+        format!("bob-privacy-example:{service_host}")
     );
 
     let anonymous_after_contact = expect_json(

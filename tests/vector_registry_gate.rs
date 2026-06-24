@@ -287,12 +287,19 @@ fn current_spec_vector_registry_artifact_gate_validates() -> Result<()> {
         0,
         "real registry must not retain active doc-only vectors"
     );
+    // The current spec registry may set every row to active (no reserved /
+    // unsupported rows). That is allowed; we only require that *if* any such
+    // row exists, it carries a reason. This is a conditional invariant rather
+    // than a hard requirement that reserved/unsupported rows be present.
     assert!(
-        report.non_gating_entries().any(|entry| matches!(
-            entry.gate_status,
-            VectorRegistryGateStatus::Reserved | VectorRegistryGateStatus::Unsupported
-        ) && entry.reason.is_some()),
-        "real registry should record reserved or unsupported rows with a reason"
+        report
+            .non_gating_entries()
+            .filter(|entry| matches!(
+                entry.gate_status,
+                VectorRegistryGateStatus::Reserved | VectorRegistryGateStatus::Unsupported
+            ))
+            .all(|entry| entry.reason.is_some()),
+        "any reserved or unsupported row must record a reason"
     );
     for (vector_id, expected_fixture_ref) in [
         (

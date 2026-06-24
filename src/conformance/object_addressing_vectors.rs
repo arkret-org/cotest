@@ -514,7 +514,12 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "source": "directory_ingest",
                 "source_refs": ["ck:event:01904100-0000-7000-8000-0000000000e1"],
                 "as_of": "2026-05-27T00:00:00Z",
-                "expires_at": "2026-05-27T00:15:00Z"
+                "expires_at": "2026-05-27T00:15:00Z",
+                "seal_basis": {
+                    "leaves": ["ck:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+                    "control_event_set_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "state_root": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                }
             },
             {
                 "realm_id": format!("ck:realm:{R}"),
@@ -527,7 +532,12 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "source": "directory_ingest",
                 "source_refs": ["ck:event:01904100-0000-7000-8000-0000000000e2"],
                 "as_of": "2026-05-27T00:00:00Z",
-                "expires_at": "2026-05-27T00:15:00Z"
+                "expires_at": "2026-05-27T00:15:00Z",
+                "seal_basis": {
+                    "leaves": ["ck:seal:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"],
+                    "control_event_set_root": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                    "state_root": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                }
             }
         ],
         "policy_revision": "rev-7",

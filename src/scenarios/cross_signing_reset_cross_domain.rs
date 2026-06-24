@@ -24,8 +24,9 @@
 use anyhow::{Result, anyhow};
 use cokret_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_RESET_EVENT_ID_MISMATCH, EventId,
-    TypedTrustDomainId, is_known_error_code,
+    TypedTrustDomainId,
 };
+use cokret_core::schema::embedded_error_code_identifiers;
 
 pub const EXPECTED_CROSS_DOMAIN_REPLAY: &str = "cross_domain_replay_rejected";
 pub const EXPECTED_RESET_EVENT_ID_MISMATCH: &str = "reset_event_id_mismatch";
@@ -46,9 +47,15 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
             EXPECTED_CROSS_DOMAIN_REPLAY,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED) {
+    // `cross_domain_replay_rejected` is a spec `reason_code` (applies_to=
+    // auth_decision), not a top-level error `code`, so it is absent from the
+    // SDK's `KNOWN_ERROR_CODES`. Validate registration against the registry
+    // union (codes ∪ reason_codes), which is the spec truth source.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED}"
+            "error-code-registry missing reason code {ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED}"
         ));
     }
     // Validate the SDK accepts two well-formed trust domain ids and that
@@ -85,9 +92,14 @@ pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
             EXPECTED_RESET_EVENT_ID_MISMATCH,
         ));
     }
-    if !is_known_error_code(ERROR_CODE_RESET_EVENT_ID_MISMATCH) {
+    // `reset_event_id_mismatch` is a spec `reason_code` (applies_to=
+    // schema_violation), not a top-level error `code`; validate registration
+    // against the registry union rather than the codes-only table.
+    let registry_identifiers = embedded_error_code_identifiers()
+        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
+    if !registry_identifiers.contains(ERROR_CODE_RESET_EVENT_ID_MISMATCH) {
         return Err(anyhow!(
-            "SDK KNOWN_ERROR_CODES table missing {ERROR_CODE_RESET_EVENT_ID_MISMATCH}"
+            "error-code-registry missing reason code {ERROR_CODE_RESET_EVENT_ID_MISMATCH}"
         ));
     }
     let id_a = EventId::new("ck:event:01904100-0000-7000-8000-000000000001")
