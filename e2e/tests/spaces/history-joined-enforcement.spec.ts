@@ -6,6 +6,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   authHeaders,
+  accountSubscribeFramesApi,
   canonicalTimestamp,
   plaintextVisibleServiceDeclarations,
   resolveDefaultStrandId,
@@ -331,15 +332,9 @@ async function accountSubscribeBodies(
   token: string,
   realmId: string,
 ): Promise<string[]> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true&filter=${encodeURIComponent(
-      JSON.stringify({ spaces: [realmId] }),
-    )}`,
-    { headers: authHeaders(token) },
-  );
-  const text = await response.text();
-  expect(response.status(), `account subscribe ${realmId}: ${text}`).toBe(200);
-  const frames = parseNdjson(text);
+  const frames = await accountSubscribeFramesApi(request, token, {
+    filter: { spaces: [realmId] },
+  });
   const delta = frames.find((frame) => frame.kind === "delta") as
     | {
         realms?: Record<

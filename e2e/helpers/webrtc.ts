@@ -13,6 +13,7 @@ import {
 import { solandBaseUrl } from "./env";
 import {
   authHeaders,
+  accountSubscribeFramesApi,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
@@ -429,19 +430,11 @@ export async function relayedCallSignals(
   token: string,
   realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`,
-    { headers: { ...authHeaders(token), accept: "application/x-ndjson" } },
-  );
-  const text = await response.text();
-  expect(
-    response.status(),
-    `account subscribe returned ${response.status()}: ${text}`,
-  ).toBe(200);
-  const frame = JSON.parse(text.trim().split(/\r?\n/)[0]) as {
+  const frames = await accountSubscribeFramesApi(request, token);
+  const frame = frames.find((candidate) => candidate.kind === "delta") as {
     realms?: Record<string, { ephemeral?: Array<Record<string, unknown>> }>;
-  };
-  const ephemeral = frame.realms?.[realmId]?.ephemeral ?? [];
+  } | undefined;
+  const ephemeral = frame?.realms?.[realmId]?.ephemeral ?? [];
   const out: Array<Record<string, unknown>> = [];
   for (const item of ephemeral) {
     if (item.type !== "ck.call.signal") {

@@ -8,6 +8,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   addRealmMemberApi,
   accountSubscribeDeltaApi,
+  accountSubscribeFramesApi,
   authHeaders,
   createRealmApi,
   putAccountDataViaEventApi,
@@ -46,16 +47,9 @@ test.describe("personal blocklist", () => {
     const alice = uniqueUser("s31-probe");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const auth = { authorization: `Bearer ${token}` };
 
-    const accountData = await request.get(
-      `${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`,
-      {
-        headers: { ...auth, accept: "application/x-ndjson" },
-      },
-    );
-    expect(accountData.status()).toBe(200);
-    expect(await accountData.text()).toContain("delta");
+    const accountData = await accountSubscribeFramesApi(request, token);
+    expect(JSON.stringify(accountData)).toContain("delta");
   });
 
   test("Complement account_data control: same data_type overwrites and sync returns latest entry", async ({

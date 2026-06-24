@@ -18,6 +18,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   canonicalJson,
+  accountSubscribeFramesApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -61,14 +62,9 @@ async function accountSubscribeTimelineEvents(
   token: string,
   realmId: string,
 ): Promise<Array<Record<string, unknown>>> {
-  const subscribe = await request.get(
-    `${solandBaseUrl()}/_cokret/self/account/subscribe?catchup=true`,
-    {
-      headers: authHeaders(token),
-    },
-  );
-  expect(subscribe.status()).toBe(200);
-  const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
+  const frames = await accountSubscribeFramesApi(request, token);
+  const frame = frames.find((candidate) => candidate.kind === "delta");
+  expect(frame, "account subscribe delta frame").toBeTruthy();
   const realmFrame = frame.realms[realmId];
   expect(realmFrame, `sync realm frame for ${realmId}`).toBeTruthy();
   expect(Array.isArray(realmFrame.timeline?.events)).toBe(true);
@@ -397,14 +393,9 @@ test.describe("chat advanced", () => {
     );
     expect(typing.status()).toBe(200);
 
-    const subscribe = await request.get(
-      `${solandBaseUrl()}/_cokret/self/account/subscribe`,
-      {
-        headers: authHeaders(fixture.bobToken),
-      },
-    );
-    expect(subscribe.status()).toBe(200);
-    const frame = JSON.parse((await subscribe.text()).trim().split(/\r?\n/)[0]);
+    const frames = await accountSubscribeFramesApi(request, fixture.bobToken);
+    const frame = frames.find((candidate) => candidate.kind === "delta");
+    expect(frame, "account subscribe delta frame").toBeTruthy();
     const realmFrame = frame.realms[fixture.realmId];
     const ephemeral = realmFrame.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
