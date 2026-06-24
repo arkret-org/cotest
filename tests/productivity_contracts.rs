@@ -146,19 +146,26 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             }),
         )
         .unwrap();
+    // `grace_ms` is a message-expiry field, not a realm disappearing-policy
+    // field. The payload validator is forward-compatible: an unknown field on an
+    // `additionalProperties:false` schema surfaces as a validation WARNING, not a
+    // hard error, so assert the warning rather than an Err.
+    let disappearing_warnings = catalog
+        .validate_payload_with_warnings(
+            kinds::REALM_DISAPPEARING_POLICY,
+            &json!({
+                "enabled": true,
+                "max_ttl_ms": 3600000,
+                "allowed_triggers": ["on_send"],
+                "grace_ms": 0
+            }),
+        )
+        .expect("known realm-policy kind must resolve to a payload validator");
     assert!(
-        catalog
-            .validate_payload(
-                kinds::REALM_DISAPPEARING_POLICY,
-                &json!({
-                    "enabled": true,
-                    "max_ttl_ms": 3600000,
-                    "allowed_triggers": ["on_send"],
-                    "grace_ms": 0
-                }),
-            )
-            .is_err(),
-        "message-expiry field grace_ms is not a realm policy field"
+        disappearing_warnings
+            .iter()
+            .any(|warning| warning.contains("grace_ms")),
+        "grace_ms (a message-expiry field) must be flagged as an unknown realm-policy field: {disappearing_warnings:?}"
     );
 
     catalog
