@@ -222,7 +222,10 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
                 }),
             )),
         StatusCode::CONFLICT,
-        "realm_terminal_state",
+        // The top-level wire error code is `failed_precondition`; the
+        // terminal-state condition is carried as the `realm_terminal_state`
+        // sub-reason (it is a spec `reason_code`, not a top-level error code).
+        "failed_precondition",
     )
     .await?;
 

@@ -536,9 +536,13 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
         );
     }
 
-    // Each forbidden field must be a string, and must never appear in any
-    // input request body (the blinded response shares one body shape that
-    // excludes these fields regardless of the underlying failure reason).
+    // `must_not_include` constrains the blinded *response*: the single shared
+    // 404 body shape must NOT carry any of these fields, regardless of the
+    // underlying failure reason (missing / hidden / unauthorized). The query
+    // inputs legitimately contain the looked-up selector fields (e.g.
+    // `controller_subject`), so the check is against `same_body_shape` — the
+    // declared response field set — not the request inputs.
+    let body_shape_fields: Vec<&str> = body_shape.iter().filter_map(Value::as_str).collect();
     for field in must_not_include {
         let field = field.as_str().ok_or_else(|| {
             anyhow!(
@@ -546,15 +550,11 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
                 case.name
             )
         })?;
-        for input in inputs {
-            if let Some(body) = input.get("body")
-                && contains_key_recursive(body, field)
-            {
-                bail!(
-                    "privacy fixture {} input leaks blinded field {field}",
-                    case.name
-                );
-            }
+        if body_shape_fields.contains(&field) {
+            bail!(
+                "privacy fixture {} blinded response body shape leaks forbidden field {field}",
+                case.name
+            );
         }
     }
 

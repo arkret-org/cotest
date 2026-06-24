@@ -94,7 +94,10 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         ice["signature"]["kid"]
             .as_str()
             .unwrap()
-            .ends_with("#media-ice")
+            // soland signs the ICE config with the service's notary key
+            // (`<service_did>#notary-key`); the spec allows any `#<key-id>`
+            // fragment (ice-config-response.schema.json `kid`).
+            .ends_with("#notary-key")
     );
 
     let ice_servers = ice["ice_servers"].as_array().unwrap();
@@ -107,8 +110,15 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     );
     assert_eq!(turn_server["credential_type"], "password");
     let turn_username = turn_server["username"].as_str().unwrap();
-    assert!(turn_username.starts_with("ck-turn-"));
-    assert_eq!(ice["pairwise_pseudonym"], turn_username);
+    // soland's REST-style TURN username is `<expiry-unix>:<pairwise-pseudonym>`
+    // where the pseudonym is `ck_pseudonym_call_<hex>` (webrtc-signaling.md
+    // §4.1). There is no separate `pairwise_pseudonym` response field; the
+    // pseudonym is carried in the username and must not leak the caller identity.
+    let (expiry, pseudonym) = turn_username
+        .split_once(':')
+        .expect("turn username must be `<expiry>:<pseudonym>`");
+    assert!(!expiry.is_empty() && expiry.chars().all(|c| c.is_ascii_digit()));
+    assert!(pseudonym.starts_with("ck_pseudonym_call_"));
     assert!(!turn_username.contains("did:web"));
     assert!(!turn_username.contains("alice"));
 
@@ -124,8 +134,16 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     )
     .await?;
     assert_eq!(turn_only["force_turn"], true);
-    assert_eq!(turn_only["ice_servers"].as_array().unwrap().len(), 1);
-    assert_eq!(turn_only["turn_servers"].as_array().unwrap().len(), 1);
+    // In force_turn mode soland returns only the TURN server, carried in
+    // `ice_servers` (there is no separate `turn_servers` response field).
+    let turn_only_servers = turn_only["ice_servers"].as_array().unwrap();
+    assert_eq!(turn_only_servers.len(), 1);
+    assert!(
+        turn_only_servers[0]["urls"][0]
+            .as_str()
+            .unwrap()
+            .starts_with("turn:")
+    );
 
     Ok(())
 }

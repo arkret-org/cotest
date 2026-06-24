@@ -85,37 +85,70 @@ fn with_signed_federation_request_digests(
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;
     let keyid = format!("{source_service_did}#federation-fanout-key");
-    let signature_params = format!(
-        "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
-         \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
-         \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
-         expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
-    );
-    let signature_base = format!(
-        "\"@method\": {}\n\
-         \"@target-uri\": {target_uri}\n\
-         \"@authority\": {authority}\n\
-         \"content-digest\": {content_digest}\n\
-         \"source-service-did\": {source_service_did}\n\
-         \"destination-service-did\": {destination_service_did}\n\
-         \"source-trust-domain\": {source_trust_domain}\n\
-         \"destination-trust-domain\": {destination_trust_domain}\n\
-         \"request-canonical-digest\": {request_canonical_digest}\n\
-         \"@signature-params\": {signature_params}",
-        method.to_ascii_uppercase()
-    );
+    // Bodyless GET peer reads MUST NOT carry — nor bind in their signature —
+    // the body-digest components: soland rejects `content-digest` /
+    // `request-canonical-digest` headers AND a Signature-Input that lists those
+    // components for a GET (federation.md §3.2; peer.rs GET branch). Only
+    // body-carrying requests bind the two digest components.
+    let bind_body_digests = !method.eq_ignore_ascii_case("GET");
+    let signature_params = if bind_body_digests {
+        format!(
+            "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
+             \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+             \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
+             expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
+        )
+    } else {
+        format!(
+            "(\"@method\" \"@target-uri\" \"@authority\" \
+             \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
+             \"destination-trust-domain\");created={created};\
+             expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
+        )
+    };
+    let signature_base = if bind_body_digests {
+        format!(
+            "\"@method\": {}\n\
+             \"@target-uri\": {target_uri}\n\
+             \"@authority\": {authority}\n\
+             \"content-digest\": {content_digest}\n\
+             \"source-service-did\": {source_service_did}\n\
+             \"destination-service-did\": {destination_service_did}\n\
+             \"source-trust-domain\": {source_trust_domain}\n\
+             \"destination-trust-domain\": {destination_trust_domain}\n\
+             \"request-canonical-digest\": {request_canonical_digest}\n\
+             \"@signature-params\": {signature_params}",
+            method.to_ascii_uppercase()
+        )
+    } else {
+        format!(
+            "\"@method\": {}\n\
+             \"@target-uri\": {target_uri}\n\
+             \"@authority\": {authority}\n\
+             \"source-service-did\": {source_service_did}\n\
+             \"destination-service-did\": {destination_service_did}\n\
+             \"source-trust-domain\": {source_trust_domain}\n\
+             \"destination-trust-domain\": {destination_trust_domain}\n\
+             \"@signature-params\": {signature_params}",
+            method.to_ascii_uppercase()
+        )
+    };
     let signing_key = development_service_signing_key(source_service_did);
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
-    Ok(builder
-        .header("Content-Digest", content_digest)
+    let mut builder = builder
         .header("Source-Service-DID", source_service_did)
         .header("Destination-Service-DID", destination_service_did)
         .header("Source-Trust-Domain", source_trust_domain)
         .header("Destination-Trust-Domain", destination_trust_domain)
-        .header("Request-Canonical-Digest", request_canonical_digest)
         .header("Signature-Input", format!("sig1={signature_params}"))
-        .header("Signature", format!("sig1=:{signature}:")))
+        .header("Signature", format!("sig1=:{signature}:"));
+    if bind_body_digests {
+        builder = builder
+            .header("Content-Digest", content_digest)
+            .header("Request-Canonical-Digest", request_canonical_digest);
+    }
+    Ok(builder)
 }
 
 fn trust_domain_from_service_did(service_did: &str) -> String {
@@ -227,12 +260,8 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
 pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
     let server = CokretServer::spawn("federation-invalid").await?;
 
-    // Per federation.md §3.2 the inbound trust-header check (Source-Trust-Domain
-    // et al.) runs BEFORE body-schema validation, and a missing/invalid trust
-    // header is reported as `schema_violation` (minimal disclosure — soland does
-    // not leak body-parse details to an unauthenticated federation peer). These
-    // two requests carry no signed federation headers, so both are rejected at
-    // the trust-header gate regardless of whether the body is malformed.
+    // A body that is not even parseable JSON fails at the JSON layer and is
+    // reported as `bad_json`.
     expect_api_error(
         server
             .http()
@@ -240,9 +269,14 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "schema_violation",
+        "bad_json",
     )
     .await?;
+    // A well-formed JSON object that lacks the federation trust headers is
+    // rejected at the inbound trust-header gate (Source-Trust-Domain missing),
+    // which soland reports as `schema_violation` with minimal disclosure
+    // (federation.md §3.2) — body-shape details are not leaked to an
+    // unauthenticated peer.
     expect_api_error(
         server
             .http()
