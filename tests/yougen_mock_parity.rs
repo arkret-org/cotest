@@ -966,19 +966,14 @@ async fn inject_live_default_strand_id(
     let Some(mut body) = body else {
         return Ok(None);
     };
-    let realm = server
-        .http()
-        .get(server.url(&format!("/_cokret/self/realms/{}", ctx.realm_id)))
-        .bearer_auth(&ctx.alice_token)
-        .send()
-        .await?
-        .json::<Value>()
-        .await?;
-    let strand_id = realm["default_strand_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("live realm projection has no default_strand_id: {realm}"))?;
+    // soland does not auto-create a Strand on realm create and does not expose
+    // `default_strand_id` on the realm lifecycle view; the realm's conversation
+    // Strand id is derived from the realm id (ck:realm:<uuid> -> ck:strand:<uuid>),
+    // which is the same id the message/typing envelopes target.
+    let _ = server;
+    let strand_id = ctx.realm_id.replace("ck:realm:", "ck:strand:");
     if let Some(payload) = body.get_mut("payload").and_then(Value::as_object_mut) {
-        payload.insert("strand_id".to_owned(), Value::String(strand_id.to_owned()));
+        payload.insert("strand_id".to_owned(), Value::String(strand_id));
     }
     Ok(Some(body))
 }
@@ -986,6 +981,7 @@ async fn inject_live_default_strand_id(
 fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {
     let body = match case_id {
         "server_describe" => normalize_server_describe(snapshot.body),
+        "directory_describe" => normalize_directory_describe(snapshot.body),
         "account_profile" => json!({
             "principal_id": normalize_value(
                 snapshot
@@ -1065,6 +1061,45 @@ fn normalize_server_describe(body: Value) -> Value {
         "protocol_version": body.get("protocol_version").cloned().unwrap_or(Value::Null),
         "service_type": body.get("service_type").cloned().unwrap_or(Value::Null),
         "supports_core_events": supported_features || supported_operations,
+    })
+}
+
+/// Reduce a `/_cokret/find/directory/describe` response to the stable semantic
+/// invariants both the yougen mock and a live soland must agree on. The full
+/// response carries environment-specific fields (development_mode, trust_domain,
+/// per-deployment base_url) and a growing surface inventory (did methods,
+/// operations, features) that legitimately differs between a fixed mock and the
+/// current server, so — like `normalize_server_describe` — compare only the
+/// directory contract invariants.
+fn normalize_directory_describe(body: Value) -> Value {
+    let supports_describe = body
+        .get("supported_operations")
+        .and_then(Value::as_array)
+        .map(|operations| {
+            operations
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|operation| operation == "ck.find.directory.query.describe")
+        })
+        .unwrap_or(false);
+    let accepts_did_web = body
+        .get("accepted_did_methods")
+        .and_then(Value::as_array)
+        .map(|methods| {
+            methods
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|method| method == "did:web")
+        })
+        .unwrap_or(false);
+    json!({
+        "accept_policy_kind": body.get("accept_policy_kind").cloned().unwrap_or(Value::Null),
+        "accepted_resource_kinds": body.get("accepted_resource_kinds").cloned().unwrap_or(Value::Null),
+        "discovery_profiles": body.get("discovery_profiles").cloned().unwrap_or(Value::Null),
+        "auth_mode": body.pointer("/auth_metadata/mode").cloned().unwrap_or(Value::Null),
+        "default_ttl_seconds": body.get("default_ttl_seconds").cloned().unwrap_or(Value::Null),
+        "supports_describe": supports_describe,
+        "accepts_did_web": accepts_did_web,
     })
 }
 
