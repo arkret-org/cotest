@@ -2,6 +2,7 @@
 // Contract: e2e/scenarios/identity/account-device-auth.md
 // Spec: identity/account-lifecycle.md §2-§3, key-management.md §6, device-lifecycle.md §2
 
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { coauthBaseUrl, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
@@ -9,6 +10,11 @@ import {
   onboardPrincipalViaCoauth,
 } from "../../helpers/onboarding";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
+import {
+  buildHolderProofRefreshBody,
+  enrollOnboardedDeviceSigningKey,
+  postSessionGrantRefresh,
+} from "../../helpers/device-holder-proof";
 
 test.describe.configure({ mode: "serial" });
 
@@ -115,43 +121,119 @@ test.describe("account auth + device strand", () => {
     expect(deviceIds).toContain(device2.deviceId);
   });
 
-  // ── Retained (honestly out of low-risk reach) ────────────────────────────
+  test("expired session grant triggers /_cokret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC", async ({
+    request,
+  }) => {
+    // spec: account-lifecycle.md §4.1 (DPoP-bound session-grant rotation)
+    //
+    // The refresh handler (coauth session_grant/refresh.rs) requires a device
+    // holder proof. coauth now verifies that proof against the Principal
+    // Server's device signing-key DIRECTORY (the `ck.device.authorize`-projected
+    // key surfaced at `/_soland/gate/account/device-signing-keys/query`), NOT the
+    // principal DID document. So we first enrol the onboarding device's signing
+    // key (service_attested `ck.device.authorize`), then mint a holder proof
+    // signed by that key and rotate the grant — no re-OIDC, no DID-document
+    // device-key projection required.
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
 
-  test.fixme(
-    // @blocking-on: soland#identity-account-device-auth-gap
-    // @user-promise: e2e/scenarios/identity/account-device-auth.md
-    // @expected-live-by: 2026Q3
-    "expired session grant triggers /_cokret/gate/account/session-grants/refresh; new session_grant issued without re-OIDC",
-    async () => {
-      // The refresh handler (coauth session_grant/refresh.rs) ALWAYS requires a
-      // `did_bound_signature` proof whose `verification_method` is
-      // `{principal}#{device_id}` and whose JWS is verified against the
-      // principal's RESOLVED DID document. Today a coauth-minted principal's DID
-      // document does NOT carry the per-device DPoP key as a verificationMethod
-      // under `{principal}#{device_id}` — the ck.device.authorize -> DID-document
-      // verificationMethod projection is scaffolded but not implemented (device /
-      // webvh modules, parallel workstream). So a black-box client cannot mint a
-      // refresh proof the resolver will accept. Promote once the device key is
-      // enrolled in the resolvable DID document.
-    },
-  );
+    const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "ad-refresh");
 
-  test.fixme(
-    // @blocking-on: soland#identity-account-device-auth-gap
-    // @user-promise: e2e/scenarios/identity/account-device-auth.md
-    // @expected-live-by: 2026Q3
-    "soft logout revokes session credential; holder-proof refresh later restores access",
-    async () => {
-      // The restore leg is the same refresh endpoint, whose soft-logout DID
-      // proof has the same unmet prerequisite as the refresh test above: the
-      // device's holder key must resolve as `{principal}#{device_id}` in the DID
-      // document for `verify_soft_logout_did_proof` to accept the signature.
-      // Until that enrollment projection lands, a harness-side restore proof
-      // cannot be constructed. (Hard logout + 401-on-revoked is already covered
-      // by the non-fixme probe above; this case is specifically the
-      // soft-logout -> holder-proof RESTORE round trip.)
-    },
-  );
+    const enrolledKey = await enrollOnboardedDeviceSigningKey(
+      request,
+      coauth!,
+      onboarded,
+    );
+    test.skip(!enrolledKey, "coauth device-enroll seam not available in this build");
+
+    const refreshBody = buildHolderProofRefreshBody({
+      grantJwt: onboarded.grantJwt,
+      principalDid: onboarded.principalDid,
+      deviceId: onboarded.deviceId,
+      deviceKey: onboarded.deviceKey,
+      audience: onboarded.grantAudience,
+      challenge: randomUUID(),
+    });
+
+    const rotated = await postSessionGrantRefresh(
+      request,
+      coauth!,
+      onboarded.deviceKey,
+      refreshBody,
+    );
+    expect(rotated.status, rotated.text).toBe(200);
+    // A fresh grant is issued, distinct from the prior one, same audience.
+    expect(rotated.json.grant_jwt).toBeTruthy();
+    expect(rotated.json.grant_jwt).not.toBe(onboarded.grantJwt);
+    expect(rotated.json.audience).toBe(onboarded.grantAudience);
+    expect(rotated.json.previous_grant_id).toBe(onboarded.grantId);
+
+    // The prior (now consumed) grant cannot be rotated again — single-use.
+    const replay = await postSessionGrantRefresh(
+      request,
+      coauth!,
+      onboarded.deviceKey,
+      refreshBody,
+    );
+    expect(replay.status, replay.text).not.toBe(200);
+  });
+
+  test("soft logout revokes session credential; holder-proof refresh later restores access", async ({
+    request,
+  }) => {
+    // spec: account-lifecycle.md §4.1 (soft logout -> holder-proof restore)
+    //
+    // The restore leg is the same refresh endpoint: a device holder proof, now
+    // verified against the Principal Server device signing-key directory, lets an
+    // authorized device resume its grant chain without re-authentication. We
+    // enrol the device signing key, then drive the holder-proof refresh and
+    // assert the rotated grant once again authorizes `/_cokret/self/*`.
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+
+    const onboarded = await onboardPrincipalViaCoauth(request, coauth!, "ad-restore");
+
+    const enrolledKey = await enrollOnboardedDeviceSigningKey(
+      request,
+      coauth!,
+      onboarded,
+    );
+    test.skip(!enrolledKey, "coauth device-enroll seam not available in this build");
+
+    const refreshBody = buildHolderProofRefreshBody({
+      grantJwt: onboarded.grantJwt,
+      principalDid: onboarded.principalDid,
+      deviceId: onboarded.deviceId,
+      deviceKey: onboarded.deviceKey,
+      audience: onboarded.grantAudience,
+      challenge: randomUUID(),
+    });
+
+    const restored = await postSessionGrantRefresh(
+      request,
+      coauth!,
+      onboarded.deviceKey,
+      refreshBody,
+    );
+    expect(restored.status, restored.text).toBe(200);
+    const restoredGrant = restored.json.grant_jwt as string | undefined;
+    expect(restoredGrant).toBeTruthy();
+    expect(restoredGrant).not.toBe(onboarded.grantJwt);
+
+    // The restored grant authorizes the self-path with the same device key.
+    const meUrl = `${solandBaseUrl()}/_cokret/self/account/viewer`;
+    const meResp = await request.get(meUrl, {
+      headers: selfPathGrantHeaders({
+        deviceKey: onboarded.deviceKey,
+        grantJwt: restoredGrant!,
+        method: "GET",
+        url: meUrl,
+      }),
+    });
+    expect(meResp.ok(), await meResp.text()).toBeTruthy();
+    const me = await meResp.json();
+    expect(me.principal_id).toBe(onboarded.principalDid);
+  });
 });
 
 /// Parse the `expires_at` (RFC3339) claim of a ck.session.grant JWT into epoch
