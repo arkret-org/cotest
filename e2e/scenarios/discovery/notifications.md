@@ -58,14 +58,16 @@
 
 18. 制造 N 条未读消息(alice 连发 5 条)
 19. bob 进 `/notifications`,点 "Mark all read"
-20. 断言:unread count = 0,所有通知行标 `read`
+20. 断言:yougen 本地 unread badge 清零,所有通知行标 `read`;客户端按
+    `discovery/read-receipts.md` 提交 `ck.read_cursor.advance`,通知投影继续通过
+    `GET /_cokret/self/account/subscribe?catchup=true` 读取
 
 ### Phase F — `evaluation_locus` 在 E2EE 中
 
 21. 重建一个 E2EE Realm,加 notification rule `contains_keyword: "urgent"`(只 client 可求值,因为服务端看不到明文)
 22. alice 发 `"this is urgent"`
-23. 服务端发 blind wake-up push(spec §4.5)
-24. 客户端解密 → 求值 rule → 显示 urgent notification
+23. 服务端为 `mention_sidecar_hash` 命中的接收者派生脱敏 notification projection,并在 push 面走 blind wake-up(spec §4.5)
+24. 客户端从 `/_cokret/self/account/subscribe` 拉取 projection,本地解密 → 求值 rule → 显示 urgent notification
 
 ## Edge cases
 
@@ -76,7 +78,7 @@
 
 ## Implementation notes
 
-- **soland 缺口**:notification queue projection、rule engine、mention sidecar(参见 messaging/chat-advanced)
+- **soland 约束**:notification projection 只经 `/_cokret/self/account/subscribe` 暴露
 - **yougen 缺口**:`/notifications` panel 完整 UI、per-Realm mute toggle、`/settings/notifications` DnD picker
 - **harness 缺口**:可选 mock push gateway 接收 push payload(为了断言 push 真发了)
 

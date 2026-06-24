@@ -174,7 +174,7 @@ test.describe("private read marker", () => {
     // @blocking-on: soland#models-private-read-cursor-gap
     // @user-promise: e2e/scenarios/models/private-read-marker.md
     // @expected-live-by: 2026Q3
-    "E10.2 E2EE Realm notification redaction: server-side GET /_soland/self/notifications exposes only envelope metadata (event_id, sender_did, ts, encrypted:true); message body stays sealed until the client decrypts locally",
+    "E10.2 E2EE Realm notification redaction: account subscribe exposes only notification metadata (source_event_id, actor_id, ts, encrypted:true); message body stays sealed until the client decrypts locally",
     async () => {
       // spec: discovery/push-notifications.md §4 + private-objects.md §3
       // soland gap: encrypted-realm notification projection redaction path not wired;

@@ -4,11 +4,10 @@
 
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   addRealmMemberApi,
-  authHeaders,
+  accountSubscribeDeltaApi,
   canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
@@ -268,61 +267,76 @@ test.describe("notifications", () => {
   });
 
   test("mark-all-read clears unread badges and marks notification rows as read", async ({
+    browser,
     request,
-  }) => {
-    // spec: discovery/push-notifications.md — `last_read_at` marker is
-    // the canonical "everything before this is read" cursor. Asserted
-    // via the dedicated `POST /_soland/self/notifications/mark-all-read` +
-    // `GET /_soland/self/notifications` pair.
+  }, testInfo) => {
+    // spec: discovery/read-receipts.md §6.6 + sync/client-sync.md §3.
+    // Notification projection is read from account subscribe; mark-all-read
+    // advances read cursor state from the client surface.
     const stamp = Date.now();
     const alice = uniqueUser(`s23-mark-${stamp}`);
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const auth = { authorization: `Bearer ${aliceToken}` };
+    const bob = uniqueUser(`s23-mark-bob-${stamp}`);
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const [aliceToken, bobToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, bob),
+    ]);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S23 Mark Read ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "shared",
+      encryption_profile: "none",
+    });
+    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    const msg = `mark all read notification ${stamp}`;
+    const sent = await sendMessageApi(request, aliceToken, realmId, msg, {
+      mentions: [bob.did],
+    });
+    const beforeDelta = await accountSubscribeDeltaApi(request, bobToken);
+    const beforeItem = notificationEventsFromDelta(beforeDelta).find(
+      (candidate) => candidate.source_event_id === sent.event_id,
+    );
+    expect(beforeItem, "account subscribe notification before mark-all").toEqual(
+      expect.objectContaining({
+        source_event_id: sent.event_id,
+        state: "unread",
+        read: false,
+      }),
+    );
 
-    // Pre-mark: last_read_at is null.
-    const before = await request.get(
-      `${solandBaseUrl()}/_soland/self/notifications`,
-      {
-        headers: auth,
-      },
-    );
-    expect(before.status()).toBe(200);
-    const beforeBody = await before.json();
-    expect(beforeBody.last_read_at == null).toBe(true);
+    const bobPage = await openUserPage(browser, bob, {
+      sessionCredential: bobToken,
+    });
+    try {
+      await bobPage.gotoNotifications();
+      const row = bobPage.page
+        .getByTestId("notification-item")
+        .filter({ hasText: msg });
+      await expect(row).toBeVisible({ timeout: 30_000 });
+      await expect(row.getByTestId("mark-read-button")).toBeVisible();
+      await expect(
+        bobPage.page
+          .getByTestId("topbar-notifications-button")
+          .locator(".topbar-notifications-badge"),
+      ).toBeVisible({ timeout: 30_000 });
 
-    // mark-all-read writes a marker.
-    const mark = await request.post(
-      `${solandBaseUrl()}/_soland/self/notifications/mark-all-read`,
-      { headers: auth, data: {} },
-    );
-    expect(mark.status()).toBe(200);
-    const markBody = await mark.json();
-    expect(typeof markBody.marked_at).toBe("string");
-    expect(markBody.actor).toBe(alice.did);
-
-    // Post-mark: last_read_at reflects the marker.
-    const after = await request.get(
-      `${solandBaseUrl()}/_soland/self/notifications`,
-      {
-        headers: auth,
-      },
-    );
-    expect(after.status()).toBe(200);
-    const afterBody = await after.json();
-    expect(afterBody.last_read_at).toBe(markBody.marked_at);
-    expect(afterBody.unread_count).toBe(0);
-
-    // Idempotency / advancement: a second call advances the marker.
-    await new Promise((r) => setTimeout(r, 20));
-    const mark2 = await request.post(
-      `${solandBaseUrl()}/_soland/self/notifications/mark-all-read`,
-      { headers: auth, data: {} },
-    );
-    const mark2Body = await mark2.json();
-    expect(new Date(mark2Body.marked_at).getTime()).toBeGreaterThanOrEqual(
-      new Date(markBody.marked_at).getTime(),
-    );
+      await bobPage.page.getByTestId("mark-all-read-button").click();
+      await expect(row.getByTestId("mark-unread-button")).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(row.getByTestId("mark-read-button")).toHaveCount(0);
+      await expect(
+        bobPage.page
+          .getByTestId("topbar-notifications-button")
+          .locator(".topbar-notifications-badge"),
+      ).toHaveCount(0, { timeout: 30_000 });
+      await stepShot(bobPage.page, testInfo, "mark-all-read");
+    } finally {
+      await bobPage.close();
+    }
   });
 
   test(// @user-promise: e2e/scenarios/discovery/notifications.md
@@ -391,27 +405,22 @@ test.describe("notifications", () => {
       context: "encrypted message with blind wake sidecar",
     });
 
-    const notifications = await request.get(
-      `${solandBaseUrl()}/_soland/self/notifications`,
-      {
-        headers: authHeaders(bobToken),
-      },
-    );
-    expect(notifications.status()).toBe(200);
-    const body = await notifications.json();
-    const item = (body.items ?? []).find(
-      (candidate: Record<string, unknown>) =>
-        candidate.event_id === encrypted.event_id,
+    const body = await accountSubscribeDeltaApi(request, bobToken);
+    const item = notificationEventsFromDelta(body).find(
+      (candidate) => candidate.source_event_id === encrypted.event_id,
     );
     expect(item, "blind wake notification for encrypted message").toBeTruthy();
     expect(item.encrypted).toBe(true);
-    expect(item.privacy_mode).toBe("blind_wakeup");
-    expect(item.wakeup_kind).toBe("encrypted_message");
-    expect(item.sender_did).toBe(alice.did);
-    expect(item.mention_sidecar_hash).toContain(sidecarHash);
+    expect(item.local_decrypted).toBe(false);
+    expect(item.actor_id).toBe(alice.did);
+    expect(item.realm_id).toBe(realmId);
+    expect(item.notification_type).toBe("mention");
     expect(item.body).toBeUndefined();
+    expect(item.preview).toBeUndefined();
     const wire = JSON.stringify(item);
     expect(wire).not.toContain(plaintext);
+    expect(wire).not.toContain("sealed-keyword");
+    expect(wire).not.toContain(sidecarHash);
     expect(wire).not.toContain(bob.did);
   });
 
@@ -509,6 +518,29 @@ function mentionSidecarHash(realmId: string, did: string): string {
 
 function cssStringEscape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function notificationEventsFromDelta(
+  delta: Record<string, unknown>,
+): Array<Record<string, unknown>> {
+  const notifications = delta.notifications;
+  if (Array.isArray(notifications)) {
+    return notifications.filter(isRecord);
+  }
+  if (!isRecord(notifications)) {
+    return [];
+  }
+  for (const key of ["events", "items"]) {
+    const values = notifications[key];
+    if (Array.isArray(values)) {
+      return values.filter(isRecord);
+    }
+  }
+  return [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function encryptedEnvelope(
