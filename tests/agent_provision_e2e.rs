@@ -643,7 +643,10 @@ fn handle_introspection_connection(
             "proof_required": false,
             "one_time_use_consumed": false,
             "grant": {
-                "id": "agent-live-e2e-grant",
+                // `SessionGrantIntrospectGrant.id` is a typed `GrantId`
+                // (`ck:grant:<uuidv7>`); a bare label fails SDK deserialization
+                // and soland reports the introspection response as invalid (503).
+                "id": "ck:grant:01964137-0000-7000-8000-000000000a01",
                 "issuer": "did:web:coauth.cotest.local",
                 "subject": subject,
                 "service_account_id": "agent-live-e2e-account",
