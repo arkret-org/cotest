@@ -12,10 +12,13 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
+use chrono::SecondsFormat;
 use reqwest::StatusCode;
+use reqwest::header::CONTENT_TYPE;
 use serde_json::Value;
 
-use crate::harness::{TestServerGroup, expect_response};
+use crate::fixtures::TestActorBuilder;
+use crate::harness::{TestServerGroup, eventually, expect_response};
 
 const QUIET_RESPONSE_BYTES_CEILING: usize = 768;
 
@@ -46,6 +49,26 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
         .as_str()
         .ok_or_else(|| anyhow!("baseline sync missing cursor: {baseline}"))?
         .to_owned();
+
+    let (json_quiet, json_content_type) = fetch_account_subscribe_json(
+        &alice,
+        &format!("catchup=true&max_wait_ms=0&after={cursor}"),
+    )
+    .await?;
+    assert!(
+        json_content_type.contains("application/json"),
+        "JSON subscribe should negotiate application/json, got {json_content_type:?}"
+    );
+    assert!(
+        json_quiet.get("kind").is_none(),
+        "JSON subscribe returns a SyncOutcome body, not an NDJSON frame wrapper: {json_quiet}"
+    );
+    assert!(
+        json_quiet
+            .get("realms")
+            .is_none_or(|realms| realms.as_object().is_some_and(|map| map.is_empty())),
+        "quiet JSON incremental sync should leave realms empty: {json_quiet}"
+    );
 
     // (1) Quiet incremental sync with long-poll opted out — must drop
     //     the realm from the response so idle clients no longer
@@ -136,6 +159,163 @@ pub async fn account_subscribe_skips_quiet_realms_and_long_polls() -> Result<()>
     Ok(())
 }
 
+pub async fn invited_members_exchange_post_join_messages_over_account_subscribe() -> Result<()> {
+    let group = TestServerGroup::single("account-subscribe-invite-two-way").await?;
+    let server = group.server(0);
+    let alice = server
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
+        .await?;
+    let bob = TestActorBuilder::new(server, "@bob-sync")
+        .with_did("did:web:bob-sync.example")
+        .with_device("ck:device:01904100-0000-7000-8000-0000000000b1")
+        .create()
+        .await?;
+    let bob_client = bob.client();
+
+    let created = alice
+        .create_realm_with(serde_json::json!({
+            "title": "Joined History Sync Realm",
+            "summary": "Joined History Sync Realm",
+            "public": false,
+            "history_visibility": "joined",
+            "plaintext_visible_services": [alice.service_did().to_owned()]
+        }))
+        .await?;
+    let realm_id = created["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("create realm response missing realm_id: {created}"))?
+        .to_owned();
+
+    let pre_join = alice
+        .send_message(
+            &realm_id,
+            "ck:thread:joined-history",
+            "alice before bob joined",
+        )
+        .await?;
+    let pre_join_event_id = submitted_event_id(&pre_join)
+        .ok_or_else(|| anyhow!("pre-join send response missing event_id: {pre_join}"))?
+        .to_owned();
+    add_member_now(&alice, &realm_id, &bob_client.actor).await?;
+    tokio::time::sleep(Duration::from_millis(20)).await;
+
+    let bob_baseline = eventually(
+        "Bob joined-history baseline",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || async {
+            let sync = bob_client.sync().await?;
+            if sync["realms"][&realm_id].is_object() {
+                Ok(sync)
+            } else {
+                Err(anyhow!("Bob baseline missing joined realm: {sync}"))
+            }
+        },
+    )
+    .await?;
+    let bob_baseline_events = timeline_events(&bob_baseline, &realm_id)?;
+    assert!(
+        !bob_baseline_events
+            .iter()
+            .any(|event| event["event_id"] == pre_join_event_id),
+        "joined-history invitee MUST NOT receive pre-join timeline events: {bob_baseline}"
+    );
+    let bob_cursor = cursor_from_sync(&bob_baseline)?;
+
+    let alice_after_join = send_message_now(
+        &alice,
+        &realm_id,
+        "ck:thread:joined-history",
+        "alice after bob joined",
+    )
+    .await?;
+    let alice_after_join_event_id = submitted_event_id(&alice_after_join)
+        .ok_or_else(|| {
+            anyhow!("post-join Alice send response missing event_id: {alice_after_join}")
+        })?
+        .to_owned();
+    let bob_incremental = eventually(
+        "Bob sees Alice post-join message",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let bob_cursor = bob_cursor.clone();
+            let alice_after_join_event_id = alice_after_join_event_id.clone();
+            let realm_id = realm_id.clone();
+            async move {
+                let sync = fetch_account_subscribe(
+                    bob_client,
+                    &format!("catchup=true&max_wait_ms=0&after={bob_cursor}"),
+                )
+                .await?;
+                let events = timeline_events(&sync, &realm_id)?;
+                if events
+                    .iter()
+                    .any(|event| event["event_id"] == alice_after_join_event_id)
+                {
+                    Ok(sync)
+                } else {
+                    Err(anyhow!("Bob incremental missing Alice event: {sync}"))
+                }
+            }
+        },
+    )
+    .await?;
+    let alice_cursor = cursor_from_sync(&alice.sync().await?)?;
+
+    let bob_after_join = send_message_now(
+        bob_client,
+        &realm_id,
+        "ck:thread:joined-history",
+        "bob after joining",
+    )
+    .await?;
+    let bob_after_join_event_id = submitted_event_id(&bob_after_join)
+        .ok_or_else(|| anyhow!("post-join Bob send response missing event_id: {bob_after_join}"))?
+        .to_owned();
+    eventually(
+        "Alice sees Bob post-join message",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let alice_cursor = alice_cursor.clone();
+            let bob_after_join_event_id = bob_after_join_event_id.clone();
+            let realm_id = realm_id.clone();
+            let alice = alice.clone();
+            async move {
+                let sync = fetch_account_subscribe(
+                    &alice,
+                    &format!("catchup=true&max_wait_ms=0&after={alice_cursor}"),
+                )
+                .await?;
+                let events = timeline_events(&sync, &realm_id)?;
+                if events
+                    .iter()
+                    .any(|event| event["event_id"] == bob_after_join_event_id)
+                {
+                    Ok(sync)
+                } else {
+                    Err(anyhow!("Alice incremental missing Bob event: {sync}"))
+                }
+            }
+        },
+    )
+    .await?;
+
+    let bob_incremental_events = timeline_events(&bob_incremental, &realm_id)?;
+    assert!(
+        bob_incremental_events
+            .iter()
+            .any(|event| event["event_id"] == alice_after_join_event_id),
+        "Bob incremental should retain Alice post-join event: {bob_incremental}"
+    );
+
+    Ok(())
+}
+
 fn submitted_event_id(response: &Value) -> Option<&str> {
     response
         .get("event_id")
@@ -173,6 +353,26 @@ async fn fetch_account_subscribe_with_size(
     Ok((frame, bytes))
 }
 
+async fn fetch_account_subscribe_json(
+    actor: &crate::harness::TestActorClient,
+    query: &str,
+) -> Result<(Value, String)> {
+    let response = expect_response(
+        actor
+            .get(&format!("/_cokret/self/account/subscribe?{query}"))
+            .header("accept", "application/json"),
+        StatusCode::OK,
+    )
+    .await?;
+    let content_type = response
+        .headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    Ok((response.json()?, content_type))
+}
+
 fn parse_delta_frame(ndjson: &str) -> Result<Value> {
     for line in ndjson
         .lines()
@@ -188,4 +388,86 @@ fn parse_delta_frame(ndjson: &str) -> Result<Value> {
     Err(anyhow!(
         "account subscribe NDJSON missing delta frame: {ndjson:?}"
     ))
+}
+
+fn cursor_from_sync(sync: &Value) -> Result<String> {
+    sync["cursor"]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("sync response missing cursor: {sync}"))
+}
+
+fn timeline_events<'a>(sync: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>> {
+    sync["realms"][realm_id]["timeline"]["events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("sync response missing realm timeline events: {sync}"))
+}
+
+async fn send_message_now(
+    actor: &crate::harness::TestActorClient,
+    realm_id: &str,
+    thread_id: &str,
+    body: &str,
+) -> Result<Value> {
+    submit_event_now(
+        actor,
+        realm_id,
+        "ck.message.create",
+        serde_json::json!({
+            "body": body,
+            "content": {"body": body},
+            "thread_id": thread_id,
+        }),
+    )
+    .await
+}
+
+async fn add_member_now(
+    actor: &crate::harness::TestActorClient,
+    realm_id: &str,
+    member_actor: &str,
+) -> Result<Value> {
+    submit_event_now(
+        actor,
+        realm_id,
+        "ck.member.state",
+        serde_json::json!({
+            "realm_id": realm_id,
+            "actor_id": member_actor,
+            "membership": "join",
+            "delivery_status": "unroutable",
+        }),
+    )
+    .await
+}
+
+async fn submit_event_now(
+    actor: &crate::harness::TestActorClient,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+) -> Result<Value> {
+    let created_at = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let mut event = crate::harness::event_envelope(&actor.actor, realm_id, kind, payload);
+    event["created_at"] = Value::String(created_at.clone());
+    if let Some(proof) = event
+        .get_mut("proofs")
+        .and_then(Value::as_array_mut)
+        .and_then(|proofs| proofs.first_mut())
+    {
+        proof["created_at"] = Value::String(created_at);
+    }
+    crate::harness::refresh_event_proof(&mut event);
+    let mut response = crate::harness::expect_json(
+        actor.post("/_cokret/self/events").json(&event),
+        StatusCode::OK,
+    )
+    .await?;
+    if response.get("event_id").and_then(Value::as_str).is_none()
+        && let Some(event_id) = event.get("event_id").and_then(Value::as_str)
+        && let Some(object) = response.as_object_mut()
+    {
+        object.insert("event_id".to_owned(), Value::String(event_id.to_owned()));
+    }
+    Ok(response)
 }

@@ -1178,12 +1178,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
 fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<()> {
     require_str_eq(vector, "/bottom_state/status", "bottom", vector_name)?;
     require_str_eq(vector, "/bottom_state/reason", "conflict", vector_name)?;
-    require_str_eq(
-        vector,
-        "/valid_recovery_move/plane",
-        "control",
-        vector_name,
-    )?;
+    require_str_eq(vector, "/valid_recovery_move/plane", "control", vector_name)?;
 
     let refs = required_array(vector, "/valid_recovery_move/refs", vector_name)?;
     for required_role in ["recovery_capability", "state_witness"] {
@@ -1191,9 +1186,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
             reference.get("role").and_then(Value::as_str) == Some(required_role)
                 && reference.get("critical").and_then(Value::as_bool) == Some(true)
         }) {
-            bail!(
-                "vector {vector_name} valid_recovery_move missing critical {required_role} ref"
-            );
+            bail!("vector {vector_name} valid_recovery_move missing critical {required_role} ref");
         }
     }
 
@@ -1212,12 +1205,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                 require_str_eq(case, "/expected/cell_status", "value", vector_name)?;
             }
             "missing_state_witness" => {
-                require_str_eq(
-                    case,
-                    "/expected/result",
-                    "failed_precondition",
-                    vector_name,
-                )?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
                 require_str_eq(
                     case,
                     "/expected/reason",
@@ -1226,12 +1214,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                 )?;
             }
             "post_conflict_witness" => {
-                require_str_eq(
-                    case,
-                    "/expected/result",
-                    "failed_precondition",
-                    vector_name,
-                )?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
                 require_str_eq(
                     case,
                     "/expected/reason",
@@ -1240,12 +1223,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                 )?;
             }
             "recovery_capability_not_sealed" => {
-                require_str_eq(
-                    case,
-                    "/expected/result",
-                    "failed_precondition",
-                    vector_name,
-                )?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
                 require_str_eq(
                     case,
                     "/expected/reason",
@@ -1254,12 +1232,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                 )?;
             }
             "witness_revoke_lagging" => {
-                require_str_eq(
-                    case,
-                    "/expected/result",
-                    "failed_precondition",
-                    vector_name,
-                )?;
+                require_str_eq(case, "/expected/result", "failed_precondition", vector_name)?;
                 require_str_eq(
                     case,
                     "/expected/reason",
@@ -1268,19 +1241,9 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                 )?;
             }
             "unsealed_recovery_move" => {
-                require_str_eq(
-                    case,
-                    "/expected/result",
-                    "control_pending",
-                    vector_name,
-                )?;
+                require_str_eq(case, "/expected/result", "control_pending", vector_name)?;
                 require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
-                require_str_eq(
-                    case,
-                    "/expected/query_result",
-                    "failed_bottom",
-                    vector_name,
-                )?;
+                require_str_eq(case, "/expected/query_result", "failed_bottom", vector_name)?;
             }
             other => bail!("vector {vector_name} unknown conflict recovery case {other}"),
         }

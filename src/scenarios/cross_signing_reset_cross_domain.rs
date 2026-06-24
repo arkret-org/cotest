@@ -22,11 +22,11 @@
 //!   MUST be rejected with `reset_event_id_mismatch`.
 
 use anyhow::{Result, anyhow};
+use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
     ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_RESET_EVENT_ID_MISMATCH, EventId,
     TypedTrustDomainId,
 };
-use cokret_core::schema::embedded_error_code_identifiers;
 
 pub const EXPECTED_CROSS_DOMAIN_REPLAY: &str = "cross_domain_replay_rejected";
 pub const EXPECTED_RESET_EVENT_ID_MISMATCH: &str = "reset_event_id_mismatch";
