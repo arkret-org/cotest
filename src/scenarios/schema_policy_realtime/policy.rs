@@ -35,7 +35,9 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "policy_type": "ck.message.create",
             "effect": "hard_deny",
             "actions": ["ck.message.create"],
-            "resource": {"kind": "realm", "realm_id": realm_id},
+            // Realm-scoped resource: soland matches resource.kind against the
+            // request source.service_type, so constrain on realm_id only.
+            "resource": {"realm_id": realm_id},
             "obligations": [{"kind": "audit", "channel": "mod-log"}]
         })),
         StatusCode::OK,
@@ -90,7 +92,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "action": "ck.message.create",
             "actor_id": bob.actor,
             "realm_id": realm_id,
-            "source": {"kind": "realm", "realm_id": realm_id}
+            "source": {
+                "service_did": "did:web:soland.cotest.local",
+                "service_type": "principal_server",
+                "signed_transport": true
+            }
         })),
         StatusCode::OK,
     )
@@ -103,11 +109,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         "policy/check must sign decisions that carry obligations"
     );
     assert!(
-        denied["bound_to"]["policy_frontier_digest"].is_string(),
+        denied["policy_frontier_digest"].is_string(),
         "policy/check must bind the policy frontier"
     );
     assert!(
-        denied["bound_to"]["membership_frontier_digest"].is_string(),
+        denied["membership_frontier_digest"].is_string(),
         "policy/check must bind the membership frontier"
     );
 
@@ -135,7 +141,11 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             "action": "ck.message.create",
             "actor_id": bob.actor,
             "realm_id": realm_id,
-            "source": {"kind": "realm", "realm_id": realm_id}
+            "source": {
+                "service_did": "did:web:soland.cotest.local",
+                "service_type": "principal_server",
+                "signed_transport": true
+            }
         })),
         StatusCode::OK,
     )
