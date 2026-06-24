@@ -93,10 +93,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             // body shape / timing class — and MUST NOT leak the listed
             // binding fields.
             "resolve_handle_failure_blinding" => {
-                validate_resolve_failure_blinding(
-                    &case,
-                    "ck.find.directory.query.resolve_handle",
-                )?;
+                validate_resolve_failure_blinding(&case, "ck.find.directory.query.resolve_handle")?;
             }
             "resolve_agent_selector_failure_blinding" => {
                 validate_resolve_failure_blinding(
@@ -497,10 +494,7 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
         .ok_or_else(|| anyhow!("privacy fixture {} missing expected", case.name))?;
 
     if expected.get("same_http_status").and_then(Value::as_u64) != Some(404) {
-        bail!(
-            "privacy fixture {} same_http_status is not 404",
-            case.name
-        );
+        bail!("privacy fixture {} same_http_status is not 404", case.name);
     }
     if expected.get("same_error_code").and_then(Value::as_str) != Some("not_found") {
         bail!(
@@ -508,12 +502,10 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
             case.name
         );
     }
-    if expected.get("same_timing_class").and_then(Value::as_str) != Some("directory_hidden_not_found")
+    if expected.get("same_timing_class").and_then(Value::as_str)
+        != Some("directory_hidden_not_found")
     {
-        bail!(
-            "privacy fixture {} same_timing_class drifted",
-            case.name
-        );
+        bail!("privacy fixture {} same_timing_class drifted", case.name);
     }
     let body_shape = expected
         .get("same_body_shape")

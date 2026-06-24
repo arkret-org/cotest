@@ -864,8 +864,9 @@ fn evaluate_sensitive_field_handling_fixture(fixture: &Value) -> Result<()> {
             .unwrap_or(false);
         let mut handling = if remove_handling {
             "omit".to_owned()
-        } else if let Some(override_mode) =
-            case.get("override_sensitive_handling").and_then(Value::as_str)
+        } else if let Some(override_mode) = case
+            .get("override_sensitive_handling")
+            .and_then(Value::as_str)
         {
             override_mode.to_owned()
         } else {

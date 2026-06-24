@@ -5,9 +5,9 @@
 //! the upload is visible.
 
 use anyhow::Result;
+use cokret::Did;
 use cokret::auth::principal_control_realm_id;
 use cokret::identity::binding::multicodec_ed25519_public_key;
-use cokret::Did;
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -293,8 +293,8 @@ async fn upload_and_inspect_keys(
     .await?;
     // The stored device_signature is the authoritative detached-JWS bundle
     // (alg / kid / jws) the upload was verified with, not a stub `signature`.
-    let queried_signature = &query_keys["device_keys"]["did:web:alice.example"]
-        ["ck:device:01904100-0000-7000-8000-0000000000a1"]["algorithms"]["device_signature"];
+    let queried_signature = &query_keys["device_keys"]["did:web:alice.example"]["ck:device:01904100-0000-7000-8000-0000000000a1"]
+        ["algorithms"]["device_signature"];
     assert_eq!(queried_signature["alg"], "EdDSA");
     assert!(
         queried_signature["jws"].as_str().is_some(),

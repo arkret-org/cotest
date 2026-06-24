@@ -34,8 +34,7 @@ use cokret_core::models::{
 };
 use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
-    Did, ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
-    ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
+    Did, ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
 };
 
 pub const EXPECTED_MLS_GOVERNANCE_BINDING_STALE: &str = "mls_governance_binding_stale";

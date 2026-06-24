@@ -27,8 +27,7 @@
 use anyhow::{Result, anyhow};
 use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
-    ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT, ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN,
-    TypedAppealId,
+    ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT, ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
 };
 
 pub const APPEAL_KIND_SUBMIT: &str = "ck.moderation.appeal.submit";
