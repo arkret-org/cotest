@@ -304,7 +304,18 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
                     "federation_policy": "restricted",
                     "notary_profile": "single_did",
                     "digest_algorithm": "sha256",
-                    "plaintext_visible_services": [alice.service_did()],
+                    "plaintext_visible_services": [{
+                        "service_did": alice.service_did(),
+                        "service_type": "principal_server",
+                        "data_classes": [
+                            "message_content", "strand_content", "attachment_plaintext",
+                            "attachment_preview", "thumbnail", "full_text_index",
+                            "search_snippet", "notification_summary", "inbox_preview",
+                            "history_preview"
+                        ],
+                        "purposes": ["cotest"],
+                        "visibility": "private_plaintext"
+                    }],
                     "notary": {
                         "type": "single_did",
                         "did": &alice.actor,
