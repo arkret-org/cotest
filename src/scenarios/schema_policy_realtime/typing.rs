@@ -151,27 +151,44 @@ fn account_data_entry<'a>(sync: &'a Value, data_type: &str) -> Option<&'a Value>
 }
 
 async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
-    // The Realm lifecycle view (`GET /_cokret/self/realms/{realm_id}`) is
-    // `additionalProperties:false` and does NOT carry `default_strand_id`
-    // (per `realm-read-operations.schema.json`). soland exposes the default
-    // Strand via the per-row `is_default` flag on the Strand-list projection
-    // (`GET /_cokret/self/projection/strands?realm_id=...`), computed as
-    // `strand_id == realm.default_strand_id` at query time.
-    let strands = expect_json(
-        client.get(&format!(
-            "/_cokret/self/projection/strands?realm_id={realm_id}"
-        )),
-        StatusCode::OK,
-    )
-    .await?;
-    strands["strands"]
-        .as_array()
-        .and_then(|rows| rows.iter().find(|row| row["is_default"] == true))
-        .and_then(|row| row["strand_id"].as_str())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            anyhow::anyhow!("strand projection did not expose a default strand: {strands}")
-        })
+    // soland does NOT auto-create a default Strand on realm create; the Realm's
+    // `default_strand_id` pointer is only set by `ck.realm.set_default_strand`,
+    // which requires the named Strand to already exist (and the Strand-list
+    // projection only carries an `is_default` row once that pointer is set).
+    // Author the Strand as the realm owner, then point the Realm default at it.
+    let strand_id = realm_id.replace("ck:realm:", "ck:strand:");
+    let created = client
+        .submit_event(
+            realm_id,
+            "ck.strand.create",
+            json!({
+                "object": {
+                    "id": strand_id,
+                    "schema": "ck.schema.strand.v1",
+                    "realm_id": realm_id,
+                    "tracks": {"discussion": {"enabled": true, "is_primary": true}},
+                    "created_by": client.actor,
+                    "created_at": "2026-05-02T00:00:00Z"
+                }
+            }),
+        )
+        .await?;
+    assert_eq!(created["status"], "accepted", "strand create must be accepted");
+    let defaulted = client
+        .submit_event(
+            realm_id,
+            "ck.realm.set_default_strand",
+            json!({
+                "strand_id": strand_id,
+                "expected_default_strand_id": Value::Null
+            }),
+        )
+        .await?;
+    assert_eq!(
+        defaulted["status"], "accepted",
+        "set_default_strand must be accepted"
+    );
+    Ok(strand_id)
 }
 
 fn typing_envelope(actor_id: &str, realm_id: &str, strand_id: &str, typing: bool) -> Value {
