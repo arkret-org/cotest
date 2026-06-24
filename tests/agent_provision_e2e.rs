@@ -30,7 +30,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
 use cotest::harness::{
     CokretServer, add_member, create_realm, event_envelope, expect_api_error, expect_json,
-    register_account,
+    register_account, submit_event,
 };
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
@@ -247,6 +247,72 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         "effective reply bit must be enabled"
     );
 
+    // The agent reply targets the realm's default Strand (the message envelope
+    // derives `strand_id` from the realm id). soland's agent-reply participation
+    // gate resolves the message scope through the projected Strand, so the
+    // Strand must exist first — create it as the realm owner.
+    let default_strand_id = realm_id.replace("ck:realm:", "ck:strand:");
+    let strand = submit_event(
+        &server,
+        &token,
+        ALICE_DID,
+        &realm_id,
+        "ck.strand.create",
+        json!({
+            "object": {
+                "id": default_strand_id,
+                "schema": "ck.schema.strand.v1",
+                "realm_id": realm_id,
+                "tracks": {"discussion": {"enabled": true, "is_primary": true}},
+                "created_by": ALICE_DID,
+                "created_at": "2026-05-02T00:00:00Z",
+                "metadata": {"title": "Agent reply strand"}
+            }
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(strand["status"], "accepted");
+
+    // CKP-0016 §5.2: every agent-originated Event carries an auditable
+    // `agent_context` whose `authorization_ref` MUST resolve to an active
+    // capability grant for the agent IN THE EVENT'S REALM, with an action
+    // covering the operation's canonical kind. Grant the agent `ck.message.create`
+    // in the reply Realm so the reply's agent_context references a real grant.
+    let agent_grant_id = "ck:grant:01999999-0000-7000-8000-0000000000c1";
+    let agent_grant = submit_event(
+        &server,
+        &token,
+        ALICE_DID,
+        &realm_id,
+        "ck.capability.grant",
+        json!({
+            "grant_id": agent_grant_id,
+            "grant": {
+                "id": agent_grant_id,
+                "schema": "ck.schema.capability.v1",
+                "realm_id": realm_id,
+                "issuer": ALICE_DID,
+                "subject": agent_did,
+                "actions": ["ck.message.create"],
+                "resources": [{"kind": "realm", "realm_id": realm_id}],
+                "constraints": [],
+                "issued_at": "2026-05-02T00:00:00Z",
+                "proofs": [{
+                    "kind": "detached_jws",
+                    "alg": "EdDSA",
+                    "verification_method": format!("{ALICE_DID}#cotest"),
+                    "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "created_at": "2026-05-02T00:00:00Z",
+                    "jws": "a..b"
+                }]
+            }
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(agent_grant["status"], "accepted");
+
     let agent_message = event_envelope(
         &agent_did,
         &realm_id,
@@ -254,6 +320,12 @@ async fn agent_key_proof_session_reply_and_revoke_live_e2e() -> Result<()> {
         json!({
             "body": "agent_key_proof live reply",
             "content": {"body": "agent_key_proof live reply"},
+            "agent_context": {
+                "agent_id": agent_did,
+                "operator_or_controller": ALICE_DID,
+                "execution_purpose": "reply",
+                "authorization_ref": agent_grant_id,
+            },
         }),
     );
     let accepted = expect_json(
@@ -409,11 +481,20 @@ async fn agent_status(server: &CokretServer, token: &str, agent_did: &str) -> Re
 }
 
 async fn effective_grants(server: &CokretServer, token: &str, agent_did: &str) -> Result<Value> {
+    // The dev-mode agent grant is authored into the controller's
+    // principal-control Realm (soland `ensure_self_realm`). soland only lets a
+    // caller read a non-self subject's effective grants for a Realm the caller
+    // owns (anti-enumeration); a bare `subject` query defaults to realm `*` and
+    // is denied. Scope the query to the controller's principal-control Realm,
+    // which the controller owns and where the agent grant lives.
+    let control_realm = cokret::auth::principal_control_realm_id(
+        &cokret::Did::new(ALICE_DID.to_owned()).map_err(|e| anyhow!("alice did invalid: {e}"))?,
+    );
     let effective: Value = server
         .http()
         .get(server.url("/_cokret/self/authz/effective-grants"))
         .bearer_auth(token)
-        .query(&[("subject", agent_did)])
+        .query(&[("subject", agent_did), ("realm_id", control_realm.as_str())])
         .send()
         .await?
         .json()
