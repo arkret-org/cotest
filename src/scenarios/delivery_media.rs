@@ -548,6 +548,10 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "bad_request",
     )
     .await?;
+    // Blind-wakeup minimization: the push notification envelope is metadata-only
+    // and `deny_unknown_fields`, so it structurally cannot carry a plaintext
+    // `content` field — a push that tries to is rejected as a malformed body
+    // (bad_request) before any rule evaluation.
     expect_api_error(
         server
             .http()
@@ -559,7 +563,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                 }
             })),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "bad_request",
     )
     .await?;
     let notify = expect_json(
@@ -568,6 +572,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_cokret/edge/push/notify"))
             .json(&json!({
                 "notification": {
+                    "push_target_id": "ck:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
                     "devices": [{"device_id": "ck:device:01904100-0000-7000-8000-0000000000ff"}]
                 }
             })),
