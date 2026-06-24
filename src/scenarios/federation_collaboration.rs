@@ -452,8 +452,10 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             .http()
             .post(server_a.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice)
-            .header("content-type", "application/octet-stream")
-            .body("federated-media"),
+            .multipart(crate::scenarios::delivery_media::blob_upload_form(
+                b"federated-media",
+                "application/octet-stream",
+            )?),
         StatusCode::OK,
     )
     .await?;

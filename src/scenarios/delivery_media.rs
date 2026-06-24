@@ -240,6 +240,18 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     Ok(())
 }
 
+/// Build a spec-shaped multipart/form-data blob upload body. soland requires
+/// blob uploads to be `multipart/form-data` with a single `content` file part
+/// and a `size_bytes` field matching the part size (blob.rs upload parser).
+pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest::multipart::Form> {
+    let part = reqwest::multipart::Part::bytes(bytes.to_vec())
+        .file_name("blob.bin")
+        .mime_str(media_type)?;
+    Ok(reqwest::multipart::Form::new()
+        .text("size_bytes", bytes.len().to_string())
+        .part("content", part))
+}
+
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let server = CokretServer::spawn("blob-media").await?;
     let alice = server
@@ -282,7 +294,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
                 "x-cokret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
-            .body("blob-bytes"),
+            .multipart(blob_upload_form(b"blob-bytes", "text/plain")?),
         StatusCode::CONFLICT,
         "digest_mismatch",
     )
@@ -294,8 +306,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(&alice.token)
             .header("x-cokret-realm-id", &realm_id)
-            .header("content-type", "text/plain")
-            .body("encrypted-bytes"),
+            .multipart(blob_upload_form(b"encrypted-bytes", "text/plain")?),
         StatusCode::OK,
     )
     .await?;

@@ -25,7 +25,10 @@ async fn sha_mismatch_is_rejected(server: &CokretServer, token: &str) -> Result<
                 "x-cokret-content-digest",
                 "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
             )
-            .body("encrypted-bytes"),
+            .multipart(crate::scenarios::delivery_media::blob_upload_form(
+                b"encrypted-bytes",
+                "text/plain",
+            )?),
         StatusCode::CONFLICT,
     )
     .await?;
@@ -38,8 +41,10 @@ async fn upload_then_range_get(server: &CokretServer, token: &str) -> Result<()>
             .http()
             .post(server.url("/_cokret/self/blob/upload"))
             .bearer_auth(token)
-            .header("content-type", "text/plain")
-            .body("encrypted-bytes"),
+            .multipart(crate::scenarios::delivery_media::blob_upload_form(
+                b"encrypted-bytes",
+                "text/plain",
+            )?),
         StatusCode::OK,
     )
     .await?;

@@ -58,7 +58,7 @@ hpke-rs = {workspace = true}
 hpke-rs-crypto = {workspace = true}
 hpke-rs-rust-crypto = {workspace = true}
 jsonschema = {workspace = true,default-features = false,features = ["resolve-file"]}
-reqwest = {workspace = true,features = ["json"]}
+reqwest = {workspace = true,features = ["json", "multipart"]}
 salvo = {workspace = true}
 serde = {workspace = true,features = ["derive"]}
 serde_json = {workspace = true}
