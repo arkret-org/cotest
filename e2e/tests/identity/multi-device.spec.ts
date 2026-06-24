@@ -5,7 +5,7 @@
 //   - §6 (device list sync), §7 (to-device queue), §9 (MLS KeyPackage / Remove)
 //   - identity/key-management.md §5.0-§5.2
 
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   buildCrossSigningPublishPayload,
@@ -28,6 +28,7 @@ import {
 import {
   ensureRegistered,
   issueDevSession,
+  type JointUser,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -631,67 +632,359 @@ test.describe("multi-device pairing + revocation", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: cotest UI harness — cross-session to-device sync settle timing.
-    //   The soland + yougen surfaces are in place: soland live-delivers a
-    //   same_principal_device_authorization to-device request to an authorized
-    //   sibling (routing/identity/device_messages.rs), yougen's background
-    //   long-poll ingests it into the to-device inbox (sync_engine.rs
-    //   ingest_to_device_messages), and the global DevicePairApprovalPrompt
-    //   (components/device_pair_approval_prompt.rs, mounted in app/mod.rs) pops
-    //   with device-pair-approval-modal / -code / -approve / -reject. What is
-    //   NOT low-risk to assert statically is when device-1's background sync
-    //   has drained device-2's request and re-rendered the Dioxus modal in the
-    //   two-browser harness; promoting this needs a live run to pin the wait.
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "new device's same_principal_device_authorization request surfaces on an authorized device as the global approval prompt; comparing the code and Approve authorizes it",
-    async () => {
-      // spec: device-lifecycle.md §2.1 / §7 (user-in-the-loop, pairing_code compare).
-      // device-2: /settings/devices/pair → pair-device-start-button mints the
-      //   request and to-device delivers it to authorized siblings.
-      // device-1 (authorized): the global DevicePairApprovalPrompt pops:
-      //   - device-pair-approval-modal visible
-      //   - device-pair-approval-code matches the code device-2 shows
-      //   - device-pair-approval-approve → POST /_cokret/gate/account/device-pair
-      //   - device-2 then appears verified in device-1's device list.
-    },
-  );
+  test("new device's same_principal_device_authorization request surfaces on an authorized device as the global approval prompt; comparing the code and Approve authorizes it", async ({
+    browser,
+    request,
+  }) => {
+    // spec: device-lifecycle.md §2.1 / §7 (user-in-the-loop, pairing_code compare).
+    //
+    // Device-1 (an already-authorized sibling) must be `verified` in the device
+    // inventory for soland to deliver a same-principal verification-bootstrap
+    // to-device request to it (device_messages.rs: a fresh device may only send
+    // `ck.key.verification.*` to a verified same-principal target). A dev-login
+    // founding device is enrolled `unverified`, so we first promote it to
+    // verified through the real §5.1/§5.2 ingest path (the same cross-signing
+    // publish + ck.device.authorize the suite already exercises above) before
+    // driving the UI. Device-2 then delivers its pairing request over the
+    // to-device queue; device-1's background sync surfaces the global prompt.
+    const alice = uniqueUser(`s10-pair-approve-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
 
-  test.fixme(
-    // @blocking-on: cotest UI harness — cross-session to-device sync settle timing
-    //   (same as the approval-prompt case above). reject wiring is in place:
-    //   device-pair-approval-reject calls local_state.dismiss_pairing_to_device_message
-    //   and never POSTs device-pair; the open question is purely the live wait
-    //   for device-1's background sync to surface the request first.
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "rejecting the pairing request (global prompt device-pair-approval-reject) dismisses it locally and does NOT authorize the new device",
-    async () => {
-      // spec: device-lifecycle.md §7 (no trust without explicit approval).
-      // device-pair-approval-reject → request dropped from the to-device inbox
-      // (local_state.dismiss_pairing_to_device_message); the prompt does not
-      // re-pop, and device-2 is never added to the device list.
-    },
-  );
+    const device1 = await openUserPage(browser, alice, {
+      sessionCredential: device1Token,
+    });
+    try {
+      // Device-1 just needs to be inside the app so its background sync drains
+      // the to-device inbox; the home shell mounts the global prompt.
+      await device1.gotoHome();
 
-  test.fixme(
-    // @blocking-on: cotest UI harness — cross-session to-device sync settle timing
-    //   (same root as above). The pending-pairing-requests-card on
-    //   /settings/devices/pair (views/settings/devices.rs) renders the inbox via
-    //   parse_pending_pairing_requests and approves through
-    //   /_cokret/gate/account/device-pair; pending-pairing-refresh-button re-reads
-    //   the inbox. Promotion is gated only on a live wait for device-1's
-    //   background sync to drain device-2's request before the Refresh click.
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "the /settings/devices/pair 'Approve a device' card lists a delivered to-device request and approves it (pending-pairing-requests-card → approve-pairing-request-button)",
-    async () => {
-      // spec: device-lifecycle.md §7.
-      // device-1 /settings/devices/pair: pending-pairing-requests-card shows the
-      //   delivered request with pending-pairing-code; approve-pairing-request-button
-      //   finalizes via /_cokret/gate/account/device-pair; reject-pairing-request-button
-      //   drops it. Refresh requests (pending-pairing-refresh-button) re-reads the inbox.
-    },
-  );
+      const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
+        request,
+        alice,
+        device1Token,
+        { displayName: "Alice second browser" },
+      );
+
+      // Device-1's background long-poll ingests the to-device request and the
+      // global DevicePairApprovalPrompt pops. Give the cross-session sync a wide
+      // budget with a coarsening interval (mirrors the federation suites).
+      const modal = device1.page.getByTestId("device-pair-approval-modal");
+      await expect(modal).toBeVisible({
+        timeout: 90_000,
+      });
+      await expect(device1.page.getByTestId("device-pair-approval-code")).toHaveText(
+        pairingCode,
+        { timeout: 30_000 },
+      );
+
+      await device1.page.getByTestId("device-pair-approval-approve").click();
+
+      // Approval finalizes through POST /_cokret/gate/account/device-pair, which
+      // writes the new device `verified`; it then surfaces in alice's device-set
+      // projection (status=active) within the convergence window.
+      await expect
+        .poll(
+          async () => {
+            const viewer = await request.get(
+              `${solandBaseUrl()}/_cokret/self/account/viewer`,
+              { headers: authHeaders(device1Token) },
+            );
+            if (!viewer.ok()) {
+              return undefined;
+            }
+            const body = (await viewer.json()) as {
+              devices?: Array<{ device_id?: string; status?: string }>;
+            };
+            return (body.devices ?? []).find(
+              (device) => device.device_id === requestingDeviceId,
+            )?.status;
+          },
+          { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBe("active");
+    } finally {
+      await device1.close();
+    }
+  });
+
+  test("rejecting the pairing request (global prompt device-pair-approval-reject) dismisses it locally and does NOT authorize the new device", async ({
+    browser,
+    request,
+  }) => {
+    // spec: device-lifecycle.md §7 (no trust without explicit approval).
+    // device-pair-approval-reject calls dismiss_pairing_to_device_message and
+    // never POSTs device-pair, so the new device is never added to the list.
+    const alice = uniqueUser(`s10-pair-reject-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+
+    const device1 = await openUserPage(browser, alice, {
+      sessionCredential: device1Token,
+    });
+    try {
+      await device1.gotoHome();
+      const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
+        request,
+        alice,
+        device1Token,
+        { displayName: "Alice rejected browser" },
+      );
+
+      const modal = device1.page.getByTestId("device-pair-approval-modal");
+      await expect(modal).toBeVisible({ timeout: 90_000 });
+      await expect(device1.page.getByTestId("device-pair-approval-code")).toHaveText(
+        pairingCode,
+        { timeout: 30_000 },
+      );
+
+      await device1.page.getByTestId("device-pair-approval-reject").click();
+
+      // The prompt dismisses locally and does not re-pop for the same request.
+      await expect(modal).toBeHidden({ timeout: 30_000 });
+
+      // The rejected device is never authorized: it does not appear in alice's
+      // device-set projection. Poll a few times to let any (incorrect) write
+      // settle, then assert absence.
+      const seenStatus = await pollDeviceStatus(
+        request,
+        device1Token,
+        requestingDeviceId,
+      );
+      expect(seenStatus).toBeUndefined();
+    } finally {
+      await device1.close();
+    }
+  });
+
+  test("the /settings/devices/pair 'Approve a device' card lists a delivered to-device request and approves it (pending-pairing-requests-card → approve-pairing-request-button)", async ({
+    browser,
+    request,
+  }) => {
+    // spec: device-lifecycle.md §7.
+    // The /settings/devices/pair pending-pairing-requests-card renders the
+    // to-device inbox via parse_pending_pairing_requests and approves through
+    // POST /_cokret/gate/account/device-pair; pending-pairing-refresh-button
+    // re-reads the inbox after the background sync has drained the request.
+    const alice = uniqueUser(`s10-pair-card-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    await promoteDeviceToVerified(request, alice, device1Token, alice.deviceId);
+
+    const device1 = await openUserPage(browser, alice, {
+      sessionCredential: device1Token,
+    });
+    try {
+      await device1.gotoHome();
+      const { pairingCode, requestingDeviceId } = await deliverPairingRequest(
+        request,
+        alice,
+        device1Token,
+        { displayName: "Alice card browser" },
+      );
+
+      // The global prompt also mounts here; dismiss it (Reject local-only is
+      // fine — it just removes the in-memory inbox copy for the prompt) so it
+      // does not overlay the settings card. Instead, navigate straight to the
+      // pairing settings and drive the card. The card reads the same inbox.
+      await device1.page.goto("/settings/devices/pair", {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        device1.page.getByTestId("pending-pairing-requests-card"),
+      ).toBeVisible({ timeout: 120_000 });
+
+      // Re-read the inbox until the background sync has surfaced the request,
+      // refreshing the card between polls.
+      const requestRow = device1.page
+        .getByTestId("pending-pairing-request")
+        .filter({ hasText: pairingCode })
+        .first();
+      await expect
+        .poll(
+          async () => {
+            await device1.page
+              .getByTestId("pending-pairing-refresh-button")
+              .click();
+            return requestRow.isVisible().catch(() => false);
+          },
+          { timeout: 90_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBe(true);
+      await expect(
+        requestRow.getByTestId("pending-pairing-code"),
+      ).toHaveText(pairingCode, { timeout: 15_000 });
+
+      await requestRow.getByTestId("approve-pairing-request-button").click();
+
+      await expect
+        .poll(
+          () => pollDeviceStatus(request, device1Token, requestingDeviceId),
+          { timeout: 60_000, intervals: [1_000, 2_000, 5_000] },
+        )
+        .toBe("active");
+    } finally {
+      await device1.close();
+    }
+  });
 });
+
+/// Promote `deviceId` to `verified` in the device inventory through the real
+/// §5.1/§5.2 ingest path (`ck.cross_signing.publish` + a `ck.device.authorize`
+/// carrying a genuine SSK-signed `cross_signing_binding`). soland's
+/// to-device delivery gate (device_messages.rs) requires the bootstrap target
+/// device to be verified, and a dev-login founding device enrolls `unverified`,
+/// so the UI pairing-approval surfaces need an authorized sibling first. The
+/// `authorized_by` session keeps using its dev-login bearer afterward (the PoP
+/// key is the SessionRecord key, independent of the device public key written
+/// here).
+async function promoteDeviceToVerified(
+  request: APIRequestContext,
+  user: JointUser,
+  token: string,
+  deviceId: string,
+) {
+  const realmId = principalControlRealmForDid(user.did);
+  const identity = generateCrossSigningIdentity({ principalId: user.did });
+  const publish = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+    headers: authHeaders(token),
+    data: signedEventEnvelope({
+      actorDid: user.did,
+      realmId,
+      kind: "ck.cross_signing.publish",
+      payload: buildCrossSigningPublishPayload(identity),
+    }),
+  });
+  expect(
+    [200, 201],
+    `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+  ).toContain(publish.status());
+
+  const deviceKey = deviceVerifyKeyMultibase();
+  const binding = buildDeviceCrossSigningBinding({
+    identity,
+    deviceId,
+    devicePublicKeyMultibase: deviceKey.multibase,
+  });
+  const authorize = await request.post(
+    `${solandBaseUrl()}/_cokret/self/events`,
+    {
+      headers: authHeaders(token),
+      data: signedEventEnvelope({
+        actorDid: user.did,
+        realmId,
+        kind: "ck.device.authorize",
+        payload: {
+          principal_id: user.did,
+          device_id: deviceId,
+          device_public_key: deviceKey.multibase,
+          device_key_algorithm: "EdDSA",
+          authorized_by: deviceId,
+          not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+          cross_signing_binding: binding,
+        },
+      }),
+    },
+  );
+  expect(
+    [200, 201],
+    `ck.device.authorize (self-verify) returned ${authorize.status()}: ${await authorize.text()}`,
+  ).toContain(authorize.status());
+
+  // The device surfaces as authorized (status=active) in the projection.
+  await expect
+    .poll(() => pollDeviceStatus(request, token, deviceId), {
+      timeout: 30_000,
+      intervals: [500, 1_000, 2_000],
+    })
+    .toBe("active");
+}
+
+/// Deliver a same-principal `ck.key.verification.request` pairing request to
+/// every authorized sibling over the to-device queue (the API shape yougen's
+/// `pair-device-start-button` produces; driven directly here because that
+/// button reads the device-set projection's `status` field, which exposes
+/// `active`, not the `verified` literal its delivery loop filters on). soland
+/// fans it out to verified same-principal targets, which the receiving device's
+/// background sync ingests into its to-device inbox.
+async function deliverPairingRequest(
+  request: APIRequestContext,
+  user: JointUser,
+  senderToken: string,
+  opts: { displayName?: string } = {},
+): Promise<{ requestingDeviceId: string; pairingCode: string }> {
+  const requestingDeviceId = typedId("device");
+  const pairingCode = `${Date.now() % 1_000_000}`.padStart(6, "0");
+  const transactionId = `ck.key.verification.request:${requestingDeviceId}`;
+  const newDevicePubkey = {
+    kty: "OKP",
+    kid: requestingDeviceId,
+    alg: "EdDSA",
+    public_key: b64url(`pubkey:${requestingDeviceId}`),
+  };
+  const expiresAt = new Date(Date.now() + 10 * 60_000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+  const sendResp = await request.post(
+    `${solandBaseUrl()}/_cokret/self/device_messages`,
+    {
+      headers: {
+        ...authHeaders(senderToken),
+        "Idempotency-Key": `pair-${requestingDeviceId}`,
+      },
+      data: {
+        messages: {
+          [user.did]: {
+            [user.deviceId]: {
+              kind: "ck.key.verification.request",
+              expires_at: expiresAt,
+              content: {
+                transaction_id: transactionId,
+                from_device: requestingDeviceId,
+                purpose: "same_principal_device_authorization",
+                pairing_code: pairingCode,
+                new_device_pubkey: newDevicePubkey,
+                challenge_signature: b64url(`challenge:${requestingDeviceId}`),
+                device_metadata: {
+                  platform: "browser",
+                  display_name: opts.displayName ?? "New device",
+                },
+                expires_at: expiresAt,
+                timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+              },
+            },
+          },
+        },
+      },
+    },
+  );
+  expect(
+    sendResp.ok(),
+    `pairing to-device send returned ${sendResp.status()}: ${await sendResp.text()}`,
+  ).toBeTruthy();
+  return { requestingDeviceId, pairingCode };
+}
+
+/// Read a single device's `status` out of alice's device-set projection
+/// (`GET /_cokret/self/account/viewer`). Returns `undefined` when the device is
+/// absent or the read fails.
+async function pollDeviceStatus(
+  request: APIRequestContext,
+  token: string,
+  deviceId: string,
+): Promise<string | undefined> {
+  const viewer = await request.get(
+    `${solandBaseUrl()}/_cokret/self/account/viewer`,
+    { headers: authHeaders(token) },
+  );
+  if (!viewer.ok()) {
+    return undefined;
+  }
+  const body = (await viewer.json()) as {
+    devices?: Array<{ device_id?: string; status?: string }>;
+  };
+  return (body.devices ?? []).find((device) => device.device_id === deviceId)
+    ?.status;
+}
