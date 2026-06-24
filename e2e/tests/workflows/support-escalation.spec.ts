@@ -100,7 +100,7 @@ test.describe("workflow: support escalation", () => {
       await alexPage.clickTimelineEdit(summary);
       await alexPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(summaryEdited);
       await alexPage.page.getByTestId("chat-save-edit-button").click();
-      await expect(alexPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });
+      await alexPage.waitForTimelineEventSettled(summaryEdited);
       await expect(alexPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await samPage.gotoTimelineRealm(realmId);
       await expect(samPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });

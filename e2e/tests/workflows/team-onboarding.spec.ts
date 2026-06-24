@@ -76,7 +76,7 @@ test.describe("workflow: team onboarding", () => {
       await meiPage.clickTimelineEdit(welcome);
       await meiPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(welcomeEdited);
       await meiPage.page.getByTestId("chat-save-edit-button").click();
-      await expect(meiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });
+      await meiPage.waitForTimelineEventSettled(welcomeEdited);
       await expect(meiPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await yukiPage.gotoTimelineRealm(realmId);
       await expect(yukiPage.timelineEvent(welcomeEdited)).toBeVisible({ timeout: 30_000 });

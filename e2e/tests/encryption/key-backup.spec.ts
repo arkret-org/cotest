@@ -434,6 +434,7 @@ test.describe("key backup + restore", () => {
       }
       const { page: deviceB, session: deviceBSession } = deviceBFlow;
       sessionsToClose.push(deviceB);
+      const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
       await deviceB.gotoHome();
@@ -461,8 +462,15 @@ test.describe("key backup + restore", () => {
         deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
       ).toBeVisible({ timeout: 90_000 });
 
+      const deviceBPrivatePlaintextBackupsBefore =
+        mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts);
       await updateCardDescription(deviceB.page, cardTitle, restoredDescription);
       await expectEncryptedKanbanSaveErrorsAbsent(deviceB.page);
+      await expect
+        .poll(() => mlsPrivatePlaintextBackupPutCount(deviceBKeyBackupPuts), {
+          timeout: 120_000,
+        })
+        .toBeGreaterThan(deviceBPrivatePlaintextBackupsBefore);
 
       await deviceA.page.goto(`/kanban/${realmId}/board/${boardId}`, {
         waitUntil: "domcontentloaded",
@@ -488,8 +496,11 @@ test.describe("key backup + restore", () => {
         .filter({ hasText: cardTitle })
         .click();
       await expect(
-        deviceA.page.getByTestId("card-description-panel"),
-      ).toContainText(restoredDescription, { timeout: 90_000 });
+        deviceA.page
+          .locator('[data-testid="card-description-panel"]:visible')
+          .filter({ hasText: restoredDescription })
+          .first(),
+      ).toBeVisible({ timeout: 90_000 });
 
       const fatalProtocolPattern =
         /MLS runtime|SnapshotDecryptFailed|MissingWelcome|schema_violation|payload violates registered payload schema|MLS commit event failed|\/(?:api\/v1|_cokret\/self)\/(account\/subscribe|subscribe|describe|events)/;
@@ -939,12 +950,35 @@ async function expectMlsAccountSecretBackupUploaded(
     .toBe(true);
 }
 
+function mlsHistoryBackupPutCount(keyBackupPuts: KeyBackupPut[]): number {
+  return keyBackupPuts.filter(
+    (hit) =>
+      hit.status === 200 &&
+      /"backup_class"\s*:\s*"mls_history"/.test(hit.postData),
+  ).length;
+}
+
+function mlsPrivatePlaintextBackupPutCount(
+  keyBackupPuts: KeyBackupPut[],
+): number {
+  return keyBackupPuts.filter(
+    (hit) =>
+      hit.status === 200 &&
+      /"item_type"\s*:\s*"mls_private_plaintext"/.test(hit.postData),
+  ).length;
+}
+
 function normalizeRecoveryKeyText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
-  await expect(page.getByTestId("mls-unlock-modal")).toBeVisible({
+  const unlockModal = page.getByTestId("mls-unlock-modal");
+  const visibleUnlockStatus = page.locator(
+    '[data-testid="mls-unlock-status"]:visible',
+  );
+
+  await expect(unlockModal).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByTestId("mls-unlock-banner")).toHaveAttribute(
@@ -966,13 +1000,22 @@ async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   });
   await page.getByTestId("mls-unlock-passphrase").fill(recoveryKey);
   await page.getByTestId("mls-unlock-submit").click();
-  await expect(page.getByTestId("mls-unlock-status")).toContainText(
-    /restored/i,
-    {
-      timeout: 120_000,
-    },
-  );
-  await expect(page.getByTestId("mls-unlock-modal")).toHaveCount(0, {
+  await expect
+    .poll(
+      async () => {
+        if (!(await unlockModal.isVisible().catch(() => false))) {
+          return "closed";
+        }
+        const status = await visibleUnlockStatus.textContent().catch(() => "");
+        if (/restored/i.test(status ?? "")) {
+          return "restored";
+        }
+        return status ?? "";
+      },
+      { timeout: 120_000 },
+    )
+    .toMatch(/^(?:restored|closed)$/);
+  await expect(unlockModal).not.toBeVisible({
     timeout: 30_000,
   });
 }

@@ -169,23 +169,30 @@ test.describe("personal blocklist", () => {
         await stepShot(alicePage.page, testInfo, "blocked-users-after-block");
 
         await expect
-          .poll(async () => await blocklistContains(request, aliceToken, bob.did), {
+          .poll(async () => await blocklistStoredOpaque(request, aliceToken, bob.did), {
             timeout: 30_000,
-            message: "alice account_data includes bob block entry",
+            message: "alice account_data stores an opaque blocklist entry",
           })
           .toBe(true);
 
         const m2 = `S31 m2 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m2);
         await alicePage.gotoTimelineRealm(realmId);
-        const aliceTexts = await alicePage.readTimelineTexts(realmId);
-        expect(aliceTexts.some((t) => t.includes(m2))).toBe(false);
+        await expect(
+          alicePage.page.getByTestId("event-body").filter({ hasText: m2 }),
+        ).toHaveCount(0);
         await expect(bobPage.page.getByTestId("message-list")).toContainText(m2, {
           timeout: 30_000,
         });
 
-        const aliceNotifications = await readNotificationsText(request, aliceToken);
-        expect(aliceNotifications).not.toContain(m2);
+        await alicePage.page.goto("/notifications", {
+          waitUntil: "domcontentloaded",
+        });
+        await expect(
+          alicePage.page
+            .getByTestId("notification-item")
+            .filter({ hasText: m2 }),
+        ).toHaveCount(0);
         await stepShot(alicePage.page, testInfo, "alice-timeline-after-block");
 
         await alicePage.page.goto("/settings/blocked-users", {
@@ -200,11 +207,11 @@ test.describe("personal blocklist", () => {
           timeout: 30_000,
         });
         await expect
-          .poll(async () => await blocklistContains(request, aliceToken, bob.did), {
+          .poll(async () => await blocklistClearedOrTombstoned(request, aliceToken, bob.did), {
             timeout: 30_000,
-            message: "alice account_data removed bob block entry",
+            message: "alice account_data tombstoned the blocklist entry",
           })
-          .toBe(false);
+          .toBe(true);
         const m3 = `S31 m3 ${stamp}`;
         await bobPage.sendTimelineMessage(realmId, m3);
         await alicePage.gotoTimelineRealm(realmId);
@@ -244,11 +251,12 @@ test.describe("personal blocklist", () => {
       await putBlocklist(request, aliceToken, alice.did, realmId, [
         canonicalActorBlockEntry(bob.did),
       ]);
+      expect(await blocklistStoredOpaque(request, aliceToken, bob.did)).toBe(true);
 
       const body = `S31 E11.1 bob ${stamp}`;
       const sent = await sendMessageApi(request, bobToken, realmId, body);
 
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).toContain(body);
       expect(eventsText(await queryRealmEventsApi(request, carolToken, realmId))).toContain(body);
 
       const redactEvent = makeFederationEvent({
@@ -272,7 +280,7 @@ test.describe("personal blocklist", () => {
   );
 
   test(
-    "E11.2 mute vs block: muted messages still render in timeline but produce no push; blocked messages render not at all",
+    "E11.2 mute vs private blocklist: ordinary server queries still render messages while private preferences stay opaque",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser("s31e112-alice");
@@ -329,14 +337,14 @@ test.describe("personal blocklist", () => {
       });
       expect(notify.status()).toBe(200);
       const notifyBody = await notify.json();
-      expect(JSON.stringify(notifyBody)).toContain("push_rule");
+      expect(JSON.stringify(notifyBody)).not.toContain(`mute-${stamp}`);
 
       await putBlocklist(request, aliceToken, alice.did, realmId, [
         canonicalActorBlockEntry(bob.did),
       ]);
       const blockedHidden = `S31 E11.2 blocked-hidden ${stamp}`;
       await sendMessageApi(request, bobToken, realmId, blockedHidden);
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).toContain(
         blockedHidden,
       );
     },
@@ -366,10 +374,11 @@ test.describe("personal blocklist", () => {
       const body = `S31 E11.3 bob own message ${stamp}`;
       await sendMessageApi(request, bobToken, realmId, body);
 
-      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).not.toContain(body);
+      expect(eventsText(await queryRealmEventsApi(request, aliceToken, realmId))).toContain(body);
       expect(eventsText(await queryRealmEventsApi(request, bobToken, realmId))).toContain(body);
 
-      expect(await blocklistContains(request, bobToken, alice.did)).toBe(false);
+      expect(await blocklistStoredOpaque(request, aliceToken, bob.did)).toBe(true);
+      expect(await blocklistStoredOpaque(request, bobToken, alice.did)).toBe(false);
       expect(await readNotificationsText(request, bobToken)).not.toMatch(/blocked by|blocklist/i);
     },
   );
@@ -401,33 +410,51 @@ async function putBlocklist(
   );
 }
 
-async function blocklistContains(
+async function blocklistStoredOpaque(
   request: APIRequestContext,
   token: string,
   target: string,
 ): Promise<boolean> {
-  const body = await accountSubscribeDeltaApi(request, token);
-  const accountData = body.account_data as { events?: Array<Record<string, unknown>> } | undefined;
-  const blocklist = (accountData?.events ?? []).find((entry) => entry.data_type === BLOCKLIST_DATA_TYPE);
-  const content = (blocklist?.content ?? {}) as Record<string, unknown>;
-  const entries = ((content.entries ?? []) as Array<Record<string, unknown>>);
-  return entries.some((entry) => {
-    const entryTarget = targetDid(entry.target) ?? entry.did ?? entry.actor;
-    return entryTarget === target && (entry.mode ?? entry.kind ?? "block") === "block";
-  });
+  const blocklist = await blocklistAccountDataEntry(request, token);
+  if (!blocklist) {
+    return false;
+  }
+  const serialized = JSON.stringify(blocklist);
+  if (serialized.includes(target)) {
+    return false;
+  }
+  const content = (blocklist.content ?? {}) as Record<string, unknown>;
+  const marker = (content.client_side_conformance ?? {}) as Record<string, unknown>;
+  return marker.encrypted_account_data === true &&
+    typeof marker.payload_digest === "string" &&
+    /^sha256:[0-9a-f]{64}$/.test(marker.payload_digest) &&
+    typeof content.ciphertext === "string" &&
+    content.ciphertext.length > 0;
 }
 
-function targetDid(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    return value;
+async function blocklistClearedOrTombstoned(
+  request: APIRequestContext,
+  token: string,
+  target: string,
+): Promise<boolean> {
+  const blocklist = await blocklistAccountDataEntry(request, token);
+  if (!blocklist) {
+    return true;
   }
-  if (value && typeof value === "object") {
-    const target = value as Record<string, unknown>;
-    return [target.did, target.actor, target.id].find((candidate): candidate is string => {
-      return typeof candidate === "string";
-    });
+  if (JSON.stringify(blocklist).includes(target)) {
+    return false;
   }
-  return undefined;
+  const content = (blocklist.content ?? {}) as Record<string, unknown>;
+  return content.tombstone === true;
+}
+
+async function blocklistAccountDataEntry(
+  request: APIRequestContext,
+  token: string,
+): Promise<Record<string, unknown> | undefined> {
+  const body = await accountSubscribeDeltaApi(request, token);
+  const accountData = body.account_data as { events?: Array<Record<string, unknown>> } | undefined;
+  return (accountData?.events ?? []).find((entry) => entry.data_type === BLOCKLIST_DATA_TYPE);
 }
 
 async function readNotificationsText(

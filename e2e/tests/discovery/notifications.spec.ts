@@ -237,6 +237,9 @@ test.describe("notifications", () => {
       await bobPage.page
         .getByTestId("save-notification-settings-button")
         .click();
+      await expect(
+        bobPage.page.getByTestId("notification-settings-status"),
+      ).toContainText(/dnd disabled/i, { timeout: 30_000 });
       await alicePage.sendTimelineMessage(realmId, resumedMsg);
       await bobPage.page.goto("/notifications", {
         waitUntil: "domcontentloaded",

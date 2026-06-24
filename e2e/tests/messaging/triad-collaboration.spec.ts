@@ -281,7 +281,7 @@ test.describe("single-server triad collaboration", () => {
       await bobPage.clickTimelineEdit(m2);
       await bobPage.page.getByTestId("chat-edit-composer").locator("textarea").fill(m2Edited);
       await bobPage.page.getByTestId("chat-save-edit-button").click();
-      await expect(bobPage.timelineEvent(m2Edited)).toBeVisible({ timeout: 30_000 });
+      await bobPage.waitForTimelineEventSettled(m2Edited);
       await expect(bobPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await stepShot(bobPage.page, testInfo, "B-bob-edited-m2");
 

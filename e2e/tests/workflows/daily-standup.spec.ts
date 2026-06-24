@@ -119,9 +119,10 @@ test.describe("workflow: async daily standup", () => {
         .locator("textarea")
         .fill(linUnblockPatFixed);
       await linPage.page.getByTestId("chat-save-edit-button").click();
-      await expect(linPage.timelineEvent(linUnblockPatFixed)).toBeVisible({
-        timeout: encryptedSyncTimeout,
-      });
+      await linPage.waitForTimelineEventSettled(
+        linUnblockPatFixed,
+        encryptedSyncTimeout,
+      );
       await expect(linPage.page.getByTestId("chat-status")).toContainText(
         /Message updated/i,
       );

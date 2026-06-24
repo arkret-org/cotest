@@ -408,6 +408,9 @@ export async function putAccountDataViaEventApi(
   body: Record<string, unknown>,
   opts: { server?: SolandKey; context?: string } = {},
 ) {
+  const payloadBody = privateAccountDataKeys.has(key)
+    ? encryptedAccountDataMarker(key, body)
+    : body;
   return await submitSignedEventApi(
     request,
     token,
@@ -418,7 +421,7 @@ export async function putAccountDataViaEventApi(
       payload: {
         key,
         owner: actorDid,
-        body,
+        body: payloadBody,
         updated_at: canonicalTimestamp(),
       },
     }),
@@ -427,6 +430,31 @@ export async function putAccountDataViaEventApi(
       context: opts.context ?? `set account_data ${key}`,
     },
   );
+}
+
+const privateAccountDataKeys = new Set([
+  "ck.account.blocklist",
+  "ck.dnd_schedule",
+  "ck.push_rules",
+]);
+
+function encryptedAccountDataMarker(
+  dataType: string,
+  content: Record<string, unknown>,
+): Record<string, unknown> {
+  const payloadDigest = `sha256:${sha256CanonicalJson({
+    data_type: dataType,
+    content,
+  })}`;
+  return {
+    client_side_conformance: {
+      encrypted_account_data: true,
+      profile_id: "ck.profile.e2ee_client.v1",
+      payload_digest: payloadDigest,
+    },
+    content_type: "application/vnd.cokret.account-data+json",
+    ciphertext: `opaque-client-account-data:${payloadDigest.slice("sha256:".length)}`,
+  };
 }
 
 export async function currentActorDidApi(

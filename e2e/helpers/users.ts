@@ -581,22 +581,9 @@ export class JointUserPage {
     if (!this.page.url().includes(`/chat/${realmId}`)) {
       await this.gotoTimelineRealm(realmId);
     }
-    const writeStatus = this.page.getByTestId("chat-status");
     await this.page.getByTestId("chat-input").fill(body);
     await this.page.getByTestId("send-chat-button").click();
-    await expect(this.page.getByTestId("message-list")).toContainText(body, {
-      timeout: 30_000,
-    });
-    await expect
-      .poll(
-        async () => {
-          const current =
-            (await writeStatus.textContent().catch(() => ""))?.trim() ?? "";
-          return current.toLowerCase().endsWith("message sent");
-        },
-        { timeout: 30_000 },
-      )
-      .toBe(true);
+    await this.waitForTimelineEventSettled(body);
   }
 
   async sendTimelineMentionMessage(
@@ -620,24 +607,7 @@ export class JointUserPage {
     const body = `${prefix} ${suffix.trim()}`.trim();
     await input.fill(body);
     await this.page.getByTestId("send-chat-button").click();
-    await expect(this.page.getByTestId("message-list")).toContainText(body, {
-      timeout: 30_000,
-    });
-    await expect
-      .poll(
-        async () => {
-          const current =
-            (
-              await this.page
-                .getByTestId("chat-status")
-                .textContent()
-                .catch(() => "")
-            )?.trim() ?? "";
-          return current.toLowerCase().endsWith("message sent");
-        },
-        { timeout: 30_000 },
-      )
-      .toBe(true);
+    await this.waitForTimelineEventSettled(body);
     return body;
   }
 
@@ -660,6 +630,14 @@ export class JointUserPage {
       .getByTestId("chat-message")
       .filter({ hasText: body })
       .first();
+  }
+
+  async waitForTimelineEventSettled(body: string, timeout = 45_000) {
+    const event = this.timelineEvent(body);
+    await expect(event).toBeVisible({ timeout });
+    await expect(event.getByTestId("message-send-status")).toHaveCount(0, {
+      timeout,
+    });
   }
 
   async clickTimelineReply(body: string) {
@@ -1078,7 +1056,16 @@ export async function closeUser(session: UserSession) {
     session.networkLines.join("\n"),
     "utf8",
   );
-  await session.context.close();
+  try {
+    await session.context.close();
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !/Target page, context or browser has been closed/.test(error.message)
+    ) {
+      throw error;
+    }
+  }
 }
 
 function sanitize(value: string): string {
