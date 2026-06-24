@@ -332,7 +332,11 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
             "scope": policy_realm_id,
             "subject_ref": alice.actor,
             "policy_type": "ck.message.create",
-            "resource": {"kind": "realm", "realm_id": policy_realm_id},
+            // Realm-scoped resource constraint: soland matches `resource.kind`
+            // against the request's `source.service_type`, so leave `kind` unset
+            // (the policy applies to the realm regardless of calling service) and
+            // constrain only on realm_id.
+            "resource": {"realm_id": policy_realm_id},
             "effect": "allow",
             "actions": ["ck.message.create"],
             "obligations": []
@@ -351,7 +355,11 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
                 "actor_id": "did:web:alice.example",
-                "source": {"service": "soland"}
+                "source": {
+                    "service_did": "did:web:soland.cotest.local",
+                    "service_type": "principal_server",
+                    "signed_transport": true
+                }
             })),
         StatusCode::OK,
     )
@@ -363,7 +371,7 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         "policy/check must return a signed decision envelope"
     );
     assert!(
-        allow_policy["bound_to"]["auth_state_digest"].is_string(),
+        allow_policy["auth_state_digest"].is_string(),
         "policy/check must bind the auth state digest"
     );
 
@@ -376,7 +384,11 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.realm.destroy",
                 "actor_id": "did:web:alice.example",
-                "source": {"service": "soland"}
+                "source": {
+                    "service_did": "did:web:soland.cotest.local",
+                    "service_type": "principal_server",
+                    "signed_transport": true
+                }
             })),
         StatusCode::OK,
     )
@@ -393,11 +405,18 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
+                // `actor_id` is a typed Did; a bare "alice" fails to deserialize
+                // and is rejected as a malformed body (bad_request) before any
+                // semantic policy validation.
                 "actor_id": "alice",
-                "source": {"service": "soland"}
+                "source": {
+                    "service_did": "did:web:soland.cotest.local",
+                    "service_type": "principal_server",
+                    "signed_transport": true
+                }
             })),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "bad_request",
     )
     .await?;
 
