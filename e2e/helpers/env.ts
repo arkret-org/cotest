@@ -100,6 +100,31 @@ export function mockEmailBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_EMAIL_BASE_URL")?.replace(/\/$/, "");
 }
 
+export function mockClaimIssuerBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_CLAIM_ISSUER_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockClaimIssuerDid(): string {
+  return (
+    optionalEnv("COTEST_MOCK_CLAIM_ISSUER_DID") ??
+    "did:web:vc-issuer.joint-e2e.local"
+  );
+}
+
+export function mockChallengeProviderBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_CHALLENGE_PROVIDER_BASE_URL")?.replace(
+    /\/$/,
+    "",
+  );
+}
+
+export function mockChallengeProviderDid(): string {
+  return (
+    optionalEnv("COTEST_MOCK_CHALLENGE_PROVIDER_DID") ??
+    "did:web:captcha.joint-e2e.local"
+  );
+}
+
 export function mockWitnessBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_WITNESS_BASE_URL")?.replace(/\/$/, "");
 }
@@ -158,6 +183,14 @@ export function mockAppletRegistryBaseUrl(): string | undefined {
 
 export function mockAppletRegistryDid(): string | undefined {
   return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_DID");
+}
+
+export function mockAgentRuntimeBaseUrl(): string | undefined {
+  return optionalEnv("COTEST_MOCK_AGENT_RUNTIME_BASE_URL")?.replace(/\/$/, "");
+}
+
+export function mockAgentRuntimeDid(): string | undefined {
+  return optionalEnv("COTEST_MOCK_AGENT_RUNTIME_DID");
 }
 
 export function mockTspEndpointBaseUrl(): string | undefined {

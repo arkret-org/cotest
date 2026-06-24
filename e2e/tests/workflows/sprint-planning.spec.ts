@@ -147,13 +147,96 @@ test.describe("workflow: sprint planning", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#workflows-sprint-planning-gap
-  // @user-promise: e2e/scenarios/workflows/sprint-planning.md
-  // @expected-live-by: 2026Q3
-  "E-sprint.kanban mei builds a Backlog + Todo + Doing + Done kanban and promotes 3 stories", async () => {
-    // Multi-card kanban (5+ cards in one column) currently keeps cards in
-    // draft/queued state, which blocks archive. Needs soland to ack the
-    // batch faster or yougen to surface draft-state independently.
+  test("E-sprint.kanban mei builds a Backlog + Todo + Doing + Done kanban and promotes 3 stories", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(360_000);
+    const stamp = Date.now();
+    const meiFlow = await openDpopUserPage(browser, request, "wf-sprint-batch-mei");
+    test.skip(
+      !meiFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!meiFlow) {
+      return;
+    }
+    const meiPage = meiFlow.page;
+    const backlog = `Backlog-${stamp}`;
+    const todo = `Todo-${stamp}`;
+    const doing = `Doing-${stamp}`;
+    const done = `Done-${stamp}`;
+    const boardTitle = `Sprint Batch Board ${stamp}`;
+    // 5+ cards in one column — exercises the batch-ack draft-state path.
+    const stories = Array.from(
+      { length: 5 },
+      (_, i) => `Story ${i + 1} (${stamp})`,
+    );
+
+    try {
+      const realmId = await meiPage.createRealm({
+        title: `Sprint batch ${stamp}`,
+        summary: "Multi-card draft-state batch",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+      });
+
+      await meiPage.page.goto(`/kanban/${realmId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await meiPage.page.getByTestId("new-board-toggle").click();
+      await meiPage.page.getByTestId("new-board-title-input").fill(boardTitle);
+      await meiPage.page.getByTestId("create-board-space-button").click();
+      await expect(
+        meiPage.page.getByTestId("board-space-select-button"),
+      ).toContainText(boardTitle, { timeout: 45_000 });
+
+      for (const columnName of [backlog, todo, doing, done]) {
+        await meiPage.page.getByTestId("new-column-input").fill(columnName);
+        await meiPage.page.getByTestId("add-column-button").click();
+        await expect(
+          meiPage.page
+            .getByTestId("kanban-column")
+            .filter({ hasText: columnName }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+
+      const backlogColumn = meiPage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: backlog });
+
+      // Add 5 cards back-to-back. yougen surfaces each card's draft-state
+      // independently (data-card-draft) so the batch is observable even
+      // before every create event acks.
+      for (const story of stories) {
+        await backlogColumn.getByTestId("add-card-button").click();
+        await backlogColumn.getByTestId("new-card-title-input").fill(story);
+        await backlogColumn.getByTestId("save-card-button").click();
+        await expect(
+          backlogColumn.getByTestId("kanban-card").filter({ hasText: story }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+      await stepShot(meiPage.page, testInfo, "batch-A-queued");
+
+      // Every card eventually settles out of draft (the batch acks). Each
+      // card exposes its own `data-card-draft="false"` so the promote /
+      // archive flow can act on the whole column once it settles.
+      for (const story of stories) {
+        const card = backlogColumn
+          .getByTestId("kanban-card")
+          .filter({ hasText: story });
+        await expect(card).toHaveAttribute("data-card-draft", "false", {
+          timeout: 90_000,
+        });
+      }
+      await stepShot(meiPage.page, testInfo, "batch-B-settled");
+    } finally {
+      await meiPage.close();
+    }
   });
 
   test("E-sprint.crossuser bob + carol see the same kanban as mei after she edits the board", async ({
@@ -435,11 +518,89 @@ test.describe("workflow: sprint planning", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#workflows-sprint-planning-gap
-  // @user-promise: e2e/scenarios/workflows/sprint-planning.md
-  // @expected-live-by: 2026Q3
-  "E-sprint.archiveboard mei archives the entire sprint board at end of week", async () => {
-    // yougen gap: bulk board archive button; needs cascade behavior per spec.
+  test("E-sprint.archiveboard mei archives the entire sprint board at end of week", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(360_000);
+    const stamp = Date.now();
+    const meiFlow = await openDpopUserPage(
+      browser,
+      request,
+      "wf-sprint-archive-mei",
+    );
+    test.skip(
+      !meiFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!meiFlow) {
+      return;
+    }
+    const meiPage = meiFlow.page;
+    const column = `Backlog-${stamp}`;
+    const boardTitle = `Closeout Board ${stamp}`;
+    const cards = [`Story A ${stamp}`, `Story B ${stamp}`];
+
+    try {
+      const realmId = await meiPage.createRealm({
+        title: `Sprint archive ${stamp}`,
+        summary: "End-of-week bulk archive + cascade",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+      });
+
+      await meiPage.page.goto(`/kanban/${realmId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(meiPage.page.getByTestId("kanban-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await meiPage.page.getByTestId("new-board-toggle").click();
+      await meiPage.page.getByTestId("new-board-title-input").fill(boardTitle);
+      await meiPage.page.getByTestId("create-board-space-button").click();
+      await expect(
+        meiPage.page.getByTestId("board-space-select-button"),
+      ).toContainText(boardTitle, { timeout: 45_000 });
+
+      await meiPage.page.getByTestId("new-column-input").fill(column);
+      await meiPage.page.getByTestId("add-column-button").click();
+      const backlogColumn = meiPage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: column });
+      await expect(backlogColumn).toBeVisible({ timeout: 30_000 });
+
+      for (const card of cards) {
+        await backlogColumn.getByTestId("add-card-button").click();
+        await backlogColumn.getByTestId("new-card-title-input").fill(card);
+        await backlogColumn.getByTestId("save-card-button").click();
+        const cardLocator = backlogColumn
+          .getByTestId("kanban-card")
+          .filter({ hasText: card });
+        await expect(cardLocator).toBeVisible({ timeout: 30_000 });
+        await expect(cardLocator).toHaveAttribute("data-card-draft", "false", {
+          timeout: 90_000,
+        });
+      }
+      await stepShot(meiPage.page, testInfo, "archiveboard-A-ready");
+
+      // Bulk archive the whole board: cascade-archive every active card +
+      // list, then the board Space itself.
+      await meiPage.page.getByTestId("archive-board-button").click();
+
+      // Cascade: cards and the column drop out of the active board view.
+      for (const card of cards) {
+        await expect(
+          meiPage.page.getByTestId("kanban-card").filter({ hasText: card }),
+        ).toHaveCount(0, { timeout: 90_000 });
+      }
+      await expect(
+        meiPage.page.getByTestId("kanban-column").filter({ hasText: column }),
+      ).toHaveCount(0, { timeout: 90_000 });
+      await stepShot(meiPage.page, testInfo, "archiveboard-B-cascaded");
+    } finally {
+      await meiPage.close();
+    }
   });
 });
 

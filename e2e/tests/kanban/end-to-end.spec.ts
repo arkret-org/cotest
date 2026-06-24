@@ -5,9 +5,18 @@
 //   - models/strand-and-message.md §2-§3 (Strand), §4.3 (discussion track)
 //   - models/relation.md §3.2 (contains)
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  authHeaders,
+  canonicalTimestamp,
+  createRealmApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -92,6 +101,48 @@ async function setCardDetailEditorValue(page: Page, value: string): Promise<void
       new InputEvent("input", { bubbles: true, inputType: "insertText", data: nextValue }),
     );
   }, value);
+}
+
+// API-level Card creation that mirrors kanban/project-simulation's active
+// ck.strand.create payload (full `object` with metadata.fields.status). Returns
+// the new strand id so the API-driven reject tests below can target it without
+// the brittle yougen kanban UI load path.
+async function createCardStrandApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  title: string,
+): Promise<string> {
+  const strandId = typedId("strand");
+  const createdAt = canonicalTimestamp();
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.strand.create",
+      createdAt,
+      payload: {
+        object: {
+          id: strandId,
+          schema: "ck.schema.strand.v1",
+          realm_id: realmId,
+          metadata: {
+            title,
+            fields: { status: "todo" },
+          },
+          stage: "planned",
+          tracks: { discussion: { enabled: true, is_primary: true } },
+          created_by: actorDid,
+          created_at: createdAt,
+        },
+      },
+    }),
+    { context: `create card strand ${title}` },
+  );
+  return strandId;
 }
 
 test.describe("kanban end-to-end", () => {
@@ -193,41 +244,201 @@ test.describe("kanban end-to-end", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#kanban-end-to-end-gap
-    // @user-promise: e2e/scenarios/kanban/end-to-end.md
-    // @expected-live-by: 2026Q3
-    "concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_register_conflict",
-    async () => {
-      // spec: realm-and-space.md / operations-sync.md strand position basis
-    },
-  );
+  test("concurrent cross-list move: cas-register accepts one winner, rejects the other with cas_conflict", async ({
+    request,
+  }) => {
+    // spec: realm-and-space.md §3.6 — ck.strand.move writes the strand
+    // position on the Move/Seal cas-register; concurrent moves of the same
+    // Card race for the same actor frontier. soland's actor_seq frontier is
+    // the cas-register guard (event_log/submit.rs): the first move advances
+    // the frontier, a second move stamped behind it is rejected with
+    // cas_conflict ("actor_seq is older than the accepted actor frontier").
+    // The reason is cas_conflict, not cas_register_conflict (that code does
+    // not exist in soland).
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-cas-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
 
-  test.fixme(
-    // @blocking-on: soland#kanban-end-to-end-gap
-    // @user-promise: e2e/scenarios/kanban/end-to-end.md
-    // @expected-live-by: 2026Q3
-    "cross-space contains relation rejected with reason=cross_space_structural_relation",
-    async () => {
-      // spec: models/relation.md §3.2 — structural relations MUST stay
-      // within a single Space. Server enforcement landed (relation.rs
-      // cross-space check), but driving the test through the kanban UI
-      // is brittle (yougen page load + kanban panel render hits 180s
-      // timeout under joint-e2e contention). Re-enable once a
-      // programmatic strand-creation helper (signed ck.strand.create POST)
-      // lands or yougen's kanban view stabilizes its load timing.
-    },
-  );
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `Kanban CAS ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const cardId = await createCardStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      `CAS Card ${stamp}`,
+    );
 
-  test.fixme(
-    // @blocking-on: soland#kanban-end-to-end-gap
-    // @user-promise: e2e/scenarios/kanban/end-to-end.md
-    // @expected-live-by: 2026Q3
-    "commenting on an archived strand is rejected by reducer (no writes on archived Strand)",
-    async () => {
-      // spec: common-fields.md lifecycle archived-state write constraints
-    },
-  );
+    const boardSpaceId = typedId("space");
+    const inProgressListId = typedId("space");
+    const doneListId = typedId("space");
+
+    // Pin explicit actor_seq values so the race is deterministic: the winner
+    // advances the frontier; the loser is stamped strictly behind it.
+    const winnerSeq = 1_000_000;
+    const loserSeq = winnerSeq - 1;
+
+    const winnerMove = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ck.strand.move",
+      actorSeq: winnerSeq,
+      payload: {
+        strand_id: cardId,
+        board_space_id: boardSpaceId,
+        target_space_id: inProgressListId,
+        rank: "m",
+      },
+    });
+    // Winner is accepted (submitSignedEventApi asserts 200/201).
+    await submitSignedEventApi(request, aliceToken, winnerMove, {
+      context: "concurrent move winner",
+    });
+
+    // Loser targets the SAME card but is stamped behind the accepted frontier
+    // → cas_conflict. Use a raw POST since submitSignedEventApi asserts 2xx.
+    const loserMove = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ck.strand.move",
+      actorSeq: loserSeq,
+      payload: {
+        strand_id: cardId,
+        board_space_id: boardSpaceId,
+        target_space_id: doneListId,
+        rank: "m",
+      },
+    });
+    const loserResponse = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      { headers: authHeaders(aliceToken), data: loserMove },
+    );
+    expect(loserResponse.status()).toBe(409);
+    expect(wireErrCode(await loserResponse.json())).toBe("cas_conflict");
+  });
+
+  test("cross-realm contains relation rejected with reason=cross_realm_structural_relation", async ({
+    request,
+  }) => {
+    // spec: models/relation.md §4 — structural relations (contains /
+    // belongs_to) MUST NOT cross Realm boundaries. soland resolves both
+    // endpoints' home Realms (apply_relations.rs check_relation_cross_realm →
+    // SDK validate_structural_relation_same_realm) and rejects a contains
+    // edge whose endpoints live in different Realms with
+    // cross_realm_structural_relation. A Strand→Strand contains stays a
+    // directly-writable weak relation, so a Strand from_ref (not a ck:space:
+    // from_ref, which is the derived Board/List containment) reaches this
+    // check instead of relation_kind_contains_derived.
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-crossrealm-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmA = await createRealmApi(request, aliceToken, {
+      title: `Kanban Realm A ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const realmB = await createRealmApi(request, aliceToken, {
+      title: `Kanban Realm B ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const cardInA = await createCardStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmA,
+      `Card in A ${stamp}`,
+    );
+    const cardInB = await createCardStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmB,
+      `Card in B ${stamp}`,
+    );
+
+    // contains edge in realm A pointing at a Card that lives in realm B.
+    const crossRealm = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: realmA,
+      kind: "ck.relation.create",
+      payload: {
+        relation_id: typedId("relation"),
+        relation_kind: "contains",
+        from_ref: cardInA,
+        to_ref: cardInB,
+      },
+    });
+    const response = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      { headers: authHeaders(aliceToken), data: crossRealm },
+    );
+    expect(response.status()).toBe(412);
+    expect(wireErrCode(await response.json())).toBe(
+      "cross_realm_structural_relation",
+    );
+  });
+
+  test("commenting on an archived strand is rejected by reducer (no writes on archived Strand)", async ({
+    request,
+  }) => {
+    // spec: common-fields.md §5.1 — writes on a non-active object MUST fail
+    // with strand_not_active. Posting into a Card's discussion track after it
+    // is archived is a track mutation (ck.strand.tracks.update); soland gates
+    // it on the parent Strand lifecycle in apply_objects/strand.rs
+    // (check_strand_tracks_transition admission preflight + apply_strand_track_touch
+    // reducer defence-in-depth), both returning strand_not_active.
+    const stamp = Date.now();
+    const alice = uniqueUser("kanban-archived-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `Kanban Archived ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const cardId = await createCardStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      `Archived Card ${stamp}`,
+    );
+
+    // Archive the Card (ck.strand.archive, target_ref). Accepted: the strand
+    // is Active before this transition.
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ck.strand.archive",
+        payload: { target_ref: cardId },
+      }),
+      { context: "archive card strand" },
+    );
+
+    // Post into the archived Card's discussion track → strand_not_active.
+    const trackWrite = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ck.strand.tracks.update",
+      payload: {
+        strand_id: cardId,
+        patch: { discussion: { enabled: true } },
+      },
+    });
+    const response = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      { headers: authHeaders(aliceToken), data: trackWrite },
+    );
+    expect(response.status()).toBe(412);
+    expect(wireErrCode(await response.json())).toBe("strand_not_active");
+  });
 
   test("column drag handles expose stable targets and reorder columns locally", async ({
     browser,

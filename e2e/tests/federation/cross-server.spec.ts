@@ -18,7 +18,9 @@
 //   ✓ peer events query pulls peer pages and ingests missing local Events
 //   ✓ peer events frontier exposes deterministic Event ID coverage
 //   ✓ inbound RFC 9421 HTTP Message Signature rejects tampered batches
-//   ✗ service_binding_ref.reducer_profile_digest NOT validated
+//   ✓ service_binding_ref.reducer_profile_digest validated (whole-batch reject)
+//   ✓ §4.4 capability revoke fanout: revoking a peer's service delegation
+//     stops outbound federation push to that peer
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
@@ -32,12 +34,14 @@ import {
   authHeaders,
   queryPeerEventsApi,
   createRealmApi,
+  grantServiceDelegationApi,
   listInvitesApi,
   makeFederationEvent,
   peerEventFrontierApi,
   pushFederationEvents,
   rawPushFederationEvents,
   queryRealmEventsApi,
+  revokeCapabilityApi,
   sendMessageApi,
   typedId,
   wireErrCode,
@@ -628,10 +632,7 @@ test.describe("cross-server federation", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#federation-cross-server-gap
-  // @user-promise: e2e/scenarios/federation/cross-server.md
-  // @expected-live-by: 2026Q3
-  "reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch", async ({
+  test("reducer_profile_digest mismatch returns rejected with reason_code=reducer_profile_mismatch", async ({
     request,
   }) => {
     // spec: federation.md §4.1 service_binding_ref.reducer_profile_digest +
@@ -639,9 +640,9 @@ test.describe("cross-server federation", () => {
     // ck.vector.federation.reducer_profile_digest.v1: a digest diverging from
     // the receiver's registry-derived value MUST reject the WHOLE batch with
     // reducer_profile_mismatch — no partial accept.
-    // soland gap: reducer_profile_digest NOT validated yet — keep fixme (the
-    // body below is the promotion-ready assertion; promote via
-    // scripts/promote-fixme.ps1 once soland implements the gate).
+    // soland: validated in event_log/admission.rs
+    // (validate_federation_service_binding) and wired into the federation
+    // submit path before any event admission.
     const realmId = typedId("realm");
     const event = makeFederationEvent({
       realmId,
@@ -688,12 +689,114 @@ test.describe("cross-server federation", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#federation-cross-server-gap
-  // @user-promise: e2e/scenarios/federation/cross-server.md
-  // @expected-live-by: 2026Q3
-  "Capability revoke fanout: after alice revokes β's service delegation, α MUST stop pushing future events to β (§4.4)", async () => {
-    // spec: §4.4 capability revoke fanout
-    // soland gap: no service-delegation revoke fanout implemented.
+  test("Capability revoke fanout: after alice revokes β's service delegation, α MUST stop pushing future events to β (§4.4)", async ({
+    request,
+  }) => {
+    // spec: sync/federation.md §4.4 — once a service delegation grant whose
+    // subject is a peer service DID is revoked, the source Principal Server
+    // MUST stop pushing future events for that Realm to the revoked peer.
+    // soland: `ProjectionState::federation_delivery_revoked_peers` derives the
+    // revoked-peer set from the durable capability grant cells and
+    // `dynamic_peer_event_targets` (event_log/submit.rs) skips those peers.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s2-revoke-alice-${stamp}`);
+    const bob = uniqueUser(`s2-revoke-bob-${stamp}`);
+    await ensureRegistered(request, alice, { server: "alpha" });
+    await ensureRegistered(request, bob, { server: "beta" });
+    const aliceToken = await issueDevSession(request, alice, {
+      server: "alpha",
+    });
+    const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+    // Federated Realm: bob@β joins so β is a routable delivery target on α.
+    const realmId = await createRealmApi(
+      request,
+      aliceToken,
+      {
+        title: `S2 revoke fanout ${stamp}`,
+        discoverability: "listed",
+        history_visibility: "shared",
+        invitees: [bob.did],
+        ownerDid: alice.did,
+        plaintext_visible_services: [
+          solandServiceDid("alpha"),
+          solandServiceDid("beta"),
+        ],
+      },
+      { server: "alpha" },
+    );
+    const betaInvite = await waitForInvite(
+      request,
+      bobToken,
+      bob.did,
+      realmId,
+      "beta",
+    );
+    await acceptInviteApi(
+      request,
+      bobToken,
+      bob.did,
+      betaInvite.realm_id,
+      betaInvite.id,
+      { server: "beta" },
+    );
+    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+
+    // Alice (Realm owner) delegates the federation delivery binding policy to
+    // β's service DID, then confirms a baseline message still fans out to β.
+    const grantId = await grantServiceDelegationApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectServiceDid: solandServiceDid("beta"),
+    });
+    const beforeBody = `before revoke ${stamp}`;
+    await sendMessageApi(request, aliceToken, realmId, beforeBody, {
+      server: "alpha",
+    });
+    await waitForEventBody(request, bobToken, realmId, beforeBody, "beta");
+
+    // Revoke β's service delegation. Per §4.4 the source server MUST stop
+    // pushing future events to β.
+    await revokeCapabilityApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      grantId,
+    });
+
+    // A message sent after the revoke MUST still land on α (the revoke only
+    // gates outbound federation push, not local acceptance) …
+    const afterBody = `after revoke ${stamp}`;
+    await sendMessageApi(request, aliceToken, realmId, afterBody, {
+      server: "alpha",
+    });
+    await waitForEventBody(request, aliceToken, realmId, afterBody, "alpha");
+
+    // … but MUST NOT be pushed to β. Poll β long enough that a fanout would
+    // have arrived, then assert the post-revoke body never appears while the
+    // pre-revoke body remains visible (proves β was reachable before revoke).
+    await expect
+      .poll(
+        async () => {
+          const body = await queryRealmEventsApi(request, bobToken, realmId, {
+            server: "beta",
+            limit: 200,
+          });
+          const serialized = JSON.stringify(body);
+          return {
+            hasBefore: serialized.includes(beforeBody),
+            hasAfter: serialized.includes(afterBody),
+          };
+        },
+        { timeout: 20_000, intervals: [1_000, 2_000, 4_000] },
+      )
+      .toEqual({ hasBefore: true, hasAfter: false });
+
+    // Final settle: re-confirm β never received the post-revoke event.
+    const betaFinal = await queryRealmEventsApi(request, bobToken, realmId, {
+      server: "beta",
+      limit: 200,
+    });
+    expect(JSON.stringify(betaFinal)).not.toContain(afterBody);
   });
 
   test("RFC 9421 signature failure: tampered Signature header makes β reject the entire batch with 4xx", async ({

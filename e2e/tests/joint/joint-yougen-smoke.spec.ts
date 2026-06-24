@@ -15,17 +15,14 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("joint-yougen smoke @fully-implemented", () => {
-  // GAP-realm-default-strand — demoted. Rendering a message in yougen requires
-  // the realm to have a real default Strand to display, but the yougen UI
-  // realm-create flow does not establish one: soland sets default_strand_id
-  // only on an explicit ck.realm.set_default_strand (COT-06-004,
-  // apply_realm_lifecycle.rs) and never auto-creates a Strand on ck.realm.create.
-  // yougen addresses messages by the derived default_strand_id_for_realm
-  // convention, but with no Strand entity the timeline view does not render
-  // (getByTestId('timeline') never appears). The message submit itself now
-  // succeeds (event log stores it); only the yougen render is blocked. Restore
-  // once realm creation establishes a default Strand.
-  test.fixme("creates a public realm and renders a soland message in yougen", async ({
+  // The yougen chat view synthesizes a default discussion channel from the
+  // realm id (views/chat/model/strands.rs default_discussion_strand_id /
+  // default_discussion_channel) even when soland has not marked any Strand
+  // is_default, so the message-list renders without an explicit
+  // ck.realm.set_default_strand. The submitted message addresses the same
+  // derived ck:strand:<uuid> the channel selects, so it lands on the rendered
+  // strand.
+  test("creates a public realm and renders a soland message in yougen", async ({
     jointRealm,
     request,
   }) => {
@@ -46,16 +43,14 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     });
   });
 
-  // GAP-yougen-admin-invite-ui — demoted. Driving the admin invite goes through
-  // inviteFromAdmin -> gotoRealmAdminSection, which depends on the yougen realm
-  // admin UI that has drifted: the route moved /realms/:id/admin/:section ->
-  // /settings/:section and the invite surface moved from a static invite-member
-  // card to a modal (open-invite-modal-button). This is the same drift the
-  // admin-section-route probe documents. The cursor-poisoning regression this
-  // test guards is sound, but it needs the invite helper rebuilt against the
-  // current modal flow (and was previously masked by serial-skip behind the
-  // now-fixme render test). Restore once inviteFromAdmin drives the modal.
-  test.fixme("admin invite remains visible to invitee without poisoning account subscribe cursor", async ({
+  // inviteFromAdmin drives the current modal flow: gotoRealmAdminSection
+  // navigates to /realms/:id/members (realm-members-panel), opens the invite
+  // modal via open-invite-modal-button, fills invite-target-input, and submits
+  // send-invite-button, asserting the "invited ..." realm-members-status. The
+  // yougen route + testids (routes.rs RealmMembersPage, realm_admin/
+  // members_panel.rs) match the helper, so the cursor-poisoning regression this
+  // test guards runs end-to-end.
+  test("admin invite remains visible to invitee without poisoning account subscribe cursor", async ({
     browser,
     request,
   }) => {
@@ -115,7 +110,7 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
         { timeout: 30_000 },
       );
       await expect(inviteCard).toHaveCount(0, { timeout: 30_000 });
-      await expect(bobPage.page.getByTestId("space-list")).toContainText(
+      await expect(bobPage.page.getByTestId("realm-tree-list")).toContainText(
         `joint invite ${stamp}`,
         { timeout: 30_000 },
       );

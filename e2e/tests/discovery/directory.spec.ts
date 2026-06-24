@@ -187,11 +187,94 @@ test.describe("discovery", () => {
     expect(meBody.profile?.display_name).toBe(newDisplay);
   });
 
-  test.fixme(// @blocking-on: soland#discovery-directory-gap
-  // @user-promise: e2e/scenarios/discovery/directory.md
-  // @expected-live-by: 2026Q3
-  "presence: bob closes tab → alice's directory shows presence-offline; bob reopens → presence-online within 5s", async () => {
-    // spec: profiles-presence.md §3
+  test("presence: bob closes tab → alice's directory shows presence-offline; bob reopens → presence-online within 5s", async ({
+    request,
+  }) => {
+    // spec: profiles-presence.md §3 — presence is ephemeral and projects into
+    // the directory actor row. A client signals `online` while its tab is open
+    // by refreshing presence on `/_cokret/self/events/subscribe?set_presence=...`;
+    // closing the tab stops the refresh and the row decays to `offline`
+    // (mirroring the Sync presence projection's stale-online TTL). Reopening
+    // re-asserts `online`. We drive this through the API rather than the yougen
+    // UI because the directory's presence projection — not the renderer — is
+    // what this scenario pins.
+    const stamp = Date.now();
+    const alice = uniqueUser(`s24-presence-alice-${stamp}`);
+    const bob = uniqueUser(`s24-presence-bob-${stamp}`);
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, bob),
+    ]);
+    const aliceToken = await issueDevSession(request, alice);
+    const bobToken = await issueDevSession(request, bob);
+
+    // Directory search filters actors to the caller's accepted contacts;
+    // establish the contact edge so alice can see bob's row at all.
+    const { outcome: aliceReq } = await requestContactCokret(
+      request,
+      aliceToken,
+      bob.did,
+      { requestedScopes: ["direct_message"] },
+    );
+    expect(aliceReq.state).toBe("pending_outgoing");
+    const bobAccept = await respondContactCokret(request, bobToken, {
+      requestId: aliceReq.request_event_ref,
+      requester: alice.did,
+      action: "accept",
+      grantedScopes: ["direct_message"],
+    });
+    expect(bobAccept.state).toBe("accepted");
+
+    const bobPresenceFromSearch = async (): Promise<string | undefined> => {
+      const search = await request.post(
+        `${solandBaseUrl()}/_cokret/find/directory/search-actors`,
+        {
+          headers: { authorization: `Bearer ${aliceToken}` },
+          data: { query: bob.handle },
+        },
+      );
+      expect(search.status()).toBe(200);
+      const body = await search.json();
+      const row = (
+        body.actors as Array<{
+          actor_id?: string;
+          preview?: { did?: string; presence?: { status?: string } };
+        }>
+      ).find((r) => r.actor_id === bob.did || r.preview?.did === bob.did);
+      return row?.preview?.presence?.status;
+    };
+
+    // bob's tab is open → presence refreshed to online.
+    const goOnline = await request.get(
+      `${solandBaseUrl()}/_cokret/self/events/subscribe?set_presence=online&max_wait_ms=0`,
+      { headers: { authorization: `Bearer ${bobToken}` } },
+    );
+    expect(goOnline.ok()).toBeTruthy();
+    await expect
+      .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
+      .toBe("online");
+
+    // bob closes the tab → presence refresh stops. We model the closed tab by
+    // explicitly flipping presence offline (the same wire the client emits on
+    // teardown); the directory row MUST reflect offline.
+    const goOffline = await request.get(
+      `${solandBaseUrl()}/_cokret/self/events/subscribe?set_presence=offline&max_wait_ms=0`,
+      { headers: { authorization: `Bearer ${bobToken}` } },
+    );
+    expect(goOffline.ok()).toBeTruthy();
+    await expect
+      .poll(bobPresenceFromSearch, { timeout: 10_000, intervals: [500] })
+      .toBe("offline");
+
+    // bob reopens → presence-online MUST surface within 5s.
+    const reopen = await request.get(
+      `${solandBaseUrl()}/_cokret/self/events/subscribe?set_presence=online&max_wait_ms=0`,
+      { headers: { authorization: `Bearer ${bobToken}` } },
+    );
+    expect(reopen.ok()).toBeTruthy();
+    await expect
+      .poll(bobPresenceFromSearch, { timeout: 5_000, intervals: [500] })
+      .toBe("online");
   });
 
   test("E24.2 reject contact: alice's request rejected by bob → status=rejected; alice cannot re-request until cooldown", async ({

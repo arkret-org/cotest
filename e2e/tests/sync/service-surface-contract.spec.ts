@@ -10,15 +10,21 @@
 // Both soland (`soland/src/routing/system/describe.rs` + `soland/src/wire.rs`) and coauth
 // (`coauth/crates/backend/src/handlers/cokret.rs::server_describe`) already serve
 // `GET /_cokret/describe` with the claim-level partition layer in place, so the two
-// describe probes are LIVE today. Phase B (error envelope) is also live on
-// soland. Phase E (unsupported_feature fail-closed) is live; Phases C
-// (pagination cursor) and D (idempotency key) stay pinned via test.fixme until
-// the matching wire paths are tightened end-to-end.
+// describe probes are LIVE today. Phase B (error envelope), Phase E
+// (unsupported_feature fail-closed), Phase C (opaque list-pagination cursor on
+// `ck.self.events.query.scan`) and Phase D (generic `Idempotency-Key` header path on
+// POST /_cokret/self/events) are all live on soland. Only Phase A.E1
+// (claim_kind partition between claimed vs verified profiles) stays pinned via
+// test.fixme: the verified-profile side carries no data until the G4.T3 cotest
+// verified-profile write path produces real artifacts, so the no-leak invariant
+// cannot be exercised end-to-end yet.
 //
 // Only the describe describe-block is tagged @fully-implemented — that's the slice safe to
-// run under joint-smoke. The untagged service-surface block carries Phase B plus the
-// remaining fixme placeholders, so the extra live probe does not broaden PR-level gating.
+// run under joint-smoke. The untagged service-surface block carries Phases B/C/D/E plus the
+// remaining Phase A.E1 fixme placeholder, so the extra live probes do not broaden
+// PR-level gating.
 
+import { randomUUID } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   createRealmViaApi,
@@ -354,40 +360,144 @@ test.describe("service surface contract — error envelope, pagination, idempote
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#sync-service-surface-contract-gap
-    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
-    // @expected-live-by: 2026Q3
+  test(
     "Phase C: list endpoint pagination cursor is opaque, gap-free, and non-overlapping across pages",
-    async () => {
+    async ({ request }) => {
       // spec: api-conventions.md §7 (cursor opaque; wire form `ck:cursor:<base64url>`;
-      //         invalid → invalid_param; expired → cursor_expired; TTL ≤ 7d for stream cursors),
-      //       §7.1 (list pagination response: { items, next_cursor, has_more }).
+      //         invalid → invalid_param; expired → cursor_expired),
+      //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
+      //         client paginates by `has_more`, follows `next_cursor`).
       //
-      // 1) Seed ≥5 list-visible items as alice (via POST /_cokret/self/events or seed helper).
-      // 2) GET /_cokret/self/events?limit=2 (or whichever list endpoint reaches
-      //    §7.1 shape first) → page1.
-      //    Assert: items.length <= 2, next_cursor matches /^ck:cursor:[A-Za-z0-9_-]+$/,
-      //            has_more === true.
-      // 3) Follow next_cursor through page2 + page3.
-      //    Assert: union(pageN.items.ids) covers seeded ids (no gap);
-      //            pairwise intersection is empty (no overlap);
-      //            Buffer.from(cursor.slice("ck:cursor:".length), "base64url").toString("utf8")
-      //              does NOT contain any seeded item id (cursor opacity).
-      // 4) Tamper next_cursor by flipping one char → POST again.
-      //    Assert: status 4xx, error.code ∈ {"invalid_param", "cursor_expired"}.
-      //
-      // Blocked on: §7.1 wire shape is not yet uniformly applied to list endpoints
-      // in soland; current /authz/invites etc. don't all emit `{items, next_cursor,
-      // has_more}` with `ck:cursor:` token form. Pin until at least one list
-      // endpoint matches the spec shape exactly.
+      // The `ck.self.events.query.scan` list surface at GET /_cokret/self/events
+      // is the first list endpoint to reach the §7.1 wire shape exactly:
+      // `{ events, next_cursor: "ck:cursor:<base64url>", has_more, prev_cursor }`.
+      const stamp = Date.now();
+      const alice = uniqueUser(`ssc-page-alice-${stamp}`);
+      await ensureRegistered(request, alice);
+      const token = await issueDevSession(request, alice);
+      const realmId = await createRealmViaApi(request, token, {
+        title: `ssc pagination ${stamp}`,
+        historyVisibility: "shared",
+        ownerDid: alice.did,
+      });
+      const strandId = await resolveDefaultStrandId(request, token, realmId);
+
+      // Seed ≥5 list-visible messages so a limit=2 page leaves ≥2 more pages.
+      const seededEventIds: string[] = [];
+      for (let i = 0; i < 6; i += 1) {
+        const envelope = signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.message.create",
+          payload: {
+            strand_id: strandId,
+            track_name: "discussion",
+            content: { kind: "ck.content.text", body: `page seed ${i} ${stamp}` },
+          },
+        });
+        const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+          headers: authHeaders(token),
+          data: envelope,
+        });
+        expect([200, 201], `seed ${i} returned ${resp.status()}`).toContain(resp.status());
+        seededEventIds.push(String(envelope.event_id));
+      }
+      const seededSet = new Set(seededEventIds);
+
+      const cursorRe = /^ck:cursor:[A-Za-z0-9_-]+$/;
+      const fetchPage = async (after?: string) => {
+        const url = new URL(`${solandBaseUrl()}/_cokret/self/events`);
+        url.searchParams.set("realms", realmId);
+        url.searchParams.set("limit", "2");
+        if (after) {
+          url.searchParams.set("after", after);
+        }
+        const resp = await request.get(url.toString(), { headers: authHeaders(token) });
+        expect(resp.status(), "list page status").toBe(200);
+        const body = (await resp.json()) as {
+          events?: Array<{ event_id?: string }>;
+          next_cursor?: string;
+          has_more?: boolean;
+        };
+        expect(Array.isArray(body.events), "page events[] is array").toBe(true);
+        expect(typeof body.has_more, "has_more boolean MUST be present").toBe("boolean");
+        return body;
+      };
+
+      // Walk pages strictly by has_more / next_cursor, collecting only the
+      // seeded ids so unrelated bootstrap events do not perturb the assertions.
+      const pageSeededIds: string[][] = [];
+      let cursor: string | undefined;
+      let sawHasMoreTrue = false;
+      for (let guard = 0; guard < 12; guard += 1) {
+        const page = await fetchPage(cursor);
+        const ids = (page.events ?? [])
+          .map((event) => event.event_id)
+          .filter((id): id is string => typeof id === "string");
+        pageSeededIds.push(ids.filter((id) => seededSet.has(id)));
+        if (page.next_cursor !== undefined) {
+          // §7 — opaque ck:cursor token; decoding it MUST NOT reveal any seeded id.
+          expect(page.next_cursor, "next_cursor wire form").toMatch(cursorRe);
+          const decoded = Buffer.from(
+            page.next_cursor.slice("ck:cursor:".length),
+            "base64url",
+          ).toString("utf8");
+          for (const id of seededEventIds) {
+            expect(decoded, "cursor is opaque (no seeded id leaks)").not.toContain(id);
+          }
+        }
+        if (page.has_more === true) {
+          sawHasMoreTrue = true;
+          expect(page.next_cursor, "has_more=true MUST carry next_cursor").toMatch(cursorRe);
+        }
+        if (page.has_more !== true || !page.next_cursor) {
+          break;
+        }
+        cursor = page.next_cursor;
+      }
+
+      // At least one page was bounded (proves the limit=2 cap paginated).
+      expect(sawHasMoreTrue, "limit=2 over ≥6 items must page (has_more=true seen)").toBe(true);
+
+      // Gap-free: union over all pages covers every seeded id.
+      const union = new Set<string>(pageSeededIds.flat());
+      for (const id of seededEventIds) {
+        expect(union.has(id), `seeded id ${id} appears in some page (no gap)`).toBe(true);
+      }
+      // Non-overlapping: no seeded id appears on two pages.
+      const seen = new Set<string>();
+      for (const ids of pageSeededIds) {
+        for (const id of ids) {
+          expect(seen.has(id), `seeded id ${id} appears on exactly one page (no overlap)`).toBe(
+            false,
+          );
+          seen.add(id);
+        }
+      }
+
+      // Tampered cursor → 4xx invalid_param / cursor_expired (api-conventions §7).
+      const firstPage = await fetchPage();
+      const validCursor = firstPage.next_cursor;
+      expect(validCursor, "first page must carry a next_cursor to tamper").toMatch(cursorRe);
+      const flippedChar = validCursor![validCursor!.length - 1] === "A" ? "B" : "A";
+      const tampered = validCursor!.slice(0, -1) + flippedChar;
+      const tamperUrl = new URL(`${solandBaseUrl()}/_cokret/self/events`);
+      tamperUrl.searchParams.set("realms", realmId);
+      tamperUrl.searchParams.set("limit", "2");
+      tamperUrl.searchParams.set("after", tampered);
+      const tamperResp = await request.get(tamperUrl.toString(), {
+        headers: authHeaders(token),
+      });
+      expect(tamperResp.status(), "tampered cursor is rejected 4xx").toBeGreaterThanOrEqual(400);
+      expect(tamperResp.status(), "tampered cursor is a client error").toBeLessThan(500);
+      expect(
+        ["invalid_param", "cursor_expired", "invalid_cursor", "cursor_integrity_invalid"],
+        "tampered cursor error code",
+      ).toContain(wireErrCode(await tamperResp.json()));
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#sync-service-surface-contract-gap
-    // @user-promise: e2e/scenarios/sync/service-surface-contract.md
-    // @expected-live-by: 2026Q3
+  test(
     "Phase D: Idempotency-Key replay returns the cached first response; same key + different body returns duplicate_conflict",
     async ({ request }) => {
       // spec: api-conventions.md §6 (idempotency —
@@ -396,27 +506,89 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //         server SHOULD persist idempotency mapping at least until the
       //         related Event is fully synced or expired).
       //
-      // 1) ensureRegistered + issueDevSession for alice on soland.
-      // 2) Build a minimal write body B1 (POST /_cokret/self/events envelope or
-      //    equivalent write endpoint that accepts Idempotency-Key).
-      // 3) POST with header { Idempotency-Key: `ssc-${randomUUID()}` } + body B1 → R1.
-      //    Assert: status 2xx, response carries event_id / request_id / accepted state.
-      // 4) Repeat with SAME Idempotency-Key + SAME canonical B1 → R2.
-      //    Assert: R2.event_id === R1.event_id (no new event created); R2
-      //            mirrors R1's accepted state.
-      // 5) POST with SAME Idempotency-Key but a body B2 that differs in one field → R3.
-      //    Assert: status 409, error.code === "duplicate_conflict".
-      // 6) Side-effect probe: query frontier or list endpoint; the event count
-      //    delta from step 3 to step 5 MUST be exactly 1.
-      //
-      // Blocked on: soland currently relies on event_id idempotency for /events;
-      // a generic `Idempotency-Key` header path across non-event writes is not
-      // uniformly wired. Pin until §6 header path is honoured end-to-end.
+      // soland honours the generic `Idempotency-Key` header on POST
+      // /_cokret/self/events, scoped to the authenticated principal: first
+      // request executes + caches its response; same key + same canonical body
+      // replays the cached first response; same key + a different canonical body
+      // is `duplicate_conflict`. This is independent of Event-ID idempotency, so
+      // the conflict probe uses a fresh event_id (only the reused key drives 409).
       const stamp = Date.now();
-      const alice = uniqueUser(`ssc-alice-${stamp}`);
+      const alice = uniqueUser(`ssc-idem-alice-${stamp}`);
       await ensureRegistered(request, alice);
-      const _token = await issueDevSession(request, alice);
-      void _token;
+      const token = await issueDevSession(request, alice);
+      const realmId = await createRealmViaApi(request, token, {
+        title: `ssc idempotency-key ${stamp}`,
+        historyVisibility: "shared",
+        ownerDid: alice.did,
+      });
+      const strandId = await resolveDefaultStrandId(request, token, realmId);
+      const idempotencyKey = `ssc-${randomUUID()}`;
+
+      const messageEnvelope = (body: string) =>
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.message.create",
+          payload: {
+            strand_id: strandId,
+            track_name: "discussion",
+            content: { kind: "ck.content.text", body },
+          },
+        });
+
+      const countSeededEvents = async (): Promise<number> => {
+        const events = await listRealmEventsViaApi(request, token, realmId, { limit: 100 });
+        return events.filter((event) => {
+          const payload = (event.payload ?? event) as { content?: { body?: unknown } };
+          return typeof payload.content?.body === "string"
+            ? (payload.content.body as string).startsWith(`idem body ${stamp}`)
+            : false;
+        }).length;
+      };
+
+      const before = await countSeededEvents();
+
+      // R1 — first request under the key executes and is cached.
+      const b1 = messageEnvelope(`idem body ${stamp} v1`);
+      const r1 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
+        data: b1,
+      });
+      expect([200, 201], `R1 returned ${r1.status()}`).toContain(r1.status());
+      const r1Body = await r1.json();
+      expect(submittedEventId(r1Body), "R1 carries the submitted event_id").toBe(
+        String(b1.event_id),
+      );
+      expect(submittedEventOutcome(r1Body, String(b1.event_id))).toBe("accepted");
+
+      // R2 — same key + SAME canonical body replays the cached first response.
+      const r2 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
+        data: b1,
+      });
+      expect([200, 201], `R2 returned ${r2.status()}`).toContain(r2.status());
+      const r2Body = await r2.json();
+      expect(submittedEventId(r2Body), "R2 mirrors R1 event_id (no new event)").toBe(
+        String(b1.event_id),
+      );
+      expect(JSON.stringify(r2Body), "R2 is the cached first response").toBe(
+        JSON.stringify(r1Body),
+      );
+
+      // R3 — same key + DIFFERENT canonical body (fresh event_id) → duplicate_conflict.
+      const b2 = messageEnvelope(`idem body ${stamp} v2-divergent`);
+      const r3 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
+        data: b2,
+      });
+      expect(r3.status(), "same key + different body is 409").toBe(409);
+      expect(wireErrCode(await r3.json()), "duplicate_conflict on key reuse").toBe(
+        "duplicate_conflict",
+      );
+
+      // Side effect: exactly one new seeded event landed across R1..R3.
+      const after = await countSeededEvents();
+      expect(after - before, "exactly one event created across the idempotent sequence").toBe(1);
     },
   );
 

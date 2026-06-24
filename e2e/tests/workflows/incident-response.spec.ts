@@ -32,17 +32,10 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("workflow: incident response", () => {
-  test.fixme(// @blocking-on: soland#workflows-incident-response-gap
-  // @user-promise: e2e/scenarios/workflows/incident-response.md
-  // @expected-live-by: 2026Q3
-  "on-call opens SEV-2 war room; backend diagnoses; comms publishes sanitized updates; on-call edits final timeline", async ({
+  test("on-call opens SEV-2 war room; backend diagnoses; comms publishes sanitized updates; on-call edits final timeline", async ({
     browser,
     request,
   }, testInfo) => {
-    // Current gaps: incident-specific status fields, priority notification
-    // routing, and postmortem linkage are not wired end-to-end. The basic
-    // timeline body is ready to promote once seed-member invite projection
-    // and notification routing are stable.
     const stamp = Date.now();
     const oncall = uniqueUser("wf-incident-oncall");
     const backend = uniqueUser("wf-incident-backend");

@@ -138,12 +138,84 @@ test.describe("audited E2EE", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#encryption-audited-e2ee-gap
-    // @user-promise: e2e/scenarios/encryption/audited-e2ee.md
-    // @expected-live-by: 2026Q3
+  test(
     "E25.3 alice revokes audit_disclosure_policy; subsequent audit-agent requests are rejected (still leaving historical accessed records intact)",
-    async () => {},
+    async ({ request }) => {
+      const setup = await setupAuditedMessage(request, "s25-revoke");
+
+      // 1. With the policy active, a first report invites the audit agent.
+      const firstReport = await fileModerationReport(request, setup);
+      const inboxBefore = await (
+        await request.get(`${setup.agentBaseUrl}/_cokret/self/audit-agent/inbox`)
+      ).json();
+      expect(JSON.stringify(inboxBefore)).toContain(String(firstReport.report_id));
+
+      // The historical audit.report routing record is durable.
+      const historicalRouted = await request.get(
+        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        { headers: authHeaders(setup.aliceToken) },
+      );
+      const historicalRoutedText = await historicalRouted.text();
+      expect(historicalRouted.ok(), historicalRoutedText).toBeTruthy();
+      expect(JSON.stringify(JSON.parse(historicalRoutedText).events ?? [])).toContain(
+        String(firstReport.report_id),
+      );
+
+      // 2. Alice (the Realm owner) revokes the audit_disclosure_policy via a
+      // ck.realm.update patch that flips `enabled` to false. audited-e2ee.md
+      // §3.1: admins MAY suspend / revoke a binding from a new accepted policy
+      // frontier onward.
+      const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(setup.aliceToken),
+        data: signedEventEnvelope({
+          actorDid: setup.aliceDid,
+          realmId: setup.realmId,
+          kind: "ck.realm.update",
+          payload: {
+            target_ref: setup.realmId,
+            patch: {
+              audit_disclosure_policy: {
+                $op: "set",
+                value: {
+                  enabled: false,
+                  agent_id: setup.agentDid,
+                  agent_url: setup.agentBaseUrl,
+                  trigger: "report_filed",
+                  assurance: "mock_attested",
+                },
+              },
+            },
+          },
+        }),
+      });
+      const revokeText = await revoke.text();
+      expect(revoke.ok(), revokeText).toBeTruthy();
+
+      // 3. A fresh report after the revoke MUST NOT reach the audit agent.
+      const secondReport = await fileModerationReportForTarget(
+        request,
+        setup,
+        await sendAuditedMessage(request, setup, "post-revoke"),
+      );
+      const inboxAfter = await (
+        await request.get(`${setup.agentBaseUrl}/_cokret/self/audit-agent/inbox`)
+      ).json();
+      expect(JSON.stringify(inboxAfter)).not.toContain(String(secondReport.report_id));
+      // The post-revoke report is never routed to the audit agent DID.
+      expect(secondReport.routed_to ?? []).not.toContain(setup.agentDid);
+
+      // 4. The historical accessed / routed records from before the revoke
+      // remain intact (revocation is prospective only).
+      const routedAfter = await request.get(
+        `${solandBaseUrl()}/_soland/self/audit/events?realm_id=${encodeURIComponent(setup.realmId)}&kind=org.cokret.soland.audit.report`,
+        { headers: authHeaders(setup.aliceToken) },
+      );
+      const routedAfterText = await routedAfter.text();
+      expect(routedAfter.ok(), routedAfterText).toBeTruthy();
+      const routedAfterEvents = JSON.stringify(JSON.parse(routedAfterText).events ?? []);
+      expect(routedAfterEvents).toContain(String(firstReport.report_id));
+      expect(routedAfterEvents).not.toContain(String(secondReport.report_id));
+    },
   );
 });
 
@@ -151,6 +223,9 @@ type AuditedSetup = {
   agentBaseUrl: string;
   agentDid: string;
   aliceToken: string;
+  aliceDid: string;
+  bobToken: string;
+  bobDid: string;
   reporterToken: string;
   reporterDid: string;
   realmId: string;
@@ -222,12 +297,75 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
     agentBaseUrl,
     agentDid,
     aliceToken,
+    aliceDid: alice.did,
+    bobToken,
+    bobDid: bob.did,
     reporterToken,
     reporterDid: reporter.did,
     realmId,
     message,
     ciphertextDigest: String(encryptedContent.payload_digest),
     plaintext,
+  };
+}
+
+// Sends a second encrypted message into the audited Realm (e.g. after a policy
+// revoke) and returns its event_id so a fresh report can target it.
+async function sendAuditedMessage(
+  request: APIRequestContext,
+  setup: AuditedSetup,
+  label: string,
+): Promise<string> {
+  const ciphertext = Buffer.from(
+    `opaque-ciphertext-${label}-${Date.now()}`,
+    "utf8",
+  ).toString("base64url");
+  const strandId = await resolveDefaultStrandId(
+    request,
+    setup.bobToken,
+    setup.realmId,
+  );
+  const encryptedContent = encryptedEnvelope("ck.message.v1", ciphertext, setup.realmId);
+  const message = signedEventEnvelope({
+    actorDid: setup.bobDid,
+    realmId: setup.realmId,
+    kind: "ck.message.create",
+    payload: {
+      strand_id: strandId,
+      track_name: "discussion",
+      encrypted_content: encryptedContent,
+    },
+  });
+  await submitSignedEventApi(request, setup.bobToken, message, {
+    context: `submit ${label} audited encrypted message`,
+  });
+  return String(message.event_id);
+}
+
+// Files a moderation report against an explicit target_ref (rather than the
+// setup's default message) so a test can report a post-revoke message.
+async function fileModerationReportForTarget(
+  request: APIRequestContext,
+  setup: AuditedSetup,
+  targetRef: string,
+) {
+  const response = await request.post(`${solandBaseUrl()}/_cokret/self/moderation/report`, {
+    headers: authHeaders(setup.reporterToken),
+    data: {
+      realm_id: setup.realmId,
+      target_ref: targetRef,
+      report_reason_code: "harassment",
+      reporter: setup.reporterDid,
+      description: "post-revoke report must not reach the audit agent",
+      evidence_refs: [],
+    },
+  });
+  const text = await response.text();
+  expect(response.ok(), text).toBeTruthy();
+  return JSON.parse(text) as {
+    report_id: string;
+    status: string;
+    routed_to?: string[];
   };
 }
 

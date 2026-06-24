@@ -20,8 +20,11 @@
 //   POST /_cokret/self/policy/check  { action, actor_id, target, context }
 //     Evaluate the rule table; record into InspectLog "checks".
 //   POST /scenarios  { rules: [{action, actor, target, decision, reason,
-//                                obligations}], default }
+//                                obligations, delay_ms}], default, delay_ms }
 //     Replace-or-merge the rule table. `default` overrides defaultDecision.
+//     A top-level `delay_ms` (or per-rule `delay_ms`) makes /policy/check
+//     stall before responding, so callers can exercise their outbound
+//     timeout / fail-closed deadline against a configured-but-slow upstream.
 //   DELETE /scenarios → clear rules, defaultDecision = "deny"
 //   GET    /scenarios → dump current rules + default
 //   GET    /_cokret/self/policy/health → { status: "ok" }
@@ -63,6 +66,15 @@ const publicJwk = publicKey.export({ format: "jwk" });
 // "allow" }`.
 const decisionRules = new Map();
 let defaultDecision = "deny";
+// Optional artificial latency (ms) applied to every /policy/check before the
+// response is written. A matched rule may override it via its own `delay_ms`.
+// Lets callers drive their outbound `timeout_ms` deadline against a slow but
+// reachable upstream (fail-closed coverage).
+let defaultDelayMs = 0;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const checksLog = new InspectLog("checks");
 const scenariosLog = new InspectLog("scenarios");
@@ -165,6 +177,13 @@ const server = createServer(async (req, res) => {
       actor: body.actor_id,
       target: body.target,
     });
+    const delayMs =
+      match && Number.isFinite(match.rule.delay_ms)
+        ? match.rule.delay_ms
+        : defaultDelayMs;
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
     const decision = match ? match.rule.decision : defaultDecision;
     const reason = match ? match.rule.reason ?? null : "default_decision";
     const obligations = match ? match.rule.obligations ?? [] : [];
@@ -220,21 +239,27 @@ const server = createServer(async (req, res) => {
         decision: rule.decision,
         reason: rule.reason ?? null,
         obligations: Array.isArray(rule.obligations) ? rule.obligations : [],
+        delay_ms: Number.isFinite(rule.delay_ms) ? rule.delay_ms : null,
       });
     }
     if (typeof body.default === "string") {
       defaultDecision = body.default;
     }
+    if (Number.isFinite(body.delay_ms)) {
+      defaultDelayMs = body.delay_ms;
+    }
     scenariosLog.record({
       action: "configure",
       added: rules.length,
       default: defaultDecision,
+      default_delay_ms: defaultDelayMs,
     });
     res.end(
       JSON.stringify({
         ok: true,
         rule_count: decisionRules.size,
         default: defaultDecision,
+        default_delay_ms: defaultDelayMs,
       }),
     );
     return;
@@ -243,6 +268,7 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/scenarios" && req.method === "DELETE") {
     decisionRules.clear();
     defaultDecision = "deny";
+    defaultDelayMs = 0;
     scenariosLog.record({ action: "clear", default: defaultDecision });
     res.end(JSON.stringify({ ok: true, default: defaultDecision }));
     return;
@@ -258,9 +284,16 @@ const server = createServer(async (req, res) => {
         decision: value.decision,
         reason: value.reason,
         obligations: value.obligations,
+        delay_ms: value.delay_ms,
       });
     }
-    res.end(JSON.stringify({ rules, default: defaultDecision }));
+    res.end(
+      JSON.stringify({
+        rules,
+        default: defaultDecision,
+        default_delay_ms: defaultDelayMs,
+      }),
+    );
     return;
   }
 

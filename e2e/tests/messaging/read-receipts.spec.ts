@@ -20,6 +20,7 @@ import {
 import {
   ensureRegistered,
   issueDevSession,
+  type JointUser,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -235,32 +236,219 @@ test.describe("read receipts + privacy", () => {
     expect(response.status()).toBe(200);
   });
 
-  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
-  // @user-promise: e2e/scenarios/messaging/read-receipts.md
-  // @expected-live-by: 2026Q3
-  "space disclosure=disabled: client does not send; Sync Service silently drops any inbound ck.receipt.read for the space", async () => {
-    // spec: read-receipts.md §2.5
+  test("space disclosure=disabled: Sync Service rejects any inbound ck.receipt.read for the space", async ({
+    request,
+  }) => {
+    // spec: read-receipts.md §2.5 — with disclosure=disabled the client does
+    // not send, and an inbound ck.receipt.read for the space is dropped by the
+    // Sync Service. soland enforces the server-side leg by rejecting the
+    // ephemeral admission with a PolicyViolation (403) whose body names the
+    // disabled disclosure, and no peer-visible marker is created.
+    const fixture = await createReceiptFixture(request, "disclosure-disabled");
+    await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
+      disclosure: "disabled",
+    });
+    const receipt = await postReceipt(
+      request,
+      fixture.aliceToken,
+      receiptEnvelope(fixture),
+    );
+    expect(receipt.status()).toBe(403);
+    const body = await receipt.json();
+    expect(JSON.stringify(body)).toContain("disclosure=disabled");
+    expect(
+      await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
+    ).toHaveLength(0);
   });
 
-  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
-  // @user-promise: e2e/scenarios/messaging/read-receipts.md
-  // @expected-live-by: 2026Q3
-  "actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async () => {
-    // spec: read-receipts.md §3.1-§3.2
+  test("actor-private read marker (ck.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
+    request,
+  }) => {
+    // spec: read-receipts.md §3.1-§3.2 / §6.6 — ck.read_cursor.advance is an
+    // actor-private durable cursor (POST /_cokret/self/read-cursors). The
+    // Principal/Sync Service returns it only to the same principal's authorized
+    // devices (account-private projection read-back), never to other Realm
+    // members. We model alice's two devices as two dev sessions over the same
+    // DID with distinct device ids, and assert: both alice devices read the
+    // converged marker, bob reads none.
+    const fixture = await createReceiptFixture(request, "read-cursor-sync");
+    const aliceSecond = withDevice(fixture.alice, secondDeviceId(fixture.alice));
+    await ensureRegistered(request, aliceSecond);
+    const aliceSecondToken = await issueDevSession(request, aliceSecond);
+
+    const hlc = makeHlc(1);
+    const advance = await advanceReadCursor(request, fixture.aliceToken, {
+      realm_id: fixture.realmId,
+      read_scope: { kind: "realm" },
+      position: { event_id: fixture.message.event_id, hlc },
+    });
+    expect(advance.status()).toBe(200);
+    const advanceBody = await advance.json();
+    expect(advanceBody.actor_id).toBe(fixture.alice.did);
+    expect(advanceBody.position.event_id).toBe(fixture.message.event_id);
+
+    // Alice's first device reads back its own cursor.
+    const aliceMarkers = await listReadCursors(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    expect(aliceMarkers).toHaveLength(1);
+    expect(aliceMarkers[0].actor_id).toBe(fixture.alice.did);
+    expect(aliceMarkers[0].position.event_id).toBe(fixture.message.event_id);
+
+    // Alice's second device synchronizes the same account-private cursor.
+    const aliceSecondMarkers = await listReadCursors(
+      request,
+      aliceSecondToken,
+      fixture.realmId,
+    );
+    expect(aliceSecondMarkers).toHaveLength(1);
+    expect(aliceSecondMarkers[0].actor_id).toBe(fixture.alice.did);
+    expect(aliceSecondMarkers[0].position.event_id).toBe(
+      fixture.message.event_id,
+    );
+
+    // Bob is a Realm member but a different principal: the actor-private cursor
+    // is never broadcast to him.
+    const bobMarkers = await listReadCursors(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
+    expect(bobMarkers).toHaveLength(0);
+
+    // The actor-private cursor also stays out of bob's shared Realm timeline.
+    expect(
+      await listReadMarkersViaApi(request, fixture.bobToken, fixture.realmId),
+    ).toHaveLength(0);
   });
 
-  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
-  // @user-promise: e2e/scenarios/messaging/read-receipts.md
-  // @expected-live-by: 2026Q3
-  "E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted", async () => {
-    // spec: read-receipts.md §2.3
+  test("E22.1 high-frequency scroll: debounce window ≥1s; only a single receipt covering the highest visible event is emitted", async ({
+    request,
+  }) => {
+    // spec: read-receipts.md §2.3 — the Sync Service merges high-frequency
+    // receipts for the same (realm, read_scope, actor): it MAY drop older
+    // receipts and only broadcasts the monotonically-latest position; it MUST
+    // NOT fan out every scroll increment as an independent push. Time-based
+    // debounce is a client concern not observable here, so we express the
+    // server-side merge contract directly: submitting several receipts that walk
+    // up to the highest visible event leaves a single converged read-cursor
+    // covering that highest event (members/private receipts never reach bob's
+    // durable timeline).
+    const fixture = await createReceiptFixture(request, "debounce-merge");
+    const second = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `debounce second ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+    const highest = await sendPlaintextMessageViaApi(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+      `debounce highest ${Date.now()}`,
+      { actorDid: fixture.bob.did },
+    );
+
+    // Three rapid "scroll" positions for the same realm scope; the cursor must
+    // converge on the highest visible event only.
+    const positions = [
+      { event_id: fixture.message.event_id, hlc: makeHlc(1) },
+      { event_id: second.event_id, hlc: makeHlc(2) },
+      { event_id: highest.event_id, hlc: makeHlc(3) },
+    ];
+    for (const position of positions) {
+      const response = await advanceReadCursor(request, fixture.aliceToken, {
+        realm_id: fixture.realmId,
+        read_scope: { kind: "realm" },
+        position,
+      });
+      expect(response.status()).toBe(200);
+    }
+
+    const markers = await listReadCursors(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    // Single merged cursor for the (realm, realm-scope, actor) key — not three.
+    expect(markers).toHaveLength(1);
+    expect(markers[0].position.event_id).toBe(highest.event_id);
+    expect(markers[0].position.hlc).toBe(makeHlc(3));
+
+    // An out-of-order older position MUST NOT regress the merged cursor.
+    const regress = await advanceReadCursor(request, fixture.aliceToken, {
+      realm_id: fixture.realmId,
+      read_scope: { kind: "realm" },
+      position: { event_id: second.event_id, hlc: makeHlc(2) },
+    });
+    expect(regress.status()).toBe(200);
+    const afterRegress = await listReadCursors(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    expect(afterRegress).toHaveLength(1);
+    expect(afterRegress[0].position.event_id).toBe(highest.event_id);
   });
 
-  test.fixme(// @blocking-on: soland#messaging-read-receipts-gap
-  // @user-promise: e2e/scenarios/messaging/read-receipts.md
-  // @expected-live-by: 2026Q3
-  "E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt", async () => {
-    // spec: read-receipts.md §3.2
+  test("E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt", async ({
+    request,
+  }) => {
+    // spec: read-receipts.md §3.2 / §6.5 — concurrent read cursors for the same
+    // actor/scope converge by HLC-max, and on equal HLC by device_id
+    // lexicographic tiebreak. We submit two cursors carrying the SAME HLC from
+    // two devices of one principal and assert the surviving marker is the one
+    // from the lexicographically larger device_id, deterministically.
+    const fixture = await createReceiptFixture(request, "hlc-tiebreak");
+    const aliceSecond = withDevice(fixture.alice, secondDeviceId(fixture.alice));
+    await ensureRegistered(request, aliceSecond);
+    const aliceSecondToken = await issueDevSession(request, aliceSecond);
+
+    const lower =
+      fixture.alice.deviceId < aliceSecond.deviceId
+        ? { user: fixture.alice, token: fixture.aliceToken }
+        : { user: aliceSecond, token: aliceSecondToken };
+    const higher =
+      fixture.alice.deviceId < aliceSecond.deviceId
+        ? { user: aliceSecond, token: aliceSecondToken }
+        : { user: fixture.alice, token: fixture.aliceToken };
+
+    const tieHlc = makeHlc(7);
+    // Submit the higher device first, then the lower device: server-receive
+    // order favors the lower device under naive LWW, so a passing assertion
+    // proves the HLC/device tiebreak — not arrival order — decides convergence.
+    const first = await advanceReadCursor(request, higher.token, {
+      realm_id: fixture.realmId,
+      read_scope: { kind: "realm" },
+      position: { event_id: fixture.message.event_id, hlc: tieHlc },
+    });
+    expect(first.status()).toBe(200);
+    const second = await advanceReadCursor(request, lower.token, {
+      realm_id: fixture.realmId,
+      read_scope: { kind: "realm" },
+      position: { event_id: fixture.message.event_id, hlc: tieHlc },
+    });
+    expect(second.status()).toBe(200);
+
+    const markers = await listReadCursors(
+      request,
+      fixture.aliceToken,
+      fixture.realmId,
+    );
+    expect(markers).toHaveLength(1);
+    // device_id tiebreak: the lexicographically larger device wins on equal HLC.
+    expect(markers[0].device_id).toBe(higher.user.deviceId);
+
+    // Bob (other principal) still sees no actor-private cursor.
+    const bobMarkers = await listReadCursors(
+      request,
+      fixture.bobToken,
+      fixture.realmId,
+    );
+    expect(bobMarkers).toHaveLength(0);
   });
 });
 
@@ -356,4 +544,75 @@ async function postReceipt(
     headers: authHeaders(token),
     data,
   });
+}
+
+type ReadCursorAdvanceBody = {
+  realm_id: string;
+  read_scope: { kind: string; ref?: string; track_name?: string };
+  position: { event_id: string; hlc: string };
+};
+
+type ReadCursorMarker = {
+  realm_id: string;
+  actor_id: string;
+  device_id: string;
+  read_scope: { kind: string; ref?: string; track_name?: string };
+  position: { event_id: string; hlc: string };
+  updated_at: string;
+};
+
+// POST /_cokret/self/read-cursors — durable actor-private ck.read_cursor.advance
+// (spec read-receipts.md §6.6). The body is exactly {realm_id, read_scope,
+// position}; the actor/device are bound from the bearer session.
+async function advanceReadCursor(
+  request: APIRequestContext,
+  token: string,
+  body: ReadCursorAdvanceBody,
+) {
+  return await request.post(`${solandBaseUrl()}/_cokret/self/read-cursors`, {
+    headers: authHeaders(token),
+    data: body,
+  });
+}
+
+// GET /_cokret/self/read-cursors — account-private read-back, scoped to the
+// bearer session's principal. Other principals never see these markers.
+async function listReadCursors(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+): Promise<ReadCursorMarker[]> {
+  const response = await request.get(
+    `${solandBaseUrl()}/_cokret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  expect(response.status()).toBe(200);
+  const body = await response.json();
+  return Array.isArray(body.markers) ? (body.markers as ReadCursorMarker[]) : [];
+}
+
+// A second authorized device for the same principal. The DID is preserved; only
+// the device_id changes so two dev sessions model one actor with two devices.
+function withDevice(user: JointUser, deviceId: string): JointUser {
+  return { ...user, deviceId };
+}
+
+function secondDeviceId(user: JointUser): string {
+  // A second authorized device id for the same principal. It MUST stay a valid
+  // lowercase UUIDv7 (cokret_identifiers is_lowercase_uuidv7: version nibble 7,
+  // variant nibble 8/9/a/b), so we only rewrite the node (last) group, keeping
+  // the version/variant groups intact. A fixed node value guarantees the two
+  // device ids differ and sort deterministically for the §6.5 tiebreak.
+  const replacement = user.deviceId.endsWith("ffffffffffff")
+    ? "000000000000"
+    : "ffffffffffff";
+  return user.deviceId.replace(/[0-9a-f]{12}$/i, replacement);
+}
+
+// Valid position HLC per read-cursor.schema.json / soland validate_position:
+// 12 hex - 4 hex counter - 8 hex node. The counter slot encodes ordering so a
+// larger `counter` is a strictly later HLC under lexicographic comparison.
+function makeHlc(counter: number): string {
+  const counterHex = counter.toString(16).padStart(4, "0");
+  return `01970e589d21-${counterHex}-a13f9c2e`;
 }

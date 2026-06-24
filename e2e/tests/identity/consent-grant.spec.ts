@@ -105,7 +105,7 @@ async function requestContactApi(
 }
 
 test.describe("consent grant", () => {
-  test.fixme("consent settings surface exposes the local grant form controls", async ({
+  test("consent settings surface exposes the local grant form controls", async ({
     browser,
     request,
   }, testInfo) => {
@@ -162,7 +162,7 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme("consent settings can open an outbound consent request", async ({
+  test("consent settings can open an outbound consent request", async ({
     browser,
     request,
   }, testInfo) => {
@@ -413,7 +413,7 @@ test.describe("consent grant", () => {
     expect(stillPendingAfterRevoke.state).toBe("pending_outgoing");
   });
 
-  test.fixme("consent settings grants and revokes a pending request", async ({
+  test("consent settings grants and revokes a pending request", async ({
     browser,
     request,
   }) => {
@@ -462,13 +462,15 @@ test.describe("consent grant", () => {
           .getByTestId("consent-granted-row")
           .filter({ hasText: bob.did }),
       ).toBeVisible({ timeout: 30_000 });
+      // Effective consent state is spec `active` (consent-model.md §2.2 /
+      // SDK `ConsentState::Active`); the legacy `granted` term was renamed.
       await expectConsentCell(
         request,
         aliceToken,
         alice.did,
         bob.did,
         "message",
-        "granted",
+        "active",
       );
 
       await alicePage.page
@@ -495,17 +497,11 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#identity-consent-grant-gap
-  // @user-promise: e2e/scenarios/identity/consent-grant.md
-  // @expected-live-by: 2026Q3
-  "alice grants consent and bob can establish contact (full lifecycle)", async ({
+  test("alice grants consent and bob can establish contact (full lifecycle)", async ({
     browser,
     request,
   }, testInfo) => {
     // spec: identity/consent-model.md §2-§4.
-    // soland gap: ck.consent.* reducer/projection 未实现.
-    // yougen gap: /contacts/new and /settings/consent consent UI 未实现.
-    const stamp = Date.now();
     const alice = uniqueUser("consent-alice");
     const bob = uniqueUser("consent-bob");
     await Promise.all([
@@ -565,13 +561,14 @@ test.describe("consent grant", () => {
           timeout: 30_000,
         },
       );
+      // Spec `active` (consent-model.md §2.2 / SDK `ConsentState::Active`).
       await expectConsentCell(
         request,
         aliceToken,
         alice.did,
         bob.did,
         "invite",
-        "granted",
+        "active",
       );
       await stepShot(alicePage.page, testInfo, "B-alice-granted-consent");
 
@@ -596,7 +593,7 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme("E1.1 time-windowed consent expires after valid_until elapses", async ({
+  test("E1.1 time-windowed consent expires after valid_until elapses", async ({
     browser,
     request,
   }, testInfo) => {
@@ -641,7 +638,7 @@ test.describe("consent grant", () => {
         alice.did,
         bob.did,
         "invite",
-        "granted",
+        "active",
       );
 
       await expect(
@@ -652,13 +649,16 @@ test.describe("consent grant", () => {
       await expect(expiredStatus).toContainText(/pending|expired/i, {
         timeout: 30_000,
       });
+      // Time-windowed expiry is an implicit revoke (consent-model.md §3.2):
+      // once the window lapses the cell falls back to spec `pending` /
+      // no-consent — there is no distinct `expired` wire state.
       await expectConsentCell(
         request,
         aliceToken,
         alice.did,
         bob.did,
         "invite",
-        "expired",
+        "pending",
       );
       await stepShot(bobPage.page, testInfo, "time-window-expired");
     } finally {
@@ -666,7 +666,7 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme("E1.2 revoke then re-grant lifecycle", async ({
+  test("E1.2 revoke then re-grant lifecycle", async ({
     browser,
     request,
   }, testInfo) => {
@@ -707,7 +707,7 @@ test.describe("consent grant", () => {
         alice.did,
         bob.did,
         "message",
-        "granted",
+        "active",
       );
 
       const grantedRow = alicePage.page
@@ -752,7 +752,7 @@ test.describe("consent grant", () => {
         alice.did,
         bob.did,
         "message",
-        "granted",
+        "active",
       );
       await expect(
         await requestContact(bobPage, alice.did, "message"),
@@ -763,7 +763,7 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme("E1.3 scope-granularity: invite-scope consent does not allow call", async ({
+  test("E1.3 scope-granularity: invite-scope consent does not allow call", async ({
     browser,
     request,
   }, testInfo) => {
@@ -806,7 +806,7 @@ test.describe("consent grant", () => {
         alice.did,
         bob.did,
         "invite",
-        "granted",
+        "active",
       );
 
       await expect(
@@ -831,7 +831,7 @@ test.describe("consent grant", () => {
     }
   });
 
-  test.fixme("E1.4 pairwise DID consent isolates contact channels", async ({
+  test("E1.4 pairwise DID consent isolates contact channels", async ({
     browser,
     request,
   }, testInfo) => {
@@ -882,7 +882,7 @@ test.describe("consent grant", () => {
         alice.did,
         bobPairwise.did,
         "message",
-        "granted",
+        "active",
       );
 
       await expect(

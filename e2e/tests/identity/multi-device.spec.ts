@@ -10,7 +10,11 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
   b64url,
+  createRealmApi,
+  currentActorDidApi,
   principalControlRealmForDid,
+  queryRealmEventsApi,
+  sendMessageApi,
   signedEventEnvelope,
   typedId,
   wireErrCode,
@@ -95,54 +99,204 @@ test.describe("multi-device pairing + revocation", () => {
   });
 
   test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap
+    // @blocking-on: real cross-signing cryptography in the TS harness. soland
+    //   ingest of a ck.device.authorize that carries `cross_signing_binding`
+    //   is NOT a dev-proof shortcut: operations/policy.rs →
+    //   cross_signing::validate_device_authorize_binding →
+    //   check_device_cross_signing_binding verifies the binding signature with
+    //   the principal's accepted SSK from a real ck.cross_signing.publish, over
+    //   the §5.2 "ck-device-trust-bind-v1" canonical input, at the matching
+    //   generation. Promoting this needs the harness to (1) generate a real SSK
+    //   keypair, (2) publish ck.cross_signing.publish with a PSK→SSK binding
+    //   signature over the §5.1 canonical input, and (3) sign the device-trust
+    //   binding with that SSK — full cross-signing key management not yet
+    //   available in helpers/. soland (project_device_authorize → keys/query
+    //   §8.2 echo) and the SDK types are already in place to surface it once the
+    //   crypto helper lands.
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
     "Device 1 scans Device 2's QR; signs ck.device.authorize with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
     async () => {
-      // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding
-      // soland gap: ck.device.authorize cross_signing_binding payload; device list materialization.
-      // yougen gap: /settings/devices "Add device" + QR-scan strand.
+      // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding,
+      // §8.2 keys/query directory echo.
     },
   );
 
-  test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "both devices show up in alice's device list via ck.device.list_update projection within 30s of pairing",
-    async () => {
-      // spec: device-lifecycle.md §6
-    },
-  );
+  test("both devices show up in alice's device list projection within 30s of pairing", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §6 (device list sync) + §8.2 (device-set
+    // projection). After Device 1 authorizes Device 2, the principal's device
+    // list projection (GET /_cokret/self/account/viewer) MUST surface both
+    // devices. The 30s budget is the spec's device-list convergence window.
+    const alice = uniqueUser(`s10-device-list-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    // A second dev-login for the same DID registers Device 2 in the inventory
+    // (issueDevSession({deviceId}) overrides the per-user device).
+    const device2Id = typedId("device");
+    await issueDevSession(request, alice, { deviceId: device2Id });
+
+    const deadline = Date.now() + 30_000;
+    let ids: string[] = [];
+    for (;;) {
+      const viewer = await request.get(
+        `${solandBaseUrl()}/_cokret/self/account/viewer`,
+        { headers: authHeaders(device1Token) },
+      );
+      if (viewer.ok()) {
+        const body = (await viewer.json()) as {
+          devices?: Array<{ device_id?: string }>;
+        };
+        ids = (body.devices ?? [])
+          .map((device) => device.device_id)
+          .filter((id): id is string => typeof id === "string");
+        if (ids.includes(alice.deviceId) && ids.includes(device2Id)) {
+          break;
+        }
+      }
+      if (Date.now() > deadline) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    expect(ids, `device list within 30s: ${JSON.stringify(ids)}`).toContain(
+      alice.deviceId,
+    );
+    expect(ids).toContain(device2Id);
+  });
+
+  test("alice messages from Device 1 appear in Device 2's timeline; both have distinct device_id but same actor_id", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §2.1 step 5 (state handoff) — two sessions of
+    // the same principal (distinct device_id, same actor_id) share the same
+    // realm history. Device 1 writes a message; Device 2 reads it back.
+    const alice = uniqueUser(`s10-multi-timeline-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const device2Id = typedId("device");
+    const device2Token = await issueDevSession(request, alice, {
+      deviceId: device2Id,
+    });
+    expect(device2Id).not.toBe(alice.deviceId);
+
+    // Both sessions resolve to the same actor DID via the viewer.
+    const did1 = await currentActorDidApi(request, device1Token);
+    const did2 = await currentActorDidApi(request, device2Token);
+    expect(did1).toBe(alice.did);
+    expect(did2).toBe(alice.did);
+
+    const realmId = await createRealmApi(request, device1Token, {
+      title: `s10 multi-device timeline ${Date.now()}`,
+    });
+    const body = `multi-device-cross-read-${Date.now()}`;
+    await sendMessageApi(request, device1Token, realmId, body);
+
+    // Device 2 reads the same realm history and finds Device 1's message.
+    const events = await queryRealmEventsApi(request, device2Token, realmId);
+    const serialized = JSON.stringify(events);
+    expect(
+      serialized.includes(body),
+      `Device 2 timeline missing Device 1 message: ${serialized.slice(0, 2000)}`,
+    ).toBeTruthy();
+  });
+
+  test("Device 1 revokes Device 2 via ck.device.revoke; Device 2's subsequent /_cokret/self/events POST is rejected and Device 2 shows revoked", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §2.2 + key-management.md §5.2. After a peer
+    // device submits ck.device.revoke for Device 2, the auth gate stops
+    // accepting Device 2's signed writes. soland fails the revoked-device
+    // session closed at the auth layer (401 unauthenticated, "device revoked");
+    // the device-set projection flips to status=revoked.
+    const alice = uniqueUser(`s10-revoke-peer-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const device2Id = typedId("device");
+    const device2Token = await issueDevSession(request, alice, {
+      deviceId: device2Id,
+    });
+
+    const realmId = principalControlRealmForDid(alice.did);
+
+    // Device 1 (a peer device) revokes Device 2 on the principal control stream.
+    const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      headers: authHeaders(device1Token),
+      data: signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ck.device.revoke",
+        payload: {
+          principal_id: alice.did,
+          device_id: device2Id,
+          revoked_by: alice.deviceId,
+          revoked_at: new Date().toISOString(),
+          reason: "lost_device",
+        },
+      }),
+    });
+    expect(
+      [200, 201],
+      `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+    ).toContain(revoke.status());
+
+    // Device 2's subsequent signed write is rejected — the revoked device can
+    // no longer authenticate. soland returns 401 unauthenticated at the auth
+    // gate (the spec stops accepting the device's new signed writes; the wire
+    // shape is the generic auth rejection, not a 200).
+    const afterRevoke = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(device2Token),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.device.list_update",
+          payload: {
+            principal_id: alice.did,
+            changed: [device2Id],
+          },
+        }),
+      },
+    );
+    expect(
+      afterRevoke.ok(),
+      `revoked Device 2 write should be rejected, got ${afterRevoke.status()}`,
+    ).toBeFalsy();
+    expect([401, 403]).toContain(afterRevoke.status());
+
+    // Device 2 is reported revoked in Device 1's device-set projection.
+    const viewer = await request.get(
+      `${solandBaseUrl()}/_cokret/self/account/viewer`,
+      { headers: authHeaders(device1Token) },
+    );
+    const body = (await viewer.json()) as {
+      devices?: Array<{ device_id?: string; status?: string }>;
+    };
+    const device2Row = (body.devices ?? []).find(
+      (device) => device.device_id === device2Id,
+    );
+    expect(device2Row, `device2 row in viewer: ${JSON.stringify(body)}`).toBeTruthy();
+    expect(device2Row!.status).toBe("revoked");
+  });
 
   test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "alice messages from Device 1 appear in Device 2's timeline; both have distinct device_id but same actor_id",
-    async () => {
-      // spec: device-lifecycle.md §2.1 step 5
-    },
-  );
-
-  test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "Device 1 revokes Device 2 via ck.device.revoke; Device 2's subsequent /_cokret/self/events POST returns device_revoked",
-    async () => {
-      // spec: device-lifecycle.md §2.2 + key-management.md §5.2
-    },
-  );
-
-  test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap
+    // @blocking-on: full MLS group orchestration (KeyPackage claim → Welcome →
+    //   Commit Remove → epoch advance) across two device leaves; out of scope
+    //   here because it requires driving the mls-group encryption stack, not
+    //   just the device lifecycle surface this suite owns.
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
     "after revoke in an E2EE Realm, MLS Remove triggers epoch advance; Device 2 cannot decrypt subsequent messages",
     async () => {
       // spec: device-lifecycle.md §9 + encryption-and-audit.md §2.2
+      // The device-revoke half (peer revoke → device_status=revoked, queued
+      // to-device drop) is covered by the promoted tests above. The remaining
+      // MLS half — claiming Device 2 a KeyPackage, joining it to an E2EE Realm
+      // group via Welcome, then driving a Commit{Remove} that advances the
+      // epoch and re-keys so Device 2 can no longer decrypt — needs the full
+      // MLS group stack and is tracked separately.
     },
   );
 
@@ -180,15 +334,105 @@ test.describe("multi-device pairing + revocation", () => {
     expect(wireErrCode(body)).toBe("cannot_self_revoke");
   });
 
-  test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "E10.E to-device message queued for Device 2 before revocation is dropped after revocation (spec §7 line 341 grace drop)",
-    async () => {
-      // spec: device-lifecycle.md §7
-    },
-  );
+  test("E10.E to-device message queued for Device 2 before revocation is dropped after revocation (spec §7 grace drop)", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §7 grace drop — a to-device message already
+    // queued for a device MUST be dropped when that device is revoked, so a
+    // lost/compromised device that comes back online cannot drain key-exchange
+    // material queued before the revoke. soland purges the device's to-device
+    // queue (purge_device_delivery_state) when ck.device.revoke is accepted,
+    // and the revoked device's session is then fail-closed at the auth gate, so
+    // the queued message is unreachable.
+    const alice = uniqueUser(`s10-grace-drop-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const device2Id = typedId("device");
+    const device2Token = await issueDevSession(request, alice, {
+      deviceId: device2Id,
+    });
+
+    // Device 1 (verified, first device) queues a to-device message for Device 2.
+    const sendResp = await request.post(
+      `${solandBaseUrl()}/_cokret/self/device_messages`,
+      {
+        headers: {
+          ...authHeaders(device1Token),
+          "Idempotency-Key": `grace-drop-${device2Id}`,
+        },
+        data: {
+          messages: {
+            [alice.did]: {
+              [device2Id]: {
+                kind: "ck.key.verification.request",
+                expires_at: new Date(Date.now() + 10 * 60_000)
+                  .toISOString()
+                  .replace(/\.\d{3}Z$/, "Z"),
+                content: {
+                  transaction_id: `grace-${device2Id}`,
+                  from_device: alice.deviceId,
+                  timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+                },
+              },
+            },
+          },
+        },
+      },
+    );
+    expect(
+      sendResp.ok(),
+      `to-device send returned ${sendResp.status()}: ${await sendResp.text()}`,
+    ).toBeTruthy();
+
+    // Before revocation Device 2 can drain the queued message.
+    const beforeDrop = await request.get(
+      `${solandBaseUrl()}/_cokret/self/device_messages`,
+      { headers: authHeaders(device2Token) },
+    );
+    expect(beforeDrop.ok()).toBeTruthy();
+    const beforeBody = (await beforeDrop.json()) as {
+      messages?: Array<{ kind?: string }>;
+    };
+    expect(
+      (beforeBody.messages ?? []).some(
+        (message) => message.kind === "ck.key.verification.request",
+      ),
+      `Device 2 should see the queued request before revoke: ${JSON.stringify(beforeBody)}`,
+    ).toBeTruthy();
+
+    // Device 1 revokes Device 2 — this drops the queued to-device message.
+    const revoke = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      headers: authHeaders(device1Token),
+      data: signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: principalControlRealmForDid(alice.did),
+        kind: "ck.device.revoke",
+        payload: {
+          principal_id: alice.did,
+          device_id: device2Id,
+          revoked_by: alice.deviceId,
+          revoked_at: new Date().toISOString(),
+          reason: "lost_device",
+        },
+      }),
+    });
+    expect(
+      [200, 201],
+      `ck.device.revoke returned ${revoke.status()}: ${await revoke.text()}`,
+    ).toContain(revoke.status());
+
+    // After revocation Device 2's session is fail-closed at the auth gate, so
+    // the previously-queued message can never be drained by the revoked device.
+    const afterDrop = await request.get(
+      `${solandBaseUrl()}/_cokret/self/device_messages`,
+      { headers: authHeaders(device2Token) },
+    );
+    expect(
+      afterDrop.ok(),
+      `revoked Device 2 device_messages pull should be rejected, got ${afterDrop.status()}`,
+    ).toBeFalsy();
+    expect([401, 403]).toContain(afterDrop.status());
+  });
 
   // ── Pairing-approval UX (yougen surfaces; device-lifecycle.md §2.1/§7) ──
   // §7 MUST: the receiving authorized device puts pairing_code + binding into
@@ -226,7 +470,17 @@ test.describe("multi-device pairing + revocation", () => {
   });
 
   test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap (live to-device delivery between two sessions)
+    // @blocking-on: cotest UI harness — cross-session to-device sync settle timing.
+    //   The soland + yougen surfaces are in place: soland live-delivers a
+    //   same_principal_device_authorization to-device request to an authorized
+    //   sibling (routing/identity/device_messages.rs), yougen's background
+    //   long-poll ingests it into the to-device inbox (sync_engine.rs
+    //   ingest_to_device_messages), and the global DevicePairApprovalPrompt
+    //   (components/device_pair_approval_prompt.rs, mounted in app/mod.rs) pops
+    //   with device-pair-approval-modal / -code / -approve / -reject. What is
+    //   NOT low-risk to assert statically is when device-1's background sync
+    //   has drained device-2's request and re-rendered the Dioxus modal in the
+    //   two-browser harness; promoting this needs a live run to pin the wait.
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
     "new device's same_principal_device_authorization request surfaces on an authorized device as the global approval prompt; comparing the code and Approve authorizes it",
@@ -239,13 +493,15 @@ test.describe("multi-device pairing + revocation", () => {
       //   - device-pair-approval-code matches the code device-2 shows
       //   - device-pair-approval-approve → POST /_cokret/gate/account/device-pair
       //   - device-2 then appears verified in device-1's device list.
-      // Gap: cross-session live to-device fan-out in the harness (devices share
-      // one actor; needs real device_messages delivery, not the paste path).
     },
   );
 
   test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap (live to-device delivery between two sessions)
+    // @blocking-on: cotest UI harness — cross-session to-device sync settle timing
+    //   (same as the approval-prompt case above). reject wiring is in place:
+    //   device-pair-approval-reject calls local_state.dismiss_pairing_to_device_message
+    //   and never POSTs device-pair; the open question is purely the live wait
+    //   for device-1's background sync to surface the request first.
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
     "rejecting the pairing request (global prompt device-pair-approval-reject) dismisses it locally and does NOT authorize the new device",
@@ -258,7 +514,13 @@ test.describe("multi-device pairing + revocation", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#identity-multi-device-gap (live to-device delivery between two sessions)
+    // @blocking-on: cotest UI harness — cross-session to-device sync settle timing
+    //   (same root as above). The pending-pairing-requests-card on
+    //   /settings/devices/pair (views/settings/devices.rs) renders the inbox via
+    //   parse_pending_pairing_requests and approves through
+    //   /_cokret/gate/account/device-pair; pending-pairing-refresh-button re-reads
+    //   the inbox. Promotion is gated only on a live wait for device-1's
+    //   background sync to drain device-2's request before the Refresh click.
     // @user-promise: e2e/scenarios/identity/multi-device.md
     // @expected-live-by: 2026Q3
     "the /settings/devices/pair 'Approve a device' card lists a delivered to-device request and approves it (pending-pairing-requests-card → approve-pairing-request-button)",

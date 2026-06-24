@@ -6,7 +6,7 @@
 //   - §2.5 Governance Binding, §2.6 KeyPackage
 //   - models/realm-and-space.md §2.2 encryption_profile, §3.7.2 E2EE Realm
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   createHash,
   generateKeyPairSync,
@@ -34,6 +34,7 @@ import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
+  type JointUser,
   type JointUserPage,
   uniqueUser,
 } from "../../helpers/users";
@@ -436,6 +437,139 @@ async function createEncryptedRealm(
   return realmId;
 }
 
+type MlsGroupContext = {
+  groupId: string;
+  effectiveScope: { kind: "realm"; realm_id: string };
+  policyRoot: string;
+  frontierRef: string;
+};
+
+const MLS_CIPHER_SUITE = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
+
+function mlsGovernanceBinding(
+  group: MlsGroupContext,
+  previousEpoch: number,
+  nextEpoch: number,
+  policyRoot = group.policyRoot,
+): Record<string, unknown> {
+  return {
+    binding_version: 1,
+    encoding_profile: "cbor-deterministic-rfc8949-v1",
+    realm_id: group.effectiveScope.realm_id,
+    effective_scope: group.effectiveScope,
+    mls_group_id: group.groupId,
+    previous_epoch: previousEpoch,
+    next_epoch: nextEpoch,
+    membership_frontier: [group.frontierRef],
+    policy_root: policyRoot,
+    binding_profile: MLS_GOVERNANCE_BINDING_FULL_PROFILE,
+    reducer_profile: MLS_REDUCER_PROFILE_V1,
+  };
+}
+
+// Submit ck.mls.genesis for a fresh MLS group bound to `realmId` at epoch 0 and
+// return the group context the commit helper threads through. The genesis locks
+// the group's policy_root; later commits MUST carry the same root.
+async function submitMlsGenesis(
+  request: import("@playwright/test").APIRequestContext,
+  token: string,
+  owner: JointUser,
+  realmId: string,
+): Promise<MlsGroupContext> {
+  const groupId = typedId("mls_group");
+  const genesisEventId = typedId("event");
+  const effectiveScope = { kind: "realm" as const, realm_id: realmId };
+  const policyRoot = `sha256:${"2".repeat(64)}`;
+  const group: MlsGroupContext = {
+    groupId,
+    effectiveScope,
+    policyRoot,
+    frontierRef: genesisEventId,
+  };
+  const body = await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: owner.did,
+      realmId,
+      kind: "ck.mls.genesis",
+      eventId: genesisEventId,
+      payload: {
+        mls_group_id: groupId,
+        effective_scope: effectiveScope,
+        epoch: 0,
+        creator_principal_id: owner.did,
+        creator_device_id: owner.deviceId,
+        cipher_suite: MLS_CIPHER_SUITE,
+        group_info_digest: `sha256:${"3".repeat(64)}`,
+        ratchet_tree_digest: `sha256:${"4".repeat(64)}`,
+        governance_binding: mlsGovernanceBinding(group, 0, 0),
+        created_at: canonicalTimestamp(),
+      },
+    }),
+    { context: `submit MLS genesis ${groupId}` },
+  );
+  expect(body.accepted ?? []).toContain(genesisEventId);
+  return group;
+}
+
+// Submit a ck.mls.commit advancing `baseEpoch` -> `baseEpoch + 1`. Optional
+// `policyRoot` override forges a mismatched governance binding (E11.2);
+// `concurrentCommit` flags a racing fork at the same base epoch (E11.1). Returns
+// the raw submit response so callers can assert accepted ids or wire codes.
+async function submitMlsCommit(
+  request: import("@playwright/test").APIRequestContext,
+  token: string,
+  committer: JointUser,
+  args: {
+    realmId: string;
+    group: MlsGroupContext;
+    baseEpoch: number;
+    label: string;
+    eventId?: string;
+    policyRoot?: string;
+    concurrentCommit?: boolean;
+    raw?: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  const { realmId, group, baseEpoch, label } = args;
+  const nextEpoch = baseEpoch + 1;
+  const payload: Record<string, unknown> = {
+    mls_group_id: group.groupId,
+    base_epoch: baseEpoch,
+    base_epoch_ref: group.frontierRef,
+    proposal_refs: [],
+    next_epoch: nextEpoch,
+    commit_digest: sha256Digest(Buffer.from(label, "utf8")),
+    governance_binding: mlsGovernanceBinding(
+      group,
+      baseEpoch,
+      nextEpoch,
+      args.policyRoot ?? group.policyRoot,
+    ),
+  };
+  if (args.concurrentCommit) {
+    payload.concurrent_commit = true;
+  }
+  const envelope = signedEventEnvelope({
+    actorDid: committer.did,
+    realmId,
+    kind: "ck.mls.commit",
+    eventId: args.eventId ?? typedId("event"),
+    payload,
+  });
+  if (args.raw) {
+    const resp = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      headers: authHeaders(token),
+      data: envelope,
+    });
+    return { __status: resp.status(), __body: await resp.json() };
+  }
+  return await submitSignedEventApi(request, token, envelope, {
+    context: `submit MLS commit ${label}`,
+  });
+}
+
 async function sendEncryptedTimelineMessage(
   userPage: JointUserPage,
   realmId: string,
@@ -479,6 +613,114 @@ async function sendEncryptedTimelineMessage(
     { timeout: 30_000 },
   );
   return postData;
+}
+
+// Same account (same DID), brand-new device id and therefore a fresh local
+// MLS store: no Welcome applied and no encrypted-history backup restored. This
+// is the "fresh device, no backup, no welcome" state the write guard must
+// fail closed on.
+function sameActorFreshDevice(user: JointUser, label: string): JointUser {
+  const suffix =
+    `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`
+      .replace(/[^a-f0-9]/g, "")
+      .slice(0, 12)
+      .padEnd(12, "0");
+  return {
+    ...user,
+    name: `${user.name}-${label}`,
+    deviceId: `ck:device:01904100-0000-7000-8000-${suffix}`,
+  };
+}
+
+async function createKanbanBoardListAndCard(
+  page: Page,
+  realmId: string,
+  boardTitle: string,
+  listTitle: string,
+  cardTitle: string,
+): Promise<string> {
+  await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+    timeout: 120_000,
+  });
+  await page.getByTestId("new-board-toggle").click();
+  await page.getByTestId("new-board-title-input").fill(boardTitle);
+  await page.getByTestId("create-board-space-button").click();
+  await expect(page.getByTestId("kanban-empty-board")).toContainText(
+    /No lists yet/,
+    {
+      timeout: 45_000,
+    },
+  );
+  await expect
+    .poll(() => page.url(), { timeout: 30_000 })
+    .toContain("/board/ck:space:");
+  const boardId = decodeURIComponent(
+    new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
+  );
+  expect(boardId).toMatch(/^ck:space:/);
+
+  await page.getByTestId("new-column-input").fill(listTitle);
+  await page.getByTestId("add-column-button").click();
+  const column = page
+    .getByTestId("kanban-column")
+    .filter({ hasText: listTitle })
+    .first();
+  await expect(column).toBeVisible({ timeout: 45_000 });
+  await column.getByTestId("add-card-button").click();
+  await column.getByTestId("new-card-title-input").fill(cardTitle);
+  await column.getByTestId("save-card-button").click();
+  await expect(
+    column.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+  ).toBeVisible({
+    timeout: 45_000,
+  });
+  return boardId;
+}
+
+async function setCardDetailEditorValue(
+  page: Page,
+  value: string,
+): Promise<void> {
+  const input = page.getByTestId("card-detail-description-input");
+  await expect(input).toBeAttached({ timeout: 45_000 });
+  await input.evaluate((node, nextValue) => {
+    const textarea = node as HTMLTextAreaElement;
+    textarea.value = nextValue;
+    textarea.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: nextValue,
+      }),
+    );
+  }, value);
+}
+
+// Open the card and attempt to save a private description. Unlike the happy
+// path, this does NOT expect the description panel to update — the caller
+// asserts the not-ready affordance instead.
+async function attemptCardDescription(
+  page: Page,
+  cardTitle: string,
+  description: string,
+): Promise<void> {
+  await page
+    .getByTestId("kanban-card")
+    .filter({ hasText: cardTitle })
+    .first()
+    .click();
+  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+    timeout: 45_000,
+  });
+  const add = page.getByTestId("card-detail-add-description-button");
+  if ((await add.count()) > 0 && (await add.first().isVisible())) {
+    await add.first().click();
+  } else {
+    await page.getByTestId("card-detail-edit-description-button").click();
+  }
+  await setCardDetailEditorValue(page, description);
+  await page.getByTestId("card-detail-save-button").click();
 }
 
 test.describe("MLS group encryption", () => {
@@ -1017,11 +1259,105 @@ test.describe("MLS group encryption", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#encryption-mls-group-gap
-  // @user-promise: e2e/scenarios/encryption/mls-group.md
-  // @expected-live-by: 2026Q3
-  "carol added in epoch 1 → ck.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async () => {
-    // spec: encryption-and-audit.md §2.4.1, models/realm-and-space.md §3.4
+  test("carol added in epoch 1 → ck.mls.commit advances to epoch 2; carol cannot decrypt pre-join messages (history_visibility=joined)", async ({
+    request,
+  }) => {
+    // spec: encryption-and-audit.md §2.4.1, models/realm-and-space.md §3.4.
+    //
+    // Pre-join history exclusion is a soland-side property under
+    // `history_visibility=joined`: `realm_event_visible_to_session`
+    // (routing/spaces/space.rs) crops any realm event whose `received_at`
+    // predates the reader's `joined_at`. This asserts that boundary at the API
+    // level using MLS epoch events as the pre/post-join markers: carol, who
+    // joins after the epoch-1 commit (carrying the pre-join epoch she has no
+    // key for) lands, never sees that commit event, but does see the epoch-2
+    // commit sent after she joined.
+    const stamp = Date.now();
+    const alice = uniqueUser("s11-prejoin-alice");
+    const carol = uniqueUser("s11-prejoin-carol");
+    await Promise.all([
+      ensureRegistered(request, alice),
+      ensureRegistered(request, carol),
+    ]);
+    const [aliceToken, carolToken] = await Promise.all([
+      issueDevSession(request, alice),
+      issueDevSession(request, carol),
+    ]);
+
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S11 pre-join ${stamp}`,
+      ownerDid: alice.did,
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+    const group = await submitMlsGenesis(request, aliceToken, alice, realmId);
+
+    // Pre-join MLS epoch advance: epoch 0 -> 1, before carol joins.
+    const preJoinEventId = typedId("event");
+    const preJoin = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: preJoinEventId,
+      baseEpoch: 0,
+      label: `prejoin-${stamp}`,
+    });
+    expect(preJoin.accepted ?? []).toContain(preJoinEventId);
+
+    // carol joins now → her joined_at is after the pre-join commit landed. This
+    // is the epoch-1 -> epoch-2 membership advance from the user's vantage.
+    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+
+    // Post-join MLS epoch advance: epoch 1 -> 2, visible to carol.
+    const postJoinEventId = typedId("event");
+    const postJoin = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: postJoinEventId,
+      baseEpoch: 1,
+      label: `postjoin-${stamp}`,
+    });
+    expect(postJoin.accepted ?? []).toContain(postJoinEventId);
+
+    // carol reads the realm event stream: history_visibility=joined crops the
+    // pre-join epoch event but surfaces the post-join one.
+    const carolEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+    await expect
+      .poll(
+        async () => {
+          const resp = await request.get(carolEventsUrl, {
+            headers: authHeaders(carolToken),
+          });
+          if (resp.status() !== 200) {
+            return null;
+          }
+          return JSON.stringify(await resp.json());
+        },
+        {
+          timeout: 60_000,
+          intervals: [1_000, 2_000, 5_000],
+          message: "carol's synced event stream should surface the post-join event",
+        },
+      )
+      .toContain(postJoinEventId);
+
+    const carolEvents = await request.get(carolEventsUrl, {
+      headers: authHeaders(carolToken),
+    });
+    expect(carolEvents.status()).toBe(200);
+    const carolWire = JSON.stringify(await carolEvents.json());
+    // Post-join epoch event visible; pre-join epoch event id cropped.
+    expect(carolWire).toContain(postJoinEventId);
+    expect(carolWire).not.toContain(preJoinEventId);
+
+    // Sanity: alice (owner) still sees both events — the crop is a per-reader
+    // history gate, not a delete.
+    const aliceEvents = await request.get(carolEventsUrl, {
+      headers: authHeaders(aliceToken),
+    });
+    expect(aliceEvents.status()).toBe(200);
+    const aliceWire = JSON.stringify(await aliceEvents.json());
+    expect(aliceWire).toContain(preJoinEventId);
+    expect(aliceWire).toContain(postJoinEventId);
   });
 
   test("alice bans bob → membership_frontier advances; client enters epoch_update_required state for up to max_mls_commit_delay_ms", async ({
@@ -1088,18 +1424,142 @@ test.describe("MLS group encryption", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#encryption-mls-group-gap
-  // @user-promise: e2e/scenarios/encryption/mls-group.md
-  // @expected-live-by: 2026Q3
-  "E11.1 concurrent MLS commits produce ⊥ in covered_frontier_cell; subsequent messages marked decryption_pending until later commit resolves", async () => {
+  test("E11.1 concurrent MLS commits produce ⊥ in covered_frontier_cell; subsequent messages marked decryption_pending until later commit resolves", async ({
+    request,
+  }) => {
     // spec: encryption-and-audit.md §2.5.2
+    //
+    // Two commits attesting the same base epoch with different commit material
+    // drive the group's covered_frontier_cell to ⊥. soland's reducer
+    // (reducer/mls.rs apply_commit_epoch) accepts the first, flags the frontier
+    // contested on the racing fork, and then fails closed any further commit at
+    // the contested base with `decryption_pending` until a resolving commit
+    // advances the epoch.
+    const stamp = Date.now();
+    const alice = uniqueUser("s11-contend-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S11 concurrent commit ${stamp}`,
+      ownerDid: alice.did,
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+    const group = await submitMlsGenesis(request, aliceToken, alice, realmId);
+
+    // First commit at base epoch 0 lands → epoch 1.
+    const firstEventId = typedId("event");
+    const first = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: firstEventId,
+      baseEpoch: 0,
+      label: `commit-a-${stamp}`,
+    });
+    expect(first.accepted ?? []).toContain(firstEventId);
+
+    // A racing commit explicitly forking base epoch 0 with different material
+    // drives covered_frontier_cell to ⊥. soland accepts the first contended
+    // commit (it records the contested marker) without advancing the epoch.
+    const contendEventId = typedId("event");
+    const contend = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: contendEventId,
+      baseEpoch: 0,
+      label: `commit-b-${stamp}`,
+      concurrentCommit: true,
+    });
+    expect(contend.accepted ?? []).toContain(contendEventId);
+
+    // A further racing commit at the contested base now fails closed as
+    // decryption_pending — the frontier is ⊥ until resolved.
+    const pending = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      baseEpoch: 0,
+      label: `commit-c-${stamp}`,
+      concurrentCommit: true,
+      raw: true,
+    });
+    expect([409, 412, 422]).toContain(pending.__status as number);
+    expect(wireErrCode(pending.__body)).toBe("decryption_pending");
+
+    // A resolving commit at the live epoch advances past ⊥ and clears it.
+    const resolveEventId = typedId("event");
+    const resolve = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: resolveEventId,
+      baseEpoch: 1,
+      label: `commit-resolve-${stamp}`,
+    });
+    expect(resolve.accepted ?? []).toContain(resolveEventId);
+
+    // After resolution a further commit at the new live epoch advances normally
+    // (the frontier is no longer ⊥).
+    const afterEventId = typedId("event");
+    const after = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: afterEventId,
+      baseEpoch: 2,
+      label: `commit-after-${stamp}`,
+    });
+    expect(after.accepted ?? []).toContain(afterEventId);
   });
 
-  test.fixme(// @blocking-on: soland#encryption-mls-group-gap
-  // @user-promise: e2e/scenarios/encryption/mls-group.md
-  // @expected-live-by: 2026Q3
-  "E11.2 governance_binding.realm_policy_digest mismatch causes federation push to reject with governance_binding_mismatch", async () => {
+  test("E11.2 governance_binding.realm_policy_digest mismatch causes federation push to reject with governance_binding_mismatch", async ({
+    request,
+  }) => {
     // spec: encryption-and-audit.md §2.5.1
+    //
+    // A commit's governance_binding.policy_root MUST stay bound to the policy
+    // root the MLS group's epoch chain was genesis-locked to. soland's reducer
+    // (reducer/mls.rs apply_commit_epoch) rejects a forged / stale binding with
+    // `governance_binding_mismatch`. This is the same reducer gate the
+    // federation-push ingest pipeline (submit_federation_events ->
+    // submit_event_value -> reducer) runs every pushed ck.mls.commit through, so
+    // a mismatched binding is rejected on the local submit and the federation
+    // boundary alike.
+    const stamp = Date.now();
+    const alice = uniqueUser("s11-binding-alice");
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `S11 binding mismatch ${stamp}`,
+      ownerDid: alice.did,
+      history_visibility: "joined",
+      encryption_profile: "mls_rfc9420",
+    });
+    const group = await submitMlsGenesis(request, aliceToken, alice, realmId);
+
+    // A commit carrying a different policy_root than the genesis-locked root is
+    // rejected with governance_binding_mismatch.
+    const forged = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      baseEpoch: 0,
+      label: `forged-binding-${stamp}`,
+      policyRoot: `sha256:${"9".repeat(64)}`,
+      raw: true,
+    });
+    expect([400, 409, 412, 422]).toContain(forged.__status as number);
+    expect(wireErrCode(forged.__body)).toBe("governance_binding_mismatch");
+
+    // The matching-root commit at the same base still advances the epoch — the
+    // gate rejects only the forged binding, not the legitimate one.
+    const cleanEventId = typedId("event");
+    const clean = await submitMlsCommit(request, aliceToken, alice, {
+      realmId,
+      group,
+      eventId: cleanEventId,
+      baseEpoch: 0,
+      label: `clean-binding-${stamp}`,
+    });
+    expect(clean.accepted ?? []).toContain(cleanEventId);
   });
 
   // encryption_profile is a create-locked Realm field (spec
@@ -1221,32 +1681,119 @@ test.describe("MLS group encryption", () => {
 
   // Not-ready guard: a fresh device of the SAME account that has NOT received
   // an MLS Welcome and has NOT restored its account secret must NOT silently
-  // downgrade an encrypted private write to plaintext. The client should
-  // surface a recoverable "MLS state not ready" affordance and refuse to
-  // submit; it must never POST a plaintext ck.strand.update that the server
-  // accepts (or bounces with content_encryption_floor_violation).
+  // downgrade an encrypted private write to plaintext. The client surfaces a
+  // recoverable "MLS state not ready" affordance and refuses to submit; it
+  // never POSTs a plaintext ck.strand.update carrying the private `body`.
   //
-  // Parked as fixme: deterministically reaching the "fresh device, no
-  // backup, no welcome" state requires a second-device rig (sameActorFreshDevice
-  // + openUserPage), and the exact not-ready UX surface (mls-unlock-banner vs
-  // board_status text) must be confirmed against a live stack before the
-  // assertions can be pinned without flake. Promote to an active test once the
-  // first stack run confirms the surfaced affordance.
-  test.fixme(
-    // @blocking-on: yougen#mls-not-ready-write-guard
-    // @user-promise: e2e/scenarios/encryption/mls-group.md
-    // @expected-live-by: 2026Q3
+  // yougen guard: encrypt_values_with_device_snapshot returns
+  // MlsRuntimeError::MissingWelcome when no local MLS snapshot exists, which
+  // dispatch_card_detail_update surfaces into board_status /
+  // card-detail-edit-status ("MLS state is not ready on this device yet ...")
+  // and returns false BEFORE any strand.update event is built or submitted —
+  // so the encrypted scope never falls back to a plaintext write.
+  test(
     "fresh device without MLS welcome/restore refuses encrypted private writes instead of silently downgrading to plaintext",
-    async () => {
-      // 1) deviceA: createRealm(encryption_profile=mls_rfc9420) + board + list + card.
-      // 2) deviceB = sameActorFreshDevice(alice): fresh session, NO passphrase
-      //    vault set up, NO welcome applied.
-      // 3) deviceB opens the board, opens the card (title is plaintext metadata),
-      //    tries to add a description.
-      // 4) Assert: NO /_cokret/self/events POST carrying a plaintext private `body`
-      //    is accepted (and none is bounced with content_encryption_floor_violation),
-      //    AND a not-ready affordance (mls-unlock-banner / "MLS state is not
-      //    ready" board status) is shown.
+    async ({ browser, request }) => {
+      test.setTimeout(300_000);
+      const stamp = Date.now();
+      const alice = uniqueUser("mls-not-ready-alice");
+      await ensureRegistered(request, alice);
+
+      const boardTitle = `Not-ready Board ${stamp}`;
+      const listTitle = `Not-ready Todos ${stamp}`;
+      const cardTitle = `Not-ready encrypted card ${stamp}`;
+      const privateDescription = `Not-ready secret detail ${stamp}`;
+
+      // 1) deviceA (the MLS group creator) builds the encrypted realm + board +
+      //    list + card via the UI so a genuine MLS group exists.
+      const deviceAToken = await issueDevSession(request, alice);
+      const deviceA = await openUserPage(browser, alice, {
+        sessionCredential: deviceAToken,
+      });
+
+      // 2) deviceB = same account, fresh device id, fresh dev session => empty
+      //    local store: NO Welcome applied, NO encrypted-history restore.
+      const deviceBUser = sameActorFreshDevice(alice, "fresh-device-b");
+      const deviceBToken = await issueDevSession(request, deviceBUser);
+      const deviceB = await openUserPage(browser, deviceBUser, {
+        sessionCredential: deviceBToken,
+      });
+
+      // Capture any plaintext private write that would leak the description.
+      // A plaintext ck.strand.update would carry `privateDescription` verbatim
+      // in its body/fields.body patch; an encrypted one never does.
+      const plaintextPrivateWrites: string[] = [];
+      deviceB.page.on("request", (req) => {
+        if (
+          req.method() !== "POST" ||
+          !req.url().includes("/_cokret/self/events")
+        ) {
+          return;
+        }
+        const postData = req.postData() ?? "";
+        if (
+          postData.includes("ck.strand.update") &&
+          postData.includes(privateDescription)
+        ) {
+          plaintextPrivateWrites.push(postData);
+        }
+      });
+
+      try {
+        const realmId = await deviceA.createRealm({
+          title: `MLS not-ready ${stamp}`,
+          summary: "fresh device must refuse plaintext private writes",
+          discoverability: "unlisted",
+          joinRule: "invite",
+          historyVisibility: "joined",
+          encryptionProfile: "mls_rfc9420",
+        });
+        const boardId = await createKanbanBoardListAndCard(
+          deviceA.page,
+          realmId,
+          boardTitle,
+          listTitle,
+          cardTitle,
+        );
+
+        // 3) deviceB opens the board, opens the card (title is plaintext
+        //    container metadata it can render), and tries to add a private
+        //    description.
+        await deviceB.page.goto(`/kanban/${realmId}/board/${boardId}`, {
+          waitUntil: "domcontentloaded",
+        });
+        await expect(deviceB.page.getByTestId("kanban-panel")).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(
+          deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
+        ).toBeVisible({ timeout: 90_000 });
+
+        await attemptCardDescription(deviceB.page, cardTitle, privateDescription);
+
+        // 4a) The not-ready affordance is surfaced. The MissingWelcome guard
+        //     copy lands in card-detail-edit-status (and board-status).
+        await expect(
+          deviceB.page.getByTestId("card-detail-edit-status"),
+        ).toContainText(/MLS state is not ready/i, { timeout: 60_000 });
+
+        // 4b) The private description was NEVER committed to the card — the
+        //     write was refused, not silently downgraded.
+        await expect(
+          deviceB.page
+            .locator('[data-testid="card-description-panel"]:visible')
+            .filter({ hasText: privateDescription }),
+        ).toHaveCount(0);
+
+        // 4c) No plaintext ck.strand.update carrying the private body ever left
+        //     the client (so the server never had to accept or bounce one).
+        expect(
+          plaintextPrivateWrites,
+          plaintextPrivateWrites.join("\n"),
+        ).toEqual([]);
+      } finally {
+        await Promise.allSettled([deviceA.close(), deviceB.close()]);
+      }
     },
   );
 });

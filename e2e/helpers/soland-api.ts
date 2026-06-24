@@ -22,7 +22,8 @@ export type OperationKind =
   | "operation"
   | "realm"
   | "relation"
-  | "space";
+  | "space"
+  | "view";
 
 export type SignedEventEnvelopeArgs = {
   actorDid: string;
@@ -33,6 +34,11 @@ export type SignedEventEnvelopeArgs = {
   createdAt?: string;
   eventId?: string;
   schemaId?: string;
+  /// Override the full `requirements.schema[]` binding. morph.md §4.1 S1/S2
+  /// requires schema-evolving events (ck.morph.schema_migrate /
+  /// schema_refs-changing ck.morph.update) to bind the active Morph schema set
+  /// (the union of from/to schema_refs) here, not just the payload schema id.
+  requirementsSchema?: string[];
   proofVerificationMethod?: string;
   anchorRef?: string;
   refs?: Array<Record<string, unknown>>;
@@ -157,6 +163,7 @@ export async function createRealmApi(
     owning_organizations?: string[];
     audit_disclosure_policy?: Record<string, unknown>;
     retention_policy?: Record<string, unknown>;
+    default_join_rule?: string;
   },
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
@@ -195,7 +202,7 @@ export async function createRealmApi(
           schema_refs: ["ck.schema.realm.v1"],
           default_discoverability:
             data.discoverability ?? (data.public ? "public" : "listed"),
-          default_join_rule: "invite",
+          default_join_rule: data.default_join_rule ?? "invite",
           history_visibility: data.history_visibility ?? "shared",
           encryption_profile: data.encryption_profile ?? "none",
           plaintext_visible_services: plaintextVisibleServices,
@@ -270,6 +277,450 @@ export async function addRealmMemberApi(
     }),
     { server: opts.server, context: `add member ${memberDid}` },
   );
+}
+
+// join-policy.md §3 — write the per-Realm `realm.join_policy` cell. soland
+// carries the candidate join policy inside the active
+// `ck.realm.policy_components` event under `components.join_policy`; the
+// reducer projects it into
+// `ck:cell:ck.component.realm.policy_components.v1:<realm_id>` and reads the
+// `join_policy` facet from there.
+export async function writeJoinPolicyApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  joinPolicy: Record<string, unknown>,
+  opts: { server?: SolandKey } = {},
+): Promise<string> {
+  const actorDid = await currentActorDidApi(request, token, opts);
+  const digest = `sha256:${sha256CanonicalJson(joinPolicy)}`;
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.realm.policy_components",
+      payload: {
+        realm_id: realmId,
+        value: {
+          components: { join_policy: joinPolicy },
+          join_policy: joinPolicy,
+        },
+      },
+    }),
+    { server: opts.server, context: `write join policy ${realmId}` },
+  );
+  return digest;
+}
+
+// Grant a realm-scoped `ck.realm.join.review` capability to a subject. Used
+// by the knock-application scenario to make a non-owner reviewer, whose
+// capability can later be revoked (join-policy.md §7.5 #3 re-check).
+export async function grantRealmReviewCapabilityApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: {
+    ownerDid: string;
+    realmId: string;
+    subjectDid: string;
+    server?: SolandKey;
+  },
+): Promise<string> {
+  const grantId = typedId("grant");
+  const issuedAt = canonicalTimestamp();
+  const unsignedGrant: Record<string, unknown> = {
+    id: grantId,
+    grant_id: grantId,
+    schema: "ck.schema.capability.v1",
+    realm_id: args.realmId,
+    issuer: args.ownerDid,
+    subject: args.subjectDid,
+    actions: ["ck.realm.join.review"],
+    resources: [{ kind: "realm", realm_id: args.realmId }],
+    issued_at: issuedAt,
+  };
+  await submitSignedEventApi(
+    request,
+    ownerToken,
+    signedEventEnvelope({
+      actorDid: args.ownerDid,
+      realmId: args.realmId,
+      kind: "ck.capability.grant",
+      createdAt: issuedAt,
+      payload: {
+        grant_id: grantId,
+        grant: {
+          ...unsignedGrant,
+          proofs: [
+            eventProof({ actorDid: args.ownerDid, event: unsignedGrant }),
+          ],
+        },
+      },
+    }),
+    {
+      server: args.server,
+      context: `grant ck.realm.join.review to ${args.subjectDid}`,
+    },
+  );
+  return grantId;
+}
+
+// Grant a Realm-scoped service delegation capability to a peer service DID.
+// sync/federation.md §4.4: the grant subject is a service DID; revoking it
+// makes the source Principal Server stop pushing future events to that peer.
+export async function grantServiceDelegationApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: {
+    ownerDid: string;
+    realmId: string;
+    subjectServiceDid: string;
+    action?: string;
+    server?: SolandKey;
+  },
+): Promise<string> {
+  const grantId = typedId("grant");
+  const issuedAt = canonicalTimestamp();
+  const action = args.action ?? "ck.realm.delivery_binding_policy";
+  const unsignedGrant: Record<string, unknown> = {
+    id: grantId,
+    grant_id: grantId,
+    schema: "ck.schema.capability.v1",
+    realm_id: args.realmId,
+    issuer: args.ownerDid,
+    subject: args.subjectServiceDid,
+    actions: [action],
+    resources: [{ kind: "realm", realm_id: args.realmId }],
+    issued_at: issuedAt,
+  };
+  await submitSignedEventApi(
+    request,
+    ownerToken,
+    signedEventEnvelope({
+      actorDid: args.ownerDid,
+      realmId: args.realmId,
+      kind: "ck.capability.grant",
+      createdAt: issuedAt,
+      payload: {
+        grant_id: grantId,
+        grant: {
+          ...unsignedGrant,
+          proofs: [
+            eventProof({ actorDid: args.ownerDid, event: unsignedGrant }),
+          ],
+        },
+      },
+    }),
+    {
+      server: args.server,
+      context: `grant ${action} service delegation to ${args.subjectServiceDid}`,
+    },
+  );
+  return grantId;
+}
+
+// Revoke a previously granted capability by grant_id.
+export async function revokeCapabilityApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: {
+    ownerDid: string;
+    realmId: string;
+    grantId: string;
+    server?: SolandKey;
+  },
+) {
+  return await submitSignedEventApi(
+    request,
+    ownerToken,
+    signedEventEnvelope({
+      actorDid: args.ownerDid,
+      realmId: args.realmId,
+      kind: "ck.capability.revoke",
+      payload: {
+        grant_id: args.grantId,
+        realm_id: args.realmId,
+      },
+    }),
+    { server: args.server, context: `revoke grant ${args.grantId}` },
+  );
+}
+
+// join-policy.md §7.1 stage 1 — `ck.member.state{membership=knock}`. The
+// knock Control Move carries no application body (spec §8 keeps free text out
+// of the public knock event).
+export async function submitKnockApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  opts: { server?: SolandKey; createdAt?: string } = {},
+) {
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.member.state",
+      createdAt: opts.createdAt,
+      payload: {
+        realm_id: realmId,
+        actor_id: actorDid,
+        membership: "knock",
+      },
+    }),
+    { server: opts.server, context: `knock ${realmId}` },
+  );
+}
+
+// join-policy.md §7.2 — `member.application` carried as a profile-private
+// `application` sub-object on the active `ck.member.state{knock}` event.
+export async function submitApplicationApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  application: {
+    knockRef?: string;
+    policyVersionDigest?: string;
+    answers?: Array<{ question_id: string; value: unknown }>;
+    receiptDigest?: string;
+  },
+  opts: { server?: SolandKey; createdAt?: string } = {},
+) {
+  const receiptDigest =
+    application.receiptDigest ?? `sha256:${sha256CanonicalJson({ realmId, actorDid, answers: application.answers ?? [] })}`;
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.member.state",
+      createdAt: opts.createdAt,
+      payload: {
+        realm_id: realmId,
+        actor_id: actorDid,
+        membership: "knock",
+        application: {
+          realm_id: realmId,
+          applicant_did: actorDid,
+          knock_ref: application.knockRef,
+          policy_version_digest: application.policyVersionDigest,
+          answers: application.answers ?? [],
+          application_receipt_digest: receiptDigest,
+        },
+      },
+    }),
+    { server: opts.server, context: `application ${realmId}` },
+  );
+  return receiptDigest;
+}
+
+// join-policy.md §7.3 — `member.application.review`. The reviewer submits a
+// `ck.member.state` event targeting the applicant; `accept` keeps the
+// applicant in `knock` (the join is later authorised via ck.invite.create),
+// `reject` drives the applicant to `leave` and stamps cooldown_after_reject.
+export async function submitApplicationReviewApi(
+  request: APIRequestContext,
+  token: string,
+  reviewerDid: string,
+  applicantDid: string,
+  realmId: string,
+  review: {
+    applicationRef: string;
+    decision: "accept" | "reject" | "request_changes";
+    reasonCode?: string;
+    reasonText?: string;
+    grantId?: string;
+    reviewReceiptDigest?: string;
+  },
+  opts: { server?: SolandKey; createdAt?: string } = {},
+) {
+  const reviewReceiptDigest =
+    review.reviewReceiptDigest ??
+    `sha256:${sha256CanonicalJson({ realmId, applicantDid, applicationRef: review.applicationRef, decision: review.decision })}`;
+  const membership = review.decision === "reject" ? "leave" : "knock";
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: reviewerDid,
+      realmId,
+      kind: "ck.member.state",
+      createdAt: opts.createdAt,
+      payload: {
+        realm_id: realmId,
+        actor_id: applicantDid,
+        sender: reviewerDid,
+        membership,
+        application_review: {
+          realm_id: realmId,
+          application_ref: review.applicationRef,
+          decision: review.decision,
+          reason_code: review.reasonCode,
+          reason_text: review.reasonText,
+          reviewer_did: reviewerDid,
+          review_receipt_digest: reviewReceiptDigest,
+          reviewer_capability_proof: review.grantId
+            ? { grant_id: review.grantId }
+            : undefined,
+        },
+      },
+    }),
+    {
+      server: opts.server,
+      context: `review ${review.decision} ${realmId}`,
+    },
+  );
+  return reviewReceiptDigest;
+}
+
+// join-policy.md §7.4 — applicant withdraws; drives to leave, no cooldown.
+export async function submitApplicationCancelApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  applicationRef: string,
+  opts: { server?: SolandKey } = {},
+) {
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.member.state",
+      payload: {
+        realm_id: realmId,
+        actor_id: actorDid,
+        membership: "leave",
+        application_cancel: {
+          realm_id: realmId,
+          application_ref: applicationRef,
+          cancelled_by: actorDid,
+        },
+      },
+    }),
+    { server: opts.server, context: `cancel application ${realmId}` },
+  );
+}
+
+// join-policy.md §5 — auto-resolve join: `ck.member.state{membership=join}`
+// carrying `gate_proofs[]`. The reducer validates the gates inline.
+export async function submitJoinWithProofsApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  gateProofs: Array<Record<string, unknown>>,
+  opts: { server?: SolandKey; createdAt?: string } = {},
+) {
+  return await request.post(
+    `${solandBaseUrl(opts.server)}/_cokret/self/events`,
+    {
+      headers: authHeaders(token),
+      data: signedEventEnvelope({
+        actorDid,
+        realmId,
+        kind: "ck.member.state",
+        createdAt: opts.createdAt,
+        payload: {
+          realm_id: realmId,
+          actor_id: actorDid,
+          membership: "join",
+          delivery_status: "unroutable",
+          gate_proofs: gateProofs,
+        },
+      }),
+    },
+  );
+}
+
+// join-policy.md §3.1 `cooldown` gate — applicant leaves the Realm.
+export async function submitLeaveApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  opts: { server?: SolandKey; createdAt?: string } = {},
+) {
+  return await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.member.state",
+      createdAt: opts.createdAt,
+      payload: {
+        realm_id: realmId,
+        actor_id: actorDid,
+        membership: "leave",
+      },
+    }),
+    { server: opts.server, context: `leave ${realmId}` },
+  );
+}
+
+// join-policy.md §7.5 — `ck.invite.create` whose
+// `refs[role="join_authorised_by"]` binds to the review accept receipt.
+export async function submitInviteCreateApi(
+  request: APIRequestContext,
+  token: string,
+  inviterDid: string,
+  realmId: string,
+  subjectDid: string,
+  joinAuthorisedByRef: string,
+  opts: { server?: SolandKey } = {},
+) {
+  const inviteId = typedId("invite");
+  const expiresAt = canonicalTimestamp(new Date(Date.now() + 86_400_000));
+  return await request.post(
+    `${solandBaseUrl(opts.server)}/_cokret/self/events`,
+    {
+      headers: authHeaders(token),
+      data: signedEventEnvelope({
+        actorDid: inviterDid,
+        realmId,
+        kind: "ck.invite.create",
+        refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
+        payload: {
+          realm_id: realmId,
+          invite_id: inviteId,
+          subject_did: subjectDid,
+          invitee: subjectDid,
+          inviter: inviterDid,
+          invite_delivery_target: { recipient_did: subjectDid },
+          introduction_evidence_digest: `sha256:${sha256CanonicalJson({ inviteId, subjectDid })}`,
+          expires_at: expiresAt,
+        },
+      }),
+    },
+  );
+}
+
+// join-policy.md §9 — list member applications scoped to the caller.
+export async function listMemberApplicationsApi(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  opts: { server?: SolandKey } = {},
+): Promise<{
+  applications: Array<Record<string, unknown>>;
+  viewer_is_reviewer: boolean;
+}> {
+  const response = await request.get(
+    `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}/applications`,
+    { headers: authHeaders(token) },
+  );
+  return await expectJsonOk<{
+    applications: Array<Record<string, unknown>>;
+    viewer_is_reviewer: boolean;
+  }>(response, `list applications ${realmId}`);
 }
 
 export async function acceptInviteApi(
@@ -610,7 +1061,9 @@ export function signedEventEnvelope(
     refs: args.refs ?? [],
     ...(args.anchorRef ? { anchor_ref: args.anchorRef } : {}),
     requirements: {
-      schema: [args.schemaId ?? schemaIdForEventKind(args.kind)],
+      schema: args.requirementsSchema ?? [
+        args.schemaId ?? schemaIdForEventKind(args.kind),
+      ],
       features: [],
       critical_extensions: [],
     },

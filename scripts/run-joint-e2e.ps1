@@ -59,6 +59,11 @@ param(
     [string]$CoauthOAuthIntrospectionBearer = "joint-e2e-oauth-introspection",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
+    # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
+    # from the 24h spec ceiling so webvh-rotation.spec.ts (E9.4) can exercise the
+    # expiry -> unresolvable edge without a real 24h wait. soland clamps any value
+    # back to the 24h ceiling, so this can only tighten the window.
+    [int]$WebvhDegradedNoWitnessMaxSecs = 30,
     # OAuth `client_id` soland advertises in `/_cokret/describe.auth_metadata.methods[].client_id`
     # (soland config `oidc_client_id`). MUST match a client registered at coauth; the joint
     # coauth config (coauth/config.dev.yaml) seeds the "Yougen Dev" client under this ULID.
@@ -82,10 +87,16 @@ param(
     [string]$MockPushGatewayIss,
     [switch]$StartMockAppletRegistry,
     [string]$MockAppletRegistryDid,
+    [switch]$StartMockAgentRuntime,
+    [string]$MockAgentRuntimeDid,
     [switch]$StartMockTspEndpoint,
     [string]$MockTspEndpointVid,
     [switch]$StartMockMimiFacade,
     [string]$MockMimiFacadeDid = "did:web:mimi-facade.joint-e2e.local",
+    [switch]$StartMockClaimIssuer,
+    [string]$MockClaimIssuerDid = "did:web:vc-issuer.joint-e2e.local",
+    [switch]$StartMockChallengeProvider,
+    [string]$MockChallengeProviderDid = "did:web:captcha.joint-e2e.local",
     [switch]$StartMocks,
     [string]$MockWitnessDid = "did:web:witness.joint-e2e.local",
     [string[]]$MockWitnessExtraDids = @(),
@@ -104,8 +115,11 @@ if ($StartMocks) {
     $StartMockPolicyServer = $true
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
+    $StartMockAgentRuntime = $true
     $StartMockTspEndpoint = $true
     $StartMockMimiFacade = $true
+    $StartMockClaimIssuer = $true
+    $StartMockChallengeProvider = $true
 }
 
 $MockWitnessExtraDids = @(
@@ -1137,6 +1151,12 @@ if ($StartMockAppletRegistry) {
     $mockAppletRegistryPort = Get-FreeTcpPort
     $mockAppletRegistryBaseUrl = "http://127.0.0.1:$mockAppletRegistryPort"
 }
+$mockAgentRuntimePort = $null
+$mockAgentRuntimeBaseUrl = $null
+if ($StartMockAgentRuntime) {
+    $mockAgentRuntimePort = Get-FreeTcpPort
+    $mockAgentRuntimeBaseUrl = "http://127.0.0.1:$mockAgentRuntimePort"
+}
 $mockTspEndpointPort = $null
 $mockTspEndpointBaseUrl = $null
 if ($StartMockTspEndpoint) {
@@ -1148,6 +1168,18 @@ $mockMimiFacadeBaseUrl = $null
 if ($StartMockMimiFacade) {
     $mockMimiFacadePort = Get-FreeTcpPort
     $mockMimiFacadeBaseUrl = "http://127.0.0.1:$mockMimiFacadePort"
+}
+$mockClaimIssuerPort = $null
+$mockClaimIssuerBaseUrl = $null
+if ($StartMockClaimIssuer) {
+    $mockClaimIssuerPort = Get-FreeTcpPort
+    $mockClaimIssuerBaseUrl = "http://127.0.0.1:$mockClaimIssuerPort"
+}
+$mockChallengeProviderPort = $null
+$mockChallengeProviderBaseUrl = $null
+if ($StartMockChallengeProvider) {
+    $mockChallengeProviderPort = Get-FreeTcpPort
+    $mockChallengeProviderBaseUrl = "http://127.0.0.1:$mockChallengeProviderPort"
 }
 
 $managedServices = New-Object System.Collections.Generic.List[object]
@@ -1280,6 +1312,15 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "mock-applet-registry" -Command $mockAppletRegistryCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockAppletRegistryBaseUrl/identity" -TimeoutSeconds 30
     }
+    if ($StartMockAgentRuntime) {
+        $envExpr = "`$env:MOCK_AGENT_RUNTIME_PORT='$mockAgentRuntimePort'"
+        if ($MockAgentRuntimeDid) {
+            $envExpr = "$envExpr; `$env:MOCK_AGENT_RUNTIME_DID=" + (Quote-PsLiteral $MockAgentRuntimeDid)
+        }
+        $mockAgentRuntimeCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-agent-runtime.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-agent-runtime" -Command $mockAgentRuntimeCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockAgentRuntimeBaseUrl/healthz" -TimeoutSeconds 30
+    }
     if ($StartMockTspEndpoint) {
         $envExpr = "`$env:MOCK_TSP_ENDPOINT_PORT='$mockTspEndpointPort'"
         if ($MockTspEndpointVid) {
@@ -1295,6 +1336,20 @@ try {
         ) -f (Quote-PsLiteral $MockMimiFacadeDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-mimi-facade.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-mimi-facade" -Command $mockMimiFacadeCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockMimiFacadeBaseUrl/health" -TimeoutSeconds 30
+    }
+    if ($StartMockClaimIssuer) {
+        $mockClaimIssuerCmd = (
+            "`$env:MOCK_CLAIM_ISSUER_PORT='$mockClaimIssuerPort'; `$env:MOCK_CLAIM_ISSUER_DID={0}; node {1}"
+        ) -f (Quote-PsLiteral $MockClaimIssuerDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-claim-issuer.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-claim-issuer" -Command $mockClaimIssuerCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockClaimIssuerBaseUrl/health" -TimeoutSeconds 30
+    }
+    if ($StartMockChallengeProvider) {
+        $mockChallengeProviderCmd = (
+            "`$env:MOCK_CHALLENGE_PROVIDER_PORT='$mockChallengeProviderPort'; `$env:MOCK_CHALLENGE_PROVIDER_DID={0}; node {1}"
+        ) -f (Quote-PsLiteral $MockChallengeProviderDid), (Quote-PsLiteral (Join-Path $mocksRoot "mock-challenge-provider.mjs"))
+        $managedServices.Add((Start-ManagedCommand -Name "mock-challenge-provider" -Command $mockChallengeProviderCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$mockChallengeProviderBaseUrl/health" -TimeoutSeconds 30
     }
 
     if ($StartCoauth) {
@@ -1451,6 +1506,7 @@ try {
             SOLAND_LOG_FILE = "/cotest-logs/$LogFileName"
             SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
             SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
+            SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
         }
         if ($CoauthBaseUrl) {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
@@ -1529,6 +1585,7 @@ try {
             "`$env:SOLAND_LOG_FILE={5}; " +
             "`$env:SOLAND_LIVEKIT_API_KEY='did:web:media.example#media-token'; " +
             "`$env:SOLAND_LIVEKIT_API_SECRET='joint-e2e-livekit-secret'; " +
+            "`$env:SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS='$WebvhDegradedNoWitnessMaxSecs'; " +
             "{6}" +
             "{7}" +
             "{8}" +
@@ -1766,6 +1823,7 @@ try {
     } else {
         Remove-Item Env:COTEST_MOCK_EMAIL_BASE_URL -ErrorAction SilentlyContinue
     }
+    $env:COTEST_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
     if ($mockWitnessBaseUrl) {
         $env:COTEST_MOCK_WITNESS_BASE_URL = $mockWitnessBaseUrl
         $env:COTEST_MOCK_WITNESS_DID = $MockWitnessDid
@@ -1815,6 +1873,17 @@ try {
         Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_DID -ErrorAction SilentlyContinue
     }
+    if ($mockAgentRuntimeBaseUrl) {
+        $env:COTEST_MOCK_AGENT_RUNTIME_BASE_URL = $mockAgentRuntimeBaseUrl
+        if ($MockAgentRuntimeDid) {
+            $env:COTEST_MOCK_AGENT_RUNTIME_DID = $MockAgentRuntimeDid
+        } else {
+            Remove-Item Env:COTEST_MOCK_AGENT_RUNTIME_DID -ErrorAction SilentlyContinue
+        }
+    } else {
+        Remove-Item Env:COTEST_MOCK_AGENT_RUNTIME_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_AGENT_RUNTIME_DID -ErrorAction SilentlyContinue
+    }
     if ($mockTspEndpointBaseUrl) {
         $env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL = $mockTspEndpointBaseUrl
         if ($MockTspEndpointVid) {
@@ -1832,6 +1901,20 @@ try {
     } else {
         Remove-Item Env:COTEST_MOCK_MIMI_FACADE_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_MIMI_FACADE_DID -ErrorAction SilentlyContinue
+    }
+    if ($mockClaimIssuerBaseUrl) {
+        $env:COTEST_MOCK_CLAIM_ISSUER_BASE_URL = $mockClaimIssuerBaseUrl
+        $env:COTEST_MOCK_CLAIM_ISSUER_DID = $MockClaimIssuerDid
+    } else {
+        Remove-Item Env:COTEST_MOCK_CLAIM_ISSUER_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_CLAIM_ISSUER_DID -ErrorAction SilentlyContinue
+    }
+    if ($mockChallengeProviderBaseUrl) {
+        $env:COTEST_MOCK_CHALLENGE_PROVIDER_BASE_URL = $mockChallengeProviderBaseUrl
+        $env:COTEST_MOCK_CHALLENGE_PROVIDER_DID = $MockChallengeProviderDid
+    } else {
+        Remove-Item Env:COTEST_MOCK_CHALLENGE_PROVIDER_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_MOCK_CHALLENGE_PROVIDER_DID -ErrorAction SilentlyContinue
     }
 
     $playwrightArgs = @("playwright", "test", "--config", "playwright.config.ts")

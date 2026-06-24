@@ -818,12 +818,16 @@ export async function ensureRegistered(
 export async function issueDevSession(
   request: APIRequestContext,
   user: JointUser,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: SolandKey; deviceId?: string } = {},
 ): Promise<string> {
   const url = `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`;
   const data = {
     actor: user.did,
-    device_id: user.deviceId,
+    // Same actor (DID) can hold multiple device sessions: pass `deviceId` to
+    // override the default per-user device. soland's dev-login registers each
+    // distinct device_id in the device inventory, which is what drives the
+    // actor-private read-cursor to-device fan-out across devices.
+    device_id: opts.deviceId ?? user.deviceId,
     display_name: user.displayName,
   };
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];

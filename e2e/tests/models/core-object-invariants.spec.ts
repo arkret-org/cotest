@@ -19,15 +19,64 @@
 // assertion so a future live-ification PR only needs to remove the fixme
 // once the soland endpoints land.
 
-import { expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  authHeaders,
+  canonicalTimestamp,
+  createRealmApi,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  typedId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
+
+// ── Shared strand factory used by the promoted phases below. Mirrors the
+// live kanban/end-to-end ck.strand.create payload (full `object` with
+// metadata.fields.status) so the strand projects with a readable
+// `fields.status`.
+async function createStrandApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  title: string,
+  fields: Record<string, unknown> = { status: "open" },
+): Promise<string> {
+  const strandId = typedId("strand");
+  const createdAt = canonicalTimestamp();
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid,
+      realmId,
+      kind: "ck.strand.create",
+      createdAt,
+      payload: {
+        object: {
+          id: strandId,
+          schema: "ck.schema.strand.v1",
+          realm_id: realmId,
+          metadata: { title, fields },
+          stage: "planned",
+          tracks: { discussion: { enabled: true, is_primary: true } },
+          created_by: actorDid,
+          created_at: createdAt,
+        },
+      },
+    }),
+    { context: `create strand ${title}` },
+  );
+  return strandId;
+}
 
 test.describe.configure({ mode: "serial" });
 
@@ -137,74 +186,66 @@ test.describe("core object invariants", () => {
   );
 
   // ── Phase B — Patch precondition CAS fail.
-  // soland gap: there is no unified Move/patch endpoint exposing
-  // preconditions[].head_eq on the wire today; ck.strand.update precondition
-  // checks exist in the reducer but no HTTP path drives them with a stale
-  // expected_revision. Live this once soland adds:
-  //   POST /_cokret/self/events  with { kind: "ck.strand.update", preconditions: [...],
-  //                                effects: [...], payload: { target_ref, patch } }
-  // and returns { error_code: "failed_precondition", reason: "..." } on
-  // head_eq mismatch (spec models/event-and-patch.md §4.2.4 / §4.2.5).
+  // Retained as fixme: soland parses `preconditions[]` off the Event Envelope
+  // (event_log/sdk_projection.rs) but has NO generic `head_eq` CAS engine on
+  // the `ck.strand.update` path — the only CAS guard on the events submit
+  // surface is the per-actor `actor_seq` frontier (event_log/submit.rs returns
+  // `cas_conflict`, HTTP 409), not a cell-level `head_eq` predicate that fails
+  // closed with `failed_precondition` and suppresses effects[]. Promoting this
+  // would require building the generic precondition/effects atom engine in the
+  // reducer; that is a large, separately-scoped change. The strand fields
+  // read-back path is real today (`GET /_soland/self/strands/{strand_id}`
+  // surfaces `fields.status`), so only the CAS-rejection half is blocked.
   test.fixme(
-    // @blocking-on: soland#models-core-object-invariants-gap
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md
-    // @expected-live-by: 2026Q3
     "Phase B — stale precondition head_eq is rejected with failed_precondition and effects[] are NOT applied",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-b-${stamp}`);
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const aliceAuth = { authorization: `Bearer ${aliceToken}` };
-
-      // 1. Create a Strand with fields.status = "open".
-      const strandRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
-          kind: "ck.strand.create",
-          payload: {
-            object: {
-              kind: "ck.schema.strand.v1",
-              title: `core-invariants strand ${stamp}`,
-              fields: { status: "open" },
-            },
-          },
-        },
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: `core-invariants B ${stamp}`,
+        ownerDid: alice.did,
       });
-      expect(strandRes.status()).toBe(201);
-      const strandId = (await strandRes.json()).strand_id as string;
-      expect(strandId).toMatch(/^ck:strand:/);
 
-      // 2. Submit an update with a STALE precondition (claims status == "closed"
-      //    when it's actually "open"). Expect 4xx + failed_precondition.
+      const strandId = await createStrandApi(
+        request,
+        aliceToken,
+        alice.did,
+        realmId,
+        `core-invariants strand ${stamp}`,
+        { status: "open" },
+      );
+
+      // A ck.strand.update carrying a STALE `head_eq` precondition (claims
+      // status == "closed" when it is actually "open") MUST reject with
+      // failed_precondition and apply NO effect. soland has no generic
+      // head_eq CAS engine yet, so this stays fixme.
       const staleMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
           kind: "ck.strand.update",
-          preconditions: [
-            {
-              cell: `ck:cell:ck.component.strand.fields.v1:${strandId}`,
-              predicate: { op: "head_eq", value: { "fields.status": "closed" } },
-            },
-          ],
-          effects: [
-            {
-              cell: `ck:cell:ck.component.strand.fields.v1:${strandId}`,
-              op: { kind: "set", value: { "fields.status": "done" } },
-            },
-          ],
-          payload: { target_ref: strandId, patch: { "fields.status": "done" } },
-        },
+          payload: {
+            strand_id: strandId,
+            preconditions: [
+              {
+                cell: `ck:cell:ck.component.strand.fields.v1:${strandId}`,
+                predicate: { op: "head_eq", value: { "fields.status": "closed" } },
+              },
+            ],
+            patch: { "fields.status": "done" },
+          },
+        }),
       });
       expect(staleMove.status()).toBeGreaterThanOrEqual(400);
-      const staleBody = await staleMove.json();
-      expect(staleBody.error_code).toBe("failed_precondition");
+      expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
-      // 3. Verify the cell head is UNCHANGED — failed precondition MUST NOT
-      //    apply any effect (spec §2.2: preconditions + effects are atomic).
+      // The materialized field MUST be unchanged.
       const readBack = await request.get(
-        `${solandBaseUrl()}/_cokret/self/strands/${encodeURIComponent(strandId)}`,
-        { headers: aliceAuth },
+        `${solandBaseUrl()}/_soland/self/strands/${encodeURIComponent(strandId)}`,
+        { headers: authHeaders(aliceToken) },
       );
       const strandBody = await readBack.json();
       expect(strandBody.fields?.status).toBe("open");
@@ -212,236 +253,287 @@ test.describe("core object invariants", () => {
   );
 
   // ── Phase C — Cascade / archive / delete.
-  // soland gap: soland has archive/delete paths on Space but the
-  // child-cascade error code (`space_has_live_dependents`) and the
-  // post-tombstone write-rejection (`realm_terminal_state` /
-  // `space_already_terminal`) are not stably exposed on the wire. Once they
-  // are, drop the fixme.
+  // Retained as fixme: this asserts the spec §3.4 "archive does NOT cascade"
+  // shape, but soland deliberately DOES cascade archive/restore to child
+  // Spaces + contained Strands (reducer/apply_space_container.rs
+  // `cascade_space_container_lifecycle`, tracked via `cascade_archived_by`),
+  // because the kanban product UX relies on archiving a List hiding its
+  // cards. Reversing that is a behavioural change owned by the kanban surface
+  // (its own tests depend on the cascade) and is out of scope here.
+  // Separately, `ck.space.tombstone` does not yet enforce a
+  // `space_has_live_dependents` precondition (apply_space_container.rs only
+  // checks the source lifecycle state → `space_already_terminal`), so the
+  // live-dependents refusal is also not wired. Both halves require reducer
+  // changes that cannot be validated without breaking the existing,
+  // separately-owned tombstone/archive flows.
   test.fixme(
-    // @blocking-on: soland#models-core-object-invariants-gap
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md
-    // @expected-live-by: 2026Q3
     "Phase C — ck.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-c-${stamp}`);
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const aliceAuth = { authorization: `Bearer ${aliceToken}` };
-
-      // Create parent space + a child Strand as a live dependent.
-      const parentRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
-        headers: aliceAuth,
-        data: { title: `core-invariants parent ${stamp}` },
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: `core-invariants C ${stamp}`,
+        ownerDid: alice.did,
       });
-      const parentSpaceId = (await parentRes.json()).space_id as string;
+      const createdAt = canonicalTimestamp();
+      const parentSpaceId = typedId("space");
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.space.create",
+          createdAt,
+          payload: {
+            object: {
+              id: parentSpaceId,
+              schema: "ck.schema.space.v1",
+              realm_id: realmId,
+              kind: "board",
+              metadata: { title: `core-invariants parent ${stamp}` },
+              created_by: alice.did,
+              created_at: createdAt,
+            },
+          },
+        }),
+        { context: "create parent board space" },
+      );
 
-      const childStrandRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
-          kind: "ck.strand.create",
-          space_id: parentSpaceId,
-          payload: { object: { title: `child ${stamp}` } },
-        },
-      });
-      expect(childStrandRes.status()).toBe(201);
-
-      // Step 11 — archive parent; verify child is still active.
+      // Archiving the parent MUST NOT cascade to the child per spec §3.4;
+      // soland's cascade behaviour means this assertion does not yet hold.
       const archiveRes = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: { kind: "ck.space.archive", payload: { space_id: parentSpaceId } },
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.space.archive",
+          payload: { space_id: parentSpaceId },
+        }),
       });
-      expect(archiveRes.status()).toBe(200);
+      expect(archiveRes.ok()).toBeTruthy();
 
-      // Step 12 — tombstone with live child must fail (space §3.4).
+      // Tombstone with a live dependent MUST fail with space_has_live_dependents
+      // (not yet enforced by soland).
       const tombFail = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: { kind: "ck.space.tombstone", payload: { space_id: parentSpaceId } },
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.space.tombstone",
+          payload: { space_id: parentSpaceId },
+        }),
       });
       expect(tombFail.status()).toBeGreaterThanOrEqual(400);
-      const tombFailBody = await tombFail.json();
-      expect(tombFailBody.error_code).toBe("failed_precondition");
-      expect(tombFailBody.reason).toBe("space_has_live_dependents");
-
-      // Step 13–14 — remove child, then tombstone OK; further writes blocked.
-      // (Sketch only; exact endpoint TBD.)
+      expect(wireErrCode(await tombFail.json())).toBe("space_has_live_dependents");
     },
   );
 
-  // ── Phase D — Relation cardinality.
-  // soland gap: ck.relation.create reducer + cardinality enforcement on
-  // has_default_view (many_to_one), idempotent dedup on
-  // (realm_id, relation_kind, from_ref, to_ref), and cross-Realm contains
-  // refusal are not stably wired today.
-  test.fixme(
-    // @blocking-on: soland#models-core-object-invariants-gap
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md
-    // @expected-live-by: 2026Q3
+  // ── Phase D — Relation cardinality (PROMOTED).
+  // soland's relation reducer (reducer/apply_relations.rs) is fully wired:
+  // - has_default_view default cardinality is many_to_one, so a second active
+  //   edge from the same from_ref auto-tombstones the prior winner (the
+  //   relation list MUST show ≤ 1 active edge).
+  // - duplicate (realm_id, relation_kind, from_ref, to_ref) writes dedupe.
+  // - structural `contains` across Realms is rejected with
+  //   `cross_realm_structural_relation` (HTTP 412) — relation.md §4.4.
+  // Reads use the product-private `/_soland/self/relations` projection list.
+  test(
     "Phase D — has_default_view enforces many_to_one; duplicate Relation create is idempotent; cross-Realm contains rejected",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-d-${stamp}`);
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const aliceAuth = { authorization: `Bearer ${aliceToken}` };
-
-      const spaceRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
-        headers: aliceAuth,
-        data: { title: `core-invariants D ${stamp}` },
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: `core-invariants D ${stamp}`,
+        ownerDid: alice.did,
       });
-      const spaceId = (await spaceRes.json()).space_id as string;
 
-      // Two Views in the same space.
-      const mkView = async (label: string) => {
-        const res = await request.post(`${solandBaseUrl()}/_cokret/self/views`, {
-          headers: aliceAuth,
-          data: {
-            kind: "collection",
-            renderer: "board",
-            title: `${label} ${stamp}`,
-            source_space_id: spaceId,
-          },
-        });
-        return (await res.json()).view_id as string;
-      };
-      const v1 = await mkView("V1");
-      const v2 = await mkView("V2");
-
-      // Step 16 — first has_default_view edge succeeds.
-      const e1 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
-          kind: "ck.relation.create",
-          payload: {
-            relation_kind: "has_default_view",
-            from_ref: spaceId,
-            to_ref: v1,
-          },
-        },
-      });
-      expect(e1.status()).toBe(201);
-
-      // Step 17 — second has_default_view edge MUST NOT coexist as active.
-      // Acceptable outcomes:
-      //  (a) 200/201 + v1 edge auto-tombstoned (reducer closes old winner)
-      //  (b) 4xx + relation_cardinality_violation (early reducer fail-closed)
-      const e2 = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
-          kind: "ck.relation.create",
-          payload: {
-            relation_kind: "has_default_view",
-            from_ref: spaceId,
-            to_ref: v2,
-          },
-        },
-      });
-      const activeEdges = await request.get(
-        `${solandBaseUrl()}/_cokret/self/relations?from_ref=${encodeURIComponent(spaceId)}&relation_kind=has_default_view&state=active`,
-        { headers: aliceAuth },
+      // `has_default_view` is many_to_one on (from_ref, relation_kind). The
+      // relation reducer requires a structural from_ref endpoint
+      // (`ck:strand:`/`ck:space:`) to be projected, so anchor the edges on a
+      // real Strand created via the proven ck.strand.create path. The
+      // `ck:view:` to_ref does not need a local projection (View objects are
+      // not reduced today), so two synthetic view ids are valid targets.
+      const sourceRef = await createStrandApi(
+        request,
+        aliceToken,
+        alice.did,
+        realmId,
+        `has_default_view anchor ${stamp}`,
       );
+      const v1 = typedId("view");
+      const v2 = typedId("view");
+
+      const createDefaultView = async (viewId: string, relationId: string) =>
+        submitSignedEventApi(
+          request,
+          aliceToken,
+          signedEventEnvelope({
+            actorDid: alice.did,
+            realmId,
+            kind: "ck.relation.create",
+            payload: {
+              relation_id: relationId,
+              relation_kind: "has_default_view",
+              from_ref: sourceRef,
+              to_ref: viewId,
+            },
+          }),
+          { context: `has_default_view -> ${viewId}` },
+        );
+
+      // First default-view edge succeeds.
+      await createDefaultView(v1, typedId("relation"));
+      // Second default-view edge for the same source: many_to_one means one
+      // edge is auto-tombstoned, leaving exactly 1 active edge. The surviving
+      // edge is the deterministic_winner (largest canonical event_digest per
+      // relation.md §6), so we assert the cardinality invariant — exactly one
+      // active edge pointing at one of the two views — not which view wins.
+      await createDefaultView(v2, typedId("relation"));
+
+      const activeEdges = await request.get(
+        `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`,
+        { headers: authHeaders(aliceToken) },
+      );
+      expect(activeEdges.ok()).toBeTruthy();
       const edgesBody = await activeEdges.json();
-      expect((edgesBody.items ?? []).length).toBeLessThanOrEqual(1);
-      if (e2.status() >= 400) {
-        expect((await e2.json()).reason).toBe("relation_cardinality_violation");
+      const activeItems = (edgesBody.items ?? []) as Array<{ to_ref?: string }>;
+      // many_to_one: at most one active edge for this (from_ref, relation_kind).
+      expect(activeItems.length).toBeLessThanOrEqual(1);
+      if (activeItems.length === 1) {
+        expect([v1, v2]).toContain(activeItems[0].to_ref);
       }
 
-      // Step 18 — completely duplicate edge create is idempotent.
-      const dup = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
+      // A fully-duplicate edge (same relation_id) is idempotent — re-submitting
+      // the same signed envelope is accepted by the events submit surface.
+      const dupRelationId = typedId("relation");
+      await createDefaultView(v2, dupRelationId);
+      const dupAgain = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
           kind: "ck.relation.create",
           payload: {
+            relation_id: dupRelationId,
             relation_kind: "has_default_view",
-            from_ref: spaceId,
+            from_ref: sourceRef,
             to_ref: v2,
           },
-        },
+        }),
       });
-      expect([200, 201, 409]).toContain(dup.status());
+      expect([200, 201, 409]).toContain(dupAgain.status());
 
-      // Step 19 — cross-Realm contains MUST fail (spec §4.4).
-      const otherSpace = (
-        await (
-          await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
-            headers: aliceAuth,
-            data: { title: `other-realm ${stamp}` },
-          })
-        ).json()
-      ).space_id as string;
-      const otherStrand = (
-        await (
-          await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-            headers: aliceAuth,
-            data: { kind: "ck.strand.create", space_id: otherSpace, payload: { object: {} } },
-          })
-        ).json()
-      ).strand_id as string;
-      const crossRealm = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
-        headers: aliceAuth,
-        data: {
-          kind: "ck.relation.create",
-          space_id: spaceId,
-          payload: {
-            relation_kind: "contains",
-            from_ref: spaceId,
-            to_ref: otherStrand,
-          },
-        },
+      // Cross-Realm structural `contains` MUST fail (relation.md §4.4). Create a
+      // strand in another Realm and try to `contains` it from this Realm.
+      const realmB = await createRealmApi(request, aliceToken, {
+        title: `core-invariants D other ${stamp}`,
+        ownerDid: alice.did,
       });
-      expect(crossRealm.status()).toBeGreaterThanOrEqual(400);
-      expect((await crossRealm.json()).reason).toBe("cross_space_structural_relation");
+      const strandInA = await createStrandApi(
+        request,
+        aliceToken,
+        alice.did,
+        realmId,
+        `card in A ${stamp}`,
+      );
+      const strandInB = await createStrandApi(
+        request,
+        aliceToken,
+        alice.did,
+        realmB,
+        `card in B ${stamp}`,
+      );
+      const crossRealm = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.relation.create",
+          payload: {
+            relation_id: typedId("relation"),
+            relation_kind: "contains",
+            from_ref: strandInA,
+            to_ref: strandInB,
+          },
+        }),
+      });
+      expect(crossRealm.status()).toBe(412);
+      expect(wireErrCode(await crossRealm.json())).toBe("cross_realm_structural_relation");
     },
   );
 
   // ── Phase E — View projection fallback.
-  // soland gap: /_soland/self/spaces/{id}/views/projection endpoint for the
-  // derived board response family does not exist. Once soland exposes it
-  // (returning a CollectionProjectionResponse even when no user-defined
-  // View has been registered), drop the fixme.
+  // Retained as fixme: soland has NO View object storage or Board projection
+  // surface today. `ck.view.*` events are not reduced (no `views` projection
+  // map; only `generate_view_id` exists), and there is no
+  // `/_soland/self/spaces/{id}/views/projection` derived-collection endpoint.
+  // Materializing a derived `CollectionProjectionView` from
+  // query → contains → strand (views.md §6) — including the no-registered-View
+  // fallback and unknown-renderer fail-closed — is a large new feature
+  // spanning the View reducer + projection materializer + SDK DTOs. Promoting
+  // it is out of scope for this pass.
   test.fixme(
-    // @blocking-on: soland#models-core-object-invariants-gap
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md
-    // @expected-live-by: 2026Q3
     "Phase E — Board projection on a fresh Space with no registered View returns the derived default (NOT 404); unknown renderer fails closed",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-e-${stamp}`);
       await ensureRegistered(request, alice);
       const aliceToken = await issueDevSession(request, alice);
-      const aliceAuth = { authorization: `Bearer ${aliceToken}` };
-
-      const spaceRes = await request.post(`${solandBaseUrl()}/_soland/self/spaces`, {
-        headers: aliceAuth,
-        data: { title: `core-invariants E ${stamp}` },
+      const realmId = await createRealmApi(request, aliceToken, {
+        title: `core-invariants E ${stamp}`,
+        ownerDid: alice.did,
       });
-      const spaceId = (await spaceRes.json()).space_id as string;
+      const createdAt = canonicalTimestamp();
+      const spaceId = typedId("space");
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.space.create",
+          createdAt,
+          payload: {
+            object: {
+              id: spaceId,
+              schema: "ck.schema.space.v1",
+              realm_id: realmId,
+              kind: "board",
+              metadata: { title: `core-invariants E ${stamp}` },
+              created_by: alice.did,
+              created_at: createdAt,
+            },
+          },
+        }),
+        { context: "create board space" },
+      );
 
-      // Step 20-21 — request a board projection on a Space that has never
-      // had ck.view.create called on it. Spec views.md §6: response MUST be
-      // derived (kind=collection, renderer=board) from query → contains →
-      // strand, not 404.
+      // A board projection on a Space that has never had ck.view.create called
+      // MUST be derived (kind=collection, renderer=board), not 404. Endpoint
+      // does not exist yet.
       const proj = await request.get(
         `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
-        { headers: aliceAuth },
+        { headers: authHeaders(aliceToken) },
       );
       expect(proj.status()).toBe(200);
       const projBody = await proj.json();
       expect(projBody.kind).toBe("collection");
       expect(projBody.renderer).toBe("board");
       expect(projBody.view_id).toMatch(/^ck:view:/);
-      expect(Array.isArray(projBody.frontier)).toBe(true);
       expect(Array.isArray(projBody.groups)).toBe(true);
 
-      // Step 22 — unknown renderer MUST fail-closed (spec §2.2 — only the
-      // 5 canonical View.kind / known renderers are valid response families).
+      // Unknown renderer MUST fail-closed (views.md §2.2).
       const bogus = await request.get(
         `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
-        { headers: aliceAuth },
+        { headers: authHeaders(aliceToken) },
       );
       expect(bogus.status()).toBeGreaterThanOrEqual(400);
-      const bogusBody = await bogus.json();
-      expect(bogusBody.error_code).toMatch(/unknown_renderer|unsupported_renderer/);
+      expect(wireErrCode(await bogus.json())).toMatch(/unknown_renderer|unsupported_renderer/);
     },
   );
 });

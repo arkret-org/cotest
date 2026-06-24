@@ -140,17 +140,136 @@ test.describe("workflow: async daily standup", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#workflows-daily-standup-gap
-  // @user-promise: e2e/scenarios/workflows/daily-standup.md
-  // @expected-live-by: 2026Q3
-  "E-standup.offline pat is offline mid-post; reconnect flushes the outbox", async () => {
-    // yougen gap: outbox UX + offline persistence (sync/offline-conflict).
+  test("E-standup.offline pat is offline mid-post; reconnect flushes the outbox", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(300_000);
+    const stamp = Date.now();
+    const patFlow = await openDpopUserPage(browser, request, "wf-standup-offline-pat");
+    test.skip(
+      !patFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!patFlow) {
+      return;
+    }
+    const patPage = patFlow.page;
+    const context = patPage.page.context();
+    const offlinePost = `[Standup] Today: offline post that flushes on reconnect. ${stamp}`;
+
+    try {
+      const realmId = await patPage.createRealm({
+        title: `Offline standup ${stamp}`,
+        summary: "Outbox + offline persistence",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+      });
+      await patPage.gotoTimelineRealm(realmId);
+
+      // Drop connectivity mid-post: navigator.onLine flips false and the
+      // composer parks the send into the offline outbox instead of failing.
+      await context.setOffline(true);
+      await expect
+        .poll(
+          async () =>
+            patPage.page
+              .getByTestId("chat-input")
+              .isVisible()
+              .catch(() => false),
+          { timeout: 30_000 },
+        )
+        .toBeTruthy();
+      await patPage.page.getByTestId("chat-input").fill(offlinePost);
+      await patPage.page.getByTestId("send-chat-button").click();
+
+      // The optimistic row stays visible but is marked queued-offline, and
+      // the outbox banner surfaces the parked count.
+      const queuedRow = patPage
+        .timelineEvent(offlinePost)
+        .getByTestId("message-send-status");
+      await expect(queuedRow).toHaveAttribute("data-send-state", "queued_offline", {
+        timeout: 30_000,
+      });
+      const banner = patPage.page.getByTestId("chat-outbox-banner");
+      await expect(banner).toBeVisible({ timeout: 30_000 });
+      await expect(banner).toHaveAttribute("data-online", "false");
+      await expect(
+        patPage.page.getByTestId("chat-outbox-count"),
+      ).toContainText("1", { timeout: 30_000 });
+      await stepShot(patPage.page, testInfo, "offline-A-queued");
+
+      // Outbox survives a reload while still offline (localStorage persist).
+      await patPage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(patPage.page.getByTestId("message-list")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(
+        patPage.page.getByTestId("chat-outbox-banner"),
+      ).toBeVisible({ timeout: 30_000 });
+
+      // Reconnect: the drain effect flushes the queue; the message settles
+      // (send-status clears) and the banner disappears.
+      await context.setOffline(false);
+      await patPage.gotoTimelineRealm(realmId);
+      await patPage.waitForTimelineEventSettled(offlinePost);
+      await expect(
+        patPage.page.getByTestId("chat-outbox-banner"),
+      ).toHaveCount(0, { timeout: 60_000 });
+      await stepShot(patPage.page, testInfo, "offline-B-flushed");
+    } finally {
+      await context.setOffline(false).catch(() => {});
+      await patPage.close();
+    }
   });
 
-  test.fixme(// @blocking-on: soland#workflows-daily-standup-gap
-  // @user-promise: e2e/scenarios/workflows/daily-standup.md
-  // @expected-live-by: 2026Q3
-  "E-standup.redact lin redacts their own standup after spotting a wrong template", async () => {
-    // Same redact pattern as triad — pulled out here for the standup story.
+  test("E-standup.redact lin redacts their own standup after spotting a wrong template", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(300_000);
+    const stamp = Date.now();
+    const linFlow = await openDpopUserPage(browser, request, "wf-standup-redact-lin");
+    test.skip(
+      !linFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!linFlow) {
+      return;
+    }
+    const linPage = linFlow.page;
+    const wrongTemplate = `[Standup] WRONG TEMPLATE leaked draft ${stamp}`;
+
+    try {
+      const realmId = await linPage.createRealm({
+        title: `Self-redact standup ${stamp}`,
+        summary: "Lin redacts their own standup",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+      });
+      await linPage.sendTimelineMessage(realmId, wrongTemplate);
+
+      // Lin spots the wrong template and redacts their own message. The
+      // sender-side tombstone replaces the body in place. (Cross-user
+      // receiver tombstone fold is covered by messaging/triad redaction.)
+      const message = linPage.timelineEvent(wrongTemplate);
+      await expect(message).toBeVisible({ timeout: 30_000 });
+      await message.hover();
+      await message.getByTestId("chat-redact-button").click();
+      await linPage.page.getByTestId("chat-confirm-redact-button").click();
+
+      await expect(
+        linPage.page.getByTestId("chat-redacted-tombstone"),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(linPage.page.getByTestId("message-list")).not.toContainText(
+        wrongTemplate,
+        { timeout: 30_000 },
+      );
+      await stepShot(linPage.page, testInfo, "redact-tombstone");
+    } finally {
+      await linPage.close();
+    }
   });
 });

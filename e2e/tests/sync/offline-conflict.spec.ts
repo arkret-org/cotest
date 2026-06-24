@@ -10,11 +10,20 @@ import {
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import {
+  acceptInviteApi,
   authHeaders,
+  createRealmApi,
+  listInvitesApi,
+  makeFederationEvent,
+  peerEventFrontierApi,
+  pushFederationEvents,
+  queryPeerEventsApi,
+  queryRealmEventsApi,
   signedEventEnvelope,
   submitSignedEventApi,
+  typedId,
 } from "../../helpers/soland-api";
-import { solandBaseUrl } from "../../helpers/env";
+import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
@@ -173,16 +182,219 @@ test.describe("offline sync + conflict repair", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#sync-offline-conflict-gap
-    // @user-promise: e2e/scenarios/sync/offline-conflict.md
-    // @expected-live-by: 2026Q3
+  test(
     "long offline → on reconnect, peer events query backfills missing events; bob's timeline catches up to head",
-    async () => {
-      // spec: sync/federation.md §4.2 (single-server uses same pull endpoint)
+    async ({ request }) => {
+      // spec: sync/federation.md §4.2 (pull / backfill uses the same peer events
+      // query endpoint). Mirrors the federation "peer query recovery" active
+      // test: while bob is offline alice writes, and on reconnect the missing
+      // event is pulled via GET /_cokret/peer/events and bob's timeline catches
+      // up to head.
+      test.skip(
+        !hasDualSoland(),
+        "requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
+      );
+
+      const stamp = Date.now();
+      const alice = uniqueUser(`g2t3-backfill-alice-${stamp}`);
+      const bob = uniqueUser(`g2t3-backfill-bob-${stamp}`);
+      await ensureRegistered(request, alice, { server: "alpha" });
+      await ensureRegistered(request, bob, { server: "beta" });
+      const aliceToken = await issueDevSession(request, alice, {
+        server: "alpha",
+      });
+      const bobToken = await issueDevSession(request, bob, { server: "beta" });
+
+      const realmId = await createRealmApi(
+        request,
+        aliceToken,
+        {
+          title: `G2.T3 offline backfill ${stamp}`,
+          discoverability: "listed",
+          history_visibility: "shared",
+          invitees: [bob.did],
+          ownerDid: alice.did,
+          plaintext_visible_services: [
+            solandServiceDid("alpha"),
+            solandServiceDid("beta"),
+          ],
+          federation_policy: "open",
+        },
+        { server: "alpha" },
+      );
+      const betaInvite = await waitForInvite(
+        request,
+        bobToken,
+        bob.did,
+        realmId,
+        "beta",
+      );
+      await acceptInviteApi(
+        request,
+        bobToken,
+        bob.did,
+        betaInvite.realm_id,
+        betaInvite.id,
+        { server: "beta" },
+      );
+      await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+
+      // Offline window: alice writes an event that bob never pulled.
+      const missingBody = `offline backfill ${stamp}`;
+      const missingEvent = makeFederationEvent({
+        realmId,
+        kind: "ck.message.create",
+        actorDid: alice.did,
+        payload: {
+          strand_id: typedId("strand"),
+          track_name: "discussion",
+          content: {
+            kind: "ck.content.text",
+            body: missingBody,
+          },
+        },
+      });
+      await pushFederationEvents(request, [missingEvent], {
+        origin: solandServiceDid("alpha"),
+        destination: solandServiceDid("alpha"),
+        server: "alpha",
+        realmId,
+        idempotencyKey: `${solandServiceDid("alpha")}#cotest-offline-source`,
+      });
+      await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
+
+      // Bob's server has not seen the event while offline.
+      const betaBeforeEvents = await queryRealmEventsApi(
+        request,
+        bobToken,
+        realmId,
+        { server: "beta", limit: 100 },
+      );
+      expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
+      const alphaFrontier = await peerEventFrontierApi(request, realmId, {
+        server: "alpha",
+      });
+      const betaFrontierBefore = await peerEventFrontierApi(request, realmId, {
+        server: "beta",
+      });
+      expect(betaFrontierBefore.frontier_root).not.toBe(
+        alphaFrontier.frontier_root,
+      );
+
+      // On reconnect: pull the missing event via the peer events query endpoint
+      // and ingest it so bob's timeline catches up.
+      const backfill = await queryPeerEventsApi(request, {
+        server: "alpha",
+        sourceDid: solandServiceDid("beta"),
+        realmId,
+        limit: 100,
+      });
+      const backfilledEvents = (backfill.events ?? [])
+        .map((entry: { event?: Record<string, unknown> }) => entry.event)
+        .filter(Boolean) as Array<Record<string, unknown>>;
+      expect(backfilledEvents.map((event) => event.event_id)).toContain(
+        missingEvent.event_id,
+      );
+      const ingest = await pushFederationEvents(request, backfilledEvents, {
+        origin: solandServiceDid("alpha"),
+        destination: solandServiceDid("beta"),
+        server: "beta",
+        realmId,
+        idempotencyKey: `${solandServiceDid("beta")}#cotest-offline-backfill`,
+      });
+      expect(ingest.rejected ?? []).toEqual([]);
+      expect(ingest.accepted).toContain(String(missingEvent.event_id));
+      await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
+
+      // Timeline caught up to head: bob's frontier now covers alpha's heads.
+      const betaFrontierAfter = await peerEventFrontierApi(request, realmId, {
+        server: "beta",
+      });
+      for (const eventId of alphaFrontier.heads) {
+        expect(betaFrontierAfter.heads).toContain(eventId);
+      }
     },
   );
 });
+
+async function waitForInvite(
+  request: APIRequestContext,
+  token: string,
+  inviteeDid: string,
+  realmId: string,
+  server: "alpha" | "beta",
+) {
+  let found:
+    | {
+        id: string;
+        realm_id: string;
+        invitee?: string;
+        state?: string;
+        status?: string;
+      }
+    | undefined;
+  await expect
+    .poll(
+      async () => {
+        const invites = await listInvitesApi(request, token, { server });
+        found = invites.find(
+          (invite) =>
+            invite.invitee === inviteeDid && invite.realm_id === realmId,
+        );
+        return Boolean(found);
+      },
+      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+    )
+    .toBeTruthy();
+  return found!;
+}
+
+async function waitForMember(
+  request: APIRequestContext,
+  token: string,
+  memberDid: string,
+  realmId: string,
+  server: "alpha" | "beta",
+) {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${solandBaseUrl(server)}/_cokret/self/realms/${encodeURIComponent(realmId)}`,
+          { headers: authHeaders(token) },
+        );
+        if (!response.ok()) {
+          return false;
+        }
+        const body = await response.json();
+        return Array.isArray(body.members) && body.members.includes(memberDid);
+      },
+      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+    )
+    .toBeTruthy();
+}
+
+async function waitForEventBody(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  bodyText: string,
+  server: "alpha" | "beta",
+) {
+  await expect
+    .poll(
+      async () => {
+        const body = await queryRealmEventsApi(request, token, realmId, {
+          server,
+          limit: 100,
+        });
+        const events = Array.isArray(body.events) ? body.events : [];
+        return events.some((event) => JSON.stringify(event).includes(bodyText));
+      },
+      { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
+    )
+    .toBeTruthy();
+}
 
 type BottomConflictFixture = {
   alice: JointUser;

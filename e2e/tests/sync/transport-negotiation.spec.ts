@@ -7,20 +7,25 @@
 //     HTTP Message Signature for service-to-service, error envelope)
 //   - sync/federation.md §3.2 (RFC 9421 request signature) + §4.1 (push)
 //
-// soland gap: WebSocket transport + TSP binding negotiation 未实现;
-// HTTP RFC 9421 入站 OK 但出站签名生成不完整。
-// Soland implementation status (2026-05 audit, mirrored from
-// tests/federation/cross-server.spec.ts):
-//   ✓ POST /_cokret/peer/events handler routed
-//   ✓ Basic envelope validation + idempotency on signed Event IDs
-//   ~ RFC 9421 inbound: partial — Signature-Input parsing works for
-//     simple cases but Content-Digest / nonce window / key-rotation hint
-//     not wired through end-to-end
-//   ✗ Outbound RFC 9421 signature generation — stubbed (only logs)
-//   ✗ ck.transport.negotiate operation — slot reserved, no runtime
-//   ✗ WebSocket frame binding (ck.profile.binding.websocket.v1) — not impl
-//   ✗ TSP binding (ck.profile.binding.tsp.v1) — not impl
-//   ✗ Binding fallback chain state machine — not impl
+// soland status (2026-06 re-audit against cokret-spec v1):
+//   ✓ POST /_cokret/peer/events handler routed (canonical single rail)
+//   ✓ Envelope validation + idempotency on signed Event IDs
+//   ✓ RFC 9421 INBOUND: full — Content-Digest, Request-Canonical-Digest,
+//     created/expires freshness window (±30s skew, ≤300s window,
+//     expires-in-future), @authority/endpoint-digest binding, and the
+//     §3.2/§8.3 minimal-disclosure failure envelope are all wired
+//     (signature.rs). A key-rotation hint IS computed but is audit-log only
+//     (tracing detail), because surfacing it in the response body would
+//     violate the minimal-disclosure MUST — see E8.1 below.
+//   ✓ RFC 9421 OUTBOUND: real — outbox.rs signs (rfc9421_sign) and POSTs for
+//     real when `federation_outbound_enabled=true`. GAP: the enqueued body
+//     (outbound.rs::enqueue_outbound_for) is a {resource_kind,resource_id}
+//     reference placeholder, not the sealed Event Envelope events[] batch the
+//     peer endpoint requires — so cross-server delivery does not yet complete.
+//   ✗ ck.transport.negotiate operation — NOT in spec registry (reserved name)
+//   ✗ WebSocket frame binding — extension profile, not v1 core (tb §6)
+//   ✗ TSP binding — extension profile, not v1 core
+//   ✗ Binding fallback chain state machine — presupposes the above bindings
 
 import { expect, test } from "@playwright/test";
 import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
@@ -87,9 +92,24 @@ test.describe("transport negotiation", () => {
   });
 
   test.fixme(
-    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @blocking-on: spec — WebSocket/TSP are binding *extension profiles*, not
+    //   v1 core. transport-bindings.md §6 states non-HTTP bindings ("不是 v1 core
+    //   互通 surface"; "core 实现不要求提供") and §1/§2 lock v1 core interop to
+    //   HTTP/JSON. There is no registered `websocket_frame` binding kind,
+    //   `ck.profile.binding.websocket.v1` profile, or `ck.transport.negotiate`
+    //   operation in artifacts/registry — they are reserved extension slots only.
+    //   Phase A's cross-server delivery is *also* blocked, but on an
+    //   implementation gap, not the binding stack: soland's outbound dispatcher
+    //   (outbox.rs) already signs+POSTs RFC 9421 for real when
+    //   `federation_outbound_enabled=true`, but the enqueued body
+    //   (outbound.rs::enqueue_outbound_for) is a `{resource_kind,resource_id}`
+    //   *reference* placeholder, not the sealed Event Envelope `events[]` batch
+    //   that POST /_cokret/peer/events requires — so β would reject it. Wiring a
+    //   real envelope batch touches event-log/reducer/realm-policy resolution
+    //   (which peer gets which event), outside this binding-negotiation surface.
     // @user-promise: e2e/scenarios/sync/transport-negotiation.md
-    // @expected-live-by: 2026Q3
+    // @expected-live-by: unscheduled (requires a published binding extension
+    //   profile + outbound envelope-batch fanout; neither is on the v1 core path)
     "soland_a and soland_b negotiate HTTP → WebSocket → TSP with proper RFC 9421 signing throughout; fallback to HTTP on WebSocket failure",
     async ({ browser, request }, testInfo) => {
       // soland gap: WebSocket transport + TSP binding negotiation 未实现;
@@ -184,31 +204,78 @@ test.describe("transport negotiation", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#sync-transport-negotiation-gap
-    // @user-promise: e2e/scenarios/sync/transport-negotiation.md
-    // @expected-live-by: 2026Q3
+    // @blocking-on: spec — the acceptance criteria below CONTRADICT the
+    //   normative minimal-disclosure requirement and cannot be implemented as
+    //   written. federation.md §3.2 (lines 110-114) is a MUST: signature
+    //   failure / destination mismatch / digest mismatch / freshness-window
+    //   expiry MUST all return ONE indistinguishable error envelope — same HTTP
+    //   status, same `reason_code`, no visible field carrying "binding ... 的
+    //   任何可区分信息", and the real reason is audit-log only ("MUST NOT 出现
+    //   在对外响应的 status、reason_code、header、body 或 timing 中"). §8.3
+    //   (line 853) restates it: the error MUST NOT leak verifiable-vs-
+    //   unverifiable source differences. A structured `key_rotation_hint`
+    //   {current_keyid, valid_from} in the 401 body is exactly the
+    //   distinguishing signal the spec forbids — it would turn the federation
+    //   ingress into an existence/key-state oracle. soland implements this
+    //   correctly today: signature.rs folds every failure into
+    //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket, and the
+    //   key-rotation hint lives only in the tracing::warn! audit detail. There
+    //   is also no `key_rotation_hint` / `signature_expired` / `unknown_keyid`
+    //   field defined anywhere in spec v1 (grep-confirmed). To promote, this
+    //   sub-test would have to be REWRITTEN to assert the minimal-disclosure
+    //   contract (expired/rotated signature → uniform auth-failure envelope; a
+    //   fresh, correctly-keyed re-sign → 200), NOT to assert a structured hint.
+    //   The expiry/clock-skew enforcement it depends on already exists
+    //   (signature.rs::validate_signature_params: created ±30s, window ≤300s,
+    //   expires-in-future).
+    // @user-promise: e2e/scenarios/sync/transport-negotiation.md (E8.1 — the
+    //   scenario doc's `key_rotation_hint` expectation also needs correcting)
+    // @expected-live-by: blocked-on-test-rewrite (criteria conflict with the
+    //   §3.2 minimal-disclosure MUST; not a soland gap)
     "E8.1 signature expiry + key rotation: soland_a signs with an expired key; soland_b returns 401 with key_rotation_hint; α re-signs with current key and succeeds",
     async ({ request }) => {
       // spec: service-http-binding.md §3 (auth materials), federation.md §3.2
-      // soland gap: signature expiry / key rotation hint path not wired.
+      //       + §8.3 minimal-disclosure MUST.
       //
-      // Acceptance criteria:
+      // Acceptance criteria (AS WRITTEN — superseded; see @blocking-on):
       //   1. Build a federation push request with a RFC 9421 Signature whose
       //      `created` timestamp is older than the accepted window (or whose
       //      keyid points at a retired key in α's DID document)
       //   2. POST to β → expect 401 with body
       //      { error: { code: "signature_expired" | "unknown_keyid",
       //                 key_rotation_hint: { current_keyid, valid_from } } }
-      //   3. Re-sign with the keyid named in the hint; second POST returns 200
+      //      ^^^ FORBIDDEN by §3.2: a distinguishable code/hint in the response
+      //          body is a minimal-disclosure violation. Correct expectation:
+      //          a single uniform auth-failure envelope (one status + one
+      //          reason_code), with no rotation hint exposed.
+      //   3. Re-sign with the CURRENT keyid; second POST returns 200
       //   4. β only persists the event from the second (validly signed) attempt
       void request;
     },
   );
 
   test.fixme(
-    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @blocking-on: spec single-track convergence — the canonical interop rail
+    //   POST /_cokret/peer/events (verify_inbound_peer_http_signature) does NOT
+    //   carry a relay-inner hop: per federation.md §4.0 the origin IS the
+    //   `source-service-did` header and relay delegation is expressed via
+    //   service_binding_ref / service delegation, not a nested HTTP signature.
+    //   soland's two-layer relay verification (signature.rs::
+    //   verify_relay_inner_signature) lives ONLY on the private
+    //   /_soland/peer/federation/* rail, which §4.0 (line 152) says MUST NOT be
+    //   a cross-deployment interop entry point and which
+    //   ensure_private_inbound_write_rail_local gates to development_mode only.
+    //   That rail also takes a different body shape (FederationPushOperations
+    //   with origin/destination + operations[], not the events[] envelope batch
+    //   the cotest helpers build). To promote on the canonical rail, the spec
+    //   would first need to define a relay/delegation hop for /_cokret/peer/*;
+    //   to promote against the private rail would mean testing a deployment-
+    //   local debug surface the spec forbids as an interop target, and would
+    //   require new helpers (relay-inner-signature / -input header + operations
+    //   body). Neither is a low-risk transport-negotiation change.
     // @user-promise: e2e/scenarios/sync/transport-negotiation.md
-    // @expected-live-by: 2026Q3
+    // @expected-live-by: unscheduled (needs a spec-defined relay/delegation hop
+    //   on the canonical /_cokret/peer/* rail)
     "E8.2 multi-hop relay: α → relay → β; β verifies BOTH the relay's outer RFC 9421 signature AND the inner EventEnvelope actor signature; either failure rejects the batch",
     async ({ request }) => {
       // spec: federation.md §3.2 + capabilities.md (service delegation)
@@ -233,9 +300,19 @@ test.describe("transport negotiation", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#sync-transport-negotiation-gap
+    // @blocking-on: spec — depends on `ck.transport.negotiate` + a
+    //   `websocket_frame` binding, neither of which exists in v1. There is no
+    //   `ck.transport.negotiate` operation in artifacts/registry and no
+    //   registered WebSocket binding kind (transport-bindings.md §6: non-HTTP
+    //   bindings are extension profiles, "core 实现不要求提供"). The whole
+    //   negotiation → timeout → fallback state machine is client-side logic
+    //   over a binding stack soland does not (and per v1 core need not) ship.
+    //   The HTTP/JSON baseline this would "fall back to" is the same
+    //   outbound-fanout path blocked under the main test above. Not a discrete
+    //   soland bug — it presupposes the extension binding stack.
     // @user-promise: e2e/scenarios/sync/transport-negotiation.md
-    // @expected-live-by: 2026Q3
+    // @expected-live-by: unscheduled (requires a published WebSocket binding
+    //   extension profile + ck.transport.negotiate; not on the v1 core path)
     "E8.3 binding negotiation timeout: α requests WebSocket upgrade; β does not respond within 30s; α cancels and falls back to HTTP/JSON",
     async ({ request }) => {
       // spec: transport-bindings.md §3 (binding requirements — background /

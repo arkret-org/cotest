@@ -211,13 +211,18 @@ test.describe("single-server triad collaboration", () => {
 
   // The history_visibility=joined server gap is now covered live by the
   // API late-join case above plus spaces/history-joined-enforcement.spec.ts.
-  // Keep this full UI workflow fixme until the remaining timeline reply/edit,
-  // invite, propagation, and redaction UI sequence is reactivated as one
-  // browser-driven scenario.
-  test.fixme(
-    // @blocking-on: yougen#triad-ui-workflow-reactivation
-    // @user-promise: e2e/scenarios/messaging/triad-collaboration.md
-    // @expected-live-by: 2026Q3
+  // Phases A-D (space lifecycle, invite, mutual messaging, reply, edit) are
+  // fully wired in yougen (chat-* reply/edit testids + the realm-members invite
+  // modal). Phase E's *receive-side* redaction tombstone is now wired end-to-end:
+  // soland folds a redacted ck.message.create into a per-message tombstone on the
+  // sync timeline (projection/timeline.rs + sync/snapshot.rs call
+  // apply_message_redaction_timeline_projection, which uses the SDK
+  // redaction_tombstone_message_value shape: event_id preserved, body stripped,
+  // redacted/state/redacted_at/redaction_ref markers added), and yougen's receive
+  // path folds the tombstone onto the existing message (chat_message_from_event
+  // sets redacted=true → chat-redacted-tombstone) so alice renders the tombstone
+  // on reload, not just bob's optimistic local redact.
+  test(
     "alice + bob + carol drive space lifecycle, mutual messaging, late-join history visibility, and redact tombstone",
     async ({
     browser,

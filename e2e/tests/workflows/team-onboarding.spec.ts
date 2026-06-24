@@ -95,23 +95,135 @@ test.describe("workflow: team onboarding", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#workflows-team-onboarding-gap
-    // @user-promise: e2e/scenarios/workflows/team-onboarding.md
-    // @expected-live-by: 2026Q3
-    "E-onboarding.1 mei pins the welcome message so yuki keeps seeing it at the top",
-    async () => {
-      // yougen gap: pinned-message UI; spec models/strand-and-message.md §8.6.
-    },
-  );
+  test("E-onboarding.1 mei pins the welcome message so yuki keeps seeing it at the top", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(300_000);
+    const stamp = Date.now();
+    const [meiFlow, yukiFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "wf-onboard-pin-mei"),
+      openDpopUserPage(browser, request, "wf-onboard-pin-yuki"),
+    ]);
+    test.skip(
+      !meiFlow || !yukiFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!meiFlow || !yukiFlow) {
+      return;
+    }
+    const yuki = yukiFlow.user;
+    const meiPage = meiFlow.page;
+    const yukiPage = yukiFlow.page;
+    const welcome = `Pinned welcome — read me first, Yuki! ${stamp}`;
 
-  test.fixme(
-    // @blocking-on: soland#workflows-team-onboarding-gap
-    // @user-promise: e2e/scenarios/workflows/team-onboarding.md
-    // @expected-live-by: 2026Q3
-    "E-onboarding.2 mei edits welcome twice; write-status reflects revision count",
-    async () => {
-      // yougen gap: write-status reports `revised` but not a numeric counter.
-    },
-  );
+    try {
+      const realmId = await meiPage.createRealm({
+        title: `Pinned welcome space ${stamp}`,
+        summary: "Day-1 onboarding hub with a pinned welcome",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+        seedMembers: [yuki.did],
+      });
+      await yukiPage.acceptInvite(realmId);
+      await meiPage.sendTimelineMessage(realmId, welcome);
+
+      // Mei pins the welcome via the hover action on the message row. The
+      // pinned-message bar at the top of the feed then surfaces it. Spec:
+      // models/pins.md (`ck.pin.add` shared event).
+      const meiMessage = meiPage.timelineEvent(welcome);
+      await expect(meiMessage).toBeVisible({ timeout: 30_000 });
+      await meiMessage.hover();
+      const pinButton = meiMessage.getByTestId("chat-pin-button");
+      await expect(pinButton).toBeVisible({ timeout: 30_000 });
+      await expect(pinButton).toHaveAttribute("data-pinned", "false");
+      await pinButton.click();
+
+      const meiPinnedBar = meiPage.page.getByTestId("pinned-bar");
+      await expect(
+        meiPinnedBar.getByTestId("pinned-bar-item"),
+      ).toContainText(welcome.slice(0, 40), { timeout: 30_000 });
+      await stepShot(meiPage.page, testInfo, "E1-mei-pinned");
+
+      // Yuki keeps seeing the welcome at the top: the shared pin projects
+      // into Yuki's pinned bar once the `ck.pin.add` event syncs.
+      await yukiPage.gotoTimelineRealm(realmId);
+      await expect(yukiPage.page.getByTestId("message-list")).toContainText(welcome, {
+        timeout: 30_000,
+      });
+      const yukiPinnedItem = yukiPage.page
+        .getByTestId("pinned-bar")
+        .getByTestId("pinned-bar-item");
+      await expect(yukiPinnedItem).toContainText(welcome.slice(0, 40), {
+        timeout: 60_000,
+      });
+      await stepShot(yukiPage.page, testInfo, "E1-yuki-sees-pin");
+    } finally {
+      await Promise.allSettled([yukiPage.close(), meiPage.close()]);
+    }
+  });
+
+  test("E-onboarding.2 mei edits welcome twice; write-status reflects revision count", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(300_000);
+    const stamp = Date.now();
+    const meiFlow = await openDpopUserPage(browser, request, "wf-onboard-rev-mei");
+    test.skip(
+      !meiFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!meiFlow) {
+      return;
+    }
+    const meiPage = meiFlow.page;
+    const welcome = `Welcome v1 ${stamp}`;
+    const welcomeV2 = `Welcome v2 — added onboarding hub ${stamp}`;
+    const welcomeV3 = `Welcome v3 — added benefits portal ${stamp}`;
+
+    try {
+      const realmId = await meiPage.createRealm({
+        title: `Revision counter space ${stamp}`,
+        summary: "Edit the welcome twice; assert the numeric write-status",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+      });
+      await meiPage.sendTimelineMessage(realmId, welcome);
+
+      // First edit -> revision count 1.
+      await meiPage.clickTimelineEdit(welcome);
+      await meiPage.page
+        .getByTestId("chat-edit-composer")
+        .locator("textarea")
+        .fill(welcomeV2);
+      await meiPage.page.getByTestId("chat-save-edit-button").click();
+      await meiPage.waitForTimelineEventSettled(welcomeV2);
+      const afterFirst = meiPage
+        .timelineEvent(welcomeV2)
+        .getByTestId("message-write-status");
+      await expect(afterFirst).toBeVisible({ timeout: 30_000 });
+      await expect(afterFirst).toHaveAttribute("data-revision-count", "1");
+
+      // Second edit -> revision count 2.
+      await meiPage.clickTimelineEdit(welcomeV2);
+      await meiPage.page
+        .getByTestId("chat-edit-composer")
+        .locator("textarea")
+        .fill(welcomeV3);
+      await meiPage.page.getByTestId("chat-save-edit-button").click();
+      await meiPage.waitForTimelineEventSettled(welcomeV3);
+      const afterSecond = meiPage
+        .timelineEvent(welcomeV3)
+        .getByTestId("message-write-status");
+      await expect(afterSecond).toBeVisible({ timeout: 30_000 });
+      await expect(afterSecond).toHaveAttribute("data-revision-count", "2");
+      await expect(afterSecond).toContainText("2");
+      await stepShot(meiPage.page, testInfo, "E2-revision-count");
+    } finally {
+      await meiPage.close();
+    }
+  });
 });

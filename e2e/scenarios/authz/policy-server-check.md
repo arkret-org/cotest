@@ -122,6 +122,16 @@
 
 (E3.1/E3.2/E3.3 各自独立 `test()`,主流程的主 `test.fixme` 覆盖 A→E。)
 
+## 实现状态(2026-06,与 `tests/authz/policy-server-check.spec.ts` 对齐)
+
+后端集成已落地:`PUT/GET /_cokret/self/realms/{realm_id}/policy-server` 投影、cap-gated 路径上的 outbound `POST /_cokret/self/policy/check`(`soland/crates/server/src/routing/policy_gate.rs` → `authz::check_with_policy_server`)、per-realm `cache_ttl` 决策缓存、`on_timeout=fail_closed` 兜底、以及对 `PolicyCheckOutcome` 的签名 + frontier 校验(`authz/policy_client.rs`)。
+
+但 soland 对**真实 allow 路径**有强约束:上游必须返回 spec §3 完整 `PolicyCheckOutcome`(回签 `bound_to`、三个 frontier digest 与 soland 运行时计算值逐字段一致、`signature.kid` 在声明的 `policy_server_did` 下可由 soland 的 DID resolver 验证)。harness 的 `mock-policy-server.mjs` 返回的是简化未签 body,且其 DID 不在 soland 信任集内,因此 soland 对任何 gated 操作一律 fail-closed(deny)。据此当前 e2e 覆盖的是 spec §4 的 **fail-closed 安全属性**(可确定性断言),而非 allow→deny→obligation 生命周期。
+
+已 live(`test()`):realm policy-server 投影 + 无 grant 时仍 fail-closed(原有用例);声明 policy server 后 cap-gated 操作被 fail-closed deny,且 mock `/inspect.kinds.checks` 证明上游被调用;E3.1 上游慢响应(mock `delay_ms`)→ soland 在自身 `timeout_ms` deadline 内 fail-closed。
+
+仍 `test.fixme`(阻塞原因见 spec 文件内联 `@blocking-on`):allow→deny→obligation 生命周期需 mock 升级为可验签 `PolicyCheckOutcome` 并纳入 soland 信任集;E3.2 多源优先级(soland 是 realm→org 的 `governed_by` fallback 而非 override,且无 org 级 / governed_by 的 self-API,`?source=` query 被禁);E3.3 cache_ttl 幂等仅在 allow 路径可观测。
+
 ## Implementation notes
 
 - **soland 缺口**:`PUT /_cokret/self/realms/{realm_id}/policy-server` 已覆盖配置投影;`POST /_cokret/self/policy/check` outbound call 在 cap-gated 路径上未挂;obligation executor (写 audit log + step-up + mask field 三个 kind);cache_ttl 缓存层;on_timeout=fail_closed 兜底分支。

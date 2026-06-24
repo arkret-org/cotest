@@ -82,10 +82,28 @@ function loadFixture<T>(name: string): T | null {
   }
 }
 
+type RedactionCase = {
+  name: string;
+  vector_id?: string;
+  event?: Record<string, unknown>;
+  redaction_receipt?: Record<string, unknown>;
+  expected_projection?: Record<string, unknown>;
+};
+
+type RedactionFixture = {
+  suite: string;
+  cases: RedactionCase[];
+};
+
 const encodingFixture = loadFixture<EncodingFixture>("encoding-fixture.json");
 const cryptoSignatureFixture = loadFixture<CryptoSignatureFixture>(
   "crypto-signature-fixture.json",
 );
+const redactionFixture = loadFixture<RedactionFixture>("redaction-fixture.json");
+
+function redactionCaseByName(name: string): RedactionCase | undefined {
+  return redactionFixture?.cases.find((entry) => entry.name === name);
+}
 
 function vectorById(id: string): EncodingVector | undefined {
   return encodingFixture?.vectors.find((v) => v.vector_id === id);
@@ -545,7 +563,7 @@ test.describe("conformance encoding vectors", () => {
     const event = {
       event_id: "ck:event:019640ed-8000-7000-8000-000000000abc",
       kind: "ck.message.create",
-      sender: ownerDid,
+      sender_actor_id: ownerDid,
       payload: {
         strand_id: "ck:strand:019640ed-8000-7000-8000-000000000000",
         content: { kind: "ck.content.text", body: "private message" },
@@ -601,25 +619,139 @@ test.describe("conformance encoding vectors", () => {
 
   // -------------------------------------------------------------------------
   // §3.4 / §3.5 — hard erasure receipt + snapshot pruning verification stub.
-  // redaction-fixture.json names these cases but only as semantic stubs
-  // (`expected: "snapshot_and_backfill_retain_verification_stub"` etc.), not
-  // as wire-form (event, expected_projection) tuples. Leaving as fixme until
-  // a richer fixture lands.
+  // redaction-fixture.json now carries concrete
+  // (event, redaction_receipt, expected_projection) tuples for both
+  // `hard_erasure_receipt` and `snapshot_pruning_stub`. §3.4 drives soland's
+  // /erase-receipt endpoint (hard-erasure projection + retained stub digest +
+  // no-plaintext-leak guard); §3.5 drives /redact to confirm the default view
+  // after snapshot pruning shows the redacted placeholder, never the original
+  // plaintext.
   // -------------------------------------------------------------------------
-  test.fixme(
-    // @blocking-on: soland#conformance-encoding-vectors-gap
-    // @user-promise: e2e/scenarios/conformance/encoding-vectors.md
-    // @expected-live-by: 2026Q3
-    "§3.4 hard erasure receipt + §3.5 snapshot pruning verification stub",
-    async () => {
-      // Missing fixture: cokret-spec/spec/v1/artifacts/fixtures/redaction-fixture.json
-      // today only carries semantic stubs (preserved_fields, dangling_redaction,
-      // late_target_event, audit_visibility, snapshot_pruning_stub) — no
-      // concrete (event, redaction_receipt, expected_projection) tuples. When
-      // the fixture grows real hard-erasure receipt + snapshot stub vectors,
-      // convert this test to drive /redact + a future /erase-receipt endpoint.
-    },
-  );
+  test("§3.4 hard erasure receipt drops plaintext + retains a verification stub digest", async ({
+    request,
+  }) => {
+    const fixtureCase = redactionCaseByName("hard_erasure_receipt");
+    expect(
+      fixtureCase?.event && fixtureCase?.redaction_receipt,
+      "redaction-fixture hard_erasure_receipt tuple missing",
+    ).toBeTruthy();
+    const c = fixtureCase!;
+    const event = c.event!;
+    const receipt = c.redaction_receipt!;
+    const expected = c.expected_projection ?? {};
+
+    const resp = await request.post(
+      `${conformanceBaseUrl()}/erase-receipt`,
+      {
+        data: {
+          vector_id: c.vector_id ?? "ck.vector.redaction.hard_erasure_receipt.v1",
+          event,
+          receipt,
+        },
+      },
+    );
+    expect(resp.status()).toBe(200);
+    const body = await resp.json();
+
+    // Hard erasure deletes payload bytes + derived plaintext: the projected
+    // default view MUST NOT carry the original content/proofs, and the
+    // fail-closed leak guard MUST report no plaintext fingerprint.
+    const projected = body.projected_event as Record<string, unknown>;
+    const projectedPayload = (projected.payload ?? {}) as Record<string, unknown>;
+    expect("content" in projectedPayload).toBe(false);
+    expect("proofs" in projected).toBe(false);
+    expect(body.plaintext_fingerprint_present).toBe(false);
+    expect(JSON.stringify(projected)).not.toContain("hard erased plaintext");
+
+    // A signed receipt + retained verification stub MUST survive so an auditor
+    // can verify the erasure without the erased plaintext.
+    expect(body.verification_stub_retained).toBe(true);
+    expect(typeof body.retained_stub_digest).toBe("string");
+    expect(body.retained_stub_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(body.outcome).toBe(expected.erasure_receipt_outcome ?? "completed");
+    expect(body.legal_hold_blocked).toBe(false);
+
+    // The tombstone marker pivots to the signed receipt id.
+    const because = projected.redacted_because as Record<string, unknown>;
+    expect(because?.receipt_id).toBe(receipt.receipt_id);
+
+    // §3.4 legal-hold branch: a blocked outcome MUST still strip plaintext from
+    // the default view but report the erasure as blocked.
+    const blockedReceipt = {
+      ...receipt,
+      outcome: "blocked_by_legal_hold",
+      legal_hold_ref: "ck:policy:01970e58-0004-7000-8000-0000000004b9",
+    };
+    const blockedResp = await request.post(
+      `${conformanceBaseUrl()}/erase-receipt`,
+      {
+        data: {
+          vector_id: c.vector_id ?? "ck.vector.redaction.hard_erasure_receipt.v1",
+          event,
+          receipt: blockedReceipt,
+        },
+      },
+    );
+    expect(blockedResp.status()).toBe(200);
+    const blockedBody = await blockedResp.json();
+    expect(blockedBody.legal_hold_blocked).toBe(true);
+    expect(blockedBody.plaintext_fingerprint_present).toBe(false);
+    expect(
+      JSON.stringify(blockedBody.projected_event),
+    ).not.toContain("hard erased plaintext");
+  });
+
+  test("§3.5 snapshot pruning default view retains redacted placeholder, not plaintext", async ({
+    request,
+  }) => {
+    const fixtureCase = redactionCaseByName("snapshot_pruning_stub");
+    expect(
+      fixtureCase?.event && fixtureCase?.redaction_receipt,
+      "redaction-fixture snapshot_pruning_stub tuple missing",
+    ).toBeTruthy();
+    const c = fixtureCase!;
+    const event = c.event!;
+    const receipt = c.redaction_receipt! as {
+      fields?: string[];
+      reason?: Record<string, unknown>;
+    };
+    const originalBody = (
+      (event.payload as Record<string, unknown>).content as Record<string, unknown>
+    ).body as string;
+
+    // After snapshot pruning, the default (non-owner) view MUST show the
+    // redacted placeholder + tombstone, never the original plaintext. Drive
+    // /redact as a guest using the receipt's field list + reason.
+    const guestResp = await request.post(
+      `${conformanceBaseUrl()}/redact`,
+      {
+        data: {
+          vector_id: c.vector_id ?? "ck.vector.redaction.snapshot_pruning_stub.v1",
+          event,
+          redaction: {
+            target_event_id: event.event_id,
+            fields: receipt.fields ?? ["payload.content"],
+            reason: receipt.reason,
+          },
+          viewer_did: "did:web:guest.example",
+        },
+      },
+    );
+    expect(guestResp.status()).toBe(200);
+    const guestBody = await guestResp.json();
+    const projected = guestBody.projected_event as Record<string, unknown>;
+    const projectedPayload = (projected.payload ?? {}) as Record<string, unknown>;
+
+    // Content stripped (key removed, NOT nulled); plaintext never surfaces.
+    expect("content" in projectedPayload).toBe(false);
+    expect(JSON.stringify(projected)).not.toContain(originalBody);
+    // Strand position (a preserved field) survives so the timeline slot stays.
+    expect(projectedPayload.strand_id).toBe(
+      (event.payload as Record<string, unknown>).strand_id,
+    );
+    // Tombstone reason retained for the redacted placeholder.
+    expect(projected.redacted_because).toEqual(receipt.reason);
+  });
 
   // -------------------------------------------------------------------------
   // Smoke probe (kept from the original suite) — confirms the conformance

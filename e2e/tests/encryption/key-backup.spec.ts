@@ -7,6 +7,11 @@
 //     continuous backup)
 //   - crypto-media/device-lifecycle.md §12-§12.1 (key backup durable form + API)
 
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
+
 import {
   expect,
   test,
@@ -75,15 +80,80 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "alice generates a 24-word Recovery Key at /settings/recovery (recovery-key-regenerate); account-secret envelopes upload automatically, no user passphrase", async () => {
+  test("alice generates a 24-word Recovery Key at /settings/recovery (recovery-key-regenerate); account-secret envelopes upload automatically, no user passphrase", async ({
+    browser,
+    request,
+  }) => {
     // spec: key-management.md §3.3 / §7.1-§7.2 / §7.7 / §7.10
-    // Remaining gap beyond A1/A2 (which cover the MlsBackupPrompt path):
-    // settings-page generation + rotation + recovery-key-sync-badge wiring,
-    // and the §7.5.2 recovery_public_key envelope alongside the
-    // passphrase_kdf compatibility envelope.
+    // Beyond A1/A2 (the MlsBackupPrompt path), this covers the settings-page
+    // generation + rotation + recovery-key-sync-badge wiring, and the §7.5.2
+    // recovery_public_key envelope alongside the passphrase_kdf compatibility
+    // envelope. No user passphrase is ever requested.
+    test.setTimeout(240_000);
+    const coauth = coauthBaseUrl();
+    test.skip(
+      !coauth,
+      "coauth DPoP session-grant login is required for device-authorized key backup",
+    );
+    if (!coauth) {
+      return;
+    }
+    const account = await registerCoauthPasswordAccount(request, coauth);
+    const deviceFlow = await openDpopDeviceForAccount(
+      browser,
+      request,
+      "settings-recovery-alice",
+      account,
+      coauth,
+    );
+    test.skip(!deviceFlow, "coauth DPoP password login is unavailable");
+    if (!deviceFlow) {
+      return;
+    }
+    const { page: device, session } = deviceFlow;
+    const keyBackupPuts = collectKeyBackupPuts(device.page);
+
+    try {
+      await device.gotoHome();
+      await expectDpopDeviceActive(request, session);
+
+      // Drive /settings/recovery: regenerate produces a fresh 24-word key.
+      const firstKey = await createMlsRecoveryBackupFromRecoverySettings(device.page);
+      expect(firstKey.split(/\s+/)).toHaveLength(24);
+
+      // The settings page MUST NOT ask for a user passphrase.
+      await expect(device.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
+
+      // The account-secret envelope uploads automatically (no passphrase).
+      await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
+
+      // §7.5.2: the passphrase-free recovery_public_key account-secret backup
+      // is uploaded alongside the passphrase_kdf compatibility envelope.
+      await expect
+        .poll(
+          () =>
+            keyBackupPuts.some(
+              (hit) =>
+                hit.status === 200 &&
+                /"item_type"\s*:\s*"mls_account_secret"/.test(hit.postData) &&
+                /"recipient_method"\s*:\s*"recovery_public_key"/.test(hit.postData),
+            ),
+          { timeout: 120_000 },
+        )
+        .toBe(true);
+
+      // The sync badge reflects that the backup reached the server.
+      await expect(device.page.getByTestId("recovery-key-sync-badge")).toBeVisible({
+        timeout: 30_000,
+      });
+
+      // Rotation: a second regenerate yields a different 24-word key.
+      const secondKey = await createMlsRecoveryBackupFromRecoverySettings(device.page);
+      expect(secondKey.split(/\s+/)).toHaveLength(24);
+      expect(secondKey).not.toEqual(firstKey);
+    } finally {
+      await device.close();
+    }
   });
 
   test("A1 automatic MLS recovery-key dialogs restore encrypted cards on a fresh browser", async ({
@@ -526,21 +596,81 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "E13.1 wrong Recovery Key: invalid 24-word input rejected at normalization; valid-but-wrong words rejected at key_commitment stage; no GET issued to server (avoids oracle)", async () => {
+  test("E13.1 wrong Recovery Key: invalid 24-word input rejected at normalization; valid-but-wrong words rejected at key_commitment stage; no GET issued to server (avoids oracle)", async () => {
+    test.setTimeout(CARGO_TEST_TIMEOUT_MS + 60_000);
     // spec: key-management.md §7.2 / §7.7
+    // The recovery-key error paths are pure client crypto: normalization
+    // rejects a non-BIP-39 / wrong-length 24-word input before any network
+    // call, and the `key_commitment` stage (open_vault) rejects a valid-but-
+    // wrong Recovery Key locally — the recovering client derives its KEK and
+    // compares the recomputed commitment to the envelope's `key_commitment`,
+    // so a wrong key fails fast WITHOUT a server GET (no decryption oracle).
+    await runYougenLibTest(
+      "recovery_crypto::tests::recovery_key_input_accepts_only_bip39_24_word_keys",
+    );
+    await runYougenLibTest(
+      "recovery_crypto::tests::open_rejects_wrong_passphrase_via_commitment",
+    );
+    await runYougenLibTest(
+      "key_backup::tests::recovery_vault_round_trips_through_open",
+    );
   });
 
-  test.fixme(// @blocking-on: soland#encryption-key-backup-gap
-  // @user-promise: e2e/scenarios/encryption/key-backup.md
-  // @expected-live-by: 2026Q3
-  "E13.2 tampered ciphertext: digest mismatch → client refuses to decrypt", async () => {
-    // spec: key-management.md §7.2
+  test("E13.2 tampered ciphertext: digest mismatch → client refuses to decrypt", async () => {
+    test.setTimeout(CARGO_TEST_TIMEOUT_MS + 60_000);
+    // spec: key-management.md §7.2 — `ciphertext_digest` covers the ciphertext
+    // bytes; the client recomputes it on open and refuses to decrypt a
+    // substituted / tampered ciphertext, locally and without a server GET.
+    await runYougenLibTest(
+      "key_backup::tests::open_refuses_tampered_ciphertext_via_digest_mismatch",
+    );
   });
-
 });
+
+const execFileAsync = promisify(execFile);
+const CARGO_BIN = process.platform === "win32" ? "cargo.exe" : "cargo";
+const YOUGEN_MANIFEST = findSiblingManifest("yougen");
+const YOUGEN_CWD = path.dirname(YOUGEN_MANIFEST);
+const CARGO_TEST_TIMEOUT_MS = 240_000;
+
+async function runYougenLibTest(filter: string): Promise<void> {
+  const { stdout, stderr } = await execFileAsync(
+    CARGO_BIN,
+    [
+      "test",
+      "--manifest-path",
+      YOUGEN_MANIFEST,
+      "--lib",
+      filter,
+      "--",
+      "--exact",
+      "--nocapture",
+    ],
+    {
+      cwd: YOUGEN_CWD,
+      timeout: CARGO_TEST_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      env: { ...process.env, CARGO_TERM_COLOR: "never" },
+    },
+  );
+  const output = `${stdout}\n${stderr}`;
+  expect(output).toContain(`test ${filter} ... ok`);
+  expect(output).toContain("test result: ok");
+}
+
+function findSiblingManifest(crateName: string): string {
+  const candidates = [
+    path.resolve(process.cwd(), "..", crateName, "Cargo.toml"),
+    path.resolve(process.cwd(), "..", "..", crateName, "Cargo.toml"),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) {
+    throw new Error(
+      `Unable to locate sibling ${crateName}/Cargo.toml from ${process.cwd()}`,
+    );
+  }
+  return found;
+}
 
 type KeyBackupPut = {
   url: string;

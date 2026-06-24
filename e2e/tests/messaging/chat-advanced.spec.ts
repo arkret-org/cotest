@@ -423,10 +423,7 @@ test.describe("chat advanced", () => {
   // Direct `/chat/:realm_id` channel hydration is covered live above. The
   // remaining browser-driven chat workflows stay fixme until their owning
   // server/client projections are closed.
-  test.fixme(// @blocking-on: soland#messaging-chat-advanced-gap
-  // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-  // @expected-live-by: 2026Q3
-  "reactions converge (OR-Set) and replies render with reply indicator", async ({
+  test("reactions converge (OR-Set) and replies render with reply indicator", async ({
     browser,
     request,
   }, testInfo) => {
@@ -745,10 +742,7 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#messaging-chat-advanced-gap
-  // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-  // @expected-live-by: 2026Q3
-  "E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async ({
+  test("E14.F typing indicator (ck.typing ephemeral) appears in peer view within 1s and clears after ttl_ms=5000", async ({
     browser,
     request,
   }, testInfo) => {
@@ -796,10 +790,7 @@ test.describe("chat advanced", () => {
     }
   });
 
-  test.fixme(// @blocking-on: soland#messaging-chat-advanced-gap
-  // @user-promise: e2e/scenarios/messaging/chat-advanced.md
-  // @expected-live-by: 2026Q3
-  "E14.G presence state propagates online/offline within 1s after page open/close", async ({
+  test("E14.G presence state propagates online/offline within 1s after page open/close", async ({
     browser,
     request,
   }, testInfo) => {

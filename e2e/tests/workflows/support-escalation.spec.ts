@@ -130,17 +130,100 @@ test.describe("workflow: support escalation", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#workflows-support-escalation-gap
-    // @user-promise: e2e/scenarios/workflows/support-escalation.md
-    // @expected-live-by: 2026Q3
-    "E-support.kanban alex tracks ticket on a Triage → In Progress → Resolved kanban",
-    async () => {
-      // yougen gap: locally-queued cards stay in "draft" state when the
-      // reducer hasn't acked yet, which blocks the archive-then-recreate
-      // promote pattern. Will revisit after the soland kanban Move ack lands.
-    },
-  );
+  test("E-support.kanban alex tracks ticket on a Triage → In Progress → Resolved kanban", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(360_000);
+    const stamp = Date.now();
+    const alexFlow = await openDpopUserPage(browser, request, "wf-support-kanban-alex");
+    test.skip(
+      !alexFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!alexFlow) {
+      return;
+    }
+    const alexPage = alexFlow.page;
+    const triage = `Triage-${stamp}`;
+    const inProgress = `In Progress-${stamp}`;
+    const resolved = `Resolved-${stamp}`;
+    const boardTitle = `Escalation Board ${stamp}`;
+    const ticketCard = `Ticket #1042 checkout 500 ${stamp}`;
+
+    try {
+      const realmId = await alexPage.createRealm({
+        title: `Support kanban ${stamp}`,
+        summary: "Triage -> In Progress -> Resolved",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+      });
+
+      await alexPage.page.goto(`/kanban/${realmId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(alexPage.page.getByTestId("kanban-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await alexPage.page.getByTestId("new-board-toggle").click();
+      await alexPage.page.getByTestId("new-board-title-input").fill(boardTitle);
+      await alexPage.page.getByTestId("create-board-space-button").click();
+      await expect(
+        alexPage.page.getByTestId("board-space-select-button"),
+      ).toContainText(boardTitle, { timeout: 45_000 });
+
+      for (const columnName of [triage, inProgress, resolved]) {
+        await alexPage.page.getByTestId("new-column-input").fill(columnName);
+        await alexPage.page.getByTestId("add-column-button").click();
+        await expect(
+          alexPage.page
+            .getByTestId("kanban-column")
+            .filter({ hasText: columnName }),
+        ).toBeVisible({ timeout: 30_000 });
+      }
+
+      const triageColumn = alexPage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: triage });
+      await triageColumn.getByTestId("add-card-button").click();
+      await triageColumn.getByTestId("new-card-title-input").fill(ticketCard);
+      await triageColumn.getByTestId("save-card-button").click();
+
+      const card = triageColumn
+        .getByTestId("kanban-card")
+        .filter({ hasText: ticketCard });
+      await expect(card).toBeVisible({ timeout: 30_000 });
+
+      // Locally-queued card surfaces a draft state independently of the
+      // server ack: the draft badge is visible and the archive button is
+      // gated to "draft" so the archive-then-recreate promote pattern can't
+      // act on an unacked card.
+      const archiveButton = card.getByTestId("card-archive-button");
+      const draftBadge = card.getByTestId("kanban-card-draft-badge");
+      if (await draftBadge.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await expect(card).toHaveAttribute("data-card-draft", "true");
+        await expect(archiveButton).toHaveAttribute("data-cap-gate", "draft");
+      }
+      await stepShot(alexPage.page, testInfo, "kanban-A-draft");
+
+      // Once soland acks the card create, the draft state clears: the badge
+      // disappears and archive unblocks. This is the gate the promote pattern
+      // was waiting on.
+      await expect(card).toHaveAttribute("data-card-draft", "false", {
+        timeout: 60_000,
+      });
+      await expect(draftBadge).toHaveCount(0, { timeout: 30_000 });
+      await expect(archiveButton).not.toHaveAttribute(
+        "data-cap-gate",
+        "draft",
+        { timeout: 30_000 },
+      );
+      await stepShot(alexPage.page, testInfo, "kanban-B-settled");
+    } finally {
+      await alexPage.close();
+    }
+  });
 
   test.fixme(
     // @blocking-on: soland#workflows-support-escalation-gap
@@ -148,8 +231,12 @@ test.describe("workflow: support escalation", () => {
     // @expected-live-by: 2026Q3
     "E-support.redact alex redacts a reply that leaked PII; tombstone replaces body for both",
     async () => {
-      // Same redact-tombstone covered in messaging/triad — pulled out here
-      // as a support-specific case (PII removal is a common ops workflow).
+      // Kept: this case asserts the tombstone replaces the body for BOTH
+      // sender and receiver. The cross-user (receiver-side) tombstone fold
+      // is owned by the messaging/triad redaction work and the soland
+      // redaction projection; promoting it here would duplicate that effort.
+      // The sender-only self-redact path is covered in daily-standup
+      // (E-standup.redact).
     },
   );
 });
