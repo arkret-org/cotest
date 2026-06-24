@@ -314,14 +314,14 @@ export async function listInvitesApi(
   }>
 > {
   const actorDid = await currentActorDidApi(request, token, opts);
-  const url = new URL("/_cokret/self/authz/invites", solandBaseUrl(opts.server));
-  url.searchParams.set("subject", actorDid);
-  const response = await request.get(
-    url.toString(),
-    {
-      headers: authHeaders(token),
-    },
+  const url = new URL(
+    "/_cokret/self/authz/invites",
+    solandBaseUrl(opts.server),
   );
+  url.searchParams.set("subject", actorDid);
+  const response = await request.get(url.toString(), {
+    headers: authHeaders(token),
+  });
   const body = await expectJsonOk<{
     invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
   }>(response, "list invites");
@@ -342,7 +342,9 @@ export async function sendMessageApi(
   } = {},
 ) {
   const actorDid = await currentActorDidApi(request, token, opts);
-  const strandId = await resolveDefaultStrandId(request, token, realmId, { server: opts.server });
+  const strandId = await resolveDefaultStrandId(request, token, realmId, {
+    server: opts.server,
+  });
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
@@ -396,7 +398,10 @@ export async function accountSubscribeDeltaApi(
     { headers: { ...authHeaders(token), accept: "application/x-ndjson" } },
   );
   const text = await response.text();
-  expect(response.status(), `account subscribe returned ${response.status()}: ${text}`).toBe(200);
+  expect(
+    response.status(),
+    `account subscribe returned ${response.status()}: ${text}`,
+  ).toBe(200);
   const frames = text
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -595,7 +600,10 @@ export async function resolveDefaultStrandId(
   );
   if (realmResp.ok()) {
     const realm = (await realmResp.json()) as { default_strand_id?: unknown };
-    if (typeof realm.default_strand_id === "string" && realm.default_strand_id) {
+    if (
+      typeof realm.default_strand_id === "string" &&
+      realm.default_strand_id
+    ) {
       return realm.default_strand_id;
     }
   }
@@ -800,7 +808,11 @@ export async function queryPeerEventsApi(
   }
   const targetUri = `${solandBaseUrl(opts.server)}/_cokret/peer/events?${params.toString()}`;
   const response = await request.get(targetUri, {
-    headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server), targetUri),
+    headers: peerGetHeaders(
+      opts.sourceDid,
+      solandServiceDid(opts.server),
+      targetUri,
+    ),
   });
   return await expectJsonOk<{
     events: Array<Record<string, unknown>>;
@@ -817,7 +829,11 @@ export async function peerEventFrontierApi(
 ) {
   const targetUri = `${solandBaseUrl(opts.server)}/_cokret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`;
   const response = await request.get(targetUri, {
-    headers: peerGetHeaders(opts.sourceDid, solandServiceDid(opts.server), targetUri),
+    headers: peerGetHeaders(
+      opts.sourceDid,
+      solandServiceDid(opts.server),
+      targetUri,
+    ),
   });
   return await expectJsonOk<{
     realm_id: string;
@@ -864,7 +880,11 @@ const SPEC_ARTIFACTS_ROOT = resolve(
   "v1",
   "artifacts",
 );
-const E2E_FIXTURES_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
+const E2E_FIXTURES_ROOT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "fixtures",
+);
 
 // The reducer profile soland declares for its federation surface
 // (ck.peer.events.query.describe → supported_profiles), also the vector's profile.
@@ -916,7 +936,10 @@ export function reducerProfileDigest(profileId: string): string {
 
 let principalControlRealmVectorsChecked = false;
 
-function assertPrincipalControlRealmVectors(did: string, realmId: string): void {
+function assertPrincipalControlRealmVectors(
+  did: string,
+  realmId: string,
+): void {
   const fixture = JSON.parse(
     readFileSync(
       join(E2E_FIXTURES_ROOT, "principal-control-realm-vectors.json"),
@@ -932,7 +955,9 @@ function assertPrincipalControlRealmVectors(did: string, realmId: string): void 
   if (!principalControlRealmVectorsChecked) {
     for (const vector of vectors) {
       if (!vector.principal_id || !vector.principal_control_realm_id) {
-        throw new Error("principal-control-realm-vectors.json contains an incomplete vector");
+        throw new Error(
+          "principal-control-realm-vectors.json contains an incomplete vector",
+        );
       }
       const actual = derivePrincipalControlRealmForDid(vector.principal_id);
       if (actual !== vector.principal_control_realm_id) {
@@ -944,7 +969,10 @@ function assertPrincipalControlRealmVectors(did: string, realmId: string): void 
     principalControlRealmVectorsChecked = true;
   }
   const pinned = vectors.find((vector) => vector.principal_id === did);
-  if (pinned?.principal_control_realm_id && pinned.principal_control_realm_id !== realmId) {
+  if (
+    pinned?.principal_control_realm_id &&
+    pinned.principal_control_realm_id !== realmId
+  ) {
     throw new Error(
       `principal_control_realm_id ${realmId} drifted from pinned vector ${pinned.principal_control_realm_id} for ${did}`,
     );
@@ -971,7 +999,10 @@ function assertReducerProfileDigestMatchesVectors(
     ),
   ) as { vectors?: Array<{ profile_id?: string; expected_digest?: string }> };
   const vectors = new Map(
-    (fixture.vectors ?? []).map((entry) => [entry.profile_id, entry.expected_digest]),
+    (fixture.vectors ?? []).map((entry) => [
+      entry.profile_id,
+      entry.expected_digest,
+    ]),
   );
   const expected = vectors.get(profileId);
   if (!expected) {
@@ -992,7 +1023,9 @@ function assertReducerProfileDigestMatchesVectors(
       continue;
     }
     if (!row.profile_id || row.digest_input === undefined) {
-      throw new Error("reducer-profile-registry contains an incomplete active profile");
+      throw new Error(
+        "reducer-profile-registry contains an incomplete active profile",
+      );
     }
     const rowExpected = vectors.get(row.profile_id);
     if (!rowExpected) {
@@ -1283,7 +1316,9 @@ function canonicalJsonValue(value: unknown, path: string): string {
     case "object":
       break;
     default:
-      throw new TypeError(`non-canonical JSON value at ${path}: ${typeof value}`);
+      throw new TypeError(
+        `non-canonical JSON value at ${path}: ${typeof value}`,
+      );
   }
 
   if (Array.isArray(value)) {
