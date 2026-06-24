@@ -1,4 +1,6 @@
 use anyhow::Result;
+use cokret::identity::binding::multicodec_ed25519_public_key;
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -7,6 +9,9 @@ use crate::harness::{
     expect_indistinguishable_api_errors, expect_json, expect_response, expect_text,
     refresh_event_proof, register_account,
 };
+use crate::scenarios::federation_collaboration::{
+    authorize_device_public_key, signed_keys_upload_body,
+};
 
 const BLOB_REALM_ID: &str = "ck:realm:0196419b-0000-7000-8000-00000000d101";
 const BLOB_REALM_CREATE_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000000d100";
@@ -14,23 +19,29 @@ const BLOB_REALM_MEMBER_EVENT_ID: &str = "ck:event:0196419b-0000-7000-8000-00000
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = CokretServer::spawn("delivery-keys").await?;
-    let token = dev_login(
-        &server,
-        "did:web:alice.example",
-        "ck:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
+    let alice_did = "did:web:alice.example";
+    let alice_device = "ck:device:01904100-0000-7000-8000-0000000000a1";
+    let token = dev_login(&server, alice_did, alice_device).await?;
+
+    // soland binds keys/upload to the authoritative device key (the device must
+    // be authorized, and the upload carries a detached JWS over the canonical
+    // body signed by that key). Authorize Alice's device up front.
+    let device_key = SigningKey::from_bytes(&[0x7a; 32]);
+    let device_public_key = multicodec_ed25519_public_key(&device_key.verifying_key());
+    authorize_device_public_key(&server, &token, alice_did, alice_device, &device_public_key)
+        .await?;
 
     expect_api_error(
         server
             .http()
             .post(server.url("/_cokret/self/keys/upload"))
-            .json(&json!({
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
-                "one_time_keys": {},
-                "fallback_keys": {},
-                "device_signature": {"alg": "EdDSA", "signature": "alice-device"}
-            })),
+            .json(&signed_keys_upload_body(
+                alice_did,
+                alice_device,
+                &device_key,
+                json!({}),
+                json!({}),
+            )?),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -44,17 +55,21 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
         "unauthenticated",
     )
     .await?;
+    // Uploading keys for a device that is not the caller's bound device is
+    // rejected: the body is validly signed by Alice's authorized device key, but
+    // it claims a different device_id that Alice does not control.
     expect_api_error(
         server
             .http()
             .post(server.url("/_cokret/self/keys/upload"))
             .bearer_auth(&token)
-            .json(&json!({
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000f0",
-                "one_time_keys": {},
-                "fallback_keys": {},
-                "device_signature": {"alg": "EdDSA", "signature": "wrong-device"}
-            })),
+            .json(&signed_keys_upload_body(
+                alice_did,
+                "ck:device:01904100-0000-7000-8000-0000000000f0",
+                &device_key,
+                json!({}),
+                json!({}),
+            )?),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -65,18 +80,19 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_cokret/self/keys/upload"))
             .bearer_auth(&token)
-            .json(&json!({
-                "device_id": "ck:device:01904100-0000-7000-8000-0000000000a1",
-                "one_time_keys": {
+            .json(&signed_keys_upload_body(
+                alice_did,
+                alice_device,
+                &device_key,
+                json!({
                     "signed_curve25519:otk1": {
                         "algorithm": "signed_curve25519",
                         "key_id": "otk1",
                         "key": "single-use"
                     }
-                },
-                "fallback_keys": {},
-                "device_signature": {"alg": "EdDSA", "signature": "alice-device"}
-            })),
+                }),
+                json!({}),
+            )?),
         StatusCode::OK,
     )
     .await?;

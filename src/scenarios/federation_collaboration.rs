@@ -728,7 +728,7 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
     })
 }
 
-async fn authorize_device_public_key(
+pub(crate) async fn authorize_device_public_key(
     server: &CokretServer,
     token: &str,
     actor: &str,
@@ -766,7 +766,7 @@ async fn authorize_device_public_key(
     Ok(())
 }
 
-fn signed_keys_upload_body(
+pub(crate) fn signed_keys_upload_body(
     actor: &str,
     device_id: &str,
     signing_key: &SigningKey,
@@ -779,6 +779,10 @@ fn signed_keys_upload_body(
         .context("sign keys/upload body")?;
     Ok(json!({
         "device_id": device_id,
+        // soland binds keys/upload to the authoritative device key: the payload
+        // carries the device_public_key and the detached JWS is verified against
+        // it (keys.rs upload signature gate).
+        "device_public_key": multicodec_ed25519_public_key(&signing_key.verifying_key()),
         "one_time_keys": one_time_keys,
         "fallback_keys": fallback_keys,
         "device_signature": {
@@ -789,7 +793,7 @@ fn signed_keys_upload_body(
     }))
 }
 
-fn keys_upload_signing_input(
+pub(crate) fn keys_upload_signing_input(
     device_id: &str,
     one_time_keys: &Value,
     fallback_keys: &Value,
