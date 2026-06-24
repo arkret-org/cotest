@@ -194,7 +194,7 @@ test.describe("notifications", () => {
     });
     const suppressedSuffix = `DND suppressed ${stamp}`;
     const resumedSuffix = `DND resumed ${stamp}`;
-    const apiActorSeq = Date.now();
+    const apiActorSeq = 8_000_000_000_000_000 + (stamp % 100_000);
     let suppressedMsg = "";
     let resumedMsg = "";
 

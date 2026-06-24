@@ -155,6 +155,7 @@ test.describe("personal blocklist", () => {
     const bobPage = await openUserPage(browser, bob, {
       sessionCredential: bobToken,
     });
+    const bobDidVisiblePrefix = bob.did.slice(0, 16);
 
     try {
       const realmId = await alicePage.createRealm({
@@ -189,7 +190,7 @@ test.describe("personal blocklist", () => {
       await alicePage.page.getByTestId("block-user-button").click();
       await expect(
         alicePage.page.getByTestId("blocked-users-list"),
-      ).toContainText(bob.did, {
+      ).toContainText(bobDidVisiblePrefix, {
         timeout: 30_000,
       });
       await expect(alicePage.page.getByTestId("write-status")).toContainText(
@@ -237,12 +238,12 @@ test.describe("personal blocklist", () => {
       });
       await alicePage.page
         .getByTestId("blocked-user-row")
-        .filter({ hasText: bob.did })
+        .filter({ hasText: bobDidVisiblePrefix })
         .getByTestId("unblock-button")
         .click();
       await expect(
         alicePage.page.getByTestId("blocked-users-list"),
-      ).not.toContainText(bob.did, {
+      ).not.toContainText(bobDidVisiblePrefix, {
         timeout: 30_000,
       });
       await expect
