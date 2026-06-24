@@ -14,8 +14,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 - `cokret-spec/spec/v1/zh/models/private-objects.md` §2 — Private object 总览:read marker 属于
   actor-scope account data;与 Event 链解耦,只在 actor 自己的 device 之间复制
-- `cokret-spec/spec/v1/zh/models/private-objects.md` §3 — Read marker schema(`last_read_at` 时间锚 +
-  optional `last_read_anchor` event_id);to-device propagation;eventual consistency 窗口
+- `cokret-spec/spec/v1/zh/discovery/read-receipts.md` §6 — Read Cursor schema
+  (`position.event_id` + `position.hlc` + `read_scope`);actor-private propagation;eventual consistency 窗口
 - `cokret-spec/spec/v1/zh/discovery/read-receipts.md` — server 不持久化 per-message read state;
   marker 是单点游标,inbox unread 一律由 marker 衍生
 - `cokret-spec/spec/v1/zh/discovery/push-notifications.md` §2-§4 — notification 是 client-side
@@ -72,12 +72,10 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 7. alice (device-1) 进 `/timeline/${realmId}`,等到 `timeline-event` 至少含 M1/M2/M3
 8. alice (device-1) 把视口滚到 M2(`scrollIntoView`),停留到 yougen 触发 read-position 上报
-9. 客户端通过 `POST /_cokret/self/account/data/m.read_cursor`(account data API,private object 写路径)
-   推 marker,payload 含 `last_read_at = <ts(M2)>` + `last_read_anchor = M2.event_id`
-   - 备用路径:直接 `POST /_soland/self/notifications/mark-all-read` 把游标推到 M2(参考 spec §3 的
-     "marker write" 等价接口)
-10. 断言:`GET /_soland/self/notifications` 返回 `last_read_at` 等于步骤 9 写入的 ts,
-    `unread_count` 反映"M3 是未读、M1/M2 已读"
+9. 客户端提交 actor-private `ck.read_cursor.advance`,payload 使用 `ck.schema.read_cursor.v1`,
+   含 `position.event_id = M2.event_id`、`position.hlc = M2.hlc` 和对应 `read_scope`
+10. 断言:`GET /_cokret/self/account/subscribe?catchup=true` 返回的 actor-private read cursor
+    delta / notification projection 反映"M3 是未读、M1/M2 已读"
 
 ### Phase D — alice device-1 settings 显示 marker 位置
 
@@ -89,7 +87,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 13. alice (device-2) 打开第二个 browser context,进 `/settings`(`gotoSettings()`)
 14. 等待 sync 窗口(测试上界 30s);yougen 应通过 to-device 同步把 marker 落到本地
 15. 断言:device-2 的 settings 也显示 "Last read in S: M2"
-16. 断言:device-2 的 `GET /_soland/self/notifications` `last_read_at` 与 device-1 一致
+16. 断言:device-2 经 `/_cokret/self/account/subscribe` 看到的 read cursor position 与 device-1 一致
 
 ### Phase F — bob 发 M4,两台 device 的 inbox 都显示未读
 
@@ -100,18 +98,18 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ### Phase G — alice device-2 mark-all-read,device-1 在 sync 后归零
 
-20. alice (device-2) `POST /_soland/self/notifications/mark-all-read`,断言 200 + `marked_at` >
-    Phase C 的 marker ts
-21. 断言:device-2 `GET /_soland/self/notifications` `unread_count = 0`,`last_read_at = marked_at`
+20. alice (device-2) 在 yougen `/notifications` 点 "Mark all read",客户端提交最新
+    `ck.read_cursor.advance`
+21. 断言:device-2 本地 notification projection `unread_count = 0`,read cursor position 覆盖 Phase C
 22. 等待 to-device 同步窗口(测试上界 30s)
-23. 断言:device-1 `GET /_soland/self/notifications` `unread_count = 0`,`last_read_at` 与 device-2 收敛
-    到同一 `marked_at`
+23. 断言:device-1 `/_cokret/self/account/subscribe` 收到同一 read cursor position 后
+    `unread_count = 0`
 
 ## Observable assertions(合并清单)
 
 - Phase A 步骤 3:`realmId` 形如 `ck:realm:...`
 - Phase B 步骤 6:M1/M2/M3 三条都 persisted
-- Phase C 步骤 10:`last_read_at` 写入成功,`unread_count` 反映 M3 未读
+- Phase C 步骤 10:read cursor 写入成功,`unread_count` 反映 M3 未读
 - Phase D 步骤 12:device-1 settings 上 marker 文本可见
 - Phase E 步骤 15-16:device-2 settings + notifications API 与 device-1 收敛
 - Phase F 步骤 18-19:新消息 M4 在两台 device 都计入 unread
@@ -120,12 +118,12 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 ## Edge cases / sub-tests
 
 - **E10.1 multi-device read marker eventual consistency**:device-1 写 marker → device-2 收到
-  marker 之间允许有一个有界窗口(spec §3:30s);窗口内 device-2 的 `last_read_at` MAY 落后,但
+  marker 之间允许有一个有界窗口(spec §3:30s);窗口内 device-2 的 read cursor position MAY 落后,但
   最终一定收敛到 device-1 写入的最新值
 - **E10.2 E2EE Realm 中 notification 脱敏**:把 `realmId` 切到一个 `encryption_locus =
   per_realm_mls` 的 Realm;bob 发的 M4 在 server 侧 payload 是密文,但 server 仍能投递 to-device
-  wake;notification 投影由 client 在解密后产生 — 测试断言 server `GET /_soland/self/notifications` 不
-  暴露明文 body,只暴露 envelope 元数据(event_id、sender_did、ts、`encrypted: true`)
+  wake;notification 投影由 client 在解密后产生 — 测试断言 `/_cokret/self/account/subscribe`
+  的 notification projection 不暴露明文 body,只暴露 source event / sender / timestamp / `encrypted: true`
 - **E10.3 Circle-scoped private Strand 的 read marker 独立于 Realm-default Strand**:在 Realm `R`
   内创建公开 Strand `F_public`,再创建 Circle `C_discussion` 与私密 Strand `F_private`
   (`F_private.scope_circle_id = C_discussion`),并用 `confidential_discussion_of` Relation 指回
@@ -135,13 +133,12 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## Implementation notes
 
-- **soland gap(关键)**:read marker 的 **to-device propagation** 当前未实现 — `POST
-  /_cokret/self/account/data/m.read_cursor` 与 `POST /_soland/self/notifications/mark-all-read` 在 alice 当前
-  device 上写 account_data OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
+- **soland gap(关键)**:read cursor 的 **to-device propagation** 当前未实现 — `ck.read_cursor.advance`
+  在 alice 当前 device 上写 actor-private state OK,但 device 间的 fan-out(to-device channel)不通,因此 Phase E /
   Phase G 的 cross-device 断言会 fail。主流程标 `test.fixme`,内联注释说明 gap
-- **soland 现状**:`POST /_soland/self/notifications/mark-all-read` 已 live(参考 `discovery/notifications`
-  spec),`GET /_soland/self/notifications` 返回 `last_read_at` / `unread_count` 也 live —— 单 device 的
-  marker 写 / 读路径已可断言,可作为非 fixme 的子测试
+- **soland 现状**:notification projection 的读取面是
+  `GET /_cokret/self/account/subscribe?catchup=true`;单 device 的本地 mark-all-read 由 yougen
+  提交 read cursor 并更新本地 projection
 - **yougen gap**:`/settings` 当前没有 `read-position-row` testid;Phase D / E 的 UI 断言依赖该
   testid 上线后才能跑(或者改成纯 API 断言绕过)
 - **multi-device dev-login proxy**:沿用 `identity/multi-device` Phase A 的做法 — 对同一 actor 调

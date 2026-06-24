@@ -69,7 +69,8 @@
    - 验证 `Destination-Service-DID` 是自身 DID
    - 验证 nonce / `created` ts 在窗口内(防 replay)
 4. 断言:`POST /_cokret/peer/peer/events` 返回 200,响应 body 含 `accepted[<invite_event_id>]`
-5. 断言:bob 通过 `GET /_soland/self/notifications` 在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
+5. 断言:bob 通过 `GET /_cokret/self/account/subscribe?catchup=true` 的 `notifications.events`
+   在 30s 内看到 invite 通知(意味着 server B 已经把事件入库)
 
 ### Phase B — WebSocket upgrade (negotiate via ck.transport.negotiate)
 
@@ -110,7 +111,7 @@
 ## Observable assertions (合并清单)
 
 - Phase A:POST `/_cokret/peer/peer/events` 入站签名验证成功(返回 200 + `accepted[]`),失败(签名错)返回 401
-- Phase A:bob `GET /_soland/self/notifications` 看到 invite
+- Phase A:bob 在 `/_cokret/self/account/subscribe` 的 `notifications.events` 看到 invite
 - Phase B:`GET /_cokret/describe` 含 `supported_bindings[].kind=websocket_frame`
 - Phase B:WebSocket upgrade 返回 101;subprotocol = `ck.federation.v1`
 - Phase B:bob 在 30s 内看到通过 WebSocket 帧投递的消息
