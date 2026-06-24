@@ -327,7 +327,6 @@ export class JointUserPage {
       handled ||= recoveryKey !== undefined;
     }
     for (const [testId, modalTestId] of [
-      ["recommended-encryption-floor-dismiss", "recommended-encryption-floor-modal"],
       ["mls-recovery-missing-dismiss", "mls-recovery-missing-modal"],
       ["mls-unlock-dismiss", "mls-unlock-modal"],
     ] as const) {
@@ -423,23 +422,14 @@ export class JointUserPage {
   async acknowledgeRecommendedEncryptionPromptIfVisible(
     timeoutMs = 5_000,
   ): Promise<boolean> {
-    const modal = this.page
-      .getByTestId("recommended-encryption-floor-modal")
-      .last();
-    const visible = await modal
-      .waitFor({ state: "visible", timeout: timeoutMs })
-      .then(() => true)
-      .catch(() => false);
-    if (!visible) {
-      return false;
-    }
-
-    await this.page
-      .getByTestId("recommended-encryption-floor-enable")
-      .last()
-      .click();
-    await expect(modal).toBeHidden({ timeout: 10_000 });
-    return true;
+    // The recommended encryption floor is auto-acknowledged by the client.
+    // Keep this helper as a compatibility hook for tests that previously
+    // clicked the old modal: the only visible follow-up can be Recovery Key
+    // setup when the account has no configured recovery material.
+    const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(
+      Math.min(timeoutMs, 1_000),
+    );
+    return recoveryKey !== undefined;
   }
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
