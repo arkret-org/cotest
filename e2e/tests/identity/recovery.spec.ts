@@ -283,23 +283,35 @@ test.describe("account recovery", () => {
   });
 
   test.fixme(
-    // @blocking-on: soland#identity-recovery-gap
+    // @blocking-on: client custody of the principal/recovery control private key.
+    //   soland is NOT the gap: recovery_session_complete (soland
+    //   routing/identity/recovery/session_endpoints.rs) already wires the
+    //   recovery-session → ck.device.authorize binding end-to-end. It requires
+    //   the recovering client to first POST, on the principal control stream, a
+    //   real SSK-signed `ck.device.authorize` (its cross_signing_binding verified
+    //   at ingest, §3a) plus a `ck.device.list_update`, then references those two
+    //   durable event ids from /complete, which re-verifies the binding against
+    //   the accepted SSK before flipping the session to `completed` and recording
+    //   the device key. The cross-signing publish + cross_signing_binding side is
+    //   now harness-driveable (see helpers/cross-signing-harness.ts, exercised by
+    //   the multi-device suite). What a black-box e2e harness still cannot produce
+    //   is a soland-verifiable recovery PROOF: the only implemented proof kinds
+    //   are `principal_signing` (verify_principal_signing_proof) — which signs the
+    //   §15 recovery transcript with the principal DID control key — and
+    //   `trusted_recovery_service`. The §15 24-word Recovery Key flow IS the
+    //   principal/recovery-key path, and coauth's onboarding keeps the principal
+    //   DID control private key server-side (helpers/onboarding.ts never exposes
+    //   it), so cotest cannot mint the recovery-key proof. Promoting this needs a
+    //   coauth test seam that signs a recovery transcript with the principal /
+    //   recovery key (out of this task's soland+cotest module boundary; coauth is
+    //   owned by parallel auth-line work). The content-recovery half (SSK/USK +
+    //   MLS account secret unlock on a fresh device) is already live-covered by
+    //   tests/encryption/key-backup.spec.ts A1/A2/A3.
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
     "device-2 restores account using the 24-word Recovery Key; SSK/USK recovered; new device authorized via ck.device.authorize with recovery proof",
     async () => {
-      // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1
-      // BLOCKED: the recovery.md device-authorize段 is NOT end-to-end wired.
-      // soland has the recovery-session lifecycle + proof verification, and
-      // yougen has the restore panel, but the recovery-session →
-      // ck.device.authorize binding (the §7.3 step 5 write that turns a
-      // verified recovery proof into a new authorized device) is not joined.
-      // Promoting this requires deep changes across the yougen recovery flow
-      // AND soland device-authorize, which is owned by parallel device-line
-      // work — out of this task's recovery/key-management module boundary.
-      // The content-recovery half (SSK/USK + MLS account secret unlock on a
-      // fresh device) is already live-covered by
-      // tests/encryption/key-backup.spec.ts A1/A2/A3.
+      // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1; device-lifecycle.md §15.
     },
   );
 

@@ -225,18 +225,83 @@ test.describe("workflow: support escalation", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: soland#workflows-support-escalation-gap
-    // @user-promise: e2e/scenarios/workflows/support-escalation.md
-    // @expected-live-by: 2026Q3
-    "E-support.redact alex redacts a reply that leaked PII; tombstone replaces body for both",
-    async () => {
-      // Kept: this case asserts the tombstone replaces the body for BOTH
-      // sender and receiver. The cross-user (receiver-side) tombstone fold
-      // is owned by the messaging/triad redaction work and the soland
-      // redaction projection; promoting it here would duplicate that effort.
-      // The sender-only self-redact path is covered in daily-standup
-      // (E-standup.redact).
-    },
-  );
+  test("E-support.redact alex redacts a reply that leaked PII; tombstone replaces body for both", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    test.setTimeout(300_000);
+    const stamp = Date.now();
+    const [alexFlow, samFlow] = await Promise.all([
+      openDpopUserPage(browser, request, "wf-support-redact-alex"),
+      openDpopUserPage(browser, request, "wf-support-redact-sam"),
+    ]);
+    test.skip(
+      !alexFlow || !samFlow,
+      "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+    );
+    if (!alexFlow || !samFlow) {
+      return;
+    }
+    const sam = samFlow.user;
+    const alexPage = alexFlow.page;
+    const samPage = samFlow.page;
+    const leaked = `Re #1042: customer SSN 123-45-6789, card 4111-1111-1111-1111 ${stamp}`;
+
+    try {
+      const realmId = await alexPage.createRealm({
+        title: `Support PII redact #1042 ${stamp}`,
+        summary: "Alex redacts a reply that leaked PII",
+        discoverability: "listed",
+        joinRule: "invite",
+        encryptionProfile: "none",
+        seedMembers: [sam.did],
+      });
+      await samPage.acceptInvite(realmId);
+
+      // Alex posts the reply that accidentally leaked PII; Sam receives it.
+      await alexPage.sendTimelineMessage(realmId, leaked);
+      await samPage.gotoTimelineRealm(realmId);
+      await expect(samPage.page.getByTestId("message-list")).toContainText(leaked, {
+        timeout: 30_000,
+      });
+
+      // Alex redacts their own leaked reply. The sender-side tombstone
+      // replaces the body in place.
+      await alexPage.gotoTimelineRealm(realmId);
+      const leakedRow = alexPage.timelineEvent(leaked);
+      await expect(leakedRow).toBeVisible({ timeout: 30_000 });
+      await leakedRow.getByTestId("chat-redact-button").click();
+      await alexPage.page.getByTestId("chat-confirm-redact-button").click();
+      await expect(
+        alexPage.page.getByTestId("chat-redacted-tombstone"),
+      ).toBeVisible({ timeout: 30_000 });
+      await stepShot(alexPage.page, testInfo, "redact-A-alex-tombstone");
+
+      // Both parties reload: the receiver-side tombstone fold is now wired
+      // end-to-end (soland projects the redacted ck.message.create as a
+      // tombstone on events_query/sync; yougen chat folds it into
+      // chat-redacted-tombstone), so the plaintext disappears for both and
+      // the tombstone surfaces on each reload.
+      await alexPage.gotoTimelineRealm(realmId);
+      await expect(
+        alexPage.page.getByTestId("chat-redacted-tombstone"),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(alexPage.page.getByTestId("message-list")).not.toContainText(
+        leaked,
+        { timeout: 30_000 },
+      );
+
+      await samPage.gotoTimelineRealm(realmId);
+      await expect(
+        samPage.page.getByTestId("chat-redacted-tombstone"),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(samPage.page.getByTestId("message-list")).not.toContainText(
+        leaked,
+        { timeout: 30_000 },
+      );
+      await stepShot(samPage.page, testInfo, "redact-B-sam-tombstone");
+    } finally {
+      await Promise.allSettled([samPage.close(), alexPage.close()]);
+    }
+  });
 });

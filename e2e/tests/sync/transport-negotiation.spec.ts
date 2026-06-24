@@ -14,9 +14,20 @@
 //     created/expires freshness window (±30s skew, ≤300s window,
 //     expires-in-future), @authority/endpoint-digest binding, and the
 //     §3.2/§8.3 minimal-disclosure failure envelope are all wired
-//     (signature.rs). A key-rotation hint IS computed but is audit-log only
-//     (tracing detail), because surfacing it in the response body would
-//     violate the minimal-disclosure MUST — see E8.1 below.
+//     (signature.rs). Every auth-failure cause (stale window, wrong/invalid
+//     key) folds into one indistinguishable envelope (FEDERATION_AUTH_FAILURE
+//     _MESSAGE + fixed timing bucket); a key-rotation hint IS computed but
+//     stays audit-log only (tracing::warn! detail), because surfacing it in
+//     the response would violate the minimal-disclosure MUST. E8.1 below
+//     asserts that uniform-failure contract.
+//   ✓ RFC 9421 INBOUND relay hop: the canonical /_cokret/peer/* rail
+//     (verify_inbound_peer_http_signature) authenticates purely on the
+//     federation trust headers — origin IS the source-service-did header, so
+//     there is NO relay-inner signature hop. Two-layer relay verification
+//     (verify_relay_inner_signature) lives only on the private
+//     /_soland/peer/federation/* rail (dev-only, NOT an interop entry point),
+//     so E8.2's inner-EventEnvelope-actor-signature assertion has no landing
+//     spot on the canonical rail — see E8.2 below.
 //   ✓ RFC 9421 OUTBOUND: real — outbox.rs signs (rfc9421_sign) and POSTs for
 //     real when `federation_outbound_enabled=true`. GAP: the enqueued body
 //     (outbound.rs::enqueue_outbound_for) is a {resource_kind,resource_id}
@@ -31,11 +42,39 @@ import { expect, test } from "@playwright/test";
 import { hasDualSoland, solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  makeFederationEvent,
+  rawPushFederationEvents,
+  typedId,
+} from "../../helpers/soland-api";
+import {
   ensureRegistered,
   issueDevSession,
   openUserPage,
   uniqueUser,
 } from "../../helpers/users";
+
+// Reads the auth-failure shape off a federation push response without
+// assuming an envelope vs. plain-text body: minimal disclosure means the
+// status, message, and code MUST be identical across every distinct failure
+// cause (federation.md §3.2 / §8.3).
+async function federationAuthFailureShape(response: {
+  status: () => number;
+  text: () => Promise<string>;
+}): Promise<{ status: number; message: string; code: string; raw: string }> {
+  const raw = await response.text();
+  let message = "";
+  let code = "";
+  try {
+    const body = JSON.parse(raw) as {
+      error?: { code?: string; message?: string };
+    };
+    message = body.error?.message ?? "";
+    code = body.error?.code ?? "";
+  } catch {
+    message = raw;
+  }
+  return { status: response.status(), message, code, raw };
+}
 
 test.describe.configure({ mode: "serial" });
 
@@ -203,56 +242,97 @@ test.describe("transport negotiation", () => {
     },
   );
 
-  test.fixme(
-    // @blocking-on: spec — the acceptance criteria below CONTRADICT the
-    //   normative minimal-disclosure requirement and cannot be implemented as
-    //   written. federation.md §3.2 (lines 110-114) is a MUST: signature
-    //   failure / destination mismatch / digest mismatch / freshness-window
-    //   expiry MUST all return ONE indistinguishable error envelope — same HTTP
-    //   status, same `reason_code`, no visible field carrying "binding ... 的
-    //   任何可区分信息", and the real reason is audit-log only ("MUST NOT 出现
-    //   在对外响应的 status、reason_code、header、body 或 timing 中"). §8.3
-    //   (line 853) restates it: the error MUST NOT leak verifiable-vs-
-    //   unverifiable source differences. A structured `key_rotation_hint`
-    //   {current_keyid, valid_from} in the 401 body is exactly the
-    //   distinguishing signal the spec forbids — it would turn the federation
-    //   ingress into an existence/key-state oracle. soland implements this
-    //   correctly today: signature.rs folds every failure into
-    //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket, and the
-    //   key-rotation hint lives only in the tracing::warn! audit detail. There
-    //   is also no `key_rotation_hint` / `signature_expired` / `unknown_keyid`
-    //   field defined anywhere in spec v1 (grep-confirmed). To promote, this
-    //   sub-test would have to be REWRITTEN to assert the minimal-disclosure
-    //   contract (expired/rotated signature → uniform auth-failure envelope; a
-    //   fresh, correctly-keyed re-sign → 200), NOT to assert a structured hint.
-    //   The expiry/clock-skew enforcement it depends on already exists
-    //   (signature.rs::validate_signature_params: created ±30s, window ≤300s,
-    //   expires-in-future).
-    // @user-promise: e2e/scenarios/sync/transport-negotiation.md (E8.1 — the
-    //   scenario doc's `key_rotation_hint` expectation also needs correcting)
-    // @expected-live-by: blocked-on-test-rewrite (criteria conflict with the
-    //   §3.2 minimal-disclosure MUST; not a soland gap)
-    "E8.1 signature expiry + key rotation: soland_a signs with an expired key; soland_b returns 401 with key_rotation_hint; α re-signs with current key and succeeds",
-    async ({ request }) => {
-      // spec: service-http-binding.md §3 (auth materials), federation.md §3.2
-      //       + §8.3 minimal-disclosure MUST.
-      //
-      // Acceptance criteria (AS WRITTEN — superseded; see @blocking-on):
-      //   1. Build a federation push request with a RFC 9421 Signature whose
-      //      `created` timestamp is older than the accepted window (or whose
-      //      keyid points at a retired key in α's DID document)
-      //   2. POST to β → expect 401 with body
-      //      { error: { code: "signature_expired" | "unknown_keyid",
-      //                 key_rotation_hint: { current_keyid, valid_from } } }
-      //      ^^^ FORBIDDEN by §3.2: a distinguishable code/hint in the response
-      //          body is a minimal-disclosure violation. Correct expectation:
-      //          a single uniform auth-failure envelope (one status + one
-      //          reason_code), with no rotation hint exposed.
-      //   3. Re-sign with the CURRENT keyid; second POST returns 200
-      //   4. β only persists the event from the second (validly signed) attempt
-      void request;
-    },
-  );
+  test("E8.1 signature expiry / key mismatch: β returns one indistinguishable auth-failure envelope (no key_rotation_hint); a fresh re-sign passes auth", async ({
+    request,
+  }) => {
+    // spec: federation.md §3.2 + §8.3 minimal-disclosure MUST. Distinct
+    //   failure causes (stale freshness window, invalid/wrong-key signature)
+    //   MUST collapse to ONE indistinguishable failure: same HTTP status, same
+    //   message, same code, with no distinguishing field (no key_rotation_hint
+    //   / signature_expired / unknown_keyid) in the response — the real cause
+    //   is audit-log only. soland: signature.rs folds every cause into
+    //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket.
+    const realmId = typedId("realm");
+    const buildEvent = (tag: string) =>
+      makeFederationEvent({
+        realmId,
+        kind: "ck.message.create",
+        actorDid: "did:web:alice-e81.example",
+        payload: {
+          strand_id: typedId("strand"),
+          track_name: "discussion",
+          content: {
+            kind: "ck.content.text",
+            body: `E8.1 ${tag} ${Date.now()}`,
+          },
+        },
+      });
+
+    const pushOpts = {
+      origin: solandServiceDid("alpha"),
+      destination: solandServiceDid("beta"),
+      server: "beta" as const,
+      realmId,
+    };
+
+    // Cause 1: the RFC 9421 signature is valid but its freshness window is in
+    // the past (created beyond ±30s, expires < now) → §3.2 rejects on expiry.
+    const expired = await federationAuthFailureShape(
+      await rawPushFederationEvents(request, [buildEvent("expired")], {
+        ...pushOpts,
+        idempotencyKey: `${solandServiceDid("alpha")}#cotest-e81-expired`,
+        expireSignature: true,
+      }),
+    );
+
+    // Cause 2: a structurally-present but cryptographically-invalid signature
+    // (a different cause: bad/wrong key, not expiry).
+    const tampered = await federationAuthFailureShape(
+      await rawPushFederationEvents(request, [buildEvent("tampered")], {
+        ...pushOpts,
+        idempotencyKey: `${solandServiceDid("alpha")}#cotest-e81-tampered`,
+        tamperSignature: true,
+      }),
+    );
+
+    // Both are auth failures in the 4xx family.
+    for (const failure of [expired, tampered]) {
+      expect(failure.status).toBeGreaterThanOrEqual(400);
+      expect(failure.status).toBeLessThan(500);
+    }
+
+    // Minimal disclosure: the two distinct causes are INDISTINGUISHABLE — same
+    // status, same message, same code.
+    expect(expired.status).toBe(tampered.status);
+    expect(expired.message).toBe(tampered.message);
+    expect(expired.code).toBe(tampered.code);
+
+    // And neither response leaks a distinguishing rotation/cause signal that
+    // §3.2/§8.3 forbid.
+    for (const failure of [expired, tampered]) {
+      expect(failure.raw).not.toContain("key_rotation_hint");
+      expect(failure.raw).not.toContain("signature_expired");
+      expect(failure.raw).not.toContain("unknown_keyid");
+      expect(failure.raw).not.toContain("valid_from");
+      expect(failure.raw).not.toContain("current_keyid");
+    }
+
+    // A fresh, correctly-keyed re-sign clears the auth gate: the request is no
+    // longer the uniform auth-failure envelope (post-auth admission outcome is
+    // out of scope for this binding-auth test).
+    const reSigned = await federationAuthFailureShape(
+      await rawPushFederationEvents(request, [buildEvent("resigned")], {
+        ...pushOpts,
+        idempotencyKey: `${solandServiceDid("alpha")}#cotest-e81-resigned`,
+      }),
+    );
+    const passedAuth =
+      reSigned.status !== expired.status || reSigned.message !== expired.message;
+    expect(
+      passedAuth,
+      `re-signed push still looks like an auth failure: ${reSigned.raw}`,
+    ).toBeTruthy();
+  });
 
   test.fixme(
     // @blocking-on: spec single-track convergence — the canonical interop rail

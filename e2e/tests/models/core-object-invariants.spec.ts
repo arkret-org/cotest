@@ -185,19 +185,18 @@ test.describe("core object invariants", () => {
     },
   );
 
-  // ── Phase B — Patch precondition CAS fail.
-  // Retained as fixme: soland parses `preconditions[]` off the Event Envelope
-  // (event_log/sdk_projection.rs) but has NO generic `head_eq` CAS engine on
-  // the `ck.strand.update` path — the only CAS guard on the events submit
-  // surface is the per-actor `actor_seq` frontier (event_log/submit.rs returns
-  // `cas_conflict`, HTTP 409), not a cell-level `head_eq` predicate that fails
-  // closed with `failed_precondition` and suppresses effects[]. Promoting this
-  // would require building the generic precondition/effects atom engine in the
-  // reducer; that is a large, separately-scoped change. The strand fields
-  // read-back path is real today (`GET /_soland/self/strands/{strand_id}`
-  // surfaces `fields.status`), so only the CAS-rejection half is blocked.
-  test.fixme(
-    "Phase B — stale precondition head_eq is rejected with failed_precondition and effects[] are NOT applied",
+  // ── Phase B — Patch precondition CAS (PROMOTED).
+  // soland's events submit surface now evaluates the generic
+  // `preconditions[].head_eq` compare-and-swap before any effect lands
+  // (reducer/projection_state.rs `check_move_preconditions`, wired into the
+  // submit preflight in event_log/submit.rs). A `ck.strand.update` Move
+  // carrying a STALE `head_eq` predicate fails closed with
+  // `failed_precondition` (HTTP 412) and applies NO patch; a FRESH predicate
+  // matching the materialized head admits and applies. The strand fields
+  // read-back path (`GET /_soland/self/strands/{strand_id}` → `fields.status`)
+  // is the assertable head.
+  test(
+    "Phase B — stale precondition head_eq is rejected with failed_precondition and effects[] are NOT applied; a fresh head_eq applies",
     async ({ request }) => {
       const stamp = Date.now();
       const alice = uniqueUser(`s-coinv-b-${stamp}`);
@@ -216,11 +215,11 @@ test.describe("core object invariants", () => {
         `core-invariants strand ${stamp}`,
         { status: "open" },
       );
+      const fieldsCell = `ck:cell:ck.component.strand.fields.v1:${strandId}`;
 
       // A ck.strand.update carrying a STALE `head_eq` precondition (claims
       // status == "closed" when it is actually "open") MUST reject with
-      // failed_precondition and apply NO effect. soland has no generic
-      // head_eq CAS engine yet, so this stays fixme.
+      // failed_precondition and apply NO effect.
       const staleMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
@@ -228,14 +227,14 @@ test.describe("core object invariants", () => {
           realmId,
           kind: "ck.strand.update",
           payload: {
-            strand_id: strandId,
+            target_ref: strandId,
             preconditions: [
               {
-                cell: `ck:cell:ck.component.strand.fields.v1:${strandId}`,
+                cell: fieldsCell,
                 predicate: { op: "head_eq", value: { "fields.status": "closed" } },
               },
             ],
-            patch: { "fields.status": "done" },
+            patch: { "metadata.fields.status": "done" },
           },
         }),
       });
@@ -243,12 +242,41 @@ test.describe("core object invariants", () => {
       expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
       // The materialized field MUST be unchanged.
-      const readBack = await request.get(
+      const readBackStale = await request.get(
         `${solandBaseUrl()}/_soland/self/strands/${encodeURIComponent(strandId)}`,
         { headers: authHeaders(aliceToken) },
       );
-      const strandBody = await readBack.json();
-      expect(strandBody.fields?.status).toBe("open");
+      const staleBody = await readBackStale.json();
+      expect(staleBody.fields?.status).toBe("open");
+
+      // A FRESH head_eq precondition (claims the real head status == "open")
+      // MUST admit and apply the patch.
+      const freshMove = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+        headers: authHeaders(aliceToken),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.strand.update",
+          payload: {
+            target_ref: strandId,
+            preconditions: [
+              {
+                cell: fieldsCell,
+                predicate: { op: "head_eq", value: { "fields.status": "open" } },
+              },
+            ],
+            patch: { "metadata.fields.status": "in_progress" },
+          },
+        }),
+      });
+      expect(freshMove.ok()).toBeTruthy();
+
+      const readBackFresh = await request.get(
+        `${solandBaseUrl()}/_soland/self/strands/${encodeURIComponent(strandId)}`,
+        { headers: authHeaders(aliceToken) },
+      );
+      const freshBody = await readBackFresh.json();
+      expect(freshBody.fields?.status).toBe("in_progress");
     },
   );
 

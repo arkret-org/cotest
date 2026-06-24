@@ -827,6 +827,10 @@ test.describe("cross-server federation", () => {
     const text = await response.text();
     expect(response.status()).toBeGreaterThanOrEqual(400);
     expect(response.status()).toBeLessThan(500);
-    expect(text).toContain("key_rotation_hint=refresh_origin_service_did");
+    // federation.md §3.2/§8.3 minimal disclosure: every auth failure folds to a
+    // single indistinguishable envelope. The key_rotation_hint is audit-only
+    // (soland signature_error → tracing::warn) and MUST NOT leak in the body.
+    expect(text).not.toContain("key_rotation_hint");
+    expect(text).toContain("federation request authentication failed");
   });
 });

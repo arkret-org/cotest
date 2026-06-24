@@ -1257,6 +1257,10 @@ export async function rawPushFederationEvents(
     server?: SolandKey;
     idempotencyKey?: string;
     tamperSignature?: boolean;
+    // Negative-coverage hook: drive the RFC 9421 freshness window past its
+    // bound so verify rejects on expiry (federation.md §3.2). The signature
+    // itself stays cryptographically valid — only created/expires are stale.
+    expireSignature?: boolean;
     relaySourceDid?: string;
     // Negative-coverage hook: submit a digest that diverges from the
     // receiver's registry-derived value (expect reducer_profile_mismatch).
@@ -1272,12 +1276,9 @@ export async function rawPushFederationEvents(
     { reducerProfileDigest: opts.reducerProfileDigestOverride },
   );
   const sourceDid = opts.relaySourceDid ?? opts.origin;
-  const headers = signedFederationPushHeaders(
-    sourceDid,
-    destination,
-    url,
-    body,
-  );
+  const headers = signedFederationPushHeaders(sourceDid, destination, url, body, {
+    expireSignature: opts.expireSignature,
+  });
   if (opts.tamperSignature) {
     headers.signature = `sig1=:${Buffer.alloc(64).toString("base64")}:`;
   }
@@ -1706,14 +1707,20 @@ function signedFederationPushHeaders(
   destinationDid: string,
   targetUri: string,
   body: unknown,
+  opts: { expireSignature?: boolean } = {},
 ): Record<string, string> {
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
   const requestDigest = `sha256:${createHash("sha256").update(bodyBytes).digest("hex")}`;
   const sourceTrustDomain = trustDomainFromServiceDid(sourceDid);
   const destinationTrustDomain = trustDomainFromServiceDid(destinationDid);
-  const created = Math.floor(Date.now() / 1000);
-  const expires = created + 300;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  // When asked, push created/expires fully behind the accepted freshness
+  // window (federation.md §3.2): expires < now and created beyond the ±30s
+  // skew bound. The signature still covers these params, so it verifies — the
+  // request is rejected on the freshness check, not on a bad signature.
+  const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
+  const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
   const keyid = `${sourceDid}#federation-fanout-key`;
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "source-service-did" ` +

@@ -218,19 +218,18 @@ test.describe("realm links", () => {
     },
   );
 
-  test.fixme(
+  test(
     "E6.2 multi-target narrowing: T governed_by G1 + G2 takes narrow (intersection) of inherited rules (spec §6.2 narrow-only)",
     async ({ request }) => {
-      // Retained as fixme. soland's effective-policy read
-      // (reducer/realm_links.rs effective_policy_for_realm) surfaces the
-      // UNION of each source realm's `allowed_policies` — the spec §6.2
-      // narrow-only intersection is documented as applied DOWNSTREAM at
-      // policy-decision time (routing/access/policy.rs), not materialized on
-      // the effective-policy read. There is therefore no readable surface
-      // that exposes a deny-style `banned_keywords` intersection across two
-      // sources to assert against. Promoting this needs either a
-      // decision-time intersection read endpoint or banned-keyword rule
-      // modelling in the inheritance merge, neither of which exists today.
+      // PROMOTED. soland now retains a per-(child, source) inheritance-policy
+      // projection (reducer/projection_state.rs
+      // `realm_inheritance_policies_by_source`, populated in
+      // reducer/apply_realm_policy.rs), and the effective-policy read
+      // (reducer/realm_links.rs `narrowed_inheritance_intersection`) surfaces
+      // the narrow-only INTERSECTION across every source the child opted into
+      // via a currently-active governance link, alongside the legacy UNION.
+      // `effective_policy.narrowed_policies` is the §6.2 narrow-only result:
+      // a policy survives only when EVERY active source declares it.
       const stamp = Date.now();
       const alice = uniqueUser(`s-rl-multi-${stamp}`);
       await ensureRegistered(request, alice);
@@ -288,14 +287,21 @@ test.describe("realm links", () => {
         { headers: auth },
       );
       const effBody = await eff.json();
-      const merged: string[] = effBody.effective_policy.allowed_policies ?? [];
+      // §6.2 narrow-only: `narrowed_policies` is the INTERSECTION across the
+      // two opted-in sources (G1 = {p1, p2}, G2 = {p2, p3}). Only the shared
+      // p2 survives the narrowing; p1 and p3 (declared by only one source) do
+      // NOT.
+      const narrowed: string[] = effBody.effective_policy.narrowed_policies ?? [];
       const g1Set = new Set([`p1-${stamp}`, `p2-${stamp}`]);
       const g2Set = new Set([`p2-${stamp}`, `p3-${stamp}`]);
-      // Narrow-only: every policy in the merged set must appear in EVERY source.
-      for (const p of merged) {
+      // Every narrowed policy MUST appear in EVERY source.
+      for (const p of narrowed) {
         expect(g1Set.has(p) && g2Set.has(p)).toBe(true);
       }
-      expect(merged).toContain(`p2-${stamp}`);
+      expect(narrowed).toContain(`p2-${stamp}`);
+      // The source-exclusive policies MUST be narrowed out.
+      expect(narrowed).not.toContain(`p1-${stamp}`);
+      expect(narrowed).not.toContain(`p3-${stamp}`);
     },
   );
 

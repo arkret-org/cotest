@@ -8,6 +8,12 @@
 import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  buildCrossSigningPublishPayload,
+  buildDeviceCrossSigningBinding,
+  deviceVerifyKeyMultibase,
+  generateCrossSigningIdentity,
+} from "../../helpers/cross-signing-harness";
+import {
   authHeaders,
   b64url,
   createRealmApi,
@@ -98,29 +104,185 @@ test.describe("multi-device pairing + revocation", () => {
     expect(wireErrCode(await pairResp.json())).toBe("device_not_authorized");
   });
 
-  test.fixme(
-    // @blocking-on: real cross-signing cryptography in the TS harness. soland
-    //   ingest of a ck.device.authorize that carries `cross_signing_binding`
-    //   is NOT a dev-proof shortcut: operations/policy.rs →
-    //   cross_signing::validate_device_authorize_binding →
-    //   check_device_cross_signing_binding verifies the binding signature with
-    //   the principal's accepted SSK from a real ck.cross_signing.publish, over
-    //   the §5.2 "ck-device-trust-bind-v1" canonical input, at the matching
-    //   generation. Promoting this needs the harness to (1) generate a real SSK
-    //   keypair, (2) publish ck.cross_signing.publish with a PSK→SSK binding
-    //   signature over the §5.1 canonical input, and (3) sign the device-trust
-    //   binding with that SSK — full cross-signing key management not yet
-    //   available in helpers/. soland (project_device_authorize → keys/query
-    //   §8.2 echo) and the SDK types are already in place to surface it once the
-    //   crypto helper lands.
-    // @user-promise: e2e/scenarios/identity/multi-device.md
-    // @expected-live-by: 2026Q3
-    "Device 1 scans Device 2's QR; signs ck.device.authorize with cross_signing_binding; Device 2 syncs and joins existing MLS groups via Welcome",
-    async () => {
-      // spec: device-lifecycle.md §2.1 (5-step pairing), §5.2 cross-signing binding,
-      // §8.2 keys/query directory echo.
-    },
-  );
+  test("Device 1 publishes cross-signing keys, then signs ck.device.authorize for Device 2 with a real cross_signing_binding; soland ingest verifies the SSK signature and surfaces Device 2", async ({
+    request,
+  }) => {
+    // spec: device-lifecycle.md §5.1 (ck.cross_signing.publish — PSK→{SSK,USK})
+    // + §5.2 (per-device cross_signing_binding, the SSK signature over the
+    // ck-device-trust-bind-v1 canonical input).
+    //
+    // This is NOT a dev-proof shortcut for the binding: soland's
+    // validate_device_authorize_binding → check_device_cross_signing_binding
+    // (routing/identity/cross_signing.rs) resolves the accepted SSK from a real
+    // ck.cross_signing.publish and verifies the §5.2 signature at the live
+    // generation. The harness publishes a genuine cross-signing identity (PSK
+    // anchored as a self-contained did:key; PSK→SSK and PSK→USK bindings signed
+    // over the §5.1 input) and signs the device-trust binding with that SSK, so
+    // the assertions below exercise the real ingest cryptography.
+    const alice = uniqueUser(`s10-xsign-${Date.now()}`);
+    await ensureRegistered(request, alice);
+    const device1Token = await issueDevSession(request, alice);
+    const realmId = principalControlRealmForDid(alice.did);
+
+    const identity = generateCrossSigningIdentity({ principalId: alice.did });
+
+    // 1) Publish the cross-signing identity (PSK→SSK / PSK→USK bindings). soland
+    //    anchors the PSK (did:key), verifies both §5.1 bindings, and runs the
+    //    CAS check (expected_previous_generation=0 → generation=1).
+    const publish = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(device1Token),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.cross_signing.publish",
+          payload: buildCrossSigningPublishPayload(identity),
+        }),
+      },
+    );
+    expect(
+      [200, 201],
+      `ck.cross_signing.publish returned ${publish.status()}: ${await publish.text()}`,
+    ).toContain(publish.status());
+
+    // 2) Authorize Device 2 with a real SSK-signed cross_signing_binding over
+    //    the §5.2 ck-device-trust-bind-v1 input. soland verifies the binding at
+    //    ingest against the just-accepted SSK at the live generation.
+    const device2Id = typedId("device");
+    const device2Key = deviceVerifyKeyMultibase();
+    const goodBinding = buildDeviceCrossSigningBinding({
+      identity,
+      deviceId: device2Id,
+      devicePublicKeyMultibase: device2Key.multibase,
+    });
+    const authorize = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(device1Token),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.device.authorize",
+          payload: {
+            principal_id: alice.did,
+            device_id: device2Id,
+            device_public_key: device2Key.multibase,
+            device_key_algorithm: "EdDSA",
+            authorized_by: alice.deviceId,
+            not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            cross_signing_binding: goodBinding,
+          },
+        }),
+      },
+    );
+    expect(
+      [200, 201],
+      `ck.device.authorize with valid cross_signing_binding returned ${authorize.status()}: ${await authorize.text()}`,
+    ).toContain(authorize.status());
+
+    // The authorized device surfaces in alice's device-set projection.
+    const deadline = Date.now() + 30_000;
+    let ids: string[] = [];
+    for (;;) {
+      const viewer = await request.get(
+        `${solandBaseUrl()}/_cokret/self/account/viewer`,
+        { headers: authHeaders(device1Token) },
+      );
+      if (viewer.ok()) {
+        const body = (await viewer.json()) as {
+          devices?: Array<{ device_id?: string }>;
+        };
+        ids = (body.devices ?? [])
+          .map((device) => device.device_id)
+          .filter((id): id is string => typeof id === "string");
+        if (ids.includes(device2Id)) {
+          break;
+        }
+      }
+      if (Date.now() > deadline) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    expect(
+      ids,
+      `cross-signed Device 2 should appear in the device list: ${JSON.stringify(ids)}`,
+    ).toContain(device2Id);
+
+    // 3) Negative: a binding whose ssk_generation does not match the accepted
+    //    publish MUST be rejected (device_recovery_ssk_generation_mismatch) —
+    //    proves the generation gate is live, not echoed.
+    const staleDeviceId = typedId("device");
+    const staleDeviceKey = deviceVerifyKeyMultibase();
+    const staleBinding = buildDeviceCrossSigningBinding({
+      identity: { ...identity, generation: identity.generation + 1 },
+      deviceId: staleDeviceId,
+      devicePublicKeyMultibase: staleDeviceKey.multibase,
+    });
+    const staleAuthorize = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(device1Token),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.device.authorize",
+          payload: {
+            principal_id: alice.did,
+            device_id: staleDeviceId,
+            device_public_key: staleDeviceKey.multibase,
+            device_key_algorithm: "EdDSA",
+            authorized_by: alice.deviceId,
+            not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            cross_signing_binding: staleBinding,
+          },
+        }),
+      },
+    );
+    expect(
+      staleAuthorize.ok(),
+      `wrong-generation cross_signing_binding should be rejected, got ${staleAuthorize.status()}`,
+    ).toBeFalsy();
+
+    // 4) Negative: a binding signed by the USK instead of the accepted SSK MUST
+    //    fail the §5.2 signature check — proves soland verifies the signature,
+    //    not just the declared generation.
+    const forgedDeviceId = typedId("device");
+    const forgedDeviceKey = deviceVerifyKeyMultibase();
+    const forgedBinding = buildDeviceCrossSigningBinding({
+      // Swap SSK for USK so the signature is over the right bytes but by the
+      // wrong key — the declared verification_method is also the USK's did:key,
+      // which is not the accepted SSK.
+      identity: { ...identity, ssk: identity.usk },
+      deviceId: forgedDeviceId,
+      devicePublicKeyMultibase: forgedDeviceKey.multibase,
+    });
+    const forgedAuthorize = await request.post(
+      `${solandBaseUrl()}/_cokret/self/events`,
+      {
+        headers: authHeaders(device1Token),
+        data: signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ck.device.authorize",
+          payload: {
+            principal_id: alice.did,
+            device_id: forgedDeviceId,
+            device_public_key: forgedDeviceKey.multibase,
+            device_key_algorithm: "EdDSA",
+            authorized_by: alice.deviceId,
+            not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+            cross_signing_binding: forgedBinding,
+          },
+        }),
+      },
+    );
+    expect(
+      forgedAuthorize.ok(),
+      `cross_signing_binding signed by the wrong key should be rejected, got ${forgedAuthorize.status()}`,
+    ).toBeFalsy();
+  });
 
   test("both devices show up in alice's device list projection within 30s of pairing", async ({
     request,
