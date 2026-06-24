@@ -12,7 +12,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
-use chrono::SecondsFormat;
+use chrono::{Duration as ChronoDuration, SecondsFormat};
 use reqwest::StatusCode;
 use reqwest::header::CONTENT_TYPE;
 use serde_json::Value;
@@ -199,7 +199,33 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     let pre_join_event_id = submitted_event_id(&pre_join)
         .ok_or_else(|| anyhow!("pre-join send response missing event_id: {pre_join}"))?
         .to_owned();
-    add_member_now(&alice, &realm_id, &bob_client.actor).await?;
+    let invite_id = create_invite_now(&alice, &realm_id, bob_client).await?;
+    eventually(
+        "Bob sees pending invite before joining",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let invite_id = invite_id.clone();
+            let realm_id = realm_id.clone();
+            async move {
+                let invites = bob_client
+                    .sdk()
+                    .authz_invites(&bob_client.actor, Some(&realm_id), None)
+                    .await?;
+                if invites
+                    .invites
+                    .iter()
+                    .any(|invite| invite.id.to_string() == invite_id)
+                {
+                    Ok(())
+                } else {
+                    Err(anyhow!("Bob pending invites missing {invite_id}"))
+                }
+            }
+        },
+    )
+    .await?;
+    accept_invite_join_now(bob_client, &realm_id, &invite_id).await?;
     tokio::time::sleep(Duration::from_millis(20)).await;
 
     let bob_baseline = eventually(
@@ -223,6 +249,40 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             .any(|event| event["event_id"] == pre_join_event_id),
         "joined-history invitee MUST NOT receive pre-join timeline events: {bob_baseline}"
     );
+    assert!(
+        !sync_notifications_contain_invite(&bob_baseline, &invite_id),
+        "accepted invite notification MUST NOT remain in Bob full sync: {bob_baseline}"
+    );
+    eventually(
+        "accepted invite is hidden after Bob joins",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let realm_id = realm_id.clone();
+            let invite_id = invite_id.clone();
+            let alice = alice.clone();
+            async move {
+                let bob_invites = bob_client
+                    .sdk()
+                    .authz_invites(&bob_client.actor, Some(&realm_id), None)
+                    .await?;
+                let alice_view = alice
+                    .sdk()
+                    .authz_invites(&bob_client.actor, Some(&realm_id), None)
+                    .await?;
+                if bob_invites.invites.is_empty() && alice_view.invites.is_empty() {
+                    Ok(())
+                } else {
+                    Err(anyhow!(
+                        "accepted invite {invite_id} still visible: bob={}, alice={}",
+                        serde_json::to_string(&bob_invites.invites)?,
+                        serde_json::to_string(&alice_view.invites)?
+                    ))
+                }
+            }
+        },
+    )
+    .await?;
     let bob_cursor = cursor_from_sync(&bob_baseline)?;
 
     let alice_after_join = send_message_now(
@@ -316,6 +376,92 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     Ok(())
 }
 
+pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<()> {
+    let group = TestServerGroup::single("account-subscribe-invite-cancel").await?;
+    let server = group.server(0);
+    let alice = server
+        .demo_client(
+            "did:web:alice.example",
+            "ck:device:01904100-0000-7000-8000-0000000000a1",
+        )
+        .await?;
+    let bob = TestActorBuilder::new(server, "@bob-cancel")
+        .with_did("did:web:bob-cancel.example")
+        .with_device("ck:device:01904100-0000-7000-8000-0000000000b2")
+        .create()
+        .await?;
+    let bob_client = bob.client();
+    let realm_id = alice.create_realm("Cancelled Invite Realm").await?;
+    let invite_id = create_invite_now(&alice, &realm_id, bob_client).await?;
+
+    eventually(
+        "Bob sees pending invite before cancellation",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let invite_id = invite_id.clone();
+            let realm_id = realm_id.clone();
+            async move {
+                let invites = bob_client
+                    .sdk()
+                    .authz_invites(&bob_client.actor, Some(&realm_id), None)
+                    .await?;
+                if invites
+                    .invites
+                    .iter()
+                    .any(|invite| invite.id.to_string() == invite_id)
+                {
+                    Ok(())
+                } else {
+                    Err(anyhow!("Bob pending invites missing {invite_id}"))
+                }
+            }
+        },
+    )
+    .await?;
+
+    cancel_invite_now(&alice, &realm_id, &invite_id).await?;
+
+    eventually(
+        "cancelled invite is hidden from invite listings",
+        Duration::from_secs(5),
+        Duration::from_millis(100),
+        || {
+            let realm_id = realm_id.clone();
+            let invite_id = invite_id.clone();
+            let alice = alice.clone();
+            async move {
+                let bob_invites = bob_client
+                    .sdk()
+                    .authz_invites(&bob_client.actor, Some(&realm_id), None)
+                    .await?;
+                let alice_view = alice
+                    .sdk()
+                    .authz_invites(&bob_client.actor, Some(&realm_id), None)
+                    .await?;
+                if bob_invites.invites.is_empty() && alice_view.invites.is_empty() {
+                    Ok(())
+                } else {
+                    Err(anyhow!(
+                        "cancelled invite {invite_id} still visible: bob={}, alice={}",
+                        serde_json::to_string(&bob_invites.invites)?,
+                        serde_json::to_string(&alice_view.invites)?
+                    ))
+                }
+            }
+        },
+    )
+    .await?;
+
+    let bob_sync = bob_client.sync().await?;
+    assert!(
+        !sync_notifications_contain_invite(&bob_sync, &invite_id),
+        "cancelled invite notification MUST NOT remain in Bob full sync: {bob_sync}"
+    );
+
+    Ok(())
+}
+
 fn submitted_event_id(response: &Value) -> Option<&str> {
     response
         .get("event_id")
@@ -403,6 +549,16 @@ fn timeline_events<'a>(sync: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>
         .ok_or_else(|| anyhow!("sync response missing realm timeline events: {sync}"))
 }
 
+fn sync_notifications_contain_invite(sync: &Value, invite_id: &str) -> bool {
+    sync["notifications"]
+        .as_array()
+        .is_some_and(|notifications| {
+            notifications
+                .iter()
+                .any(|notification| notification["invite_id"] == invite_id)
+        })
+}
+
 async fn send_message_now(
     actor: &crate::harness::TestActorClient,
     realm_id: &str,
@@ -422,20 +578,65 @@ async fn send_message_now(
     .await
 }
 
-async fn add_member_now(
-    actor: &crate::harness::TestActorClient,
+async fn create_invite_now(
+    inviter: &crate::harness::TestActorClient,
     realm_id: &str,
-    member_actor: &str,
+    invitee: &crate::harness::TestActorClient,
+) -> Result<String> {
+    let invite_id = "ck:invite:01999999-0000-7000-8000-00000000b0b1".to_owned();
+    let expires_at =
+        (chrono::Utc::now() + ChronoDuration::days(7)).to_rfc3339_opts(SecondsFormat::Secs, true);
+    submit_event_now(
+        inviter,
+        realm_id,
+        "ck.invite.create",
+        serde_json::json!({
+            "invite_id": invite_id,
+            "invitee": invitee.actor.as_str(),
+            "invite_delivery_target": {
+                "recipient_service_did": invitee.service_did(),
+                "recipient_service_type": "principal_server",
+            },
+            "introduction_evidence_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "expires_at": expires_at,
+        }),
+    )
+    .await?;
+    Ok(invite_id)
+}
+
+async fn accept_invite_join_now(
+    invitee: &crate::harness::TestActorClient,
+    realm_id: &str,
+    invite_id: &str,
 ) -> Result<Value> {
     submit_event_now(
-        actor,
+        invitee,
         realm_id,
         "ck.member.state",
         serde_json::json!({
             "realm_id": realm_id,
-            "actor_id": member_actor,
+            "actor_id": invitee.actor.as_str(),
             "membership": "join",
+            "invite_ref": invite_id,
             "delivery_status": "unroutable",
+        }),
+    )
+    .await
+}
+
+async fn cancel_invite_now(
+    inviter: &crate::harness::TestActorClient,
+    realm_id: &str,
+    invite_id: &str,
+) -> Result<Value> {
+    submit_event_now(
+        inviter,
+        realm_id,
+        "ck.invite.cancel",
+        serde_json::json!({
+            "invite_id": invite_id,
+            "reason": "admin_cancel",
         }),
     )
     .await
