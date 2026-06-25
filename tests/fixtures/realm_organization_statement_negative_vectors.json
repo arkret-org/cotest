@@ -1,0 +1,200 @@
+{
+  "profile": "ck.profile.realm_organization_statement_negative_vectors.v1",
+  "version": "2026-06-25",
+  "inherits": ["_shared/_canonical_dids.json", "_shared/_canonical_uuids.json"],
+  "comment": "COT-ORG-02 — protocol-semantic negative vectors for ck.realm.organization (RealmOrganizationPayload). Every vector is consumed by tests/realm_organization_statement_negative.rs which drives the cokret-core EventPayloadValidatorCatalog::validate_payload (strong schema dispatch on `ck.realm.organization`) and the cokret_core::models::realm_governance::verify_realm_organization_statement verifier. `surface=verifier` cases MUST be rejected by verify_realm_organization_statement under the declared resolver, and the verifier error embeds the pinned spec wire reason-code (error-code-registry / reason-code-registry) — the test asserts that exact code token, never a project-private string. `surface=schema` cases MUST be rejected by the strong payload JSON-schema; that validator echoes the schema $id, not the registry token, so for schema cases the test asserts rejection and expected.reason_code stays documentary (it classifies the wire failure as schema_violation). A declared-but-unverified organization (only owning_organizations, no active statement) is NOT modelled here because there is no statement to validate — that gap is covered by the organization-policy e2e (case A).",
+  "expected_realm_id": "ck:realm:0196419b-0000-7000-8000-000000000010",
+  "now": "2026-06-25T12:00:00Z",
+  "base_active_statement": {
+    "statement_id": "org-stmt-1",
+    "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000010",
+    "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+    "relationship": "owner",
+    "status": "active",
+    "control_scopes": ["official_badge", "realm_admin"],
+    "issued_at": "2026-06-25T00:00:00Z",
+    "authorization": {
+      "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+      "issuer_role": "organization_did",
+      "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
+      "signed_at": "2026-06-25T00:00:00Z",
+      "proof": "c2ln"
+    }
+  },
+  "negative_vectors": [
+    {
+      "name": "active_missing_proof",
+      "surface": "verifier",
+      "comment": "Active statement whose authorization.proof is blank must fail closed; an unproven statement cannot endorse the relationship.",
+      "mutation": { "set": { "authorization.proof": "   " } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "invalid_signature" }
+    },
+    {
+      "name": "active_missing_proof_field_schema",
+      "surface": "schema",
+      "comment": "Strong payload schema requires authorization.proof; removing it is a schema_violation independent of the verifier.",
+      "mutation": { "remove": ["authorization.proof"] },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "governance_service_missing_delegation_ref",
+      "surface": "verifier",
+      "comment": "issuer_role=governance_service is a delegated role; the statement MUST carry a delegation_ref. Absent ⇒ schema_violation.",
+      "mutation": { "set": { "authorization.issuer_role": "governance_service" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "account_authority_missing_delegation_ref",
+      "surface": "verifier",
+      "comment": "issuer_role=account_authority is a delegated role; missing delegation_ref ⇒ schema_violation.",
+      "mutation": { "set": { "authorization.issuer_role": "account_authority" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "governance_service_missing_delegation_ref_schema",
+      "surface": "schema",
+      "comment": "Strong payload schema allOf requires delegation_ref when issuer_role is governance_service/account_authority.",
+      "mutation": { "set": { "authorization.issuer_role": "governance_service" } },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "non_delegated_role_with_delegation_ref",
+      "surface": "verifier",
+      "comment": "organization_did is NOT a delegated role; carrying a delegation_ref is invalid coupling ⇒ schema_violation.",
+      "mutation": { "set": { "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "delegated_role_unresolvable_delegation_fails_closed",
+      "surface": "verifier",
+      "comment": "governance_service with a delegation_ref that does not resolve fails closed; upstream grant is treated as revoked/absent.",
+      "mutation": {
+        "set": {
+          "authorization.issuer_role": "governance_service",
+          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+        }
+      },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "grant_revoked_upstream" }
+    },
+    {
+      "name": "delegated_role_not_live_delegation",
+      "surface": "verifier",
+      "comment": "Delegation resolves but is_live=false (expired/revoked upstream) ⇒ grant_revoked_upstream.",
+      "mutation": {
+        "set": {
+          "authorization.issuer_role": "governance_service",
+          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+        }
+      },
+      "resolver": "delegation_not_live",
+      "expected": { "outcome": "reject", "reason_code": "grant_revoked_upstream" }
+    },
+    {
+      "name": "delegation_scope_not_covering_official_badge",
+      "surface": "verifier",
+      "comment": "Statement requests official_badge + realm_admin but the delegation only covers realm_admin. The uncovered scope cannot be endorsed ⇒ grant_exceeds_issuer_authority. This is the scope-coverage gate for official badge / governance policy.",
+      "mutation": {
+        "set": {
+          "authorization.issuer_role": "governance_service",
+          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+        }
+      },
+      "resolver": "delegation_covers_realm_admin_only",
+      "expected": { "outcome": "reject", "reason_code": "grant_exceeds_issuer_authority" }
+    },
+    {
+      "name": "delegation_relationship_not_covered",
+      "surface": "verifier",
+      "comment": "Statement asserts relationship=governance but the delegation only covers owner ⇒ grant_exceeds_issuer_authority (cannot grant a governance-policy relationship outside the delegation purpose).",
+      "mutation": {
+        "set": {
+          "relationship": "governance",
+          "authorization.issuer_role": "governance_service",
+          "authorization.delegation_ref": "ck:grant:0196419b-0000-7000-8000-000000000001"
+        }
+      },
+      "resolver": "delegation_covers_owner_only",
+      "expected": { "outcome": "reject", "reason_code": "grant_exceeds_issuer_authority" }
+    },
+    {
+      "name": "expired_statement",
+      "surface": "verifier",
+      "comment": "expires_at <= now ⇒ the statement is no longer in effect (ttl_expired). An expired endorsement does not grant official badge or governance policy.",
+      "mutation": { "set": { "expires_at": "2026-06-25T06:00:00Z" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "ttl_expired" }
+    },
+    {
+      "name": "not_yet_valid_statement",
+      "surface": "verifier",
+      "comment": "not_before > now ⇒ the statement is not yet in its validity window (failed_precondition).",
+      "mutation": { "set": { "not_before": "2026-06-26T00:00:00Z" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "failed_precondition" }
+    },
+    {
+      "name": "realm_id_mismatch",
+      "surface": "verifier",
+      "comment": "payload.realm_id must equal the enclosing Event.realm_id; a statement bound to another Realm cannot endorse this one.",
+      "mutation": { "set": { "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000099" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "revoked_without_revokes_statement_id",
+      "surface": "verifier",
+      "comment": "status=revoked MUST carry revokes_statement_id; otherwise the revocation is unanchored ⇒ schema_violation.",
+      "mutation": { "set": { "status": "revoked" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "revoked_without_revokes_statement_id_schema",
+      "surface": "schema",
+      "comment": "Strong payload schema allOf requires revokes_statement_id when status=revoked.",
+      "mutation": { "set": { "status": "revoked" } },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "active_carrying_revokes_statement_id",
+      "surface": "verifier",
+      "comment": "status=active MUST NOT carry revokes_statement_id (a live endorsement is not a revocation) ⇒ schema_violation.",
+      "mutation": { "set": { "revokes_statement_id": "org-stmt-0" } },
+      "resolver": "no_delegation",
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "legacy_organization_ref_shape",
+      "surface": "schema",
+      "comment": "The pre-migration singleton shape { organization_ref } must be rejected by the strong schema (required fields missing).",
+      "replace": { "organization_ref": "did:web:org.example" },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "invalid_relationship_enum",
+      "surface": "schema",
+      "comment": "relationship is a closed enum {owner, governance, sponsor, directory_certifier}; `admin` is not a member.",
+      "mutation": { "set": { "relationship": "admin" } },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    },
+    {
+      "name": "invalid_control_scope_enum",
+      "surface": "schema",
+      "comment": "control_scopes items are a closed enum; `not_a_scope` is not a member.",
+      "mutation": { "set_array": { "control_scopes": ["not_a_scope"] } },
+      "expected": { "outcome": "reject", "reason_code": "schema_violation" }
+    }
+  ],
+  "positive_control": {
+    "name": "active_organization_did_statement",
+    "comment": "Sanity control: the unmutated base statement MUST pass both the strong schema and the verifier under the no_delegation resolver.",
+    "surface": "both",
+    "resolver": "no_delegation",
+    "expected": { "outcome": "accept" }
+  }
+}

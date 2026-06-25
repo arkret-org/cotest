@@ -66,12 +66,53 @@
       "payload_shape": { "space_id": "ck:space:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "parent_space_id": "ck:space:7fd5ae82-44e2-7a8a-9a4b-885799114210" }
     },
     {
-      "name": "space_organization_cas_register",
+      "name": "realm_organization_active_cas_register",
       "event_kind": "ck.realm.organization",
       "cell_family": "ck.component.realm.organization.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "payload_shape": { "organization_ref": "did:web:org.example" }
+      "comment": "SDK-ORG-01 — active RealmOrganizationPayload relationship statement. organization_did issuer carries no delegation_ref; control_scopes endorse official_badge + realm_admin. Field order mirrors event-payload.schema.json #/$defs/realm_organization_payload properties.",
+      "payload_shape": {
+        "statement_id": "org-stmt-active-1",
+        "realm_id": "ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+        "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+        "relationship": "owner",
+        "status": "active",
+        "control_scopes": ["official_badge", "realm_admin"],
+        "issued_at": "2026-06-25T00:00:00Z",
+        "authorization": {
+          "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+          "issuer_role": "organization_did",
+          "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
+          "signed_at": "2026-06-25T00:00:00Z",
+          "proof": "c2ln"
+        }
+      }
+    },
+    {
+      "name": "realm_organization_revoked_cas_register",
+      "event_kind": "ck.realm.organization",
+      "cell_family": "ck.component.realm.organization.v1",
+      "lattice": "cas_register",
+      "bottom": "reject",
+      "comment": "SDK-ORG-01 — revoked RealmOrganizationPayload statement. status=revoked REQUIRES revokes_statement_id (schema allOf + verifier invariant).",
+      "payload_shape": {
+        "statement_id": "org-stmt-revoke-1",
+        "realm_id": "ck:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+        "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+        "relationship": "owner",
+        "status": "revoked",
+        "control_scopes": ["official_badge", "realm_admin"],
+        "issued_at": "2026-06-25T00:00:00Z",
+        "revokes_statement_id": "org-stmt-active-1",
+        "authorization": {
+          "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+          "issuer_role": "organization_did",
+          "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
+          "signed_at": "2026-06-25T00:00:00Z",
+          "proof": "c2ln"
+        }
+      }
     },
     {
       "name": "realm_inheritance_policy_cas_register",

@@ -4,7 +4,7 @@
 
 验证 kanban 完整 CRUD 与跨 list 拖拽:alice 在 Realm 内建 Board (Space container);加 List (child Space container);加 Card (Strand);跨 List 拖动 Card(`ck.strand.move` cas-register);archive Card;在 Card 内发 comment(discussion track)。
 
-不验证:多用户协作(见 kanban/project-simulation)、跨 board 移动(后续)、文档编辑(documents/collaboration)。
+不验证:多用户协作(见 kanban/project-simulation)、跨 board 移动(后续)。
 
 ## Spec 锚点
 

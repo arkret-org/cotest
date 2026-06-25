@@ -57,6 +57,8 @@ fn build_realm(
         encryption_profile: EncryptionProfile::None,
         content_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
         metadata_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
+        content_scheme: None,
+        durability_policy: None,
         federation_policy,
         sync_endpoints: Vec::new(),
         digest_algorithm: cokret_core::canonical::DigestSuite::Sha256,

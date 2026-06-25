@@ -4,7 +4,7 @@
 
 kanban/end-to-end 的多用户进阶版:三个用户(alice 项目经理 + bob/carol 开发)在一个 Realm 内运行一个完整 sprint 节奏 —— alice 建 board、把任务 assign 给 bob/carol、设 due dates、bob/carol 自己更新 status 推进任务到 done、alice 跨列移动逾期任务、最终 alice archive board。每一步对应一个 spec 事件,并验证 cas-register 的并发安全和 relation 的 cardinality 约束。
 
-不验证:基础 kanban CRUD(kanban/end-to-end 已覆盖)、文档协作(documents/collaboration)、加密(encryption/mls-group)。
+不验证:基础 kanban CRUD(kanban/end-to-end 已覆盖)、加密(encryption/mls-group)。
 
 ## Spec 锚点
 

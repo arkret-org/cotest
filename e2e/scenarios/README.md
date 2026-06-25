@@ -6,7 +6,7 @@
 e2e/
   scenarios/      # 设计契约(actor / step / 断言 / spec ref)
     authz/        calls/        conformance/  discovery/
-    documents/    encryption/   extensions/   federation/
+    encryption/   extensions/   federation/
     governance/   harness/      identity/     invites/
     joint/        kanban/       messaging/    models/
     spaces/       sync/         workflows/
