@@ -118,6 +118,120 @@ The primary human-readable report is
 
 The local hygiene report is `artifacts/hygiene/<timestamp>/summary.md`.
 
+## Recording manual flows into one-key replay (codegen → smoke)
+
+If you keep hand-driving the same browser flow (register → login → create a
+Realm → …) to verify a change, stop repeating it by hand. Record it **once** as
+a Playwright spec, then replay it with one command and keep the screenshots/trace
+as evidence. This is the highest-ROI automation step: the recorder emits
+maintainable TypeScript over `getByTestId`/`getByRole`, not a brittle pixel
+recording, and the resulting spec doubles as a regression gate the AI-driven
+exploratory tools can never be.
+
+### 1. Bring the stack up, then record
+
+`playwright codegen` needs a running yougen (and the soland/coauth it talks to).
+Start the stack the usual way, then point the recorder at it:
+
+```powershell
+# Terminal A — start soland + coauth + yougen and leave them running.
+& "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -KeepAlive
+
+# Terminal B — record. Default yougen URL is http://127.0.0.1:4527; override
+# with YOUGEN_BASE_URL if your run prints a different one.
+cd D:\Works\cokret\cotest\e2e
+npx playwright codegen http://127.0.0.1:4527
+```
+
+Drive the flow by hand in the popup browser. The Inspector writes the
+corresponding TypeScript live; copy it out when you are done.
+
+> If `-KeepAlive` is not available on your branch, start the services with your
+> usual local commands (or `run-compose.ps1`) and codegen against the printed
+> yougen URL — codegen only needs a reachable base URL.
+
+### 2. Save it as a spec, following the e2e conventions
+
+Drop the recording under the matching domain in `e2e/tests/<domain>/` (e.g.
+`identity/`), or under `e2e/tests/smoke/` for a fast cross-cutting happy-path.
+Then refit the raw recording onto the harness conventions
+(see [`e2e/scenarios/README.md`](./e2e/scenarios/README.md)):
+
+- Replace any hardcoded handle/email with `uniqueUser("smoke-register")` so the
+  spec is re-runnable and does not collide across runs (helpers in
+  [`e2e/helpers/users.ts`](./e2e/helpers/users.ts)).
+- Open the page via `openUserPage(browser, user)` instead of a bare
+  `browser.newPage()` when you want the harness's diagnostics (console + network
+  HAR) captured automatically.
+- Prefer `getByTestId(...)` selectors (the recorder picks these up from yougen's
+  `data-testid`s); fall back to `getByRole`. Avoid nth/CSS positional selectors.
+- `test.describe.configure({ mode: "serial" })` when later steps depend on
+  earlier ones.
+- Capture key views with `stepShot(page, testInfo, "after-register")` at each
+  meaningful phase (helper in
+  [`e2e/helpers/screenshots.ts`](./e2e/helpers/screenshots.ts)); it writes a
+  full-page PNG under the run's `screenshots/` and attaches it to the report.
+
+```ts
+import { expect, test } from "@playwright/test";
+import { openUserPage, uniqueUser } from "../../helpers/users";
+import { stepShot } from "../../helpers/screenshots";
+
+test.describe.configure({ mode: "serial" });
+
+test("register → create realm smoke", async ({ browser }, testInfo) => {
+  const user = uniqueUser("smoke-register");
+  const session = await openUserPage(browser, user);
+  try {
+    // …codegen-recorded steps, with literals swapped for `user.*`…
+    await stepShot(session.page, testInfo, "after-register");
+    // …create a Realm…
+    await stepShot(session.page, testInfo, "realm-created");
+  } finally {
+    await session.close();
+  }
+});
+```
+
+### 3. Replay with one command + collect evidence
+
+```powershell
+# Whole suite (or a domain / single spec via -Grep), with services managed for you.
+& "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -RunProfile joint-full
+& "D:\Works\cokret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -Grep "smoke/"
+
+# Or directly against an already-running stack:
+cd D:\Works\cokret\cotest\e2e
+npm test                 # headless
+npm run test:headed      # watch it click
+```
+
+Evidence lands in `artifacts/runs/<ts>/joint-e2e/`:
+`playwright-report/` (HTML with trace/video/failure screenshot),
+`screenshots/` (your `stepShot` captures), and `diagnostics/` (console +
+network HAR). Open a failure's trace for a step-by-step replay of DOM, network,
+and screenshots:
+
+```powershell
+npx playwright show-trace artifacts\latest\joint-e2e\playwright-report\<...>\trace.zip
+```
+
+### 4. (Optional) pin the visual with a screenshot assertion
+
+To also catch visual regressions, assert against a committed baseline:
+
+```ts
+await expect(session.page).toHaveScreenshot("realm-created.png");
+```
+
+First run writes the baseline; later runs diff against it. Update intentionally
+with `npx playwright test --update-snapshots`.
+
+> A recorded happy-path smoke is a normal **live** `test(...)` — it is not a
+> `test.fixme` and is not subject to the promotion checklist. Only use
+> `test.fixme` (with `@blocking-on` / `@user-promise` / `@expected-live-by`) when
+> you are asserting a spec contract the running stack cannot yet satisfy.
+
 ## Direct Cargo Run
 
 ```powershell
