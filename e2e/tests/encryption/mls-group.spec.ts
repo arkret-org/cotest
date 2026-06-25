@@ -1175,6 +1175,12 @@ test.describe("MLS group encryption", () => {
     // Regression for the join→decrypt boundary: accepting a Realm invite must
     // leave the new member with usable MLS state for messages sent after join.
     // Spec: encryption-and-audit.md §2.2-§2.4, §2.3.1-§2.3.3.
+    //
+    // The full two-browser MLS flow (recovery-key setup, create, invite, Welcome,
+    // navigation, encrypted send + decrypt in BOTH directions, reloads) does not
+    // fit the 180s default; mirror the longer budget the sibling MLS browser test
+    // uses so this does not time out mid-flow.
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
       createDpopUserSession(request, "s11-decrypt-alice"),
@@ -1237,6 +1243,22 @@ test.describe("MLS group encryption", () => {
       const bobMessage = bobPage.timelineEvent(plaintext);
       await expect(bobMessage).toBeVisible({ timeout: 60_000 });
       await expect(bobMessage.getByTestId("event-body")).toContainText(plaintext);
+
+      // Bidirectional decrypt: the admission fork (add-member commit rejected
+      // `governance_binding_mismatch` while its Welcome still landed) broke BOTH
+      // directions — the admin sat one epoch behind the invitee, so neither could
+      // read the other. Assert a message Bob authors after joining also decrypts
+      // for Alice, not just Alice → Bob.
+      const bobPlaintext = `joined member round-trips back to admin ${stamp}`;
+      const bobWire = await sendEncryptedTimelineMessage(bobPage, realmId, bobPlaintext);
+      expect(bobWire).not.toContain(bobPlaintext);
+      await expect(bobPage.timelineEvent(bobPlaintext)).toBeVisible({ timeout: 30_000 });
+
+      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(alicePage.page.getByTestId("message-list")).toBeVisible({ timeout: 120_000 });
+      const aliceSeesBob = alicePage.timelineEvent(bobPlaintext);
+      await expect(aliceSeesBob).toBeVisible({ timeout: 60_000 });
+      await expect(aliceSeesBob.getByTestId("event-body")).toContainText(bobPlaintext);
 
       const rawEventsUrl = `${solandBaseUrl()}/_cokret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
       const rawEvents = await request.get(rawEventsUrl, {

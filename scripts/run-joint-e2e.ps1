@@ -1377,7 +1377,14 @@ try {
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
         # so the joint harness can mint real DPoP-bound ck.session.grants instead
         # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).
-        $CoauthCommand = "`$env:COAUTH_ENABLE_TEST_ENDPOINTS='1'; & {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        #
+        # The generated dev config enables `account.registration_email_delivery_bypass_allowed`
+        # (in-band verification code, no SMTP) so the harness can register accounts
+        # headlessly. coauth's config validator fails closed and refuses to start
+        # unless the dev-only escape hatch is also set (mirrors coauth/justfile),
+        # so set it here too — otherwise coauth panics on boot and the whole MLS
+        # joint suite (which needs DPoP session-grant login) silently `test.skip`s.
+        $CoauthCommand = "`$env:COAUTH_ENABLE_TEST_ENDPOINTS='1'; `$env:COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS='1'; & {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
