@@ -1384,7 +1384,13 @@ try {
         # unless the dev-only escape hatch is also set (mirrors coauth/justfile),
         # so set it here too — otherwise coauth panics on boot and the whole MLS
         # joint suite (which needs DPoP session-grant login) silently `test.skip`s.
-        $CoauthCommand = "`$env:COAUTH_ENABLE_TEST_ENDPOINTS='1'; `$env:COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS='1'; & {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        #
+        # The generated config likewise enables `passwords.password_login_session_grants_enabled`
+        # so the headless password-bootstrap login path works. coauth's validator fails
+        # closed on that one too and demands `COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP`;
+        # without it coauth panics on boot ("password-bootstrap scaffold is for dev/test
+        # only") and the whole joint suite never starts.
+        $CoauthCommand = "`$env:COAUTH_ENABLE_TEST_ENDPOINTS='1'; `$env:COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS='1'; `$env:COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP='1'; & {0} --config {1} server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
     }
 
