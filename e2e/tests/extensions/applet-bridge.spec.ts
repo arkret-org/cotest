@@ -312,6 +312,96 @@ test.describe("applet bridge", () => {
     expect(conflict.status()).toBe(409);
     expect(wireErrCode(await conflict.json())).toBe("applet_already_registered");
   });
+
+  // COTEST-SEC-02: production-mode controller-signed package signature negative
+  // tests. Spec: extensions/applet-integration.md §4.1 — `controller_did` MUST
+  // sign the registration; `proof` MUST be a controller DID detached proof
+  // covering the canonical registration object (excluding `proof` itself), and
+  // a package whose proof does not cover its body MUST be rejected. soland's
+  // canonical install validator (validate_applet_package) recomputes
+  // `package_digest` over the bare body and recomputes the proof
+  // `event_digest`; a package mutated after signing therefore fails closed at
+  // the preview/commit gate. These run for real against soland in dev-mode —
+  // no live deployment required — mirroring the runnable positive install case
+  // above and the RFC 9421 inbound-signature negative cases below.
+
+  test("E4.4 tampered package body: post-signing mutation breaks package_digest and is rejected with schema_violation", async ({
+    request,
+  }) => {
+    const registryBase = requireMockAppletRegistry();
+    const stamp = Date.now();
+    const alice = uniqueUser(`applet-tamper-body-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `applet tamper body ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
+    });
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:tamper-body-${stamp}`,
+      namespace: `bridge.tamper.body.${stamp}`,
+    });
+
+    // Mutate the signed package body WITHOUT re-signing: the sealed
+    // `package_digest` and the controller proof now cover a different byte
+    // sequence than what is submitted. soland recomputes the digest over the
+    // bare body and MUST reject the mismatch.
+    const tampered = tamperSignedPackage(signed, (pkg) => {
+      pkg.requested_scopes = [...pkg.requested_scopes, "ck.applet.smuggled.scope"];
+    });
+
+    const denied = await rawInstallApplet(
+      request,
+      aliceToken,
+      tampered,
+      realmId,
+      `tamper-body-${stamp}`,
+    );
+    expect([400, 409]).toContain(denied.status());
+    expect(wireErrCode(await denied.json())).toBe("schema_violation");
+  });
+
+  test("E4.5 tampered proof: proof that no longer covers the package body is rejected with proof_invalid", async ({
+    request,
+  }) => {
+    const registryBase = requireMockAppletRegistry();
+    const stamp = Date.now();
+    const alice = uniqueUser(`applet-tamper-proof-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `applet tamper proof ${stamp}`,
+      discoverability: "listed",
+      history_visibility: "joined",
+    });
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:tamper-proof-${stamp}`,
+      namespace: `bridge.tamper.proof.${stamp}`,
+    });
+
+    // Keep `package_digest` consistent with the body, but corrupt the proof's
+    // `event_digest` so the controller proof no longer covers the canonical
+    // registration object. §4.1: the proof MUST cover the body; soland
+    // recomputes the payload digest and MUST reject the mismatch.
+    const tampered = tamperSignedPackage(signed, (pkg) => {
+      const proof = pkg.proof as Record<string, unknown> | undefined;
+      if (!proof) {
+        throw new Error("signed package is missing controller proof");
+      }
+      proof.event_digest = `sha256:${"0".repeat(64)}`;
+    });
+
+    const denied = await rawInstallApplet(
+      request,
+      aliceToken,
+      tampered,
+      realmId,
+      `tamper-proof-${stamp}`,
+    );
+    expect([400, 409]).toContain(denied.status());
+    expect(wireErrCode(await denied.json())).toBe("proof_invalid");
+  });
 });
 
 // Spec: extensions/applet-integration.md §7.3.1. The inbound direction
@@ -607,6 +697,19 @@ async function signPackage(
   const response = await request.post(`${registryBase}/sign-package`, { data });
   expect(response.status()).toBe(200);
   return (await response.json()) as SignedPackage;
+}
+
+// Deep-clone a controller-signed package and mutate its `applet_package` body
+// WITHOUT re-sealing or re-signing, so the submitted bytes diverge from what the
+// sealed `package_digest` / controller proof cover. Used by the COTEST-SEC-02
+// production-mode signature negative tests.
+function tamperSignedPackage(
+  signed: SignedPackage,
+  mutate: (appletPackage: SignedPackage["applet_package"]) => void,
+): SignedPackage {
+  const cloned = structuredClone(signed);
+  mutate(cloned.applet_package);
+  return cloned;
 }
 
 async function installApplet(
