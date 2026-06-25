@@ -13,7 +13,7 @@
 // presentation from development and deployment compatibility credentials.
 //
 // Minting approach: a real DPoP-bound grant is obtained from coauth's cotest
-// debug seam (POST /_coauth/gate/account/test/debug/issue-dpop-grant), which
+// debug seam (POST /_coauth/account/test/debug/issue-dpop-grant), which
 // signs a grant whose `cnf.jkt` matches a supplied device public JWK — without
 // driving the OIDC browser ceremony. That route is mounted only in debug builds
 // with COAUTH_ENABLE_TEST_ENDPOINTS enabled; the grant-minting cases skip

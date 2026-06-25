@@ -64,7 +64,7 @@ async function verifyEmailWithRetry(
   while (Date.now() < deadline) {
     const { status, body, raw } = await postJson(
       request,
-      `${coauthBase}/_coauth/gate/account/auth/register/${id}/verify-email`,
+      `${coauthBase}/_coauth/account/auth/register/${id}/verify-email`,
       { code: COAUTH_DEV_EMAIL_CODE },
     );
     if (status === 200 && body?.status === "success") {
@@ -122,7 +122,7 @@ export async function registerCoauthPasswordAccount(
   const password = opts.password ?? "CokretE2E!2026";
   const email = `${slug}@example.test`;
   const displayName = `E2E ${slug}`;
-  const base = `${coauthBase}/_coauth/gate/account/auth/register`;
+  const base = `${coauthBase}/_coauth/account/auth/register`;
 
   // 1. begin password registration
   const begin = await beginRegistrationWithRetry(request, base, {

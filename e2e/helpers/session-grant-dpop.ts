@@ -12,7 +12,7 @@
 //
 // These helpers obtain a real DPoP-bound grant WITHOUT driving the full OIDC
 // browser ceremony, via coauth's cotest debug seam:
-//   POST /_coauth/gate/account/test/debug/issue-dpop-grant
+//   POST /_coauth/account/test/debug/issue-dpop-grant
 // (coauth: crates/backend/src/handlers/cokret/mod.rs::debug_issue_dpop_grant).
 // That route is mounted only in debug builds with COAUTH_ENABLE_TEST_ENDPOINTS
 // enabled; `mintDpopBoundGrant` returns `undefined` when it is unavailable so
@@ -269,7 +269,7 @@ export async function mintDpopBoundGrant(
 ): Promise<DpopBoundGrant | undefined> {
   const audience = opts.audience ?? solandServiceDid(opts.server);
   const response = await request.post(
-    `${coauthBase}/_coauth/gate/account/test/debug/issue-dpop-grant`,
+    `${coauthBase}/_coauth/account/test/debug/issue-dpop-grant`,
     {
       data: {
         actor_id: actorDid,

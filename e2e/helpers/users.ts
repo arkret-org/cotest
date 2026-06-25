@@ -867,7 +867,7 @@ export async function createDpopUserSessionForAccount(
   const seed = uniqueUser(prefix);
   const deviceKey = generateDpopDeviceKey();
   const audience = solandServiceDid(opts.server);
-  const loginUrl = `${coauth}/_coauth/gate/account/auth/login`;
+  const loginUrl = `${coauth}/_coauth/account/auth/login`;
   const login = await request.post(loginUrl, {
     headers: kickoffDpopHeaders({
       deviceKey,

@@ -56,11 +56,11 @@ test.describe("account onboarding", () => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "coauth not started for this run");
 
-    const bridgeResponse = await request.get(`${coauth}/_coauth/gate/account/integration/describe`);
+    const bridgeResponse = await request.get(`${coauth}/_coauth/account/integration/describe`);
     expect(bridgeResponse.status()).toBe(200);
     const bridge = await bridgeResponse.json();
     expect(bridge.contract).toBe("cokret.rest.integration_manifest.v1");
-    expect(bridge.describe_path).toBe("/_coauth/gate/account/integration/describe");
+    expect(bridge.describe_path).toBe("/_coauth/account/integration/describe");
     expect(bridge.surfaces).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -71,7 +71,7 @@ test.describe("account onboarding", () => {
         }),
         expect.objectContaining({
           name: "passkey_auth",
-          path: "/_coauth/gate/account/auth/passkey/{register,auth}/{start,finish}",
+          path: "/_coauth/account/auth/passkey/{register,auth}/{start,finish}",
         }),
       ]),
     );
@@ -88,7 +88,7 @@ test.describe("account onboarding", () => {
     );
     expect(JSON.stringify(service.auth_metadata)).not.toContain(solandServiceDid());
 
-    const start = await request.post(`${coauth}/_coauth/gate/account/auth/register/webvh/start`, {
+    const start = await request.post(`${coauth}/_coauth/account/auth/register/webvh/start`, {
       data: {
         handle: user.handle.slice(1),
         principal_server_url: solandBaseUrl(),
@@ -100,7 +100,7 @@ test.describe("account onboarding", () => {
     expect(started.email_verification_bypass_allowed).toBe(true);
 
     const email = await request.post(
-      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/email`,
+      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/email`,
       { data: { email: `${user.name}@example.test` } },
     );
     expect(email.status()).toBe(200);
@@ -110,7 +110,7 @@ test.describe("account onboarding", () => {
     expect(emailBody.dev_code).toBeTruthy();
 
     const verify = await request.post(
-      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/verify-email`,
+      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
       { data: { code: emailBody.dev_code } },
     );
     expect(verify.status()).toBe(200);
@@ -263,7 +263,7 @@ test.describe("account onboarding", () => {
 
     const user = uniqueUser("s7-carol-email");
     const start = await request.post(
-      `${coauth}/_coauth/gate/account/auth/register/webvh/start`,
+      `${coauth}/_coauth/account/auth/register/webvh/start`,
       { data: { handle: user.handle.slice(1), principal_server_url: solandBaseUrl() } },
     );
     expect(start.status(), await start.text()).toBe(200);
@@ -273,7 +273,7 @@ test.describe("account onboarding", () => {
 
     const email = `${user.name}@example.test`;
     const sent = await request.post(
-      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/email`,
+      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/email`,
       { data: { email } },
     );
     expect(sent.status(), await sent.text()).toBe(200);
@@ -295,7 +295,7 @@ test.describe("account onboarding", () => {
     }
 
     const verify = await request.post(
-      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/verify-email`,
+      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
       { data: { code: sentBody.dev_code } },
     );
     expect(verify.status(), await verify.text()).toBe(200);
@@ -306,7 +306,7 @@ test.describe("account onboarding", () => {
     // Re-submitting the same (now consumed) code must not re-advance the strand:
     // the token is single-use.
     const replay = await request.post(
-      `${coauth}/_coauth/gate/account/auth/register/webvh/${started.registration_id}/verify-email`,
+      `${coauth}/_coauth/account/auth/register/webvh/${started.registration_id}/verify-email`,
       { data: { code: sentBody.dev_code } },
     );
     const replayBody = await replay.json();
@@ -328,7 +328,7 @@ test.describe("account onboarding", () => {
     test.skip(!coauth, "coauth not started for this run");
 
     const handle = uniqueUser("s7-claim").handle.slice(1);
-    const startUrl = `${coauth}/_coauth/gate/account/auth/register/webvh/start`;
+    const startUrl = `${coauth}/_coauth/account/auth/register/webvh/start`;
 
     // Onboard the first claimant so the handle is durably claimed (the account
     // is created, not just a pending registration).

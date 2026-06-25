@@ -79,7 +79,7 @@ export async function loginPrincipalViaCoauth(
   const deviceId = opts.deviceId ?? uniqueUser(prefix).deviceId;
   const deviceKey = generateDpopDeviceKey();
   const audience = solandServiceDid(opts.server);
-  const loginUrl = `${coauthBase}/_coauth/gate/account/auth/login`;
+  const loginUrl = `${coauthBase}/_coauth/account/auth/login`;
   const login = await request.post(loginUrl, {
     headers: kickoffDpopHeaders({ deviceKey, method: "POST", url: loginUrl }),
     data: {
