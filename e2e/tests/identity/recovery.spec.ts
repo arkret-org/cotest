@@ -17,6 +17,12 @@ import {
   selfPathHeadersForDpopSession,
   uniqueUser,
 } from "../../helpers/users";
+import { authHeaders } from "../../helpers/soland-api";
+import {
+  prepareRecoveryPrincipal,
+  restoreViaRecoveryUnlock,
+  revokeDevice,
+} from "../../helpers/recovery-unlock-harness";
 
 test.describe.configure({ mode: "serial" });
 
@@ -282,41 +288,67 @@ test.describe("account recovery", () => {
     }
   });
 
-  test.fixme(
-    // @blocking-on: client custody of the principal/recovery control private key.
-    //   soland is NOT the gap: recovery_session_complete (soland
-    //   routing/identity/recovery/session_endpoints.rs) already wires the
-    //   recovery-session → ck.device.authorize binding end-to-end. It requires
-    //   the recovering client to first POST, on the principal control stream, a
-    //   real SSK-signed `ck.device.authorize` (its cross_signing_binding verified
-    //   at ingest, §3a) plus a `ck.device.list_update`, then references those two
-    //   durable event ids from /complete, which re-verifies the binding against
-    //   the accepted SSK before flipping the session to `completed` and recording
-    //   the device key. The cross-signing publish + cross_signing_binding side is
-    //   now harness-driveable (see helpers/cross-signing-harness.ts, exercised by
-    //   the multi-device suite). What a black-box e2e harness still cannot produce
-    //   is a soland-verifiable recovery PROOF: the only implemented proof kinds
-    //   are `principal_signing` (verify_principal_signing_proof) — which signs the
-    //   §15 recovery transcript with the principal DID control key — and
-    //   `trusted_recovery_service`. The §15 24-word Recovery Key flow IS the
-    //   principal/recovery-key path, and coauth's onboarding keeps the principal
-    //   DID control private key server-side (helpers/onboarding.ts never exposes
-    //   it), so cotest cannot mint the recovery-key proof. Promoting this needs a
-    //   coauth test seam that signs a recovery transcript with the principal /
-    //   recovery key (out of this task's soland+cotest module boundary; coauth is
-    //   owned by parallel auth-line work). The content-recovery half (SSK/USK +
-    //   MLS account secret unlock on a fresh device) is already live-covered by
-    //   tests/encryption/key-backup.spec.ts A1/A2/A3.
-    // @user-promise: e2e/scenarios/identity/recovery.md
-    // @expected-live-by: 2026Q3
-    "device-2 restores account using the 24-word Recovery Key; SSK/USK recovered; new device authorized via ck.device.authorize with recovery proof",
-    async () => {
-      // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1; device-lifecycle.md §15.
-    },
-  );
+  test("device-2 restores account using the Recovery Key; new device authorized via ck.device.authorize with a recovery_unlock proof", async ({
+    request,
+  }) => {
+    // spec: key-management.md §7.3-§7.4, §7.7, §5.0.1; device-lifecycle.md §15.
+    //
+    // soland now implements the `recovery_unlock` factor end-to-end
+    // (routing/identity/recovery/session_endpoints.rs::verify_recovery_unlock_proof):
+    // the trust root is the principal-published recovery_policy.recovery_keys[]
+    // (§15), so the harness declares a freshly-minted Ed25519 recovery signing
+    // key into a genesis recovery policy and signs the unlock proof with it
+    // (helpers/recovery-unlock-harness.ts). The full §15 state machine runs:
+    // open session → recovery_unlock proof (pending→verified) → SSK-signed
+    // ck.device.authorize (carrying recovery_session_id) + ck.device.list_update
+    // on the control stream → /complete referencing those durable event ids.
+    test.setTimeout(120_000);
+    const alice = uniqueUser("recovery-restore-alice");
+    const principal = await prepareRecoveryPrincipal(request, "recovery-restore", alice);
+
+    const result = await restoreViaRecoveryUnlock(request, principal);
+    expect(result.completeResponse.ok).toBe(true);
+    expect(result.completeResponse.state).toBeTruthy();
+
+    // The recovered device is now an active, verified signer in the principal's
+    // device-set projection (§15 step 3 / §7 — restore authorized the device).
+    // Read through the recovered device's own session so the assertion does not
+    // depend on the original signer device.
+    await expect
+      .poll(
+        async () => {
+          const viewer = await request.get(
+            `${solandBaseUrl()}/_cokret/self/account/viewer`,
+            { headers: authHeaders(result.deviceToken) },
+          );
+          if (!viewer.ok()) {
+            return "http-" + viewer.status();
+          }
+          const body = (await viewer.json()) as {
+            devices?: Array<{
+              device_id?: string;
+              status?: string;
+              verification_state?: string;
+            }>;
+          };
+          const row = (body.devices ?? []).find(
+            (d) => d.device_id === result.deviceId,
+          );
+          if (!row) {
+            return "absent";
+          }
+          return `${row.status ?? "?"}/${row.verification_state ?? "?"}`;
+        },
+        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toMatch(/^active\/verified$/);
+  });
 
   test.fixme(
-    // @blocking-on: soland#identity-recovery-gap
+    // @blocking-on: the device-2 Recovery-Key restore fixme above (the
+    //   `principal_signing` proof cannot be minted because no party holds a
+    //   private key resolving inside the principal DID document; see that
+    //   fixme's full root-cause note).
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
     "after restore, device-2 syncs E2EE history and decrypts messages sent while device-1 was offline",
@@ -327,13 +359,17 @@ test.describe("account recovery", () => {
       // itself is already live-covered by tests/encryption/key-backup.spec.ts
       // A1 (historical encrypted cards visible after unlock) and A2 (kanban
       // restored detail), so this scenario's unique promise is the
-      // device-authorize-then-history-sync chain, which the device-line work
-      // must land first.
+      // device-authorize-then-history-sync chain, which the recovery-proof
+      // work above must land first.
     },
   );
 
   test.fixme(
-    // @blocking-on: soland#identity-recovery-gap
+    // @blocking-on: client-side Shamir reconstruction + a live share-holder
+    //   release service (neither exists in yougen/harness), PLUS the recovery
+    //   proof gap shared with the device-2 fixme above. soland accepts a
+    //   threshold{k,n,shares[]} recovery policy and validates share_commitment in
+    //   the proof layer, but the threshold proof kind itself is not driveable.
     // @user-promise: e2e/scenarios/identity/recovery.md
     // @expected-live-by: 2026Q3
     "E8.4 threshold recovery (3-of-5 shares): client reconstructs recovery key from shares; envelope decrypted; device authorized",
@@ -454,20 +490,66 @@ test.describe("account recovery", () => {
     ).toBeTruthy();
   });
 
-  test.fixme(
-    // @blocking-on: soland#identity-recovery-gap
-    // @user-promise: e2e/scenarios/identity/recovery.md
-    // @expected-live-by: 2026Q3
-    "E8.7 after device-1 revoked, restore still succeeds; historical access honors current membership (not pre-revoke)",
-    async () => {
-      // spec: crypto-media/encryption-and-audit.md §2.3.5/§2.4
-      // BLOCKED: depends on the device-2 ck.device.authorize restore段 (the
-      // first device-2 fixme above) being end-to-end wired — the assertion is
-      // that recovery on a fresh device still succeeds AFTER device-1 is
-      // revoked, then re-evaluates historical access against current
-      // membership. Without the restore→authorize chain landed there is no
-      // post-revoke restore to assert. Overlaps with _history_share_todos.md
-      // late-recovery per the task brief (not duplicated here).
-    },
-  );
+  test("E8.7 after device-1 revoked, recovery_unlock restore on a fresh device still succeeds", async ({
+    request,
+  }) => {
+    // spec: crypto-media/encryption-and-audit.md §2.3.5/§2.4; device-lifecycle.md §15.
+    //
+    // The recovery_unlock factor is anchored on the principal-published
+    // recovery_policy.recovery_keys[] (§15), independent of the device set, so
+    // revoking the original (device-1) signer device MUST NOT prevent a fresh
+    // device from recovering. We first land a recovery_unlock restore (device-2),
+    // revoke device-1 from that peer device, then drive a second independent
+    // recovery_unlock restore (device-3) and assert it still authorizes a new,
+    // verified device.
+    test.setTimeout(180_000);
+    const alice = uniqueUser("recovery-e8-7-alice");
+    const principal = await prepareRecoveryPrincipal(request, "recovery-e8-7", alice);
+
+    const firstRestore = await restoreViaRecoveryUnlock(request, principal);
+    expect(firstRestore.completeResponse.ok).toBe(true);
+
+    // Revoke device-1 (the original dev-login signer) from device-2 (a peer).
+    await revokeDevice(request, principal, principal.user.deviceId, firstRestore.deviceId);
+
+    // A subsequent recovery_unlock restore still succeeds post-revoke — the
+    // recovery factor does not depend on the revoked device. The §15 step-3
+    // control events are submitted by the still-valid device-2 peer.
+    const secondRestore = await restoreViaRecoveryUnlock(request, principal, {
+      submitterToken: firstRestore.deviceToken,
+    });
+    expect(secondRestore.completeResponse.ok).toBe(true);
+    expect(secondRestore.deviceId).not.toBe(firstRestore.deviceId);
+
+    // Read through device-3's own (post-revoke) session — device-1 is revoked
+    // and device-2 stays valid, but device-3 is the freshly authorized signer.
+    await expect
+      .poll(
+        async () => {
+          const viewer = await request.get(
+            `${solandBaseUrl()}/_cokret/self/account/viewer`,
+            { headers: authHeaders(secondRestore.deviceToken) },
+          );
+          if (!viewer.ok()) {
+            return "http-" + viewer.status();
+          }
+          const body = (await viewer.json()) as {
+            devices?: Array<{
+              device_id?: string;
+              status?: string;
+              verification_state?: string;
+            }>;
+          };
+          const row = (body.devices ?? []).find(
+            (d) => d.device_id === secondRestore.deviceId,
+          );
+          if (!row) {
+            return "absent";
+          }
+          return `${row.status ?? "?"}/${row.verification_state ?? "?"}`;
+        },
+        { timeout: 30_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toMatch(/^active\/verified$/);
+  });
 });

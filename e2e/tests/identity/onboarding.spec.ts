@@ -391,17 +391,43 @@ test.describe("account onboarding", () => {
   );
 
   test.fixme(
-    // @blocking-on: soland#identity-onboarding-gap
+    // @blocking-on: coauth#passkey-duplicate-wire-contract
     // @user-promise: e2e/scenarios/identity/onboarding.md
     // @expected-live-by: 2026Q3
     "E7.1 re-registering the same WebAuthn credential is rejected with account_already_registered",
     async () => {
-      // Requires driving a real WebAuthn passkey registration twice with the
-      // same credential. coauth's passkey finish (handlers/account/auth/passkey.rs)
-      // consumes an attestation produced by an authenticator; reproducing it
-      // headlessly needs a CDP virtual authenticator + a coauth passkey UI, the
-      // same prerequisite as the passkey-onboarding case. Handle/account
-      // duplicate-rejection over the webvh path is already covered by E7.5 above.
+      // Retained after the CDP-virtual-authenticator pass: the assertion this
+      // case demands is not satisfiable by the running stack, and making it so
+      // is a protocol-layer decision, not a test fixture.
+      //
+      // 1. `account_already_registered` is NOT a defined wire code anywhere in
+      //    the cokret-spec source of truth — it appears only in this scenario
+      //    doc, never in artifacts/registry/error-code-registry.json, and the
+      //    spec defines no WebAuthn duplicate-credential rejection contract at
+      //    all (device-lifecycle.md §3 lists passkey only as a login factor).
+      //    Asserting it would assert undefined protocol behaviour.
+      // 2. coauth's passkey register endpoint (handlers/account/auth/passkey.rs)
+      //    is "attach a passkey to an EXISTING account" (resolve_user looks the
+      //    account up by handle/id), not "a passkey IS an account". The
+      //    "same credential registers a second account" shape is not expressible
+      //    against this endpoint.
+      // 3. The WebAuthn standard's duplicate-credential guard fires in the
+      //    AUTHENTICATOR layer: register_start feeds the account's existing
+      //    credentials into `excludeCredentials`, so a second
+      //    navigator.credentials.create() on the same (virtual) authenticator
+      //    raises InvalidStateError client-side and never reaches the server —
+      //    a faithful CDP virtual authenticator reproduces exactly this, so
+      //    register/finish is never even called and no server wire code is
+      //    produced. Replaying the same credential_id to register/finish out of
+      //    band hits the one-shot challenge guard (webauthn_state_missing), not
+      //    account_already_registered.
+      //
+      // Promoting requires (a) a spec-level duplicate-credential wire contract
+      // (new error-code-registry entry, or reusing did_already_exists/409) and
+      // (b) coauth enforcing global credential_id uniqueness mapped to that
+      // code — both protocol-layer changes outside this onboarding test
+      // workstream. Handle/account duplicate rejection over the webvh path is
+      // already covered by E7.5 above.
     },
   );
 });
