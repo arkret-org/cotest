@@ -644,14 +644,31 @@ test.describe("consent grant", () => {
       await expect(
         await requestContact(bobPage, alice.did, "invite"),
       ).toContainText(/accepted|already connected/i, { timeout: 30_000 });
-      await bobPage.page.waitForTimeout(6_000);
+      // The consent window above was set to Date.now()+5_000. Instead of
+      // sleeping for a fixed margin, poll the authoritative consent cell until
+      // the window lapses and the cell falls back to spec `pending` (implicit
+      // revoke, consent-model.md §3.2 — there is no distinct `expired` wire
+      // state). `expect.poll` bounds the wait and re-queries observable truth.
+      await expect
+        .poll(
+          async () => {
+            const cell = await request.get(
+              `${solandBaseUrl()}/_cokret/self/consent/cells/${encodeURIComponent(alice.did)}` +
+                `?peer=${encodeURIComponent(bob.did)}&scope=invite`,
+              { headers: { authorization: `Bearer ${aliceToken}` } },
+            );
+            if (cell.status() !== 200) {
+              return cell.status();
+            }
+            return JSON.stringify(await cell.json());
+          },
+          { timeout: 30_000, intervals: [250, 500, 1_000] },
+        )
+        .toContain("pending");
       const expiredStatus = await requestContact(bobPage, alice.did, "invite");
       await expect(expiredStatus).toContainText(/pending|expired/i, {
         timeout: 30_000,
       });
-      // Time-windowed expiry is an implicit revoke (consent-model.md §3.2):
-      // once the window lapses the cell falls back to spec `pending` /
-      // no-consent — there is no distinct `expired` wire state.
       await expectConsentCell(
         request,
         aliceToken,

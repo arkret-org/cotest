@@ -65,10 +65,19 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
     const alicePage = await openUserPage(browser, alice, { sessionCredential: aliceToken });
     const bobPage = await openUserPage(browser, bob, { sessionCredential: bobToken });
     const subscribeFailures: string[] = [];
+    // Count every account-subscribe response (success or failure) so the
+    // assertion below can wait for at least one FRESH re-poll after the join
+    // instead of sleeping a fixed margin — that re-poll is exactly the request
+    // that would carry the poisoned cursor if the regression reappeared.
+    let subscribeResponses = 0;
 
     for (const observedPage of [alicePage.page, bobPage.page]) {
       observedPage.on("response", async (response) => {
-        if (!response.url().includes("/_cokret/self/account/subscribe") || response.status() < 400) {
+        if (!response.url().includes("/_cokret/self/account/subscribe")) {
+          return;
+        }
+        subscribeResponses += 1;
+        if (response.status() < 400) {
           return;
         }
         const body = await response.text().catch(() => "");
@@ -114,7 +123,15 @@ test.describe("joint-yougen smoke @fully-implemented", () => {
         `joint invite ${stamp}`,
         { timeout: 30_000 },
       );
-      await alicePage.page.waitForTimeout(6_500);
+      // Force alice's page to re-establish its account-subscribe stream after
+      // the invite/join settled, then wait (bounded) for that fresh re-poll to
+      // land. If the write path poisoned the cursor, this is the request that
+      // would return cursor_integrity_invalid.
+      const baselineResponses = subscribeResponses;
+      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
+      await expect
+        .poll(() => subscribeResponses, { timeout: 30_000, intervals: [250, 500, 1_000] })
+        .toBeGreaterThan(baselineResponses);
 
       expect(
         subscribeFailures.filter((failure) =>

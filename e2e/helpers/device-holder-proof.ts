@@ -29,54 +29,18 @@ import { type APIRequestContext, expect } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import type { OnboardedPrincipal } from "./onboarding";
 import { canonicalJson } from "./soland-api";
+import { encodeEd25519PubkeyMultibase } from "./encoding";
 import {
   type DpopDeviceKey,
   mintDpopProof,
   selfPathGrantHeaders,
 } from "./session-grant-dpop";
 
-const ED25519_MULTICODEC_PREFIX = Buffer.from([0xed, 0x01]);
-const BASE58_ALPHABET =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function base58btcEncode(bytes: Buffer): string {
-  if (bytes.length === 0) {
-    return "";
-  }
-  let leadingZeros = 0;
-  while (leadingZeros < bytes.length && bytes[leadingZeros] === 0) {
-    leadingZeros += 1;
-  }
-  const digits: number[] = [];
-  for (let i = leadingZeros; i < bytes.length; i += 1) {
-    let carry = bytes[i];
-    for (let j = 0; j < digits.length; j += 1) {
-      const value = (digits[j] << 8) + carry;
-      digits[j] = value % 58;
-      carry = Math.floor(value / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  let out = "1".repeat(leadingZeros);
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    out += BASE58_ALPHABET[digits[i]];
-  }
-  return out;
-}
-
 /// Render an Ed25519 raw public key (32 bytes) as the multibase form soland
 /// projects (`z` + base58btc(0xed01 ‖ key)). Mirrors soland's
 /// `ed25519_pubkey_to_did_key_multibase`.
 function ed25519MultibaseFromPublicJwkX(xB64Url: string): string {
-  const raw = Buffer.from(xB64Url, "base64url");
-  if (raw.length !== 32) {
-    throw new Error(`Ed25519 public key must be 32 bytes, got ${raw.length}`);
-  }
-  const envelope = Buffer.concat([ED25519_MULTICODEC_PREFIX, raw]);
-  return `z${base58btcEncode(envelope)}`;
+  return encodeEd25519PubkeyMultibase(Buffer.from(xB64Url, "base64url"));
 }
 
 /// The `did:key:z…` rendering soland returns for an authorized device signing

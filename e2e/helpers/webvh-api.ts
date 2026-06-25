@@ -32,14 +32,12 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { canonicalJson, expectJsonOk } from "./soland-api";
+import { base58btcEncode, encodeEd25519PubkeyMultibase } from "./encoding";
+
+export { base58btcEncode, encodeEd25519PubkeyMultibase };
 
 const WEBVH_SCID_PLACEHOLDER = "{SCID}";
 const WEBVH_METHOD_VERSION = "did:webvh:1.0";
-// multicodec ed25519-pub (0xed 0x01) varint prefix.
-const ED25519_MULTICODEC_PREFIX = Buffer.from([0xed, 0x01]);
-
-const BASE58_ALPHABET =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export type WebvhKey = {
   /// raw 32-byte ed25519 public key
@@ -62,38 +60,6 @@ export function generateWebvhKey(): WebvhKey {
     privateKey,
     multibase: encodeEd25519PubkeyMultibase(raw),
   };
-}
-
-export function encodeEd25519PubkeyMultibase(publicKey: Buffer): string {
-  const envelope = Buffer.concat([ED25519_MULTICODEC_PREFIX, publicKey]);
-  return `z${base58btcEncode(envelope)}`;
-}
-
-export function base58btcEncode(bytes: Buffer): string {
-  if (bytes.length === 0) {
-    return "";
-  }
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i += 1) {
-      carry += digits[i] << 8;
-      digits[i] = carry % 58;
-      carry = (carry / 58) | 0;
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = (carry / 58) | 0;
-    }
-  }
-  let out = "";
-  for (let i = 0; i < bytes.length && bytes[i] === 0; i += 1) {
-    out += BASE58_ALPHABET[0];
-  }
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    out += BASE58_ALPHABET[digits[i]];
-  }
-  return out;
 }
 
 function sha256MultihashMultibase(bytes: Buffer): string {

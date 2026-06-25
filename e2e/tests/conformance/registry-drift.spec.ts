@@ -19,14 +19,20 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { type APIResponse, expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
-import { signedEventEnvelope, wireErrCode } from "../../helpers/soland-api";
+import {
+  createRealmApi,
+  resolveDefaultStrandId,
+  signedEventEnvelope,
+  submitSignedEventApi,
+  wireErrCode,
+} from "../../helpers/soland-api";
 
 // ---------------------------------------------------------------------------
 // Artifact loader
@@ -52,6 +58,9 @@ function loadRegistryJson<T = unknown>(name: string): T {
 
 type DriftEntry = {
   id: string;
+  // forbidden-model-terms.json carries the term under `term` for the
+  // namespace-prefix rows (`cx.` / `cx:`) and under `id` everywhere else.
+  term?: string;
   since_revision?: string;
   rejection_level: "hard_reject" | "migration_only" | "compat_only" | "docs_only";
   replacement?: string | null;
@@ -152,6 +161,145 @@ function collectClaimedProfileIds(describe: unknown): Set<string> {
   return found;
 }
 
+// Escape a literal for embedding in a RegExp source.
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Build a matcher for a forbidden term. The previous Phase F filtered terms
+// through /^[A-Za-z_ -]+$/, silently dropping every term that carried a dot,
+// colon, or parenthesis (`cx.`, `cx:`, `Realm(kind=list)`, …) — exactly the
+// terms most worth catching. Instead we escape the term and only anchor a word
+// boundary on a side that ends in a word character, so:
+//   * `Room`            → /\bRoom\b/      (avoids matching inside "Bedroom")
+//   * `cx.`             → /\bcx\./        (trailing `.` is not a word char)
+//   * `Realm(kind=list)`→ /\bRealm\(kind=list\)/
+//   * `受控协作 Realm`   → matched as a plain escaped substring (CJK chars are
+//                          not in \w, so neither side gets a boundary).
+function forbiddenTermMatcher(term: string): RegExp {
+  const escaped = escapeRegExp(term);
+  const leading = /^\w/.test(term) ? "\\b" : "";
+  const trailing = /\w$/.test(term) ? "\\b" : "";
+  return new RegExp(`${leading}${escaped}${trailing}`);
+}
+
+// ---------------------------------------------------------------------------
+// forbidden-wire-fields classifier + scanner (Phase G)
+// ---------------------------------------------------------------------------
+//
+// forbidden-wire-fields.json is heterogeneous: most entries are bare wire
+// field NAMES (`branch`, `title`, `sender`), but the `id` also encodes nested
+// key paths (`metadata.fields.stage`), patch op paths (`patch:stage`), enum
+// `key=value` forms (`kind=room`, `actor_kind=ghost`), typed-id value prefixes
+// (`ck:rtcpart:`), and removed event-kind / schema-id VALUES
+// (`cx.device.authorized`, `cx.schema.read_marker.v1`). The scanner classifies
+// each hard_reject entry and applies the matching probe against a real wire
+// document (submitted Event Envelope + soland's receipt + queried events).
+
+type WireFieldRule =
+  | { kind: "field_name"; id: string; name: string }
+  | { kind: "key_path"; id: string; segments: string[] }
+  | { kind: "patch_path"; id: string; path: string }
+  | { kind: "enum_pair"; id: string; key: string; value: string }
+  | { kind: "id_prefix"; id: string; prefix: string }
+  | { kind: "value"; id: string; value: string };
+
+function classifyWireField(entry: DriftEntry): WireFieldRule {
+  const id = entry.id;
+  const context = entry.context ?? "";
+  if (context === "typed_id_prefix" || /^ck:[a-z_0-9]+:$/.test(id)) {
+    return { kind: "id_prefix", id, prefix: id };
+  }
+  if (id.startsWith("patch:")) {
+    return { kind: "patch_path", id, path: id.slice("patch:".length) };
+  }
+  if (id.includes("=")) {
+    const [key, value] = id.split("=", 2);
+    return { kind: "enum_pair", id, key, value };
+  }
+  // Removed event-kind / schema-id entries forbid a VALUE, not a key name.
+  if (
+    context === "event_kind" ||
+    context === "event_kind_or_capability_action" ||
+    context === "schema_id" ||
+    context === "error_code"
+  ) {
+    return { kind: "value", id, value: id };
+  }
+  // Dotted ids are nested key paths (`metadata.fields.stage`,
+  // `notification.space_name`, `bound_to.actor`).
+  if (id.includes(".")) {
+    return { kind: "key_path", id, segments: id.split(".") };
+  }
+  return { kind: "field_name", id, name: id };
+}
+
+// True when `path` (a key/index trail) ends with `segments` as a contiguous run
+// of object keys (array indices in between are tolerated).
+function pathEndsWithKeySegments(path: string[], segments: string[]): boolean {
+  let s = segments.length - 1;
+  for (let p = path.length - 1; p >= 0 && s >= 0; p -= 1) {
+    if (/^\d+$/.test(path[p])) {
+      continue; // skip array indices
+    }
+    if (path[p] !== segments[s]) {
+      return false;
+    }
+    s -= 1;
+  }
+  return s < 0;
+}
+
+type WireViolation = { id: string; rule: string; path: string; detail: string };
+
+function scanForbiddenWireFields(
+  document: unknown,
+  rules: WireFieldRule[],
+): WireViolation[] {
+  const violations: WireViolation[] = [];
+  for (const node of walkTree(document)) {
+    for (const rule of rules) {
+      switch (rule.kind) {
+        case "field_name":
+          if (node.key === rule.name) {
+            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: rule.name });
+          }
+          break;
+        case "key_path":
+          if (
+            node.key === rule.segments[rule.segments.length - 1] &&
+            pathEndsWithKeySegments(node.path, rule.segments)
+          ) {
+            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: rule.segments.join(".") });
+          }
+          break;
+        case "enum_pair":
+          if (node.key === rule.key && node.value === rule.value) {
+            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: `${rule.key}=${rule.value}` });
+          }
+          break;
+        case "id_prefix":
+          if (typeof node.value === "string" && node.value.startsWith(rule.prefix)) {
+            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: node.value });
+          }
+          break;
+        case "value":
+          if (typeof node.value === "string" && node.value === rule.value) {
+            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: rule.value });
+          }
+          break;
+        case "patch_path":
+          // A patch op object carrying the forbidden `path`.
+          if (node.key === "path" && node.value === rule.path) {
+            violations.push({ id: rule.id, rule: rule.kind, path: node.path.join("."), detail: `patch path ${rule.path}` });
+          }
+          break;
+      }
+    }
+  }
+  return violations;
+}
+
 function* stringLeaves(node: unknown, path: string[] = []): Generator<{ path: string[]; value: string }> {
   if (typeof node === "string") {
     yield { path, value: node };
@@ -181,6 +329,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
   const removedEventKinds = loadMigrationJson<DriftRegistry>("removed-event-kinds.json");
   const deprecatedProfileIds = loadMigrationJson<DriftRegistry>("deprecated-profile-ids.json");
   const forbiddenModelTerms = loadRegistryJson<DriftRegistry>("forbidden-model-terms.json");
+  const forbiddenWireFields = loadRegistryJson<DriftRegistry>("forbidden-wire-fields.json");
   const operationRegistry = loadRegistryJson<OperationRegistry>("operation-registry.json");
 
   test("Phase C — /server/describe does not claim any deprecated profile id", async ({
@@ -282,28 +431,77 @@ test.describe("conformance registry drift @fully-implemented", () => {
     expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
   });
 
-  test("Phase F — server-managed audit / log surfaces don't leak forbidden model terms", async ({
+  test("Phase F — server-managed read surfaces don't leak forbidden model terms", async ({
     request,
   }, testInfo) => {
-    const forbidden = forbiddenModelTerms.entries
+    // forbidden-model-terms.json carries the term under `id` for most rows and
+    // under `term` for the `cx.` / `cx:` namespace-prefix rows. Keep every
+    // hard_reject term (do NOT pre-filter punctuated terms — the matcher below
+    // handles dots/colons/parens). docs_only terms (e.g. bare `协作 Realm`)
+    // are intentionally out of scope.
+    const forbiddenTerms = forbiddenModelTerms.entries
       .filter((entry) => entry.rejection_level === "hard_reject")
-      .map((entry) => entry.id)
-      .filter((term) => /^[A-Za-z_ -]+$/.test(term));
-    expect(forbidden.length).toBeGreaterThan(0);
+      .map((entry) => entry.term ?? entry.id)
+      .filter((term): term is string => typeof term === "string" && term.length > 0);
+    expect(forbiddenTerms.length).toBeGreaterThan(0);
+    const matchers = forbiddenTerms.map((term) => ({
+      term,
+      regex: forbiddenTermMatcher(term),
+    }));
 
-    const surfaces = [
-      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_cokret/describe`) },
-      { name: "health", response: await request.get(`${solandBaseUrl()}/health`) },
+    // Stand up a real authed actor so the scan reaches the reader / receipt
+    // surfaces a leak would surface on, not just the anonymous describe/health
+    // pair the previous Phase F covered.
+    const alice = uniqueUser("registry-drift-terms");
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const auth = { authorization: `Bearer ${token}` };
+
+    // Submit a benign event so the write receipt is part of the scan surface.
+    const submitReceipt = await request.post(`${solandBaseUrl()}/_cokret/self/events`, {
+      headers: auth,
+      data: signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: "ck:realm:01904100-0000-7000-8000-000000000997",
+        kind: "ck.read_cursor.advance",
+        payload: {},
+      }),
+    });
+
+    const surfaces: Array<{ name: string; response: APIResponse; requireOk?: boolean }> = [
+      { name: "server.describe", response: await request.get(`${solandBaseUrl()}/_cokret/describe`), requireOk: true },
+      { name: "health", response: await request.get(`${solandBaseUrl()}/health`), requireOk: true },
+      { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_cokret/find/directory/describe`) },
+      { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_cokret/self/account/viewer`, { headers: auth }) },
+      { name: "events.query", response: await request.get(`${solandBaseUrl()}/_cokret/self/events?limit=20`, { headers: auth }) },
+      { name: "notifications", response: await request.get(`${solandBaseUrl()}/_cokret/self/notifications`, { headers: auth }) },
+      { name: "events.submit.receipt", response: submitReceipt },
     ];
-    const violations: Array<{ surface: string; path: string; term: string; value: string }> = [];
+
+    const violations: Array<{ surface: string; status: number; path: string; term: string; value: string }> = [];
+    const scanned: Array<{ surface: string; status: number }> = [];
     for (const surface of surfaces) {
-      expect(surface.response.ok(), `${surface.name} responded ${surface.response.status()}`).toBeTruthy();
-      const body = await surface.response.json();
+      const status = surface.response.status();
+      scanned.push({ surface: surface.name, status });
+      if (surface.requireOk) {
+        expect(surface.response.ok(), `${surface.name} responded ${status}`).toBeTruthy();
+      }
+      // Authed reader / receipt surfaces may legitimately 4xx in some
+      // deployments (feature not mounted, empty inbox). Server-managed text
+      // still arrives on the error body, so scan whatever JSON came back and
+      // skip only non-JSON / empty responses.
+      let body: unknown;
+      try {
+        body = await surface.response.json();
+      } catch {
+        continue;
+      }
       for (const leaf of stringLeaves(body)) {
-        for (const term of forbidden) {
-          if (new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(leaf.value)) {
+        for (const { term, regex } of matchers) {
+          if (regex.test(leaf.value)) {
             violations.push({
               surface: surface.name,
+              status,
               path: leaf.path.join("."),
               term,
               value: leaf.value,
@@ -313,9 +511,86 @@ test.describe("conformance registry drift @fully-implemented", () => {
       }
     }
     await testInfo.attach("forbidden-model-term-scan", {
-      body: JSON.stringify({ forbidden, violations }, null, 2),
+      body: JSON.stringify({ forbiddenTerms, scanned, violations }, null, 2),
       contentType: "application/json",
     });
     expect(violations).toEqual([]);
+  });
+
+  test("Phase G — submitted Event Envelopes carry no forbidden wire field", async ({
+    request,
+  }, testInfo) => {
+    // spec: forbidden-wire-fields.json (source_of_truth). Walk a REAL submitted
+    // Event Envelope (+ soland's receipt) and flag any hard_reject forbidden
+    // wire field / typed-id prefix / removed kind / forbidden patch path.
+    //
+    // The probe payload classes are chosen so that NONE of the context-scoped
+    // bare field names (`title`, `summary`, `sender`, `events`, …) are
+    // legitimate here — a message-create / read-cursor envelope never carries
+    // them — which lets the field-name rules run without the false positives a
+    // Realm/Space projection (legitimately carrying `title` / `name` / `id`)
+    // would trigger. The always-illegal rule kinds (typed-id prefixes, removed
+    // event-kind / schema-id / error-code VALUES) are context-independent.
+    const rules = forbiddenWireFields.entries
+      .filter((entry) => entry.rejection_level === "hard_reject")
+      .map(classifyWireField);
+    expect(rules.length).toBeGreaterThan(0);
+
+    const alice = uniqueUser("forbidden-wire-fields");
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+
+    const realmId = await createRealmApi(request, token, {
+      title: "forbidden-wire-fields probe",
+      encryption_profile: "none",
+    });
+    const strandId = await resolveDefaultStrandId(request, token, realmId);
+
+    const messageEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ck.message.create",
+      schemaId: "ck.schema.message.v1",
+      payload: {
+        strand_id: strandId,
+        track_name: "discussion",
+        content: { kind: "ck.content.text", body: "forbidden-wire-fields probe" },
+      },
+    });
+    const messageReceipt = await submitSignedEventApi(request, token, messageEnvelope, {
+      context: "forbidden-wire-fields message",
+    });
+
+    const cursorEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ck.read_cursor.advance",
+      payload: {},
+    });
+
+    const documents: Array<{ name: string; document: unknown }> = [
+      { name: "message.envelope", document: messageEnvelope },
+      { name: "message.receipt", document: messageReceipt },
+      { name: "read_cursor.envelope", document: cursorEnvelope },
+    ];
+
+    const violations: WireViolation[] = [];
+    for (const { name, document } of documents) {
+      for (const violation of scanForbiddenWireFields(document, rules)) {
+        violations.push({ ...violation, path: `${name}:${violation.path}` });
+      }
+    }
+    await testInfo.attach("forbidden-wire-field-scan", {
+      body: JSON.stringify(
+        { rule_count: rules.length, documents: documents.map((d) => d.name), violations },
+        null,
+        2,
+      ),
+      contentType: "application/json",
+    });
+    expect(
+      violations,
+      `forbidden wire field(s) on submitted envelope: ${violations.map((v) => `${v.id}@${v.path}`).join(", ")}`,
+    ).toEqual([]);
   });
 });

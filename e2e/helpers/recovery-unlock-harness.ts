@@ -49,48 +49,7 @@ import {
   uuidV7,
 } from "./soland-api";
 import { ensureRegistered, issueDevSession, type JointUser } from "./users";
-
-const ED25519_MULTICODEC_PREFIX = Buffer.from([0xed, 0x01]);
-const BASE58_ALPHABET =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function base58btcEncode(bytes: Buffer): string {
-  if (bytes.length === 0) {
-    return "";
-  }
-  let leadingZeros = 0;
-  while (leadingZeros < bytes.length && bytes[leadingZeros] === 0) {
-    leadingZeros += 1;
-  }
-  const digits: number[] = [];
-  for (let i = leadingZeros; i < bytes.length; i += 1) {
-    let carry = bytes[i];
-    for (let j = 0; j < digits.length; j += 1) {
-      const value = (digits[j] << 8) + carry;
-      digits[j] = value % 58;
-      carry = Math.floor(value / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  let out = "1".repeat(leadingZeros);
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    out += BASE58_ALPHABET[digits[i]];
-  }
-  return out;
-}
-
-function ed25519Multibase(rawPublicKey: Buffer): string {
-  if (rawPublicKey.length !== 32) {
-    throw new Error(
-      `Ed25519 public key must be 32 bytes, got ${rawPublicKey.length}`,
-    );
-  }
-  const envelope = Buffer.concat([ED25519_MULTICODEC_PREFIX, rawPublicKey]);
-  return `z${base58btcEncode(envelope)}`;
-}
+import { encodeEd25519PubkeyMultibase } from "./encoding";
 
 function rfc3339Millis(date: Date): string {
   // soland serializes recovery timestamps with millisecond precision
@@ -117,7 +76,9 @@ export function generateRecoverySigningKey(): RecoverySigningKey {
   if (!jwk.x) {
     throw new Error("Ed25519 public JWK missing 'x'");
   }
-  const multibase = ed25519Multibase(Buffer.from(jwk.x, "base64url"));
+  const multibase = encodeEd25519PubkeyMultibase(
+    Buffer.from(jwk.x, "base64url"),
+  );
   return {
     privateKey,
     multibase,

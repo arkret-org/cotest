@@ -1021,9 +1021,33 @@ fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {
             })
         }
         "events_submit" | "realm_create" | "space_create" => {
+            // Compare the write-receipt's *key set* (after dropping dynamic
+            // members), not just `body.status`. The previous normalizer kept
+            // only `status`, so a mock or soland that dropped `accepted` /
+            // `rejected` / the frontier objects from the EventsSubmitOutcome
+            // would still pass. We deliberately compare the remaining top-level
+            // key names rather than their values: the frontier objects and the
+            // `accepted[]` event ids are per-run (head event ids, freshly minted
+            // ids) and `is_dynamic_key` only filters whole members by name, not
+            // the dynamic contents nested inside `actor_frontier` /
+            // `realm_frontier`. The key-set check keeps the receipt shape honest
+            // while staying immune to those per-run values.
             if snapshot.status == 200 || snapshot.status == 201 {
+                let mut keys: Vec<String> = snapshot
+                    .body
+                    .as_object()
+                    .map(|object| {
+                        object
+                            .keys()
+                            .filter(|key| !is_dynamic_key(key.as_str()))
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                keys.sort();
                 json!({
                     "status": snapshot.body.get("status").cloned().unwrap_or(Value::Null),
+                    "receipt_keys": keys,
                 })
             } else {
                 normalize_value(snapshot.body)

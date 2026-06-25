@@ -135,6 +135,7 @@ fn unsigned_recovery_policy(
         allowed_proof_kinds: vec![RecoveryProofKind::PrincipalSigning],
         threshold: None,
         device_quorum: None,
+        recovery_keys: None,
         trusted_recovery_services: None,
         approval_requirement: None,
         audit: None,

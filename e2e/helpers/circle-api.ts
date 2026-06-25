@@ -17,17 +17,11 @@
 // Wire shapes mirror soland src/routing/circles.rs (CreateCircleRequestBody /
 // CircleMemberRequestBody / CircleOutcome / CircleMembershipOutcome).
 
-import {
-  createHash,
-  createPrivateKey,
-  sign as nodeSign,
-  type KeyObject,
-} from "node:crypto";
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
 import {
   authHeaders,
-  canonicalJson,
+  buildDetachedJwsProof,
   canonicalTimestamp,
   expectJsonOk,
   signedEventEnvelope,
@@ -60,59 +54,6 @@ export type CircleMembershipOutcome = {
 };
 
 export type CircleMembership = "join" | "invite" | "knock" | "leave" | "ban";
-
-function base64url(input: Buffer | string): string {
-  return Buffer.from(input).toString("base64url");
-}
-
-function sha256Canonical(value: unknown): string {
-  return `sha256:${createHash("sha256")
-    .update(canonicalJson(value), "utf8")
-    .digest("hex")}`;
-}
-
-function developmentPrivateKey(actorDid: string): KeyObject {
-  const seed = createHash("sha256")
-    .update("soland:anchorer-ephemeral:")
-    .update(actorDid)
-    .digest();
-  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
-  return createPrivateKey({
-    key: Buffer.concat([pkcs8Prefix, seed]),
-    format: "der",
-    type: "pkcs8",
-  });
-}
-
-function genericDetachedJwsProof(args: {
-  issuerDid: string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-}): Record<string, unknown> {
-  const verificationMethod = `${args.issuerDid}#device`;
-  const payloadDigest = sha256Canonical(args.payload);
-  const bindingObject = {
-    payload_digest: payloadDigest,
-    did: args.issuerDid,
-    verification_method: verificationMethod,
-    created_at: args.createdAt,
-  };
-  const protectedHeader = base64url(canonicalJson({ alg: "EdDSA" }));
-  const bindingPayload = base64url(canonicalJson(bindingObject));
-  const signature = nodeSign(
-    null,
-    Buffer.from(`${protectedHeader}.${bindingPayload}`, "utf8"),
-    developmentPrivateKey(args.issuerDid),
-  );
-  return {
-    kind: "detached_jws",
-    alg: "EdDSA",
-    verification_method: verificationMethod,
-    payload_digest: payloadDigest,
-    created_at: args.createdAt,
-    jws: `${protectedHeader}..${base64url(signature)}`,
-  };
-}
 
 export async function grantCircleMemberManageCapability(
   request: APIRequestContext,
@@ -159,7 +100,7 @@ export async function grantCircleMemberManageCapability(
         grant: {
           ...unsignedGrant,
           proofs: [
-            genericDetachedJwsProof({
+            buildDetachedJwsProof({
               issuerDid: args.ownerDid,
               payload: unsignedGrant,
               createdAt: issuedAt,
@@ -222,7 +163,7 @@ export async function grantCircleManageCapability(
         grant: {
           ...unsignedGrant,
           proofs: [
-            genericDetachedJwsProof({
+            buildDetachedJwsProof({
               issuerDid: args.ownerDid,
               payload: unsignedGrant,
               createdAt: issuedAt,

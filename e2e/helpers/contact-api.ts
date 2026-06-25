@@ -38,9 +38,8 @@ import {
   type InviteDeliveryRequestBody,
 } from "./soland-api";
 import type { JointUser } from "./users";
+import { encodeEd25519PubkeyMultibase } from "./encoding";
 
-const BASE58BTC_ALPHABET =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const CROSS_SIGNING_BINDING_LABEL = "ck-cross-signing-bind-v1\n";
 
 type Ed25519FixtureKey = {
@@ -364,35 +363,6 @@ export async function seedDirectConversationIdentityCokret(
   await uploadDirectConversationKeyPackage(request, token, user, opts);
 }
 
-function base58btc(bytes: Buffer): string {
-  if (bytes.length === 0) {
-    return "";
-  }
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i += 1) {
-      const value = digits[i] * 256 + carry;
-      digits[i] = value % 58;
-      carry = Math.floor(value / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  for (const byte of bytes) {
-    if (byte !== 0) {
-      break;
-    }
-    digits.push(0);
-  }
-  return digits
-    .reverse()
-    .map((digit) => BASE58BTC_ALPHABET[digit])
-    .join("");
-}
-
 function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
   const der = publicKey.export({ format: "der", type: "spki" }) as Buffer;
   if (der.length < 32) {
@@ -402,9 +372,7 @@ function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
 }
 
 function ed25519PublicKeyMultibase(publicKey: KeyObject): string {
-  return `z${base58btc(
-    Buffer.concat([Buffer.from([0xed, 0x01]), rawEd25519PublicKey(publicKey)]),
-  )}`;
+  return encodeEd25519PubkeyMultibase(rawEd25519PublicKey(publicKey));
 }
 
 function ed25519FixtureKey(): Ed25519FixtureKey {

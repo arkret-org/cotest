@@ -1116,6 +1116,45 @@ export function eventProof(args: {
   };
 }
 
+// Generic detached-JWS proof over an arbitrary canonical payload (Seal
+// signature, capability grant, identity-link, etc. — NOT the Event-bound
+// `eventProof`). The JWS transcript signs the `{payload_digest, did,
+// verification_method, created_at}` binding object; the protected header is
+// exactly `{"alg":"EdDSA"}` (the SDK verifier deserialises with
+// deny-unknown-fields). circle-api.ts and webrtc.ts previously each inlined an
+// identical `genericDetachedJwsProof`.
+export function buildDetachedJwsProof(args: {
+  issuerDid: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  verificationMethod?: string;
+}): Record<string, unknown> {
+  const verificationMethod =
+    args.verificationMethod ?? `${args.issuerDid}#device`;
+  const payloadDigest = `sha256:${sha256CanonicalJson(args.payload)}`;
+  const bindingObject = {
+    payload_digest: payloadDigest,
+    did: args.issuerDid,
+    verification_method: verificationMethod,
+    created_at: args.createdAt,
+  };
+  const protectedHeader = base64urlJson({ alg: "EdDSA" });
+  const bindingPayload = base64urlJson(bindingObject);
+  const signature = sign(
+    null,
+    Buffer.from(`${protectedHeader}.${bindingPayload}`, "utf8"),
+    developmentServicePrivateKey(args.issuerDid),
+  );
+  return {
+    kind: "detached_jws",
+    alg: "EdDSA",
+    verification_method: verificationMethod,
+    payload_digest: payloadDigest,
+    created_at: args.createdAt,
+    jws: `${protectedHeader}..${signature.toString("base64url")}`,
+  };
+}
+
 export async function submitSignedEventApi(
   request: APIRequestContext,
   token: string,
@@ -1806,7 +1845,11 @@ function base64urlJson(value: unknown): string {
 // soland's *dev* anchorer-ephemeral derivation (soland: federation.rs /
 // state.rs) so the mock's federation signatures verify against a dev soland —
 // production soland MUST reject keys produced by this convention.
-function developmentServicePrivateKey(serviceDid: string) {
+//
+// Exported as the single source of truth for the dev actor/anchorer-ephemeral
+// key: circle-api.ts and webrtc.ts previously each re-derived this same
+// `sha256("soland:anchorer-ephemeral:" + did)` PKCS#8 ed25519 key.
+export function developmentServicePrivateKey(serviceDid: string) {
   const seed = createHash("sha256")
     .update("soland:anchorer-ephemeral:")
     .update(serviceDid)

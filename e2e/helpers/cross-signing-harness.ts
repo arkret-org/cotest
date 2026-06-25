@@ -25,52 +25,8 @@
 // principal_id).
 
 import { generateKeyPairSync, sign } from "node:crypto";
+import { encodeEd25519PubkeyMultibase } from "./encoding";
 import { canonicalJson } from "./soland-api";
-
-const ED25519_MULTICODEC_PREFIX = Buffer.from([0xed, 0x01]);
-const BASE58_ALPHABET =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function base58btcEncode(bytes: Buffer): string {
-  if (bytes.length === 0) {
-    return "";
-  }
-  let leadingZeros = 0;
-  while (leadingZeros < bytes.length && bytes[leadingZeros] === 0) {
-    leadingZeros += 1;
-  }
-  const digits: number[] = [];
-  for (let i = leadingZeros; i < bytes.length; i += 1) {
-    let carry = bytes[i];
-    for (let j = 0; j < digits.length; j += 1) {
-      const value = (digits[j] << 8) + carry;
-      digits[j] = value % 58;
-      carry = Math.floor(value / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  let out = "1".repeat(leadingZeros);
-  for (let i = digits.length - 1; i >= 0; i -= 1) {
-    out += BASE58_ALPHABET[digits[i]];
-  }
-  return out;
-}
-
-/// Render a raw 32-byte Ed25519 public key as the `z…` multibase form soland
-/// decodes (`z` + base58btc(0xed01 ‖ key)). Mirrors soland's
-/// `ed25519_pubkey_to_did_key_multibase` / SDK `decode_ed25519_multibase`.
-function ed25519Multibase(rawPublicKey: Buffer): string {
-  if (rawPublicKey.length !== 32) {
-    throw new Error(
-      `Ed25519 public key must be 32 bytes, got ${rawPublicKey.length}`,
-    );
-  }
-  const envelope = Buffer.concat([ED25519_MULTICODEC_PREFIX, rawPublicKey]);
-  return `z${base58btcEncode(envelope)}`;
-}
 
 /// A freshly-generated Ed25519 cross-signing key, carrying its raw public key,
 /// the `z…` multibase rendering soland projects, and a `did:key:z…` kid.
@@ -92,7 +48,7 @@ export function generateCrossSigningKey(): CrossSigningKey {
     throw new Error("Ed25519 public JWK missing 'x'");
   }
   const rawPublicKey = Buffer.from(jwk.x, "base64url");
-  const multibase = ed25519Multibase(rawPublicKey);
+  const multibase = encodeEd25519PubkeyMultibase(rawPublicKey);
   return {
     privateKey,
     rawPublicKey,
