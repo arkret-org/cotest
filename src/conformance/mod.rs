@@ -6,6 +6,7 @@ mod blob_stream_aead;
 mod call_signal;
 mod call_state_core;
 mod call_state_media_lifecycle;
+mod canonical_cross_lang;
 mod capability;
 mod coauth_lifecycle;
 mod cursor_vectors;
@@ -103,6 +104,7 @@ pub use call_state_core::{
     run_participant_binding_invalid_vector, run_replay_same_state_noop_vector,
     run_terminal_absorbing_vector, run_transition_matrix_vector,
 };
+pub use canonical_cross_lang::run_canonical_cross_lang_suite;
 pub use call_state_media_lifecycle::{
     ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, run_call_state_media_lifecycle_vector_suite,
     run_moderator_kick_ban_vector, run_p2p_to_sfu_upgrade_vector,

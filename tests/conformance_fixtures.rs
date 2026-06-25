@@ -61,6 +61,17 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Cross-language canonical-JSON parity: the SDK canonicaliser
+    /// (cokret_core::canonical) must reproduce every golden vector in
+    /// e2e/fixtures/canonical-cross-check.json byte-for-byte. The TS port
+    /// (e2e/tests/conformance/canonical-cross-lang.spec.ts) asserts the same
+    /// golden, so the two implementations are pinned to one shared truth.
+    canonical_cross_lang_suite_matches_reference_semantics,
+    "canonical_cross_lang",
+    cotest::conformance::run_canonical_cross_lang_suite,
+);
+
+conformance_test!(
     redaction_fixture_suite_matches_reference_semantics,
     "redaction_fixture",
     cotest::conformance::run_redaction_fixture_suite,

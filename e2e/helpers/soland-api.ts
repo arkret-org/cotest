@@ -1899,6 +1899,16 @@ function nextActorSeq(): number {
 // Canonical JSON gate for e2e signing/hash fixtures. This intentionally rejects
 // values outside the Cokret canonical profile instead of silently producing a
 // digest for non-canonical JavaScript data.
+//
+// AUTHORITATIVE SOURCE: this is a TS port of the SDK's canonical JSON
+// (cokret-rust-sdk/crates/core/src/canonical.rs — RFC 8785 JCS, integer-only
+// number profile, UTF-16 key sort, NFC strings). The harness runs on Node and
+// cannot call the Rust SDK directly, so this reimplementation MUST stay
+// byte-for-byte identical to the SDK; soland verifies the signatures this
+// produces using that same SDK. Drift is guarded by the cross-language golden in
+// e2e/fixtures/canonical-cross-check.json, asserted by both
+// e2e/tests/conformance/canonical-cross-lang.spec.ts (this port) and
+// cotest/src/conformance/canonical_cross_lang.rs (the SDK). Keep them in sync.
 export function sha256CanonicalJson(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }

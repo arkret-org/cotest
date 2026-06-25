@@ -182,7 +182,11 @@ fn vector_registry_gate_mode_from_env() -> Result<VectorRegistryGateMode> {
     };
 
     match value.trim().to_ascii_lowercase().as_str() {
-        "" | "0" | "false" | "no" | "off" | "lenient" => Ok(VectorRegistryGateMode::Lenient),
+        // Empty string is treated as "unset" => Strict (safer default). Lenient
+        // requires an explicit opt-out value so `VAR=""` cannot silently
+        // downgrade certification strength.
+        "" => Ok(VectorRegistryGateMode::Strict),
+        "0" | "false" | "no" | "off" | "lenient" => Ok(VectorRegistryGateMode::Lenient),
         "1" | "true" | "yes" | "on" | "strict" => Ok(VectorRegistryGateMode::Strict),
         other => bail!(
             "{STRICT_GATE_ENV} must be one of 1/true/yes/on/strict or 0/false/no/off/lenient, got `{other}`"
