@@ -25,10 +25,20 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             "ck:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
+    // Publish bob's primary handle so directory search resolves a concrete
+    // `localpart:host` rather than `null` (soland leaves the handle unpublished
+    // when registration omits it). The authority is the SUT's bind host, which
+    // soland derives via `service_handle_domain` (host of SOLAND_PUBLIC_BASE_URL).
+    let service_host = server
+        .base_url()
+        .host_str()
+        .expect("server base_url must have a host")
+        .to_owned();
     let bob = server
-        .register_client(
+        .register_client_with_handle(
             "did:web:bob-privacy.example",
             "@bob-privacy",
+            &format!("bob-privacy-example:{service_host}"),
             "ck:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
@@ -302,18 +312,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    // soland derives the handle authority via `service_handle_domain`, which
-    // prefers the host of `SOLAND_PUBLIC_BASE_URL` over the service DID host
-    // (handles.rs). In production those agree (public_base_url host ==
-    // service_did host); the harness binds the SUT to loopback, so the
-    // public_base_url host here is the bind host (e.g. `127.0.0.1`) rather
-    // than `*.cotest.local`. Derive the expected authority from the server's
-    // actual bind host instead of hard-coding it.
-    let service_host = server
-        .base_url()
-        .host_str()
-        .expect("server base_url must have a host")
-        .to_owned();
+    // `service_host` (computed at registration above) is the authority soland
+    // derives via `service_handle_domain` from the SUT bind host, so the
+    // published handle round-trips as `bob-privacy-example:<host>`.
     assert_eq!(
         alice_user_after_contact["users"][0]["handle"],
         format!("bob-privacy-example:{service_host}")

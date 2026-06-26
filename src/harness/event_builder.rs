@@ -17,16 +17,35 @@ pub async fn register_account(
     handle: &str,
     device_id: &str,
 ) -> Result<String> {
+    register_account_with_handle(server, did, handle, None, device_id).await
+}
+
+/// Register an account and, when `published_handle` is `Some`, also publish a
+/// primary localpart binding via the canonical `<localpart>:<domain>` handle.
+/// soland leaves an account with no published handle when the registration
+/// omits `handle`, so directory/handle assertions that expect a resolvable
+/// `localpart:host` must opt in here.
+pub async fn register_account_with_handle(
+    server: &CokretServer,
+    did: &str,
+    display_handle: &str,
+    published_handle: Option<&str>,
+    device_id: &str,
+) -> Result<String> {
     let device_id = canonical_device_id(device_id);
+    let mut body = json!({
+        "principal_id": did,
+        "display_name": display_handle.trim_start_matches('@'),
+        "device_id": device_id
+    });
+    if let Some(handle) = published_handle {
+        body["handle"] = json!(handle);
+    }
     expect_json(
         server
             .http()
             .post(server.url("/_cokret/gate/account/register"))
-            .json(&json!({
-                "principal_id": did,
-                "display_name": handle.trim_start_matches('@'),
-                "device_id": device_id
-            })),
+            .json(&body),
         StatusCode::OK,
     )
     .await?;

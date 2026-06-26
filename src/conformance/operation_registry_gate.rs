@@ -900,8 +900,56 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
     if let Some(method) = infer_method_from_line(lines[index]) {
         return Some(method);
     }
+    // Router-table style spread across lines:
+    //   Router::with_path("/_cokret/...")
+    //       .post(handler),
+    // The verb binding sits on the line(s) immediately *after* the path. Prefer
+    // the nearest following `.<verb>(` over the symmetric context window, which
+    // would otherwise pick up a neighbouring route's verb earlier in the
+    // `.push(...).push(...)` chain (HTTP_METHODS iteration order makes GET win
+    // over POST when both appear in the window).
+    for following in lines.iter().skip(index + 1).take(2) {
+        if following.contains("with_path(") || following.contains("Router::") {
+            break;
+        }
+        for method in HTTP_METHODS {
+            if following
+                .trim_start()
+                .starts_with(&format!(".{}(", method.to_ascii_lowercase()))
+            {
+                return Some((*method).to_owned());
+            }
+        }
+    }
+    // A bare path-list element (a string literal that is the whole statement,
+    // e.g. inside `for path in [ "/_cokret/...", ... ]`) carries no verb of its
+    // own. Treating the verb as unknown lets the registry lookup match the path
+    // template against whichever method the spec registers it under, instead of
+    // borrowing an unrelated verb (a nearby `get_json(...openapi.json)` call)
+    // from the surrounding context window.
+    if is_bare_path_list_element(lines[index]) {
+        return None;
+    }
     let context = nearby_context(lines, index, 3);
     infer_method_from_context(&context)
+}
+
+/// True when the line is just a quoted string literal (optionally followed by a
+/// comma), i.e. an element of a path/identifier list rather than part of an
+/// HTTP call expression.
+fn is_bare_path_list_element(line: &str) -> bool {
+    let trimmed = line.trim();
+    let trimmed = trimmed.strip_suffix(',').unwrap_or(trimmed).trim_end();
+    let mut chars = trimmed.chars();
+    let Some(open) = chars.next() else {
+        return false;
+    };
+    if !matches!(open, '"' | '\'' | '`') {
+        return false;
+    }
+    // The closing quote must be the final character and there must be no
+    // intervening call syntax (parentheses) that would indicate a request.
+    trimmed.ends_with(open) && trimmed.len() >= 2 && !trimmed.contains('(')
 }
 
 fn infer_method_from_line(line: &str) -> Option<String> {
@@ -912,6 +960,18 @@ fn infer_method_from_line(line: &str) -> Option<String> {
             if token == *method {
                 return Some((*method).to_owned());
             }
+        }
+    }
+    // Router-table style: the HTTP verb follows the path on the same line, e.g.
+    // `Router::with_path("/_cokret/...").post(handler)`. The path literal sits
+    // between the `with_path(` call and the `.<verb>(` binding, so the verb is
+    // in the suffix rather than the prefix. Inferring it from the same line is
+    // far more precise than the multi-line context fallback, which can latch
+    // onto a neighbouring route's verb in a `.push(...).push(...)` chain.
+    let suffix = &line[cokret_index..];
+    for method in HTTP_METHODS {
+        if suffix.contains(&format!(").{}(", method.to_ascii_lowercase())) {
+            return Some((*method).to_owned());
         }
     }
     None
@@ -1029,7 +1089,8 @@ fn extract_regex_path_candidates(line: &str) -> Vec<String> {
 }
 
 fn extract_path_candidates(value: &str) -> Vec<String> {
-    let normalized = value
+    let collapsed = collapse_template_interpolations(value);
+    let normalized = collapsed
         .replace("\\/", "/")
         .replace("\\?", "?")
         .replace("\\#", "#")
@@ -1057,6 +1118,50 @@ fn extract_path_candidates(value: &str) -> Vec<String> {
             out.push(candidate);
         }
         search_from = match_start + "_cokret".len();
+    }
+    out
+}
+
+/// Collapse JavaScript/TypeScript template-literal interpolations (`${...}`)
+/// into a single `{wildcard}` segment-token before path extraction.
+///
+/// Without this, an interpolation like
+/// `/_cokret/self/keys/backups/${encodeURIComponent(id)}/unlock` would be cut
+/// short at the `(` that `trim_path_candidate` treats as a terminator, dropping
+/// the `/unlock` tail and producing a spurious `/_cokret/self/keys/backups/{wildcard}`
+/// observation that never matches the registered `.../unlock` operation. By
+/// folding the full `${...}` expression (balanced across one nested paren level)
+/// into `{wildcard}` first, the trailing path segments survive and the real
+/// operation template is recovered.
+fn collapse_template_interpolations(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = String::with_capacity(value.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+            let mut depth = 0usize;
+            let mut j = i + 1;
+            while j < bytes.len() {
+                match bytes[j] {
+                    b'{' => depth += 1,
+                    b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            if j < bytes.len() && depth == 0 {
+                out.push_str("{wildcard}");
+                i = j + 1;
+                continue;
+            }
+        }
+        out.push(bytes[i] as char);
+        i += 1;
     }
     out
 }

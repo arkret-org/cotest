@@ -18,7 +18,7 @@ use url::Url;
 use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
-use super::event_builder::{dev_login, register_account};
+use super::event_builder::{dev_login, register_account, register_account_with_handle};
 
 pub struct CokretServer {
     handle: SutHandle,
@@ -81,16 +81,11 @@ impl CokretServer {
         }
     }
 
-    /// spawn a pre-built soland binary directly (no `cargo run`).
-    /// Mirrors `spawn_process` but invokes the binary at `bin_path` with
-    /// `--bind <addr>` so federation scenarios can promote out of the slow
-    /// `cargo run --manifest-path` path when a SOLAND_BIN is supplied.
-    async fn spawn_external_binary(name: &str, bin_path: &Path) -> Result<Self> {
-        Self::spawn_external_binary_with_env(name, bin_path, &[]).await
-    }
-
-    /// extension of `spawn_external_binary` that injects extra env
-    /// vars into the child process. Used by `spawn_process` so the fast
+    /// spawn a pre-built soland binary directly (no `cargo run`), injecting
+    /// `extra_env` into the child process. Mirrors `spawn_process` but invokes
+    /// the binary at `bin_path` with `--bind <addr>` so federation scenarios
+    /// can promote out of the slow `cargo run --manifest-path` path when a
+    /// SOLAND_BIN is supplied. Used by `spawn_process` so the fast
     /// pre-built-binary path supports the same `extra_env` knob the slow
     /// `cargo run` path always supported.
     async fn spawn_external_binary_with_env(
@@ -100,6 +95,22 @@ impl CokretServer {
     ) -> Result<Self> {
         let port = reserve_port()?;
         let metrics_port = reserve_port()?;
+        Self::spawn_external_binary_with_ports_and_env(name, bin_path, port, metrics_port, extra_env)
+            .await
+    }
+
+    /// Spawn a pre-built soland binary on already-reserved ports. Splitting the
+    /// port reservation out of [`spawn_external_binary_with_env`] lets the
+    /// multi-node federation path compute every node's `did:web` + base URL up
+    /// front so each node can be started with the others wired in via
+    /// `SOLAND_FEDERATION_PEERS`.
+    async fn spawn_external_binary_with_ports_and_env(
+        name: &str,
+        bin_path: &Path,
+        port: ReservedPort,
+        metrics_port: ReservedPort,
+        extra_env: &[(&str, &str)],
+    ) -> Result<Self> {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
@@ -379,6 +390,27 @@ impl CokretServer {
         self.actor_client(did, &canonical_device_id(device_id), token)
     }
 
+    /// Like [`register_client`] but also publishes a primary localpart binding
+    /// via the canonical `<localpart>:<domain>` `published_handle`, so the
+    /// account resolves a directory handle instead of `null`.
+    pub async fn register_client_with_handle(
+        &self,
+        did: &str,
+        display_handle: &str,
+        published_handle: &str,
+        device_id: &str,
+    ) -> Result<TestActorClient> {
+        let token = register_account_with_handle(
+            self,
+            did,
+            display_handle,
+            Some(published_handle),
+            device_id,
+        )
+        .await?;
+        self.actor_client(did, &canonical_device_id(device_id), token)
+    }
+
     fn actor_client(&self, actor: &str, device_id: &str, token: String) -> Result<TestActorClient> {
         // Harness-only: actor clients talk to the same loopback SUT created
         // above, so insecure localhost TLS is acceptable for test traffic.
@@ -445,9 +477,82 @@ impl TestServerGroup {
             return Ok(None);
         };
 
-        let mut servers = Vec::with_capacity(count);
+        let servers = Self::spawn_external_federated(name, count, &bin_path).await?;
+        Ok(Some(Self {
+            servers,
+            docker_network: None,
+        }))
+    }
+
+    /// Spawn `count` pre-built soland binaries with each node wired to every
+    /// other as a `SOLAND_FEDERATION_PEERS` entry (`did:web|base_url`). Ports
+    /// are reserved for all nodes up front so each node's `did:web` + base URL
+    /// is known before any node starts, which is the only way to inject a
+    /// mutual peer mesh through start-time env. Without this, an inbound
+    /// `/_cokret/peer/events` submission can never resolve the source peer's
+    /// ServiceDescribe, so the federation profile gate falls back to
+    /// `federation_minimal` and rejects core kinds like `ck.message.create`.
+    ///
+    /// The outbound dispatcher is disabled (`SOLAND_FEDERATION_OUTBOUND=0`)
+    /// because federation scenarios drive cross-server delivery with explicit
+    /// `/_cokret/peer/events` POSTs; leaving the background dispatcher on would
+    /// race those deterministic submissions with unsolicited broadcasts.
+    async fn spawn_external_federated(
+        name: &str,
+        count: usize,
+        bin_path: &Path,
+    ) -> Result<Vec<CokretServer>> {
+        struct Pending {
+            name: String,
+            port: ReservedPort,
+            metrics: ReservedPort,
+            did: String,
+            url: String,
+        }
+
+        let mut pending = Vec::with_capacity(count);
         for index in 0..count {
-            match CokretServer::spawn_external_binary(&format!("{name}-{index}"), &bin_path).await {
+            let node_name = format!("{name}-{index}");
+            let port = reserve_port()?;
+            let metrics = reserve_port()?;
+            let did = format!("did:web:{node_name}.cotest.local");
+            let url = format!("http://127.0.0.1:{}", port.port());
+            pending.push(Pending {
+                name: node_name,
+                port,
+                metrics,
+                did,
+                url,
+            });
+        }
+
+        let peer_lists: Vec<String> = (0..count)
+            .map(|index| {
+                pending
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != index)
+                    .map(|(_, peer)| format!("{}|{}", peer.did, peer.url))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .collect();
+
+        let mut servers = Vec::with_capacity(count);
+        for (index, node) in pending.into_iter().enumerate() {
+            let extra_env: Vec<(&str, &str)> = vec![
+                ("SOLAND_FEDERATION_PEERS", peer_lists[index].as_str()),
+                ("SOLAND_FEDERATION_OUTBOUND", "0"),
+            ];
+            match CokretServer::spawn_external_binary_with_ports_and_env(
+                &node.name,
+                bin_path,
+                node.port,
+                node.metrics,
+                &extra_env,
+            )
+            .await
+            {
                 Ok(server) => servers.push(server),
                 Err(error) => {
                     drop(servers);
@@ -455,13 +560,26 @@ impl TestServerGroup {
                 }
             }
         }
-        Ok(Some(Self {
-            servers,
-            docker_network: None,
-        }))
+        Ok(servers)
     }
 
     pub async fn multi(name: &str, count: usize) -> Result<Self> {
+        // Process-mode fast path: when a pre-built soland binary is available,
+        // spawn the nodes as a mutually-wired federation mesh so inbound
+        // `/_cokret/peer/events` submissions can resolve each peer's
+        // ServiceDescribe (see `spawn_external_federated`). The slow
+        // `cargo run` and Docker paths below keep their original behavior.
+        if sut_runtime_mode() == SutRuntimeMode::Process {
+            use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
+            if let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) {
+                let servers = Self::spawn_external_federated(name, count, &bin_path).await?;
+                return Ok(Self {
+                    servers,
+                    docker_network: None,
+                });
+            }
+        }
+
         let docker_network = if sut_runtime_mode() == SutRuntimeMode::Docker {
             let network_name = format!(
                 "cotest-{}-{}-{}",

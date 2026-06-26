@@ -529,6 +529,24 @@ async fn create_federated_realm(
 }
 
 fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value {
+    // soland gates plaintext (`encryption_profile: "none"`) message delivery on
+    // each receiving service holding the `message_content` plaintext data class
+    // for the realm (`RealmMetaRecord::allows_plaintext_data_class`). The realm
+    // declaration MUST therefore carry structured `plaintext_visible_services`
+    // entries (`{service_did, data_classes}`), not bare DIDs — bare strings
+    // populate the legacy id list but never the typed data-class map.
+    let plaintext_visible_services = visible_services
+        .iter()
+        .map(|service_did| {
+            json!({
+                "service_did": service_did,
+                "service_type": "principal_server",
+                "data_classes": ["message_content"],
+                "purposes": ["federated_plaintext_delivery"],
+                "visibility": "private_plaintext"
+            })
+        })
+        .collect::<Vec<_>>();
     json!({
         "object": {
             "id": realm_id,
@@ -546,7 +564,7 @@ fn federated_realm_payload(realm_id: &str, visible_services: &[String]) -> Value
             "federation_policy": "open",
             "notary_profile": "single_did",
             "digest_algorithm": "sha256",
-            "plaintext_visible_services": visible_services,
+            "plaintext_visible_services": plaintext_visible_services,
             "notary": {
                 "type": "single_did",
                 "did": ALICE_DID,

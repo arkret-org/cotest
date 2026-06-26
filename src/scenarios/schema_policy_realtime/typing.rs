@@ -183,31 +183,30 @@ async fn default_strand_id(client: &TestActorClient, realm_id: &str) -> Result<S
         "strand create must be accepted"
     );
 
-    // The Realm lifecycle view (`GET /_cokret/self/realms/{realm_id}`) is
-    // `additionalProperties:false` and does NOT carry `default_strand_id`
-    // (per `realm-read-operations.schema.json`). soland exposes the default
-    // Strand via the per-row `is_default` flag on the Strand-list projection
-    // (`GET /_cokret/self/realms/{realm_id}/strands`), computed as
-    // `strand_id == realm.default_strand_id` at query time.
+    // The typing/ephemeral scope resolves through the realm-scoped Strand
+    // projection, so confirm the Strand we just authored is visible there and
+    // return its id. We deliberately do NOT require it to be the realm's
+    // `default` Strand: soland only marks `is_default` once a Realm publishes a
+    // `ck.realm.set_default_strand` pointer, which this typing scenario neither
+    // needs nor exercises.
     let realm_path_id = encode_path_segment(realm_id);
     let strands = expect_json(
         client.get(&format!("/_cokret/self/realms/{realm_path_id}/strands")),
         StatusCode::OK,
     )
     .await?;
-    let projected_default = strands["strands"]
+    let projected = strands["strands"]
         .as_array()
-        .and_then(|rows| rows.iter().find(|row| row["is_default"] == true))
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| row["strand_id"].as_str() == Some(strand_id.as_str()))
+        })
         .and_then(|row| row["strand_id"].as_str())
         .map(ToOwned::to_owned)
         .ok_or_else(|| {
-            anyhow::anyhow!("strand projection did not expose a default strand: {strands}")
+            anyhow::anyhow!("strand projection did not expose the authored strand: {strands}")
         })?;
-    assert_eq!(
-        projected_default, strand_id,
-        "realm-scoped strand projection exposed the wrong default strand"
-    );
-    Ok(projected_default)
+    Ok(projected)
 }
 
 fn encode_path_segment(segment: &str) -> String {

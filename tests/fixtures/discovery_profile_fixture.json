@@ -29,12 +29,13 @@
       "invite_locator_handoff",
       "moderation_reports",
       "peer_federation",
-      "projection_lifecycle",
       "push",
       "read_cursor",
       "realm_governance_links",
+      "realm_object_read",
       "realm_read",
-      "realtime_media"
+      "realtime_media",
+      "view_projection"
     ],
     "interop_bridge": [
       "applet",

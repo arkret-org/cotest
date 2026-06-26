@@ -227,6 +227,23 @@ fn signed_federation_event(
 }
 
 fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&str]) -> Value {
+    // Structured `plaintext_visible_services` entries (`{service_did,
+    // data_classes}`) are required for the receiving service to hold the
+    // `message_content` plaintext class — bare DIDs only populate the legacy
+    // id list and leave the typed data-class map empty, so a plaintext
+    // (`encryption_profile: "none"`) federated message would be denied.
+    let plaintext_visible_services = visible_services
+        .iter()
+        .map(|service_did| {
+            json!({
+                "service_did": service_did,
+                "service_type": "principal_server",
+                "data_classes": ["message_content"],
+                "purposes": ["federated_plaintext_delivery"],
+                "visibility": "private_plaintext"
+            })
+        })
+        .collect::<Vec<_>>();
     json!({
         "object": {
             "id": realm_id,
@@ -244,7 +261,7 @@ fn federation_realm_payload(realm_id: &str, creator: &str, visible_services: &[&
             "federation_policy": "open",
             "notary_profile": "single_did",
             "digest_algorithm": "sha256",
-            "plaintext_visible_services": visible_services,
+            "plaintext_visible_services": plaintext_visible_services,
             "notary": {
                 "type": "single_did",
                 "did": creator,

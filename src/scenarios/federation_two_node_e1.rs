@@ -26,7 +26,7 @@ use anyhow::{Context, Result};
 use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
+use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -210,17 +210,10 @@ fn with_peer_get_headers(
     source: &crate::harness::CokretServer,
     destination: &crate::harness::CokretServer,
 ) -> Result<reqwest::RequestBuilder> {
-    let content_digest = ContentDigest::compute(&[], ContentDigestAlgorithm::Sha256).wire_value;
-    let request_canonical_digest = sha256_digest([]);
-    with_peer_headers_for_digest(
-        builder,
-        "GET",
-        target_url,
-        source,
-        destination,
-        content_digest,
-        request_canonical_digest,
-    )
+    // GET peer reads carry no body: soland (peer.rs) rejects any GET that sends
+    // Content-Digest / Request-Canonical-Digest headers or binds those
+    // components in Signature-Input. Sign over the no-body-digest base.
+    with_peer_headers_for_digest(builder, "GET", target_url, source, destination, None)
 }
 
 fn with_peer_post_headers(
@@ -240,19 +233,23 @@ fn with_peer_post_headers(
         target_url,
         source,
         destination,
-        content_digest,
-        request_canonical_digest,
+        Some((content_digest, request_canonical_digest)),
     )
 }
 
+/// Sign a federation peer request. `body_digest` is `Some((content_digest,
+/// request_canonical_digest))` for write methods (POST) and `None` for GET peer
+/// reads, which MUST NOT carry or bind body-digest headers/components (soland
+/// `peer.rs`). The covered-component list, signature base, and emitted headers
+/// all include the body-digest fields only when present, matching soland's
+/// `peer_http_signature_base`.
 fn with_peer_headers_for_digest(
     builder: reqwest::RequestBuilder,
     method: &str,
     target_url: &str,
     source: &crate::harness::CokretServer,
     destination: &crate::harness::CokretServer,
-    content_digest: String,
-    request_canonical_digest: String,
+    body_digest: Option<(String, String)>,
 ) -> Result<reqwest::RequestBuilder> {
     let source_service_did = source.service_did();
     let destination_service_did = destination.service_did();
@@ -273,37 +270,61 @@ fn with_peer_headers_for_digest(
     let created = chrono::Utc::now().timestamp();
     let expires = created + 300;
     let keyid = format!("{source_service_did}#federation-fanout-key");
+    let content_digest_param = if body_digest.is_some() {
+        "\"content-digest\" "
+    } else {
+        ""
+    };
+    let request_digest_param = if body_digest.is_some() {
+        " \"request-canonical-digest\""
+    } else {
+        ""
+    };
     let signature_params = format!(
-        "(\"@method\" \"@target-uri\" \"@authority\" \"content-digest\" \
+        "(\"@method\" \"@target-uri\" \"@authority\" {content_digest_param}\
          \"source-service-did\" \"destination-service-did\" \"source-trust-domain\" \
-         \"destination-trust-domain\" \"request-canonical-digest\");created={created};\
+         \"destination-trust-domain\"{request_digest_param});created={created};\
          expires={expires};keyid=\"{keyid}\";alg=\"ed25519\""
     );
+    let content_digest_line = body_digest
+        .as_ref()
+        .map(|(content_digest, _)| format!("\"content-digest\": {content_digest}\n"))
+        .unwrap_or_default();
+    let request_digest_line = body_digest
+        .as_ref()
+        .map(|(_, request_canonical_digest)| {
+            format!("\"request-canonical-digest\": {request_canonical_digest}\n")
+        })
+        .unwrap_or_default();
     let signature_base = format!(
         "\"@method\": {}\n\
          \"@target-uri\": {target_uri}\n\
          \"@authority\": {authority}\n\
-         \"content-digest\": {content_digest}\n\
+         {content_digest_line}\
          \"source-service-did\": {source_service_did}\n\
          \"destination-service-did\": {destination_service_did}\n\
          \"source-trust-domain\": {source_trust_domain}\n\
          \"destination-trust-domain\": {destination_trust_domain}\n\
-         \"request-canonical-digest\": {request_canonical_digest}\n\
+         {request_digest_line}\
          \"@signature-params\": {signature_params}",
         method.to_ascii_uppercase()
     );
     let signing_key = development_service_signing_key(source_service_did);
     let signature = sign_message(signature_base.as_bytes(), &signing_key);
 
-    Ok(builder
-        .header("Content-Digest", content_digest)
+    let mut builder = builder
         .header("Source-Service-DID", source_service_did)
         .header("Destination-Service-DID", destination_service_did)
         .header("Source-Trust-Domain", source_trust_domain)
         .header("Destination-Trust-Domain", destination_trust_domain)
-        .header("Request-Canonical-Digest", request_canonical_digest)
         .header("Signature-Input", format!("sig1={signature_params}"))
-        .header("Signature", format!("sig1=:{signature}:")))
+        .header("Signature", format!("sig1=:{signature}:"));
+    if let Some((content_digest, request_canonical_digest)) = body_digest {
+        builder = builder
+            .header("Content-Digest", content_digest)
+            .header("Request-Canonical-Digest", request_canonical_digest);
+    }
+    Ok(builder)
 }
 
 fn development_service_signing_key(service_did: &str) -> cokret::http_signature::Ed25519SigningKey {
