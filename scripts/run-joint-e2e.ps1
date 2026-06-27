@@ -1456,16 +1456,12 @@ try {
         $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
         $solandCoauthEnv = (
             "`$env:SOLAND_ACCOUNT_AUTHORITY_URL={0}; " +
-            "`$env:SOLAND_OAUTH_INTROSPECTION_URL={1}; " +
-            "`$env:SOLAND_OAUTH_INTROSPECTION_BEARER={2}; " +
-            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={3}; " +
-            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={4}; " +
-            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={5}; " +
-            "`$env:SOLAND_OAUTH_CLIENT_ID={6}; "
+            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_URL={1}; " +
+            "`$env:SOLAND_SESSION_GRANT_INTROSPECTION_BEARER={2}; " +
+            "`$env:SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER={3}; " +
+            "`$env:SOLAND_OAUTH_CLIENT_ID={4}; "
         ) -f `
             (Quote-PsLiteral $coauthTrimmed),
-            (Quote-PsLiteral "$coauthTrimmed/oauth/introspect"),
-            (Quote-PsLiteral $CoauthOAuthIntrospectionBearer),
             (Quote-PsLiteral "$coauthTrimmed/_cokret/gate/account/session-grants/introspect"),
             (Quote-PsLiteral $CoauthSessionGrantIntrospectionBearer),
             (Quote-PsLiteral $CoauthEmbeddedWebvhRegistrationBearer),
@@ -1525,8 +1521,6 @@ try {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
-            $map.SOLAND_OAUTH_INTROSPECTION_URL = "$coauthContainer/oauth/introspect"
-            $map.SOLAND_OAUTH_INTROSPECTION_BEARER = $CoauthOAuthIntrospectionBearer
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_cokret/gate/account/session-grants/introspect"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $map.SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
