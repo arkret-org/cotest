@@ -6,9 +6,11 @@ use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
 };
 use cokret::identity::binding::multicodec_ed25519_public_key;
-use cokret_core::canonical::{canonical_json_bytes, canonical_sha256, sha256_digest};
+use cokret_core::canonical::{
+    canonical_json_bytes, canonical_sha256, format_timestamp_canonical, sha256_digest,
+};
 use cokret_core::{Did, Event, EventId, Hash, Hlc, Proof, RealmId, proof_kind};
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -43,6 +45,8 @@ const E2EE_MLS_GROUP_ID: &str = "peer_dm_mls_group";
 const E2EE_MESSAGE_CIPHERTEXT: &str = "opaque_cross_server_e2ee_message";
 const E2EE_MESSAGE_PLAINTEXT: &str = "cross-server e2ee plaintext must stay client-side";
 const BOB_DEVICE_KEY_SEED: [u8; 32] = [187u8; 32];
+const ALICE_DEVICE_KEY_SEED: [u8; 32] = [161u8; 32];
+const ALICE_DEVICE_AUTHORIZE_EVENT_ID: &str = "ck:event:01904100-0000-7000-8000-fedc00000a11";
 
 pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     let group = TestServerGroup::multi("federation-collaboration", 2).await?;
@@ -314,12 +318,69 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "alice sync did not include bob federation reply: {alice_sync}"
     );
 
+    // Federate alice's device identity to server_b so the receiver can verify
+    // the cross-server MLS Welcome's `claim_envelope.signature` against alice's
+    // device key (crypto-media/encryption-and-audit.md §6.04 device path:
+    // requester_device_id → the requester's current accepted, unrevoked device
+    // projection). soland projects an accepted `ck.device.authorize` into a
+    // `verification_state="verified"` device row (project_device_authorize), so
+    // the welcome's device-bound claim signature can be checked on server_b.
+    let alice_device_key = SigningKey::from_bytes(&ALICE_DEVICE_KEY_SEED);
+    let alice_device_public_key = multicodec_ed25519_public_key(&alice_device_key.verifying_key());
+    let alice_principal_realm =
+        principal_control_realm_id(&Did::new(ALICE_DID.to_owned()).context("invalid alice did")?);
+    let alice_device_authorize = signed_federation_event(
+        ALICE_DEVICE_AUTHORIZE_EVENT_ID,
+        "ck.device.authorize",
+        &alice_principal_realm,
+        ALICE_DID,
+        5,
+        json!({
+            "principal_id": ALICE_DID,
+            "device_id": ALICE_DEVICE_ID,
+            "device_public_key": alice_device_public_key,
+            "authorized_by": ALICE_DID,
+            "not_before": "2026-05-02T00:00:00Z",
+            "device_signature": "bootstrap-device-signature-placeholder",
+            "bootstrap_binding": {
+                "kind": "inception_self_authorized",
+                "did_method_evidence_ref": format!("{ALICE_DID}#inception")
+            },
+        }),
+    )?;
+    let alice_device_body = peer_events_submit_body(
+        &alice_principal_realm,
+        vec![alice_device_authorize],
+        Some("a-to-b-device-01"),
+    )?;
+    let alice_device_url = server_b.url("/_cokret/peer/events");
+    let alice_device_pushed = expect_json(
+        with_federation_trust_headers(
+            server_b
+                .http()
+                .post(&alice_device_url)
+                .json(&alice_device_body),
+            "POST",
+            &alice_device_url,
+            server_a,
+            server_b,
+            &alice_device_body,
+        )?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_json_array_contains(
+        &alice_device_pushed["accepted"],
+        ALICE_DEVICE_AUTHORIZE_EVENT_ID,
+        &alice_device_pushed,
+    );
+
     let e2ee_realm_create = signed_federation_event(
         E2EE_REALM_CREATE_EVENT_ID,
         "ck.realm.create",
         E2EE_REALM_ID,
         ALICE_DID,
-        5,
+        6,
         federated_e2ee_realm_payload(E2EE_REALM_ID),
     )?;
     let e2ee_bob_join = signed_federation_event(
@@ -327,7 +388,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck.member.state",
         E2EE_REALM_ID,
         ALICE_DID,
-        6,
+        7,
         member_delivery_binding_payload(E2EE_REALM_ID, BOB_DID, server_b.service_did()),
     )?;
     let e2ee_genesis = signed_federation_event(
@@ -335,7 +396,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck.mls.genesis",
         E2EE_REALM_ID,
         ALICE_DID,
-        7,
+        8,
         mls_genesis_payload(E2EE_REALM_ID),
     )?;
     let e2ee_welcome = signed_federation_event(
@@ -343,15 +404,20 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck.mls.welcome",
         E2EE_REALM_ID,
         ALICE_DID,
-        8,
-        mls_welcome_payload(E2EE_REALM_ID),
+        9,
+        mls_welcome_payload(
+            E2EE_REALM_ID,
+            &alice_device_key,
+            ALICE_DEVICE_ID,
+            ALICE_DEVICE_AUTHORIZE_EVENT_ID,
+        )?,
     )?;
     let e2ee_commit = signed_federation_event(
         E2EE_MLS_COMMIT_EVENT_ID,
         "ck.mls.commit",
         E2EE_REALM_ID,
         ALICE_DID,
-        9,
+        10,
         mls_commit_payload(E2EE_REALM_ID),
     )?;
     let e2ee_message = signed_federation_event(
@@ -359,7 +425,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         "ck.message.create",
         E2EE_REALM_ID,
         ALICE_DID,
-        10,
+        11,
         encrypted_message_payload(E2EE_REALM_ID),
     )?;
     let e2ee_body = peer_events_submit_body(
@@ -724,7 +790,12 @@ fn mls_genesis_payload(realm_id: &str) -> Value {
     })
 }
 
-fn mls_welcome_payload(realm_id: &str) -> Value {
+fn mls_welcome_payload(
+    realm_id: &str,
+    requester_device_key: &SigningKey,
+    requester_device_id: &str,
+    device_authorize_event_id: &str,
+) -> Result<Value> {
     let keypackage_ref = "sha256:5555555555555555555555555555555555555555555555555555555555555555";
     // The welcome ciphertext is opaque base64-encoded MLS Welcome bytes: soland
     // base64-decodes `ciphertext` and binds `welcome_digest =
@@ -733,35 +804,61 @@ fn mls_welcome_payload(realm_id: &str) -> Value {
     // base64 text.
     let welcome_plaintext = b"opaque-cross-server-mls-welcome";
     let welcome_bytes = URL_SAFE_NO_PAD.encode(welcome_plaintext);
-    json!({
+    let welcome_digest = sha256_digest(welcome_plaintext);
+    let claim_id = "claim-cross-ps-01";
+    let nonce = "claim_cross_ps_01_nonce_128_bit_material";
+    // §6.04 device path: the welcome `claim_envelope.signature` is a real
+    // Ed25519 signature by the requester's device key over the SDK's
+    // `MlsWelcomeClaimEnvelopeSigningInput` canonical bytes. soland deserialises
+    // the envelope and recomputes the same canonical signing input, so we build
+    // it field-for-field (device path → `requester_device_id`, no
+    // `ssk_generation`) with the canonical timestamp form the SDK emits.
+    let created_at_canonical = format_timestamp_canonical(
+        chrono::DateTime::parse_from_rfc3339("2026-05-25T00:00:02Z")
+            .context("welcome claim envelope timestamp")?
+            .with_timezone(&chrono::Utc),
+    );
+    let signing_input = json!({
+        "keypackage_ref": keypackage_ref,
+        "keypackage_digest": keypackage_ref,
+        "intended_realm_id": realm_id,
+        "claim_id": claim_id,
+        "requester_did": ALICE_DID,
+        "requester_device_id": requester_device_id,
+        "nonce": nonce,
+        "welcome_digest": welcome_digest,
+        "created_at": created_at_canonical,
+    });
+    let claim_signature = requester_device_key.sign(&canonical_json_bytes(&signing_input)?);
+    Ok(json!({
         "mls_group_id": E2EE_MLS_GROUP_ID,
         "epoch": 1,
         "recipient_principal_id": BOB_DID,
         "recipient_device_id": BOB_DEVICE_ID,
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_ref,
-        "claim_id": "claim-cross-ps-01",
+        "claim_id": claim_id,
         "claim_ref": {
-            "claim_id": "claim-cross-ps-01",
+            "claim_id": claim_id,
             "keypackage_ref": keypackage_ref,
             "keypackage_digest": keypackage_ref,
             "capabilities_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
-            "ssk_generation": 1
+            "device_authorize_event_id": device_authorize_event_id
         },
         "claim_envelope": {
             "keypackage_ref": keypackage_ref,
             "keypackage_digest": keypackage_ref,
             "intended_realm_id": realm_id,
-            "claim_id": "claim-cross-ps-01",
+            "claim_id": claim_id,
             "requester_did": ALICE_DID,
-            "ssk_generation": 1,
-            "nonce": "claim_cross_ps_01_nonce_128_bit_material",
-            "welcome_digest": sha256_digest(welcome_plaintext),
-            "created_at": "2026-05-25T00:00:02Z",
+            "requester_device_id": requester_device_id,
+            "nonce": nonce,
+            "welcome_digest": welcome_digest,
+            "created_at": created_at_canonical,
             "signature": {
-                "kid": format!("{ALICE_DID}#self-signing"),
+                "kid": format!("{ALICE_DID}#device"),
                 "alg": "EdDSA",
-                "sig": "claim_cross_ps_01_signature"
+                "sig": URL_SAFE_NO_PAD.encode(claim_signature.to_bytes())
             }
         },
         "welcome_ref": "ck:blob:sha256:88888888888888888888888888888888888888888888888888888888888888e2",
@@ -769,7 +866,7 @@ fn mls_welcome_payload(realm_id: &str) -> Value {
         "expires_at": "2026-05-25T01:00:00Z",
         "commit_ref": E2EE_MLS_COMMIT_EVENT_ID,
         "governance_binding": mls_governance_binding(realm_id, 0, 0)
-    })
+    }))
 }
 
 fn mls_commit_payload(realm_id: &str) -> Value {
