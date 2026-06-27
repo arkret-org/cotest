@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use cokret::auth::principal_control_realm_id;
 use cokret::http_signature::{
     ContentDigest, ContentDigestAlgorithm, sign_message, signing_key_from_seed,
@@ -724,7 +726,13 @@ fn mls_genesis_payload(realm_id: &str) -> Value {
 
 fn mls_welcome_payload(realm_id: &str) -> Value {
     let keypackage_ref = "sha256:5555555555555555555555555555555555555555555555555555555555555555";
-    let welcome_bytes = "opaque-cross-server-mls-welcome";
+    // The welcome ciphertext is opaque base64-encoded MLS Welcome bytes: soland
+    // base64-decodes `ciphertext` and binds `welcome_digest =
+    // sha256(decoded bytes)` (reducer/mls.rs `validate_welcome_trust_binding`).
+    // The digest MUST therefore be computed over the decoded plaintext, not the
+    // base64 text.
+    let welcome_plaintext = b"opaque-cross-server-mls-welcome";
+    let welcome_bytes = URL_SAFE_NO_PAD.encode(welcome_plaintext);
     json!({
         "mls_group_id": E2EE_MLS_GROUP_ID,
         "epoch": 1,
@@ -748,7 +756,7 @@ fn mls_welcome_payload(realm_id: &str) -> Value {
             "requester_did": ALICE_DID,
             "ssk_generation": 1,
             "nonce": "claim_cross_ps_01_nonce_128_bit_material",
-            "welcome_digest": sha256_digest(welcome_bytes.as_bytes()),
+            "welcome_digest": sha256_digest(welcome_plaintext),
             "created_at": "2026-05-25T00:00:02Z",
             "signature": {
                 "kid": format!("{ALICE_DID}#self-signing"),
