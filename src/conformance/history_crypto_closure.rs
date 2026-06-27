@@ -460,8 +460,7 @@ fn evaluate_history_sharing_scenario(scenario: &Value) -> Result<Value> {
     // (device-lifecycle §13 canonical gate) are separate decisions: a reader
     // can be allowed to read pre-join history yet still be denied the key when
     // the requesting key source is not in the matched rule's `key_sources`.
-    let pre_join_ok =
-        required_str_obj(policy, "pre_join_history")? == "allow_if_visibility_allows";
+    let pre_join_ok = required_str_obj(policy, "pre_join_history")? == "allow_if_visibility_allows";
     let receiver_ok = scenario
         .get("receiver_state_valid")
         .and_then(Value::as_bool)

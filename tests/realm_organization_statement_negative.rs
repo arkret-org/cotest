@@ -5,12 +5,11 @@
 //! gate. These tests drive the *shared* cokret-rust-sdk surfaces so cotest
 //! never re-implements the organization-side invariants:
 //!
-//!   * `cokret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`]
-//!     dispatches `ck.realm.organization` to the `realm_organization_payload`
-//!     def (no fallback to a legacy `{ organization_ref }` shape).
-//!   * `cokret_core::models::verify_realm_organization_statement` enforces the
-//!     issuer-role / delegation / proof / validity-window / scope / revocation
-//!     invariants, fail-closed.
+//!   * `cokret_core::schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
+//!     `ck.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
+//!     organization_ref }` shape).
+//!   * `cokret_core::models::verify_realm_organization_statement` enforces the issuer-role /
+//!     delegation / proof / validity-window / scope / revocation invariants, fail-closed.
 //!
 //! COT-ORG-01 asserts the coverage fixture's active + revoked
 //! `RealmOrganizationPayload` shapes validate against the SDK validator and the
@@ -26,6 +25,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Utc};
+use cokret_core::Did;
 use cokret_core::models::{
     NoDelegationResolver, ObjectRef, RealmId, RealmOrganizationControlScope,
     RealmOrganizationDelegation, RealmOrganizationDelegationResolver, RealmOrganizationPayload,
@@ -34,7 +34,6 @@ use cokret_core::models::{
 use cokret_core::schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
-use cokret_core::Did;
 use serde_json::Value;
 
 const ORG_EVENT_KIND: &str = "ck.realm.organization";
@@ -96,7 +95,9 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
             .with_context(|| format!("strong schema must accept {name}"))?;
         // Strong-typed deserialization round-trip (rejects the legacy shape).
         let _typed: RealmOrganizationPayload = serde_json::from_value(payload.clone())
-            .with_context(|| format!("vector {name} must deserialize to RealmOrganizationPayload"))?;
+            .with_context(|| {
+                format!("vector {name} must deserialize to RealmOrganizationPayload")
+            })?;
 
         match payload.get("status").and_then(Value::as_str) {
             Some("active") => {
@@ -117,8 +118,14 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
         }
     }
 
-    assert!(active_seen, "coverage fixture must carry an active organization vector");
-    assert!(revoked_seen, "coverage fixture must carry a revoked organization vector");
+    assert!(
+        active_seen,
+        "coverage fixture must carry an active organization vector"
+    );
+    assert!(
+        revoked_seen,
+        "coverage fixture must carry a revoked organization vector"
+    );
     Ok(())
 }
 
@@ -177,14 +184,21 @@ fn run_verifier(
     use RealmOrganizationControlScope::*;
     use RealmOrganizationRelationship::*;
     match resolver_name {
-        "no_delegation" => {
-            verify_realm_organization_statement(payload, expected_realm_id, now, &NoDelegationResolver)
-        }
+        "no_delegation" => verify_realm_organization_statement(
+            payload,
+            expected_realm_id,
+            now,
+            &NoDelegationResolver,
+        ),
         "delegation_not_live" => verify_realm_organization_statement(
             payload,
             expected_realm_id,
             now,
-            &FixedResolver(Some(delegation(false, vec![Owner], vec![OfficialBadge, RealmAdmin]))),
+            &FixedResolver(Some(delegation(
+                false,
+                vec![Owner],
+                vec![OfficialBadge, RealmAdmin],
+            ))),
         ),
         "delegation_covers_realm_admin_only" => verify_realm_organization_statement(
             payload,
@@ -196,7 +210,11 @@ fn run_verifier(
             payload,
             expected_realm_id,
             now,
-            &FixedResolver(Some(delegation(true, vec![Owner], vec![OfficialBadge, RealmAdmin]))),
+            &FixedResolver(Some(delegation(
+                true,
+                vec![Owner],
+                vec![OfficialBadge, RealmAdmin],
+            ))),
         ),
         other => panic!("unknown resolver fixture {other}"),
     }
@@ -289,8 +307,13 @@ fn realm_organization_statement_negative_vectors_match_spec_codes() -> Result<()
         .context("positive control must pass the strong schema")?;
     let base_typed: RealmOrganizationPayload =
         serde_json::from_value(base.clone()).context("positive control must deserialize")?;
-    verify_realm_organization_statement(&base_typed, &expected_realm_id, now, &NoDelegationResolver)
-        .context("positive control must pass the verifier")?;
+    verify_realm_organization_statement(
+        &base_typed,
+        &expected_realm_id,
+        now,
+        &NoDelegationResolver,
+    )
+    .context("positive control must pass the verifier")?;
 
     let vectors = fixture
         .get("negative_vectors")
@@ -353,7 +376,9 @@ fn realm_organization_statement_negative_vectors_match_spec_codes() -> Result<()
                 // verifier (not the deserializer) is what rejects it.
                 let typed: RealmOrganizationPayload = serde_json::from_value(candidate.clone())
                     .with_context(|| {
-                        format!("verifier vector {name} must deserialize to RealmOrganizationPayload")
+                        format!(
+                            "verifier vector {name} must deserialize to RealmOrganizationPayload"
+                        )
                     })?;
                 let err = run_verifier(&typed, &expected_realm_id, now, resolver_name)
                     .err()
@@ -371,6 +396,9 @@ fn realm_organization_statement_negative_vectors_match_spec_codes() -> Result<()
     }
 
     assert!(schema_cases > 0, "expected schema-surface negative vectors");
-    assert!(verifier_cases > 0, "expected verifier-surface negative vectors");
+    assert!(
+        verifier_cases > 0,
+        "expected verifier-surface negative vectors"
+    );
     Ok(())
 }

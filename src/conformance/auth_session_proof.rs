@@ -242,8 +242,11 @@ fn issue_session_grant(
         device_id: request.device_id.clone(),
         session_grant: "ck.session.grant.test".to_owned(),
         expires_at,
+        grant_id: None,
+        session_public_key: None,
+        audience: None,
         granted_scope: request.requested_scope.clone(),
-        scope_details: Value::Null,
+        scope_details: None,
     })
 }
 

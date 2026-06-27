@@ -17,7 +17,9 @@ use crate::harness::{
     CokretServer, TestServerGroup, add_member, encrypted_envelope, expect_account_subscribe_delta,
     expect_json, expect_text, register_account, submit_event,
 };
-use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
+use crate::scenarios::_helpers::federation_binding::{
+    peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
+};
 
 const ALICE_DID: &str = "did:web:federation-collaboration-0.cotest.local";
 const BOB_DID: &str = "did:web:federation-collaboration-1.cotest.local";
@@ -76,6 +78,55 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
     ];
     let realm_id = create_federated_realm(server_a, &alice, &visible_services).await?;
     add_member(server_a, &alice, ALICE_DID, &realm_id, BOB_DID).await?;
+    // server_a delivery-binding setup so the later b->a federation push (bob's
+    // reply) clears the `delivery_binding_stale` gate: a push to a Realm the
+    // receiver already hosts MUST assert a member delivery-binding frontier
+    // whose `recipient_service_did = Destination-Service-DID` (federation.md
+    // §4.1). Declare the policy admitting an explicit binding to server_a, then
+    // bind the local owner (alice) to server_a and capture the projected
+    // binding frontier (= the member.state event_id).
+    submit_event(
+        server_a,
+        &alice,
+        ALICE_DID,
+        &realm_id,
+        "ck.realm.delivery_binding_policy",
+        json!({
+            "realm_id": realm_id,
+            "allow_binding_sources": ["explicit"],
+            "allowed_recipient_services": [server_a.service_did()]
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    let alice_local_binding = submit_event(
+        server_a,
+        &alice,
+        ALICE_DID,
+        &realm_id,
+        "ck.member.state",
+        json!({
+            "realm_id": realm_id,
+            "actor_id": ALICE_DID,
+            "membership": "join",
+            "delivery_status": "routable",
+            "delivery_binding": {
+                "recipient_service_did": server_a.service_did(),
+                "recipient_service_type": "principal_server",
+                "binding_scope": "realm",
+                "binding_source": "explicit",
+                "delivery_modes": ["events", "sync"],
+                "service_acceptance_ref": ALICE_DELIVERY_BINDING_EVENT_ID,
+                "resolved_at": "2026-05-02T00:00:00Z"
+            }
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    let alice_local_binding_frontier = alice_local_binding["event_id"]
+        .as_str()
+        .context("alice server_a binding response missing event_id")?
+        .to_owned();
     // Federation ck.message.create Event payload carries the message
     // addressing/identity fields soland's federation projection consumes
     // (event_id, actor_id, strand_id, track_name, content). The forbidden wire
@@ -222,7 +273,16 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             }
         }),
     )?;
-    let b_to_a_body = peer_events_submit_body(&realm_id, vec![bob_reply], Some("b-to-a-01"))?;
+    let b_to_a_delivery_frontier = vec![
+        cokret_core::EventId::new(alice_local_binding_frontier)
+            .context("invalid alice server_a binding frontier id")?,
+    ];
+    let b_to_a_body = peer_events_submit_body_with_delivery_frontier(
+        &realm_id,
+        vec![bob_reply],
+        &b_to_a_delivery_frontier,
+        Some("b-to-a-01"),
+    )?;
     let b_to_a_url = server_a.url("/_cokret/peer/events");
     let txn = expect_json(
         with_federation_trust_headers(

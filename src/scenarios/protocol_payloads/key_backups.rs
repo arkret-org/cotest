@@ -111,6 +111,7 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
                 extra: BTreeMap::new(),
             },
             key_commitment: None,
+            hpke_suite: None,
             extra: BTreeMap::new(),
         },
         domain_separation: KeyBackupDomainSeparation {
@@ -124,6 +125,8 @@ fn signed_backup_envelope() -> Result<KeyBackup> {
                 backup_version: "kb_1".to_owned(),
                 created_at,
                 item_types: vec!["mls_group_state".to_owned()],
+                recipient_method: None,
+                recipient_key_ref: None,
                 extra: BTreeMap::new(),
             },
             extra: BTreeMap::new(),

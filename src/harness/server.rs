@@ -95,8 +95,14 @@ impl CokretServer {
     ) -> Result<Self> {
         let port = reserve_port()?;
         let metrics_port = reserve_port()?;
-        Self::spawn_external_binary_with_ports_and_env(name, bin_path, port, metrics_port, extra_env)
-            .await
+        Self::spawn_external_binary_with_ports_and_env(
+            name,
+            bin_path,
+            port,
+            metrics_port,
+            extra_env,
+        )
+        .await
     }
 
     /// Spawn a pre-built soland binary on already-reserved ports. Splitting the
@@ -570,7 +576,9 @@ impl TestServerGroup {
         // ServiceDescribe (see `spawn_external_federated`). The slow
         // `cargo run` and Docker paths below keep their original behavior.
         if sut_runtime_mode() == SutRuntimeMode::Process {
-            use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
+            use crate::scenarios::_helpers::external_binary::{
+                SOLAND_SPEC, locate_external_binary,
+            };
             if let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) {
                 let servers = Self::spawn_external_federated(name, count, &bin_path).await?;
                 return Ok(Self {

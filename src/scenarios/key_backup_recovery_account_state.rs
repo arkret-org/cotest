@@ -190,6 +190,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 extra: BTreeMap::new(),
             },
             key_commitment: None,
+            hpke_suite: None,
             extra: BTreeMap::new(),
         },
         domain_separation: KeyBackupDomainSeparation {
@@ -203,6 +204,8 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 backup_version: "kb_1".to_owned(),
                 created_at,
                 item_types: vec!["recovery_secret".to_owned()],
+                recipient_method: None,
+                recipient_key_ref: None,
                 extra: BTreeMap::new(),
             },
             extra: BTreeMap::new(),

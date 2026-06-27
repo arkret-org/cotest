@@ -160,6 +160,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
                 extra: BTreeMap::new(),
             },
             key_commitment: None,
+            hpke_suite: None,
             extra: BTreeMap::new(),
         },
         domain_separation: KeyBackupDomainSeparation {
@@ -173,6 +174,8 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
                 backup_version: "kb_1".to_owned(),
                 created_at,
                 item_types: vec!["mls_group_state".to_owned()],
+                recipient_method: None,
+                recipient_key_ref: None,
                 extra: BTreeMap::new(),
             },
             extra: BTreeMap::new(),

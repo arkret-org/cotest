@@ -13,7 +13,9 @@ use url::Url;
 use crate::harness::{
     CokretServer, dev_login, expect_api_error, expect_json, expect_response, submit_event,
 };
-use crate::scenarios::_helpers::federation_binding::peer_events_submit_body;
+use crate::scenarios::_helpers::federation_binding::{
+    peer_events_submit_body, peer_events_submit_body_with_delivery_frontier,
+};
 
 fn with_signed_federation_request(
     builder: reqwest::RequestBuilder,
@@ -568,6 +570,64 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
     .await?;
     assert_eq!(created["status"], "accepted");
 
+    // A routable member delivery_binding is only projected once the Realm
+    // declares a `ck.realm.delivery_binding_policy` admitting the binding's
+    // source + recipient (join-policy.md §5.1.3 — fail-closed, no DID-document
+    // fallback). Without it the reducer rejects the routable join with
+    // `delivery_binding_policy_unset` and no member is projected.
+    let policy = submit_event(
+        &server,
+        &alice,
+        "did:web:alice.example",
+        realm_id,
+        "ck.realm.delivery_binding_policy",
+        json!({
+            "realm_id": realm_id,
+            "allow_binding_sources": ["explicit"],
+            "allowed_recipient_services": [server.service_did()]
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(policy["status"], "accepted");
+
+    // Bind the local owner to this server: a federation push to a Realm the
+    // receiver already hosts is gated on an effective member
+    // `delivery_binding.recipient_service_did = Destination-Service-DID`
+    // (federation.md §4.1); absent it the receiver fails closed with
+    // `delivery_binding_stale`. soland projects this member.state's own
+    // event_id as the delivery-binding causal frontier ref, so capture it and
+    // assert exactly that frontier on the push.
+    let bound = submit_event(
+        &server,
+        &alice,
+        "did:web:alice.example",
+        realm_id,
+        "ck.member.state",
+        json!({
+            "realm_id": realm_id,
+            "actor_id": "did:web:alice.example",
+            "membership": "join",
+            "delivery_status": "routable",
+            "delivery_binding": {
+                "recipient_service_did": server.service_did(),
+                "recipient_service_type": "principal_server",
+                "binding_scope": "realm",
+                "binding_source": "explicit",
+                "delivery_modes": ["events", "sync"],
+                "service_acceptance_ref": "ck:event:0196419b-0000-7000-8000-00000000fe10",
+                "resolved_at": "2026-05-02T00:00:00Z"
+            }
+        }),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(bound["status"], "accepted");
+    let delivery_binding_frontier_id = bound["event_id"]
+        .as_str()
+        .context("member.state binding response missing event_id")?
+        .to_owned();
+
     let event_id = "ck:event:0196419b-0000-7000-8000-00000000fe22";
     let event = signed_federation_event(
         event_id,
@@ -586,8 +646,17 @@ pub async fn federation_remote_operations_project_to_sync_and_index() -> Result<
         }),
     )?;
 
+    let delivery_binding_frontier = vec![
+        EventId::new(delivery_binding_frontier_id)
+            .context("invalid delivery binding frontier id")?,
+    ];
     let txn_url = server.url("/_cokret/peer/events");
-    let txn_body = peer_events_submit_body(realm_id, vec![event], Some("project-1"))?;
+    let txn_body = peer_events_submit_body_with_delivery_frontier(
+        realm_id,
+        vec![event],
+        &delivery_binding_frontier,
+        Some("project-1"),
+    )?;
     let txn = expect_json(
         with_signed_federation_request(
             server.http().post(&txn_url).json(&txn_body),

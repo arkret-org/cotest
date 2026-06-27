@@ -62,6 +62,25 @@ pub fn peer_service_binding_ref(
     realm_id: &str,
     frontier: &[EventId],
 ) -> Result<FederationServiceBindingRef> {
+    peer_service_binding_ref_with_delivery(realm_id, frontier, frontier)
+}
+
+/// Build the §4.1 `service_binding_ref` separating the membership frontier from
+/// the `delivery_binding_frontier`.
+///
+/// The bootstrap helpers default `delivery_binding_frontier = batch heads`,
+/// which only holds while the receiver has no prior member binding to be stale
+/// against (federation.md §4.1: a push that first establishes the Realm has no
+/// local binding). Once the receiver already hosts a member whose effective
+/// `delivery_binding.recipient_service_did = Destination-Service-DID`, the
+/// sender MUST instead assert that member's delivery-binding causal frontier
+/// (reachable in the receiver's Realm view), or the receiver fails closed with
+/// `delivery_binding_stale`.
+pub fn peer_service_binding_ref_with_delivery(
+    realm_id: &str,
+    membership_frontier: &[EventId],
+    delivery_binding_frontier: &[EventId],
+) -> Result<FederationServiceBindingRef> {
     let realm_policy_digest = canonical_sha256(&json!({
         "domain": "cotest.harness.realm_policy_snapshot.v1",
         "realm_id": realm_id,
@@ -74,8 +93,8 @@ pub fn peer_service_binding_ref(
         // hash (see module docs).
         realm_policy_digest: Hash::new(realm_policy_digest)
             .context("invalid federation realm_policy_digest")?,
-        membership_frontier: frontier.to_vec(),
-        delivery_binding_frontier: frontier.to_vec(),
+        membership_frontier: membership_frontier.to_vec(),
+        delivery_binding_frontier: delivery_binding_frontier.to_vec(),
         destination_service_type: "principal_server".to_owned(),
         reducer_profile_digest: Hash::new(registry_reducer_profile_digest(
             FEDERATION_MINIMAL_PROFILE_ID,
@@ -93,6 +112,29 @@ pub fn peer_events_submit_body(
     let frontier = batch_frontier_event_ids(&events)?;
     Ok(EventsSubmitFederationRequestBody {
         service_binding_ref: peer_service_binding_ref(realm_id, &frontier)?,
+        events,
+        idempotency_key: idempotency_key.map(str::to_owned),
+    })
+}
+
+/// Like [`peer_events_submit_body`] but asserts an explicit
+/// `delivery_binding_frontier` — the receiver-reachable causal frontier of the
+/// member whose `delivery_binding.recipient_service_did` equals the destination
+/// service (federation.md §4.1). Use when pushing to a Realm the receiver
+/// already hosts a delivery-bound member for.
+pub fn peer_events_submit_body_with_delivery_frontier(
+    realm_id: &str,
+    events: Vec<Event>,
+    delivery_binding_frontier: &[EventId],
+    idempotency_key: Option<&str>,
+) -> Result<EventsSubmitFederationRequestBody> {
+    let membership_frontier = batch_frontier_event_ids(&events)?;
+    Ok(EventsSubmitFederationRequestBody {
+        service_binding_ref: peer_service_binding_ref_with_delivery(
+            realm_id,
+            &membership_frontier,
+            delivery_binding_frontier,
+        )?,
         events,
         idempotency_key: idempotency_key.map(str::to_owned),
     })

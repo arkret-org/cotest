@@ -104,13 +104,13 @@ pub use call_state_core::{
     run_participant_binding_invalid_vector, run_replay_same_state_noop_vector,
     run_terminal_absorbing_vector, run_transition_matrix_vector,
 };
-pub use canonical_cross_lang::run_canonical_cross_lang_suite;
 pub use call_state_media_lifecycle::{
     ALL_CALL_STATE_MEDIA_LIFECYCLE_VECTOR_IDS, run_call_state_media_lifecycle_vector_suite,
     run_moderator_kick_ban_vector, run_p2p_to_sfu_upgrade_vector,
     run_recording_result_artifact_shape_vector, run_recording_retention_lock_vector,
     run_transcribe_lifecycle_vector,
 };
+pub use canonical_cross_lang::run_canonical_cross_lang_suite;
 pub use capability::{
     run_capability_boundary_fixture_suite, run_capability_facet_fixture_suite,
     run_capability_fixture_suite,
