@@ -329,9 +329,20 @@ pub async fn federation_endpoints_reject_invalid_input_shapes() -> Result<()> {
 }
 
 pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result<()> {
-    let server = CokretServer::spawn("federation-replay").await?;
+    // This server is a pure federation replica / observer of `remote.example`'s
+    // Realm: it holds a copy but hosts no locally-homed members. Replica posture
+    // admits subsequent delivery pushes that a conservative server would reject
+    // with `delivery_binding_stale` (no local member binding to be stale
+    // against). See AppConfig::federation_replica_observer / member-delivery-binding.md §4.
+    let server = CokretServer::spawn_with_env(
+        "federation-replay",
+        &[("SOLAND_FEDERATION_REPLICA_OBSERVER", "1")],
+    )
+    .await?;
     let realm_id = "ck:realm:0196419b-0000-7000-8000-00000000fed0";
     let realm_create_event_id = "ck:event:0196419b-0000-7000-8000-00000000f100";
+    let policy_event_id = "ck:event:0196419b-0000-7000-8000-00000000f0fe";
+    let member_event_id = "ck:event:0196419b-0000-7000-8000-00000000f0ff";
     let replay_event_id = "ck:event:0196419b-0000-7000-8000-00000000f101";
     let invalid_event_id = "ck:event:0196419b-0000-7000-8000-00000000f102";
     let redaction_event_id = "ck:event:0196419b-0000-7000-8000-00000000f103";
@@ -349,12 +360,50 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
             &[remote_service_did, server.service_did()],
         ),
     )?;
+    // The originating service is itself the Realm's delivery-bound member (its
+    // events are homed on remote.example), so a peer read by that same service
+    // is an authorised member read rather than anti-enumeration probing. Declare
+    // the delivery-binding policy admitting the binding, then bind the member.
+    let delivery_policy = signed_federation_event(
+        policy_event_id,
+        "ck.realm.delivery_binding_policy",
+        realm_id,
+        remote_service_did,
+        2,
+        json!({
+            "realm_id": realm_id,
+            "allow_binding_sources": ["explicit"],
+            "allowed_recipient_services": [remote_service_did]
+        }),
+    )?;
+    let member_binding = signed_federation_event(
+        member_event_id,
+        "ck.member.state",
+        realm_id,
+        remote_service_did,
+        3,
+        json!({
+            "realm_id": realm_id,
+            "actor_id": remote_service_did,
+            "membership": "join",
+            "delivery_status": "routable",
+            "delivery_binding": {
+                "recipient_service_did": remote_service_did,
+                "recipient_service_type": "principal_server",
+                "binding_scope": "realm",
+                "binding_source": "explicit",
+                "delivery_modes": ["events", "sync"],
+                "service_acceptance_ref": realm_create_event_id,
+                "resolved_at": "2026-05-02T00:00:00Z"
+            }
+        }),
+    )?;
     let event = signed_federation_event(
         replay_event_id,
         "ck.message.create",
         realm_id,
         remote_service_did,
-        2,
+        4,
         json!({
             "strand_id": realm_id.replacen("ck:realm:", "ck:strand:", 1),
             "track_name": "discussion",
@@ -365,7 +414,12 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     let first_push_url = server.url("/_cokret/peer/events");
     let first_push_body = peer_events_submit_body(
         realm_id,
-        vec![realm_create.clone(), event.clone()],
+        vec![
+            realm_create.clone(),
+            delivery_policy.clone(),
+            member_binding.clone(),
+            event.clone(),
+        ],
         Some("replay-1"),
     )?;
     let first_push = expect_json(
@@ -416,8 +470,15 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     .await?;
 
     let replay_url = server.url("/_cokret/peer/events");
-    let replay_body =
-        peer_events_submit_body(realm_id, vec![realm_create, event], Some("replay-1"))?;
+    // Replay the already-delivered DataEvent: federation re-delivery MUST be
+    // idempotent — the duplicate is accepted as a no-op and the event is not
+    // persisted twice (asserted below). The one-time realm-establishing events
+    // (realm.create / policy / member binding) are not re-sent; re-delivering a
+    // `ck.realm.create` is a distinct create-uniqueness concern, not a
+    // message-replay one. The replica delivery gate admits the push
+    // (federation_replica_observer), and the message dedupes against its prior
+    // persisted copy.
+    let replay_body = peer_events_submit_body(realm_id, vec![event], Some("replay-2"))?;
     let replay = expect_json(
         with_signed_federation_request(
             server.http().post(&replay_url).json(&replay_body),
@@ -461,7 +522,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ck.message.create",
         realm_id,
         remote_service_did,
-        3,
+        5,
         json!({
             "encrypted": true,
             "content": {"ciphertext": "missing-envelope-fields"}
@@ -486,8 +547,16 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
     )
     .await?;
     assert!(invalid_push["accepted"].as_array().unwrap().is_empty());
+    // An encrypted (`ciphertext`-bearing) federation DataEvent requires the
+    // source peer's ServiceDescribe to advertise the MLS governance binding
+    // profile (`ck.profile.mls_governance_binding.full.v1`) — the receiver MUST
+    // NOT accept ciphertext it cannot bind to a supported governance profile
+    // (crypto-media/encryption-and-audit.md §295). `remote.example` is a test
+    // stand-in with no reachable describe, so the federation profile-intersection
+    // gate rejects the push with `profile_unsupported` before payload schema
+    // validation is reached.
     assert_eq!(
-        invalid_push["rejected"][0]["reason_code"], "schema_violation",
+        invalid_push["rejected"][0]["reason_code"], "profile_unsupported",
         "invalid encrypted federation event response: {invalid_push}"
     );
 
@@ -496,7 +565,7 @@ pub async fn federation_replay_snapshot_and_redaction_contracts_work() -> Result
         "ck.message.redact",
         realm_id,
         remote_service_did,
-        4,
+        6,
         json!({
             "target_event_id": replay_event_id
         }),

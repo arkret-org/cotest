@@ -185,34 +185,44 @@ fn realm_create_payload(actor: &str, service_did: &str, realm_id: &str, input: &
             .unwrap_or_default(),
     );
 
-    json!({
-        "object": {
-            "id": realm_id,
-            "schema": "ck.schema.realm.v1",
-            "title": title,
-            "summary": summary,
-            "created_by": actor,
-            "trust_domain": "ck:trust_domain:soland.local",
-            "schema_refs": ["ck.schema.realm.v1"],
-            "default_discoverability": discoverability,
-            "default_join_rule": join_rule,
-            "history_visibility": history_visibility,
-            "encryption_profile": encryption_profile,
-            "plaintext_visible_services": plaintext_visible_services,
-            "security_class": "standard",
-            "federation_policy": "restricted",
-            "notary_profile": "single_did",
-            "digest_algorithm": "sha256",
-            "notary": {
-                "type": "single_did",
-                "did": actor,
-                "recovery_members": ["did:web:recovery.soland.local"],
-                "controller_organization": "did:web:organization.primary.soland.local",
-                "recovery_controller_organizations": [
-                    "did:web:organization.recovery.soland.local"
-                ],
-            },
-            "created_at": "2026-05-02T00:00:00Z",
+    let mut object = json!({
+        "id": realm_id,
+        "schema": "ck.schema.realm.v1",
+        "title": title,
+        "summary": summary,
+        "created_by": actor,
+        "trust_domain": "ck:trust_domain:soland.local",
+        "schema_refs": ["ck.schema.realm.v1"],
+        "default_discoverability": discoverability,
+        "default_join_rule": join_rule,
+        "history_visibility": history_visibility,
+        "encryption_profile": encryption_profile,
+        "plaintext_visible_services": plaintext_visible_services,
+        "security_class": "standard",
+        "federation_policy": "restricted",
+        "notary_profile": "single_did",
+        "digest_algorithm": "sha256",
+        "notary": {
+            "type": "single_did",
+            "did": actor,
+            "recovery_members": ["did:web:recovery.soland.local"],
+            "controller_organization": "did:web:organization.primary.soland.local",
+            "recovery_controller_organizations": [
+                "did:web:organization.recovery.soland.local"
+            ],
         },
-    })
+        "created_at": "2026-05-02T00:00:00Z",
+    });
+    // Realm-level `sync_endpoints` (ck.schema.realm.v1#/properties/sync_endpoints):
+    // shared notary / sync / mirror / federation-peer service bindings. Passed
+    // through verbatim so federation tests can authorise a peer service as a
+    // `federation_peer` endpoint (member-delivery-binding.md §7 — orthogonal to
+    // member-level delivery_binding).
+    if let Some(sync_endpoints) = input.get("sync_endpoints").filter(|value| value.is_array()) {
+        object
+            .as_object_mut()
+            .expect("realm object literal")
+            .insert("sync_endpoints".to_owned(), sync_endpoints.clone());
+    }
+    json!({ "object": object })
 }

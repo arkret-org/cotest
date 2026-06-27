@@ -704,6 +704,10 @@ export async function submitInviteCreateApi(
 }
 
 // join-policy.md §9 — list member applications scoped to the caller.
+// `member.application` is a spec *candidate* workflow concept
+// (`governance/join-policy.md` §7.2) that MUST NOT occupy the `/_cokret/...`
+// protocol root before formal registration; soland serves it from the
+// product-local `/_soland/self/realms/...` surface (realms.rs `local_router`).
 export async function listMemberApplicationsApi(
   request: APIRequestContext,
   token: string,
@@ -714,7 +718,7 @@ export async function listMemberApplicationsApi(
   viewer_is_reviewer: boolean;
 }> {
   const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_cokret/self/realms/${encodeURIComponent(realmId)}/applications`,
+    `${solandBaseUrl(opts.server)}/_soland/self/realms/${encodeURIComponent(realmId)}/applications`,
     { headers: authHeaders(token) },
   );
   return await expectJsonOk<{

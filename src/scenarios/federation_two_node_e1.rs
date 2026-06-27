@@ -30,7 +30,7 @@ use cokret_core::canonical::{canonical_json_bytes, canonical_sha256};
 use cokret_core::identifiers::new_prefixed_uuid7;
 use reqwest::StatusCode;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
 
@@ -85,18 +85,55 @@ pub async fn two_node_federation_harness_starts() -> Result<()> {
     // fresh UUIDv7-backed device id at runtime so the fixture is
     // wire-canonical and unique per run.
     let device_alice = new_prefixed_uuid7("ck:device:");
+    // alice is homed on server_a, so her DID MUST live under server_a's trust
+    // domain (`did:web:<server_a host>:alice-e2`). Federation admission binds the
+    // relayed actor to the relaying server: `federation_actor_origin_acceptable`
+    // accepts an inbound event only when the actor's home trust domain equals the
+    // asserted `source-trust-domain` (or the actor is already a known member).
+    // A DID under an unrelated domain is rejected `capability_denied` on push.
+    let alice_did = format!("{}:alice-e2", server_a.service_did());
     let actor_a = server_a
-        .register_client(
-            "did:web:alice.e2.federation.cotest.local",
-            "@alice-e2",
-            &device_alice,
-        )
+        .register_client(&alice_did, "@alice-e2", &device_alice)
         .await
         .context("register actor on server_a")?;
-    let realm_id = actor_a
-        .create_realm("e2-federation-two-node-realm")
+    // Authorise server_b as a Realm-level `federation_peer` sync endpoint and
+    // make it plaintext-visible: a peer read by server_b is then an authorised
+    // federation-peer read (PeerReadAuthz `source_has_realm_scope` +
+    // `source_can_receive_plaintext`), not anti-enumeration probing. Realm-level
+    // `sync_endpoints` is the canonical carrier for federation-peer surfaces
+    // (member-delivery-binding.md §7), orthogonal to member delivery_binding.
+    let created = actor_a
+        .create_realm_with(json!({
+            "title": "e2-federation-two-node-realm",
+            "plaintext_visible_services": [
+                server_a.service_did(),
+                server_b.service_did(),
+            ],
+            "sync_endpoints": [
+                {
+                    "did": server_a.service_did(),
+                    "endpoint": server_a.base_url().as_str(),
+                    "role": "federation_peer",
+                    "service_type": "principal_server",
+                    "plaintext_visible": true,
+                    "visibility_scope": "plaintext_events",
+                },
+                {
+                    "did": server_b.service_did(),
+                    "endpoint": server_b.base_url().as_str(),
+                    "role": "federation_peer",
+                    "service_type": "principal_server",
+                    "plaintext_visible": true,
+                    "visibility_scope": "plaintext_events",
+                },
+            ],
+        }))
         .await
         .context("create Realm on server_a")?;
+    let realm_id = created["realm_id"]
+        .as_str()
+        .context("create realm response missing realm_id")?
+        .to_owned();
     let _msg = actor_a
         .send_message(&realm_id, "thread-e2", "hello from server_a")
         .await
