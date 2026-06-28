@@ -35,6 +35,7 @@ import {
   authHeaders,
   canonicalJson,
   createRealmApi,
+  grantCapabilityEventApi,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -578,7 +579,18 @@ async function createCustomerRiskMorph(
           id: morphId,
           schema: "ck.schema.morph.v1",
           realm_id: realmId,
-          morph_type: "customer_risk",
+          // views.md §377 / service-http-binding.md §230 — the single-Morph read
+          // surface GET /_cokret/self/realms/{realm_id}/morphs/{morph_id} is the
+          // *document* Morph projection (response document_morph_projection_outcome,
+          // which carries `document.schema_refs` and `document.fields`). It serves
+          // only morph_type=="document" (soland projection_query.rs
+          // get_document_projection). Business morph field state is otherwise read
+          // via the canonical event/snapshot history, which has no HTTP field-read
+          // surface — so this HTTP migration read-back test uses a document Morph.
+          // morph_type is orthogonal to schema_refs (the customer_risk reference
+          // schemas the §4.1 S3 transformation vectors evolve), and immutable per
+          // §4.1 S2, so the migration semantics are unchanged.
+          morph_type: "document",
           stage: "in_progress",
           schema_refs: schemaRefs,
           fields,
@@ -587,7 +599,7 @@ async function createCustomerRiskMorph(
         },
       },
     }),
-    { context: `create customer_risk morph ${morphId}` },
+    { context: `create customer_risk-schema document morph ${morphId}` },
   );
 }
 
@@ -609,18 +621,39 @@ async function submitSchemaMigrateRaw(
   // morph.md §4.1 S1 — bind the migration schema set (union of from/to) into
   // requirements.schema[] so the reducer's version-binding check is satisfied.
   const requirementsSchema = Array.from(new Set([...args.fromRefs, ...args.toRefs]));
+  // morph.md §4.1 S3 — ck.morph.schema_migrate is gated by the high-tier
+  // capability action `ck.morph.schema_migrate`; the authorization is carried on
+  // the envelope `refs[]` with role `authorized_by`, which MUST resolve to the
+  // accepted Event that produced the authorizing grant (event-and-patch.md §2.2;
+  // soland event_log/submit.rs rejects unresolved authorized_by refs with
+  // dependency_missing, and event_log/sdk_projection.rs projects
+  // refs[authorized_by][0] into the operation's authorization_ref). The payload
+  // itself is closed
+  // (ck.schema.event_payload.v1#/$defs/morph_schema_migrate_payload,
+  // additionalProperties:false) and only declares morph_id / from_schema_refs /
+  // to_schema_refs / compatibility_class / transformation_rules.
+  //
+  // The Realm owner is implicitly authorized for the capability check
+  // (operations/policy.rs validate_morph_schema_migrate_authz short-circuits the
+  // owner), but soland still requires a resolvable authorized_by ref — so mint a
+  // real owner-issued grant for the action and reference its carrying event.
+  const { eventId: authorizationEventId } = await grantCapabilityEventApi(request, token, {
+    ownerDid: args.actorDid,
+    realmId: args.realmId,
+    subjectDid: args.actorDid,
+    actions: ["ck.morph.schema_migrate"],
+  });
   const envelope = signedEventEnvelope({
     actorDid: args.actorDid,
     realmId: args.realmId,
     kind: "ck.morph.schema_migrate",
     requirementsSchema,
+    refs: [{ role: "authorized_by", id: authorizationEventId }],
     payload: {
       morph_id: args.morphId,
       from_schema_refs: args.fromRefs,
       to_schema_refs: args.toRefs,
       compatibility_class: args.compatibilityClass,
-      capability_action: "ck.morph.schema_migrate",
-      authorization_ref: typedId("event"),
       ...(args.transformationRules ? { transformation_rules: args.transformationRules } : {}),
     },
   });
