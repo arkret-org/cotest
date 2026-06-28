@@ -41,6 +41,9 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // Opt-in for live Caddy `tls internal` stacks (self-signed). Applies to the
+    // `request` fixture's API calls; the browser context mirrors it in openUser.
+    ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
     trace: "retain-on-failure",
     video: "retain-on-failure",
     screenshot: "only-on-failure",

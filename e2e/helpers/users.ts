@@ -978,6 +978,9 @@ export async function openUser(
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const context = await browser.newContext({
+    // Opt-in for running against a live Caddy stack whose TLS is `tls internal`
+    // (self-signed). Default off so CI/headless harness runs are unaffected.
+    ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
     recordHar: {
       path: path.join(diagnosticsDir, "network.har"),
       mode: "minimal",
