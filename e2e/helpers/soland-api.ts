@@ -420,6 +420,70 @@ export async function grantServiceDelegationApi(
   return grantId;
 }
 
+// Mint a realm-scoped `ck.capability.grant` event for an arbitrary action set
+// and return BOTH the materialized grant id (`ck:grant:*`) and the carrying
+// event id (`ck:event:*`). event-and-patch.md §2.2: a high-tier write that
+// references its authorization via the envelope `refs[]` `authorized_by` role
+// MUST point at the accepted Event that produced the grant, and soland's
+// authorized_by ref resolver requires the `ck:event:` typed id (not the
+// `ck:grant:` form). Callers that need the authorized_by ref use the returned
+// `eventId`.
+export async function grantCapabilityEventApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  args: {
+    ownerDid: string;
+    realmId: string;
+    subjectDid: string;
+    actions: string[];
+    server?: SolandKey;
+  },
+): Promise<{ grantId: string; eventId: string }> {
+  const grantId = typedId("grant");
+  const eventId = typedId("event");
+  const issuedAt = canonicalTimestamp();
+  const unsignedGrant: Record<string, unknown> = {
+    id: grantId,
+    grant_id: grantId,
+    schema: "ck.schema.capability.v1",
+    realm_id: args.realmId,
+    issuer: args.ownerDid,
+    subject: args.subjectDid,
+    actions: args.actions,
+    resources: [{ kind: "realm", realm_id: args.realmId }],
+    issued_at: issuedAt,
+  };
+  await submitSignedEventApi(
+    request,
+    ownerToken,
+    signedEventEnvelope({
+      actorDid: args.ownerDid,
+      realmId: args.realmId,
+      kind: "ck.capability.grant",
+      eventId,
+      createdAt: issuedAt,
+      payload: {
+        grant_id: grantId,
+        grant: {
+          ...unsignedGrant,
+          proofs: [
+            buildDetachedJwsProof({
+              issuerDid: args.ownerDid,
+              payload: unsignedGrant,
+              createdAt: issuedAt,
+            }),
+          ],
+        },
+      },
+    }),
+    {
+      server: args.server,
+      context: `grant [${args.actions.join(", ")}] to ${args.subjectDid}`,
+    },
+  );
+  return { grantId, eventId };
+}
+
 // Revoke a previously granted capability by grant_id.
 export async function revokeCapabilityApi(
   request: APIRequestContext,

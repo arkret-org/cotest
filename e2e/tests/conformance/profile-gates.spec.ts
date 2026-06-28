@@ -71,6 +71,14 @@ type DescribeResponse = {
 
 type ConformanceCatalog = {
   implementation_profiles?: string[];
+  // hardening_profiles[] is a first-class array of opt-in security-hardening
+  // profile ids in the authoritative conformance-profiles.json matrix
+  // (conformance-profiles.md §2.1: the json is the full matrix; the markdown
+  // is a non-exhaustive view). They are independently advertisable in
+  // /_cokret/describe.claimed_profiles — e.g. crypto-media/encryption-and-audit.md
+  // §2.5 requires a principal server federating MLS-backed Realms to advertise
+  // ck.profile.mls_governance_binding.full.v1.
+  hardening_profiles?: string[];
   profile_tiers?: {
     v1_profile_catalog?: string[];
     v1_minimal_interop_floor?: string[];
@@ -168,11 +176,15 @@ test.describe("conformance profile gates @fully-implemented", () => {
   }, testInfo) => {
     // spec: conformance-profiles.md §2.1 (v1_profile_catalog tiering);
     //       artifact: conformance-profiles.json (implementation_profiles ∪
-    //       profile_tiers.v1_profile_catalog ∪ profile_tiers.extension_profile_implementation).
+    //       profile_tiers.v1_profile_catalog ∪ profile_tiers.extension_profile_implementation
+    //       ∪ hardening_profiles).
     //
     // Every entry in soland's claimed_profiles MUST resolve to a profile id known by
     // the canonical catalog. This catches typos and forward-references to draft
-    // profiles before they ship.
+    // profiles before they ship. hardening_profiles[] is included because opt-in
+    // hardening profiles are independently advertisable in claimed_profiles (e.g.
+    // ck.profile.mls_governance_binding.full.v1, the cross-deployment E2EE MLS
+    // federation interop floor — crypto-media/encryption-and-audit.md §2.5).
     expect(fs.existsSync(CATALOG_PATH), `catalog exists at ${CATALOG_PATH}`).toBe(true);
     const catalog = JSON.parse(fs.readFileSync(CATALOG_PATH, "utf8")) as ConformanceCatalog;
 
@@ -180,6 +192,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       ...(catalog.implementation_profiles ?? []),
       ...(catalog.profile_tiers?.v1_profile_catalog ?? []),
       ...(catalog.profile_tiers?.extension_profile_implementation ?? []),
+      ...(catalog.hardening_profiles ?? []),
     ]);
     expect(knownProfiles.size, "catalog known-profiles set is non-empty").toBeGreaterThan(0);
 
