@@ -5,12 +5,12 @@
 //! reject with HTTP 409 + errcode `series_chain_broken`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::error::ERROR_CODE_SERIES_CHAIN_BROKEN;
+use cokret_core::error::REASON_SERIES_CHAIN_BROKEN;
 
 pub async fn series_chain_broken_run() -> Result<()> {
-    if ERROR_CODE_SERIES_CHAIN_BROKEN != "series_chain_broken" {
+    if REASON_SERIES_CHAIN_BROKEN != "series_chain_broken" {
         return Err(anyhow!(
-            "ERROR_CODE_SERIES_CHAIN_BROKEN spelling drifted: {ERROR_CODE_SERIES_CHAIN_BROKEN}"
+            "REASON_SERIES_CHAIN_BROKEN spelling drifted: {REASON_SERIES_CHAIN_BROKEN}"
         ));
     }
     // Negative-shape pin: a mismatched supersedes_digest MUST be

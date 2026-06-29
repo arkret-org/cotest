@@ -3,7 +3,7 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, Duration, Utc};
 use cokret_core::error::{
-    ERROR_CODE_DID_PROOF_REQUIRED, ERROR_CODE_PROOF_INVALID, ERROR_CODE_UNAUTHENTICATED,
+    ERROR_CODE_DID_PROOF_REQUIRED, REASON_PROOF_INVALID, ERROR_CODE_UNAUTHENTICATED,
 };
 use cokret_core::{
     DeviceId, Did, Hash, SessionGrantOutcome, SessionGrantProofKind, SessionGrantRequestBody,
@@ -42,7 +42,7 @@ const SESSION_GRANT_REQUEST_SCHEMA: &str =
 const SESSION_GRANT_OUTCOME_SCHEMA: &str =
     "schemas/service-operation-dtos.schema.json#/$defs/SessionGrantOutcome";
 const ERROR_CODE_AUDIENCE_MISMATCH: &str = "audience_mismatch";
-const ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED: &str = "did_proof_replay_window_exceeded";
+const REASON_DID_PROOF_REPLAY_WINDOW_EXCEEDED: &str = "did_proof_replay_window_exceeded";
 const MAX_HTTP_SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const HTTP_SIGNATURE_SKEW_SECONDS: i64 = 30;
 
@@ -223,13 +223,13 @@ fn issue_session_grant(
     now: DateTime<Utc>,
 ) -> std::result::Result<SessionGrantOutcome, &'static str> {
     if request.proof.proof_kind != SessionGrantProofKind::DidBoundSignature {
-        return Err(ERROR_CODE_PROOF_INVALID);
+        return Err(REASON_PROOF_INVALID);
     }
     if request.proof.audience != target_audience {
         return Err(ERROR_CODE_AUDIENCE_MISMATCH);
     }
     if &request.proof.request_canonical_digest != expected_digest {
-        return Err(ERROR_CODE_PROOF_INVALID);
+        return Err(REASON_PROOF_INVALID);
     }
 
     let requested_expires_at = request.proof.expires_at.unwrap_or(now + server_max_ttl);
@@ -315,23 +315,23 @@ fn validate_did_proof(
         || &proof.request_canonical_digest != validation.expected_request_digest
         || proof.challenge != challenge.challenge
     {
-        return Err(ERROR_CODE_PROOF_INVALID);
+        return Err(REASON_PROOF_INVALID);
     }
     if challenge.used {
-        return Err(ERROR_CODE_PROOF_INVALID);
+        return Err(REASON_PROOF_INVALID);
     }
     if proof.audience != challenge.audience || proof.origin != challenge.origin {
         return Err(ERROR_CODE_AUDIENCE_MISMATCH);
     }
     if proof.issued_at != challenge.issued_at || proof.expires_at != challenge.expires_at {
-        return Err(ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
+        return Err(REASON_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
     }
     if proof.expires_at - proof.issued_at > validation.max_window
         || proof.issued_at > validation.now + validation.skew
         || validation.now > proof.expires_at
         || validation.now - proof.issued_at > validation.max_window + validation.skew
     {
-        return Err(ERROR_CODE_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
+        return Err(REASON_DID_PROOF_REPLAY_WINDOW_EXCEEDED);
     }
     challenge.used = true;
     Ok(())

@@ -27,7 +27,7 @@
 use anyhow::{Result, anyhow};
 use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
-    ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT, ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
+    REASON_APPEAL_OVERTURN_MISSING_LIFT, REASON_APPEAL_SELF_REVIEW_FORBIDDEN, TypedAppealId,
 };
 
 pub const APPEAL_KIND_SUBMIT: &str = "ck.moderation.appeal.submit";
@@ -49,17 +49,17 @@ pub const EXPECTED_SELF_REVIEW_FORBIDDEN: &str = "appeal_self_review_forbidden";
 /// recognises both. Also exercises [`TypedAppealId`] to confirm the
 /// `ck:appeal:<uuidv7>` wire form round-trips through the SDK.
 pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
-    if ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
+    if REASON_APPEAL_OVERTURN_MISSING_LIFT != EXPECTED_OVERTURN_MISSING_LIFT {
         return Err(anyhow!(
-            "SDK ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT,
+            "SDK REASON_APPEAL_OVERTURN_MISSING_LIFT ({}) drifted from cotest pin ({}).",
+            REASON_APPEAL_OVERTURN_MISSING_LIFT,
             EXPECTED_OVERTURN_MISSING_LIFT,
         ));
     }
-    if ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN != EXPECTED_SELF_REVIEW_FORBIDDEN {
+    if REASON_APPEAL_SELF_REVIEW_FORBIDDEN != EXPECTED_SELF_REVIEW_FORBIDDEN {
         return Err(anyhow!(
-            "SDK ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN,
+            "SDK REASON_APPEAL_SELF_REVIEW_FORBIDDEN ({}) drifted from cotest pin ({}).",
+            REASON_APPEAL_SELF_REVIEW_FORBIDDEN,
             EXPECTED_SELF_REVIEW_FORBIDDEN,
         ));
     }
@@ -68,14 +68,14 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
     // codes-only `KNOWN_ERROR_CODES` table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT) {
+    if !registry_identifiers.contains(REASON_APPEAL_OVERTURN_MISSING_LIFT) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {ERROR_CODE_APPEAL_OVERTURN_MISSING_LIFT}"
+            "error-code-registry missing reason code {REASON_APPEAL_OVERTURN_MISSING_LIFT}"
         ));
     }
-    if !registry_identifiers.contains(ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN) {
+    if !registry_identifiers.contains(REASON_APPEAL_SELF_REVIEW_FORBIDDEN) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {ERROR_CODE_APPEAL_SELF_REVIEW_FORBIDDEN}"
+            "error-code-registry missing reason code {REASON_APPEAL_SELF_REVIEW_FORBIDDEN}"
         ));
     }
     // Typed appeal id round-trip.

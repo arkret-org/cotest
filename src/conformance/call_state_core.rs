@@ -11,7 +11,7 @@ use cokret::{
     MediaServiceAnchors, call_media_token_exchange, participant_binding_signing_input,
     verify_call_media_token_outcome,
 };
-use cokret_core::error::ERROR_CODE_PARTICIPANT_BINDING_INVALID;
+use cokret_core::error::REASON_PARTICIPANT_BINDING_INVALID;
 use cokret_core::lattice::{CellState, Fsm, Lattice, SealedOp};
 use cokret_core::{
     BottomKind, CallId, CallMediaParticipantBinding, CallMediaServiceSignature,
@@ -200,7 +200,7 @@ fn reducer_participant_binding_admission(
 ) -> std::result::Result<(), &'static str> {
     match verify_call_media_token_outcome(request, outcome, anchors, now) {
         Ok(_) => Ok(()),
-        Err(_) => Err(ERROR_CODE_PARTICIPANT_BINDING_INVALID),
+        Err(_) => Err(REASON_PARTICIPANT_BINDING_INVALID),
     }
 }
 
@@ -212,15 +212,15 @@ fn assert_participant_binding_invalid(
     now: DateTime<Utc>,
 ) -> Result<()> {
     match reducer_participant_binding_admission(request, outcome, anchors, now) {
-        Err(code) if code == ERROR_CODE_PARTICIPANT_BINDING_INVALID => Ok(()),
+        Err(code) if code == REASON_PARTICIPANT_BINDING_INVALID => Ok(()),
         other => bail!("{label} must map to participant_binding_invalid, got {other:?}"),
     }
 }
 
 pub fn run_participant_binding_invalid_vector() -> Result<()> {
-    if ERROR_CODE_PARTICIPANT_BINDING_INVALID != "participant_binding_invalid" {
+    if REASON_PARTICIPANT_BINDING_INVALID != "participant_binding_invalid" {
         bail!(
-            "ERROR_CODE_PARTICIPANT_BINDING_INVALID spelling drifted: {ERROR_CODE_PARTICIPANT_BINDING_INVALID}"
+            "REASON_PARTICIPANT_BINDING_INVALID spelling drifted: {REASON_PARTICIPANT_BINDING_INVALID}"
         );
     }
 

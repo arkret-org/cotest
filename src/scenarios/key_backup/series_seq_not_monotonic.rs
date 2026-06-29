@@ -5,17 +5,17 @@
 //! `series_seq_not_monotonic`.
 
 use anyhow::{Result, anyhow};
-use cokret_core::error::ERROR_CODE_SERIES_SEQ_NOT_MONOTONIC;
+use cokret_core::error::REASON_SERIES_SEQ_NOT_MONOTONIC;
 
 fn is_monotonic_advance(tip: u64, candidate: u64) -> bool {
     candidate > tip
 }
 
 pub async fn series_seq_not_monotonic_run() -> Result<()> {
-    if ERROR_CODE_SERIES_SEQ_NOT_MONOTONIC != "series_seq_not_monotonic" {
+    if REASON_SERIES_SEQ_NOT_MONOTONIC != "series_seq_not_monotonic" {
         return Err(anyhow!(
-            "ERROR_CODE_SERIES_SEQ_NOT_MONOTONIC spelling drifted: \
-             {ERROR_CODE_SERIES_SEQ_NOT_MONOTONIC}"
+            "REASON_SERIES_SEQ_NOT_MONOTONIC spelling drifted: \
+             {REASON_SERIES_SEQ_NOT_MONOTONIC}"
         ));
     }
     if !is_monotonic_advance(2, 3) {

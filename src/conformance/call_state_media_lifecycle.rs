@@ -26,9 +26,9 @@
 use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use cokret_core::error::{
-    ERROR_CODE_LEGAL_HOLD_ACTIVE, ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
-    ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED,
-    ERROR_CODE_TRANSCRIPTION_DENIED,
+    REASON_LEGAL_HOLD_ACTIVE, REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+    ERROR_CODE_SCHEMA_VIOLATION, REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED,
+    REASON_TRANSCRIPTION_DENIED,
 };
 use cokret_core::{
     BlobRef, CallId, CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
@@ -102,9 +102,8 @@ fn validate_call_state_media_lifecycle_fixture_metadata() -> Result<()> {
 // surfaced as SDK constants.
 
 const REASON_RECORDING_CONSENT_REQUIRED: &str = "recording_consent_required";
-const REASON_TRANSCRIPTION_DENIED: &str = ERROR_CODE_TRANSCRIPTION_DENIED;
-const REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED: &str =
-    ERROR_CODE_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED;
+// `REASON_TRANSCRIPTION_DENIED` / `REASON_TRANSCRIPTION_ARTIFACT_PIPELINE_BYPASSED`
+// now come from `cokret_core::error` (imported above) instead of local pins.
 const REASON_CALL_MODERATION_UNAUTHORISED: &str = "call_moderation_unauthorised";
 const REASON_CALL_PARTICIPANT_REMOVED: &str = "call_participant_removed";
 const REASON_CALL_SUMMARY_INVALID: &str = "call_summary_invalid";
@@ -134,7 +133,7 @@ struct RetentionState {
 /// An active audit lock blocks deletion regardless of TTL → `legal_hold_active`.
 fn try_delete_recording(state: &RetentionState) -> std::result::Result<(), &'static str> {
     if state.audit_lock {
-        return Err(ERROR_CODE_LEGAL_HOLD_ACTIVE);
+        return Err(REASON_LEGAL_HOLD_ACTIVE);
     }
     if !state.retention_expired || state.deletion_trigger != "retention_expiry" {
         return Err("retention_active");
@@ -152,8 +151,8 @@ fn capture_consent_ok(consent_confirmed: bool) -> std::result::Result<(), &'stat
 }
 
 pub fn run_recording_retention_lock_vector() -> Result<()> {
-    if ERROR_CODE_LEGAL_HOLD_ACTIVE != "legal_hold_active" {
-        bail!("ERROR_CODE_LEGAL_HOLD_ACTIVE spelling drifted: {ERROR_CODE_LEGAL_HOLD_ACTIVE}");
+    if REASON_LEGAL_HOLD_ACTIVE != "legal_hold_active" {
+        bail!("REASON_LEGAL_HOLD_ACTIVE spelling drifted: {REASON_LEGAL_HOLD_ACTIVE}");
     }
 
     // Step 2 — delete before TTL with audit_lock set → legal_hold_active.
@@ -163,7 +162,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
         deletion_trigger: "retention_expiry",
     };
     match try_delete_recording(&locked_before) {
-        Err(code) if code == ERROR_CODE_LEGAL_HOLD_ACTIVE => {}
+        Err(code) if code == REASON_LEGAL_HOLD_ACTIVE => {}
         other => {
             bail!("delete before TTL under audit_lock must be legal_hold_active, got {other:?}")
         }
@@ -177,7 +176,7 @@ pub fn run_recording_retention_lock_vector() -> Result<()> {
         deletion_trigger: "retention_expiry",
     };
     match try_delete_recording(&locked_after) {
-        Err(code) if code == ERROR_CODE_LEGAL_HOLD_ACTIVE => {}
+        Err(code) if code == REASON_LEGAL_HOLD_ACTIVE => {}
         other => {
             bail!("delete after TTL under audit_lock must be legal_hold_active, got {other:?}")
         }
@@ -339,7 +338,7 @@ fn evaluate_recording_result_artifact_shape(
     deletion_completed: bool,
 ) -> std::result::Result<(), &'static str> {
     if value_has_backend_direct_ref(&value) {
-        return Err(ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED);
+        return Err(REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED);
     }
     let payload: CallStatePayload =
         serde_json::from_value(value).map_err(|_| ERROR_CODE_SCHEMA_VIOLATION)?;
@@ -373,9 +372,9 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
             CallRecordingArtifact::SCHEMA
         );
     }
-    if ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
+    if REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
         bail!(
-            "ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
+            "REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
         );
     }
 
@@ -392,7 +391,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
     direct_result["recording_result"]["recording_url"] =
         json!("https://s3.amazonaws.com/bucket/recording.mp4");
     match evaluate_recording_result_artifact_shape(direct_result, false) {
-        Err(code) if code == ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
+        Err(code) if code == REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
         other => bail!("backend direct result URL must be pipeline bypass, got {other:?}"),
     }
 
@@ -401,7 +400,7 @@ pub fn run_recording_result_artifact_shape_vector() -> Result<()> {
     direct_artifact["recording_result"]["artifact"]["destination"] =
         json!("livekit://egress/recording-1");
     match evaluate_recording_result_artifact_shape(direct_artifact, false) {
-        Err(code) if code == ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
+        Err(code) if code == REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED => {}
         other => {
             bail!("backend direct artifact destination must be pipeline bypass, got {other:?}")
         }

@@ -67,6 +67,26 @@ jobs:
         # `/// Gating:` justification — see scripts/check_ignore_comments.sh.
         run: bash scripts/check_ignore_comments.sh
 
+  typecheck:
+    name: typecheck (tsc --noEmit)
+    runs-on: ubuntu-latest
+    # Static type gate for the e2e TypeScript suite. Playwright runs specs
+    # through esbuild (transpile-only, no type check); `tsc --noEmit` is the
+    # gate that catches wire-body field typos, signature drift, and null misuse
+    # before they reach an (expensive, docker-bound) live run. Self-contained:
+    # only the e2e npm deps are required.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install e2e deps
+        working-directory: e2e
+        run: npm ci || npm install
+      - name: typecheck
+        working-directory: e2e
+        run: npm run typecheck
+
   typos:
     name: typos
     runs-on: ubuntu-latest

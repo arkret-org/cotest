@@ -3,10 +3,16 @@ set -eu
 
 staged_paths=$(git diff --cached --name-only --diff-filter=ACMR)
 rust_touched=$(printf '%s\n' "$staged_paths" | grep -E '(\.rs$|Cargo\.toml$|Cargo\.lock$)' || true)
+# `tsc --noEmit` is the static gate for the e2e TypeScript suite (wire-body
+# field typos, signature drift, null misuse); Playwright's esbuild loader does
+# not type-check. Run it whenever a tracked TS file under e2e/ is staged.
+ts_touched=$(printf '%s\n' "$staged_paths" | grep -E '^e2e/.*\.ts$' || true)
 
-if [ -z "$rust_touched" ]; then
-    exit 0
+if [ -n "$rust_touched" ]; then
+    cargo fmt --all -- --check
+    cargo clippy --no-deps -- -D warnings
 fi
 
-cargo fmt --all -- --check
-cargo clippy --no-deps -- -D warnings
+if [ -n "$ts_touched" ]; then
+    ( cd e2e && npm run typecheck )
+fi

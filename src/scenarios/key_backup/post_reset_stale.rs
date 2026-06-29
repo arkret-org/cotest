@@ -8,7 +8,7 @@
 
 use anyhow::{Result, anyhow};
 use chrono::{DateTime, Duration, Utc};
-use cokret_core::error::ERROR_CODE_BACKUP_POST_RESET_STALE;
+use cokret_core::error::REASON_BACKUP_POST_RESET_STALE;
 
 /// Returns true when an existing envelope is "stale" relative to the
 /// most recent cross-signing reset.
@@ -21,10 +21,10 @@ fn is_post_reset_stale(envelope_emitted_at: DateTime<Utc>, last_reset_at: DateTi
 }
 
 pub async fn post_reset_stale_run() -> Result<()> {
-    if ERROR_CODE_BACKUP_POST_RESET_STALE != "backup_post_reset_stale" {
+    if REASON_BACKUP_POST_RESET_STALE != "backup_post_reset_stale" {
         return Err(anyhow!(
-            "ERROR_CODE_BACKUP_POST_RESET_STALE spelling drifted: \
-             {ERROR_CODE_BACKUP_POST_RESET_STALE}"
+            "REASON_BACKUP_POST_RESET_STALE spelling drifted: \
+             {REASON_BACKUP_POST_RESET_STALE}"
         ));
     }
 

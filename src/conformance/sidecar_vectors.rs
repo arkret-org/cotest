@@ -12,7 +12,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_SIDECAR_CREATE_DENIED,
+    REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED, REASON_SIDECAR_CREATE_DENIED,
 };
 use cokret_core::{
     AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED, CAP_ACTION_AGENT_SIDECAR_THREAD_ENSURE,
@@ -96,11 +96,11 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     // Sidecar ensure rejects from `paused` / `deactivated` agents with
     // the canonical error codes (also covered by the agent FSM
     // vector, but pinned again at the sidecar-specific code path).
-    if ERROR_CODE_AGENT_PAUSED != "agent_paused" {
-        bail!("ERROR_CODE_AGENT_PAUSED spelling drifted: {ERROR_CODE_AGENT_PAUSED}");
+    if REASON_AGENT_PAUSED != "agent_paused" {
+        bail!("REASON_AGENT_PAUSED spelling drifted: {REASON_AGENT_PAUSED}");
     }
-    if ERROR_CODE_AGENT_DEACTIVATED != "agent_deactivated" {
-        bail!("ERROR_CODE_AGENT_DEACTIVATED spelling drifted: {ERROR_CODE_AGENT_DEACTIVATED}");
+    if REASON_AGENT_DEACTIVATED != "agent_deactivated" {
+        bail!("REASON_AGENT_DEACTIVATED spelling drifted: {REASON_AGENT_DEACTIVATED}");
     }
     // Default home-policy is `context_realm_preferred` (B-F).
     if AGENT_SIDECAR_HOME_POLICY_CONTEXT_REALM_PREFERRED != "context_realm_preferred" {
@@ -118,9 +118,9 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     // A caller without the `ck.self.agent.sidecar_thread.command.ensure` capability
     // MUST receive `sidecar_create_denied` (NOT `not_found` — the
     // server MUST NOT confirm or deny existence by error code).
-    if ERROR_CODE_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
+    if REASON_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
         bail!(
-            "ERROR_CODE_SIDECAR_CREATE_DENIED spelling drifted: {ERROR_CODE_SIDECAR_CREATE_DENIED}"
+            "REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}"
         );
     }
     Ok(())

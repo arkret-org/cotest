@@ -49,10 +49,10 @@ const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ck.feature.mls_last_resort_keypackage.v1";
-const ERROR_CODE_LAST_RESORT_NOT_SUPPORTED: &str = "last_resort_not_supported";
-const ERROR_CODE_LAST_RESORT_REALM_AFFINITY_VIOLATION: &str =
+const REASON_LAST_RESORT_NOT_SUPPORTED: &str = "last_resort_not_supported";
+const REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION: &str =
     "last_resort_realm_affinity_violation";
-const ERROR_CODE_LAST_RESORT_ROTATION_REQUIRED: &str = "last_resort_rotation_required";
+const REASON_LAST_RESORT_ROTATION_REQUIRED: &str = "last_resort_rotation_required";
 
 fn keypackage_fixture() -> Result<Value> {
     let fixture = super::load_fixture_value(KEYPACKAGE_LIFECYCLE_FIXTURE_FILE)?;
@@ -383,7 +383,7 @@ impl MiniKeypackage {
         if self.last_resort && &self.intended_realm_id != realm_id {
             return Ok(consume_failure_outcome_value(
                 &self.keypackage_ref,
-                ERROR_CODE_LAST_RESORT_REALM_AFFINITY_VIOLATION,
+                REASON_LAST_RESORT_REALM_AFFINITY_VIOLATION,
             ));
         }
         if !self.last_resort && now > self.expires_at {
@@ -446,7 +446,7 @@ fn claim_from_pool(
 
     if explicit_last_resort_fallback && !feature_supported {
         return Ok(claim_failure_outcome_value(
-            ERROR_CODE_LAST_RESORT_NOT_SUPPORTED,
+            REASON_LAST_RESORT_NOT_SUPPORTED,
             Some(0),
         ));
     }
@@ -729,7 +729,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     if commits.len() as u64 != expected_u64(vector, "self_update_commits")? {
         bail!("rotation did not emit one MLS self-update per joined group");
     }
-    if expected_str(vector, "rotation_reason")? != ERROR_CODE_LAST_RESORT_ROTATION_REQUIRED {
+    if expected_str(vector, "rotation_reason")? != REASON_LAST_RESORT_ROTATION_REQUIRED {
         bail!("last-resort rotation reason drifted");
     }
 

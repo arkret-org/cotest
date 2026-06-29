@@ -5,13 +5,13 @@
 
 use anyhow::{Result, anyhow};
 use cokret_core::BackupSeriesId;
-use cokret_core::error::ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND;
+use cokret_core::error::REASON_SERIES_PREDECESSOR_NOT_FOUND;
 
 pub async fn series_predecessor_not_found_run() -> Result<()> {
-    if ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND != "series_predecessor_not_found" {
+    if REASON_SERIES_PREDECESSOR_NOT_FOUND != "series_predecessor_not_found" {
         return Err(anyhow!(
-            "ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND spelling drifted: \
-             {ERROR_CODE_SERIES_PREDECESSOR_NOT_FOUND}"
+            "REASON_SERIES_PREDECESSOR_NOT_FOUND spelling drifted: \
+             {REASON_SERIES_PREDECESSOR_NOT_FOUND}"
         ));
     }
     // UUIDv7 literal: lowercase hex, version nibble = 7, variant nibble ∈

@@ -34,7 +34,7 @@ use cokret_core::models::{
 };
 use cokret_core::schema::embedded_error_code_identifiers;
 use cokret_core::{
-    Did, ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
+    Did, REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED, REASON_MLS_GOVERNANCE_BINDING_STALE,
 };
 
 pub const EXPECTED_MLS_GOVERNANCE_BINDING_STALE: &str = "mls_governance_binding_stale";
@@ -45,19 +45,19 @@ pub const EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED: &str =
 /// plaintext error codes agree with the cotest pins and the canonical
 /// registry recognises them.
 pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()> {
-    if ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE != EXPECTED_MLS_GOVERNANCE_BINDING_STALE {
+    if REASON_MLS_GOVERNANCE_BINDING_STALE != EXPECTED_MLS_GOVERNANCE_BINDING_STALE {
         return Err(anyhow!(
-            "SDK ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE,
+            "SDK REASON_MLS_GOVERNANCE_BINDING_STALE ({}) drifted from cotest pin ({}).",
+            REASON_MLS_GOVERNANCE_BINDING_STALE,
             EXPECTED_MLS_GOVERNANCE_BINDING_STALE,
         ));
     }
-    if ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
+    if REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
         != EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED
     {
         return Err(anyhow!(
-            "SDK ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
+            "SDK REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED ({}) drifted from cotest pin ({}).",
+            REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
             EXPECTED_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED,
         ));
     }
@@ -66,14 +66,14 @@ pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()>
     // `KNOWN_ERROR_CODES` table.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE) {
+    if !registry_identifiers.contains(REASON_MLS_GOVERNANCE_BINDING_STALE) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE}"
+            "error-code-registry missing reason code {REASON_MLS_GOVERNANCE_BINDING_STALE}"
         ));
     }
-    if !registry_identifiers.contains(ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED) {
+    if !registry_identifiers.contains(REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {ERROR_CODE_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED}"
+            "error-code-registry missing reason code {REASON_MEDIA_PLAINTEXT_SERVICE_NOT_AUTHORISED}"
         ));
     }
     Ok(())
@@ -146,16 +146,16 @@ pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
             "member recompute mismatch MUST be refused (mls_governance_binding_stale), got Ok",
         ),
         Err(Error::Protocol(msg)) => {
-            if !msg.contains(ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE) {
+            if !msg.contains(REASON_MLS_GOVERNANCE_BINDING_STALE) {
                 bail!(
-                    "mismatch refusal must carry error code `{ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE}`, \
+                    "mismatch refusal must carry error code `{REASON_MLS_GOVERNANCE_BINDING_STALE}`, \
                      got Protocol({msg})"
                 );
             }
         }
         Err(other) => bail!(
             "mismatch must surface Error::Protocol tagged \
-             `{ERROR_CODE_MLS_GOVERNANCE_BINDING_STALE}`, got {other:?}"
+             `{REASON_MLS_GOVERNANCE_BINDING_STALE}`, got {other:?}"
         ),
     }
     Ok(())

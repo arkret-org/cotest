@@ -37,6 +37,10 @@ import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
 import { basename, resolve, join } from 'node:path';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+// Single canonical-JSON implementation for the `.mjs` runtime (see
+// mocks/_shared/http.mjs). Keeps script-computed digests aligned with the
+// mocks and the TS harness; no local copy.
+import { canonicalJson } from '../mocks/_shared/http.mjs';
 
 // ---------------------------------------------------------------------------
 // Profile-suite allow-list.
@@ -201,27 +205,6 @@ function decodeXmlAttr(s) {
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&amp;/g, '&');
-}
-
-// ---------------------------------------------------------------------------
-// Canonical JSON for hashing — keys sorted lexicographically; no whitespace.
-// Matches the convention used elsewhere in cokret-spec for canonical bytes.
-// ---------------------------------------------------------------------------
-function canonicalJson(value) {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return '[' + value.map((v) => canonicalJson(v)).join(',') + ']';
-  }
-  const keys = Object.keys(value).sort();
-  return (
-    '{' +
-    keys
-      .map((k) => JSON.stringify(k) + ':' + canonicalJson(value[k]))
-      .join(',') +
-    '}'
-  );
 }
 
 function sha256Hex(s) {

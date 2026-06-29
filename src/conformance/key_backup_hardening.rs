@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    ERROR_CODE_RECOVERY_EVIDENCE_UNBOUND, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED,
+    REASON_RECOVERY_EVIDENCE_UNBOUND, ERROR_CODE_SCHEMA_VIOLATION, ERROR_CODE_UNAUTHENTICATED,
 };
 use cokret_core::{BackupClass, KeyBackupPlaintext, KeyBackupUnlockProof};
 use serde_json::Value;
@@ -214,10 +214,10 @@ fn authorize_unlock(
         || backup_class_str(proof.backup_class) != envelope.backup_class
         || proof.series_id.as_str() != envelope.series_id
         || proof.ciphertext_digest.as_str() != envelope.ciphertext_digest
-        || proof_digest_str(proof).map_err(|_| ERROR_CODE_RECOVERY_EVIDENCE_UNBOUND)?
+        || proof_digest_str(proof).map_err(|_| REASON_RECOVERY_EVIDENCE_UNBOUND)?
             != session.proof_digest
     {
-        return Err(ERROR_CODE_RECOVERY_EVIDENCE_UNBOUND);
+        return Err(REASON_RECOVERY_EVIDENCE_UNBOUND);
     }
     Ok(())
 }

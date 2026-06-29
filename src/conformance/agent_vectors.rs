@@ -16,9 +16,9 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    ERROR_CODE_AGENT_DEACTIVATED, ERROR_CODE_AGENT_PAUSED, ERROR_CODE_APPROVAL_ALREADY_CONSUMED,
-    ERROR_CODE_PAIRING_REQUEST_EXPIRED, ERROR_CODE_PROOF_INVALID, ERROR_CODE_SIDECAR_CREATE_DENIED,
-    ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH, REASON_ACCOUNTABILITY_GRANT_MISSING,
+    REASON_AGENT_DEACTIVATED, REASON_AGENT_PAUSED, REASON_APPROVAL_ALREADY_CONSUMED,
+    REASON_PAIRING_REQUEST_EXPIRED, REASON_PROOF_INVALID, REASON_SIDECAR_CREATE_DENIED,
+    REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH, REASON_ACCOUNTABILITY_GRANT_MISSING,
     REASON_APPROVAL_NONCE_REUSED,
 };
 use cokret_core::{
@@ -131,9 +131,9 @@ pub fn run_agent_provision_vector() -> Result<()> {
 // ─── VECT-AG-2 — pairing_expiry ────────────────────────────────────────────
 
 pub fn run_agent_pairing_expiry_vector() -> Result<()> {
-    if ERROR_CODE_PAIRING_REQUEST_EXPIRED != "pairing_request_expired" {
+    if REASON_PAIRING_REQUEST_EXPIRED != "pairing_request_expired" {
         bail!(
-            "ERROR_CODE_PAIRING_REQUEST_EXPIRED spelling drifted: {ERROR_CODE_PAIRING_REQUEST_EXPIRED}"
+            "REASON_PAIRING_REQUEST_EXPIRED spelling drifted: {REASON_PAIRING_REQUEST_EXPIRED}"
         );
     }
     if OP_ACCOUNT_AGENT_KEY_PAIR != "ck.gate.account.command.pair_agent_key" {
@@ -146,10 +146,10 @@ pub fn run_agent_pairing_expiry_vector() -> Result<()> {
     // validator (fail-closed-before-validator); we pin the canonical
     // error-code spellings here.
     let required = [
-        ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-        ERROR_CODE_PAIRING_REQUEST_EXPIRED,
-        ERROR_CODE_PROOF_INVALID,
-        ERROR_CODE_AGENT_DEACTIVATED,
+        REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+        REASON_PAIRING_REQUEST_EXPIRED,
+        REASON_PROOF_INVALID,
+        REASON_AGENT_DEACTIVATED,
     ];
     for code in required {
         if code.is_empty() || !code.chars().all(|c| c == '_' || c.is_ascii_lowercase()) {
@@ -176,9 +176,9 @@ fn agent_transition(state: AgentState, op: &str) -> std::result::Result<AgentSta
         (Active, "pause") => Ok(Paused),
         (Paused, "resume") => Ok(Active),
         (Active | Paused, "deactivate") => Ok(Deactivated),
-        (Deactivated, _) => Err(ERROR_CODE_AGENT_DEACTIVATED),
+        (Deactivated, _) => Err(REASON_AGENT_DEACTIVATED),
         (Active, "resume") => Err("reject"),
-        (Paused, "pause") => Err(ERROR_CODE_AGENT_PAUSED),
+        (Paused, "pause") => Err(REASON_AGENT_PAUSED),
         _ => Err("reject"),
     }
 }
@@ -226,7 +226,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
     let err = agent_transition(AgentState::Deactivated, "resume")
         .err()
         .ok_or_else(|| anyhow!("resume-from-deactivated must be rejected"))?;
-    if err != ERROR_CODE_AGENT_DEACTIVATED {
+    if err != REASON_AGENT_DEACTIVATED {
         bail!("resume-from-deactivated returned `{err}`, expected agent_deactivated");
     }
 
@@ -234,7 +234,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
     let err = agent_transition(AgentState::Paused, "pause")
         .err()
         .ok_or_else(|| anyhow!("pause-while-paused must be rejected"))?;
-    if err != ERROR_CODE_AGENT_PAUSED {
+    if err != REASON_AGENT_PAUSED {
         bail!("pause-while-paused returned `{err}`, expected agent_paused");
     }
     Ok(())
@@ -315,17 +315,17 @@ pub fn run_agent_act_on_behalf_vector() -> Result<()> {
     // The four new actor-private agent event kinds are pinned by the
     // SDK constants list in personal_agent_provisioning; here we
     // assert the side-effect that approvals are write-once.
-    if ERROR_CODE_APPROVAL_ALREADY_CONSUMED != "approval_already_consumed" {
+    if REASON_APPROVAL_ALREADY_CONSUMED != "approval_already_consumed" {
         bail!(
-            "ERROR_CODE_APPROVAL_ALREADY_CONSUMED spelling drifted: {ERROR_CODE_APPROVAL_ALREADY_CONSUMED}"
+            "REASON_APPROVAL_ALREADY_CONSUMED spelling drifted: {REASON_APPROVAL_ALREADY_CONSUMED}"
         );
     }
     // Sidecar-create denial is part of the act-on-behalf pipeline
     // (controller's grant has not authorised the agent to write to
     // the sidecar circle).
-    if ERROR_CODE_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
+    if REASON_SIDECAR_CREATE_DENIED != "sidecar_create_denied" {
         bail!(
-            "ERROR_CODE_SIDECAR_CREATE_DENIED spelling drifted: {ERROR_CODE_SIDECAR_CREATE_DENIED}"
+            "REASON_SIDECAR_CREATE_DENIED spelling drifted: {REASON_SIDECAR_CREATE_DENIED}"
         );
     }
     if REASON_APPROVAL_NONCE_REUSED != "approval_nonce_reused" {
@@ -408,7 +408,7 @@ impl MiniAgentKeyProofVerifier {
         }
         if proof.signature != self.expected_signature {
             self.consumed_challenges.insert(proof.challenge.to_owned());
-            return Err(ERROR_CODE_PROOF_INVALID);
+            return Err(REASON_PROOF_INVALID);
         }
         self.consumed_challenges.insert(proof.challenge.to_owned());
         Ok(())
@@ -436,10 +436,10 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
     //   agent_paused / agent_deactivated / accountability_grant_missing
     // We pin all five.
     let required = [
-        ERROR_CODE_PROOF_INVALID,
-        ERROR_CODE_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-        ERROR_CODE_AGENT_PAUSED,
-        ERROR_CODE_AGENT_DEACTIVATED,
+        REASON_PROOF_INVALID,
+        REASON_VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
+        REASON_AGENT_PAUSED,
+        REASON_AGENT_DEACTIVATED,
     ];
     let mut sorted = required.to_vec();
     sorted.sort_unstable();
@@ -486,7 +486,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
             audience: "soland.local",
             signature: "sig-tampered",
         },
-        ERROR_CODE_PROOF_INVALID,
+        REASON_PROOF_INVALID,
     )?;
     expect_proof_denial(
         &mut verifier,

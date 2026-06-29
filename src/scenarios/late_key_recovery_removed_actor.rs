@@ -22,7 +22,7 @@
 //! decrypting.
 
 use anyhow::{Result, anyhow};
-use cokret_core::ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP;
+use cokret_core::REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP;
 use cokret_core::schema::embedded_error_code_identifiers;
 
 /// The canonical error code surfaced by the reducer when a late key
@@ -38,10 +38,10 @@ pub const EXPECTED_REASON: &str = "late_recovery_rejected_membership";
 /// posts a late `ck.key.share` can layer on top of this local contract
 /// without weakening the always-on error-code gate.
 pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
-    if ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP != EXPECTED_REASON {
+    if REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP != EXPECTED_REASON {
         return Err(anyhow!(
-            "SDK ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
-            ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP,
+            "SDK REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP ({}) drifted from cotest pin ({}).",
+            REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP,
             EXPECTED_REASON,
         ));
     }
@@ -49,9 +49,9 @@ pub async fn late_key_recovery_removed_actor_run() -> Result<()> {
     // audit_decision); validate against the registry union, not codes-only.
     let registry_identifiers = embedded_error_code_identifiers()
         .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP) {
+    if !registry_identifiers.contains(REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP) {
         return Err(anyhow!(
-            "error-code-registry missing reason code {ERROR_CODE_LATE_RECOVERY_REJECTED_MEMBERSHIP}"
+            "error-code-registry missing reason code {REASON_LATE_RECOVERY_REJECTED_MEMBERSHIP}"
         ));
     }
     Ok(())

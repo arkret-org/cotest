@@ -48,7 +48,7 @@ use std::collections::BTreeMap;
 use anyhow::{Result, anyhow};
 use cokret_core::canonical::{canonical_json_bytes, sha256_digest};
 use cokret_core::{
-    ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_HISTORICAL_ONLY,
+    REASON_CROSS_DOMAIN_REPLAY_REJECTED, ERROR_CODE_HISTORICAL_ONLY,
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_REQUEST_CANONICAL_DIGEST, HEADER_SOURCE_TRUST_DOMAIN,
     Hash, TypedTrustDomainId, federation_trust_domain_transcript_fragment,
 };
@@ -164,7 +164,7 @@ impl SimulatedFederationReceiver {
     ) -> Result<Value> {
         if destination_trust_domain != self.configured_trust_domain {
             return Err(anyhow!(
-                "{ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED}: destination_trust_domain {:?} \
+                "{REASON_CROSS_DOMAIN_REPLAY_REJECTED}: destination_trust_domain {:?} \
                  does not match receiver configuration {:?}",
                 destination_trust_domain,
                 self.configured_trust_domain
@@ -383,11 +383,11 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
         Err(err)
             if err
                 .to_string()
-                .contains(ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED) => {}
+                .contains(REASON_CROSS_DOMAIN_REPLAY_REJECTED) => {}
         other => {
             return Err(anyhow!(
                 "wrong destination MUST be rejected with \
-                 {ERROR_CODE_CROSS_DOMAIN_REPLAY_REJECTED}; got {other:?}"
+                 {REASON_CROSS_DOMAIN_REPLAY_REJECTED}; got {other:?}"
             ));
         }
     }

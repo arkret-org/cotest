@@ -757,13 +757,17 @@ export async function submitInviteCreateApi(
         realmId,
         kind: "ck.invite.create",
         refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
+        // Directed invite-create payload shape per event-payload.schema.json
+        // `invite_payload` (variant: invitee + invite_delivery_target +
+        // introduction_evidence_digest + expires_at). The subject is carried by
+        // `invitee` (a DID); the forbidden `subject_did` wire field and the
+        // non-schema `realm_id` / `inviter` keys are intentionally absent.
         payload: {
-          realm_id: realmId,
           invite_id: inviteId,
-          subject_did: subjectDid,
           invitee: subjectDid,
-          inviter: inviterDid,
-          invite_delivery_target: { recipient_did: subjectDid },
+          invite_delivery_target: {
+            recipient_service_did: solandServiceDid(opts.server),
+          },
           introduction_evidence_digest: `sha256:${sha256CanonicalJson({ inviteId, subjectDid })}`,
           expires_at: expiresAt,
         },

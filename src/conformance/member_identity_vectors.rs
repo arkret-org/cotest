@@ -30,9 +30,9 @@
 use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use cokret_core::error::{
-    ERROR_CODE_MEMBER_IDENTITY_PROOF_INVALID,
-    ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
-    ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH, ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
+    REASON_MEMBER_IDENTITY_PROOF_INVALID,
+    REASON_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH,
+    REASON_MEMBER_IDENTITY_STATE_MISMATCH, REASON_MEMBER_IDENTITY_UNKNOWN_SEGMENT,
 };
 use cokret_core::models::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
@@ -349,12 +349,12 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
     // invalid replacement-event rejection (not the silent-edge case we
     // model here) — assert the constant exists so a rename in the SDK
     // breaks this vector first.
-    if ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH
+    if REASON_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH
         != "member_identity_replacement_digest_mismatch"
     {
         bail!(
             "VECT-MID-3: error-code constant drifted from spec value; got \
-             `{ERROR_CODE_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH}`"
+             `{REASON_MEMBER_IDENTITY_REPLACEMENT_DIGEST_MISMATCH}`"
         );
     }
     Ok(())
@@ -415,10 +415,10 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
     if payload.expected_state_digest.as_ref() != Some(&stale_digest) {
         bail!("VECT-MID-4: expected_state_digest field did not round-trip");
     }
-    if ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH != "member_identity_state_mismatch" {
+    if REASON_MEMBER_IDENTITY_STATE_MISMATCH != "member_identity_state_mismatch" {
         bail!(
             "VECT-MID-4: error-code constant drifted; got \
-             `{ERROR_CODE_MEMBER_IDENTITY_STATE_MISMATCH}`"
+             `{REASON_MEMBER_IDENTITY_STATE_MISMATCH}`"
         );
     }
     // When expected_state_digest is None, this is treated as "no optimistic
@@ -468,10 +468,10 @@ pub fn run_member_identity_proof_invalid_vector() -> Result<()> {
         );
     }
     // Wire-level error-code constant the verifier MUST surface.
-    if ERROR_CODE_MEMBER_IDENTITY_PROOF_INVALID != "member_identity_proof_invalid" {
+    if REASON_MEMBER_IDENTITY_PROOF_INVALID != "member_identity_proof_invalid" {
         bail!(
             "VECT-MID-5: error-code constant drifted; got \
-             `{ERROR_CODE_MEMBER_IDENTITY_PROOF_INVALID}`"
+             `{REASON_MEMBER_IDENTITY_PROOF_INVALID}`"
         );
     }
     Ok(())
@@ -516,10 +516,10 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
              only the v1 `member_identity` segment is allowed"
         ),
     }
-    if ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT != "member_identity_unknown_segment" {
+    if REASON_MEMBER_IDENTITY_UNKNOWN_SEGMENT != "member_identity_unknown_segment" {
         bail!(
             "VECT-MID-6: error-code constant drifted; got \
-             `{ERROR_CODE_MEMBER_IDENTITY_UNKNOWN_SEGMENT}`"
+             `{REASON_MEMBER_IDENTITY_UNKNOWN_SEGMENT}`"
         );
     }
     Ok(())

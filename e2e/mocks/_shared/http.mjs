@@ -24,12 +24,31 @@ export function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-/// Deterministic canonical JSON (JCS-style: sorted keys, `undefined` members
-/// dropped). Mirrors the helper-side `canonicalJson` so mock-computed digests
-/// match the harness.
+/// Deterministic canonical JSON (RFC 8785 / JCS-style: keys sorted by UTF-16
+/// code unit, no whitespace, `undefined` members dropped). This is the single
+/// canonical-JSON implementation for the `.mjs` runtime (mocks + scripts), kept
+/// in lock-step with the TypeScript helper `canonicalJson` in
+/// `e2e/helpers/soland-api.ts` so mock/script-computed digests cannot drift
+/// from the harness. Numbers are validated to be finite integers (the only
+/// number form the conformance encoding profile permits) so a boundary value
+/// fails loudly here instead of silently diverging from the TS authority.
 export function canonicalJson(value) {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
+  if (value === null) {
+    return "null";
+  }
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return JSON.stringify(value);
+    case "number":
+      if (!Number.isFinite(value) || !Number.isInteger(value)) {
+        throw new TypeError(`non-canonical JSON number: ${value}`);
+      }
+      return JSON.stringify(value);
+    case "object":
+      break;
+    default:
+      throw new TypeError(`non-canonical JSON value: ${typeof value}`);
   }
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;

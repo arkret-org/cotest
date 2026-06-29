@@ -24,11 +24,11 @@
 
 use anyhow::{Result, anyhow, bail};
 use cokret_core::error::{
-    ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED, ERROR_CODE_FOCUS_MISMATCH,
-    ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT, ERROR_CODE_PARTICIPANT_BINDING_INVALID,
-    ERROR_CODE_PARTICIPANT_IDENTITY_UNRECOGNISED, ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
-    ERROR_CODE_SESSION_FOCUS_ALREADY_COMMITTED, ERROR_CODE_TOKEN_ISSUER_UNAUTHORISED,
-    ERROR_CODE_UNKNOWN_FOCUS_TYPE,
+    REASON_E2EE_KEY_SOURCE_UNAUTHORISED, REASON_FOCUS_MISMATCH,
+    REASON_FOCUS_UNAVAILABLE_FOR_CLIENT, REASON_PARTICIPANT_BINDING_INVALID,
+    REASON_PARTICIPANT_IDENTITY_UNRECOGNISED, REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED,
+    REASON_SESSION_FOCUS_ALREADY_COMMITTED, REASON_TOKEN_ISSUER_UNAUTHORISED,
+    REASON_UNKNOWN_FOCUS_TYPE,
 };
 use cokret_core::{
     MEDIA_TOKEN_TTL_MAX_SECS, OP_CALL_MEDIA_TOKEN_EXCHANGE, PARTICIPANT_BINDING_SCHEMA,
@@ -180,8 +180,8 @@ pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
 
     // Off-focus token request from Bob must fail-closed with
     // `focus_mismatch`.
-    if ERROR_CODE_FOCUS_MISMATCH != "focus_mismatch" {
-        bail!("ERROR_CODE_FOCUS_MISMATCH spelling drifted: {ERROR_CODE_FOCUS_MISMATCH}");
+    if REASON_FOCUS_MISMATCH != "focus_mismatch" {
+        bail!("REASON_FOCUS_MISMATCH spelling drifted: {REASON_FOCUS_MISMATCH}");
     }
     Ok(())
 }
@@ -200,7 +200,7 @@ struct SessionFocusCell {
 impl SessionFocusCell {
     fn commit(&mut self, focus_id: &str) -> std::result::Result<(), &'static str> {
         if self.committed.is_some() {
-            return Err(ERROR_CODE_SESSION_FOCUS_ALREADY_COMMITTED);
+            return Err(REASON_SESSION_FOCUS_ALREADY_COMMITTED);
         }
         self.committed = Some(focus_id.to_owned());
         Ok(())
@@ -213,15 +213,15 @@ pub fn run_session_focus_no_split_brain_vector() -> Result<()> {
         .map_err(|e| anyhow!("first commit unexpectedly failed: {e}"))?;
     let second = cell.commit("focus.cokret.lhr");
     match second {
-        Err(code) if code == ERROR_CODE_SESSION_FOCUS_ALREADY_COMMITTED => {}
+        Err(code) if code == REASON_SESSION_FOCUS_ALREADY_COMMITTED => {}
         other => bail!("second write must surface session_focus_already_committed, got {other:?}"),
     }
 
     // Carol's local-fail surfaces `focus_unavailable_for_client` rather
     // than silently downgrading to plaintext or any other focus.
-    if ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT != "focus_unavailable_for_client" {
+    if REASON_FOCUS_UNAVAILABLE_FOR_CLIENT != "focus_unavailable_for_client" {
         bail!(
-            "ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT spelling drifted: {ERROR_CODE_FOCUS_UNAVAILABLE_FOR_CLIENT}"
+            "REASON_FOCUS_UNAVAILABLE_FOR_CLIENT spelling drifted: {REASON_FOCUS_UNAVAILABLE_FOR_CLIENT}"
         );
     }
     Ok(())
@@ -280,9 +280,9 @@ pub fn run_token_exchange_minimal_vector() -> Result<()> {
 // ─── VECT-MB-4 — token_issuer_unauthorised ─────────────────────────────────
 
 pub fn run_token_issuer_unauthorised_vector() -> Result<()> {
-    if ERROR_CODE_TOKEN_ISSUER_UNAUTHORISED != "token_issuer_unauthorised" {
+    if REASON_TOKEN_ISSUER_UNAUTHORISED != "token_issuer_unauthorised" {
         bail!(
-            "ERROR_CODE_TOKEN_ISSUER_UNAUTHORISED spelling drifted: {ERROR_CODE_TOKEN_ISSUER_UNAUTHORISED}"
+            "REASON_TOKEN_ISSUER_UNAUTHORISED spelling drifted: {REASON_TOKEN_ISSUER_UNAUTHORISED}"
         );
     }
 
@@ -305,9 +305,9 @@ pub fn run_token_issuer_unauthorised_vector() -> Result<()> {
 // ─── VECT-MB-5 — participant_binding_required ──────────────────────────────
 
 pub fn run_participant_binding_required_vector() -> Result<()> {
-    if ERROR_CODE_PARTICIPANT_BINDING_INVALID != "participant_binding_invalid" {
+    if REASON_PARTICIPANT_BINDING_INVALID != "participant_binding_invalid" {
         bail!(
-            "ERROR_CODE_PARTICIPANT_BINDING_INVALID spelling drifted: {ERROR_CODE_PARTICIPANT_BINDING_INVALID}"
+            "REASON_PARTICIPANT_BINDING_INVALID spelling drifted: {REASON_PARTICIPANT_BINDING_INVALID}"
         );
     }
     // A response missing the `participant_binding` field, or one whose
@@ -475,7 +475,7 @@ fn run_participant_binding_eddsa_vector() -> Result<()> {
         if verifying.verify(&tampered, &sig).is_ok() {
             bail!(
                 "tampered participant_binding field #{idx} verified against the original sig — \
-                 the signature does not actually cover that field ({ERROR_CODE_PARTICIPANT_BINDING_INVALID})"
+                 the signature does not actually cover that field ({REASON_PARTICIPANT_BINDING_INVALID})"
             );
         }
     }
@@ -528,8 +528,8 @@ fn hex_lower(bytes: &[u8]) -> String {
 // ─── VECT-MB-6 — unknown_type_fail_closed ──────────────────────────────────
 
 pub fn run_unknown_type_fail_closed_vector() -> Result<()> {
-    if ERROR_CODE_UNKNOWN_FOCUS_TYPE != "unknown_focus_type" {
-        bail!("ERROR_CODE_UNKNOWN_FOCUS_TYPE spelling drifted: {ERROR_CODE_UNKNOWN_FOCUS_TYPE}");
+    if REASON_UNKNOWN_FOCUS_TYPE != "unknown_focus_type" {
+        bail!("REASON_UNKNOWN_FOCUS_TYPE spelling drifted: {REASON_UNKNOWN_FOCUS_TYPE}");
     }
     // Known variants must round-trip; anything else MUST fail closed
     // at the SDK helper, never silently downgrade.
@@ -549,9 +549,9 @@ pub fn run_unknown_type_fail_closed_vector() -> Result<()> {
 // ─── VECT-MB-7 — e2ee_key_source ───────────────────────────────────────────
 
 pub fn run_e2ee_key_source_vector() -> Result<()> {
-    if ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED != "e2ee_key_source_unauthorised" {
+    if REASON_E2EE_KEY_SOURCE_UNAUTHORISED != "e2ee_key_source_unauthorised" {
         bail!(
-            "ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED spelling drifted: {ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED}"
+            "REASON_E2EE_KEY_SOURCE_UNAUTHORISED spelling drifted: {REASON_E2EE_KEY_SOURCE_UNAUTHORISED}"
         );
     }
     // Only MLS-Exporter (label `ck-rtc-frame-key/v1`, length=19) is
@@ -633,7 +633,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         if context_value.get(field).and_then(|v| v.as_str()).is_none() {
             bail!(
                 "SFrame Context MUST bind `{field}`; an epoch-only / missing-sender Context \
-                 fails closed ({ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED})"
+                 fails closed ({REASON_E2EE_KEY_SOURCE_UNAUTHORISED})"
             );
         }
     }
@@ -714,9 +714,9 @@ fn sframe_context(
 // ─── VECT-MB-8 — participant_identity_unrecognised ─────────────────────────
 
 pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
-    if ERROR_CODE_PARTICIPANT_IDENTITY_UNRECOGNISED != "participant_identity_unrecognised" {
+    if REASON_PARTICIPANT_IDENTITY_UNRECOGNISED != "participant_identity_unrecognised" {
         bail!(
-            "ERROR_CODE_PARTICIPANT_IDENTITY_UNRECOGNISED spelling drifted: {ERROR_CODE_PARTICIPANT_IDENTITY_UNRECOGNISED}"
+            "REASON_PARTICIPANT_IDENTITY_UNRECOGNISED spelling drifted: {REASON_PARTICIPANT_IDENTITY_UNRECOGNISED}"
         );
     }
     // The backend MUST signal only identities that match an entry in
@@ -739,9 +739,9 @@ pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
 // ─── VECT-MB-9 — recording_artifact_via_cokret_blob ───────────────────────
 
 pub fn run_recording_artifact_via_cokret_blob_vector() -> Result<()> {
-    if ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
+    if REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED != "recording_artifact_pipeline_bypassed" {
         bail!(
-            "ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {ERROR_CODE_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
+            "REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED spelling drifted: {REASON_RECORDING_ARTIFACT_PIPELINE_BYPASSED}"
         );
     }
     // Egress MUST land on a Cokret blob endpoint. Direct S3 / GCS
@@ -791,7 +791,7 @@ fn recording_exporter_key_source_ok(
     context: &[u8],
 ) -> std::result::Result<(), &'static str> {
     if label != LABEL_RTC_RECORDING_KEY || context.is_empty() {
-        return Err(ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED);
+        return Err(REASON_E2EE_KEY_SOURCE_UNAUTHORISED);
     }
     Ok(())
 }
@@ -816,7 +816,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         (LABEL_RTC_RECORDING_KEY, &[][..]),
     ] {
         match recording_exporter_key_source_ok(label, candidate_context) {
-            Err(code) if code == ERROR_CODE_E2EE_KEY_SOURCE_UNAUTHORISED => {}
+            Err(code) if code == REASON_E2EE_KEY_SOURCE_UNAUTHORISED => {}
             other => bail!(
                 "recording exporter source ({label}, {} bytes) must be rejected, got {other:?}",
                 candidate_context.len()
