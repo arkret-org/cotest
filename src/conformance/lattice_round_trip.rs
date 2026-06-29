@@ -744,13 +744,13 @@ fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
     let cref = notary_cell("02");
     let value = json!({
         "type": "threshold",
-        "k": 2,
-        "n": 3,
+        "threshold": 2,
         "members": [
             "did:web:notary1.example",
             "did:web:notary2.example",
             "did:web:notary3.example"
         ],
+        "forensic_attribution": "quorum_intersection",
     });
     let ops = vec![SealedOp::new(move_id("a2"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
@@ -783,7 +783,7 @@ fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
     let cref = notary_cell("04");
     let value = json!({
         "type": "mixed",
-        "primary": "did:web:hub.example",
+        "did": "did:web:hub.example",
         "recovery_members": [
             "did:web:recovery1.example",
             "did:web:recovery2.example"
