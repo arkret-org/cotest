@@ -849,7 +849,7 @@ export async function createDpopUserSession(
     return undefined;
   }
   const account = await registerCoauthPasswordAccount(request, coauth, {
-    password: "1amTesting!",
+    password: "1amTester!",
   });
   return createDpopUserSessionForAccount(request, prefix, account, opts);
 }
