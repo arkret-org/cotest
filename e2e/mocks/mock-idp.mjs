@@ -18,6 +18,7 @@ import { createServer } from "node:http";
 import { createHash, createSign, randomUUID } from "node:crypto";
 import { createRsaKeyPair, b64url } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_IDP_PORT ?? "0", 10);
 const explicitIssuer = process.env.MOCK_IDP_ISSUER;
@@ -46,17 +47,6 @@ function signIdToken({ issuer, sub, email, audience, nonce }) {
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
   const sig = createSign("RSA-SHA256").update(enc).sign(privateKey);
   return `${enc}.${b64url(sig)}`;
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 function verifyPkce({ code_verifier, code_challenge, code_challenge_method }) {

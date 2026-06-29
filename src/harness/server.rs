@@ -113,8 +113,8 @@ impl CokretServer {
     async fn spawn_external_binary_with_ports_and_env(
         name: &str,
         bin_path: &Path,
-        port: ReservedPort,
-        metrics_port: ReservedPort,
+        mut port: ReservedPort,
+        mut metrics_port: ReservedPort,
         extra_env: &[(&str, &str)],
     ) -> Result<Self> {
         let bind = format!("127.0.0.1:{}", port.port());
@@ -144,6 +144,11 @@ impl CokretServer {
         for &(key, value) in extra_env {
             command.env(key, value);
         }
+        // Release the guard listeners at the last possible moment so the child
+        // can bind the ports it was handed (the file-lock keeps this manager
+        // from re-selecting them).
+        port.release();
+        metrics_port.release();
         let mut child = command.spawn().with_context(|| {
             format!(
                 "failed to start external soland binary at {}",
@@ -182,8 +187,8 @@ impl CokretServer {
             return Self::spawn_external_binary_with_env(name, &bin_path, extra_env).await;
         }
 
-        let port = reserve_port()?;
-        let metrics_port = reserve_port()?;
+        let mut port = reserve_port()?;
+        let mut metrics_port = reserve_port()?;
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
@@ -217,6 +222,9 @@ impl CokretServer {
         for &(key, value) in extra_env {
             command.env(key, value);
         }
+        // Release the guard listeners right before the child binds them.
+        port.release();
+        metrics_port.release();
         let mut child = command
             .spawn()
             .with_context(|| format!("failed to start SUT from {}", manifest.display()))?;
@@ -242,7 +250,7 @@ impl CokretServer {
         docker_network: Option<&str>,
         extra_env: &[(&str, &str)],
     ) -> Result<Self> {
-        let host_port = reserve_port()?;
+        let mut host_port = reserve_port()?;
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
@@ -298,6 +306,8 @@ impl CokretServer {
         }
         command.arg(&image);
 
+        // Release the guard listener right before docker publishes the port.
+        host_port.release();
         run_command(
             &mut command,
             &format!("failed to start docker SUT from image {image}"),
@@ -825,14 +835,30 @@ fn docker_logs(container_name: &str) -> Result<String> {
 
 /// A loopback port reservation held for the lifetime of the service that will
 /// bind it.
+///
+/// The reservation keeps the originally-bound [`TcpListener`] alive in
+/// `listener` until [`ReservedPort::release`] is called immediately before the
+/// child process binds the port. Holding the socket open prevents the OS from
+/// handing the same ephemeral port to another `bind("127.0.0.1:0")` caller
+/// (the classic reserve→spawn TOCTOU window), shrinking the unguarded gap to the
+/// few instructions between `release()` and the child's own `bind()`.
 pub(crate) struct ReservedPort {
     port: u16,
     path: PathBuf,
+    listener: Option<TcpListener>,
 }
 
 impl ReservedPort {
     pub(crate) fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Drop the guard listener so the child process can bind the port. MUST be
+    /// called right before spawning the child that will bind `port`; the
+    /// file-lock + in-process set still prevent this manager from re-selecting
+    /// the same number.
+    pub(crate) fn release(&mut self) {
+        self.listener = None;
     }
 }
 
@@ -867,7 +893,11 @@ pub(crate) fn reserve_port() -> Result<ReservedPort> {
                 writeln!(file, "pid={}", std::process::id())?;
                 writeln!(file, "port={port}")?;
                 reserved.insert(port);
-                return Ok(ReservedPort { port, path });
+                return Ok(ReservedPort {
+                    port,
+                    path,
+                    listener: Some(listener),
+                });
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {

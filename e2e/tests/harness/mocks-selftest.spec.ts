@@ -496,6 +496,8 @@ test.describe("harness mocks selftest @fully-implemented", () => {
   }) => {
     const facade = createMimiFacadeClient(request);
     test.skip(!facade, "mock-mimi-facade not started for this run");
+    // The skip above runs at runtime; narrow the static type for the calls below.
+    if (!facade) throw new Error("mock-mimi-facade client unavailable");
 
     await facade.reset();
     const identity = await (await request.get(`${facade.baseUrl}/identity`)).json();

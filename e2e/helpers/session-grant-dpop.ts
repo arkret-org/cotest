@@ -36,6 +36,8 @@ import {
 } from "node:crypto";
 import { type APIRequestContext } from "@playwright/test";
 import { type SolandKey, solandServiceDid } from "./env";
+import { base64url } from "./encoding";
+import { base64urlJsonRaw } from "./soland-api";
 
 /// Public JWK for an Ed25519 OKP key, as emitted by Node and as consumed by
 /// both coauth (`PublicJsonWebKey`) and soland (`parse_dpop_jwk`).
@@ -73,10 +75,6 @@ export type MintDpopGrantOpts = {
   scopes?: string[];
   server?: SolandKey;
 };
-
-function b64urlNoPad(input: Buffer): string {
-  return input.toString("base64url");
-}
 
 /// Generate a fresh Ed25519 device key and its public JWK + RFC 7638 thumbprint.
 export function generateDpopDeviceKey(): DpopDeviceKey {
@@ -122,13 +120,13 @@ export function dpopDeviceSeedB64url(key: DpopDeviceKey): string {
 /// no whitespace, matching soland's `jwk_thumbprint_ed25519`.
 export function jwkThumbprintEd25519(x: string): string {
   const canonical = `{"crv":"Ed25519","kty":"OKP","x":"${x}"}`;
-  return b64urlNoPad(createHash("sha256").update(canonical).digest());
+  return base64url(createHash("sha256").update(canonical).digest());
 }
 
 /// `ath` claim per RFC 9449 §4.3: base64url-encoded SHA-256 of the presented
 /// session credential, unpadded. In Cokret this is the `ck.session.grant` JWT.
 export function dpopAth(grantJwt: string): string {
-  return b64urlNoPad(createHash("sha256").update(grantJwt).digest());
+  return base64url(createHash("sha256").update(grantJwt).digest());
 }
 
 /// Mint a DPoP proof JWT bound to (method, url, grant) for the given device key.
@@ -175,13 +173,9 @@ export function mintDpopProof(args: {
     }
     claims.ath = args.athOverride ?? dpopAth(args.grantJwt!);
   }
-  const signingInput = `${b64urlJson(header)}.${b64urlJson(claims)}`;
+  const signingInput = `${base64urlJsonRaw(header)}.${base64urlJsonRaw(claims)}`;
   const signature = sign(null, Buffer.from(signingInput, "utf8"), args.deviceKey.privateKey);
-  return `${signingInput}.${b64urlNoPad(signature)}`;
-}
-
-function b64urlJson(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+  return `${signingInput}.${base64url(signature)}`;
 }
 
 /// Build the full header set for a real grant + DPoP request to a soland

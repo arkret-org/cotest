@@ -4,9 +4,12 @@
   "type": "module",
   "scripts": {
     "test": "playwright test --config playwright.config.ts",
-    "test:headed": "playwright test --config playwright.config.ts --headed"
+    "test:headed": "playwright test --config playwright.config.ts --headed",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
   }
 }

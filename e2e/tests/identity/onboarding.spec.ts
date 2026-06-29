@@ -82,7 +82,7 @@ test.describe("account onboarding", () => {
     const service = await serviceDescribe.json();
     expect(service.supported_operations).toContain("ck.gate.account.command.issue_session_grant");
     expect(service.auth_metadata?.issuer_did).toBe(coauthServiceDid());
-    expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth).origin);
+    expect(service.auth_metadata?.account_authority?.origin).toBe(new URL(coauth!).origin);
     expect(service.auth_metadata?.account_authority?.gate_account_base).toBe(
       `${coauth}/_cokret/gate/account`,
     );
@@ -131,7 +131,7 @@ test.describe("account onboarding", () => {
       await page.page.getByTestId("start-server-login-button").click();
       await page.page.waitForURL(
         (url) =>
-          url.origin === new URL(coauth).origin &&
+          url.origin === new URL(coauth!).origin &&
           url.pathname.endsWith("/authorize") &&
           url.searchParams.get("code_challenge_method") === "S256",
         { timeout: 60_000 },

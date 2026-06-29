@@ -228,7 +228,7 @@
         "admin_did": "did:web:admin2.example",
         "capability": "ck.recovery.read.history.v1",
         "event_id": "ck:event:01970f01-000b-7a0b-8a0b-000000000600",
-        "subject_did": "did:web:eve.example",
+        "subject_id": "did:web:eve.example",
         "subject_membership_state": "ban",
         "audit_log_required": true,
         "audit_log_kind": "ck.audit.recovery.history_read.v1"

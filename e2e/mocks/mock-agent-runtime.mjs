@@ -42,6 +42,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { handleInspect, InspectLog } from "./_shared/inspect.mjs";
+import { canonicalJson, readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_AGENT_RUNTIME_PORT ?? "0", 10);
 
@@ -53,31 +54,6 @@ const agentDid =
   `did:web:agent-runtime-${randomUUID().slice(0, 8)}.joint-e2e.local`;
 
 const invocations = new InspectLog("invocation");
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
-}
-
-function canonicalJson(value) {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  return `{${Object.keys(value)
-    .filter((key) => value[key] !== undefined)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-    .join(",")}}`;
-}
 
 function sha256Digest(value) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;

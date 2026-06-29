@@ -231,7 +231,12 @@ export function buildDeviceCrossSigningBinding(args: {
 export function deviceVerifyKeyMultibase(): {
   multibase: string;
   didKey: string;
+  privateKey: CrossSigningKey["privateKey"];
 } {
   const key = generateCrossSigningKey();
-  return { multibase: key.multibase, didKey: key.didKey };
+  return {
+    multibase: key.multibase,
+    didKey: key.didKey,
+    privateKey: key.privateKey,
+  };
 }

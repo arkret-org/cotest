@@ -7,6 +7,8 @@
 // matching soland's `bs58`-backed decoder so multibase `z…` renderings produced
 // here round-trip on a live server.
 
+import type { KeyObject } from "node:crypto";
+
 const BASE58BTC_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -54,4 +56,23 @@ export function encodeEd25519PubkeyMultibase(rawPublicKey: Buffer): string {
   }
   const envelope = Buffer.concat([ED25519_MULTICODEC_PREFIX, rawPublicKey]);
   return `z${base58btcEncode(envelope)}`;
+}
+
+/// Extract the raw 32-byte Ed25519 public key from an SPKI-exported KeyObject.
+/// The DER SPKI tail is always the 32-byte key, so this slices it off without a
+/// full ASN.1 parse — mirrors what the helpers previously open-coded.
+export function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
+  const der = publicKey.export({ format: "der", type: "spki" }) as Buffer;
+  if (der.length < 32) {
+    throw new Error("Ed25519 SPKI public key is too short");
+  }
+  return der.subarray(der.length - 32);
+}
+
+/// Authoritative base64url (no padding) encoder. Node's `Buffer.toString
+/// ("base64url")` already omits padding, so this is the single thin wrapper the
+/// harness shares instead of re-defining `b64url`/`b64urlNoPad`/`base64url`
+/// per helper.
+export function base64url(input: Buffer | string): string {
+  return Buffer.from(input).toString("base64url");
 }

@@ -572,7 +572,11 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
                 display_name: name.to_owned(),
                 avatar_blob_ref: None,
             },
-            asserted_at: chrono::Utc::now(),
+            // Fixed RFC3339 constant — conformance vectors must be
+            // deterministic and reproducible across runs (not wall-clock).
+            asserted_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")
+                .expect("static rfc3339")
+                .with_timezone(&chrono::Utc),
             expires_at: None,
             proof: MemberIdentityProof {
                 verification_method: "did:web:alice.acme.example#key-1".to_owned(),
@@ -698,8 +702,13 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         },
         issuer_service_did: principal,
         audience: "ck:realm:01904100-0000-7000-8000-test8audience".to_owned(),
-        expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
-        issued_at: Some(chrono::Utc::now()),
+        // Fixed RFC3339 constants — vectors are deterministic, not wall-clock.
+        expires_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00Z")?
+            .with_timezone(&chrono::Utc),
+        issued_at: Some(
+            chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00Z")?
+                .with_timezone(&chrono::Utc),
+        ),
         source_refs: vec!["ck:event:01904100-0000-7000-8000-test8source01".to_owned()],
         proofs: vec![serde_json::to_value(PayloadProof {
             kind: "detached_jws".to_owned(),

@@ -164,12 +164,26 @@ test.describe.fixme("handle management", () => {
     const immediateBody = await immediate.json();
     expect(wireErrCode(immediateBody)).toBe("handle_in_grace_period");
 
-    // After the grace window (5s) mallory's claim succeeds.
-    await new Promise((resolve) => setTimeout(resolve, 6000));
-    const afterGrace = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
-      headers: { authorization: `Bearer ${malloryToken}` },
-      data: { handle: releasedHandle },
-    });
+    // Poll mallory's claim until the grace window elapses, instead of blindly
+    // sleeping past a hard-coded server constant. Retry only while the server
+    // still reports the handle in grace; bail on any other terminal outcome.
+    // Upper-bounded so a never-released handle fails fast rather than hanging.
+    const deadline = Date.now() + 15_000;
+    let afterGrace = immediate;
+    while (Date.now() < deadline) {
+      afterGrace = await request.post(`${solandBaseUrl()}/_soland/self/account/handle`, {
+        headers: { authorization: `Bearer ${malloryToken}` },
+        data: { handle: releasedHandle },
+      });
+      if (afterGrace.status() !== 409) {
+        break;
+      }
+      const body = await afterGrace.json();
+      if (wireErrCode(body) !== "handle_in_grace_period") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
     expect(afterGrace.status()).toBe(200);
     expect((await afterGrace.json()).handle).toBe(releasedHandle.toLowerCase());
   });

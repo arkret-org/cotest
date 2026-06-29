@@ -31,7 +31,7 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { canonicalJson, expectJsonOk } from "./soland-api";
+import { canonicalBytes, expectJsonOk } from "./soland-api";
 import { base58btcEncode, encodeEd25519PubkeyMultibase } from "./encoding";
 
 export { base58btcEncode, encodeEd25519PubkeyMultibase };
@@ -67,10 +67,6 @@ function sha256MultihashMultibase(bytes: Buffer): string {
   // multihash: sha2-256 (0x12) + length 32 (0x20) + digest.
   const multihash = Buffer.concat([Buffer.from([0x12, 0x20]), digest]);
   return `z${base58btcEncode(multihash)}`;
-}
-
-function canonicalBytes(value: unknown): Buffer {
-  return Buffer.from(canonicalJson(value), "utf8");
 }
 
 function stripForHash(entry: Record<string, unknown>): Record<string, unknown> {

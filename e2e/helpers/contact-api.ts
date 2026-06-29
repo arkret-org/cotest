@@ -26,6 +26,7 @@ import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
 import {
   authHeaders,
   b64url,
+  canonicalBytes,
   canonicalJson,
   canonicalTimestamp,
   currentActorDidApi,
@@ -385,10 +386,6 @@ function ed25519FixtureKey(): Ed25519FixtureKey {
 
 function ed25519SignatureB64url(privateKey: KeyObject, payload: Buffer): string {
   return nodeSign(null, payload, privateKey).toString("base64url");
-}
-
-function canonicalBytes(value: unknown): Buffer {
-  return Buffer.from(canonicalJson(value), "utf8");
 }
 
 function crossSigningBindingInput(args: {

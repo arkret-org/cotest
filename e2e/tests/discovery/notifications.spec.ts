@@ -410,6 +410,7 @@ test.describe("notifications", () => {
       (candidate) => candidate.source_event_id === encrypted.event_id,
     );
     expect(item, "blind wake notification for encrypted message").toBeTruthy();
+    if (!item) throw new Error("blind wake notification missing for encrypted message");
     expect(item.encrypted).toBe(true);
     expect(item.local_decrypted).toBe(false);
     expect(item.actor_id).toBe(alice.did);

@@ -41,6 +41,7 @@ import {
 } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
+import { canonicalJson, readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 
@@ -54,30 +55,6 @@ const registryDid =
 const { publicKey, privateKey, jwks } = createEd25519KeyPair("mock-applet-registry-key-1");
 const publicJwk = publicKey.export({ format: "jwk" });
 
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
-}
-
-function canonicalJson(value) {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(",")}]`;
-  }
-  return `{${Object.keys(value)
-    .filter((key) => value[key] !== undefined)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-    .join(",")}}`;
-}
 
 function canonicalHash(value) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;

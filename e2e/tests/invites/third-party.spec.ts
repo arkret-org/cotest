@@ -240,7 +240,7 @@ test.describe("third-party invite", () => {
       const outcome = await submitThirdPartyInvite(
         request,
         ctx.aliceToken,
-        ctx.alice,
+        ctx.alice.did,
         ctx.cell,
         ctx.invitePayload,
       );
@@ -326,7 +326,7 @@ test.describe("third-party invite", () => {
       const issued = await submitThirdPartyInvite(
         request,
         ctx.aliceToken,
-        ctx.alice,
+        ctx.alice.did,
         ctx.cell,
         ctx.invitePayload,
       );
@@ -397,7 +397,7 @@ test.describe("third-party invite", () => {
       const issued = await submitThirdPartyInvite(
         request,
         ctx.aliceToken,
-        ctx.alice,
+        ctx.alice.did,
         ctx.cell,
         ctx.invitePayload,
       );
@@ -452,7 +452,7 @@ test.describe("third-party invite", () => {
       const issued = await submitThirdPartyInvite(
         request,
         ctx.aliceToken,
-        ctx.alice,
+        ctx.alice.did,
         ctx.cell,
         ctx.invitePayload,
       );
@@ -513,7 +513,7 @@ test.describe("third-party invite", () => {
       const issued = await submitThirdPartyInvite(
         request,
         ctx.aliceToken,
-        ctx.alice,
+        ctx.alice.did,
         ctx.cell,
         ctx.invitePayload,
       );

@@ -115,6 +115,37 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             expected_digest: "sha256:0f144fa1df6408114a253823b0814b6059b1656737e6e957bca6c89fa215b59b",
         },
+        CanonicalVector {
+            vector_id: "ck.cotest_vector.canonical_hash.webvh_default_handle_claim.v1",
+            label: "coauth handle_claim digest input (did:webvh default subjects)",
+            // identity-did.md §3: v1 core defaults BOTH principal and service
+            // DIDs to `did:webvh`; `did:web` is reserved for explicit no-history
+            // / personal_node profiles + method-adapter tests. The other vectors
+            // here exercise `did:web` (still a MUST-support method); this one
+            // pins canonical convergence on the DEFAULT `did:webvh:<scid>:…`
+            // path so a service that hand-rolls canonical encoding for the
+            // default method drifts the digest here first. The SCID below is a
+            // fixed deterministic test constant (NOT a live anchored value).
+            payload: json!({
+                "type": "ck.handle.claim",
+                "subject_id": "did:webvh:zcotesthandleclaimscid000000000000:alice.example",
+                "handle": "alice:cokret.example",
+                "handle_aliases": ["acct:alice@cokret.example"],
+                "issuer_service_did": "did:webvh:zcotestcoauthscid0000000000000000:coauth.example",
+                "audience": "https://soland.example/_cokret",
+                "member_delivery_binding": {
+                    "recipient_service_did": "did:webvh:zcotestsolandscid0000000000000000:soland.example",
+                    "recipient_service_type": "principal_server",
+                    "binding_source": "organization_policy",
+                    "delivery_modes": ["events"],
+                },
+                "issued_at": "2026-05-20T00:00:00Z",
+                "expires_at": "2026-05-20T00:05:00Z",
+            }),
+            // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
+            //  dump_canonical_digests -- --ignored --nocapture`.
+            expected_digest: "sha256:ce25be45fac5a49d55897be015035be803cba6848f952f6abb46f7fc3c2d25b5",
+        },
     ]
 }
 

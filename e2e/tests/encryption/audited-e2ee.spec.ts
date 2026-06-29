@@ -294,7 +294,8 @@ async function setupAuditedMessage(request: APIRequestContext, label: string): P
   });
 
   return {
-    agentBaseUrl,
+    // Present by the `test.skip(!agentBaseUrl, ...)` guard above.
+    agentBaseUrl: agentBaseUrl!,
     agentDid,
     aliceToken,
     aliceDid: alice.did,

@@ -42,6 +42,7 @@ import { createServer } from "node:http";
 import { createHash, randomUUID, sign as cryptoSign } from "node:crypto";
 import { createEd25519KeyPair, b64url } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_PUSH_GATEWAY_PORT ?? "0", 10);
 const issuer =
@@ -166,17 +167,6 @@ function signDeliveryReceipt({ pusher_id, payload }) {
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
   const sig = cryptoSign(null, Buffer.from(enc), privateKey);
   return { jwt: `${enc}.${b64url(sig)}`, claims };
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 const server = createServer(async (req, res) => {

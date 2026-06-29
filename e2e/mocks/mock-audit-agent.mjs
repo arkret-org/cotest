@@ -33,6 +33,7 @@ import { createServer } from "node:http";
 import { randomUUID, sign as cryptoSign } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_AUDIT_AGENT_PORT ?? "0", 10);
 const audienceDefault = process.env.MOCK_AUDIT_AGENT_AUDIENCE ?? "soland";
@@ -104,17 +105,6 @@ function makeAccessedEnvelope({ realm_id, source_event_id, reason }) {
   };
   accessedLog.record(event);
   return event;
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 const server = createServer(async (req, res) => {

@@ -1,0 +1,25 @@
+{
+  // Type-check gate for the e2e TypeScript suite. Playwright runs the specs
+  // through esbuild, which transpiles but does NOT type-check; `tsc --noEmit`
+  // (the `typecheck` npm script) is the static gate that catches wire-body
+  // field typos, signature drift, and null misuse before they reach a run.
+  "compilerOptions": {
+    "target": "ES2022",
+    // Bundler resolution mirrors Playwright's esbuild loader (extensionless
+    // relative imports, ESM) so the type gate matches how specs actually run.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "allowJs": false,
+    "resolveJsonModule": true
+  },
+  "include": ["helpers/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules"]
+}

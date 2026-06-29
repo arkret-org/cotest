@@ -21,6 +21,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_MIMI_FACADE_PORT ?? "0", 10);
 const facadeDid =
@@ -77,17 +78,6 @@ function pairwiseDidFor({ realm_id, mimi_handle }) {
     .digest("hex")
     .slice(0, 24);
   return `did:pairwise:${safeDidSegment(realm_id)}:${digest}`;
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 function resetScenario() {

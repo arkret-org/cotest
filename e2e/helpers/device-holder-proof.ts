@@ -28,7 +28,7 @@ import { createHash, sign } from "node:crypto";
 import { type APIRequestContext, expect } from "@playwright/test";
 import { solandBaseUrl, type SolandKey } from "./env";
 import type { OnboardedPrincipal } from "./onboarding";
-import { canonicalJson } from "./soland-api";
+import { base64urlJsonCanonical, canonicalJson } from "./soland-api";
 import { encodeEd25519PubkeyMultibase } from "./encoding";
 import {
   type DpopDeviceKey,
@@ -48,10 +48,6 @@ function ed25519MultibaseFromPublicJwkX(xB64Url: string): string {
 /// holder proof must carry.
 export function deviceSigningKeyDid(deviceKey: DpopDeviceKey): string {
   return `did:key:${ed25519MultibaseFromPublicJwkX(deviceKey.publicJwk.x)}`;
-}
-
-function b64urlJson(value: unknown): string {
-  return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
 }
 
 /// Whole-second RFC3339 (`…Z`, no fractional part) — the canonical timestamp
@@ -203,7 +199,7 @@ export function buildHolderProofRefreshBody(args: {
   // EdDSA detached JWS: protected header carries alg + kid; payload segment is
   // empty; signature is over `b64u(header).b64u(payloadBytes)`.
   const header = { alg: "EdDSA", kid: holderKeyId };
-  const headerB64 = b64urlJson(header);
+  const headerB64 = base64urlJsonCanonical(header);
   const payloadB64 = payloadBytes.toString("base64url");
   const signingInput = `${headerB64}.${payloadB64}`;
   const signature = sign(null, Buffer.from(signingInput, "utf8"), args.deviceKey.privateKey)

@@ -19,6 +19,7 @@ import { createServer } from "node:http";
 import { randomUUID, sign as cryptoSign } from "node:crypto";
 import { createEd25519KeyPair, b64url } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_CHALLENGE_PROVIDER_PORT ?? "0", 10);
 const providerDid =
@@ -30,24 +31,6 @@ const { privateKey, publicKey, jwks } = createEd25519KeyPair(
 );
 const publicJwk = publicKey.export({ format: "jwk" });
 const challengesLog = new InspectLog("challenges");
-
-function readJson(req) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on("data", (chunk) => chunks.push(chunk));
-    req.on("end", () => {
-      if (chunks.length === 0) {
-        resolve({});
-        return;
-      }
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString()));
-      } catch {
-        resolve(null);
-      }
-    });
-  });
-}
 
 function signProof(proof) {
   const header = {

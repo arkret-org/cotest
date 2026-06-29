@@ -292,9 +292,11 @@ test.describe("policy server check", () => {
     await request.post(`${baseUrl}/scenarios`, { data: { default: "allow" } });
 
     const did = mockPolicyServerDid() ?? "did:web:policy.example.com";
-    await declarePolicyServer(request, aliceToken, realmId, baseUrl, did);
+    // `baseUrl` is guaranteed present here by the `test.skip(!baseUrl, ...)`
+    // guard above; the non-null assertion narrows it for the typed call sites.
+    await declarePolicyServer(request, aliceToken, realmId, baseUrl!, did);
 
-    const before = await policyCheckCount(request, baseUrl);
+    const before = await policyCheckCount(request, baseUrl!);
 
     const gated = await submitGatedMessage(
       request,
@@ -312,7 +314,7 @@ test.describe("policy server check", () => {
     expect(wireErrCode(gated.json)).toBeTruthy();
 
     // The upstream WAS consulted: the mock recorded at least one /policy/check.
-    const after = await policyCheckCount(request, baseUrl);
+    const after = await policyCheckCount(request, baseUrl!);
     expect(after).toBeGreaterThan(before);
 
     // Mock's /inspect surfaces the recorded checks with their signed transcript
@@ -355,7 +357,7 @@ test.describe("policy server check", () => {
     const did = mockPolicyServerDid() ?? "did:web:policy.example.com";
     // cache_ttl 0 so each attempt re-hits the (slow) upstream; tight timeout so
     // the deadline fires quickly relative to the 9s mock delay.
-    await declarePolicyServer(request, aliceToken, realmId, baseUrl, did, {
+    await declarePolicyServer(request, aliceToken, realmId, baseUrl!, did, {
       cacheTtlSeconds: 0,
       timeoutMs: 1500,
     });

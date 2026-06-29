@@ -216,7 +216,7 @@ test.describe("conformance encoding vectors", () => {
       "invalid_canonical_json",
       "invalid_encoding",
     ]);
-    expect(acceptedCodes.has(wireErrCode(body))).toBe(true);
+    expect(acceptedCodes.has(wireErrCode(body) ?? "")).toBe(true);
     // Reject paths MUST NOT leak partial canonical bytes / digest.
     expect(body.canonical_json).toBeUndefined();
     expect(body.digest).toBeUndefined();
@@ -251,7 +251,7 @@ test.describe("conformance encoding vectors", () => {
       "invalid_canonical_json",
       "invalid_encoding",
     ]);
-    expect(acceptedCodes.has(wireErrCode(body))).toBe(true);
+    expect(acceptedCodes.has(wireErrCode(body) ?? "")).toBe(true);
     expect(body.canonical_json).toBeUndefined();
     expect(body.digest).toBeUndefined();
   });

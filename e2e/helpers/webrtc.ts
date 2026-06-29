@@ -13,6 +13,8 @@ import { solandBaseUrl } from "./env";
 import {
   authHeaders,
   accountSubscribeFramesApi,
+  base64url,
+  base64urlJsonCanonical,
   buildDetachedJwsProof,
   canonicalJson,
   canonicalTimestamp,
@@ -109,10 +111,6 @@ export function deviceVerifyingKeyHex(
   return deviceSigner(actorDid, deviceId).publicKeyHex;
 }
 
-function base64url(input: Buffer | string): string {
-  return Buffer.from(input).toString("base64url");
-}
-
 /**
  * Build a real `ck.call.signal` ephemeral envelope (webrtc-signaling.md §5)
  * with a genuine detached-JWS `proof` (§5.1). `event_digest` =
@@ -171,8 +169,8 @@ export function buildCallSignalEnvelope(args: {
   // receiver verification — the verification_method rides the proof object +
   // binding, not the header. (Pinned by the call_signal proof_detached_jws
   // conformance vector, which round-trips this exact construction.)
-  const protectedHeader = base64url(canonicalJson({ alg: "EdDSA" }));
-  const bindingPayload = base64url(canonicalJson(bindingObject));
+  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const bindingPayload = base64urlJsonCanonical(bindingObject);
   // RFC 7797 detached-JWS signing input = `<protected>.<payload>`; the wire
   // `jws` blanks the payload segment (`<protected>..<sig>`).
   const signingInput = `${protectedHeader}.${bindingPayload}`;

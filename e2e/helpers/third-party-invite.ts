@@ -23,9 +23,7 @@ import {
   canonicalTimestamp,
   sha256CanonicalJson,
 } from "./soland-api";
-
-const BASE58BTC_ALPHABET =
-  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+import { encodeEd25519PubkeyMultibase, rawEd25519PublicKey } from "./encoding";
 
 // Domain separators — must match soland invite_claim_proofs.rs verbatim,
 // trailing "\n" included.
@@ -50,57 +48,13 @@ export type ThirdPartyInviteCell = {
   joinRuleSnapshot: Record<string, unknown>;
 };
 
-function base58btc(bytes: Buffer): string {
-  if (bytes.length === 0) {
-    return "";
-  }
-  const digits = [0];
-  for (const byte of bytes) {
-    let carry = byte;
-    for (let i = 0; i < digits.length; i += 1) {
-      const value = digits[i] * 256 + carry;
-      digits[i] = value % 58;
-      carry = Math.floor(value / 58);
-    }
-    while (carry > 0) {
-      digits.push(carry % 58);
-      carry = Math.floor(carry / 58);
-    }
-  }
-  for (const byte of bytes) {
-    if (byte !== 0) {
-      break;
-    }
-    digits.push(0);
-  }
-  return digits
-    .reverse()
-    .map((digit) => BASE58BTC_ALPHABET[digit])
-    .join("");
-}
-
-function rawEd25519PublicKey(publicKey: KeyObject): Buffer {
-  const der = publicKey.export({ format: "der", type: "spki" }) as Buffer;
-  if (der.length < 32) {
-    throw new Error("Ed25519 SPKI public key is too short");
-  }
-  return der.subarray(der.length - 32);
-}
-
-function ed25519PublicKeyMultibase(publicKey: KeyObject): string {
-  // `z` + base58btc(0xed 0x01 multicodec prefix || 32-byte key) — the
-  // did:key / multibase form soland's resolver and decode_ed25519_multibase
-  // expect (core/multibase.rs).
-  return `z${base58btc(
-    Buffer.concat([Buffer.from([0xed, 0x01]), rawEd25519PublicKey(publicKey)]),
-  )}`;
-}
-
 // Mint a fresh `did:key` Ed25519 identity. The single verification method is
-// `did:key:<mb>#<mb>`, exactly what DidKeyResolver synthesizes.
+// `did:key:<mb>#<mb>`, exactly what DidKeyResolver synthesizes. The multibase
+// (`z` + base58btc(0xed01 ‖ key)) is rendered by the shared `encoding.ts`
+// authority so did:key generation can never drift from soland's decoder.
 export function generateDidKeyIdentity(): DidKeyIdentity {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const multibase = ed25519PublicKeyMultibase(publicKey);
+  const multibase = encodeEd25519PubkeyMultibase(rawEd25519PublicKey(publicKey));
   const did = `did:key:${multibase}`;
   return {
     did,

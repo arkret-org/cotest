@@ -3,7 +3,8 @@ param(
     [string]$OutputRoot,
     [switch]$SkipCargoDeny,
     [switch]$SkipTypos,
-    [switch]$SkipCargoAudit
+    [switch]$SkipCargoAudit,
+    [switch]$SkipE2eTypecheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -112,6 +113,23 @@ if (-not $SkipCargoAudit) {
         $auditArgs += @("--ignore", $advisory)
     }
     $results.Add((Invoke-HygieneCommand -Label "cargo-audit" -FilePath $cargoPath -Arguments $auditArgs -RunDir $runDir -RawLog $rawLog))
+}
+if (-not $SkipE2eTypecheck) {
+    $e2eDir = Join-Path $repoRoot "e2e"
+    $e2eTsconfig = Join-Path $e2eDir "tsconfig.json"
+    # Prefer the e2e-local TypeScript install; tsc resolves `include` paths
+    # relative to the tsconfig, so the working directory is irrelevant.
+    $tscExe = Join-Path $e2eDir "node_modules\.bin\tsc.cmd"
+    if (-not (Test-Path $tscExe)) {
+        $tscExe = Join-Path $e2eDir "node_modules\.bin\tsc"
+    }
+    if ((Test-Path $e2eTsconfig) -and (Test-Path $tscExe)) {
+        $results.Add((Invoke-HygieneCommand -Label "e2e-typecheck" -FilePath $tscExe -Arguments @("--noEmit", "-p", $e2eTsconfig) -RunDir $runDir -RawLog $rawLog))
+    } else {
+        Add-Content -Path $rawLog -Value ""
+        Add-Content -Path $rawLog -Value "=== e2e-typecheck (skipped) ==="
+        Add-Content -Path $rawLog -Value "tsconfig or local tsc not found; run 'npm install' in e2e/ first"
+    }
 }
 if ($results.Count -eq 0) {
     throw "No hygiene checks were selected"

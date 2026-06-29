@@ -8,6 +8,7 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceDid } from "./env";
+import { base64url } from "./encoding";
 
 export type OperationKind =
   | "circle"
@@ -72,8 +73,12 @@ function derivePrincipalControlRealmForDid(did: string): string {
   return `ck:realm:${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+// Re-exported authoritative base64url encoder (single source: encoding.ts).
+export { base64url };
+
+/// @deprecated string-only alias for `base64url`; retained for existing callers.
 export function b64url(value: string): string {
-  return Buffer.from(value, "utf8").toString("base64url");
+  return base64url(value);
 }
 
 export function wireErrCode(body: unknown): string | undefined {
@@ -1206,8 +1211,8 @@ export function buildDetachedJwsProof(args: {
     verification_method: verificationMethod,
     created_at: args.createdAt,
   };
-  const protectedHeader = base64urlJson({ alg: "EdDSA" });
-  const bindingPayload = base64urlJson(bindingObject);
+  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signature = sign(
     null,
     Buffer.from(`${protectedHeader}.${bindingPayload}`, "utf8"),
@@ -1884,12 +1889,12 @@ function detachedJwsFixture(args: {
   eventDigest: string;
   createdAt: string;
 }): string {
-  const protectedHeader = base64urlJson({
+  const protectedHeader = base64urlJsonCanonical({
     alg: "EdDSA",
     kid: args.verificationMethod,
     typ: "ck-event-proof+jws",
   });
-  const payload = base64urlJson({
+  const payload = base64urlJsonCanonical({
     actor_id: args.actorDid,
     created_at: args.createdAt,
     event_digest: args.eventDigest,
@@ -1903,9 +1908,6 @@ function detachedJwsFixture(args: {
   return `${protectedHeader}..${signature.toString("base64url")}`;
 }
 
-function base64urlJson(value: unknown): string {
-  return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
-}
 
 // FIXTURE ONLY — publicly derivable, MUST NOT be trusted by any non-test code.
 // The private key is `sha256("soland:anchorer-ephemeral:" + serviceDid)`, so
@@ -1983,6 +1985,27 @@ export function sha256CanonicalJson(value: unknown): string {
 
 export function canonicalJson(value: unknown): string {
   return canonicalJsonValue(value, "$");
+}
+
+/// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative
+/// replacement for the per-helper `canonicalBytes` thin wrappers.
+export function canonicalBytes(value: unknown): Buffer {
+  return Buffer.from(canonicalJson(value), "utf8");
+}
+
+/// base64url of the *canonical* (JCS) JSON encoding of `value`. Use this for any
+/// signing input whose bytes must be deterministic key-ordered JSON (detached
+/// JWS over a canonical transcript, anchorer payloads, holder proofs).
+export function base64urlJsonCanonical(value: unknown): string {
+  return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
+}
+
+/// base64url of the *insertion-order* (`JSON.stringify`) JSON encoding of
+/// `value`. Use this where the wire format is NOT JCS — notably JWT/JWS headers
+/// and DPoP claims (RFC 7519 does not mandate JCS), where the verifier expects
+/// the exact bytes the signer emitted in field-declaration order.
+export function base64urlJsonRaw(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
 function canonicalJsonValue(value: unknown, path: string): string {

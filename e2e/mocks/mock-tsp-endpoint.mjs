@@ -59,6 +59,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_TSP_ENDPOINT_PORT ?? "0", 10);
 
@@ -127,17 +128,6 @@ function makeReplyEnvelope({ from_vid, to_vid, source_message_id, source_payload
     occurred_at: replyPayload.occurred_at,
     decoded_preview: replyPayload,
   };
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 function filterByVid(entries, vid) {

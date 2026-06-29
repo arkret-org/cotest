@@ -41,6 +41,7 @@ import { createServer } from "node:http";
 import { randomUUID, sign as cryptoSign } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_POLICY_SERVER_PORT ?? "0", 10);
 const audienceDefault = process.env.MOCK_POLICY_SERVER_AUDIENCE ?? "soland";
@@ -124,17 +125,6 @@ function signTranscript({ action, actor, target, decision, reason, obligations, 
   // Ed25519 has no separate digest — pass null algo to crypto.sign.
   const sig = cryptoSign(null, Buffer.from(enc), privateKey);
   return `${enc}.${b64url(sig)}`;
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 const server = createServer(async (req, res) => {

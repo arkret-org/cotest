@@ -65,10 +65,14 @@ async function accountSubscribeTimelineEvents(
   const frames = await accountSubscribeFramesApi(request, token);
   const frame = frames.find((candidate) => candidate.kind === "delta");
   expect(frame, "account subscribe delta frame").toBeTruthy();
-  const realmFrame = frame.realms[realmId];
+  if (!frame) throw new Error("account subscribe delta frame missing");
+  const realms = (frame as { realms?: Record<string, unknown> }).realms ?? {};
+  const realmFrame = realms[realmId] as
+    | { timeline?: { events?: unknown } }
+    | undefined;
   expect(realmFrame, `sync realm frame for ${realmId}`).toBeTruthy();
-  expect(Array.isArray(realmFrame.timeline?.events)).toBe(true);
-  return realmFrame.timeline.events as Array<Record<string, unknown>>;
+  expect(Array.isArray(realmFrame?.timeline?.events)).toBe(true);
+  return realmFrame!.timeline!.events as Array<Record<string, unknown>>;
 }
 
 test.describe("chat advanced", () => {
@@ -396,8 +400,12 @@ test.describe("chat advanced", () => {
     const frames = await accountSubscribeFramesApi(request, fixture.bobToken);
     const frame = frames.find((candidate) => candidate.kind === "delta");
     expect(frame, "account subscribe delta frame").toBeTruthy();
-    const realmFrame = frame.realms[fixture.realmId];
-    const ephemeral = realmFrame.ephemeral;
+    if (!frame) throw new Error("account subscribe delta frame missing");
+    const realms = (frame as { realms?: Record<string, unknown> }).realms ?? {};
+    const realmFrame = realms[fixture.realmId] as
+      | { ephemeral?: unknown }
+      | undefined;
+    const ephemeral = realmFrame?.ephemeral;
     expect(JSON.stringify(ephemeral)).toContain(fixture.alice.did);
     expect(JSON.stringify(ephemeral)).toContain(strandId);
   });

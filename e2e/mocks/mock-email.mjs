@@ -19,6 +19,7 @@ import { createServer } from "node:http";
 import { createSign, randomUUID } from "node:crypto";
 import { createRsaKeyPair, b64url } from "./_shared/keypairs.mjs";
 import { InspectLog, handleInspect } from "./_shared/inspect.mjs";
+import { readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_EMAIL_PORT ?? "0", 10);
 const defaultTtlSeconds = parseInt(process.env.MOCK_EMAIL_TOKEN_TTL_SECONDS ?? "900", 10);
@@ -49,17 +50,6 @@ function signBindingProof({ token_commitment, did, issuer, audience }) {
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
   const sig = createSign("RSA-SHA256").update(enc).sign(privateKey);
   return `${enc}.${b64url(sig)}`;
-}
-
-async function readJson(req) {
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  if (chunks.length === 0) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    return null;
-  }
 }
 
 function normalizeRecipient(raw) {
