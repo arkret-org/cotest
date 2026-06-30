@@ -35,7 +35,7 @@ pub const SCHEMA_VALIDATION_FIXTURE: &str = "schema-validation-fixture.json";
 pub const SCHEMA_VALIDATION_PROFILE: &str = "ck.profile.privacy_security_vectors.v1";
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://cokret.io/artifacts/";
+const SCHEMA_ID_PREFIX: &str = "https://cokret.org/artifacts/";
 const OPENAPI_FILE: &str = "openapi/cokret-service-api.openapi.yaml";
 
 #[derive(Clone, Debug, Deserialize)]

@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::{load_artifact_json, required_str, spec_artifacts_root};
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://cokret.io/artifacts/";
+const SCHEMA_ID_PREFIX: &str = "https://cokret.org/artifacts/";
 
 pub fn run_schema_validation_suite() -> Result<()> {
     let root = spec_artifacts_root();

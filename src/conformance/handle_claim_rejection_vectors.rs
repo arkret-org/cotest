@@ -36,7 +36,7 @@ pub const ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS: &[&str] = &[
 ];
 
 const SCHEMA_DIR: &str = "schemas";
-const SCHEMA_ID_PREFIX: &str = "https://cokret.io/artifacts/";
+const SCHEMA_ID_PREFIX: &str = "https://cokret.org/v1/";
 const HANDLE_CLAIM_SCHEMA_FILE: &str = "schemas/handle-claim.schema.json";
 
 /// Compile the `handle-claim.schema.json` artifact with the full schema
