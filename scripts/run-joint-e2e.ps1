@@ -45,6 +45,10 @@ param(
     [switch]$StartCoauth,
     [string]$CoauthBin,
     [string]$CoauthPostgresImage = "postgres:16-alpine",
+    # Optional externally-provisioned Postgres DSN for coauth. When set, the
+    # harness skips the docker-backed ephemeral Postgres entirely (useful when
+    # Docker Desktop is unavailable and a local PostgreSQL serves instead).
+    [string]$CoauthPostgresUrl,
     [switch]$StartStarid,
     [string]$StaridBin,
     [string]$StaridBaseUrl,
@@ -442,23 +446,27 @@ function Invoke-JointE2ePreflight {
             Add-PreflightResult $results "coauth binary" "fail" $_.Exception.Message
         }
 
-        $docker = Find-CommandPath @("docker.exe", "docker")
-        if ($docker) {
-            Add-PreflightResult $results "docker cli" "pass" $docker
-            $dockerInfo = (Invoke-NativeCapture -FilePath $docker -Arguments @("info")) -join "`n"
-            if ($LASTEXITCODE -eq 0) {
-                Add-PreflightResult $results "docker daemon" "pass" "daemon reachable"
-            } else {
-                Add-PreflightResult $results "docker daemon" "fail" $dockerInfo
-            }
-            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $CoauthPostgresImage)) -join "`n"
-            if ($LASTEXITCODE -eq 0) {
-                Add-PreflightResult $results "postgres image" "pass" $CoauthPostgresImage
-            } else {
-                Add-PreflightResult $results "postgres image" "warn" "$CoauthPostgresImage not present locally; docker run may pull it"
-            }
+        if ($CoauthPostgresUrl) {
+            Add-PreflightResult $results "coauth postgres" "pass" "external DSN provided; docker not required"
         } else {
-            Add-PreflightResult $results "docker cli" "fail" "docker is required for -StartCoauth PostgreSQL"
+            $docker = Find-CommandPath @("docker.exe", "docker")
+            if ($docker) {
+                Add-PreflightResult $results "docker cli" "pass" $docker
+                $dockerInfo = (Invoke-NativeCapture -FilePath $docker -Arguments @("info")) -join "`n"
+                if ($LASTEXITCODE -eq 0) {
+                    Add-PreflightResult $results "docker daemon" "pass" "daemon reachable"
+                } else {
+                    Add-PreflightResult $results "docker daemon" "fail" $dockerInfo
+                }
+                $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $CoauthPostgresImage)) -join "`n"
+                if ($LASTEXITCODE -eq 0) {
+                    Add-PreflightResult $results "postgres image" "pass" $CoauthPostgresImage
+                } else {
+                    Add-PreflightResult $results "postgres image" "warn" "$CoauthPostgresImage not present locally; docker run may pull it"
+                }
+            } else {
+                Add-PreflightResult $results "docker cli" "fail" "docker is required for -StartCoauth PostgreSQL"
+            }
         }
     }
 
@@ -738,7 +746,10 @@ function New-CoauthJointConfig {
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
     $configPath = Join-Path $JointDir "coauth.yaml"
     $generateLog = Join-Path $JointDir "coauth-config-generate.log"
-    $generateOutput = & $CoauthBinary config generate 2>"$generateLog"
+    # coauth (07-02 service-DID bootstrap flow) requires either an explicit
+    # cokret.service_did or the local-development `--dev` mode; the joint
+    # harness patches its own service DID afterwards, so --dev is correct here.
+    $generateOutput = & $CoauthBinary config generate --dev 2>"$generateLog"
     if ($LASTEXITCODE -ne 0) {
         throw "coauth config generate failed; see $generateLog"
     }
@@ -1358,12 +1369,18 @@ try {
             $coauthPort = $coauthUri.Port
         }
         $coauthBinary = Resolve-CoauthBinary -ExplicitPath $CoauthBin -WorkspaceRoot $workspaceRoot
-        $ephemeralPostgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
+        if ($CoauthPostgresUrl) {
+            Write-Host "coauth postgres: using externally-provisioned DSN (docker skipped)"
+            $coauthPostgresDsn = $CoauthPostgresUrl
+        } else {
+            $ephemeralPostgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
+            $coauthPostgresDsn = $ephemeralPostgres.Url
+        }
         $coauthConfigPath = New-CoauthJointConfig `
             -CoauthBinary $coauthBinary `
             -RepoRoot $repoRoot `
             -JointDir $jointDir `
-            -PostgresUrl $ephemeralPostgres.Url `
+            -PostgresUrl $coauthPostgresDsn `
             -CoauthBaseUrl $CoauthBaseUrl `
             -CoauthBind "127.0.0.1:$coauthPort" `
             -SolandBaseUrl $SolandBaseUrl `

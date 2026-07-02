@@ -437,8 +437,8 @@ test.describe("conformance registry drift @fully-implemented", () => {
     // forbidden-model-terms.json carries the term under `id` for most rows and
     // under `term` for the `cx.` / `cx:` namespace-prefix rows. Keep every
     // hard_reject term (do NOT pre-filter punctuated terms — the matcher below
-    // handles dots/colons/parens). docs_only terms (e.g. bare `协作 Realm`)
-    // are intentionally out of scope.
+    // handles dots/colons/parens). docs_only terms are intentionally out of
+    // scope.
     const forbiddenTerms = forbiddenModelTerms.entries
       .filter((entry) => entry.rejection_level === "hard_reject")
       .map((entry) => entry.term ?? entry.id)

@@ -10,6 +10,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   buildCrossSigningPublishPayload,
   buildDeviceCrossSigningBinding,
+  TEST_DEVICE_ALGORITHMS,
   deviceVerifyKeyMultibase,
   generateCrossSigningIdentity,
 } from "../../helpers/cross-signing-harness";
@@ -156,6 +157,8 @@ test.describe("multi-device pairing + revocation", () => {
       identity,
       deviceId: device2Id,
       devicePublicKeyMultibase: device2Key.multibase,
+      hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+      algorithms: TEST_DEVICE_ALGORITHMS,
     });
     const authorize = await request.post(
       `${solandBaseUrl()}/_cokret/self/events`,
@@ -169,6 +172,8 @@ test.describe("multi-device pairing + revocation", () => {
             principal_id: alice.did,
             device_id: device2Id,
             device_public_key: device2Key.multibase,
+            hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+            algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
             authorized_by: alice.deviceId,
             not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -220,6 +225,8 @@ test.describe("multi-device pairing + revocation", () => {
       identity: { ...identity, generation: identity.generation + 1 },
       deviceId: staleDeviceId,
       devicePublicKeyMultibase: staleDeviceKey.multibase,
+      hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+      algorithms: TEST_DEVICE_ALGORITHMS,
     });
     const staleAuthorize = await request.post(
       `${solandBaseUrl()}/_cokret/self/events`,
@@ -233,6 +240,8 @@ test.describe("multi-device pairing + revocation", () => {
             principal_id: alice.did,
             device_id: staleDeviceId,
             device_public_key: staleDeviceKey.multibase,
+            hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+            algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
             authorized_by: alice.deviceId,
             not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -258,6 +267,8 @@ test.describe("multi-device pairing + revocation", () => {
       identity: { ...identity, ssk: identity.usk },
       deviceId: forgedDeviceId,
       devicePublicKeyMultibase: forgedDeviceKey.multibase,
+      hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+      algorithms: TEST_DEVICE_ALGORITHMS,
     });
     const forgedAuthorize = await request.post(
       `${solandBaseUrl()}/_cokret/self/events`,
@@ -271,6 +282,8 @@ test.describe("multi-device pairing + revocation", () => {
             principal_id: alice.did,
             device_id: forgedDeviceId,
             device_public_key: forgedDeviceKey.multibase,
+            hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+            algorithms: TEST_DEVICE_ALGORITHMS,
             device_key_algorithm: "EdDSA",
             authorized_by: alice.deviceId,
             not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
@@ -867,6 +880,8 @@ async function promoteDeviceToVerified(
     identity,
     deviceId,
     devicePublicKeyMultibase: deviceKey.multibase,
+    hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+    algorithms: TEST_DEVICE_ALGORITHMS,
   });
   const authorize = await request.post(
     `${solandBaseUrl()}/_cokret/self/events`,
@@ -880,6 +895,8 @@ async function promoteDeviceToVerified(
           principal_id: user.did,
           device_id: deviceId,
           device_public_key: deviceKey.multibase,
+          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+          algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
           authorized_by: deviceId,
           not_before: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),

@@ -339,6 +339,8 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
             "principal_id": ALICE_DID,
             "device_id": ALICE_DEVICE_ID,
             "device_public_key": alice_device_public_key,
+            "hpke_key": "z6LSCotestDeviceHpkeKey",
+            "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
             "authorized_by": ALICE_DID,
             "not_before": "2026-05-02T00:00:00Z",
             "device_signature": "bootstrap-device-signature-placeholder",
@@ -737,6 +739,10 @@ fn federated_e2ee_realm_payload(realm_id: &str) -> Value {
             "default_join_rule": "invite",
             "history_visibility": "shared",
             "encryption_profile": "mls_rfc9420",
+            // realm.schema.json: pre-join history visibility (shared/invited/
+            // world_readable) on an MLS-backed Realm requires the
+            // history-capable content envelope scheme.
+            "content_scheme": "mls-exporter-aead-v1",
             "security_class": "standard",
             "federation_policy": "open",
             "notary_profile": "single_did",
@@ -931,6 +937,8 @@ pub(crate) async fn authorize_device_public_key(
             "principal_id": actor,
             "device_id": device_id,
             "device_public_key": device_public_key,
+            "hpke_key": "z6LSCotestDeviceHpkeKey",
+            "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
             "authorized_by": actor,
             "not_before": "2026-05-02T00:00:00Z",
             "device_signature": "bootstrap-device-signature-placeholder",

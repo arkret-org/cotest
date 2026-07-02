@@ -319,6 +319,10 @@ fn service_attested_device_authorize_event(
         "principal_id": principal_id,
         "device_id": device_id,
         "device_public_key": device_public_key,
+        // device-lifecycle.md §5.4: the enrollment authority attests the
+        // device verify key, HPKE sealing key AND the canonical algorithm set.
+        "hpke_key": "z6LSCotestEnrollHpkeKey",
+        "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
         "authorized_by": authority_did,
         "not_before": "2026-06-17T00:00:00Z",
         "enrollment_authority_binding": {

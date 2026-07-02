@@ -24,15 +24,15 @@ pub const VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF: &str = "ck.vector.auth.soft_logo
 pub const VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW: &str =
     "ck.vector.identity.did_proof_replay_window.v1";
 pub const VECTOR_ID_SESSION_POP_PRESENTATION: &str = "ck.vector.session.pop_presentation.v1";
-pub const VECTOR_ID_SESSION_BEARER_REPLAY_REJECTED_HIGH_SECURITY: &str =
-    "ck.vector.session.bearer_replay_rejected_high_security.v1";
+pub const VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED: &str =
+    "ck.vector.session.bare_bearer_rejected_protected.v1";
 
 pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING,
     VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF,
     VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW,
     VECTOR_ID_SESSION_POP_PRESENTATION,
-    VECTOR_ID_SESSION_BEARER_REPLAY_REJECTED_HIGH_SECURITY,
+    VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED,
 ];
 
 const AUTH_SESSION_PROOF_FIXTURE_FILE: &str = "auth-session-proof-fixture.json";
@@ -501,17 +501,32 @@ fn verify_self_pop(
     Ok(())
 }
 
-fn bearer_admission(
-    profile: &str,
+/// Reference model for the `ck.vector.session.bare_bearer_rejected_protected.v1`
+/// admission rule (api-conventions.md sender-constrained hardening): production
+/// current-v1 protected endpoints MUST reject bare `Authorization: Bearer`
+/// unless a sender-constrained proof (DPoP, RFC 9421 HTTP Message Signature,
+/// detached JWS, mTLS or equivalent) accompanies it — for EVERY profile, not
+/// just high-security. High-security profiles additionally demand RFC 9421 PoP
+/// for regular writes / sensitive reads, which the same predicate covers.
+fn protected_bare_bearer_admission(
+    _profile: &str,
     action: &str,
-    has_pop: bool,
+    has_sender_constrained_proof: bool,
 ) -> std::result::Result<(), &'static str> {
-    let requires_pop = profile == "ck.profile.high_security_organization.v1"
-        && matches!(action, "regular_write" | "sensitive_read");
-    if requires_pop && !has_pop {
+    let protected = matches!(
+        action,
+        "protected_current_v1_endpoint" | "regular_write" | "sensitive_read"
+    );
+    if protected && !has_sender_constrained_proof {
         return Err(ERROR_CODE_UNAUTHENTICATED);
     }
     Ok(())
+}
+
+/// Public metadata surfaces never treat bare bearer as session or capability
+/// authentication — the request is served as an unauthenticated public read.
+fn classify_public_metadata_bare_bearer() -> &'static str {
+    "treated_as_unauthenticated_public_request"
 }
 
 pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
@@ -838,30 +853,50 @@ pub fn run_session_pop_presentation_vector() -> Result<()> {
     Ok(())
 }
 
-pub fn run_session_bearer_replay_rejected_high_security_vector() -> Result<()> {
+pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
     let fixture = auth_session_proof_fixture()?;
-    let vector = case(
-        &fixture,
-        VECTOR_ID_SESSION_BEARER_REPLAY_REJECTED_HIGH_SECURITY,
-    )?;
-    if bearer_admission(
+    let vector = case(&fixture, VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED)?;
+    // High-security profile: bare bearer on a regular write / sensitive read
+    // is rejected as unauthenticated.
+    if protected_bare_bearer_admission(
         required_str(vector, "high_security_profile")?,
         required_str(vector, "sensitive_action")?,
         false,
     )
     .err()
-        != Some(expected_str(vector, "high_security_bearer_reason")?)
+        != Some(expected_str(vector, "high_security_bare_bearer_reason")?)
     {
-        bail!("high-security profile accepted plain bearer");
+        bail!("high-security profile accepted bare bearer");
     }
-    bearer_admission(
+    // Default profile: bare bearer on ANY production current-v1 protected
+    // endpoint is rejected — there is no low-sensitivity bearer compat path.
+    if protected_bare_bearer_admission(
         required_str(vector, "default_profile")?,
-        required_str(vector, "compat_action")?,
+        required_str(vector, "bare_bearer_action")?,
         false,
     )
-    .map_err(|reason| anyhow!("default compatibility bearer rejected: {reason}"))?;
-    if expected_str(vector, "default_bearer")? != "accepted" {
-        bail!("default bearer compatibility expectation drifted");
+    .err()
+        != Some(expected_str(vector, "default_protected_bare_bearer_reason")?)
+    {
+        bail!("default profile accepted bare bearer on a protected endpoint");
+    }
+    // The same endpoint admits the session when a sender-constrained proof
+    // accompanies the presentation.
+    protected_bare_bearer_admission(
+        required_str(vector, "default_profile")?,
+        required_str(vector, "bare_bearer_action")?,
+        true,
+    )
+    .map_err(|reason| anyhow!("sender-constrained presentation rejected: {reason}"))?;
+    // Public metadata surfaces: bare bearer never authenticates — the request
+    // is classified as an unauthenticated public read, not an auth failure.
+    if required_str(vector, "public_metadata_surface")? != "unauthenticated_public_response_only" {
+        bail!("public metadata surface control drifted");
+    }
+    if classify_public_metadata_bare_bearer()
+        != expected_str(vector, "public_metadata_bare_bearer")?
+    {
+        bail!("public metadata bare bearer classification drifted");
     }
 
     let key = signing_key(8);
@@ -910,7 +945,7 @@ pub fn run_auth_session_proof_fixture_suite() -> Result<()> {
     run_auth_soft_logout_did_proof_vector()?;
     run_identity_did_proof_replay_window_vector()?;
     run_session_pop_presentation_vector()?;
-    run_session_bearer_replay_rejected_high_security_vector()?;
+    run_session_bare_bearer_rejected_protected_vector()?;
     Ok(())
 }
 

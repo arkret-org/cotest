@@ -47,9 +47,29 @@ impl Drop for MockServer {
 /// Bind `router` on an ephemeral loopback port and serve it on the current
 /// tokio runtime. Must be called from within a tokio runtime.
 pub async fn spawn_mock(router: Router) -> Result<MockServer> {
-    let port = crate::harness::reserve_port()?;
-    let addr = SocketAddr::from(([127, 0, 0, 1], port.port()));
-    let acceptor = TcpListener::new(addr).bind().await;
+    // `reserve_port` holds a guard listener on the chosen port; it MUST be
+    // released before salvo binds the same address or the bind races other
+    // test processes and panics with AddrInUse (salvo's `bind()` panics on
+    // error — use `try_bind` so a lost race surfaces as a retryable Err).
+    let mut last_error = None;
+    let mut bound = None;
+    for _ in 0..8 {
+        let mut port = crate::harness::reserve_port()?;
+        let addr = SocketAddr::from(([127, 0, 0, 1], port.port()));
+        port.release();
+        match TcpListener::new(addr).try_bind().await {
+            Ok(acceptor) => {
+                bound = Some((acceptor, addr, port));
+                break;
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+    let Some((acceptor, addr, port)) = bound else {
+        return Err(anyhow::anyhow!(
+            "mock server could not bind an ephemeral loopback port after 8 attempts: {last_error:?}"
+        ));
+    };
     let task = tokio::spawn(async move {
         Server::new(acceptor).serve(router).await;
     });

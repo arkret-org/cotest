@@ -713,14 +713,14 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
         Some("typing_ephemeral") => {
             let sent_at = Utc::now();
             let expires_at = sent_at + Duration::seconds(30);
-            // EphemeralEnvelope's `device_id` is typed as `DeviceId` in the SDK
-            // and must match the `ck:device:<uuidv7>` shape. This fixture omits
-            // the optional field so the typing surface is what's actually under
-            // test.
-            Some(json!({
+            // ephemeral-envelope.schema.json: every broadcast ephemeral kind
+            // carries `device_id` and a detached-JWS `proof` bound to
+            // `{actor_id}#{device_id}` over the canonical envelope bytes.
+            let mut envelope = json!({
                 "kind": "ck.typing",
                 "realm_id": ctx.realm_id,
                 "actor_id": ctx.alice_did,
+                "device_id": MOCK_PARITY_ALICE_DEVICE_ID,
                 "sent_at": sent_at.to_rfc3339_opts(SecondsFormat::Secs, true),
                 "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
                 "payload": {
@@ -730,7 +730,12 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                     "typing": true,
                     "ttl_ms": 30000
                 }
-            }))
+            });
+            cotest::harness::attach_ephemeral_proof(
+                &mut envelope,
+                &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+            );
+            Some(envelope)
         }
         Some(other) => panic!("unknown body_template {other}"),
         None => case.body.as_ref().map(|body| render_value(body, ctx)),
@@ -974,6 +979,14 @@ async fn inject_live_default_strand_id(
     let strand_id = ctx.realm_id.replace("ck:realm:", "ck:strand:");
     if let Some(payload) = body.get_mut("payload").and_then(Value::as_object_mut) {
         payload.insert("strand_id".to_owned(), Value::String(strand_id));
+    }
+    // The strand_id injection changed the canonical envelope bytes — re-sign
+    // the broadcast proof so proof.event_digest matches what soland recomputes.
+    if body.get("proof").is_some() {
+        cotest::harness::attach_ephemeral_proof(
+            &mut body,
+            &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+        );
     }
     Ok(Some(body))
 }

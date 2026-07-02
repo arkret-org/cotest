@@ -31,7 +31,7 @@ pub async fn framework_errors_and_invalid_json_use_cokret_envelopes() -> Result<
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_request",
+        "invalid_param",
     )
     .await?;
 
@@ -46,8 +46,8 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_cokret/gate/account/register"))
             .json(&json!({"principal_id": "bad", "device_id": "ck:device:01904100-0000-7000-8000-000000000bad"})),
-        StatusCode::BAD_REQUEST,
-        "bad_request",
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
     )
     .await?;
 

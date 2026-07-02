@@ -84,7 +84,7 @@ pub use auth_session_proof::{
     ALL_AUTH_SESSION_PROOF_VECTOR_IDS, run_auth_session_grant_audience_binding_vector,
     run_auth_session_proof_fixture_suite, run_auth_soft_logout_did_proof_vector,
     run_identity_did_proof_replay_window_vector,
-    run_session_bearer_replay_rejected_high_security_vector, run_session_pop_presentation_vector,
+    run_session_bare_bearer_rejected_protected_vector, run_session_pop_presentation_vector,
 };
 pub use blind_payload::{
     run_blind_payload_sanitizer_suite, run_blind_payload_sanitizer_suite_counts,

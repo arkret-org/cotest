@@ -167,7 +167,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_request",
+        "invalid_param",
     )
     .await?;
 
@@ -545,13 +545,13 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "bad_request",
+        "invalid_param",
     )
     .await?;
     // Blind-wakeup minimization: the push notification envelope is metadata-only
     // and `deny_unknown_fields`, so it structurally cannot carry a plaintext
-    // `content` field — a push that tries to is rejected as a malformed body
-    // (bad_request) before any rule evaluation.
+    // `content` field — a push that tries to violates the declared schema and
+    // is rejected as `schema_violation` (422) before any rule evaluation.
     expect_api_error(
         server
             .http()
@@ -562,8 +562,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                     "content": {"body": "plaintext leak"}
                 }
             })),
-        StatusCode::BAD_REQUEST,
-        "bad_request",
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
     )
     .await?;
     let notify = expect_json(

@@ -98,11 +98,14 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         StatusCode::CREATED,
     )
     .await?;
+    // did:webvh-only red line: soland mints the agent principal as
+    // `did:webvh:<scid>:<host>:webvh:agent:<uuid>` (never did:web).
+    let agent_principal_id = provisioned["agent_principal_id"]
+        .as_str()
+        .unwrap_or_default();
     assert!(
-        provisioned["agent_principal_id"]
-            .as_str()
-            .unwrap_or_default()
-            .starts_with("did:web:agent-")
+        agent_principal_id.starts_with("did:webvh:") && agent_principal_id.contains(":webvh:agent:"),
+        "agent_principal_id must be a did:webvh agent DID, got: {agent_principal_id}"
     );
 
     expect_api_error(

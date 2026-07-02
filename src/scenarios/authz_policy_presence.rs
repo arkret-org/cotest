@@ -405,9 +405,9 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": "ck:realm:0196419b-0000-7000-8000-000000000000",
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ck.message.create",
-                // `actor_id` is a typed Did; a bare "alice" fails to deserialize
-                // and is rejected as a malformed body (bad_request) before any
-                // semantic policy validation.
+                // `actor_id` is a typed Did; a bare "alice" parses as JSON but
+                // violates the declared schema, so it is rejected as
+                // `schema_violation` (422) before any semantic policy validation.
                 "actor_id": "alice",
                 "source": {
                     "service_did": "did:web:soland.cotest.local",
@@ -415,8 +415,8 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                     "signed_transport": true
                 }
             })),
-        StatusCode::BAD_REQUEST,
-        "bad_request",
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
     )
     .await?;
 

@@ -1,9 +1,12 @@
 use anyhow::Result;
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{Duration as ChronoDuration, SecondsFormat, Utc};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CokretServer, TestActorClient, expect_api_error, expect_json};
+use crate::harness::{
+    CokretServer, TestActorClient, attach_ephemeral_proof, expect_api_error, expect_json,
+};
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = CokretServer::spawn("typing-push-rules").await?;
@@ -35,6 +38,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     expect_api_error(
         carol.post("/_cokret/self/ephemeral").json(&typing_envelope(
             &carol.actor,
+            "ck:device:01904100-0000-7000-8000-000000000ca0",
             &realm_id,
             &strand_id,
             true,
@@ -45,8 +49,13 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     .await?;
 
     let typing = expect_json(
-        bob.post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&bob.actor, &realm_id, &strand_id, true)),
+        bob.post("/_cokret/self/ephemeral").json(&typing_envelope(
+            &bob.actor,
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            &realm_id,
+            &strand_id,
+            true,
+        )),
         StatusCode::OK,
     )
     .await?;
@@ -69,8 +78,13 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     );
 
     let stopped = expect_json(
-        bob.post("/_cokret/self/ephemeral")
-            .json(&typing_envelope(&bob.actor, &realm_id, &strand_id, false)),
+        bob.post("/_cokret/self/ephemeral").json(&typing_envelope(
+            &bob.actor,
+            "ck:device:01904100-0000-7000-8000-0000000000b0",
+            &realm_id,
+            &strand_id,
+            false,
+        )),
         StatusCode::OK,
     )
     .await?;
@@ -222,18 +236,30 @@ fn encode_path_segment(segment: &str) -> String {
     encoded
 }
 
-fn typing_envelope(actor_id: &str, realm_id: &str, strand_id: &str, typing: bool) -> Value {
+/// ephemeral-envelope.schema.json: every broadcast ephemeral kind carries
+/// `device_id` and a detached-JWS `proof` (`{actor_id}#{device_id}`, digest
+/// over the canonical envelope without `proof`).
+fn typing_envelope(
+    actor_id: &str,
+    device_id: &str,
+    realm_id: &str,
+    strand_id: &str,
+    typing: bool,
+) -> Value {
     let sent_at = Utc::now();
     let expires_at = sent_at + ChronoDuration::seconds(30);
-    json!({
+    let mut envelope = json!({
         "kind": "ck.typing",
         "realm_id": realm_id,
         "actor_id": actor_id,
-        "sent_at": sent_at,
-        "expires_at": expires_at,
+        "device_id": device_id,
+        "sent_at": sent_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+        "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
         "payload": {
             "strand_id": strand_id,
             "typing": typing
         }
-    })
+    });
+    attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));
+    envelope
 }

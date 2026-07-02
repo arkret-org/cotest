@@ -178,6 +178,11 @@ def main() -> int:
         f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
         f"  service_did: {yaml_string(args.coauth_service_did)}\n"
         f"  issuer_did: {yaml_string(args.coauth_service_did)}\n"
+        # coauth's service-DID bootstrap validation only admits did:web
+        # service/issuer DIDs under the explicit personal-node no-history
+        # profile; the joint harness runs did:web:*.joint-e2e.local fixtures.
+        "  deployment_profile: personal_node\n"
+        "  principal_method: \"did:web\"\n"
         f"  admin_audience: {yaml_string(admin_audience)}\n"
         f"  principal_server_url: {yaml_string(soland_base)}\n"
         "  password_login_session_grants_enabled: true\n"

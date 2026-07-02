@@ -225,10 +225,10 @@ async fn unlock_backup_requires_body_proof(server: &CokretServer, token: &str) -
             .post(server.url(&format!("/_cokret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
             .json(&json!({})),
-        StatusCode::BAD_REQUEST,
+        StatusCode::UNPROCESSABLE_ENTITY,
     )
     .await?;
-    assert_eq!(body["error"]["code"], "bad_request");
+    assert_eq!(body["error"]["code"], "schema_violation");
     Ok(())
 }
 

@@ -97,12 +97,19 @@ function deviceTrustBindingInput(args: {
   principalId: string;
   deviceId: string;
   devicePublicKey: string;
+  hpkeKey: string;
+  algorithms: string[];
   sskGeneration: number;
 }): Buffer {
+  // §5.2: algorithms MUST be UTF-8 bytewise ascending and deduplicated
+  // before entering the signing input.
+  const canonicalAlgorithms = [...new Set(args.algorithms)].sort();
   const body = canonicalJson({
     principal_id: args.principalId,
     device_id: args.deviceId,
     device_public_key: args.devicePublicKey,
+    hpke_key: args.hpkeKey,
+    algorithms: canonicalAlgorithms,
     ssk_generation: args.sskGeneration,
   });
   return Buffer.concat([
@@ -205,17 +212,31 @@ export function buildCrossSigningPublishPayload(
 
 /// Build the `cross_signing_binding` object for a `ck.device.authorize` payload
 /// (device-lifecycle.md §5.2): the accepted SSK signs the device's
-/// `device_public_key` (`z…` multibase) over the ck-device-trust-bind-v1 input.
+/// `device_public_key`, `hpke_key` and canonical `algorithms` over the
+/// ck-device-trust-bind-v1 input.
+
+/// Canonical default algorithm set for test device records; matches the
+/// hpke-suite-registry default-MUST row plus the MLS group algorithm.
+export const TEST_DEVICE_ALGORITHMS = [
+  "ck.hpke_x25519_aead_xchacha20poly1305.v1",
+  "ck.mls.v1",
+];
 export function buildDeviceCrossSigningBinding(args: {
   identity: CrossSigningIdentity;
   deviceId: string;
   /// The new device's verify key as the `z…` multibase the directory exposes.
   devicePublicKeyMultibase: string;
+  /// The device HPKE sealing key covered by the §5.2 transcript.
+  hpkeKeyMultibase: string;
+  /// Canonical algorithm ids covered by the §5.2 transcript.
+  algorithms: string[];
 }): Record<string, unknown> {
   const input = deviceTrustBindingInput({
     principalId: args.identity.principalId,
     deviceId: args.deviceId,
     devicePublicKey: args.devicePublicKeyMultibase,
+    hpkeKey: args.hpkeKeyMultibase,
+    algorithms: args.algorithms,
     sskGeneration: args.identity.generation,
   });
   return {

@@ -36,6 +36,7 @@ import { solandBaseUrl } from "./env";
 import {
   buildCrossSigningPublishPayload,
   buildDeviceCrossSigningBinding,
+  TEST_DEVICE_ALGORITHMS,
   type CrossSigningIdentity,
   deviceVerifyKeyMultibase,
   generateCrossSigningIdentity,
@@ -191,6 +192,8 @@ export async function prepareRecoveryPrincipal(
     identity,
     deviceId: user.deviceId,
     devicePublicKeyMultibase: sessionDeviceKey.multibase,
+    hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+    algorithms: TEST_DEVICE_ALGORITHMS,
   });
   const selfAuthorize = await request.post(
     `${solandBaseUrl()}/_cokret/self/events`,
@@ -204,6 +207,8 @@ export async function prepareRecoveryPrincipal(
           principal_id: user.did,
           device_id: user.deviceId,
           device_public_key: sessionDeviceKey.multibase,
+          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+          algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
           authorized_by: user.deviceId,
           not_before: rfc3339Millis(new Date()).replace(/\.\d{3}Z$/, "Z"),
@@ -450,6 +455,8 @@ export async function restoreViaRecoveryUnlock(
     identity: principal.identity,
     deviceId: newDeviceId,
     devicePublicKeyMultibase: device2Key.multibase,
+    hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
+    algorithms: TEST_DEVICE_ALGORITHMS,
   });
   const authorizeEventId = typedId("event");
   const authorize = await request.post(
@@ -465,6 +472,8 @@ export async function restoreViaRecoveryUnlock(
           principal_id: principal.user.did,
           device_id: newDeviceId,
           device_public_key: device2Key.multibase,
+          hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+          algorithms: TEST_DEVICE_ALGORITHMS,
           device_key_algorithm: "EdDSA",
           authorized_by: principal.user.deviceId,
           not_before: rfc3339Millis(new Date()).replace(/\.\d{3}Z$/, "Z"),

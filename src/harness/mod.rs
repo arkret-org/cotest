@@ -31,6 +31,7 @@ pub use event_builder::{
 // harness contract keeps it reachable as `crate::harness::canonical_event_digest`.
 #[allow(unused_imports)]
 pub(crate) use proof::canonical_event_digest;
+pub use proof::attach_ephemeral_proof;
 pub(crate) use proof::refresh_event_proof;
 pub use server::{CokretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};

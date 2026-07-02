@@ -269,7 +269,7 @@
         "effect": "allow",
         "evaluation_class": "external",
         "expires_at": "2027-01-01T00:00:00Z",
-        "max_delegation_depth": 5,
+        "max_delegation_depth": 4,
         "encryption_required": true,
         "requires_claims": [
           { "claim_type": "kyc_verified", "subject_matches_actor": true }

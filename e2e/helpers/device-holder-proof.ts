@@ -86,6 +86,10 @@ export async function enrollOnboardedDeviceSigningKey(
       // base64url of the 32-byte Ed25519 public key — accepted by coauth's
       // `decode_device_public_key` and re-rendered to multibase server-side.
       device_public_key: onboarded.deviceKey.publicJwk.x,
+      // §5.4: the enrollment authority also attests the device HPKE sealing
+      // key and the canonical algorithm set.
+      hpke_key: "z6LSCotestE2eDeviceHpkeKey",
+      algorithms: ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
       actor_seq: 1,
     },
   });

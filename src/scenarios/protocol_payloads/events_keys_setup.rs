@@ -58,6 +58,8 @@ async fn authorize_keys_device(
             "principal_id": KEYS_ACTOR_DID,
             "device_id": KEYS_DEVICE_ID,
             "device_public_key": device_public_key,
+            "hpke_key": "z6LSCotestDeviceHpkeKey",
+            "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
             "authorized_by": KEYS_ACTOR_DID,
             "not_before": "2026-05-02T00:00:00Z",
             "device_signature": "bootstrap-device-signature-placeholder",
