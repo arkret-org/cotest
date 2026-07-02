@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::{Duration as ChronoDuration, SecondsFormat, Utc};
+use chrono::{Duration as ChronoDuration, Timelike, Utc};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -238,28 +238,31 @@ fn encode_path_segment(segment: &str) -> String {
 
 /// ephemeral-envelope.schema.json: every broadcast ephemeral kind carries
 /// `device_id` and a detached-JWS `proof` (`{actor_id}#{device_id}`, digest
-/// over the canonical envelope without `proof`).
+/// over the canonical envelope without `proof`). Built on the typed SDK
+/// `EphemeralEnvelope` so a malformed envelope fails at construction.
 fn typing_envelope(
     actor_id: &str,
     device_id: &str,
     realm_id: &str,
     strand_id: &str,
     typing: bool,
-) -> Value {
-    let sent_at = Utc::now();
+) -> cokret_core::EphemeralEnvelope {
+    let sent_at = Utc::now().with_nanosecond(0).expect("zeroing nanos is valid");
     let expires_at = sent_at + ChronoDuration::seconds(30);
-    let mut envelope = json!({
-        "kind": "ck.typing",
-        "realm_id": realm_id,
-        "actor_id": actor_id,
-        "device_id": device_id,
-        "sent_at": sent_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-        "expires_at": expires_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-        "payload": {
+    let mut envelope = cokret_core::EphemeralEnvelope::new(
+        "ck.typing",
+        cokret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
+        cokret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
+        Some(cokret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
+        sent_at,
+        expires_at,
+        json!({
             "strand_id": strand_id,
             "typing": typing
-        }
-    });
+        }),
+        None,
+    )
+    .expect("typing envelope is well-formed");
     attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));
     envelope
 }

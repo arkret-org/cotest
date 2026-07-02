@@ -54,20 +54,11 @@ async fn authorize_keys_device(
         "hlc": "01970e589d21-0001-a13f9c2e",
         "prev_refs": [],
         "refs": [],
-        "payload": {
-            "principal_id": KEYS_ACTOR_DID,
-            "device_id": KEYS_DEVICE_ID,
-            "device_public_key": device_public_key,
-            "hpke_key": "z6LSCotestDeviceHpkeKey",
-            "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
-            "authorized_by": KEYS_ACTOR_DID,
-            "not_before": "2026-05-02T00:00:00Z",
-            "device_signature": "bootstrap-device-signature-placeholder",
-            "bootstrap_binding": {
-                "kind": "inception_self_authorized",
-                "did_method_evidence_ref": format!("{KEYS_ACTOR_DID}#inception")
-            }
-        },
+        "payload": crate::scenarios::federation_collaboration::bootstrap_device_authorize_payload(
+            KEYS_ACTOR_DID,
+            KEYS_DEVICE_ID,
+            &device_public_key,
+        )?,
         "unsigned": {
             "local_operation_idempotency_alias": "ck:operation:0196419b-0000-7000-8000-00000000d0a0"
         },

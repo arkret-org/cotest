@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 
 /// Canonical `event_digest` over an Event envelope with `proofs`/`unsigned`
 /// stripped, hashed via the SDK's canonical (sorted-key, integer-number)
@@ -23,55 +23,63 @@ pub(crate) fn refresh_event_proof(event: &mut Value) {
 }
 
 /// Attach the `ephemeral-envelope.schema.json` broadcast `proof` to an
-/// ephemeral envelope value: a real ed25519 detached JWS whose
+/// ephemeral envelope: a real ed25519 detached JWS whose
 /// `verification_method` is `{actor_id}#{device_id}` and whose `event_digest`
 /// covers the canonical envelope bytes without `proof` (the shape the soland
 /// relay admits; cryptographic verification is the receiver's job).
 ///
-/// The envelope MUST already carry `kind`, `realm_id`, `actor_id`,
-/// `device_id`, `sent_at` (RFC 3339 string), `expires_at` and `payload`.
+/// Fully typed on the SDK surface: the binding transcript comes from
+/// [`cokret_core::Proof::canonical_binding_bytes`] and the JWS wire form from
+/// [`cokret_signatures::sign_eddsa_detached_jws`], so this helper can never
+/// drift from the verifier's bytes.
 pub fn attach_ephemeral_proof(
+    envelope: &mut cokret_core::EphemeralEnvelope,
+    signing_key: &ed25519_dalek::SigningKey,
+) {
+    let device_id = envelope
+        .device_id
+        .as_ref()
+        .expect("broadcast ephemeral envelope requires device_id")
+        .as_str()
+        .to_owned();
+
+    // event_digest covers the canonical envelope without `proof`.
+    envelope.proof = None;
+    let canonical = cokret_core::canonical::canonical_json_bytes(
+        &serde_json::to_value(&*envelope).expect("ephemeral envelope serializes"),
+    )
+    .expect("ephemeral envelope is canonicalizable");
+    let event_digest = cokret_core::Hash::new(cokret_core::canonical::sha256_digest(&canonical))
+        .expect("sha256 digest is a valid Hash");
+
+    let mut proof = cokret_core::Proof {
+        kind: cokret_core::proof_kind::DETACHED_JWS.to_owned(),
+        alg: "EdDSA".to_owned(),
+        verification_method: format!("{}#{device_id}", envelope.actor_id),
+        event_digest,
+        created_at: envelope.sent_at,
+        domain: None,
+        audience: None,
+        jws: String::new(),
+    };
+    let binding_bytes = proof
+        .canonical_binding_bytes(&envelope.actor_id)
+        .expect("proof binding is canonicalizable");
+    proof.jws = cokret_signatures::proof::sign_eddsa_detached_jws(signing_key, &binding_bytes)
+        .expect("detached JWS signing succeeds");
+    envelope.proof = Some(serde_json::to_value(&proof).expect("proof serializes"));
+}
+
+/// [`attach_ephemeral_proof`] for callers holding a raw JSON envelope: the
+/// value is round-tripped through the typed [`cokret_core::EphemeralEnvelope`]
+/// (so a malformed envelope fails loudly here, not at the server) and
+/// re-serialized with the attached proof.
+pub fn attach_ephemeral_proof_value(
     envelope: &mut Value,
     signing_key: &ed25519_dalek::SigningKey,
 ) {
-    use base64::Engine as _;
-    use ed25519_dalek::Signer as _;
-
-    let b64url = |bytes: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
-    let actor_id = envelope["actor_id"].as_str().expect("actor_id").to_owned();
-    let device_id = envelope["device_id"].as_str().expect("device_id").to_owned();
-    let created_at = envelope["sent_at"].as_str().expect("sent_at").to_owned();
-    let verification_method = format!("{actor_id}#{device_id}");
-
-    let mut without_proof = envelope.clone();
-    if let Value::Object(object) = &mut without_proof {
-        object.remove("proof");
-    }
-    let canonical = cokret_core::canonical::canonical_json_bytes(&without_proof)
-        .expect("ephemeral envelope is canonicalizable");
-    let event_digest = cokret_core::canonical::sha256_digest(&canonical);
-
-    let header_b64 = b64url(br#"{"alg":"EdDSA"}"#);
-    let binding = json!({
-        "event_digest": event_digest,
-        "actor_id": actor_id,
-        "verification_method": verification_method,
-        "created_at": created_at,
-    });
-    let binding_b64 = b64url(
-        &cokret_core::canonical::canonical_json_bytes(&binding)
-            .expect("proof binding is canonicalizable"),
-    );
-    let signing_input = format!("{header_b64}.{binding_b64}");
-    let signature = signing_key.sign(signing_input.as_bytes());
-    let jws = format!("{header_b64}..{}", b64url(&signature.to_bytes()));
-
-    envelope["proof"] = json!({
-        "kind": "detached_jws",
-        "alg": "EdDSA",
-        "verification_method": verification_method,
-        "event_digest": event_digest,
-        "created_at": created_at,
-        "jws": jws,
-    });
+    let mut typed: cokret_core::EphemeralEnvelope = serde_json::from_value(envelope.clone())
+        .expect("value is a well-formed ephemeral envelope");
+    attach_ephemeral_proof(&mut typed, signing_key);
+    *envelope = serde_json::to_value(&typed).expect("ephemeral envelope serializes");
 }

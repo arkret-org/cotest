@@ -32,6 +32,7 @@ pub use event_builder::{
 #[allow(unused_imports)]
 pub(crate) use proof::canonical_event_digest;
 pub use proof::attach_ephemeral_proof;
+pub use proof::attach_ephemeral_proof_value;
 pub(crate) use proof::refresh_event_proof;
 pub use server::{CokretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};

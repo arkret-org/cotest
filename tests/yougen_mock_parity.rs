@@ -731,7 +731,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                     "ttl_ms": 30000
                 }
             });
-            cotest::harness::attach_ephemeral_proof(
+            cotest::harness::attach_ephemeral_proof_value(
                 &mut envelope,
                 &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
             );
@@ -983,7 +983,7 @@ async fn inject_live_default_strand_id(
     // The strand_id injection changed the canonical envelope bytes — re-sign
     // the broadcast proof so proof.event_digest matches what soland recomputes.
     if body.get("proof").is_some() {
-        cotest::harness::attach_ephemeral_proof(
+        cotest::harness::attach_ephemeral_proof_value(
             &mut body,
             &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         );

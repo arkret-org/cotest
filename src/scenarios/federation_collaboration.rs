@@ -335,20 +335,7 @@ pub async fn cross_server_collaboration_strand_works() -> Result<()> {
         &alice_principal_realm,
         ALICE_DID,
         5,
-        json!({
-            "principal_id": ALICE_DID,
-            "device_id": ALICE_DEVICE_ID,
-            "device_public_key": alice_device_public_key,
-            "hpke_key": "z6LSCotestDeviceHpkeKey",
-            "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
-            "authorized_by": ALICE_DID,
-            "not_before": "2026-05-02T00:00:00Z",
-            "device_signature": "bootstrap-device-signature-placeholder",
-            "bootstrap_binding": {
-                "kind": "inception_self_authorized",
-                "did_method_evidence_ref": format!("{ALICE_DID}#inception")
-            },
-        }),
+        bootstrap_device_authorize_payload(ALICE_DID, ALICE_DEVICE_ID, &alice_device_public_key)?,
     )?;
     let alice_device_body = peer_events_submit_body(
         &alice_principal_realm,
@@ -917,6 +904,47 @@ fn encrypted_message_payload(realm_id: &str) -> Value {
     })
 }
 
+/// Typed `ck.device.authorize` bootstrap payload (inception_self_authorized):
+/// built on the SDK `DeviceAuthorizePayload` so a schema drift breaks the
+/// build here instead of surfacing as a server-side `schema_violation`.
+pub(crate) fn bootstrap_device_authorize_payload(
+    principal_id: &str,
+    device_id: &str,
+    device_public_key: &str,
+) -> Result<Value> {
+    let payload = cokret_core::DeviceAuthorizePayload {
+        principal_id: Did::new(principal_id.to_owned())
+            .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
+        device_id: device_id.to_owned(),
+        device_public_key: device_public_key.to_owned(),
+        hpke_key: "z6LSCotestDeviceHpkeKey".to_owned(),
+        algorithms: vec![
+            "ck.hpke_x25519_aead_xchacha20poly1305.v1".to_owned(),
+            "ck.mls.v1".to_owned(),
+        ],
+        device_key_algorithm: None,
+        authorized_by: cokret_core::DeviceOrPrincipalRef::Did(
+            Did::new(principal_id.to_owned())
+                .with_context(|| format!("invalid principal DID `{principal_id}`"))?,
+        ),
+        scopes: None,
+        not_before: "2026-05-02T00:00:00Z".parse().expect("static timestamp parses"),
+        expires_at: None,
+        device_signature: Some(cokret_core::SignatureMaterial::NonEmptyString(
+            "bootstrap-device-signature-placeholder".to_owned(),
+        )),
+        proof: None,
+        cross_signing_binding: None,
+        bootstrap_binding: Some(cokret_core::DeviceBootstrapBinding {
+            kind: "inception_self_authorized".to_owned(),
+            did_method_evidence_ref: format!("{principal_id}#inception"),
+        }),
+        enrollment_authority_binding: None,
+        recovery_session_id: None,
+    };
+    serde_json::to_value(&payload).context("serialize device.authorize payload")
+}
+
 pub(crate) async fn authorize_device_public_key(
     server: &CokretServer,
     token: &str,
@@ -933,20 +961,7 @@ pub(crate) async fn authorize_device_public_key(
         actor,
         &principal_realm,
         "ck.device.authorize",
-        json!({
-            "principal_id": actor,
-            "device_id": device_id,
-            "device_public_key": device_public_key,
-            "hpke_key": "z6LSCotestDeviceHpkeKey",
-            "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
-            "authorized_by": actor,
-            "not_before": "2026-05-02T00:00:00Z",
-            "device_signature": "bootstrap-device-signature-placeholder",
-            "bootstrap_binding": {
-                "kind": "inception_self_authorized",
-                "did_method_evidence_ref": format!("{actor}#inception")
-            },
-        }),
+        bootstrap_device_authorize_payload(actor, device_id, device_public_key)?,
         StatusCode::OK,
     )
     .await?;

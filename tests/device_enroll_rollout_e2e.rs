@@ -315,22 +315,38 @@ fn service_attested_device_authorize_event(
     let principal = cokret::Did::new(principal_id.to_owned())
         .map_err(|error| anyhow!("invalid principal DID: {error}"))?;
     let realm_id = cokret::auth::principal_control_realm_id(&principal);
-    let payload = json!({
-        "principal_id": principal_id,
-        "device_id": device_id,
-        "device_public_key": device_public_key,
-        // device-lifecycle.md §5.4: the enrollment authority attests the
-        // device verify key, HPKE sealing key AND the canonical algorithm set.
-        "hpke_key": "z6LSCotestEnrollHpkeKey",
-        "algorithms": ["ck.hpke_x25519_aead_xchacha20poly1305.v1", "ck.mls.v1"],
-        "authorized_by": authority_did,
-        "not_before": "2026-06-17T00:00:00Z",
-        "enrollment_authority_binding": {
-            "kind": "service_attested",
-            "authority_did": authority_did,
-            "authorization_ref": authorization_ref,
-        }
-    });
+    // Typed wire payload: device-lifecycle.md §5.4 — the enrollment authority
+    // attests the device verify key, HPKE sealing key AND the canonical
+    // algorithm set. Built on the SDK counterpart so schema drift fails here.
+    let authority = cokret_core::Did::new(authority_did.to_owned())
+        .map_err(|error| anyhow!("invalid authority DID: {error}"))?;
+    let payload = cokret_core::DeviceAuthorizePayload {
+        principal_id: cokret_core::Did::new(principal_id.to_owned())
+            .map_err(|error| anyhow!("invalid principal DID: {error}"))?,
+        device_id: device_id.to_owned(),
+        device_public_key: device_public_key.to_owned(),
+        hpke_key: "z6LSCotestEnrollHpkeKey".to_owned(),
+        algorithms: vec![
+            "ck.hpke_x25519_aead_xchacha20poly1305.v1".to_owned(),
+            "ck.mls.v1".to_owned(),
+        ],
+        device_key_algorithm: None,
+        authorized_by: cokret_core::DeviceOrPrincipalRef::Did(authority.clone()),
+        scopes: None,
+        not_before: "2026-06-17T00:00:00Z".parse().expect("static timestamp parses"),
+        expires_at: None,
+        device_signature: None,
+        proof: None,
+        cross_signing_binding: None,
+        bootstrap_binding: None,
+        enrollment_authority_binding: Some(cokret_core::DeviceEnrollmentAuthorityBinding {
+            kind: cokret_core::DeviceEnrollmentAuthorityBinding::KIND_SERVICE_ATTESTED.to_owned(),
+            authority_did: authority,
+            authorization_ref: authorization_ref.to_owned(),
+        }),
+        recovery_session_id: None,
+    };
+    let payload = serde_json::to_value(&payload)?;
     let payload_digest = sha256_digest(canonical_bytes(&payload)?);
     Ok(json!({
         "event_id": event_id,
