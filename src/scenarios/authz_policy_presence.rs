@@ -1,10 +1,12 @@
 use anyhow::Result;
+use chrono::{Duration as ChronoDuration, Timelike, Utc};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CokretServer, TestActorClient, expect_account_subscribe_delta, expect_api_error, expect_json,
-    expect_status, submit_event,
+    CokretServer, TestActorClient, attach_ephemeral_proof, expect_account_subscribe_delta,
+    expect_api_error, expect_json, expect_status, submit_event,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -270,6 +272,10 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
         )
         .await?;
 
+    // client-sync.md: the account subscribe surface is read-only —
+    // `set_presence` is not a subscribe parameter (the server ignores the
+    // stray query value). Presence intent goes through
+    // `POST /_cokret/self/ephemeral` as a proof-bound `ck.presence`.
     expect_status(
         server
             .http()
@@ -278,8 +284,107 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     )
     .await?;
 
+    let presence_realm_id = alice.create_realm("Presence Broadcast Realm").await?;
+
+    // Closed v1 state set (profiles-presence.md §3.2): the Matrix-legacy
+    // `unavailable` fails closed as schema_violation, never remapped to a
+    // nearby state.
+    expect_api_error(
+        alice
+            .post("/_cokret/self/ephemeral")
+            .json(&presence_envelope(
+                &alice.actor,
+                alice.device_id.as_str(),
+                &presence_realm_id,
+                json!({"state": "unavailable"}),
+            )),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+
+    // Fail-closed `last_active_at` admission (§3.3): a bucket start not
+    // aligned to its duration on the Unix-epoch UTC grid is malformed.
+    expect_api_error(
+        alice
+            .post("/_cokret/self/ephemeral")
+            .json(&presence_envelope(
+                &alice.actor,
+                alice.device_id.as_str(),
+                &presence_realm_id,
+                json!({"state": "idle", "last_active_at": "2026-06-22T10:34:00Z/PT1H"}),
+            )),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+
+    // A bucket duration below the PT60S protocol floor is malformed too.
+    expect_api_error(
+        alice
+            .post("/_cokret/self/ephemeral")
+            .json(&presence_envelope(
+                &alice.actor,
+                alice.device_id.as_str(),
+                &presence_realm_id,
+                json!({"state": "idle", "last_active_at": "2026-06-22T10:00:00Z/PT30S"}),
+            )),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+
+    // A valid precise (second-level) timestamp is schema-clean but needs
+    // an explicit disclosure policy → policy_violation, not accepted.
+    expect_api_error(
+        alice
+            .post("/_cokret/self/ephemeral")
+            .json(&presence_envelope(
+                &alice.actor,
+                alice.device_id.as_str(),
+                &presence_realm_id,
+                json!({"state": "idle", "last_active_at": "2026-06-22T10:34:56Z"}),
+            )),
+        StatusCode::FORBIDDEN,
+        "policy_violation",
+    )
+    .await?;
+
+    // status_message over 256 Unicode code points fails closed (§3.3).
+    expect_api_error(
+        alice
+            .post("/_cokret/self/ephemeral")
+            .json(&presence_envelope(
+                &alice.actor,
+                alice.device_id.as_str(),
+                &presence_realm_id,
+                json!({"state": "dnd", "status_message": "字".repeat(257)}),
+            )),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
+    )
+    .await?;
+
+    // Legal manual-dnd broadcast with a transient status message is
+    // admitted and survives into the presence projection for an
+    // authorized observer (self sees full activity detail).
+    let presence_accepted = expect_json(
+        alice
+            .post("/_cokret/self/ephemeral")
+            .json(&presence_envelope(
+                &alice.actor,
+                alice.device_id.as_str(),
+                &presence_realm_id,
+                json!({"state": "dnd", "status_message": "In a meeting"}),
+            )),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(presence_accepted["accepted"], true);
+    assert_eq!(presence_accepted["kind"], "ck.presence");
+
     let presence_sync = expect_account_subscribe_delta(
-        alice.get("/_cokret/self/account/subscribe?catchup=true&set_presence=unavailable"),
+        alice.get("/_cokret/self/account/subscribe?catchup=true"),
         StatusCode::OK,
     )
     .await?;
@@ -295,7 +400,46 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
                 || event["user_id"] == "did:web:alice.example"
         })
         .expect("alice presence in account subscribe baseline");
-    assert_eq!(alice_presence["status"], "unavailable");
+    assert_eq!(alice_presence["status"], "dnd");
+    assert_eq!(
+        alice_presence["status_message"], "In a meeting",
+        "admitted status_message must survive into the projection: {alice_presence}"
+    );
+
+    // §3.4 activity-side-channel downgrade: an observer outside alice's
+    // accepted-contact set sees `dnd` degraded to `offline`, with no
+    // status_message or activity bucket leaking alongside.
+    let observer = server
+        .register_client(
+            "did:web:observer-presence.example",
+            "@observer-presence",
+            "ck:device:01904100-0000-7000-8000-0000000000e0",
+        )
+        .await?;
+    alice.add_member(&presence_realm_id, &observer).await?;
+    let observer_sync = expect_account_subscribe_delta(
+        observer.get("/_cokret/self/account/subscribe?catchup=true"),
+        StatusCode::OK,
+    )
+    .await?;
+    if let Some(observed_alice) = observer_sync["presence"]["events"]
+        .as_array()
+        .expect("observer presence events array")
+        .iter()
+        .find(|event| {
+            event["actor_id"] == "did:web:alice.example"
+                || event["user_id"] == "did:web:alice.example"
+        })
+    {
+        assert_eq!(
+            observed_alice["status"], "offline",
+            "dnd must degrade to offline for non-contact observers: {observed_alice}"
+        );
+        assert!(
+            observed_alice.get("status_message").is_none(),
+            "degraded presence must not leak the status message: {observed_alice}"
+        );
+    }
 
     let push_registration = expect_json(
         alice
@@ -436,4 +580,42 @@ pub async fn presence_push_policy_and_ice_contracts_work() -> Result<()> {
     assert!(ice["signature"].is_object());
 
     Ok(())
+}
+
+/// ephemeral-envelope.schema.json: broadcast `ck.presence` with the
+/// proof-bound sending device (detached JWS over the canonical envelope
+/// without `proof`). `payload_fields` merges over the base
+/// `{realm_id, actor_id, ttl_ms}` payload so callers only spell the
+/// fields under test.
+fn presence_envelope(
+    actor_id: &str,
+    device_id: &str,
+    realm_id: &str,
+    payload_fields: Value,
+) -> cokret_core::EphemeralEnvelope {
+    let sent_at = Utc::now().with_nanosecond(0).expect("zeroing nanos is valid");
+    let expires_at = sent_at + ChronoDuration::seconds(30);
+    let mut payload = json!({
+        "realm_id": realm_id,
+        "actor_id": actor_id,
+        "ttl_ms": 30000
+    });
+    if let (Some(base), Some(extra)) = (payload.as_object_mut(), payload_fields.as_object()) {
+        for (key, value) in extra {
+            base.insert(key.clone(), value.clone());
+        }
+    }
+    let mut envelope = cokret_core::EphemeralEnvelope::new(
+        "ck.presence",
+        cokret_core::RealmId::new(realm_id.to_owned()).expect("test realm id is typed"),
+        cokret_core::Did::new(actor_id.to_owned()).expect("test actor DID is typed"),
+        Some(cokret_core::DeviceId::new(device_id.to_owned()).expect("test device id is typed")),
+        sent_at,
+        expires_at,
+        payload,
+        None,
+    )
+    .expect("presence envelope is well-formed");
+    attach_ephemeral_proof(&mut envelope, &SigningKey::from_bytes(&[0x5e; 32]));
+    envelope
 }

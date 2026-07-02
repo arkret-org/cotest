@@ -727,6 +727,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Option<Value> {
                     "actor_id": ctx.alice_did,
                     "realm_id": ctx.realm_id,
                     "strand_id": "ck:strand:01999999-0000-7000-8000-000000000451",
+                    "track_name": "discussion",
                     "typing": true,
                     "ttl_ms": 30000
                 }

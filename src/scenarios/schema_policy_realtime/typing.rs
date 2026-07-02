@@ -258,6 +258,9 @@ fn typing_envelope(
         expires_at,
         json!({
             "strand_id": strand_id,
+            // ephemeral-envelope.schema.json ck.typing branch: optional, const
+            // "discussion" in v1; omitted resolves to "discussion".
+            "track_name": "discussion",
             "typing": typing
         }),
         None,
